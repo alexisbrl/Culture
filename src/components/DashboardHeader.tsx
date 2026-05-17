@@ -74,13 +74,14 @@ export default function DashboardHeader() {
                     {locale === 'fr' ? 'Mon profil' : 'My profile'}
                   </Link>
 
-                  <button
+                  <Link
+                    href={`/${locale}/pricing`}
                     onClick={() => setMenuOpen(false)}
                     className="flex items-center gap-2 w-full px-4 py-2 text-sm text-amber-600 hover:bg-amber-50"
                   >
                     <Crown className="w-4 h-4" />
                     {locale === 'fr' ? 'Passer Premium ✨' : 'Go Premium ✨'}
-                  </button>
+                  </Link>
 
                   <div className="border-t border-gray-100 my-1" />
 

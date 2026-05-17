@@ -21,8 +21,8 @@ export default async function SignInPage() {
 
         {/* Composant Clerk — gère tout automatiquement */}
         <SignIn
-          fallbackRedirectUrl={`/${locale}/create`}
-          signUpFallbackRedirectUrl={`/${locale}/create`}
+          fallbackRedirectUrl={`/${locale}/dashboard`}
+          signUpFallbackRedirectUrl={`/${locale}/dashboard`}
           appearance={{
             elements: {
               rootBox: 'w-full',

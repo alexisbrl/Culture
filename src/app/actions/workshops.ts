@@ -134,6 +134,7 @@ export async function getWorkshop(workshopId: string) {
 
     const supabase = getSupabaseServerClient();
 
+    // 1. Vérifier que l'utilisateur est membre
     const { data: membership } = await supabase
       .from('workshop_members')
       .select('role')
@@ -143,21 +144,45 @@ export async function getWorkshop(workshopId: string) {
 
     if (!membership) return null;
 
+    // 2. Récupérer l'atelier
     const { data: workshop } = await supabase
       .from('workshops')
-      .select(`
-        id, name, created_at, created_by,
-        workshop_members (
-          id, user_id, role, joined_at,
-          user_profiles ( user_id, unique_tag, display_name )
-        )
-      `)
+      .select('id, name, created_at, created_by')
       .eq('id', workshopId)
       .single();
 
     if (!workshop) return null;
 
-    return { ...workshop, currentUserRole: membership.role as 'owner' | 'member' };
+    // 3. Récupérer les membres
+    const { data: workshopMembers } = await supabase
+      .from('workshop_members')
+      .select('id, user_id, role, joined_at')
+      .eq('workshop_id', workshopId);
+
+    // 4. Récupérer les profils des membres
+    const memberUserIds = (workshopMembers ?? []).map((m) => m.user_id);
+    let userProfiles: Array<{ user_id: string; unique_tag: string; display_name: string }> = [];
+
+    if (memberUserIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('user_profiles')
+        .select('user_id, unique_tag, display_name')
+        .in('user_id', memberUserIds);
+      userProfiles = profiles ?? [];
+    }
+
+    const profileMap = Object.fromEntries(userProfiles.map((p) => [p.user_id, p]));
+
+    const membersWithProfiles = (workshopMembers ?? []).map((m) => ({
+      ...m,
+      user_profiles: profileMap[m.user_id] ?? null,
+    }));
+
+    return {
+      ...workshop,
+      workshop_members: membersWithProfiles,
+      currentUserRole: membership.role as 'owner' | 'member',
+    };
   } catch (err) {
     console.error('getWorkshop error:', err);
     return null;
