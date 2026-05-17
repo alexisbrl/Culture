@@ -1,9 +1,10 @@
 'use server';
 
 import { auth, clerkClient } from '@clerk/nextjs/server';
+import { getSupabaseServerClient } from '@/lib/supabase';
 import type { AvatarConfig } from '@/components/avatar/types';
 
-// Génère un ID unique de 6 caractères (sans lettres/chiffres ambigus)
+// Génère un tag aléatoire de 7 caractères (sans lettres/chiffres ambigus)
 function generateUniqueId(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let id = '';
@@ -11,6 +12,21 @@ function generateUniqueId(): string {
     id += chars[Math.floor(Math.random() * chars.length)];
   }
   return id;
+}
+
+// Vérifie dans Supabase qu'un tag n'est pas déjà utilisé
+async function isTagAvailable(tag: string): Promise<boolean> {
+  try {
+    const supabase = getSupabaseServerClient();
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('user_id')
+      .eq('unique_tag', tag)
+      .maybeSingle();
+    return !data; // disponible si aucun résultat
+  } catch {
+    return true; // en cas d'erreur Supabase, on laisse passer (collision très improbable)
+  }
 }
 
 // Garantit qu'un uniqueId existe pour l'utilisateur (appelé au premier chargement du profil)
@@ -21,11 +37,22 @@ export async function ensureUniqueId(): Promise<string> {
   const client = await clerkClient();
   const user = await client.users.getUser(userId);
 
+  // ID déjà attribué → on le retourne directement
   if (user.publicMetadata?.uniqueId) {
     return user.publicMetadata.uniqueId as string;
   }
 
-  const uniqueId = generateUniqueId();
+  // Générer un ID véritablement unique (max 10 tentatives)
+  let uniqueId = '';
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const candidate = generateUniqueId();
+    if (await isTagAvailable(candidate)) {
+      uniqueId = candidate;
+      break;
+    }
+  }
+  if (!uniqueId) throw new Error('Impossible de générer un ID unique après 10 tentatives');
+
   await client.users.updateUserMetadata(userId, {
     publicMetadata: {
       ...user.publicMetadata,
