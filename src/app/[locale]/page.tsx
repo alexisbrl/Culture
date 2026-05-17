@@ -4,6 +4,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import WaitlistForm from '@/components/WaitlistForm';
 import LinkButton from '@/components/LinkButton';
 import { getLocale } from 'next-intl/server';
+import { auth } from '@clerk/nextjs/server';
+import { redirect } from 'next/navigation';
 import {
   Upload,
   Brain,
@@ -20,7 +22,9 @@ import {
 } from 'lucide-react';
 
 export default async function HomePage() {
+  const { userId } = await auth();
   const locale = await getLocale();
+  if (userId) redirect(`/${locale}/dashboard`);
   return <HomePageClient locale={locale} />;
 }
 

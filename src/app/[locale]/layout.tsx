@@ -4,10 +4,12 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { ClerkProvider } from '@clerk/nextjs';
+import { auth } from '@clerk/nextjs/server';
 import { frFR, enUS } from '@clerk/localizations';
 import { routing } from '@/i18n/routing';
 import '../globals.css';
 import Navbar from '@/components/Navbar';
+import DashboardHeader from '@/components/DashboardHeader';
 import Footer from '@/components/Footer';
 
 const geistSans = Geist({
@@ -46,15 +48,17 @@ export default async function LocaleLayout({ children, params }: Props) {
 
   const messages = await getMessages();
   const clerkLocalization = locale === 'fr' ? frFR : enUS;
+  const { userId } = await auth();
+  const isLoggedIn = !!userId;
 
   return (
     <ClerkProvider localization={clerkLocalization}>
       <html lang={locale} className={`${geistSans.variable} ${geistMono.variable} h-full`}>
         <body className="min-h-full flex flex-col bg-white">
           <NextIntlClientProvider messages={messages}>
-            <Navbar />
+            {isLoggedIn ? <DashboardHeader /> : <Navbar />}
             <main className="flex-1">{children}</main>
-            <Footer />
+            {!isLoggedIn && <Footer />}
           </NextIntlClientProvider>
         </body>
       </html>
