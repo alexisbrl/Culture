@@ -3,6 +3,16 @@
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { revalidatePath } from 'next/cache';
+import { Resend } from 'resend';
+
+function getResend() {
+  if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY manquante');
+  return new Resend(process.env.RESEND_API_KEY);
+}
+
+function generateCode(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
 // ─── Sync user profile to Supabase ───────────────────────────────────────────
 
@@ -70,6 +80,22 @@ export async function createWorkshop(
   }
 }
 
+// ─── Cleanup expired trashed workshops ───────────────────────────────────────
+
+async function cleanupExpiredWorkshops() {
+  try {
+    const supabase = getSupabaseServerClient();
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    await supabase
+      .from('workshops')
+      .delete()
+      .not('deleted_at', 'is', null)
+      .lt('deleted_at', sevenDaysAgo);
+  } catch (err) {
+    console.error('cleanupExpiredWorkshops error:', err);
+  }
+}
+
 // ─── Get user's workshops ─────────────────────────────────────────────────────
 
 export async function getUserWorkshops(): Promise<{
@@ -79,6 +105,8 @@ export async function getUserWorkshops(): Promise<{
   try {
     const profile = await syncUserProfile();
     if (!profile) return { owned: [], joined: [] };
+
+    await cleanupExpiredWorkshops();
 
     const supabase = getSupabaseServerClient();
 
@@ -91,10 +119,12 @@ export async function getUserWorkshops(): Promise<{
 
     const workshopIds = memberships.map((m) => m.workshop_id);
 
+    // Exclure les ateliers en corbeille
     const { data: workshops } = await supabase
       .from('workshops')
       .select('id, name, created_at')
-      .in('id', workshopIds);
+      .in('id', workshopIds)
+      .is('deleted_at', null);
 
     const { data: counts } = await supabase
       .from('workshop_members')
@@ -122,6 +152,35 @@ export async function getUserWorkshops(): Promise<{
   } catch (err) {
     console.error('getUserWorkshops error:', err);
     return { owned: [], joined: [] };
+  }
+}
+
+// ─── Get trashed workshops (owner only) ──────────────────────────────────────
+
+export async function getTrashWorkshops(): Promise<
+  Array<{ id: string; name: string; deleted_at: string; days_remaining: number }>
+> {
+  try {
+    const { userId } = await auth();
+    if (!userId) return [];
+
+    const supabase = getSupabaseServerClient();
+
+    const { data: workshops } = await supabase
+      .from('workshops')
+      .select('id, name, deleted_at')
+      .eq('created_by', userId)
+      .not('deleted_at', 'is', null);
+
+    return (workshops ?? []).map((w) => {
+      const deletedAt = new Date(w.deleted_at).getTime();
+      const expiresAt = deletedAt + 7 * 24 * 60 * 60 * 1000;
+      const daysRemaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000)));
+      return { id: w.id, name: w.name, deleted_at: w.deleted_at, days_remaining: daysRemaining };
+    });
+  } catch (err) {
+    console.error('getTrashWorkshops error:', err);
+    return [];
   }
 }
 
@@ -358,9 +417,194 @@ export async function removeMember(
   }
 }
 
-// ─── Delete workshop (owner only) ─────────────────────────────────────────────
+// ─── Request deletion code (send email) ──────────────────────────────────────
 
-export async function deleteWorkshop(
+export async function requestDeletionCode(
+  workshopId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { userId } = await auth();
+    if (!userId) return { success: false, error: 'Non authentifié' };
+
+    const supabase = getSupabaseServerClient();
+
+    // Vérifier que l'utilisateur est propriétaire
+    const { data: workshop } = await supabase
+      .from('workshops')
+      .select('name, created_by')
+      .eq('id', workshopId)
+      .single();
+
+    if (!workshop || workshop.created_by !== userId) {
+      return { success: false, error: 'Droits insuffisants' };
+    }
+
+    // Supprimer les anciens codes pour cet atelier
+    await supabase
+      .from('deletion_codes')
+      .delete()
+      .eq('workshop_id', workshopId)
+      .eq('user_id', userId);
+
+    // Générer et stocker le nouveau code (valable 15 min)
+    const code = generateCode();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+    await supabase.from('deletion_codes').insert({
+      workshop_id: workshopId,
+      user_id: userId,
+      code,
+      expires_at: expiresAt,
+    });
+
+    // Récupérer l'email du propriétaire via Clerk
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    const ownerEmail = user.emailAddresses[0]?.emailAddress;
+    if (!ownerEmail) return { success: false, error: 'Email introuvable' };
+
+    const ownerName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || ownerEmail;
+
+    // Envoyer le code par email
+    const resend = getResend();
+    await resend.emails.send({
+      from: 'Evalia <onboarding@resend.dev>',
+      to: ownerEmail,
+      subject: `🗑️ Code de suppression : ${code}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <span style="font-size: 32px;">🪴</span>
+            <h1 style="color: #7c3aed; font-size: 24px; margin: 8px 0;">Evalia</h1>
+          </div>
+          <h2 style="color: #111827; font-size: 18px;">Confirmation de suppression</h2>
+          <p style="color: #6b7280;">Bonjour ${ownerName},</p>
+          <p style="color: #6b7280;">Vous avez demandé la suppression de l'atelier <strong style="color: #111827;">"${workshop.name}"</strong>.</p>
+          <p style="color: #6b7280;">Voici votre code de confirmation :</p>
+          <div style="background: #f3f4f6; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
+            <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #7c3aed;">${code}</span>
+          </div>
+          <p style="color: #9ca3af; font-size: 13px;">Ce code expire dans 15 minutes. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+          <p style="color: #d1d5db; font-size: 12px; text-align: center;">© Evalia · scellow.com</p>
+        </div>
+      `,
+    });
+
+    return { success: true };
+  } catch (err) {
+    console.error('requestDeletionCode error:', err);
+    return { success: false, error: 'Erreur lors de l\'envoi de l\'email' };
+  }
+}
+
+// ─── Confirm deletion with code → soft delete ────────────────────────────────
+
+export async function confirmDeletion(
+  workshopId: string,
+  code: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { userId } = await auth();
+    if (!userId) return { success: false, error: 'Non authentifié' };
+
+    const supabase = getSupabaseServerClient();
+
+    // Valider le code
+    const { data: codeRecord } = await supabase
+      .from('deletion_codes')
+      .select('code, expires_at')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', userId)
+      .single();
+
+    if (!codeRecord) return { success: false, error: 'Code introuvable. Renvoyez un nouveau code.' };
+    if (new Date(codeRecord.expires_at) < new Date()) return { success: false, error: 'Code expiré. Renvoyez un nouveau code.' };
+    if (codeRecord.code !== code) return { success: false, error: 'Code incorrect.' };
+
+    // Récupérer l'atelier et ses propriétaires
+    const { data: workshop } = await supabase
+      .from('workshops')
+      .select('name, created_by')
+      .eq('id', workshopId)
+      .single();
+
+    if (!workshop || workshop.created_by !== userId) {
+      return { success: false, error: 'Droits insuffisants' };
+    }
+
+    const { data: owners } = await supabase
+      .from('workshop_members')
+      .select('user_id')
+      .eq('workshop_id', workshopId)
+      .eq('role', 'owner');
+
+    // Soft delete
+    await supabase
+      .from('workshops')
+      .update({ deleted_at: new Date().toISOString(), deleted_by: userId })
+      .eq('id', workshopId);
+
+    // Supprimer le code utilisé
+    await supabase
+      .from('deletion_codes')
+      .delete()
+      .eq('workshop_id', workshopId)
+      .eq('user_id', userId);
+
+    // Envoyer email de notification à tous les propriétaires
+    try {
+      const resend = getResend();
+      const client = await clerkClient();
+
+      const currentUser = await client.users.getUser(userId);
+      const actionBy = `${currentUser.firstName ?? ''} ${currentUser.lastName ?? ''}`.trim() ||
+        currentUser.emailAddresses[0]?.emailAddress || 'Un propriétaire';
+
+      for (const owner of owners ?? []) {
+        const ownerUser = await client.users.getUser(owner.user_id);
+        const ownerEmail = ownerUser.emailAddresses[0]?.emailAddress;
+        if (!ownerEmail) continue;
+        const ownerName = `${ownerUser.firstName ?? ''} ${ownerUser.lastName ?? ''}`.trim() || ownerEmail;
+
+        await resend.emails.send({
+          from: 'Evalia <onboarding@resend.dev>',
+          to: ownerEmail,
+          subject: `🗑️ Atelier "${workshop.name}" mis en corbeille`,
+          html: `
+            <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+              <div style="text-align: center; margin-bottom: 24px;">
+                <span style="font-size: 32px;">🪴</span>
+                <h1 style="color: #7c3aed; font-size: 24px; margin: 8px 0;">Evalia</h1>
+              </div>
+              <h2 style="color: #111827; font-size: 18px;">Atelier mis en corbeille</h2>
+              <p style="color: #6b7280;">Bonjour ${ownerName},</p>
+              <p style="color: #6b7280;">L'atelier <strong style="color: #111827;">"${workshop.name}"</strong> a été mis en corbeille par <strong>${actionBy}</strong>.</p>
+              <div style="background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 16px; margin: 20px 0;">
+                <p style="color: #92400e; margin: 0; font-size: 14px;">⏳ Cet atelier sera <strong>définitivement supprimé dans 7 jours</strong> si aucune restauration n'est effectuée.</p>
+              </div>
+              <p style="color: #6b7280;">Si c'est une erreur, connectez-vous sur <a href="https://scellow.com" style="color: #7c3aed;">scellow.com</a> et restaurez l'atelier depuis votre corbeille.</p>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+              <p style="color: #d1d5db; font-size: 12px; text-align: center;">© Evalia · scellow.com</p>
+            </div>
+          `,
+        });
+      }
+    } catch (emailErr) {
+      console.error('Email notification error (non-blocking):', emailErr);
+    }
+
+    revalidatePath('/', 'layout');
+    return { success: true };
+  } catch (err) {
+    console.error('confirmDeletion error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
+// ─── Restore workshop from trash ──────────────────────────────────────────────
+
+export async function restoreWorkshop(
   workshopId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
@@ -379,12 +623,15 @@ export async function deleteWorkshop(
       return { success: false, error: 'Droits insuffisants' };
     }
 
-    await supabase.from('workshops').delete().eq('id', workshopId);
+    await supabase
+      .from('workshops')
+      .update({ deleted_at: null, deleted_by: null })
+      .eq('id', workshopId);
 
     revalidatePath('/', 'layout');
     return { success: true };
   } catch (err) {
-    console.error('deleteWorkshop error:', err);
+    console.error('restoreWorkshop error:', err);
     return { success: false, error: 'Erreur serveur' };
   }
 }

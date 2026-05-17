@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, FilePlus, Users, Crown, UserCheck, UserMinus,
-  Plus, Loader2, Trash2, Copy, Check, Shield
+  Plus, Loader2, Trash2, Copy, Check, Shield, Mail, RotateCcw
 } from 'lucide-react';
-import { addMemberByTag, removeMember, deleteWorkshop } from '@/app/actions/workshops';
+import { addMemberByTag, removeMember, requestDeletionCode, confirmDeletion } from '@/app/actions/workshops';
 
 type Member = {
   id: string;
@@ -126,9 +126,11 @@ export default function WorkshopClient({
   const [addError, setAddError] = useState('');
   const [addSuccess, setAddSuccess] = useState('');
 
-  // Delete workshop
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  // Delete workshop — multi-step
+  type DeleteStep = 'idle' | 'confirm' | 'sending' | 'enter_code' | 'verifying';
+  const [deleteStep, setDeleteStep] = useState<DeleteStep>('idle');
+  const [deleteCode, setDeleteCode] = useState('');
+  const [deleteError, setDeleteError] = useState('');
 
   async function handleAddMember(e: React.FormEvent) {
     e.preventDefault();
@@ -159,15 +161,35 @@ export default function WorkshopClient({
     }
   }
 
-  async function handleDeleteWorkshop() {
-    setIsDeleting(true);
-    const result = await deleteWorkshop(workshopId);
+  async function handleSendCode() {
+    setDeleteStep('sending');
+    setDeleteError('');
+    const result = await requestDeletionCode(workshopId);
+    if (result.success) {
+      setDeleteStep('enter_code');
+    } else {
+      setDeleteError(result.error ?? 'Erreur');
+      setDeleteStep('confirm');
+    }
+  }
+
+  async function handleConfirmDeletion() {
+    if (deleteCode.length !== 6) return;
+    setDeleteStep('verifying');
+    setDeleteError('');
+    const result = await confirmDeletion(workshopId, deleteCode);
     if (result.success) {
       router.push(`/${locale}/dashboard`);
     } else {
-      setIsDeleting(false);
-      setShowDeleteConfirm(false);
+      setDeleteError(result.error ?? 'Erreur');
+      setDeleteStep('enter_code');
     }
+  }
+
+  function resetDeleteFlow() {
+    setDeleteStep('idle');
+    setDeleteCode('');
+    setDeleteError('');
   }
 
   const formattedDate = new Date(createdAt).toLocaleDateString(
@@ -217,7 +239,7 @@ export default function WorkshopClient({
 
             {isOwner && (
               <button
-                onClick={() => setShowDeleteConfirm(true)}
+                onClick={() => setDeleteStep('confirm')}
                 className="flex items-center gap-1.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 px-3 py-2 rounded-lg transition-colors self-start sm:self-auto"
               >
                 <Trash2 className="w-4 h-4" />
@@ -385,37 +407,103 @@ export default function WorkshopClient({
         )}
       </div>
 
-      {/* Delete confirmation modal */}
-      {showDeleteConfirm && (
+      {/* Delete modal — multi-step */}
+      {deleteStep !== 'idle' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
-            <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center mx-auto mb-4">
-              <Trash2 className="w-6 h-6 text-red-600" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
-              {locale === 'fr' ? 'Supprimer l\'atelier ?' : 'Delete workshop?'}
-            </h3>
-            <p className="text-sm text-gray-500 text-center mb-6">
-              {locale === 'fr'
-                ? `"${workshopName}" sera définitivement supprimé. Cette action est irréversible.`
-                : `"${workshopName}" will be permanently deleted. This cannot be undone.`}
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-              >
-                {locale === 'fr' ? 'Annuler' : 'Cancel'}
-              </button>
-              <button
-                onClick={handleDeleteWorkshop}
-                disabled={isDeleting}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
-              >
-                {isDeleting && <Loader2 className="w-4 h-4 animate-spin" />}
-                {locale === 'fr' ? 'Supprimer' : 'Delete'}
-              </button>
-            </div>
+
+            {/* Step 1 : avertissement + envoyer code */}
+            {(deleteStep === 'confirm' || deleteStep === 'sending') && (
+              <>
+                <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center mx-auto mb-4">
+                  <Trash2 className="w-6 h-6 text-red-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+                  {locale === 'fr' ? 'Mettre en corbeille ?' : 'Move to trash?'}
+                </h3>
+                <p className="text-sm text-gray-500 text-center mb-2">
+                  {locale === 'fr'
+                    ? `"${workshopName}" sera mis en corbeille. Vous aurez 7 jours pour annuler.`
+                    : `"${workshopName}" will be moved to trash. You have 7 days to undo this.`}
+                </p>
+                <p className="text-xs text-gray-400 text-center mb-5">
+                  {locale === 'fr'
+                    ? 'Un code de confirmation sera envoyé par email.'
+                    : 'A confirmation code will be sent to your email.'}
+                </p>
+                {deleteError && (
+                  <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-4 text-center">{deleteError}</p>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={resetDeleteFlow}
+                    className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    {locale === 'fr' ? 'Annuler' : 'Cancel'}
+                  </button>
+                  <button
+                    onClick={handleSendCode}
+                    disabled={deleteStep === 'sending'}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
+                  >
+                    {deleteStep === 'sending'
+                      ? <><Loader2 className="w-4 h-4 animate-spin" />{locale === 'fr' ? 'Envoi...' : 'Sending...'}</>
+                      : <><Mail className="w-4 h-4" />{locale === 'fr' ? 'Envoyer le code' : 'Send code'}</>
+                    }
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Step 2 : saisir le code */}
+            {(deleteStep === 'enter_code' || deleteStep === 'verifying') && (
+              <>
+                <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center mx-auto mb-4">
+                  <Mail className="w-6 h-6 text-amber-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+                  {locale === 'fr' ? 'Code envoyé !' : 'Code sent!'}
+                </h3>
+                <p className="text-sm text-gray-500 text-center mb-5">
+                  {locale === 'fr'
+                    ? 'Saisissez le code à 6 chiffres reçu par email. Il expire dans 15 minutes.'
+                    : 'Enter the 6-digit code received by email. It expires in 15 minutes.'}
+                </p>
+                <input
+                  type="text"
+                  value={deleteCode}
+                  onChange={(e) => { setDeleteCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setDeleteError(''); }}
+                  placeholder="000000"
+                  maxLength={6}
+                  className="w-full text-center text-3xl font-mono tracking-[0.5em] px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-red-400 mb-3"
+                  disabled={deleteStep === 'verifying'}
+                  autoFocus
+                />
+                {deleteError && (
+                  <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-3 text-center">{deleteError}</p>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setDeleteStep('confirm'); setDeleteCode(''); setDeleteError(''); }}
+                    className="flex items-center gap-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50 transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    {locale === 'fr' ? 'Renvoyer' : 'Resend'}
+                  </button>
+                  <button
+                    onClick={handleConfirmDeletion}
+                    disabled={deleteCode.length !== 6 || deleteStep === 'verifying'}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
+                  >
+                    {deleteStep === 'verifying'
+                      ? <><Loader2 className="w-4 h-4 animate-spin" />{locale === 'fr' ? 'Vérification...' : 'Verifying...'}</>
+                      : locale === 'fr' ? 'Confirmer' : 'Confirm'
+                    }
+                  </button>
+                </div>
+              </>
+            )}
+
           </div>
         </div>
       )}

@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, BookOpen, Users, Crown, BookMarked, X, ArrowRight, Clock } from 'lucide-react';
-import { searchWorkshops, joinWorkshop } from '@/app/actions/workshops';
+import { Plus, Search, BookOpen, Users, Crown, BookMarked, X, ArrowRight, Clock, Trash2, RotateCcw } from 'lucide-react';
+import { searchWorkshops, joinWorkshop, restoreWorkshop } from '@/app/actions/workshops';
 
 type Workshop = {
   id: string;
@@ -13,11 +13,19 @@ type Workshop = {
   member_count: number;
 };
 
+type TrashedWorkshop = {
+  id: string;
+  name: string;
+  deleted_at: string;
+  days_remaining: number;
+};
+
 type Props = {
   locale: string;
   firstName: string;
   ownedWorkshops: Workshop[];
   joinedWorkshops: Workshop[];
+  trashedWorkshops: TrashedWorkshop[];
 };
 
 function formatDate(dateStr: string, locale: string) {
@@ -103,13 +111,13 @@ function EmptyState({ locale, onCreateClick }: { locale: string; onCreateClick: 
   );
 }
 
-export default function DashboardClient({ locale, firstName, ownedWorkshops, joinedWorkshops }: Props) {
+export default function DashboardClient({ locale, firstName, ownedWorkshops, joinedWorkshops, trashedWorkshops }: Props) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; created_at: string }>>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   const hasWorkshops = ownedWorkshops.length > 0 || joinedWorkshops.length > 0;
 
@@ -134,6 +142,13 @@ export default function DashboardClient({ locale, firstName, ownedWorkshops, joi
       router.refresh();
     }
     setJoiningId(null);
+  }
+
+  async function handleRestore(workshopId: string) {
+    setRestoringId(workshopId);
+    const result = await restoreWorkshop(workshopId);
+    if (result.success) router.refresh();
+    setRestoringId(null);
   }
 
   return (
@@ -265,6 +280,49 @@ export default function DashboardClient({ locale, firstName, ownedWorkshops, joi
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {joinedWorkshops.map((w) => (
                     <WorkshopCard key={w.id} workshop={w} role="member" locale={locale} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Trashed workshops */}
+            {trashedWorkshops.length > 0 && (
+              <section>
+                <div className="flex items-center gap-2 mb-4">
+                  <Trash2 className="w-5 h-5 text-red-400" />
+                  <h2 className="text-lg font-semibold text-gray-700">
+                    {locale === 'fr' ? 'Corbeille' : 'Trash'}
+                  </h2>
+                  <span className="text-sm text-gray-400">({trashedWorkshops.length})</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {trashedWorkshops.map((w) => (
+                    <div key={w.id} className="bg-white border border-red-100 rounded-2xl p-5 opacity-75">
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <h3 className="font-medium text-gray-500 line-through line-clamp-2">{w.name}</h3>
+                        <span className="shrink-0 text-xs font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-500">
+                          {locale === 'fr' ? 'Corbeille' : 'Trash'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-amber-600 mb-4">
+                        ⏳ {w.days_remaining > 0
+                          ? locale === 'fr'
+                            ? `Suppression définitive dans ${w.days_remaining} jour(s)`
+                            : `Permanently deleted in ${w.days_remaining} day(s)`
+                          : locale === 'fr' ? 'Suppression imminente' : 'Deletion imminent'
+                        }
+                      </p>
+                      <button
+                        onClick={() => handleRestore(w.id)}
+                        disabled={restoringId === w.id}
+                        className="flex items-center gap-2 text-xs font-medium text-violet-600 hover:text-violet-700 disabled:opacity-50 transition-colors"
+                      >
+                        {restoringId === w.id
+                          ? <><span className="w-3.5 h-3.5 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />{locale === 'fr' ? 'Restauration...' : 'Restoring...'}</>
+                          : <><RotateCcw className="w-3.5 h-3.5" />{locale === 'fr' ? 'Restaurer l\'atelier' : 'Restore workshop'}</>
+                        }
+                      </button>
+                    </div>
                   ))}
                 </div>
               </section>
