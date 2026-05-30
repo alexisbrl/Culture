@@ -3,20 +3,12 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  ArrowLeft, FilePlus, Users, Crown, UserCheck, UserMinus,
-  Plus, Loader2, Trash2, Copy, Check, Shield, Mail, RotateCcw
-} from 'lucide-react';
-import { addMemberByTag, removeMember, requestDeletionCode, confirmDeletion } from '@/app/actions/workshops';
-
-type Member = {
-  id: string;
-  userId: string;
-  role: 'owner' | 'member';
-  joinedAt: string;
-  displayName: string;
-  uniqueTag: string;
-};
+import { Loader2, Mail, RotateCcw, Trash2 } from 'lucide-react';
+import { requestDeletionCode, confirmDeletion } from '@/app/actions/workshops';
+import ProgrammeTab from './tabs/ProgrammeTab';
+import ExamenTab from './tabs/ExamenTab';
+import AnalyseTab from './tabs/AnalyseTab';
+import CoursTab from './tabs/CoursTab';
 
 type Props = {
   locale: string;
@@ -25,152 +17,48 @@ type Props = {
   createdAt: string;
   currentUserId: string;
   currentUserRole: 'owner' | 'member';
-  members: Member[];
+  members: { id: string; userId: string; role: 'owner' | 'member'; joinedAt: string; displayName: string; uniqueTag: string }[];
 };
 
-type Tab = 'documents' | 'members';
+type TabId = 'programme' | 'examen' | 'analyse' | 'cours';
 
-function MemberRow({
-  member,
-  isOwner,
-  currentUserId,
-  locale,
-  onRemove,
-}: {
-  member: Member;
-  isOwner: boolean;
-  currentUserId: string;
-  locale: string;
-  onRemove: (userId: string) => void;
-}) {
-  const [copied, setCopied] = useState(false);
+const TABS: { id: TabId; label: string; soon?: string }[] = [
+  { id: 'programme', label: 'Programme éducatif' },
+  { id: 'examen', label: "Génération d'examen" },
+  { id: 'analyse', label: 'Analyse' },
+  { id: 'cours', label: 'Génération de cours', soon: 'V2' },
+];
 
-  function copyTag() {
-    navigator.clipboard.writeText(member.uniqueTag);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }
-
-  const isCurrentUser = member.userId === currentUserId;
-
+function Chip({ children, tone = 'default' }: { children: React.ReactNode; tone?: 'default' | 'amber' | 'sage' | 'dim' }) {
+  const styles = {
+    default: { bg: 'rgba(255,255,255,0.7)', border: 'rgba(45,42,36,0.08)', color: '#2d2a24' },
+    amber: { bg: 'rgba(232,184,108,0.20)', border: 'rgba(168,122,58,0.30)', color: '#7a4d20' },
+    sage: { bg: 'rgba(122,153,104,0.18)', border: 'rgba(79,107,64,0.30)', color: '#3f5630' },
+    dim: { bg: 'rgba(45,42,36,0.06)', border: 'rgba(45,42,36,0.10)', color: '#5a564c' },
+  }[tone];
   return (
-    <div className="flex items-center justify-between py-3 px-4 rounded-xl hover:bg-gray-50 transition-colors group">
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-full bg-violet-100 flex items-center justify-center text-violet-700 font-semibold text-sm">
-          {member.displayName[0]?.toUpperCase() ?? '?'}
-        </div>
-        <div>
-          <p className="text-sm font-medium text-gray-900">
-            {member.displayName}
-            {isCurrentUser && (
-              <span className="ml-2 text-xs text-gray-400">
-                ({locale === 'fr' ? 'vous' : 'you'})
-              </span>
-            )}
-          </p>
-          <button
-            onClick={copyTag}
-            className="flex items-center gap-1 text-xs text-gray-400 hover:text-violet-600 transition-colors"
-          >
-            #{member.uniqueTag}
-            {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-          </button>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <span
-          className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-            member.role === 'owner'
-              ? 'bg-violet-100 text-violet-700'
-              : 'bg-gray-100 text-gray-600'
-          }`}
-        >
-          {member.role === 'owner'
-            ? locale === 'fr' ? 'Propriétaire' : 'Owner'
-            : locale === 'fr' ? 'Membre' : 'Member'}
-        </span>
-
-        {isOwner && !isCurrentUser && (
-          <button
-            onClick={() => onRemove(member.userId)}
-            className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-            title={locale === 'fr' ? 'Retirer' : 'Remove'}
-          >
-            <UserMinus className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-    </div>
+    <span style={{ fontSize: 11, fontWeight: 500, padding: '4px 10px', borderRadius: 999, background: styles.bg, border: `1px solid ${styles.border}`, color: styles.color, letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
+      {children}
+    </span>
   );
 }
 
-export default function WorkshopClient({
-  locale,
-  workshopId,
-  workshopName,
-  createdAt,
-  currentUserId,
-  currentUserRole,
-  members: initialMembers,
-}: Props) {
+export default function WorkshopClient({ locale, workshopId, workshopName, currentUserRole, members }: Props) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<Tab>('documents');
-  const [members, setMembers] = useState(initialMembers);
   const isOwner = currentUserRole === 'owner';
+  const [activeTab, setActiveTab] = useState<TabId>('programme');
 
-  // Add member form
-  const [addTag, setAddTag] = useState('');
-  const [addRole, setAddRole] = useState<'member' | 'owner'>('member');
-  const [isAdding, setIsAdding] = useState(false);
-  const [addError, setAddError] = useState('');
-  const [addSuccess, setAddSuccess] = useState('');
-
-  // Delete workshop — multi-step
   type DeleteStep = 'idle' | 'confirm' | 'sending' | 'enter_code' | 'verifying';
   const [deleteStep, setDeleteStep] = useState<DeleteStep>('idle');
   const [deleteCode, setDeleteCode] = useState('');
   const [deleteError, setDeleteError] = useState('');
 
-  async function handleAddMember(e: React.FormEvent) {
-    e.preventDefault();
-    if (!addTag.trim()) return;
-    setIsAdding(true);
-    setAddError('');
-    setAddSuccess('');
-
-    const result = await addMemberByTag(workshopId, addTag.trim(), addRole);
-    if (result.success) {
-      setAddSuccess(
-        locale === 'fr'
-          ? `${result.displayName} a été ajouté(e) avec succès !`
-          : `${result.displayName} was added successfully!`
-      );
-      setAddTag('');
-      router.refresh();
-    } else {
-      setAddError(result.error ?? 'Erreur');
-    }
-    setIsAdding(false);
-  }
-
-  async function handleRemoveMember(targetUserId: string) {
-    const result = await removeMember(workshopId, targetUserId);
-    if (result.success) {
-      setMembers((prev) => prev.filter((m) => m.userId !== targetUserId));
-    }
-  }
-
   async function handleSendCode() {
     setDeleteStep('sending');
     setDeleteError('');
     const result = await requestDeletionCode(workshopId);
-    if (result.success) {
-      setDeleteStep('enter_code');
-    } else {
-      setDeleteError(result.error ?? 'Erreur');
-      setDeleteStep('confirm');
-    }
+    if (result.success) setDeleteStep('enter_code');
+    else { setDeleteError(result.error ?? 'Erreur'); setDeleteStep('confirm'); }
   }
 
   async function handleConfirmDeletion() {
@@ -178,332 +66,114 @@ export default function WorkshopClient({
     setDeleteStep('verifying');
     setDeleteError('');
     const result = await confirmDeletion(workshopId, deleteCode);
-    if (result.success) {
-      router.push(`/${locale}/dashboard`);
-    } else {
-      setDeleteError(result.error ?? 'Erreur');
-      setDeleteStep('enter_code');
-    }
+    if (result.success) router.push(`/${locale}/dashboard`);
+    else { setDeleteError(result.error ?? 'Erreur'); setDeleteStep('enter_code'); }
   }
-
-  function resetDeleteFlow() {
-    setDeleteStep('idle');
-    setDeleteCode('');
-    setDeleteError('');
-  }
-
-  const formattedDate = new Date(createdAt).toLocaleDateString(
-    locale === 'fr' ? 'fr-FR' : 'en-US',
-    { day: 'numeric', month: 'long', year: 'numeric' }
-  );
-
-  const owners = members.filter((m) => m.role === 'owner');
-  const regularMembers = members.filter((m) => m.role === 'member');
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-slate-950 via-violet-950 to-indigo-950 text-white">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-0">
-          <Link
-            href={`/${locale}/dashboard`}
-            className="inline-flex items-center gap-2 text-violet-300 hover:text-white text-sm mb-6 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            {locale === 'fr' ? 'Tableau de bord' : 'Dashboard'}
-          </Link>
+    <div style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", color: '#2d2a24', minHeight: '100vh', background: '#fcf9f2', display: 'flex', flexDirection: 'column' }}>
+      {/* Google Fonts */}
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&family=Caveat:wght@400;500;600&display=swap');`}</style>
 
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-6">
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <span
-                  className={`text-xs font-medium px-2.5 py-1 rounded-full border ${
-                    isOwner
-                      ? 'bg-violet-500/20 text-violet-300 border-violet-400/30'
-                      : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
-                  }`}
-                >
-                  {isOwner
-                    ? locale === 'fr' ? '👑 Propriétaire' : '👑 Owner'
-                    : locale === 'fr' ? '✓ Membre' : '✓ Member'}
-                </span>
-                <span className="text-xs text-slate-400">
-                  {locale === 'fr' ? `Créé le ${formattedDate}` : `Created ${formattedDate}`}
-                </span>
-              </div>
-              <h1 className="text-3xl sm:text-4xl font-bold leading-tight">{workshopName}</h1>
-              <p className="text-slate-400 text-sm mt-1">
-                {members.length} {locale === 'fr' ? 'participant(s)' : 'participant(s)'}
-              </p>
+      {/* Workshop header */}
+      <div style={{ paddingTop: 16, flexShrink: 0 }}>
+        <div style={{ padding: '14px 24px 0' }}>
+          {/* Breadcrumb */}
+          <div style={{ fontSize: 11, color: '#7a766d', marginBottom: 10 }}>
+            <Link href={`/${locale}/dashboard`} style={{ color: '#7a766d', textDecoration: 'none' }}>jardin</Link>
+            <span style={{ margin: '0 6px' }}>›</span>
+            <span style={{ color: '#2d2a24' }}>{workshopName.toLowerCase()}</span>
+          </div>
+
+          {/* Title row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 500, color: '#2d2a24', letterSpacing: '-0.015em' }}>{workshopName}</h1>
+              <Chip tone="amber">premium</Chip>
+              <Chip tone="dim">{isOwner ? 'propriétaire' : 'membre'}</Chip>
+              <span style={{ fontSize: 12, color: '#7a766d' }}>
+                {members.length} membre{members.length > 1 ? 's' : ''}
+              </span>
             </div>
-
-            {isOwner && (
-              <button
-                onClick={() => setDeleteStep('confirm')}
-                className="flex items-center gap-1.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 px-3 py-2 rounded-lg transition-colors self-start sm:self-auto"
-              >
-                <Trash2 className="w-4 h-4" />
-                {locale === 'fr' ? 'Supprimer' : 'Delete'}
-              </button>
-            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: '#5a564c', fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>partager · QR</button>
+              {isOwner && (
+                <>
+                  <Link href={`/${locale}/workshops/${workshopId}/settings`} style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: '#5a564c', fontSize: 12.5, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <svg width="13" height="13" viewBox="0 0 14 14"><circle cx="7" cy="7" r="2.4" stroke="#5a564c" strokeWidth="1.3" fill="none"/><path d="M7 1.5v2M7 10.5v2M1.5 7h2M10.5 7h2M3 3l1.4 1.4M9.6 9.6L11 11M11 3L9.6 4.4M4.4 9.6L3 11" stroke="#5a564c" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                    paramètres
+                  </Link>
+                  <button onClick={() => setDeleteStep('confirm')} style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(184,90,74,0.30)', color: '#b85a4a', fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Trash2 size={13} />
+                    supprimer
+                  </button>
+                </>
+              )}
+            </div>
           </div>
+        </div>
 
-          {/* Tabs */}
-          <div className="flex gap-1">
-            {(['documents', 'members'] as Tab[]).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-5 py-2.5 text-sm font-medium rounded-t-xl transition-colors ${
-                  activeTab === tab
-                    ? 'bg-gray-50 text-gray-900'
-                    : 'text-slate-400 hover:text-white hover:bg-white/10'
-                }`}
-              >
-                {tab === 'documents'
-                  ? locale === 'fr' ? '📄 Documents' : '📄 Documents'
-                  : locale === 'fr' ? `👥 Participants (${members.length})` : `👥 Participants (${members.length})`}
-              </button>
-            ))}
-          </div>
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 26, padding: '14px 24px 0', borderBottom: '1px solid rgba(45,42,36,0.08)' }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 0 12px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5, color: activeTab === t.id ? '#2d2a24' : '#7a766d', fontWeight: activeTab === t.id ? 500 : 400, borderBottom: activeTab === t.id ? '2px solid #a87a3a' : '2px solid transparent', marginBottom: -1 }}>
+              {t.label}
+              {t.soon && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 999, background: 'rgba(168,122,58,0.18)', color: '#7a4d20', fontWeight: 600, letterSpacing: '0.04em' }}>{t.soon}</span>}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Tab content */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-
-        {/* Documents tab */}
-        {activeTab === 'documents' && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="w-24 h-24 rounded-3xl bg-white border-2 border-dashed border-gray-200 flex items-center justify-center mb-6 shadow-sm">
-              <FilePlus className="w-10 h-10 text-gray-300" />
-            </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
-              {locale === 'fr' ? 'Aucun document pour le moment' : 'No documents yet'}
-            </h2>
-            <p className="text-gray-500 text-sm mb-8 max-w-sm">
-              {locale === 'fr'
-                ? 'Les documents importés apparaîtront ici. Bientôt disponible !'
-                : 'Imported documents will appear here. Coming soon!'}
-            </p>
-            <button
-              disabled
-              className="flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-400 rounded-xl font-medium cursor-not-allowed text-sm"
-              title={locale === 'fr' ? 'Fonctionnalité bientôt disponible' : 'Feature coming soon'}
-            >
-              <FilePlus className="w-4 h-4" />
-              {locale === 'fr' ? 'Ajouter un document' : 'Add a document'}
-              <span className="ml-1 text-xs bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full">
-                {locale === 'fr' ? 'Bientôt' : 'Soon'}
-              </span>
-            </button>
-          </div>
-        )}
-
-        {/* Members tab */}
-        {activeTab === 'members' && (
-          <div className="space-y-6">
-            {/* Add member form (owners only) */}
-            {isOwner && (
-              <div className="bg-white rounded-2xl border border-gray-200 p-6">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <Plus className="w-4 h-4 text-violet-600" />
-                  {locale === 'fr' ? 'Ajouter un participant' : 'Add a participant'}
-                </h3>
-                <form onSubmit={handleAddMember} className="flex flex-col sm:flex-row gap-3">
-                  <input
-                    type="text"
-                    value={addTag}
-                    onChange={(e) => { setAddTag(e.target.value.toUpperCase()); setAddError(''); setAddSuccess(''); }}
-                    placeholder={locale === 'fr' ? 'Tag unique (ex: AB3X7K)' : 'Unique tag (e.g: AB3X7K)'}
-                    maxLength={6}
-                    className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 font-mono uppercase"
-                    disabled={isAdding}
-                  />
-                  <select
-                    value={addRole}
-                    onChange={(e) => setAddRole(e.target.value as 'member' | 'owner')}
-                    className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white"
-                    disabled={isAdding}
-                  >
-                    <option value="member">{locale === 'fr' ? 'Membre' : 'Member'}</option>
-                    <option value="owner">{locale === 'fr' ? 'Propriétaire' : 'Owner'}</option>
-                  </select>
-                  <button
-                    type="submit"
-                    disabled={addTag.trim().length < 6 || isAdding}
-                    className="flex items-center gap-2 px-5 py-2.5 gradient-primary text-white rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                  >
-                    {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
-                    {locale === 'fr' ? 'Ajouter' : 'Add'}
-                  </button>
-                </form>
-                {addError && (
-                  <p className="mt-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{addError}</p>
-                )}
-                {addSuccess && (
-                  <p className="mt-2 text-sm text-emerald-600 bg-emerald-50 px-3 py-2 rounded-lg">{addSuccess}</p>
-                )}
-              </div>
-            )}
-
-            {/* Owners */}
-            {owners.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-200">
-                <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-violet-600" />
-                  <h3 className="text-sm font-semibold text-gray-700">
-                    {locale === 'fr' ? 'Propriétaires' : 'Owners'} ({owners.length})
-                  </h3>
-                </div>
-                <div className="p-2">
-                  {owners.map((m) => (
-                    <MemberRow
-                      key={m.id}
-                      member={m}
-                      isOwner={isOwner}
-                      currentUserId={currentUserId}
-                      locale={locale}
-                      onRemove={handleRemoveMember}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Members */}
-            {regularMembers.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-200">
-                <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-                  <Users className="w-4 h-4 text-gray-500" />
-                  <h3 className="text-sm font-semibold text-gray-700">
-                    {locale === 'fr' ? 'Membres' : 'Members'} ({regularMembers.length})
-                  </h3>
-                </div>
-                <div className="p-2">
-                  {regularMembers.map((m) => (
-                    <MemberRow
-                      key={m.id}
-                      member={m}
-                      isOwner={isOwner}
-                      currentUserId={currentUserId}
-                      locale={locale}
-                      onRemove={handleRemoveMember}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {members.length === 0 && (
-              <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
-                <Users className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 text-sm">
-                  {locale === 'fr' ? 'Aucun participant' : 'No participants yet'}
-                </p>
-              </div>
-            )}
-          </div>
-        )}
+      {/* Tab content — fills remaining height */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        {activeTab === 'programme' && <ProgrammeTab />}
+        {activeTab === 'examen' && <ExamenTab />}
+        {activeTab === 'analyse' && <AnalyseTab />}
+        {activeTab === 'cours' && <CoursTab />}
       </div>
 
-      {/* Delete modal — multi-step */}
+      {/* Delete modal */}
       {deleteStep !== 'idle' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(45,42,36,0.5)', backdropFilter: 'blur(4px)', padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 20, boxShadow: '0 30px 80px rgba(45,42,36,0.18)', padding: 24, width: '100%', maxWidth: 360, fontFamily: 'inherit' }}>
 
-            {/* Step 1 : avertissement + envoyer code */}
             {(deleteStep === 'confirm' || deleteStep === 'sending') && (
               <>
-                <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center mx-auto mb-4">
-                  <Trash2 className="w-6 h-6 text-red-600" />
+                <div style={{ width: 48, height: 48, borderRadius: 16, background: 'rgba(184,90,74,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                  <Trash2 size={22} color="#b85a4a" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
-                  {locale === 'fr' ? 'Mettre en corbeille ?' : 'Move to trash?'}
-                </h3>
-                <p className="text-sm text-gray-500 text-center mb-2">
-                  {locale === 'fr'
-                    ? `"${workshopName}" sera mis en corbeille. Vous aurez 7 jours pour annuler.`
-                    : `"${workshopName}" will be moved to trash. You have 7 days to undo this.`}
-                </p>
-                <p className="text-xs text-gray-400 text-center mb-5">
-                  {locale === 'fr'
-                    ? 'Un code de confirmation sera envoyé par email.'
-                    : 'A confirmation code will be sent to your email.'}
-                </p>
-                {deleteError && (
-                  <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-4 text-center">{deleteError}</p>
-                )}
-                <div className="flex gap-3">
-                  <button
-                    onClick={resetDeleteFlow}
-                    className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                  >
-                    {locale === 'fr' ? 'Annuler' : 'Cancel'}
-                  </button>
-                  <button
-                    onClick={handleSendCode}
-                    disabled={deleteStep === 'sending'}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
-                  >
-                    {deleteStep === 'sending'
-                      ? <><Loader2 className="w-4 h-4 animate-spin" />{locale === 'fr' ? 'Envoi...' : 'Sending...'}</>
-                      : <><Mail className="w-4 h-4" />{locale === 'fr' ? 'Envoyer le code' : 'Send code'}</>
-                    }
+                <h3 style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24', textAlign: 'center', margin: '0 0 8px' }}>Mettre en corbeille ?</h3>
+                <p style={{ fontSize: 13, color: '#7a766d', textAlign: 'center', margin: '0 0 6px' }}>&quot;{workshopName}&quot; sera mis en corbeille. Vous aurez 7 jours pour annuler.</p>
+                <p style={{ fontSize: 11.5, color: '#9a948a', textAlign: 'center', margin: '0 0 20px' }}>Un code de confirmation sera envoyé par email.</p>
+                {deleteError && <p style={{ fontSize: 12, color: '#b85a4a', background: 'rgba(184,90,74,0.08)', padding: '8px 12px', borderRadius: 9, textAlign: 'center', marginBottom: 14 }}>{deleteError}</p>}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => setDeleteStep('idle')} style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
+                  <button onClick={handleSendCode} disabled={deleteStep === 'sending'} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, background: '#b85a4a', color: '#fff', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: deleteStep === 'sending' ? 0.6 : 1 }}>
+                    {deleteStep === 'sending' ? <><Loader2 size={14} className="animate-spin" />Envoi...</> : <><Mail size={14} />Envoyer le code</>}
                   </button>
                 </div>
               </>
             )}
 
-            {/* Step 2 : saisir le code */}
             {(deleteStep === 'enter_code' || deleteStep === 'verifying') && (
               <>
-                <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center mx-auto mb-4">
-                  <Mail className="w-6 h-6 text-amber-600" />
+                <div style={{ width: 48, height: 48, borderRadius: 16, background: 'rgba(232,184,108,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                  <Mail size={22} color="#c89860" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
-                  {locale === 'fr' ? 'Code envoyé !' : 'Code sent!'}
-                </h3>
-                <p className="text-sm text-gray-500 text-center mb-5">
-                  {locale === 'fr'
-                    ? 'Saisissez le code à 6 chiffres reçu par email. Il expire dans 15 minutes.'
-                    : 'Enter the 6-digit code received by email. It expires in 15 minutes.'}
-                </p>
-                <input
-                  type="text"
-                  value={deleteCode}
-                  onChange={(e) => { setDeleteCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setDeleteError(''); }}
-                  placeholder="000000"
-                  maxLength={6}
-                  className="w-full text-center text-3xl font-mono tracking-[0.5em] px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-red-400 mb-3"
-                  disabled={deleteStep === 'verifying'}
-                  autoFocus
-                />
-                {deleteError && (
-                  <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-3 text-center">{deleteError}</p>
-                )}
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => { setDeleteStep('confirm'); setDeleteCode(''); setDeleteError(''); }}
-                    className="flex items-center gap-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50 transition-colors"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    {locale === 'fr' ? 'Renvoyer' : 'Resend'}
+                <h3 style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24', textAlign: 'center', margin: '0 0 8px' }}>Code envoyé !</h3>
+                <p style={{ fontSize: 13, color: '#7a766d', textAlign: 'center', margin: '0 0 20px' }}>Saisissez le code à 6 chiffres reçu par email. Il expire dans 15 minutes.</p>
+                <input type="text" value={deleteCode} onChange={e => { setDeleteCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setDeleteError(''); }} placeholder="000000" maxLength={6} style={{ width: '100%', textAlign: 'center', fontSize: 28, fontFamily: 'ui-monospace, monospace', letterSpacing: '0.5em', padding: '12px 16px', border: '2px solid rgba(45,42,36,0.14)', borderRadius: 12, outline: 'none', boxSizing: 'border-box', marginBottom: 10 }} disabled={deleteStep === 'verifying'} autoFocus />
+                {deleteError && <p style={{ fontSize: 12, color: '#b85a4a', background: 'rgba(184,90,74,0.08)', padding: '8px 12px', borderRadius: 9, textAlign: 'center', marginBottom: 10 }}>{deleteError}</p>}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => { setDeleteStep('confirm'); setDeleteCode(''); setDeleteError(''); }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    <RotateCcw size={13} /> Renvoyer
                   </button>
-                  <button
-                    onClick={handleConfirmDeletion}
-                    disabled={deleteCode.length !== 6 || deleteStep === 'verifying'}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
-                  >
-                    {deleteStep === 'verifying'
-                      ? <><Loader2 className="w-4 h-4 animate-spin" />{locale === 'fr' ? 'Vérification...' : 'Verifying...'}</>
-                      : locale === 'fr' ? 'Confirmer' : 'Confirm'
-                    }
+                  <button onClick={handleConfirmDeletion} disabled={deleteCode.length !== 6 || deleteStep === 'verifying'} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, background: '#b85a4a', color: '#fff', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: deleteCode.length !== 6 || deleteStep === 'verifying' ? 0.5 : 1 }}>
+                    {deleteStep === 'verifying' ? <><Loader2 size={14} className="animate-spin" />Vérification...</> : 'Confirmer'}
                   </button>
                 </div>
               </>
             )}
-
           </div>
         </div>
       )}

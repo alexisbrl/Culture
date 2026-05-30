@@ -1,26 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import { useUser, SignOutButton } from '@clerk/nextjs';
 import { Zap, UserCircle, LogOut, ChevronDown, Crown } from 'lucide-react';
-import AvatarSVG from '@/components/avatar/AvatarSVG';
-import type { AvatarConfig } from '@/components/avatar/types';
-import { DEFAULT_AVATAR } from '@/components/avatar/types';
+import AvatarComposer from '@/components/avatar/AvatarComposer';
+import { loadAvatarConfig, type AvatarConfig } from '@/components/avatar/avatarConfig';
 
 export default function DashboardHeader() {
   const locale = useLocale();
   const pathname = usePathname();
   const { user } = useUser();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
+
+  useEffect(() => { setAvatarConfig(loadAvatarConfig()); }, []);
 
   const otherLocale = locale === 'fr' ? 'en' : 'fr';
   const pathWithoutLocale = pathname.replace(`/${locale}`, '') || '/dashboard';
   const otherLocalePath = `/${otherLocale}${pathWithoutLocale}`;
-
-  const avatarConfig = (user?.publicMetadata?.avatarConfig as AvatarConfig) ?? DEFAULT_AVATAR;
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
@@ -51,8 +51,10 @@ export default function DashboardHeader() {
               onClick={() => setMenuOpen(!menuOpen)}
               className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-violet-50 transition-colors"
             >
-              <div className="w-7 h-7 rounded-full overflow-hidden">
-                <AvatarSVG config={avatarConfig} size={28} />
+              <div className="w-7 h-7 rounded-full overflow-hidden bg-[#eef0dd]">
+                {avatarConfig && (
+                  <AvatarComposer config={avatarConfig} size={28} frame="head" />
+                )}
               </div>
               <span className="text-sm font-medium text-gray-700">
                 {user?.firstName ?? user?.emailAddresses[0]?.emailAddress.split('@')[0]}
