@@ -349,7 +349,7 @@ export async function addMemberByTag(
     if (!targetUser) {
       return {
         success: false,
-        error: 'Utilisateur introuvable. Vérifiez le tag et assurez-vous que l\'utilisateur s\'est connecté à Evalia.',
+        error: 'Utilisateur introuvable. Vérifiez le tag et assurez-vous que l\'utilisateur s\'est connecté à Culture.',
       };
     }
 
@@ -468,25 +468,25 @@ export async function requestDeletionCode(
     // Envoyer le code par email
     const resend = getResend();
     await resend.emails.send({
-      from: 'Evalia <onboarding@resend.dev>',
+      from: 'Culture <onboarding@resend.dev>',
       to: ownerEmail,
       subject: `🗑️ Code de suppression : ${code}`,
       html: `
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
           <div style="text-align: center; margin-bottom: 24px;">
             <span style="font-size: 32px;">🪴</span>
-            <h1 style="color: #7c3aed; font-size: 24px; margin: 8px 0;">Evalia</h1>
+            <h1 style="color: #5f8a3f; font-size: 24px; margin: 8px 0;">Culture</h1>
           </div>
           <h2 style="color: #111827; font-size: 18px;">Confirmation de suppression</h2>
           <p style="color: #6b7280;">Bonjour ${ownerName},</p>
           <p style="color: #6b7280;">Vous avez demandé la suppression de l'atelier <strong style="color: #111827;">"${workshop.name}"</strong>.</p>
           <p style="color: #6b7280;">Voici votre code de confirmation :</p>
           <div style="background: #f3f4f6; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
-            <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #7c3aed;">${code}</span>
+            <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #5f8a3f;">${code}</span>
           </div>
           <p style="color: #9ca3af; font-size: 13px;">Ce code expire dans 15 minutes. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
           <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
-          <p style="color: #d1d5db; font-size: 12px; text-align: center;">© Evalia · scellow.com</p>
+          <p style="color: #d1d5db; font-size: 12px; text-align: center;">© Culture · scellow.com</p>
         </div>
       `,
     });
@@ -568,14 +568,14 @@ export async function confirmDeletion(
         const ownerName = `${ownerUser.firstName ?? ''} ${ownerUser.lastName ?? ''}`.trim() || ownerEmail;
 
         await resend.emails.send({
-          from: 'Evalia <onboarding@resend.dev>',
+          from: 'Culture <onboarding@resend.dev>',
           to: ownerEmail,
           subject: `🗑️ Atelier "${workshop.name}" mis en corbeille`,
           html: `
             <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
               <div style="text-align: center; margin-bottom: 24px;">
                 <span style="font-size: 32px;">🪴</span>
-                <h1 style="color: #7c3aed; font-size: 24px; margin: 8px 0;">Evalia</h1>
+                <h1 style="color: #5f8a3f; font-size: 24px; margin: 8px 0;">Culture</h1>
               </div>
               <h2 style="color: #111827; font-size: 18px;">Atelier mis en corbeille</h2>
               <p style="color: #6b7280;">Bonjour ${ownerName},</p>
@@ -583,9 +583,9 @@ export async function confirmDeletion(
               <div style="background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 16px; margin: 20px 0;">
                 <p style="color: #92400e; margin: 0; font-size: 14px;">⏳ Cet atelier sera <strong>définitivement supprimé dans 7 jours</strong> si aucune restauration n'est effectuée.</p>
               </div>
-              <p style="color: #6b7280;">Si c'est une erreur, connectez-vous sur <a href="https://scellow.com" style="color: #7c3aed;">scellow.com</a> et restaurez l'atelier depuis votre corbeille.</p>
+              <p style="color: #6b7280;">Si c'est une erreur, connectez-vous sur <a href="https://scellow.com" style="color: #5f8a3f;">scellow.com</a> et restaurez l'atelier depuis votre corbeille.</p>
               <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
-              <p style="color: #d1d5db; font-size: 12px; text-align: center;">© Evalia · scellow.com</p>
+              <p style="color: #d1d5db; font-size: 12px; text-align: center;">© Culture · scellow.com</p>
             </div>
           `,
         });

@@ -12,7 +12,7 @@
     "badge": "Beta launching · Join the pioneers",
     "title": "Transform your training into",
     "titleHighlight": "learning adventures",
-    "subtitle": "Evalia converts your course materials into adaptive, gamified learning journeys. Your learners progress faster, stay motivated, and you measure it all in real time.",
+    "subtitle": "Culture converts your course materials into adaptive, gamified learning journeys. Your learners progress faster, stay motivated, and you measure it all in real time.",
     "cta": "Join the beta for free",
     "ctaSecondary": "See how it works",
     "social": "Already {count} trainers on the waitlist"
@@ -28,7 +28,7 @@
     "title": "From your content to an engaging workshop",
     "subtitle": "in 3 steps",
     "step1Title": "Upload your content",
-    "step1Desc": "PDF, Word, video, images... Evalia accepts all your existing formats. No need to start from scratch.",
+    "step1Desc": "PDF, Word, video, images... Culture accepts all your existing formats. No need to start from scratch.",
     "step2Title": "AI structures it for you",
     "step2Desc": "Our AI identifies key knowledge blocks and builds an adaptive learning path with quizzes, challenges, and spaced repetition.",
     "step3Title": "Your learners progress",
@@ -43,7 +43,7 @@
     "f2Title": "Smart Gamification",
     "f2Desc": "Points, badges, leaderboards, streaks. Playful engagement serving real learning objectives.",
     "f3Title": "Multi-format",
-    "f3Desc": "PDF, Word, PowerPoint, video, images — import what you already have. Evalia does the rest.",
+    "f3Desc": "PDF, Word, PowerPoint, video, images — import what you already have. Culture does the rest.",
     "f4Title": "Real-time tracking",
     "f4Desc": "Clear dashboards to see who's progressing, who's stuck, and which concepts are causing issues.",
     "f5Title": "Automated assessments",
@@ -57,7 +57,7 @@
   },
   "cta": {
     "title": "Ready to reinvent your training?",
-    "subtitle": "Join the trainers already transforming learning with Evalia. Free beta access, limited spots.",
+    "subtitle": "Join the trainers already transforming learning with Culture. Free beta access, limited spots.",
     "button": "Join the waitlist",
     "noCb": "No credit card required · Priority access"
   },
@@ -138,7 +138,7 @@
     "badge": "For creators",
     "title": "Create your first workshop",
     "titleHighlight": "in under 10 minutes",
-    "subtitle": "No need to be a pedagogy expert. Evalia automatically structures your expertise into an engaging learning journey.",
+    "subtitle": "No need to be a pedagogy expert. Culture automatically structures your expertise into an engaging learning journey.",
     "step1": {
       "title": "1. Import your materials",
       "desc": "Drag and drop your existing files. PDF courses, PowerPoint presentations, training videos, Word documents — everything is accepted."
@@ -163,7 +163,7 @@
     "badge": "Our mission",
     "title": "Making learning",
     "titleHighlight": "irresistible",
-    "story": "Evalia was born from a simple observation: professional training is too often boring, too long, and too quickly forgotten. Trainers spend hours creating content that learners just skim through.\n\nWhat if technology could change that? AI can now transform any content into an adaptive, engaging learning path — like Duolingo did for languages, but for any skill domain.\n\nEvalia is that tool. Built for trainers who have the expertise but not the time. For learners who genuinely want to progress. For organizations that need to measure the impact of every euro invested in training.",
+    "story": "Culture was born from a simple observation: professional training is too often boring, too long, and too quickly forgotten. Trainers spend hours creating content that learners just skim through.\n\nWhat if technology could change that? AI can now transform any content into an adaptive, engaging learning path — like Duolingo did for languages, but for any skill domain.\n\nCulture is that tool. Built for trainers who have the expertise but not the time. For learners who genuinely want to progress. For organizations that need to measure the impact of every euro invested in training.",
     "values": {
       "title": "Our values",
       "v1Title": "Pedagogy first",
@@ -198,7 +198,7 @@
     "contact": "Contact",
     "terms": "Terms",
     "privacy": "Privacy",
-    "copyright": "© {year} Evalia. All rights reserved.",
+    "copyright": "© {year} Culture. All rights reserved.",
     "madeWith": "Made with ❤️ in France"
   },
   "legal": {

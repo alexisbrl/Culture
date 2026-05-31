@@ -45,3 +45,6 @@ next-env.d.ts
 
 # design handoff (outil de travail local, pas du code)
 /_handoff/
+
+# Claude Code local (worktrees, settings locaux)
+/.claude/

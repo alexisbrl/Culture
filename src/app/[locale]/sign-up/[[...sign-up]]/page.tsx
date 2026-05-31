@@ -14,8 +14,8 @@ export default async function SignUpPage() {
           </h1>
           <p className="text-gray-500 text-sm mt-1">
             {locale === 'fr'
-              ? 'Rejoignez Evalia et créez votre premier atelier'
-              : 'Join Evalia and create your first workshop'}
+              ? 'Rejoignez Culture et créez votre premier atelier'
+              : 'Join Culture and create your first workshop'}
           </p>
         </div>
 

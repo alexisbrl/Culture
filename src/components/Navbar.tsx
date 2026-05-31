@@ -9,7 +9,7 @@ import LinkButton from '@/components/LinkButton';
 import AvatarSVG from '@/components/avatar/AvatarSVG';
 import type { AvatarConfig } from '@/components/avatar/types';
 import { DEFAULT_AVATAR } from '@/components/avatar/types';
-import { Menu, X, Zap, LogIn, LogOut, LayoutDashboard, ChevronDown, UserCircle } from 'lucide-react';
+import { Menu, X, LogIn, LogOut, LayoutDashboard, ChevronDown, UserCircle } from 'lucide-react';
 
 export default function Navbar() {
   const t = useTranslations('nav');
@@ -37,12 +37,13 @@ export default function Navbar() {
 
           {/* Logo */}
           <Link href={`/${locale}`} className="flex items-center gap-2 group">
-            <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-              <Zap className="w-4 h-4 text-white fill-white" />
-            </div>
-            <span className="text-xl font-bold text-gray-900">
-              Eval<span className="text-violet-600">ia</span>
-            </span>
+            <svg viewBox="0 0 22 22" className="w-7 h-7 group-hover:scale-105 transition-transform" aria-hidden>
+              <path d="M 11 20 L 11 11" stroke="#5a6b3e" strokeWidth="1.7" strokeLinecap="round" fill="none" />
+              <ellipse cx="11" cy="8.5" rx="6.5" ry="6" fill="#7a9968" />
+              <ellipse cx="8.8" cy="6.6" rx="3" ry="2.4" fill="#fff" opacity="0.28" />
+              <path d="M 11 14 q -4 -1 -5 -4" stroke="#5a6b3e" strokeWidth="1.2" strokeLinecap="round" fill="none" opacity="0.6" />
+            </svg>
+            <span className="text-xl font-bold text-gray-900">Culture</span>
           </Link>
 
           {/* Desktop nav */}

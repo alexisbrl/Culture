@@ -87,6 +87,7 @@ culture/
 │   │   │   ├── contact/
 │   │   │   ├── create/
 │   │   │   ├── dashboard/
+│   │   │   ├── garden/          # Jardin iso — page principale (logo Evalia) [MODIFIÉ PAR CLAUDE - 31/05/2026]
 │   │   │   ├── legal/
 │   │   │   ├── pricing/
 │   │   │   ├── profile/
@@ -368,11 +369,12 @@ Un propriétaire peut activer le statut Premium sur son atelier. C'est une opér
 - Fichiers exemples disponibles pour créer son premier atelier
 - **Règle de déverrouillage des fonctionnalités :** les fonctionnalités sont masquées par défaut et révélées au moment où elles deviennent pertinentes, pas après un délai fixe.
 
-**Home page**
-- Page principale après connexion
-- Affiche : le jardin de l'utilisateur + ses ateliers
+**Home page = Jardin** (`/garden`) — page principale après connexion, cible du logo Evalia
+- **Le jardin est indépendant des ateliers** [MODIFIÉ PAR CLAUDE - 31/05/2026] : atelier = cours où l'on gagne de l'XP ; jardin = lieu où l'on cultive des plantes qui grandissent grâce à l'XP gagné. Les arbres ne sont PAS liés à un atelier.
+- Système visuel : blocs isométriques 3D épais (tranche terre/roche), détection automatique des bords → masse solide quelle que soit la forme. **Agrandissement par placement manuel** des tuiles (mode édition, coût en XP), extensible à l'infini.
+- État de la V1 : mock localStorage (`culture.garden.v1`), schéma Supabase jardin à créer ultérieurement. Le panneau de droite (infos) reste à retravailler.
 - Donne accès à : recherche d'atelier, profil, paramètres, toutes les autres fonctionnalités
-- Visuellement animée et chaleureuse — doit donner envie d'y revenir
+- Visuellement chaleureux et apaisant (nature / lofi) — doit donner envie d'y revenir
 
 **Recherche d'atelier**
 - Accessible via une icône sur la Home page (recouvre partiellement la page)

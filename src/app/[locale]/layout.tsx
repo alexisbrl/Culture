@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Inter_Tight, Caveat, Geist_Mono } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
@@ -12,9 +12,16 @@ import Navbar from '@/components/Navbar';
 import DashboardHeader from '@/components/DashboardHeader';
 import Footer from '@/components/Footer';
 
-const geistSans = Geist({
+const interTight = Inter_Tight({
   variable: '--font-sans',
   subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+});
+
+const caveat = Caveat({
+  variable: '--font-script',
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
 });
 
 const geistMono = Geist_Mono({
@@ -23,12 +30,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Evalia — L'apprentissage réinventé",
+  title: "Culture — L'apprentissage réinventé",
   description:
     'Transformez vos formations en parcours adaptatifs et gamifiés. Vos apprenants progressent plus vite, restent motivés.',
   keywords: ['formation', 'e-learning', 'gamification', 'IA', 'apprentissage adaptatif'],
   openGraph: {
-    title: "Evalia — L'apprentissage réinventé",
+    title: "Culture — L'apprentissage réinventé",
     description: 'Transformez vos formations en parcours adaptatifs et gamifiés.',
     type: 'website',
   },
@@ -53,7 +60,7 @@ export default async function LocaleLayout({ children, params }: Props) {
 
   return (
     <ClerkProvider localization={clerkLocalization}>
-      <html lang={locale} className={`${geistSans.variable} ${geistMono.variable} h-full`}>
+      <html lang={locale} className={`${interTight.variable} ${caveat.variable} ${geistMono.variable} h-full`}>
         <body className="min-h-full flex flex-col bg-white">
           <NextIntlClientProvider messages={messages}>
             {isLoggedIn ? <DashboardHeader /> : <Navbar />}

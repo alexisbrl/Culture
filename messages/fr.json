@@ -12,7 +12,7 @@
     "badge": "Bêta en cours · Rejoignez les pionniers",
     "title": "Transformez vos formations en",
     "titleHighlight": "aventures d'apprentissage",
-    "subtitle": "Evalia convertit vos supports de cours en parcours adaptatifs et gamifiés. Vos apprenants progressent plus vite, restent motivés, et vous le mesurez en temps réel.",
+    "subtitle": "Culture convertit vos supports de cours en parcours adaptatifs et gamifiés. Vos apprenants progressent plus vite, restent motivés, et vous le mesurez en temps réel.",
     "cta": "Rejoindre la beta gratuitement",
     "ctaSecondary": "Voir comment ça marche",
     "social": "Déjà {count} formateurs sur la liste d'attente"
@@ -28,7 +28,7 @@
     "title": "De votre contenu à un atelier engageant",
     "subtitle": "en 3 étapes",
     "step1Title": "Uploadez votre contenu",
-    "step1Desc": "PDF, Word, vidéo, image... Evalia accepte tous vos formats existants. Pas besoin de tout recommencer.",
+    "step1Desc": "PDF, Word, vidéo, image... Culture accepte tous vos formats existants. Pas besoin de tout recommencer.",
     "step2Title": "L'IA décompose et structure",
     "step2Desc": "Notre IA identifie les briques de connaissance clés et construit un parcours adaptatif, avec quiz, défis et révisions espacées.",
     "step3Title": "Vos apprenants progressent",
@@ -43,7 +43,7 @@
     "f2Title": "Gamification Intelligente",
     "f2Desc": "Points, badges, classements, streaks. L'engagement ludique au service de vrais objectifs pédagogiques.",
     "f3Title": "Multi-formats",
-    "f3Desc": "PDF, Word, PowerPoint, vidéo, images — importez ce que vous avez déjà. Evalia fait le reste.",
+    "f3Desc": "PDF, Word, PowerPoint, vidéo, images — importez ce que vous avez déjà. Culture fait le reste.",
     "f4Title": "Suivi en temps réel",
     "f4Desc": "Tableaux de bord clairs pour voir qui avance, qui bloque, et quels concepts posent problème.",
     "f5Title": "Examens automatisés",
@@ -57,7 +57,7 @@
   },
   "cta": {
     "title": "Prêt à révolutionner vos formations ?",
-    "subtitle": "Rejoignez les formateurs qui transforment déjà l'apprentissage avec Evalia. Accès beta gratuit, places limitées.",
+    "subtitle": "Rejoignez les formateurs qui transforment déjà l'apprentissage avec Culture. Accès beta gratuit, places limitées.",
     "button": "Rejoindre la liste d'attente",
     "noCb": "Aucune carte bancaire requise · Accès prioritaire"
   },
@@ -138,7 +138,7 @@
     "badge": "Pour les créateurs",
     "title": "Créez votre premier atelier",
     "titleHighlight": "en moins de 10 minutes",
-    "subtitle": "Pas besoin d'être expert en pédagogie. Evalia structure votre expertise en parcours engageant automatiquement.",
+    "subtitle": "Pas besoin d'être expert en pédagogie. Culture structure votre expertise en parcours engageant automatiquement.",
     "step1": {
       "title": "1. Importez vos supports",
       "desc": "Glissez-déposez vos fichiers existants. PDF de cours, présentations PowerPoint, vidéos de formation, documents Word — tout est accepté."
@@ -163,7 +163,7 @@
     "badge": "Notre mission",
     "title": "Rendre l'apprentissage",
     "titleHighlight": "irrésistible",
-    "story": "Evalia est né d'un constat simple : les formations professionnelles sont trop souvent ennuyeuses, trop longues, et trop vite oubliées. Les formateurs passent des heures à créer des contenus que les apprenants survolent.\n\nEt si la technologie pouvait changer ça ? L'IA peut désormais transformer n'importe quel contenu en parcours adaptatif et engageant — comme Duolingo l'a fait pour les langues, mais pour n'importe quel domaine de compétence.\n\nEvalia, c'est cet outil. Conçu pour les formateurs qui ont l'expertise mais pas le temps. Pour les apprenants qui veulent vraiment progresser. Pour les organisations qui mesurent l'impact de chaque euro investi en formation.",
+    "story": "Culture est né d'un constat simple : les formations professionnelles sont trop souvent ennuyeuses, trop longues, et trop vite oubliées. Les formateurs passent des heures à créer des contenus que les apprenants survolent.\n\nEt si la technologie pouvait changer ça ? L'IA peut désormais transformer n'importe quel contenu en parcours adaptatif et engageant — comme Duolingo l'a fait pour les langues, mais pour n'importe quel domaine de compétence.\n\nCulture, c'est cet outil. Conçu pour les formateurs qui ont l'expertise mais pas le temps. Pour les apprenants qui veulent vraiment progresser. Pour les organisations qui mesurent l'impact de chaque euro investi en formation.",
     "values": {
       "title": "Nos valeurs",
       "v1Title": "Pédagogie d'abord",
@@ -198,7 +198,7 @@
     "contact": "Contact",
     "terms": "CGU",
     "privacy": "Confidentialité",
-    "copyright": "© {year} Evalia. Tous droits réservés.",
+    "copyright": "© {year} Culture. Tous droits réservés.",
     "madeWith": "Fait avec ❤️ en France"
   },
   "legal": {

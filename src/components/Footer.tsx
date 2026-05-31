@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
-import { Zap } from 'lucide-react';
 
 export default function Footer() {
   const t = useTranslations('footer');
@@ -14,12 +13,13 @@ export default function Footer() {
           {/* Brand */}
           <div className="col-span-1">
             <Link href={`/${locale}`} className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
-                <Zap className="w-4 h-4 text-white fill-white" />
-              </div>
-              <span className="text-xl font-bold text-white">
-                Eval<span className="text-violet-400">ia</span>
-              </span>
+              <svg viewBox="0 0 22 22" className="w-7 h-7" aria-hidden>
+                <path d="M 11 20 L 11 11" stroke="#9ec47e" strokeWidth="1.7" strokeLinecap="round" fill="none" />
+                <ellipse cx="11" cy="8.5" rx="6.5" ry="6" fill="#7a9968" />
+                <ellipse cx="8.8" cy="6.6" rx="3" ry="2.4" fill="#fff" opacity="0.3" />
+                <path d="M 11 14 q -4 -1 -5 -4" stroke="#9ec47e" strokeWidth="1.2" strokeLinecap="round" fill="none" opacity="0.7" />
+              </svg>
+              <span className="text-xl font-bold text-white">Culture</span>
             </Link>
             <p className="text-sm text-gray-500 leading-relaxed">{t('tagline')}</p>
             <p className="text-xs text-gray-600 mt-4">{t('madeWith')}</p>

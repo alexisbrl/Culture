@@ -20,7 +20,7 @@ function LegalPageClient({ locale }: { locale: string }) {
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">1. Éditeur du site</h2>
               <p className="text-gray-600 leading-relaxed">
-                Le site Evalia (accessible temporairement via scellow.com) est édité à titre personnel dans le cadre d'un projet en phase bêta. Toute information de contact est disponible via la page Contact.
+                Le site Culture (accessible temporairement via scellow.com) est édité à titre personnel dans le cadre d'un projet en phase bêta. Toute information de contact est disponible via la page Contact.
               </p>
             </div>
             <div>
@@ -38,7 +38,7 @@ function LegalPageClient({ locale }: { locale: string }) {
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">4. Propriété intellectuelle</h2>
               <p className="text-gray-600 leading-relaxed">
-                L'ensemble du contenu de ce site (textes, visuels, marque Evalia) est protégé. Toute reproduction sans autorisation est interdite.
+                L'ensemble du contenu de ce site (textes, visuels, marque Culture) est protégé. Toute reproduction sans autorisation est interdite.
               </p>
             </div>
             <div>
@@ -53,7 +53,7 @@ function LegalPageClient({ locale }: { locale: string }) {
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">1. Publisher</h2>
               <p className="text-gray-600 leading-relaxed">
-                The Evalia website (temporarily accessible via scellow.com) is published personally as part of a beta-phase project. Contact information is available via the Contact page.
+                The Culture website (temporarily accessible via scellow.com) is published personally as part of a beta-phase project. Contact information is available via the Contact page.
               </p>
             </div>
             <div>
@@ -71,7 +71,7 @@ function LegalPageClient({ locale }: { locale: string }) {
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">4. Intellectual Property</h2>
               <p className="text-gray-600 leading-relaxed">
-                All site content (texts, visuals, Evalia brand) is protected. Reproduction without permission is prohibited.
+                All site content (texts, visuals, Culture brand) is protected. Reproduction without permission is prohibited.
               </p>
             </div>
             <div>

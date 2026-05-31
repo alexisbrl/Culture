@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useLocale } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import { useUser, SignOutButton } from '@clerk/nextjs';
-import { Zap, UserCircle, LogOut, ChevronDown, Crown } from 'lucide-react';
+import { UserCircle, LogOut, ChevronDown, Crown } from 'lucide-react';
 import AvatarComposer from '@/components/avatar/AvatarComposer';
 import { loadAvatarConfig, type AvatarConfig } from '@/components/avatar/avatarConfig';
 
@@ -25,15 +25,24 @@ export default function DashboardHeader() {
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        {/* Logo */}
-        <Link href={`/${locale}/dashboard`} className="flex items-center gap-2 group">
-          <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-            <Zap className="w-4 h-4 text-white fill-white" />
-          </div>
-          <span className="text-xl font-bold text-gray-900">
-            Eval<span className="text-violet-600">ia</span>
-          </span>
-        </Link>
+        {/* Logo → jardin (page principale) */}
+        <div className="flex items-center gap-5">
+          <Link href={`/${locale}/garden`} className="flex items-center gap-2 group">
+            <svg viewBox="0 0 22 22" className="w-7 h-7 group-hover:scale-105 transition-transform" aria-hidden>
+              <path d="M 11 20 L 11 11" stroke="#5a6b3e" strokeWidth="1.7" strokeLinecap="round" fill="none" />
+              <ellipse cx="11" cy="8.5" rx="6.5" ry="6" fill="#7a9968" />
+              <ellipse cx="8.8" cy="6.6" rx="3" ry="2.4" fill="#fff" opacity="0.28" />
+              <path d="M 11 14 q -4 -1 -5 -4" stroke="#5a6b3e" strokeWidth="1.2" strokeLinecap="round" fill="none" opacity="0.6" />
+            </svg>
+            <span className="text-xl font-bold text-gray-900">Culture</span>
+          </Link>
+          <Link
+            href={`/${locale}/dashboard`}
+            className="hidden sm:inline text-sm font-medium text-gray-500 hover:text-violet-600 transition-colors"
+          >
+            {locale === 'fr' ? 'Mes ateliers' : 'My workshops'}
+          </Link>
+        </div>
 
         {/* Right side */}
         <div className="flex items-center gap-3">
