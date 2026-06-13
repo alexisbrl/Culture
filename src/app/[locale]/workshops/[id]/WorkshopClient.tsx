@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Loader2, Mail, RotateCcw, Trash2 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { Check, Copy, Loader2, Mail, QrCode, RotateCcw, Trash2, X } from 'lucide-react';
 import { requestDeletionCode, confirmDeletion } from '@/app/actions/workshops';
 import ProgrammeTab from './tabs/ProgrammeTab';
 import ExamenTab from './tabs/ExamenTab';
@@ -53,6 +54,20 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
   const [deleteCode, setDeleteCode] = useState('');
   const [deleteError, setDeleteError] = useState('');
 
+  const [shareOpen, setShareOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [joinUrl, setJoinUrl] = useState('');
+
+  useEffect(() => {
+    setJoinUrl(`${window.location.origin}/${locale}/dashboard?preview=${workshopId}`);
+  }, [locale, workshopId]);
+
+  async function handleCopyLink() {
+    await navigator.clipboard.writeText(joinUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  }
+
   async function handleSendCode() {
     setDeleteStep('sending');
     setDeleteError('');
@@ -96,7 +111,10 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
               </span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: '#5a564c', fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>partager · QR</button>
+              <button onClick={() => setShareOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: '#5a564c', fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <QrCode size={13} />
+                partager · QR
+              </button>
               {isOwner && (
                 <>
                   <Link href={`/${locale}/workshops/${workshopId}/settings`} style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: '#5a564c', fontSize: 12.5, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -131,6 +149,33 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
         {activeTab === 'analyse' && <AnalyseTab />}
         {activeTab === 'cours' && <CoursTab />}
       </div>
+
+      {/* Share / QR modal */}
+      {shareOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(45,42,36,0.5)', backdropFilter: 'blur(4px)', padding: 16 }} onClick={() => setShareOpen(false)}>
+          <div style={{ background: '#fff', borderRadius: 20, boxShadow: '0 30px 80px rgba(45,42,36,0.18)', padding: 24, width: '100%', maxWidth: 360, fontFamily: 'inherit', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShareOpen(false)} style={{ position: 'absolute', top: 14, right: 14, background: 'none', border: 'none', cursor: 'pointer', color: '#9a948a', padding: 4, display: 'flex' }}>
+              <X size={16} />
+            </button>
+
+            <h3 style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24', textAlign: 'center', margin: '0 0 4px' }}>Rejoindre &quot;{workshopName}&quot;</h3>
+            <p style={{ fontSize: 12.5, color: '#7a766d', textAlign: 'center', margin: '0 0 20px' }}>Scannez ce QR code ou partagez le lien ci-dessous.</p>
+
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+              <div style={{ padding: 14, background: '#fff', borderRadius: 14, border: '1px solid rgba(45,42,36,0.10)' }}>
+                {joinUrl && <QRCodeSVG value={joinUrl} size={180} bgColor="#ffffff" fgColor="#2d2a24" level="M" />}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input readOnly value={joinUrl} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 0, fontSize: 12, fontFamily: 'ui-monospace, monospace', padding: '10px 12px', border: '1px solid rgba(45,42,36,0.14)', borderRadius: 10, outline: 'none', background: 'rgba(45,42,36,0.03)', color: '#5a564c' }} />
+              <button onClick={handleCopyLink} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 10, background: copied ? '#7a9968' : '#2d2a24', color: '#fff', border: 'none', fontSize: 12.5, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                {copied ? <><Check size={13} />copié</> : <><Copy size={13} />copier</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete modal */}
       {deleteStep !== 'idle' && (

@@ -14,6 +14,31 @@ function generateCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+// Génère un tag aléatoire de 7 caractères (sans lettres/chiffres ambigus)
+function generateWorkshopTag(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let id = '';
+  for (let i = 0; i < 7; i++) {
+    id += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return id;
+}
+
+// Génère un tag d'atelier garanti unique (max 10 tentatives)
+async function generateUniqueWorkshopTag(): Promise<string> {
+  const supabase = getSupabaseServerClient();
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const candidate = generateWorkshopTag();
+    const { data } = await supabase
+      .from('workshops')
+      .select('id')
+      .eq('unique_tag', candidate)
+      .maybeSingle();
+    if (!data) return candidate;
+  }
+  throw new Error('Impossible de générer un tag unique après 10 tentatives');
+}
+
 // ─── Sync user profile to Supabase ───────────────────────────────────────────
 
 export async function syncUserProfile(): Promise<{
@@ -54,10 +79,11 @@ export async function createWorkshop(
     if (!profile) return { success: false, error: 'Non authentifié' };
 
     const supabase = getSupabaseServerClient();
+    const uniqueTag = await generateUniqueWorkshopTag();
 
     const { data: workshop, error } = await supabase
       .from('workshops')
-      .insert({ name: name.trim(), created_by: profile.userId })
+      .insert({ name: name.trim(), created_by: profile.userId, unique_tag: uniqueTag })
       .select('id')
       .single();
 
@@ -98,9 +124,22 @@ async function cleanupExpiredWorkshops() {
 
 // ─── Get user's workshops ─────────────────────────────────────────────────────
 
+export type WorkshopCardData = {
+  id: string;
+  name: string;
+  created_at: string;
+  member_count: number;
+  description: string | null;
+  cover_gradient: string | null;
+  cover_image_url: string | null;
+  emoji: string | null;
+  unique_tag: string | null;
+  owner_name: string;
+};
+
 export async function getUserWorkshops(): Promise<{
-  owned: Array<{ id: string; name: string; created_at: string; member_count: number }>;
-  joined: Array<{ id: string; name: string; created_at: string; member_count: number }>;
+  owned: WorkshopCardData[];
+  joined: WorkshopCardData[];
 }> {
   try {
     const profile = await syncUserProfile();
@@ -112,7 +151,7 @@ export async function getUserWorkshops(): Promise<{
 
     const { data: memberships } = await supabase
       .from('workshop_members')
-      .select('role, workshop_id')
+      .select('role, workshop_id, last_visited_at')
       .eq('user_id', profile.userId);
 
     if (!memberships || memberships.length === 0) return { owned: [], joined: [] };
@@ -122,7 +161,7 @@ export async function getUserWorkshops(): Promise<{
     // Exclure les ateliers en corbeille
     const { data: workshops } = await supabase
       .from('workshops')
-      .select('id, name, created_at')
+      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, emoji, unique_tag')
       .in('id', workshopIds)
       .is('deleted_at', null);
 
@@ -137,16 +176,49 @@ export async function getUserWorkshops(): Promise<{
     }
 
     const roleMap: Record<string, 'owner' | 'member'> = {};
-    for (const m of memberships) roleMap[m.workshop_id] = m.role;
+    const lastVisitedMap: Record<string, string> = {};
+    for (const m of memberships) {
+      roleMap[m.workshop_id] = m.role;
+      lastVisitedMap[m.workshop_id] = m.last_visited_at;
+    }
 
-    const owned: Array<{ id: string; name: string; created_at: string; member_count: number }> = [];
-    const joined: Array<{ id: string; name: string; created_at: string; member_count: number }> = [];
+    // Profils des propriétaires (pour le nom affiché dans la Preview)
+    const ownerIds = [...new Set((workshops ?? []).map((w) => w.created_by))];
+    let ownerProfiles: Array<{ user_id: string; display_name: string }> = [];
+    if (ownerIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('user_profiles')
+        .select('user_id, display_name')
+        .in('user_id', ownerIds);
+      ownerProfiles = profiles ?? [];
+    }
+    const ownerNameMap = Object.fromEntries(ownerProfiles.map((p) => [p.user_id, p.display_name]));
+
+    const owned: WorkshopCardData[] = [];
+    const joined: WorkshopCardData[] = [];
 
     for (const w of workshops ?? []) {
-      const item = { id: w.id, name: w.name, created_at: w.created_at, member_count: countMap[w.id] ?? 1 };
+      const item: WorkshopCardData = {
+        id: w.id,
+        name: w.name,
+        created_at: w.created_at,
+        member_count: countMap[w.id] ?? 1,
+        description: w.description,
+        cover_gradient: w.cover_gradient,
+        cover_image_url: w.cover_image_url,
+        emoji: w.emoji,
+        unique_tag: w.unique_tag,
+        owner_name: ownerNameMap[w.created_by] ?? 'Utilisateur',
+      };
       if (roleMap[w.id] === 'owner') owned.push(item);
       else joined.push(item);
     }
+
+    const byLastVisited = (a: WorkshopCardData, b: WorkshopCardData) =>
+      new Date(lastVisitedMap[b.id]).getTime() - new Date(lastVisitedMap[a.id]).getTime();
+
+    owned.sort(byLastVisited);
+    joined.sort(byLastVisited);
 
     return { owned, joined };
   } catch (err) {
@@ -203,10 +275,17 @@ export async function getWorkshop(workshopId: string) {
 
     if (!membership) return null;
 
+    // Enregistrer la visite pour le tri du Dashboard (dernier atelier visité en premier)
+    await supabase
+      .from('workshop_members')
+      .update({ last_visited_at: new Date().toISOString() })
+      .eq('workshop_id', workshopId)
+      .eq('user_id', userId);
+
     // 2. Récupérer l'atelier
     const { data: workshop } = await supabase
       .from('workshops')
-      .select('id, name, created_at, created_by')
+      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, emoji, unique_tag')
       .eq('id', workshopId)
       .single();
 
@@ -248,9 +327,174 @@ export async function getWorkshop(workshopId: string) {
   }
 }
 
+// ─── Get workshop preview (public join page) ─────────────────────────────────
+
+export async function getWorkshopPreview(workshopId: string): Promise<{
+  id: string;
+  name: string;
+  createdAt: string;
+  description: string | null;
+  coverGradient: string | null;
+  coverImageUrl: string | null;
+  emoji: string | null;
+  ownerName: string;
+  memberCount: number;
+  isMember: boolean;
+} | null> {
+  try {
+    const { userId } = await auth();
+    if (!userId) return null;
+
+    const supabase = getSupabaseServerClient();
+
+    const { data: workshop } = await supabase
+      .from('workshops')
+      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, emoji')
+      .eq('id', workshopId)
+      .is('deleted_at', null)
+      .single();
+
+    if (!workshop) return null;
+
+    const { data: workshopMembers } = await supabase
+      .from('workshop_members')
+      .select('user_id, role')
+      .eq('workshop_id', workshopId);
+
+    const members = workshopMembers ?? [];
+    const owner = members.find((m) => m.role === 'owner');
+
+    let ownerName = 'Utilisateur';
+    if (owner) {
+      const { data: ownerProfile } = await supabase
+        .from('user_profiles')
+        .select('display_name')
+        .eq('user_id', owner.user_id)
+        .single();
+      ownerName = ownerProfile?.display_name ?? ownerName;
+    }
+
+    return {
+      id: workshop.id,
+      name: workshop.name,
+      createdAt: workshop.created_at,
+      description: workshop.description,
+      coverGradient: workshop.cover_gradient,
+      coverImageUrl: workshop.cover_image_url,
+      emoji: workshop.emoji,
+      ownerName,
+      memberCount: members.length,
+      isMember: members.some((m) => m.user_id === userId),
+    };
+  } catch (err) {
+    console.error('getWorkshopPreview error:', err);
+    return null;
+  }
+}
+
+// ─── Update workshop details (owner only) ─────────────────────────────────────
+
+export async function updateWorkshopDetails(
+  workshopId: string,
+  details: { description?: string; coverGradient?: string; coverImageUrl?: string | null; emoji?: string }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { userId } = await auth();
+    if (!userId) return { success: false, error: 'Non authentifié' };
+
+    const supabase = getSupabaseServerClient();
+
+    const { data: membership } = await supabase
+      .from('workshop_members')
+      .select('role')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', userId)
+      .single();
+
+    if (!membership || membership.role !== 'owner') {
+      return { success: false, error: 'Droits insuffisants' };
+    }
+
+    const update: Record<string, string | null> = {};
+    if (details.description !== undefined) update.description = details.description;
+    if (details.coverGradient !== undefined) update.cover_gradient = details.coverGradient;
+    if (details.coverImageUrl !== undefined) update.cover_image_url = details.coverImageUrl;
+    if (details.emoji !== undefined) update.emoji = details.emoji;
+
+    await supabase.from('workshops').update(update).eq('id', workshopId);
+
+    revalidatePath('/', 'layout');
+    return { success: true };
+  } catch (err) {
+    console.error('updateWorkshopDetails error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
+// ─── Upload a custom cover image (owner only) ─────────────────────────────────
+
+export async function uploadWorkshopCover(
+  workshopId: string,
+  formData: FormData
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  try {
+    const { userId } = await auth();
+    if (!userId) return { success: false, error: 'Non authentifié' };
+
+    const supabase = getSupabaseServerClient();
+
+    const { data: membership } = await supabase
+      .from('workshop_members')
+      .select('role')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', userId)
+      .single();
+
+    if (!membership || membership.role !== 'owner') {
+      return { success: false, error: 'Droits insuffisants' };
+    }
+
+    const file = formData.get('file');
+    if (!(file instanceof File)) return { success: false, error: 'Fichier manquant' };
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      return { success: false, error: 'Format non supporté (jpg, png ou webp uniquement)' };
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      return { success: false, error: 'Image trop lourde (5 Mo maximum)' };
+    }
+
+    const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+    const path = `${workshopId}/cover-${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('workshop-covers')
+      .upload(path, file, { contentType: file.type, upsert: true });
+
+    if (uploadError) {
+      console.error('uploadWorkshopCover upload error:', uploadError);
+      return { success: false, error: 'Erreur lors du téléchargement' };
+    }
+
+    const { data: publicUrlData } = supabase.storage.from('workshop-covers').getPublicUrl(path);
+    const url = publicUrlData.publicUrl;
+
+    await supabase.from('workshops').update({ cover_image_url: url }).eq('id', workshopId);
+
+    revalidatePath('/', 'layout');
+    return { success: true, url };
+  } catch (err) {
+    console.error('uploadWorkshopCover error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
 // ─── Search workshops to join ─────────────────────────────────────────────────
 
-export async function searchWorkshops(query: string) {
+export async function searchWorkshops(query: string): Promise<
+  Array<{ id: string; name: string; created_at: string; description: string | null; cover_gradient: string | null; cover_image_url: string | null; emoji: string | null; unique_tag: string | null; member_count: number }>
+> {
   try {
     const { userId } = await auth();
     if (!userId || !query.trim()) return [];
@@ -264,18 +508,32 @@ export async function searchWorkshops(query: string) {
 
     const ownedIds = memberships?.map((m) => m.workshop_id) ?? [];
 
+    // Échappe les caractères qui ont un sens dans la syntaxe .or() de PostgREST
+    const safeQuery = query.replace(/[,()%*]/g, '');
+
     let q = supabase
       .from('workshops')
-      .select('id, name, created_at')
-      .ilike('name', `%${query}%`)
+      .select('id, name, created_at, description, cover_gradient, cover_image_url, emoji, unique_tag')
+      .or(`name.ilike.%${safeQuery}%,unique_tag.ilike.${safeQuery}`)
+      .is('deleted_at', null)
       .limit(8);
 
     if (ownedIds.length > 0) {
       q = q.not('id', 'in', `(${ownedIds.join(',')})`);
     }
 
-    const { data } = await q;
-    return data ?? [];
+    const { data: workshops } = await q;
+    if (!workshops || workshops.length === 0) return [];
+
+    const { data: counts } = await supabase
+      .from('workshop_members')
+      .select('workshop_id')
+      .in('workshop_id', workshops.map((w) => w.id));
+
+    const countMap: Record<string, number> = {};
+    for (const c of counts ?? []) countMap[c.workshop_id] = (countMap[c.workshop_id] ?? 0) + 1;
+
+    return workshops.map((w) => ({ ...w, member_count: countMap[w.id] ?? 0 }));
   } catch (err) {
     console.error('searchWorkshops error:', err);
     return [];

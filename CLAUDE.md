@@ -3,7 +3,7 @@
 > Ce fichier est l'unique source de vérité pour tout développement sur ce projet. Il doit être lu intégralement à chaque nouvelle conversation.
 > **Toute modification structurante apportée au projet (stack, structure, conventions, décisions produit) doit être reflétée ici.**
 >
-> Dernière mise à jour : 31/05/2026
+> Dernière mise à jour : 13/06/2026
 
 ---
 
@@ -87,15 +87,15 @@ culture/
 │   │   │   ├── about/
 │   │   │   ├── contact/
 │   │   │   ├── create/         # Création d'atelier (dépôt fichiers + identité + visibilité) [MODIFIÉ PAR CLAUDE - 31/05/2026]
-│   │   │   ├── dashboard/
+│   │   │   ├── dashboard/       # = page Recherche fusionnée : mes ateliers + recherche + Preview d'atelier [MODIFIÉ PAR CLAUDE - 13/06/2026]
 │   │   │   ├── garden/          # Jardin « Terra Nil » — page principale (logo Culture) [MODIFIÉ PAR CLAUDE - 31/05/2026]
 │   │   │   ├── legal/
 │   │   │   ├── pricing/
 │   │   │   ├── profile/
-│   │   │   ├── search/         # Recherche d'atelier (ateliers loisir Culture) [MODIFIÉ PAR CLAUDE - 31/05/2026]
+│   │   │   ├── search/         # Redirige vers /dashboard (fusionné) [MODIFIÉ PAR CLAUDE - 13/06/2026]
 │   │   │   ├── sign-in/
 │   │   │   ├── sign-up/
-│   │   │   ├── workshops/       # + [id]/session = session d'exercice (QCM) [MODIFIÉ PAR CLAUDE - 31/05/2026]
+│   │   │   ├── workshops/       # + [id]/session = session d'exercice (QCM) ; QR de partage → /dashboard?preview=ID [MODIFIÉ PAR CLAUDE - 13/06/2026]
 │   │   │   └── layout.tsx
 │   │   ├── actions/            # Server actions
 │   │   ├── api/                # API routes (API-first)
@@ -650,8 +650,12 @@ Sessions d'examens standardisés dans des **centres certifiés**. Chaque examen 
 | **Couleur tertiaire** | Ambre/bois `#a87a3a` (accents) · encre `#2d2a24` (texte) |
 | **Ton général** | Mix ludique / professionnel. Atmosphère paisible évoquant la nature ou le lofi. |
 
-> **Migration thème en cours** [31/05/2026] : l'app passe du violet (« Evalia ») au vert/crème (« Culture »). Fondations faites (typo, logo, `--primary`, renommage). Pages encore en classes `violet-*` à migrer page par page : Dashboard, Atelier, Profil, Paramètres, Pricing.
+> **Migration thème en cours** [31/05/2026] : l'app passe du violet (« Evalia ») au vert/crème (« Culture »). Fondations faites (typo, logo, `--primary`, renommage, Dashboard). Pages encore en classes `violet-*` à migrer page par page : Atelier, Profil, Paramètres, Pricing.
+
+> **Dashboard / Recherche / Preview d'atelier** [MODIFIÉ PAR CLAUDE - 13/06/2026] : `/dashboard` est désormais la page unique « mes ateliers + recherche » (thème Culture). `/search` redirige vers `/dashboard`. La barre de recherche, au focus, révèle les « ateliers proposés par Culture » (mock) + résultats de recherche en direct (`searchWorkshops`). Chaque atelier a une **Preview** (modal) : image de couverture (`cover_gradient`, colonnes `description`/`cover_gradient` sur `workshops`, géré via `src/lib/workshopCover.ts` + `updateWorkshopDetails`), description, propriétaire, nombre de membres, et un CTA « entrer dans l'atelier » (membre) ou « rejoindre » (non-membre). Le QR code de partage d'un atelier (`WorkshopClient.tsx`) pointe vers `/dashboard?preview=<id>`, qui ouvre automatiquement la Preview. La route `/workshops/[id]/join` a été supprimée (remplacée par `?preview=`).
+
+> **Tag d'atelier & couverture personnalisée** [MODIFIÉ PAR CLAUDE - 13/06/2026] : chaque atelier a désormais un `unique_tag` (7 caractères, format Crockford-like identique au tag utilisateur, généré et vérifié à la création via `generateUniqueWorkshopTag`). Affiché en lecture seule dans Paramètres → Général (« Tag de l'atelier », comme la « Date de création »), sans symbole `#`. La recherche (`searchWorkshops`) matche le nom (`ILIKE`) OU le tag exact (`unique_tag.ilike`). En complément des 4 dégradés de base, le propriétaire peut uploader une image de couverture personnalisée (colonne `cover_image_url`, bucket Supabase Storage public `workshop-covers`, action `uploadWorkshopCover`). `src/lib/workshopCover.ts` expose `coverStyleFor(id, gradient, imageUrl)` qui renvoie l'image si présente, sinon le dégradé — utilisé partout où une couverture est affichée (Dashboard, recherche, Preview).
 
 ---
 
-*Dernière mise à jour : 31/05/2026*
+*Dernière mise à jour : 13/06/2026*

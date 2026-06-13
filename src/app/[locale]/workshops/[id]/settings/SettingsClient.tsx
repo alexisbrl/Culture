@@ -3,8 +3,9 @@
 import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Loader2, Mail, RotateCcw } from 'lucide-react';
-import { requestDeletionCode, confirmDeletion } from '@/app/actions/workshops';
+import { Check, Loader2, Mail, RotateCcw, X } from 'lucide-react';
+import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover } from '@/app/actions/workshops';
+import { COVER_GRADIENTS, COVER_GRADIENT_KEYS, COVER_EMOJIS, coverGradientFor, emojiFor } from '@/lib/workshopCover';
 
 type Member = {
   id: string;
@@ -19,6 +20,12 @@ type Props = {
   locale: string;
   workshopId: string;
   workshopName: string;
+  description: string | null;
+  coverGradient: string | null;
+  coverImageUrl: string | null;
+  emoji: string | null;
+  createdAt: string;
+  uniqueTag: string | null;
   currentUserRole: 'owner' | 'member';
   members: Member[];
 };
@@ -70,7 +77,240 @@ function DotRow({ label, value, max }: { label: string; value: number; max: numb
   );
 }
 
-export default function SettingsClient({ locale, workshopId, workshopName, members }: Props) {
+// ─── Sub-components ───────────────────────────────────────────────────────
+
+function Row({
+  label,
+  hint,
+  children,
+  noBorder,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+  noBorder?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 16,
+        padding: '14px 0',
+        borderBottom: noBorder ? 'none' : '1px solid rgba(45,42,36,0.06)',
+        flexWrap: 'wrap',
+      }}
+    >
+      <div>
+        <div style={{ fontSize: 13.5, fontWeight: 450, color: '#2d2a24' }}>{label}</div>
+        {hint && <div style={{ fontSize: 11.5, color: '#9a948a', marginTop: 2 }}>{hint}</div>}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        background: 'rgba(45,42,36,0.06)',
+        borderRadius: 999,
+        padding: 3,
+        gap: 2,
+      }}
+    >
+      {(['privé', 'public'] as const).map((opt) => {
+        const active = (opt === 'public') === value;
+        return (
+          <button
+            key={opt}
+            onClick={() => onChange(opt === 'public')}
+            style={{
+              padding: '5px 14px',
+              borderRadius: 999,
+              border: 'none',
+              fontSize: 12,
+              fontWeight: active ? 500 : 400,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              background: active ? '#fff' : 'transparent',
+              color: active ? '#2d2a24' : '#7a766d',
+              boxShadow: active ? '0 1px 4px rgba(45,42,36,0.12)' : 'none',
+              transition: 'all 0.15s',
+            }}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Switch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!value)}
+      style={{
+        width: 42,
+        height: 24,
+        borderRadius: 999,
+        border: 'none',
+        background: value ? '#7a9968' : 'rgba(45,42,36,0.14)',
+        cursor: 'pointer',
+        padding: 3,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: value ? 'flex-end' : 'flex-start',
+        transition: 'all 0.18s',
+        flexShrink: 0,
+      }}
+      aria-checked={value}
+      role="switch"
+    >
+      <div
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: '50%',
+          background: '#fff',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
+        }}
+      />
+    </button>
+  );
+}
+
+function NumInput({
+  value,
+  onChange,
+  suffix,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  suffix: string;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => onChange(e.target.value.replace(/\D/g, ''))}
+        style={{
+          width: 90,
+          textAlign: 'right',
+          fontSize: 13,
+          fontFamily: 'inherit',
+          padding: '6px 10px',
+          border: '1px solid rgba(45,42,36,0.14)',
+          borderRadius: 9,
+          outline: 'none',
+          background: 'rgba(255,255,255,0.7)',
+          color: '#2d2a24',
+        }}
+      />
+      <span style={{ fontSize: 12, color: '#9a948a', whiteSpace: 'nowrap' }}>{suffix}</span>
+    </div>
+  );
+}
+
+function SmallBtn({
+  children,
+  tone = 'ghost',
+  onClick,
+}: {
+  children: React.ReactNode;
+  tone?: 'ghost' | 'danger' | 'dark' | 'amber';
+  onClick?: () => void;
+}) {
+  const styles = {
+    ghost: {
+      bg: 'transparent',
+      border: '1px solid rgba(45,42,36,0.16)',
+      color: '#5a564c',
+    },
+    danger: {
+      bg: 'rgba(184,90,74,0.10)',
+      border: '1px solid rgba(184,90,74,0.30)',
+      color: '#b85a4a',
+    },
+    dark: {
+      bg: '#2d2a24',
+      border: '1px solid #2d2a24',
+      color: '#fff',
+    },
+    amber: {
+      bg: '#a87a3a',
+      border: '1px solid #a87a3a',
+      color: '#fff',
+    },
+  }[tone];
+
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '7px 14px',
+        borderRadius: 9,
+        background: styles.bg,
+        border: styles.border,
+        color: styles.color,
+        fontSize: 12.5,
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        fontWeight: 450,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SectionCard({
+  id,
+  sectionRef,
+  title,
+  description,
+  children,
+}: {
+  id: NavSection;
+  sectionRef: React.RefObject<HTMLDivElement | null>;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      ref={sectionRef}
+      id={id}
+      style={{ marginBottom: 36, scrollMarginTop: 24 }}
+    >
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24', marginBottom: 3 }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: '#9a948a' }}>{description}</div>
+      </div>
+      <div
+        style={{
+          background: 'rgba(255,255,255,0.85)',
+          borderRadius: 14,
+          border: '1px solid rgba(45,42,36,0.07)',
+          padding: '6px 18px',
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, emoji, createdAt, uniqueTag, members }: Props) {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<NavSection>('general');
 
@@ -91,6 +331,59 @@ export default function SettingsClient({ locale, workshopId, workshopName, membe
 
   // Section 1 — General
   const [workshopNameInput, setWorkshopNameInput] = useState(workshopName);
+  const [descriptionInput, setDescriptionInput] = useState(description ?? '');
+  const [selectedCover, setSelectedCover] = useState(coverGradientFor(workshopId, coverGradient));
+  const [selectedEmoji, setSelectedEmoji] = useState(emojiFor(workshopId, emoji));
+  const [coverImage, setCoverImage] = useState(coverImageUrl);
+  const [useCustomCover, setUseCustomCover] = useState(!!coverImageUrl);
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [detailsSaved, setDetailsSaved] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const coverFileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleCoverFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError('');
+    setUploadingCover(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    const result = await uploadWorkshopCover(workshopId, formData);
+    setUploadingCover(false);
+    if (result.success && result.url) {
+      setCoverImage(result.url);
+      setUseCustomCover(true);
+    } else {
+      setUploadError(result.error ?? 'Erreur lors du téléchargement');
+    }
+    e.target.value = '';
+  }
+
+  function handleRemoveCoverImage() {
+    if (!window.confirm("Supprimer l'image de couverture personnalisée ?")) return;
+    setCoverImage(null);
+    setUseCustomCover(false);
+    const others = COVER_GRADIENT_KEYS.filter((k) => k !== selectedCover);
+    const pool = others.length > 0 ? others : COVER_GRADIENT_KEYS;
+    setSelectedCover(pool[Math.floor(Math.random() * pool.length)]);
+  }
+
+  async function handleSaveDetails() {
+    setSavingDetails(true);
+    setDetailsSaved(false);
+    const result = await updateWorkshopDetails(workshopId, {
+      description: descriptionInput,
+      coverGradient: selectedCover,
+      coverImageUrl: useCustomCover ? coverImage : null,
+      emoji: selectedEmoji,
+    });
+    setSavingDetails(false);
+    if (result.success) {
+      setDetailsSaved(true);
+      setTimeout(() => setDetailsSaved(false), 2000);
+    }
+  }
 
   // Section 2 — Visibility
   const [isPublic, setIsPublic] = useState(false);
@@ -132,235 +425,6 @@ export default function SettingsClient({ locale, workshopId, workshopName, membe
   }
 
   // ─── Sub-components ───────────────────────────────────────────────────────
-
-  function Row({
-    label,
-    hint,
-    children,
-    noBorder,
-  }: {
-    label: string;
-    hint?: string;
-    children: React.ReactNode;
-    noBorder?: boolean;
-  }) {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 16,
-          padding: '14px 0',
-          borderBottom: noBorder ? 'none' : '1px solid rgba(45,42,36,0.06)',
-          flexWrap: 'wrap',
-        }}
-      >
-        <div>
-          <div style={{ fontSize: 13.5, fontWeight: 450, color: '#2d2a24' }}>{label}</div>
-          {hint && <div style={{ fontSize: 11.5, color: '#9a948a', marginTop: 2 }}>{hint}</div>}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          {children}
-        </div>
-      </div>
-    );
-  }
-
-  function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          background: 'rgba(45,42,36,0.06)',
-          borderRadius: 999,
-          padding: 3,
-          gap: 2,
-        }}
-      >
-        {(['privé', 'public'] as const).map((opt) => {
-          const active = (opt === 'public') === value;
-          return (
-            <button
-              key={opt}
-              onClick={() => onChange(opt === 'public')}
-              style={{
-                padding: '5px 14px',
-                borderRadius: 999,
-                border: 'none',
-                fontSize: 12,
-                fontWeight: active ? 500 : 400,
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                background: active ? '#fff' : 'transparent',
-                color: active ? '#2d2a24' : '#7a766d',
-                boxShadow: active ? '0 1px 4px rgba(45,42,36,0.12)' : 'none',
-                transition: 'all 0.15s',
-              }}
-            >
-              {opt}
-            </button>
-          );
-        })}
-      </div>
-    );
-  }
-
-  function Switch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-    return (
-      <button
-        onClick={() => onChange(!value)}
-        style={{
-          width: 42,
-          height: 24,
-          borderRadius: 999,
-          border: 'none',
-          background: value ? '#7a9968' : 'rgba(45,42,36,0.14)',
-          cursor: 'pointer',
-          padding: 3,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: value ? 'flex-end' : 'flex-start',
-          transition: 'all 0.18s',
-          flexShrink: 0,
-        }}
-        aria-checked={value}
-        role="switch"
-      >
-        <div
-          style={{
-            width: 18,
-            height: 18,
-            borderRadius: '50%',
-            background: '#fff',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
-          }}
-        />
-      </button>
-    );
-  }
-
-  function NumInput({
-    value,
-    onChange,
-    suffix,
-  }: {
-    value: string;
-    onChange: (v: string) => void;
-    suffix: string;
-  }) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-        <input
-          type="text"
-          inputMode="numeric"
-          value={value}
-          onChange={(e) => onChange(e.target.value.replace(/\D/g, ''))}
-          style={{
-            width: 90,
-            textAlign: 'right',
-            fontSize: 13,
-            fontFamily: 'inherit',
-            padding: '6px 10px',
-            border: '1px solid rgba(45,42,36,0.14)',
-            borderRadius: 9,
-            outline: 'none',
-            background: 'rgba(255,255,255,0.7)',
-            color: '#2d2a24',
-          }}
-        />
-        <span style={{ fontSize: 12, color: '#9a948a', whiteSpace: 'nowrap' }}>{suffix}</span>
-      </div>
-    );
-  }
-
-  function SmallBtn({
-    children,
-    tone = 'ghost',
-    onClick,
-  }: {
-    children: React.ReactNode;
-    tone?: 'ghost' | 'danger' | 'dark' | 'amber';
-    onClick?: () => void;
-  }) {
-    const styles = {
-      ghost: {
-        bg: 'transparent',
-        border: '1px solid rgba(45,42,36,0.16)',
-        color: '#5a564c',
-      },
-      danger: {
-        bg: 'rgba(184,90,74,0.10)',
-        border: '1px solid rgba(184,90,74,0.30)',
-        color: '#b85a4a',
-      },
-      dark: {
-        bg: '#2d2a24',
-        border: '1px solid #2d2a24',
-        color: '#fff',
-      },
-      amber: {
-        bg: '#a87a3a',
-        border: '1px solid #a87a3a',
-        color: '#fff',
-      },
-    }[tone];
-
-    return (
-      <button
-        onClick={onClick}
-        style={{
-          padding: '7px 14px',
-          borderRadius: 9,
-          background: styles.bg,
-          border: styles.border,
-          color: styles.color,
-          fontSize: 12.5,
-          cursor: 'pointer',
-          fontFamily: 'inherit',
-          fontWeight: 450,
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {children}
-      </button>
-    );
-  }
-
-  function SectionCard({
-    id,
-    title,
-    description,
-    children,
-  }: {
-    id: NavSection;
-    title: string;
-    description: string;
-    children: React.ReactNode;
-  }) {
-    return (
-      <div
-        ref={sectionRefs[id]}
-        id={id}
-        style={{ marginBottom: 36, scrollMarginTop: 24 }}
-      >
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24', marginBottom: 3 }}>{title}</div>
-          <div style={{ fontSize: 12.5, color: '#9a948a' }}>{description}</div>
-        </div>
-        <div
-          style={{
-            background: 'rgba(255,255,255,0.85)',
-            borderRadius: 14,
-            border: '1px solid rgba(45,42,36,0.07)',
-            padding: '6px 18px',
-          }}
-        >
-          {children}
-        </div>
-      </div>
-    );
-  }
 
   // Minimal SVG QR code placeholder
   function QRPlaceholder() {
@@ -485,6 +549,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, membe
         {/* ── 1. Général ── */}
         <SectionCard
           id="general"
+          sectionRef={sectionRefs.general}
           title="Général"
           description="Informations de base de l'atelier."
         >
@@ -505,6 +570,173 @@ export default function SettingsClient({ locale, workshopId, workshopName, membe
                 width: 220,
               }}
             />
+          </Row>
+
+          <Row label="Description" hint="affichée dans la Preview de l'atelier">
+            <textarea
+              value={descriptionInput}
+              onChange={(e) => setDescriptionInput(e.target.value)}
+              placeholder="décrivez votre atelier en quelques mots…"
+              rows={3}
+              style={{
+                fontSize: 13,
+                fontFamily: 'inherit',
+                padding: '8px 12px',
+                border: '1px solid rgba(45,42,36,0.14)',
+                borderRadius: 9,
+                outline: 'none',
+                background: 'rgba(255,255,255,0.7)',
+                color: '#2d2a24',
+                width: 260,
+                resize: 'vertical',
+              }}
+            />
+          </Row>
+
+          <Row label="Image de couverture" hint="affichée dans la Preview et la recherche">
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {COVER_GRADIENT_KEYS.map((key) => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setSelectedCover(key);
+                      setUseCustomCover(false);
+                    }}
+                    aria-label={key}
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 9,
+                      background: COVER_GRADIENTS[key],
+                      border: !useCustomCover && selectedCover === key ? '2px solid #2d2a24' : '2px solid transparent',
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  />
+                ))}
+                <div style={{ position: 'relative', width: 32, height: 32 }}>
+                  <button
+                    onClick={() => {
+                      if (coverImage && !useCustomCover) {
+                        setUseCustomCover(true);
+                      } else {
+                        coverFileInputRef.current?.click();
+                      }
+                    }}
+                    aria-label="uploader votre image"
+                    disabled={uploadingCover}
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 9,
+                      backgroundColor: coverImage ? 'transparent' : 'rgba(45,42,36,0.06)',
+                      backgroundImage: coverImage ? `url(${coverImage})` : 'none',
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      border: useCustomCover && coverImage ? '2px solid #2d2a24' : '2px dashed rgba(45,42,36,0.22)',
+                      cursor: uploadingCover ? 'default' : 'pointer',
+                      padding: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 14,
+                      color: '#9a948a',
+                    }}
+                  >
+                    {uploadingCover ? <Loader2 size={14} className="animate-spin" /> : !coverImage && '+'}
+                  </button>
+                  {coverImage && !uploadingCover && (
+                    <button
+                      onClick={handleRemoveCoverImage}
+                      aria-label="supprimer l'image de couverture"
+                      style={{
+                        position: 'absolute',
+                        top: -6,
+                        right: -6,
+                        width: 16,
+                        height: 16,
+                        borderRadius: '50%',
+                        background: '#b85a4a',
+                        border: '1px solid #fcf9f2',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      <X size={10} color="#fff" />
+                    </button>
+                  )}
+                </div>
+                <input
+                  ref={coverFileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleCoverFileChange}
+                  style={{ display: 'none' }}
+                />
+              </div>
+              {uploadError && (
+                <span style={{ fontSize: 11, color: '#b85a4a' }}>{uploadError}</span>
+              )}
+            </div>
+          </Row>
+
+          <Row label="Emoji" hint="affiché sur la carte de l'atelier">
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {COVER_EMOJIS.map((e) => (
+                <button
+                  key={e}
+                  onClick={() => setSelectedEmoji(e)}
+                  aria-label={e}
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 9,
+                    fontSize: 16,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(255,255,255,0.7)',
+                    border: selectedEmoji === e ? '2px solid #2d2a24' : '2px solid transparent',
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          </Row>
+
+          <Row label="Date de création">
+            <span style={{ fontSize: 13, color: '#7a766d' }}>
+              {new Date(createdAt).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </span>
+          </Row>
+
+          <Row label="Tag de l'atelier" hint="utilisable dans la recherche">
+            <span style={{ fontSize: 13, color: '#7a766d', fontFamily: 'ui-monospace, monospace', letterSpacing: '0.04em' }}>
+              {uniqueTag}
+            </span>
+          </Row>
+
+          <Row label=" " noBorder>
+            <SmallBtn tone={detailsSaved ? 'ghost' : 'dark'} onClick={handleSaveDetails}>
+              {savingDetails ? (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Loader2 size={12} className="animate-spin" />enregistrement…</span>
+              ) : detailsSaved ? (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Check size={12} />enregistré</span>
+              ) : (
+                'enregistrer'
+              )}
+            </SmallBtn>
           </Row>
 
           <Row label="QR code" hint="redirige directement vers la page">
@@ -535,6 +767,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, membe
         {/* ── 2. Visibilité & accès ── */}
         <SectionCard
           id="visibility"
+          sectionRef={sectionRefs.visibility}
           title="Visibilité & accès"
           description="Contrôlez qui peut accéder à votre atelier et comment."
         >
@@ -558,6 +791,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, membe
         {/* ── 3. Membres & rôles ── */}
         <SectionCard
           id="members"
+          sectionRef={sectionRefs.members}
           title="Membres & rôles"
           description="Gérez les accès et les permissions des membres de l'atelier."
         >
@@ -662,6 +896,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, membe
         {/* ── 4. Briques de connaissance ── */}
         <SectionCard
           id="bricks"
+          sectionRef={sectionRefs.bricks}
           title="Briques de connaissance"
           description="Les unités d'information extraites de vos fichiers sources par l'IA."
         >
@@ -740,6 +975,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, membe
         {/* ── 5. Atelier Premium ── */}
         <SectionCard
           id="premium"
+          sectionRef={sectionRefs.premium}
           title="Atelier Premium"
           description="Activez le statut Premium pour débloquer des fonctionnalités avancées pour tous les membres."
         >
@@ -771,6 +1007,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, membe
         {/* ── 6. Zone de danger ── */}
         <SectionCard
           id="danger"
+          sectionRef={sectionRefs.danger}
           title="Zone de danger"
           description="Actions irréversibles — procédez avec prudence."
         >
