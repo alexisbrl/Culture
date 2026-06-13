@@ -35,6 +35,12 @@ export default async function SettingsPage({ params }: Props) {
       locale={locale}
       workshopId={workshop.id}
       workshopName={workshop.name}
+      description={workshop.description}
+      coverGradient={workshop.cover_gradient}
+      coverImageUrl={workshop.cover_image_url}
+      emoji={workshop.emoji}
+      createdAt={workshop.created_at}
+      uniqueTag={workshop.unique_tag}
       currentUserRole={workshop.currentUserRole}
       members={members}
     />
