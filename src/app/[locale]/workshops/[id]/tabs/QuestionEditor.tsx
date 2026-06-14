@@ -30,6 +30,7 @@ export type Question = {
   difficulty: { enabled: boolean; value: number };
   duration: { enabled: boolean; minutes: number };
   linkedQuestionIds: string[];
+  examIds: string[];
 };
 
 export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
@@ -70,6 +71,7 @@ export function emptyQuestion(): Question {
     difficulty: { enabled: false, value: 5 },
     duration: { enabled: false, minutes: 2 },
     linkedQuestionIds: [],
+    examIds: [],
   };
 }
 

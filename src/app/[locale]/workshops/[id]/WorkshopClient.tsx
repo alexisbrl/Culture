@@ -107,7 +107,7 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
       {/* Tab content — fills remaining height */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {activeTab === 'programme' && <ProgrammeTab />}
-        {activeTab === 'examen' && <ExamenTab />}
+        {activeTab === 'examen' && <ExamenTab workshopId={workshopId} />}
         {activeTab === 'analyse' && <AnalyseTab />}
         {activeTab === 'cours' && <CoursTab />}
       </div>
