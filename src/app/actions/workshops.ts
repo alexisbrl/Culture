@@ -132,9 +132,11 @@ export type WorkshopCardData = {
   description: string | null;
   cover_gradient: string | null;
   cover_image_url: string | null;
+  cover_image_active: boolean;
   emoji: string | null;
   unique_tag: string | null;
   owner_name: string;
+  is_premium: boolean;
 };
 
 export async function getUserWorkshops(): Promise<{
@@ -161,7 +163,7 @@ export async function getUserWorkshops(): Promise<{
     // Exclure les ateliers en corbeille
     const { data: workshops } = await supabase
       .from('workshops')
-      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, emoji, unique_tag')
+      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium')
       .in('id', workshopIds)
       .is('deleted_at', null);
 
@@ -206,9 +208,11 @@ export async function getUserWorkshops(): Promise<{
         description: w.description,
         cover_gradient: w.cover_gradient,
         cover_image_url: w.cover_image_url,
+        cover_image_active: w.cover_image_active,
         emoji: w.emoji,
         unique_tag: w.unique_tag,
         owner_name: ownerNameMap[w.created_by] ?? 'Utilisateur',
+        is_premium: w.is_premium,
       };
       if (roleMap[w.id] === 'owner') owned.push(item);
       else joined.push(item);
@@ -285,7 +289,7 @@ export async function getWorkshop(workshopId: string) {
     // 2. Récupérer l'atelier
     const { data: workshop } = await supabase
       .from('workshops')
-      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, emoji, unique_tag')
+      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium, private, show_programme, max_members_total, max_members_monthly')
       .eq('id', workshopId)
       .single();
 
@@ -336,10 +340,12 @@ export async function getWorkshopPreview(workshopId: string): Promise<{
   description: string | null;
   coverGradient: string | null;
   coverImageUrl: string | null;
+  coverImageActive: boolean;
   emoji: string | null;
   ownerName: string;
   memberCount: number;
   isMember: boolean;
+  isPremium: boolean;
 } | null> {
   try {
     const { userId } = await auth();
@@ -349,7 +355,7 @@ export async function getWorkshopPreview(workshopId: string): Promise<{
 
     const { data: workshop } = await supabase
       .from('workshops')
-      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, emoji')
+      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, is_premium')
       .eq('id', workshopId)
       .is('deleted_at', null)
       .single();
@@ -381,10 +387,12 @@ export async function getWorkshopPreview(workshopId: string): Promise<{
       description: workshop.description,
       coverGradient: workshop.cover_gradient,
       coverImageUrl: workshop.cover_image_url,
+      coverImageActive: workshop.cover_image_active,
       emoji: workshop.emoji,
       ownerName,
       memberCount: members.length,
       isMember: members.some((m) => m.user_id === userId),
+      isPremium: workshop.is_premium,
     };
   } catch (err) {
     console.error('getWorkshopPreview error:', err);
@@ -396,7 +404,18 @@ export async function getWorkshopPreview(workshopId: string): Promise<{
 
 export async function updateWorkshopDetails(
   workshopId: string,
-  details: { description?: string; coverGradient?: string; coverImageUrl?: string | null; emoji?: string }
+  details: {
+    name?: string;
+    description?: string;
+    coverGradient?: string;
+    coverImageUrl?: string | null;
+    coverImageActive?: boolean;
+    emoji?: string;
+    isPrivate?: boolean;
+    showProgramme?: boolean;
+    maxMembersTotal?: number | null;
+    maxMembersMonthly?: number | null;
+  }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { userId } = await auth();
@@ -415,11 +434,21 @@ export async function updateWorkshopDetails(
       return { success: false, error: 'Droits insuffisants' };
     }
 
-    const update: Record<string, string | null> = {};
+    const update: Record<string, string | boolean | number | null> = {};
+    if (details.name !== undefined) update.name = details.name;
     if (details.description !== undefined) update.description = details.description;
     if (details.coverGradient !== undefined) update.cover_gradient = details.coverGradient;
     if (details.coverImageUrl !== undefined) update.cover_image_url = details.coverImageUrl;
+    if (details.coverImageActive !== undefined) update.cover_image_active = details.coverImageActive;
     if (details.emoji !== undefined) update.emoji = details.emoji;
+    if (details.showProgramme !== undefined) update.show_programme = details.showProgramme;
+    if (details.maxMembersTotal !== undefined) update.max_members_total = details.maxMembersTotal;
+    if (details.maxMembersMonthly !== undefined) update.max_members_monthly = details.maxMembersMonthly;
+    if (details.isPrivate !== undefined) {
+      const { data: w } = await supabase.from('workshops').select('is_premium').eq('id', workshopId).single();
+      // Un atelier Premium est définitivement privé — on ignore toute tentative de le rendre public.
+      update.private = w?.is_premium ? true : details.isPrivate;
+    }
 
     await supabase.from('workshops').update(update).eq('id', workshopId);
 
@@ -427,6 +456,69 @@ export async function updateWorkshopDetails(
     return { success: true };
   } catch (err) {
     console.error('updateWorkshopDetails error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
+// ─── Activer le statut Premium d'un atelier (propriétaire uniquement) ─────────
+//
+// [TEST TEMPORAIRE — 13/06/2026] En attendant l'intégration Stripe (voir mémoire
+// "Plan Stripe"), l'activation réelle ne devrait jamais avoir lieu sans paiement
+// vérifié. Cette action est un mode de test protégé par un mot de passe en dur
+// et désactivé en production (NODE_ENV === 'production') — à RETIRER une fois
+// le paiement Stripe branché sur cette action.
+const PREMIUM_TEST_ACTIVATION_PASSWORD = 'CultureMDP';
+
+export async function activateWorkshopPremium(
+  workshopId: string,
+  password: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (process.env.NODE_ENV === 'production') {
+      return { success: false, error: 'Activation de test désactivée en production' };
+    }
+
+    const { userId } = await auth();
+    if (!userId) return { success: false, error: 'Non authentifié' };
+
+    if (password !== PREMIUM_TEST_ACTIVATION_PASSWORD) {
+      return { success: false, error: 'Mot de passe incorrect' };
+    }
+
+    const supabase = getSupabaseServerClient();
+
+    const { data: membership } = await supabase
+      .from('workshop_members')
+      .select('role')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', userId)
+      .single();
+
+    if (!membership || membership.role !== 'owner') {
+      return { success: false, error: 'Droits insuffisants' };
+    }
+
+    const { data: workshop } = await supabase
+      .from('workshops')
+      .select('is_premium')
+      .eq('id', workshopId)
+      .single();
+
+    if (!workshop) return { success: false, error: 'Atelier introuvable' };
+
+    if (workshop.is_premium) {
+      return { success: true };
+    }
+
+    await supabase
+      .from('workshops')
+      .update({ is_premium: true, premium_activated_at: new Date().toISOString(), private: true })
+      .eq('id', workshopId);
+
+    revalidatePath('/', 'layout');
+    return { success: true };
+  } catch (err) {
+    console.error('activateWorkshopPremium error:', err);
     return { success: false, error: 'Erreur serveur' };
   }
 }
@@ -480,7 +572,7 @@ export async function uploadWorkshopCover(
     const { data: publicUrlData } = supabase.storage.from('workshop-covers').getPublicUrl(path);
     const url = publicUrlData.publicUrl;
 
-    await supabase.from('workshops').update({ cover_image_url: url }).eq('id', workshopId);
+    await supabase.from('workshops').update({ cover_image_url: url, cover_image_active: true }).eq('id', workshopId);
 
     revalidatePath('/', 'layout');
     return { success: true, url };
@@ -493,7 +585,7 @@ export async function uploadWorkshopCover(
 // ─── Search workshops to join ─────────────────────────────────────────────────
 
 export async function searchWorkshops(query: string): Promise<
-  Array<{ id: string; name: string; created_at: string; description: string | null; cover_gradient: string | null; cover_image_url: string | null; emoji: string | null; unique_tag: string | null; member_count: number }>
+  Array<{ id: string; name: string; created_at: string; description: string | null; cover_gradient: string | null; cover_image_url: string | null; cover_image_active: boolean; emoji: string | null; unique_tag: string | null; member_count: number; is_premium: boolean }>
 > {
   try {
     const { userId } = await auth();
@@ -513,7 +605,7 @@ export async function searchWorkshops(query: string): Promise<
 
     let q = supabase
       .from('workshops')
-      .select('id, name, created_at, description, cover_gradient, cover_image_url, emoji, unique_tag')
+      .select('id, name, created_at, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium')
       .or(`name.ilike.%${safeQuery}%,unique_tag.ilike.${safeQuery}`)
       .is('deleted_at', null)
       .limit(8);

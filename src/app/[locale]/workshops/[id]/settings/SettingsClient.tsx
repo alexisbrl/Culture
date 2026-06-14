@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Check, Loader2, Mail, RotateCcw, X } from 'lucide-react';
-import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover } from '@/app/actions/workshops';
+import { Check, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, X } from 'lucide-react';
+import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, activateWorkshopPremium } from '@/app/actions/workshops';
 import { COVER_GRADIENTS, COVER_GRADIENT_KEYS, COVER_EMOJIS, coverGradientFor, emojiFor } from '@/lib/workshopCover';
+import ShareQRModal from '@/components/ShareQRModal';
 
 type Member = {
   id: string;
@@ -23,22 +24,26 @@ type Props = {
   description: string | null;
   coverGradient: string | null;
   coverImageUrl: string | null;
+  coverImageActive: boolean;
   emoji: string | null;
   createdAt: string;
   uniqueTag: string | null;
   currentUserRole: 'owner' | 'member';
+  isPremium: boolean;
+  isPrivate: boolean;
+  showProgramme: boolean;
+  maxMembersTotal: number | null;
+  maxMembersMonthly: number | null;
   members: Member[];
 };
 
-type NavSection = 'general' | 'visibility' | 'members' | 'bricks' | 'premium' | 'danger';
+type NavSection = 'general' | 'members' | 'bricks' | 'premium';
 
 const NAV_ITEMS: { id: NavSection; label: string }[] = [
   { id: 'general', label: 'Général' },
-  { id: 'visibility', label: 'Visibilité & accès' },
   { id: 'members', label: 'Membres & rôles' },
   { id: 'bricks', label: 'Briques de connaissance' },
   { id: 'premium', label: 'Atelier Premium' },
-  { id: 'danger', label: 'Zone de danger' },
 ];
 
 const MOCK_BRICKS = [
@@ -224,10 +229,12 @@ function SmallBtn({
   children,
   tone = 'ghost',
   onClick,
+  disabled,
 }: {
   children: React.ReactNode;
   tone?: 'ghost' | 'danger' | 'dark' | 'amber';
   onClick?: () => void;
+  disabled?: boolean;
 }) {
   const styles = {
     ghost: {
@@ -254,15 +261,16 @@ function SmallBtn({
 
   return (
     <button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
       style={{
         padding: '7px 14px',
         borderRadius: 9,
-        background: styles.bg,
-        border: styles.border,
-        color: styles.color,
+        background: disabled ? 'rgba(45,42,36,0.12)' : styles.bg,
+        border: disabled ? '1px solid rgba(45,42,36,0.12)' : styles.border,
+        color: disabled ? '#9a948a' : styles.color,
         fontSize: 12.5,
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
         fontFamily: 'inherit',
         fontWeight: 450,
         whiteSpace: 'nowrap',
@@ -274,24 +282,16 @@ function SmallBtn({
 }
 
 function SectionCard({
-  id,
-  sectionRef,
   title,
   description,
   children,
 }: {
-  id: NavSection;
-  sectionRef: React.RefObject<HTMLDivElement | null>;
   title: string;
   description: string;
   children: React.ReactNode;
 }) {
   return (
-    <div
-      ref={sectionRef}
-      id={id}
-      style={{ marginBottom: 36, scrollMarginTop: 24 }}
-    >
+    <div style={{ marginBottom: 36 }}>
       <div style={{ marginBottom: 10 }}>
         <div style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24', marginBottom: 3 }}>{title}</div>
         <div style={{ fontSize: 12.5, color: '#9a948a' }}>{description}</div>
@@ -310,23 +310,27 @@ function SectionCard({
   );
 }
 
-export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, emoji, createdAt, uniqueTag, members }: Props) {
+export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, isPremium, isPrivate, showProgramme: showProgrammeProp, maxMembersTotal, maxMembersMonthly, members }: Props) {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<NavSection>('general');
 
-  // Section refs for scroll
-  const sectionRefs: Record<NavSection, React.RefObject<HTMLDivElement | null>> = {
-    general: useRef<HTMLDivElement>(null),
-    visibility: useRef<HTMLDivElement>(null),
-    members: useRef<HTMLDivElement>(null),
-    bricks: useRef<HTMLDivElement>(null),
-    premium: useRef<HTMLDivElement>(null),
-    danger: useRef<HTMLDivElement>(null),
-  };
+  // Section 5 — Atelier Premium (activation de test par mot de passe)
+  const [premiumPassword, setPremiumPassword] = useState('');
+  const [premiumError, setPremiumError] = useState('');
+  const [activatingPremium, setActivatingPremium] = useState(false);
+  const [showPremiumConfirm, setShowPremiumConfirm] = useState(false);
 
-  function scrollTo(id: NavSection) {
-    setActiveSection(id);
-    sectionRefs[id].current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  async function handleActivatePremium() {
+    setActivatingPremium(true);
+    setPremiumError('');
+    const result = await activateWorkshopPremium(workshopId, premiumPassword);
+    setActivatingPremium(false);
+    if (result.success) {
+      setShowPremiumConfirm(false);
+      router.refresh();
+    } else {
+      setPremiumError(result.error ?? 'Erreur');
+    }
   }
 
   // Section 1 — General
@@ -335,7 +339,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
   const [selectedCover, setSelectedCover] = useState(coverGradientFor(workshopId, coverGradient));
   const [selectedEmoji, setSelectedEmoji] = useState(emojiFor(workshopId, emoji));
   const [coverImage, setCoverImage] = useState(coverImageUrl);
-  const [useCustomCover, setUseCustomCover] = useState(!!coverImageUrl);
+  const [useCustomCover, setUseCustomCover] = useState(coverImageActive);
   const [savingDetails, setSavingDetails] = useState(false);
   const [detailsSaved, setDetailsSaved] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -361,45 +365,133 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
   }
 
   function handleRemoveCoverImage() {
-    if (!window.confirm("Supprimer l'image de couverture personnalisée ?")) return;
+    const wasActive = useCustomCover;
     setCoverImage(null);
     setUseCustomCover(false);
-    const others = COVER_GRADIENT_KEYS.filter((k) => k !== selectedCover);
-    const pool = others.length > 0 ? others : COVER_GRADIENT_KEYS;
-    setSelectedCover(pool[Math.floor(Math.random() * pool.length)]);
+    if (wasActive) {
+      const others = COVER_GRADIENT_KEYS.filter((k) => k !== selectedCover);
+      const pool = others.length > 0 ? others : COVER_GRADIENT_KEYS;
+      setSelectedCover(pool[Math.floor(Math.random() * pool.length)]);
+    }
   }
 
+  // Section 2 — Visibility
+  // Un atelier Premium est définitivement privé (voir activateWorkshopPremium) : le
+  // toggle est verrouillé sur « privé » et ne peut plus être changé.
+  const [isPublic, setIsPublic] = useState(!isPrivate);
+  const [showProgramme, setShowProgramme] = useState(showProgrammeProp);
+  const [maxTotal, setMaxTotal] = useState(maxMembersTotal != null ? String(maxMembersTotal) : '200');
+  const [maxMonthly, setMaxMonthly] = useState(maxMembersMonthly != null ? String(maxMembersMonthly) : '40');
+
+  // Valeurs courantes de tous les champs des sections « Général » et « Visibilité & accès ».
+  // Toute clé ajoutée ici (et au snapshot ci-dessous) participe automatiquement à isDirty
+  // et à la sauvegarde — aucune autre modification n'est nécessaire pour une future ligne.
+  const formValues = {
+    name: workshopNameInput,
+    description: descriptionInput,
+    cover: selectedCover,
+    emoji: selectedEmoji,
+    coverImage,
+    useCustomCover,
+    isPublic,
+    showProgramme,
+    maxTotal,
+    maxMonthly,
+  };
+
+  // Baseline used to detect unsaved changes
+  const [savedSnapshot, setSavedSnapshot] = useState(formValues);
+
+  const isDirty = JSON.stringify(formValues) !== JSON.stringify(savedSnapshot);
+
+  const canSave = workshopNameInput.trim().length > 0;
+
   async function handleSaveDetails() {
+    if (!canSave) return;
     setSavingDetails(true);
     setDetailsSaved(false);
     const result = await updateWorkshopDetails(workshopId, {
+      name: workshopNameInput.trim(),
       description: descriptionInput,
       coverGradient: selectedCover,
-      coverImageUrl: useCustomCover ? coverImage : null,
+      coverImageUrl: coverImage,
+      coverImageActive: useCustomCover,
       emoji: selectedEmoji,
+      isPrivate: !isPublic,
+      showProgramme,
+      maxMembersTotal: maxTotal.length > 0 ? Number(maxTotal) : null,
+      maxMembersMonthly: maxMonthly.length > 0 ? Number(maxMonthly) : null,
     });
     setSavingDetails(false);
     if (result.success) {
+      const trimmedName = workshopNameInput.trim();
+      setWorkshopNameInput(trimmedName);
+      setSavedSnapshot({ ...formValues, name: trimmedName });
       setDetailsSaved(true);
       setTimeout(() => setDetailsSaved(false), 2000);
     }
   }
 
-  // Section 2 — Visibility
-  const [isPublic, setIsPublic] = useState(false);
-  const [showProgramme, setShowProgramme] = useState(true);
-  const [maxTotal, setMaxTotal] = useState('200');
-  const [maxMonthly, setMaxMonthly] = useState('40');
-
   // Section 3 — Members
   const [tagInput, setTagInput] = useState('');
   const [localMembers, setLocalMembers] = useState<Member[]>(members);
+
+  // Confirmation de sortie (modifications non enregistrées)
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  // URL vers laquelle naviguer une fois la confirmation résolue (lien cliqué intercepté).
+  // Si null, le bouton « retour à l'atelier » est utilisé par défaut.
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
+
+  // Avertir avant de fermer/recharger l'onglet si des modifications ne sont pas enregistrées.
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (isDirtyRef.current) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
+  // Intercepte tout clic sur un lien de navigation interne (sidebar, header…) tant que
+  // des modifications ne sont pas enregistrées, et affiche la modale de confirmation.
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (!isDirtyRef.current) return;
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const anchor = (e.target as HTMLElement)?.closest('a');
+      if (!anchor) return;
+      const href = anchor.getAttribute('href');
+      if (!href || href.startsWith('#') || anchor.target === '_blank') return;
+      e.preventDefault();
+      e.stopPropagation();
+      setPendingHref(href);
+      setShowLeaveConfirm(true);
+    }
+    document.addEventListener('click', handleClick, true);
+    return () => document.removeEventListener('click', handleClick, true);
+  }, []);
+
+  function leaveTargetHref() {
+    return pendingHref ?? `/${locale}/workshops/${workshopId}`;
+  }
 
   // Section 6 — Delete modal
   type DeleteStep = 'idle' | 'confirm' | 'sending' | 'enter_code' | 'verifying';
   const [deleteStep, setDeleteStep] = useState<DeleteStep>('idle');
   const [deleteCode, setDeleteCode] = useState('');
   const [deleteError, setDeleteError] = useState('');
+
+  // Share / QR
+  const [shareOpen, setShareOpen] = useState(false);
+  const [joinUrl, setJoinUrl] = useState('');
+
+  useEffect(() => {
+    setJoinUrl(`${window.location.origin}/${locale}/dashboard?preview=${workshopId}`);
+  }, [locale, workshopId]);
 
   async function handleSendCode() {
     setDeleteStep('sending');
@@ -424,30 +516,6 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
     }
   }
 
-  // ─── Sub-components ───────────────────────────────────────────────────────
-
-  // Minimal SVG QR code placeholder
-  function QRPlaceholder() {
-    return (
-      <svg width="44" height="44" viewBox="0 0 44 44" style={{ borderRadius: 6, border: '1px solid rgba(45,42,36,0.10)' }}>
-        <rect width="44" height="44" fill="#fff" />
-        {/* Corner squares */}
-        <rect x="4" y="4" width="12" height="12" rx="2" fill="none" stroke="#2d2a24" strokeWidth="1.5" />
-        <rect x="6" y="6" width="8" height="8" rx="1" fill="#2d2a24" />
-        <rect x="28" y="4" width="12" height="12" rx="2" fill="none" stroke="#2d2a24" strokeWidth="1.5" />
-        <rect x="30" y="6" width="8" height="8" rx="1" fill="#2d2a24" />
-        <rect x="4" y="28" width="12" height="12" rx="2" fill="none" stroke="#2d2a24" strokeWidth="1.5" />
-        <rect x="6" y="30" width="8" height="8" rx="1" fill="#2d2a24" />
-        {/* Data dots */}
-        {[20, 24, 28, 32, 36].map((x) =>
-          [20, 24, 28, 32, 36].map((y) =>
-            (x + y) % 8 === 0 ? <rect key={`${x}-${y}`} x={x} y={y} width="3" height="3" fill="#2d2a24" /> : null
-          )
-        )}
-      </svg>
-    );
-  }
-
   return (
     <div
       style={{
@@ -456,6 +524,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         minHeight: '100vh',
         background: '#fcf9f2',
         display: 'flex',
+        cursor: 'default',
       }}
     >
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Caveat:wght@400;500;600&display=swap');`}</style>
@@ -483,14 +552,19 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
-            fontSize: 11,
-            color: '#9a948a',
+            gap: 8,
+            fontSize: 14,
+            fontWeight: 500,
+            color: '#5a564c',
             textDecoration: 'none',
             marginBottom: 20,
+            padding: '8px 10px',
+            margin: '-8px -10px 12px',
+            borderRadius: 9,
           }}
         >
-          ← {workshopName}
+          <ChevronLeft size={18} />
+          {workshopName}
         </Link>
 
         {/* Label */}
@@ -515,7 +589,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             return (
               <button
                 key={item.id}
-                onClick={() => scrollTo(item.id)}
+                onClick={() => setActiveSection(item.id)}
                 style={{
                   padding: '8px 10px',
                   borderRadius: 9,
@@ -546,33 +620,58 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           maxWidth: 760,
         }}
       >
+        {activeSection === 'general' && (
+        <>
         {/* ── 1. Général ── */}
         <SectionCard
-          id="general"
-          sectionRef={sectionRefs.general}
           title="Général"
           description="Informations de base de l'atelier."
         >
           <Row label="Nom de l'atelier">
-            <input
-              type="text"
-              value={workshopNameInput}
-              onChange={(e) => setWorkshopNameInput(e.target.value)}
+            <div
               style={{
-                fontSize: 13,
-                fontFamily: 'inherit',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
                 padding: '7px 12px',
                 border: '1px solid rgba(45,42,36,0.14)',
                 borderRadius: 9,
-                outline: 'none',
                 background: 'rgba(255,255,255,0.7)',
-                color: '#2d2a24',
-                width: 220,
+                width: 300,
               }}
-            />
+            >
+              <span
+                style={{
+                  fontSize: 13,
+                  fontFamily: 'ui-monospace, monospace',
+                  letterSpacing: '0.04em',
+                  color: '#9a948a',
+                  flexShrink: 0,
+                }}
+              >
+                {uniqueTag}
+              </span>
+              <span style={{ fontSize: 13, color: '#c8c2b8', flexShrink: 0 }}>-</span>
+              <input
+                type="text"
+                value={workshopNameInput}
+                onChange={(e) => setWorkshopNameInput(e.target.value)}
+                style={{
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                  border: 'none',
+                  outline: 'none',
+                  background: 'transparent',
+                  color: '#2d2a24',
+                  flex: 1,
+                  minWidth: 0,
+                  padding: 0,
+                }}
+              />
+            </div>
           </Row>
 
-          <Row label="Description" hint="affichée dans la Preview de l'atelier">
+          <Row label="Description" hint="affichée dans la preview de l'atelier">
             <textarea
               value={descriptionInput}
               onChange={(e) => setDescriptionInput(e.target.value)}
@@ -593,7 +692,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             />
           </Row>
 
-          <Row label="Image de couverture" hint="affichée dans la Preview et la recherche">
+          <Row label="Image de couverture" hint="affichée dans la preview de l'atelier">
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
               <div style={{ display: 'flex', gap: 8 }}>
                 {COVER_GRADIENT_KEYS.map((key) => (
@@ -684,7 +783,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             </div>
           </Row>
 
-          <Row label="Emoji" hint="affiché sur la carte de l'atelier">
+          <Row label="Emoji" hint="affiché dans la preview de l'atelier">
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {COVER_EMOJIS.map((e) => (
                 <button
@@ -711,7 +810,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             </div>
           </Row>
 
-          <Row label="Date de création">
+          <Row label="Date de création" noBorder>
             <span style={{ fontSize: 13, color: '#7a766d' }}>
               {new Date(createdAt).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', {
                 day: 'numeric',
@@ -720,59 +819,22 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
               })}
             </span>
           </Row>
-
-          <Row label="Tag de l'atelier" hint="utilisable dans la recherche">
-            <span style={{ fontSize: 13, color: '#7a766d', fontFamily: 'ui-monospace, monospace', letterSpacing: '0.04em' }}>
-              {uniqueTag}
-            </span>
-          </Row>
-
-          <Row label=" " noBorder>
-            <SmallBtn tone={detailsSaved ? 'ghost' : 'dark'} onClick={handleSaveDetails}>
-              {savingDetails ? (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Loader2 size={12} className="animate-spin" />enregistrement…</span>
-              ) : detailsSaved ? (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Check size={12} />enregistré</span>
-              ) : (
-                'enregistrer'
-              )}
-            </SmallBtn>
-          </Row>
-
-          <Row label="QR code" hint="redirige directement vers la page">
-            <QRPlaceholder />
-            <SmallBtn tone="ghost">télécharger</SmallBtn>
-          </Row>
-
-          <Row label="Source & cours" hint="gérer les fichiers et régénérer les briques" noBorder>
-            <button
-              onClick={() => scrollTo('bricks')}
-              style={{
-                background: 'none',
-                border: 'none',
-                fontSize: 13,
-                color: '#a87a3a',
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                textDecoration: 'underline',
-                textDecorationColor: 'rgba(168,122,58,0.4)',
-                padding: 0,
-              }}
-            >
-              voir les briques →
-            </button>
-          </Row>
         </SectionCard>
 
         {/* ── 2. Visibilité & accès ── */}
         <SectionCard
-          id="visibility"
-          sectionRef={sectionRefs.visibility}
           title="Visibilité & accès"
           description="Contrôlez qui peut accéder à votre atelier et comment."
         >
-          <Row label="Visibilité" hint="un atelier privé se rejoint via tag ou invitation">
-            <Toggle value={isPublic} onChange={setIsPublic} />
+          <Row
+            label="Visibilité"
+            hint={isPremium ? 'atelier premium · définitivement privé' : 'un atelier privé se rejoint via tag ou invitation'}
+          >
+            {isPremium ? (
+              <span style={{ fontSize: 13, color: '#7a766d' }}>privé</span>
+            ) : (
+              <Toggle value={isPublic} onChange={setIsPublic} />
+            )}
           </Row>
 
           <Row label="Afficher le programme éducatif">
@@ -783,41 +845,86 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             <NumInput value={maxTotal} onChange={setMaxTotal} suffix="membres" />
           </Row>
 
-          <Row label="Nombre maximal de candidats (mensuel)" noBorder>
+          <Row label="Nombre maximal de candidats (mensuel)">
             <NumInput value={maxMonthly} onChange={setMaxMonthly} suffix="/ mois" />
+          </Row>
+
+          <Row label="QR code" hint="redirige directement vers l'atelier" noBorder>
+            <button
+              onClick={() => setShareOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: '#5a564c', fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              <QrCode size={13} />
+              partager · QR
+            </button>
           </Row>
         </SectionCard>
 
+        {/* ── Zone de danger ── */}
+        <SectionCard
+          title="Zone de danger"
+          description="Actions irréversibles — procédez avec prudence."
+        >
+          <Row
+            label="Supprimer l'atelier"
+            hint="toutes les briques, examens et progressions seront perdus"
+            noBorder
+          >
+            <SmallBtn tone="danger" onClick={() => setDeleteStep('confirm')}>
+              supprimer l'atelier
+            </SmallBtn>
+          </Row>
+        </SectionCard>
+        </>
+        )}
+
+        {activeSection === 'members' && (
+        <>
         {/* ── 3. Membres & rôles ── */}
         <SectionCard
-          id="members"
-          sectionRef={sectionRefs.members}
           title="Membres & rôles"
           description="Gérez les accès et les permissions des membres de l'atelier."
         >
-          <Row label="Inviter un utilisateur" hint="par tag">
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                type="text"
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value.toUpperCase())}
-                placeholder="#tag…"
+          {isPremium ? (
+            <Row label="Inviter un utilisateur" hint="par tag">
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="text"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value.toUpperCase())}
+                  placeholder="#tag…"
+                  style={{
+                    fontSize: 13,
+                    fontFamily: "'ui-monospace', 'monospace', inherit",
+                    padding: '7px 12px',
+                    border: '1px solid rgba(45,42,36,0.14)',
+                    borderRadius: 9,
+                    outline: 'none',
+                    background: 'rgba(255,255,255,0.7)',
+                    color: '#2d2a24',
+                    width: 130,
+                    letterSpacing: '0.04em',
+                  }}
+                />
+                <SmallBtn tone="dark">inviter</SmallBtn>
+              </div>
+            </Row>
+          ) : (
+            <Row label="Inviter un utilisateur" hint="par tag">
+              <span
                 style={{
-                  fontSize: 13,
-                  fontFamily: "'ui-monospace', 'monospace', inherit",
-                  padding: '7px 12px',
-                  border: '1px solid rgba(45,42,36,0.14)',
+                  fontSize: 12,
+                  color: '#9a948a',
+                  background: 'rgba(45,42,36,0.05)',
+                  border: '1px solid rgba(45,42,36,0.08)',
                   borderRadius: 9,
-                  outline: 'none',
-                  background: 'rgba(255,255,255,0.7)',
-                  color: '#2d2a24',
-                  width: 130,
-                  letterSpacing: '0.04em',
+                  padding: '7px 12px',
                 }}
-              />
-              <SmallBtn tone="dark">inviter</SmallBtn>
-            </div>
-          </Row>
+              >
+                disponible pour les ateliers Premium
+              </span>
+            </Row>
+          )}
 
           {/* Member list */}
           {localMembers.map((member, i) => (
@@ -892,11 +999,13 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             </div>
           ))}
         </SectionCard>
+        </>
+        )}
 
+        {activeSection === 'bricks' && (
+        <>
         {/* ── 4. Briques de connaissance ── */}
         <SectionCard
-          id="bricks"
-          sectionRef={sectionRefs.bricks}
           title="Briques de connaissance"
           description="Les unités d'information extraites de vos fichiers sources par l'IA."
         >
@@ -971,20 +1080,22 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             <SmallBtn tone="ghost">voir toutes les briques</SmallBtn>
           </div>
         </SectionCard>
+        </>
+        )}
 
+        {activeSection === 'premium' && (
+        <>
         {/* ── 5. Atelier Premium ── */}
         <SectionCard
-          id="premium"
-          sectionRef={sectionRefs.premium}
           title="Atelier Premium"
           description="Activez le statut Premium pour débloquer des fonctionnalités avancées pour tous les membres."
         >
-          <Row
-            label="Passer l'atelier Premium"
-            hint="badge visible · engagement irréversible"
-            noBorder
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {isPremium ? (
+            <Row
+              label="Statut de l'atelier"
+              hint="passage Premium définitif"
+              noBorder
+            >
               <span
                 style={{
                   fontSize: 11,
@@ -997,31 +1108,113 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   letterSpacing: '0.02em',
                 }}
               >
-                badge premium
+                ✓ atelier premium
               </span>
-              <SmallBtn tone="amber">activer →</SmallBtn>
-            </div>
-          </Row>
+            </Row>
+          ) : (
+            <>
+            <Row
+              label="Passer l'atelier Premium"
+              hint="badge visible · engagement irréversible"
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 500,
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    background: 'rgba(232,184,108,0.20)',
+                    border: '1px solid rgba(168,122,58,0.30)',
+                    color: '#7a4d20',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  badge premium
+                </span>
+                <SmallBtn tone="amber" onClick={() => setShowPremiumConfirm(true)}>activer →</SmallBtn>
+              </div>
+            </Row>
+            {/* [TEST TEMPORAIRE — 13/06/2026] Activation par mot de passe en attendant Stripe. À retirer une fois le paiement réel branché. */}
+            <Row
+              label="Mot de passe d'activation (test)"
+              hint="mode de test — sera retiré avec l'intégration du paiement"
+              noBorder
+            >
+              <input
+                type="password"
+                value={premiumPassword}
+                onChange={(e) => { setPremiumPassword(e.target.value); setPremiumError(''); }}
+                placeholder="mot de passe…"
+                style={{
+                  fontSize: 13,
+                  padding: '7px 12px',
+                  border: '1px solid rgba(45,42,36,0.14)',
+                  borderRadius: 9,
+                  outline: 'none',
+                  background: 'rgba(255,255,255,0.7)',
+                  color: '#2d2a24',
+                  width: 160,
+                }}
+              />
+            </Row>
+            {premiumError && (
+              <p
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 500,
+                  color: '#b85a4a',
+                  background: 'rgba(184,90,74,0.08)',
+                  border: '1px solid rgba(184,90,74,0.18)',
+                  borderRadius: 9,
+                  padding: '8px 12px',
+                  margin: '4px 0 12px',
+                }}
+              >
+                {premiumError}
+              </p>
+            )}
+            </>
+          )}
         </SectionCard>
-
-        {/* ── 6. Zone de danger ── */}
-        <SectionCard
-          id="danger"
-          sectionRef={sectionRefs.danger}
-          title="Zone de danger"
-          description="Actions irréversibles — procédez avec prudence."
-        >
-          <Row
-            label="Supprimer l'atelier"
-            hint="toutes les briques, examens et progressions seront perdus"
-            noBorder
-          >
-            <SmallBtn tone="danger" onClick={() => setDeleteStep('confirm')}>
-              supprimer l'atelier
-            </SmallBtn>
-          </Row>
-        </SectionCard>
+        </>
+        )}
       </div>
+
+      {/* ── Barre d'enregistrement (visible si modifications non sauvegardées) ── */}
+      {(isDirty || detailsSaved) && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            right: 32,
+            zIndex: 40,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            background: '#fff',
+            borderRadius: 12,
+            boxShadow: '0 10px 30px rgba(45,42,36,0.16)',
+            border: '1px solid rgba(45,42,36,0.08)',
+            padding: '10px 14px',
+          }}
+        >
+          {isDirty && !detailsSaved && (
+            <span style={{ fontSize: 12.5, color: !canSave ? '#b85a4a' : '#7a766d' }}>
+              {!canSave ? "le nom de l'atelier ne peut pas être vide" : 'modifications non enregistrées'}
+            </span>
+          )}
+          <SmallBtn tone={detailsSaved ? 'ghost' : 'dark'} onClick={handleSaveDetails} disabled={!canSave}>
+            {savingDetails ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Loader2 size={12} className="animate-spin" />enregistrement…</span>
+            ) : detailsSaved ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Check size={12} />enregistré</span>
+            ) : (
+              'enregistrer'
+            )}
+          </SmallBtn>
+        </div>
+      )}
 
       {/* ── Delete modal ── */}
       {deleteStep !== 'idle' && (
@@ -1305,6 +1498,220 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Share / QR modal */}
+      <ShareQRModal open={shareOpen} onClose={() => setShareOpen(false)} title={workshopName} url={joinUrl} />
+
+      {/* ── Modale « modifications non enregistrées » ── */}
+      {showLeaveConfirm && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 50,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(45,42,36,0.5)',
+            backdropFilter: 'blur(4px)',
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 20,
+              boxShadow: '0 30px 80px rgba(45,42,36,0.18)',
+              padding: 24,
+              width: '100%',
+              maxWidth: 360,
+              fontFamily: 'inherit',
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 16,
+                background: 'rgba(168,122,58,0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+              }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a87a3a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 9v4" />
+                <path d="M12 17h.01" />
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+              </svg>
+            </div>
+            <h3
+              style={{
+                fontSize: 17,
+                fontWeight: 500,
+                color: '#2d2a24',
+                textAlign: 'center',
+                margin: '0 0 8px',
+              }}
+            >
+              Modifications non enregistrées
+            </h3>
+            <p
+              style={{
+                fontSize: 13,
+                color: '#7a766d',
+                textAlign: 'center',
+                margin: '0 0 20px',
+              }}
+            >
+              Si vous quittez maintenant, les modifications apportées seront perdues.
+            </p>
+            {!canSave && (
+              <p style={{ fontSize: 12, color: '#b85a4a', textAlign: 'center', margin: '-8px 0 16px' }}>
+                le nom de l&apos;atelier ne peut pas être vide
+              </p>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button
+                disabled={!canSave}
+                onClick={async () => {
+                  await handleSaveDetails();
+                  setShowLeaveConfirm(false);
+                  router.push(leaveTargetHref());
+                  setPendingHref(null);
+                }}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  background: canSave ? '#2d2a24' : 'rgba(45,42,36,0.12)',
+                  color: canSave ? '#fff' : '#9a948a',
+                  border: 'none',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: canSave ? 'pointer' : 'not-allowed',
+                  fontFamily: 'inherit',
+                }}
+              >
+                Enregistrer et quitter
+              </button>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={() => {
+                    setShowLeaveConfirm(false);
+                    setPendingHref(null);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(45,42,36,0.14)',
+                    background: 'transparent',
+                    color: '#5a564c',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => {
+                    setShowLeaveConfirm(false);
+                    router.push(leaveTargetHref());
+                    setPendingHref(null);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(184,90,74,0.30)',
+                    background: 'rgba(184,90,74,0.10)',
+                    color: '#b85a4a',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  Quitter sans enregistrer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modale « confirmation activation Premium » ── */}
+      {showPremiumConfirm && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(45,42,36,0.5)', backdropFilter: 'blur(4px)', padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 20, boxShadow: '0 30px 80px rgba(45,42,36,0.18)', padding: 24, width: '100%', maxWidth: 360, fontFamily: 'inherit' }}>
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 16,
+                background: 'rgba(168,122,58,0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+              }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a87a3a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 9v4" />
+                <path d="M12 17h.01" />
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+              </svg>
+            </div>
+            <h3 style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24', textAlign: 'center', margin: '0 0 8px' }}>
+              Passer l&apos;atelier Premium
+            </h3>
+            <p style={{ fontSize: 13, color: '#7a766d', textAlign: 'center', margin: '0 0 20px' }}>
+              Cette action est définitive et irréversible : l&apos;atelier deviendra privé pour toujours et tous ses membres (actuels et futurs) auront un accès Premium à vie.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button
+                disabled={activatingPremium || !premiumPassword}
+                onClick={handleActivatePremium}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  background: (activatingPremium || !premiumPassword) ? 'rgba(45,42,36,0.12)' : '#2d2a24',
+                  color: (activatingPremium || !premiumPassword) ? '#9a948a' : '#fff',
+                  border: 'none',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: (activatingPremium || !premiumPassword) ? 'not-allowed' : 'pointer',
+                  fontFamily: 'inherit',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                {activatingPremium ? <Loader2 size={14} className="animate-spin" /> : null}
+                Confirmer l&apos;activation
+              </button>
+              <button
+                onClick={() => { setShowPremiumConfirm(false); setPremiumError(''); }}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(45,42,36,0.14)',
+                  background: 'transparent',
+                  color: '#5a564c',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                Annuler
+              </button>
+            </div>
           </div>
         </div>
       )}
