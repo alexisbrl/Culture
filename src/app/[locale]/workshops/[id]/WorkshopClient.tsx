@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { QRCodeSVG } from 'qrcode.react';
-import { Check, Copy, Loader2, Mail, QrCode, RotateCcw, Trash2, X } from 'lucide-react';
-import { requestDeletionCode, confirmDeletion } from '@/app/actions/workshops';
+import { QrCode } from 'lucide-react';
+import ShareQRModal from '@/components/ShareQRModal';
 import ProgrammeTab from './tabs/ProgrammeTab';
 import ExamenTab from './tabs/ExamenTab';
 import AnalyseTab from './tabs/AnalyseTab';
@@ -45,45 +43,15 @@ function Chip({ children, tone = 'default' }: { children: React.ReactNode; tone?
 }
 
 export default function WorkshopClient({ locale, workshopId, workshopName, currentUserRole, members }: Props) {
-  const router = useRouter();
   const isOwner = currentUserRole === 'owner';
   const [activeTab, setActiveTab] = useState<TabId>('programme');
 
-  type DeleteStep = 'idle' | 'confirm' | 'sending' | 'enter_code' | 'verifying';
-  const [deleteStep, setDeleteStep] = useState<DeleteStep>('idle');
-  const [deleteCode, setDeleteCode] = useState('');
-  const [deleteError, setDeleteError] = useState('');
-
   const [shareOpen, setShareOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [joinUrl, setJoinUrl] = useState('');
 
   useEffect(() => {
     setJoinUrl(`${window.location.origin}/${locale}/dashboard?preview=${workshopId}`);
   }, [locale, workshopId]);
-
-  async function handleCopyLink() {
-    await navigator.clipboard.writeText(joinUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
-  }
-
-  async function handleSendCode() {
-    setDeleteStep('sending');
-    setDeleteError('');
-    const result = await requestDeletionCode(workshopId);
-    if (result.success) setDeleteStep('enter_code');
-    else { setDeleteError(result.error ?? 'Erreur'); setDeleteStep('confirm'); }
-  }
-
-  async function handleConfirmDeletion() {
-    if (deleteCode.length !== 6) return;
-    setDeleteStep('verifying');
-    setDeleteError('');
-    const result = await confirmDeletion(workshopId, deleteCode);
-    if (result.success) router.push(`/${locale}/dashboard`);
-    else { setDeleteError(result.error ?? 'Erreur'); setDeleteStep('enter_code'); }
-  }
 
   return (
     <div style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", color: '#2d2a24', minHeight: '100vh', background: '#fcf9f2', display: 'flex', flexDirection: 'column' }}>
@@ -116,16 +84,10 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
                 partager · QR
               </button>
               {isOwner && (
-                <>
-                  <Link href={`/${locale}/workshops/${workshopId}/settings`} style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: '#5a564c', fontSize: 12.5, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <svg width="13" height="13" viewBox="0 0 14 14"><circle cx="7" cy="7" r="2.4" stroke="#5a564c" strokeWidth="1.3" fill="none"/><path d="M7 1.5v2M7 10.5v2M1.5 7h2M10.5 7h2M3 3l1.4 1.4M9.6 9.6L11 11M11 3L9.6 4.4M4.4 9.6L3 11" stroke="#5a564c" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                    paramètres
-                  </Link>
-                  <button onClick={() => setDeleteStep('confirm')} style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(184,90,74,0.30)', color: '#b85a4a', fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Trash2 size={13} />
-                    supprimer
-                  </button>
-                </>
+                <Link href={`/${locale}/workshops/${workshopId}/settings`} style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: '#5a564c', fontSize: 12.5, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <svg width="13" height="13" viewBox="0 0 14 14"><circle cx="7" cy="7" r="2.4" stroke="#5a564c" strokeWidth="1.3" fill="none"/><path d="M7 1.5v2M7 10.5v2M1.5 7h2M10.5 7h2M3 3l1.4 1.4M9.6 9.6L11 11M11 3L9.6 4.4M4.4 9.6L3 11" stroke="#5a564c" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                  paramètres
+                </Link>
               )}
             </div>
           </div>
@@ -143,7 +105,7 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
       </div>
 
       {/* Tab content — fills remaining height */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {activeTab === 'programme' && <ProgrammeTab />}
         {activeTab === 'examen' && <ExamenTab />}
         {activeTab === 'analyse' && <AnalyseTab />}
@@ -151,77 +113,7 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
       </div>
 
       {/* Share / QR modal */}
-      {shareOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(45,42,36,0.5)', backdropFilter: 'blur(4px)', padding: 16 }} onClick={() => setShareOpen(false)}>
-          <div style={{ background: '#fff', borderRadius: 20, boxShadow: '0 30px 80px rgba(45,42,36,0.18)', padding: 24, width: '100%', maxWidth: 360, fontFamily: 'inherit', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShareOpen(false)} style={{ position: 'absolute', top: 14, right: 14, background: 'none', border: 'none', cursor: 'pointer', color: '#9a948a', padding: 4, display: 'flex' }}>
-              <X size={16} />
-            </button>
-
-            <h3 style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24', textAlign: 'center', margin: '0 0 4px' }}>Rejoindre &quot;{workshopName}&quot;</h3>
-            <p style={{ fontSize: 12.5, color: '#7a766d', textAlign: 'center', margin: '0 0 20px' }}>Scannez ce QR code ou partagez le lien ci-dessous.</p>
-
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-              <div style={{ padding: 14, background: '#fff', borderRadius: 14, border: '1px solid rgba(45,42,36,0.10)' }}>
-                {joinUrl && <QRCodeSVG value={joinUrl} size={180} bgColor="#ffffff" fgColor="#2d2a24" level="M" />}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input readOnly value={joinUrl} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 0, fontSize: 12, fontFamily: 'ui-monospace, monospace', padding: '10px 12px', border: '1px solid rgba(45,42,36,0.14)', borderRadius: 10, outline: 'none', background: 'rgba(45,42,36,0.03)', color: '#5a564c' }} />
-              <button onClick={handleCopyLink} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 10, background: copied ? '#7a9968' : '#2d2a24', color: '#fff', border: 'none', fontSize: 12.5, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                {copied ? <><Check size={13} />copié</> : <><Copy size={13} />copier</>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete modal */}
-      {deleteStep !== 'idle' && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(45,42,36,0.5)', backdropFilter: 'blur(4px)', padding: 16 }}>
-          <div style={{ background: '#fff', borderRadius: 20, boxShadow: '0 30px 80px rgba(45,42,36,0.18)', padding: 24, width: '100%', maxWidth: 360, fontFamily: 'inherit' }}>
-
-            {(deleteStep === 'confirm' || deleteStep === 'sending') && (
-              <>
-                <div style={{ width: 48, height: 48, borderRadius: 16, background: 'rgba(184,90,74,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                  <Trash2 size={22} color="#b85a4a" />
-                </div>
-                <h3 style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24', textAlign: 'center', margin: '0 0 8px' }}>Mettre en corbeille ?</h3>
-                <p style={{ fontSize: 13, color: '#7a766d', textAlign: 'center', margin: '0 0 6px' }}>&quot;{workshopName}&quot; sera mis en corbeille. Vous aurez 7 jours pour annuler.</p>
-                <p style={{ fontSize: 11.5, color: '#9a948a', textAlign: 'center', margin: '0 0 20px' }}>Un code de confirmation sera envoyé par email.</p>
-                {deleteError && <p style={{ fontSize: 12, color: '#b85a4a', background: 'rgba(184,90,74,0.08)', padding: '8px 12px', borderRadius: 9, textAlign: 'center', marginBottom: 14 }}>{deleteError}</p>}
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => setDeleteStep('idle')} style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
-                  <button onClick={handleSendCode} disabled={deleteStep === 'sending'} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, background: '#b85a4a', color: '#fff', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: deleteStep === 'sending' ? 0.6 : 1 }}>
-                    {deleteStep === 'sending' ? <><Loader2 size={14} className="animate-spin" />Envoi...</> : <><Mail size={14} />Envoyer le code</>}
-                  </button>
-                </div>
-              </>
-            )}
-
-            {(deleteStep === 'enter_code' || deleteStep === 'verifying') && (
-              <>
-                <div style={{ width: 48, height: 48, borderRadius: 16, background: 'rgba(232,184,108,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                  <Mail size={22} color="#c89860" />
-                </div>
-                <h3 style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24', textAlign: 'center', margin: '0 0 8px' }}>Code envoyé !</h3>
-                <p style={{ fontSize: 13, color: '#7a766d', textAlign: 'center', margin: '0 0 20px' }}>Saisissez le code à 6 chiffres reçu par email. Il expire dans 15 minutes.</p>
-                <input type="text" value={deleteCode} onChange={e => { setDeleteCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setDeleteError(''); }} placeholder="000000" maxLength={6} style={{ width: '100%', textAlign: 'center', fontSize: 28, fontFamily: 'ui-monospace, monospace', letterSpacing: '0.5em', padding: '12px 16px', border: '2px solid rgba(45,42,36,0.14)', borderRadius: 12, outline: 'none', boxSizing: 'border-box', marginBottom: 10 }} disabled={deleteStep === 'verifying'} autoFocus />
-                {deleteError && <p style={{ fontSize: 12, color: '#b85a4a', background: 'rgba(184,90,74,0.08)', padding: '8px 12px', borderRadius: 9, textAlign: 'center', marginBottom: 10 }}>{deleteError}</p>}
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => { setDeleteStep('confirm'); setDeleteCode(''); setDeleteError(''); }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-                    <RotateCcw size={13} /> Renvoyer
-                  </button>
-                  <button onClick={handleConfirmDeletion} disabled={deleteCode.length !== 6 || deleteStep === 'verifying'} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, background: '#b85a4a', color: '#fff', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: deleteCode.length !== 6 || deleteStep === 'verifying' ? 0.5 : 1 }}>
-                    {deleteStep === 'verifying' ? <><Loader2 size={14} className="animate-spin" />Vérification...</> : 'Confirmer'}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      <ShareQRModal open={shareOpen} onClose={() => setShareOpen(false)} title={workshopName} url={joinUrl} />
     </div>
   );
 }

@@ -38,10 +38,16 @@ export default async function SettingsPage({ params }: Props) {
       description={workshop.description}
       coverGradient={workshop.cover_gradient}
       coverImageUrl={workshop.cover_image_url}
+      coverImageActive={workshop.cover_image_active}
       emoji={workshop.emoji}
       createdAt={workshop.created_at}
       uniqueTag={workshop.unique_tag}
       currentUserRole={workshop.currentUserRole}
+      isPremium={workshop.is_premium}
+      isPrivate={workshop.private}
+      showProgramme={workshop.show_programme}
+      maxMembersTotal={workshop.max_members_total}
+      maxMembersMonthly={workshop.max_members_monthly}
       members={members}
     />
   );

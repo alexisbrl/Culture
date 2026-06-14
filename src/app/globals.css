@@ -89,6 +89,7 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    cursor: default;
   }
   html {
     @apply font-sans scroll-smooth;

@@ -30,6 +30,7 @@ type PreviewData = {
   ownerName: string;
   memberCount: number;
   isMember: boolean;
+  isPremium?: boolean;
   role?: 'owner' | 'member';
   isMock?: boolean;
 };
@@ -66,11 +67,12 @@ function workshopToPreview(w: WorkshopCardData, role: 'owner' | 'member'): Previ
     id: w.id,
     name: w.name,
     description: w.description,
-    coverStyle: coverStyleFor(w.id, w.cover_gradient, w.cover_image_url),
+    coverStyle: coverStyleFor(w.id, w.cover_gradient, w.cover_image_url, w.cover_image_active),
     emoji: emojiFor(w.id, w.emoji),
     ownerName: w.owner_name,
     memberCount: w.member_count,
     isMember: true,
+    isPremium: w.is_premium,
     role,
   };
 }
@@ -103,7 +105,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; description: string | null; cover_gradient: string | null; cover_image_url: string | null; emoji: string | null; unique_tag: string | null; member_count: number }>>([]);
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; description: string | null; cover_gradient: string | null; cover_image_url: string | null; cover_image_active: boolean; emoji: string | null; unique_tag: string | null; member_count: number }>>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
@@ -161,11 +163,12 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
         id: data.id,
         name: data.name,
         description: data.description,
-        coverStyle: coverStyleFor(data.id, data.coverGradient, data.coverImageUrl),
+        coverStyle: coverStyleFor(data.id, data.coverGradient, data.coverImageUrl, data.coverImageActive),
         emoji: emojiFor(data.id, data.emoji),
         ownerName: data.ownerName,
         memberCount: data.memberCount,
         isMember: data.isMember,
+        isPremium: data.isPremium,
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -300,17 +303,18 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                               id: data.id,
                               name: data.name,
                               description: data.description,
-                              coverStyle: coverStyleFor(data.id, data.coverGradient, data.coverImageUrl),
+                              coverStyle: coverStyleFor(data.id, data.coverGradient, data.coverImageUrl, data.coverImageActive),
                               emoji: emojiFor(data.id, data.emoji),
                               ownerName: data.ownerName,
                               memberCount: data.memberCount,
                               isMember: data.isMember,
+                              isPremium: data.isPremium,
                             });
                           });
                         }}
                         className="cursor-pointer rounded-2xl overflow-hidden bg-white/90 border border-[#2d2a24]/[0.08] shadow-[0_4px_16px_rgba(45,42,36,0.06)] flex flex-col"
                       >
-                        <div className="relative h-[90px]" style={coverStyleFor(w.id, w.cover_gradient, w.cover_image_url)}>
+                        <div className="relative h-[90px]" style={coverStyleFor(w.id, w.cover_gradient, w.cover_image_url, w.cover_image_active)}>
                           <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{emojiFor(w.id, w.emoji)}</div>
                         </div>
                         <div className="px-3.5 pt-3 pb-3.5">
@@ -462,10 +466,22 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                   <button onClick={closePreview} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/85 flex items-center justify-center text-[#5a564c] hover:bg-white">
                     <X className="w-4 h-4" />
                   </button>
-                  {preview.role && (
-                    <span className="absolute top-3 left-3 text-[11px] px-2.5 py-1 rounded-full bg-white/85 text-[#5a564c] font-medium">
-                      {preview.role === 'owner' ? (locale === 'fr' ? 'propriétaire' : 'owner') : (locale === 'fr' ? 'membre' : 'member')}
-                    </span>
+                  {(preview.role || preview.isPremium) && (
+                    <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                      {preview.role && (
+                        <span className="text-[11px] px-2.5 py-1 rounded-full bg-white/85 text-[#5a564c] font-medium">
+                          {preview.role === 'owner' ? (locale === 'fr' ? 'propriétaire' : 'owner') : (locale === 'fr' ? 'membre' : 'member')}
+                        </span>
+                      )}
+                      {preview.isPremium && (
+                        <span
+                          className="text-[11px] px-2.5 py-1 rounded-full font-medium"
+                          style={{ background: 'rgba(232,184,108,0.85)', color: '#7a4d20' }}
+                        >
+                          Premium
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
                 <div className="p-6">
@@ -510,7 +526,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
 }
 
 function WorkshopCard({ workshop, locale, onExpand }: { workshop: WorkshopCardData; locale: string; onExpand: () => void }) {
-  const coverStyle = coverStyleFor(workshop.id, workshop.cover_gradient, workshop.cover_image_url);
+  const coverStyle = coverStyleFor(workshop.id, workshop.cover_gradient, workshop.cover_image_url, workshop.cover_image_active);
   return (
     <Link href={`/${locale}/workshops/${workshop.id}`} className="group rounded-2xl overflow-hidden bg-white/90 border border-[#2d2a24]/[0.08] shadow-[0_4px_16px_rgba(45,42,36,0.06)] hover:shadow-[0_10px_28px_rgba(45,42,36,0.12)] hover:-translate-y-0.5 transition flex flex-col">
       <div className="relative h-[90px]" style={coverStyle}>

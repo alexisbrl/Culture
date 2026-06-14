@@ -27,12 +27,14 @@ export type CoverStyle = {
 };
 
 /**
- * Renvoie le style CSS de la couverture : image personnalisée si présente, sinon le gradient.
+ * Renvoie le style CSS de la couverture : image personnalisée si présente et active, sinon le gradient.
+ * `imageUrl` peut être conservé en base même quand l'image n'est pas active (cf. `imageActive`),
+ * afin de pouvoir la ré-utiliser plus tard sans nouvel upload.
  * N'utilise jamais le raccourci `background` — le mélanger avec `backgroundSize`/`backgroundPosition`
  * sur le même élément déclenche l'avertissement React « conflicting property ».
  */
-export function coverStyleFor(id: string, gradient?: string | null, imageUrl?: string | null): CoverStyle {
-  if (imageUrl) {
+export function coverStyleFor(id: string, gradient?: string | null, imageUrl?: string | null, imageActive?: boolean): CoverStyle {
+  if (imageUrl && imageActive) {
     return { backgroundColor: 'transparent', backgroundImage: `url(${imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' };
   }
   return { backgroundColor: 'transparent', backgroundImage: COVER_GRADIENTS[coverGradientFor(id, gradient)], backgroundSize: 'auto', backgroundPosition: '0 0' };
