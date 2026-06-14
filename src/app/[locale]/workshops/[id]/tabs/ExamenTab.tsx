@@ -1,38 +1,13 @@
 'use client';
 
-import { useState, useRef, useLayoutEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import QuestionEditor, { Question, ResponseType, RESPONSE_TYPE_LABELS, emptyQuestion } from './QuestionEditor';
+import { getExamBankData, saveQuestion, saveQuestions, createPool as createPoolAction, deletePool as deletePoolAction, saveGeneratedExam } from '@/app/actions/examQuestions';
 
 // ---- shared data ----
 type Pool = { id: string; name: string; color: string };
 
-const INITIAL_POOLS: Pool[] = [
-  { id: 'membr', name: 'membrane', color: '#7a9968' },
-  { id: 'cyto', name: 'cytosquelette', color: '#c89860' },
-  { id: 'mito', name: 'mitochondrie', color: '#9eb3b9' },
-  { id: 'noyau', name: 'noyau', color: '#a890b8' },
-  { id: 'examQ', name: 'jamais tombé en examen', color: '#b85a4a' },
-];
-
-const INITIAL_QUESTIONS: Question[] = [
-  { id: 'q1', questionType: 'textuel', responseType: 'qcm', content: "Quelle structure produit la majorité de l'ATP par phosphorylation oxydative ?", answer: 'La mitochondrie — via la chaîne respiratoire de la membrane interne.', choices: ['Le noyau', 'La mitochondrie', "Le réticulum endoplasmique", "L'appareil de Golgi"], correctChoices: [1], pools: ['mito'], difficulty: { enabled: true, value: 7 }, duration: { enabled: false, minutes: 2 }, linkedQuestionIds: [] },
-  { id: 'q2', questionType: 'textuel', responseType: 'qcs', content: "La membrane plasmique est une bicouche lipidique imperméable à l'eau.", answer: "Faux — elle est semi-perméable ; l'eau traverse via les aquaporines.", choices: ['Vrai', 'Faux'], correctChoices: [1], pools: ['membr'], difficulty: { enabled: true, value: 4 }, duration: { enabled: false, minutes: 2 }, linkedQuestionIds: [] },
-  { id: 'q3', questionType: 'textuel', responseType: 'textuelle', content: 'Décrivez les trois étapes de la respiration cellulaire aérobie.', answer: 'Glycolyse (cytosol) → cycle de Krebs (matrice) → chaîne respiratoire (membrane interne).', choices: [], correctChoices: [], pools: ['mito', 'examQ'], difficulty: { enabled: true, value: 8 }, duration: { enabled: false, minutes: 2 }, linkedQuestionIds: [] },
-  { id: 'q4', questionType: 'textuel', responseType: 'qcm', content: 'Quel filament est responsable de la contraction cellulaire ?', answer: "Les microfilaments d'actine.", choices: ["Les microfilaments d'actine", 'Les microtubules', 'Les filaments intermédiaires', 'Les ribosomes'], correctChoices: [0], pools: ['cyto'], difficulty: { enabled: true, value: 5 }, duration: { enabled: false, minutes: 2 }, linkedQuestionIds: [] },
-  { id: 'q5', questionType: 'textuel', responseType: 'matching', content: 'Associez chaque élément du cytosquelette à sa fonction.', answer: '', choices: ['Actine :: contraction', 'Microtubules :: transport', 'Filaments intermédiaires :: soutien'], correctChoices: [], pools: ['cyto'], difficulty: { enabled: true, value: 6 }, duration: { enabled: false, minutes: 2 }, linkedQuestionIds: [] },
-  { id: 'q6', questionType: 'textuel', responseType: 'qcm', content: 'Où se déroule le cycle de Krebs ?', answer: 'Dans la matrice mitochondriale.', choices: ['Dans le cytosol', 'Dans la matrice mitochondriale', 'Dans le noyau', 'Dans le réticulum endoplasmique'], correctChoices: [1], pools: ['mito', 'examQ'], difficulty: { enabled: true, value: 9 }, duration: { enabled: false, minutes: 2 }, linkedQuestionIds: [] },
-  { id: 'q7', questionType: 'textuel', responseType: 'qcs', content: 'Les protéines membranaires assurent le transport sélectif.', answer: 'Vrai.', choices: ['Vrai', 'Faux'], correctChoices: [0], pools: ['membr'], difficulty: { enabled: true, value: 3 }, duration: { enabled: false, minutes: 2 }, linkedQuestionIds: [] },
-  { id: 'q8', questionType: 'textuel', responseType: 'qcm', content: 'Quel processus précède la division cellulaire ?', answer: "La réplication de l'ADN durant la phase S.", choices: ['La mitose', 'La cytokinèse', "La réplication de l'ADN durant la phase S", 'La méiose'], correctChoices: [2], pools: ['noyau'], difficulty: { enabled: true, value: 6 }, duration: { enabled: false, minutes: 2 }, linkedQuestionIds: [] },
-];
-
-type Exam = { id: string; title: string; date: string; q: number; dur: string; avg: string; status: string; taken: number };
-
-const INITIAL_EXAMS: Exam[] = [
-  { id: 'e1', title: 'Partiel — Biologie cellulaire', date: '12 mai 2026', q: 24, dur: '45 min', avg: '14,2/20', status: 'publié', taken: 38 },
-  { id: 'e2', title: 'Quiz éclair — Mitochondrie', date: '4 mai 2026', q: 10, dur: '12 min', avg: '16,0/20', status: 'publié', taken: 31 },
-  { id: 'e3', title: 'Rattrapage — Membrane', date: '28 avr. 2026', q: 18, dur: '30 min', avg: '11,5/20', status: 'archivé', taken: 7 },
-  { id: 'e4', title: 'Éval. diagnostique', date: '15 avr. 2026', q: 12, dur: '15 min', avg: '—', status: 'brouillon', taken: 0 },
-];
+type Exam = { id: string; title: string; date: string; q: number; dur: string; avg: string; status: string; taken: number; questionIds?: string[] };
 
 // ---- small helpers ----
 const RESPONSE_TYPE_COLORS: Record<ResponseType, string> = {
@@ -48,15 +23,20 @@ const RESPONSE_TYPE_COLORS: Record<ResponseType, string> = {
   ordre: '#a890b8',
 };
 
-type DiffBucket = 'easy' | 'medium' | 'hard';
 type SortBy = 'difficulty' | 'name' | 'type' | 'label';
 
-const DIFF_BUCKET_LABELS: Record<DiffBucket, string> = { easy: 'facile', medium: 'moyen', hard: 'difficile' };
+const NEVER_EXAM_ID = '__never__';
 
-function diffBucket(v: number): DiffBucket {
-  if (v <= 3) return 'easy';
-  if (v <= 7) return 'medium';
-  return 'hard';
+function diffDots(v: number): number {
+  return Math.ceil(v / 2);
+}
+
+function DiffDots({ level }: { level: number }) {
+  return (
+    <span style={{ display: 'inline-flex', gap: 3 }}>
+      {Array.from({ length: 5 }, (_, i) => <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: i < level ? '#a87a3a' : 'rgba(45,42,36,0.15)', display: 'inline-block' }} />)}
+    </span>
+  );
 }
 
 function TypePill({ type }: { type: ResponseType }) {
@@ -192,9 +172,10 @@ function HistoryContent({ exams, justAddedId, onEdit, onNew }: { exams: Exam[]; 
 }
 
 // ---- BANK ----
-function BankContent({ questions, pools, selected, onToggle, openId, setOpenId, onEditQuestion, onNewQuestion, onRequestLink, onUnlinkGroup, onCreatePool, onDeletePool }: {
+function BankContent({ questions, pools, exams, selected, onToggle, openId, setOpenId, onEditQuestion, onNewQuestion, onRequestLink, onUnlinkGroup, onCreatePool, onDeletePool }: {
   questions: Question[];
   pools: Pool[];
+  exams: Exam[];
   selected: string[];
   onToggle: (id: string) => void;
   openId: string | null;
@@ -209,15 +190,27 @@ function BankContent({ questions, pools, selected, onToggle, openId, setOpenId, 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [filterPools, setFilterPools] = useState<string[]>([]);
   const [filterTypes, setFilterTypes] = useState<ResponseType[]>([]);
-  const [filterDiffs, setFilterDiffs] = useState<DiffBucket[]>([]);
+  const [filterDiffs, setFilterDiffs] = useState<number[]>([]);
+  const [filterExams, setFilterExams] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<SortBy>('difficulty');
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
   const [creatingLabel, setCreatingLabel] = useState(false);
   const [newLabelName, setNewLabelName] = useState('');
+  const [pendingDeleteLabel, setPendingDeleteLabel] = useState<string | null>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
 
   const allTypes = Array.from(new Set(questions.map(q => q.responseType)));
-  const activeFilterCount = filterTypes.length + filterDiffs.length;
+  const activeFilterCount = filterPools.length + filterTypes.length + filterDiffs.length + filterExams.length;
+
+  useEffect(() => {
+    if (!filterOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [filterOpen]);
 
   function togglePoolFilter(id: string) {
     setFilterPools(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
@@ -225,8 +218,17 @@ function BankContent({ questions, pools, selected, onToggle, openId, setOpenId, 
   function toggleTypeFilter(t: ResponseType) {
     setFilterTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
   }
-  function toggleDiffFilter(d: DiffBucket) {
+  function toggleDiffFilter(d: number) {
     setFilterDiffs(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
+  }
+  function toggleExamFilter(id: string) {
+    setFilterExams(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+  function resetFilters() {
+    setFilterPools([]);
+    setFilterTypes([]);
+    setFilterDiffs([]);
+    setFilterExams([]);
   }
   function addLabel() {
     const name = newLabelName.trim();
@@ -235,15 +237,19 @@ function BankContent({ questions, pools, selected, onToggle, openId, setOpenId, 
     setNewLabelName('');
     setCreatingLabel(false);
   }
-  function deleteLabel(id: string) {
+  function confirmDeleteLabel() {
+    if (!pendingDeleteLabel) return;
+    const id = pendingDeleteLabel;
     onDeletePool(id);
     setFilterPools(prev => prev.filter(p => p !== id));
+    setPendingDeleteLabel(null);
   }
 
   let visible = questions.filter(q => {
     if (filterPools.length && !q.pools.some(p => filterPools.includes(p))) return false;
     if (filterTypes.length && !filterTypes.includes(q.responseType)) return false;
-    if (filterDiffs.length && !(q.difficulty.enabled && filterDiffs.includes(diffBucket(q.difficulty.value)))) return false;
+    if (filterDiffs.length && !(q.difficulty.enabled && filterDiffs.includes(diffDots(q.difficulty.value)))) return false;
+    if (filterExams.length && !filterExams.some(f => f === NEVER_EXAM_ID ? q.examIds.length === 0 : q.examIds.includes(f))) return false;
     if (search.trim() && !q.content.toLowerCase().includes(search.trim().toLowerCase())) return false;
     return true;
   });
@@ -320,12 +326,21 @@ function BankContent({ questions, pools, selected, onToggle, openId, setOpenId, 
     );
   }
 
+  function ActiveChip({ label, color, onRemove }: { label: string; color?: string; onRemove: () => void }) {
+    return (
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 6px 5px 11px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.30)', background: '#2d2a24', color: '#f4f0e6', fontFamily: 'inherit' }}>
+        {color && <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, display: 'inline-block' }} />}
+        {label}
+        <button onClick={onRemove} style={{ border: 'none', background: 'none', color: '#f4f0e6', cursor: 'pointer', fontSize: 13, padding: '0 4px', lineHeight: 1, opacity: 0.7 }}>×</button>
+      </span>
+    );
+  }
+
   return (
     <div style={{ padding: '20px 24px 24px', minHeight: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14, gap: 12 }}>
         <div>
           <div style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24' }}>Banque de questions</div>
-          <div style={{ fontSize: 12.5, color: '#7a766d' }}>{questions.length} questions générées depuis 4 fichiers source · {selected.length} sélectionnées</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <button onClick={onNewQuestion} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, background: '#2d2a24', color: '#f4f0e6', border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
@@ -336,32 +351,24 @@ function BankContent({ questions, pools, selected, onToggle, openId, setOpenId, 
           </button>
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-        <button onClick={() => setFilterPools([])} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 11px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: filterPools.length === 0 ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: filterPools.length === 0 ? '#2d2a24' : 'rgba(255,255,255,0.7)', color: filterPools.length === 0 ? '#f4f0e6' : '#3a352c' }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#7a766d', display: 'inline-block' }} />toutes<span style={{ opacity: 0.6, fontVariantNumeric: 'tabular-nums' }}>{questions.length}</span>
-        </button>
-        {pools.map(l => {
-          const count = questions.filter(q => q.pools.includes(l.id)).length;
-          const active = filterPools.includes(l.id);
-          return (
-            <span key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <button onClick={() => togglePoolFilter(l.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 11px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(255,255,255,0.7)', color: active ? '#f4f0e6' : '#3a352c' }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: l.color, display: 'inline-block' }} />{l.name}<span style={{ opacity: 0.6, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
-              </button>
-              <button onClick={() => deleteLabel(l.id)} title="supprimer le libellé" style={{ border: 'none', background: 'none', color: '#bdb8ad', cursor: 'pointer', fontSize: 12, padding: '0 2px', lineHeight: 1 }}>×</button>
-            </span>
-          );
-        })}
-        {creatingLabel ? (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input autoFocus value={newLabelName} onChange={e => setNewLabelName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addLabel(); if (e.key === 'Escape') { setCreatingLabel(false); setNewLabelName(''); } }} placeholder="nom du libellé…" style={{ fontSize: 11.5, padding: '5px 10px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.18)', outline: 'none', fontFamily: 'inherit', width: 140 }} />
-            <button onClick={addLabel} style={{ fontSize: 11.5, padding: '5px 11px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.10)', background: '#2d2a24', color: '#f4f0e6', cursor: 'pointer', fontFamily: 'inherit' }}>ajouter</button>
-            <button onClick={() => { setCreatingLabel(false); setNewLabelName(''); }} style={{ fontSize: 11.5, padding: '5px 11px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.10)', background: 'transparent', color: '#9a948a', cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
-          </span>
-        ) : (
-          <button onClick={() => setCreatingLabel(true)} style={{ fontSize: 11.5, padding: '5px 11px', borderRadius: 999, border: '1px dashed rgba(45,42,36,0.20)', background: 'transparent', color: '#7a766d', cursor: 'pointer', fontFamily: 'inherit' }}>+ libellé</button>
-        )}
-      </div>
+      {activeFilterCount > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a' }}>filtres actifs</span>
+          {filterPools.map(id => {
+            const l = pools.find(p => p.id === id);
+            return <ActiveChip key={'pool:' + id} label={l?.name ?? id} color={l?.color} onRemove={() => togglePoolFilter(id)} />;
+          })}
+          {filterTypes.map(t => (
+            <ActiveChip key={'type:' + t} label={RESPONSE_TYPE_LABELS[t]} onRemove={() => toggleTypeFilter(t)} />
+          ))}
+          {filterDiffs.map(d => (
+            <ActiveChip key={'diff:' + d} label={`difficulté ${d}/5`} onRemove={() => toggleDiffFilter(d)} />
+          ))}
+          {filterExams.map(eid => (
+            <ActiveChip key={'exam:' + eid} label={eid === NEVER_EXAM_ID ? 'jamais tombé en examen' : (exams.find(ex => ex.id === eid)?.title ?? eid)} onRemove={() => toggleExamFilter(eid)} />
+          ))}
+        </div>
+      )}
       {selected.length >= 2 && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px', borderRadius: 9, background: 'rgba(232,184,108,0.16)', border: '1px solid rgba(168,122,58,0.28)', marginBottom: 10 }}>
           <span style={{ fontSize: 12, color: '#7a4d20' }}>{selected.length} questions sélectionnées</span>
@@ -375,12 +382,41 @@ function BankContent({ questions, pools, selected, onToggle, openId, setOpenId, 
           <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="6.5" cy="6.5" r="4.5" stroke="#7a766d" strokeWidth="1.4" fill="none" /><line x1="10" y1="10" x2="14" y2="14" stroke="#7a766d" strokeWidth="1.4" strokeLinecap="round" /></svg>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="filtrer les questions…" style={{ flex: 1, fontSize: 12.5, color: '#3a352c', border: 'none', outline: 'none', background: 'transparent', fontFamily: 'inherit' }} />
         </div>
-        <div style={{ position: 'relative' }}>
+        <div ref={filterRef} style={{ position: 'relative' }}>
           <button onClick={() => setFilterOpen(o => !o)} style={{ fontSize: 12, padding: '8px 14px', borderRadius: 9, border: activeFilterCount > 0 ? '1px solid rgba(168,122,58,0.45)' : '1px solid rgba(45,42,36,0.10)', background: activeFilterCount > 0 ? 'rgba(232,184,108,0.18)' : 'rgba(255,255,255,0.7)', color: activeFilterCount > 0 ? '#7a4d20' : '#5a564c', cursor: 'pointer', fontFamily: 'inherit' }}>
             filtres{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''} ▾
           </button>
           {filterOpen && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 6, width: 260, background: '#fff', border: '1px solid rgba(45,42,36,0.10)', borderRadius: 12, boxShadow: '0 12px 32px rgba(45,42,36,0.16)', padding: 14, zIndex: 20 }}>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 6, width: 280, background: '#fff', border: '1px solid rgba(45,42,36,0.10)', borderRadius: 12, boxShadow: '0 12px 32px rgba(45,42,36,0.16)', padding: 14, zIndex: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, color: '#2d2a24' }}>filtres</span>
+                {activeFilterCount > 0 && (
+                  <button onClick={resetFilters} style={{ fontSize: 11.5, color: '#a87a3a', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>réinitialiser</button>
+                )}
+              </div>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a', marginBottom: 8 }}>libellés</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                {pools.map(l => {
+                  const active = filterPools.includes(l.id);
+                  return (
+                    <span key={l.id} style={{ position: 'relative', display: 'inline-flex' }}>
+                      <button onClick={() => togglePoolFilter(l.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: l.color, display: 'inline-block' }} />{l.name}
+                      </button>
+                      <button onClick={() => setPendingDeleteLabel(l.id)} title="supprimer le libellé" style={{ position: 'absolute', top: -6, right: -6, width: 14, height: 14, borderRadius: '50%', border: '1px solid rgba(45,42,36,0.15)', background: '#fff', color: '#9a948a', cursor: 'pointer', fontSize: 10, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                    </span>
+                  );
+                })}
+                {creatingLabel ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input autoFocus value={newLabelName} onChange={e => setNewLabelName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addLabel(); if (e.key === 'Escape') { setCreatingLabel(false); setNewLabelName(''); } }} placeholder="nom du libellé…" style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.18)', outline: 'none', fontFamily: 'inherit', width: 110 }} />
+                    <button onClick={addLabel} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.10)', background: '#2d2a24', color: '#f4f0e6', cursor: 'pointer', fontFamily: 'inherit' }}>ajouter</button>
+                    <button onClick={() => { setCreatingLabel(false); setNewLabelName(''); }} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.10)', background: 'transparent', color: '#9a948a', cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
+                  </span>
+                ) : (
+                  <button onClick={() => setCreatingLabel(true)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: '1px dashed rgba(45,42,36,0.20)', background: 'transparent', color: '#7a766d', cursor: 'pointer', fontFamily: 'inherit' }}>+ libellé</button>
+                )}
+              </div>
               <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a', marginBottom: 8 }}>type de question</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
                 {allTypes.map(t => {
@@ -393,19 +429,35 @@ function BankContent({ questions, pools, selected, onToggle, openId, setOpenId, 
                 })}
               </div>
               <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a', marginBottom: 8 }}>difficulté</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: activeFilterCount > 0 ? 14 : 0 }}>
-                {(['easy', 'medium', 'hard'] as DiffBucket[]).map(d => {
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                {[1, 2, 3, 4, 5].map(d => {
                   const active = filterDiffs.includes(d);
                   return (
-                    <button key={d} onClick={() => toggleDiffFilter(d)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
-                      {DIFF_BUCKET_LABELS[d]}
+                    <button key={d} onClick={() => toggleDiffFilter(d)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
+                      <DiffDots level={d} />{d}/5
                     </button>
                   );
                 })}
               </div>
-              {activeFilterCount > 0 && (
-                <button onClick={() => { setFilterTypes([]); setFilterDiffs([]); }} style={{ fontSize: 11.5, color: '#a87a3a', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>réinitialiser</button>
-              )}
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a', marginBottom: 8 }}>présence en examen</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {exams.map(ex => {
+                  const active = filterExams.includes(ex.id);
+                  return (
+                    <button key={ex.id} onClick={() => toggleExamFilter(ex.id)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
+                      {ex.title}
+                    </button>
+                  );
+                })}
+                {(() => {
+                  const active = filterExams.includes(NEVER_EXAM_ID);
+                  return (
+                    <button onClick={() => toggleExamFilter(NEVER_EXAM_ID)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
+                      jamais tombé en examen
+                    </button>
+                  );
+                })()}
+              </div>
             </div>
           )}
         </div>
@@ -457,6 +509,27 @@ function BankContent({ questions, pools, selected, onToggle, openId, setOpenId, 
           <div style={{ fontFamily: "'Caveat', cursive", fontSize: 16, color: '#a87a3a', padding: '20px 0', textAlign: 'center' as const }}>« aucune question ne correspond à ces filtres »</div>
         )}
       </div>
+      {pendingDeleteLabel && (() => {
+        const label = pools.find(p => p.id === pendingDeleteLabel);
+        if (!label) return null;
+        const count = questions.filter(q => q.pools.includes(label.id)).length;
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div onClick={() => setPendingDeleteLabel(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
+            <div style={{ position: 'relative', width: 380, maxWidth: '90vw', background: '#fcf9f2', borderRadius: 20, padding: 24, boxShadow: '0 24px 64px rgba(45,42,36,0.25)', fontFamily: "'Inter Tight', system-ui, sans-serif", textAlign: 'center' as const }}>
+              <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(184,90,74,0.12)', color: '#b85a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 600, margin: '0 auto 12px' }}>!</div>
+              <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Supprimer le libellé « {label.name} » ?</div>
+              <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: 20 }}>
+                {count > 0 ? `Il sera retiré de ${count} question${count > 1 ? 's' : ''}. ` : ''}Cette action est irréversible.
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setPendingDeleteLabel(null)} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
+                <button onClick={confirmDeleteLabel} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: '#b85a4a', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Supprimer</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -516,24 +589,32 @@ const IDS = ['history', 'bank', 'generator'] as const;
 type PanelId = typeof IDS[number];
 
 // ---- MAIN EXAMEN TAB ----
-export default function ExamenTab() {
+export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const prevRects = useRef<Record<string, { l: number; t: number; w: number; h: number }>>({});
   const [dim, setDim] = useState({ w: 0, h: 0 });
   const [order, setOrder] = useState<PanelId[]>(['history', 'bank', 'generator']);
-  const [exams, setExams] = useState<Exam[]>(INITIAL_EXAMS);
-  const [questions, setQuestions] = useState<Question[]>(INITIAL_QUESTIONS);
-  const [pools, setPools] = useState<Pool[]>(INITIAL_POOLS);
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [pools, setPools] = useState<Pool[]>([]);
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [editing, setEditing] = useState<Exam | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
-  const [selected, setSelected] = useState(['q1', 'q2', 'q4']);
-  const [openId, setOpenId] = useState<string | null>('q1');
+  const [selected, setSelected] = useState<string[]>([]);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const GAP = 16;
   const SIDE_W = 320;
+
+  useEffect(() => {
+    getExamBankData(workshopId).then(({ questions, pools, exams }) => {
+      setQuestions(questions);
+      setPools(pools);
+      setExams(exams.map(e => ({ id: e.id, title: e.title, date: e.date, q: e.q, dur: e.dur, avg: e.avg, status: e.status, taken: e.taken, questionIds: e.questionIds })));
+    }).catch(err => console.error('chargement banque de questions échoué', err));
+  }, [workshopId]);
 
   useLayoutEffect(() => {
     const el = stageRef.current;
@@ -585,19 +666,23 @@ export default function ExamenTab() {
   function handleGenerate() {
     const id = 'e' + Date.now();
     const title = editing ? editing.title : 'Partiel · Biologie cellulaire';
+    let saved: Exam | null = null;
     setExams(prev => {
       if (editing) {
         const rest = prev.filter(e => e.id !== editing.id);
         const existing = prev.find(e => e.id === editing.id);
-        return [{ ...existing!, date: "aujourd'hui", q: selected.length }, ...rest];
+        saved = { ...existing!, date: "aujourd'hui", q: selected.length, questionIds: selected };
+        return [saved, ...rest];
       }
-      return [{ id, title, date: "aujourd'hui", q: selected.length, dur: '45 min', avg: '—', status: 'brouillon', taken: 0 }, ...prev];
+      saved = { id, title, date: "aujourd'hui", q: selected.length, dur: '45 min', avg: '—', status: 'brouillon', taken: 0, questionIds: selected };
+      return [saved, ...prev];
     });
     const hotId = editing ? editing.id : id;
     setJustAdded(hotId);
     setEditing(null);
     focus('history');
     setTimeout(() => setJustAdded(cur => cur === hotId ? null : cur), 2600);
+    if (saved) saveGeneratedExam(workshopId, saved).catch(err => console.error('enregistrement examen échoué', err));
   }
 
   function handleSaveQuestion(q: Question) {
@@ -607,26 +692,45 @@ export default function ExamenTab() {
       return [q, ...prev];
     });
     setEditingQuestion(null);
+    saveQuestion(workshopId, q).catch(err => console.error('enregistrement question échoué', err));
   }
 
   function handleCreatePool(name: string): string {
     const id = 'pool' + Date.now();
-    setPools(prev => [...prev, { id, name, color: '#9eb3b9' }]);
+    const pool = { id, name, color: '#9eb3b9' };
+    setPools(prev => [...prev, pool]);
+    createPoolAction(workshopId, pool).catch(err => console.error('création libellé échouée', err));
     return id;
   }
 
   function handleDeletePool(id: string) {
     setPools(prev => prev.filter(p => p.id !== id));
+    const affected = questions.filter(q => q.pools.includes(id)).map(q => ({ ...q, pools: q.pools.filter(p => p !== id) }));
     setQuestions(prev => prev.map(q => q.pools.includes(id) ? { ...q, pools: q.pools.filter(p => p !== id) } : q));
+    deletePoolAction(workshopId, id, affected).catch(err => console.error('suppression libellé échouée', err));
   }
 
   function handleLinkQuestions(orderedIds: string[]) {
-    setQuestions(prev => prev.map(q => orderedIds.includes(q.id) ? { ...q, linkedQuestionIds: orderedIds } : q));
+    const updated: Question[] = [];
+    setQuestions(prev => prev.map(q => {
+      if (!orderedIds.includes(q.id)) return q;
+      const next = { ...q, linkedQuestionIds: orderedIds };
+      updated.push(next);
+      return next;
+    }));
     setLinkModalOpen(false);
+    if (updated.length) saveQuestions(workshopId, updated).catch(err => console.error('liaison des questions échouée', err));
   }
 
   function handleUnlinkGroup(ids: string[]) {
-    setQuestions(prev => prev.map(q => ids.includes(q.id) ? { ...q, linkedQuestionIds: [] } : q));
+    const updated: Question[] = [];
+    setQuestions(prev => prev.map(q => {
+      if (!ids.includes(q.id)) return q;
+      const next = { ...q, linkedQuestionIds: [] };
+      updated.push(next);
+      return next;
+    }));
+    if (updated.length) saveQuestions(workshopId, updated).catch(err => console.error('déliaison des questions échouée', err));
   }
 
   function rectFor(role: number) {
@@ -661,6 +765,7 @@ export default function ExamenTab() {
                   <BankContent
                     questions={questions}
                     pools={pools}
+                    exams={exams}
                     selected={selected}
                     onToggle={id2 => setSelected(s => s.includes(id2) ? s.filter(x => x !== id2) : [...s, id2])}
                     openId={openId}
