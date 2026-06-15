@@ -8,6 +8,9 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '6mb',
     },
+    // Désactivé : ce cache disque (actif par défaut depuis Next 16.1) provoque une fuite mémoire
+    // qui fait croître le heap Turbopack jusqu'au crash OOM après ~30 min de dev.
+    turbopackFileSystemCacheForDev: false,
   },
 };
 

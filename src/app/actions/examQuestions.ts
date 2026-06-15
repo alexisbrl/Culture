@@ -27,9 +27,10 @@ type QuestionRow = {
   answer: string;
   choices: string[];
   correct_choices: number[];
+  shuffle_choices: boolean;
   pools: string[];
   difficulty: { enabled: boolean; value: number };
-  duration: { enabled: boolean; minutes: number };
+  duration: { enabled: boolean; minutes: number; seconds: number };
   linked_question_ids: string[];
   exam_ids: string[];
 };
@@ -43,9 +44,10 @@ function rowToQuestion(row: QuestionRow): Question {
     answer: row.answer,
     choices: row.choices ?? [],
     correctChoices: row.correct_choices ?? [],
+    shuffleChoices: row.shuffle_choices ?? false,
     pools: row.pools ?? [],
-    difficulty: row.difficulty ?? { enabled: false, value: 5 },
-    duration: row.duration ?? { enabled: false, minutes: 2 },
+    difficulty: row.difficulty ?? { enabled: false, value: 3 },
+    duration: row.duration ?? { enabled: false, minutes: 2, seconds: 0 },
     linkedQuestionIds: row.linked_question_ids ?? [],
     examIds: row.exam_ids ?? [],
   };
@@ -61,6 +63,7 @@ function questionToRow(workshopId: string, q: Question) {
     answer: q.answer,
     choices: q.choices,
     correct_choices: q.correctChoices,
+    shuffle_choices: q.shuffleChoices,
     pools: q.pools,
     difficulty: q.difficulty,
     duration: q.duration,
@@ -118,6 +121,13 @@ export async function saveQuestions(workshopId: string, questions: Question[]): 
 export async function createPool(workshopId: string, pool: ExamPool): Promise<void> {
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_pools').insert({ id: pool.id, workshop_id: workshopId, name: pool.name, color: pool.color });
+  if (error) throw new Error(error.message);
+  revalidatePath(`/workshops/${workshopId}`, 'page');
+}
+
+export async function updatePool(workshopId: string, pool: ExamPool): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from('exam_pools').update({ name: pool.name, color: pool.color }).eq('workshop_id', workshopId).eq('id', pool.id);
   if (error) throw new Error(error.message);
   revalidatePath(`/workshops/${workshopId}`, 'page');
 }
