@@ -2,6 +2,7 @@ import { currentUser } from '@clerk/nextjs/server';
 import { redirect, notFound } from 'next/navigation';
 import { getLocale } from 'next-intl/server';
 import { getWorkshop } from '@/app/actions/workshops';
+import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import SettingsClient from './SettingsClient';
 
 type Props = {
@@ -19,6 +20,8 @@ export default async function SettingsPage({ params }: Props) {
   if (!workshop) notFound();
 
   if (workshop.currentUserRole !== 'owner') redirect(`/${locale}/workshops/${id}`);
+
+  const files = await getWorkshopFiles(id);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const members = (workshop.workshop_members as any[]).map((m) => ({
@@ -49,6 +52,7 @@ export default async function SettingsPage({ params }: Props) {
       maxMembersTotal={workshop.max_members_total}
       maxMembersMonthly={workshop.max_members_monthly}
       members={members}
+      files={files}
     />
   );
 }

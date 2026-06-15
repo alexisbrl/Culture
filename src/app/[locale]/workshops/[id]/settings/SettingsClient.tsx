@@ -3,8 +3,10 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Check, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, X } from 'lucide-react';
+import { Check, ChevronLeft, FileText, Loader2, Mail, Music, Pencil, QrCode, RotateCcw, Trash2, Upload, X, File as FileIcon } from 'lucide-react';
 import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, activateWorkshopPremium } from '@/app/actions/workshops';
+import { createFileUploadTicket, finalizeWorkshopFileUpload, deleteWorkshopFile, renameWorkshopFile, type WorkshopFile, type FileCategory } from '@/app/actions/workshopFiles';
+import type { UploadTicket } from '@/lib/storage';
 import { COVER_GRADIENTS, COVER_GRADIENT_KEYS, COVER_EMOJIS, coverGradientFor, emojiFor } from '@/lib/workshopCover';
 import ShareQRModal from '@/components/ShareQRModal';
 
@@ -35,16 +37,31 @@ type Props = {
   maxMembersTotal: number | null;
   maxMembersMonthly: number | null;
   members: Member[];
+  files: WorkshopFile[];
 };
 
-type NavSection = 'general' | 'members' | 'bricks' | 'premium';
+type NavSection = 'general' | 'members' | 'bricks' | 'files' | 'premium';
 
 const NAV_ITEMS: { id: NavSection; label: string }[] = [
   { id: 'general', label: 'Général' },
   { id: 'members', label: 'Membres & rôles' },
+  { id: 'files', label: 'Fichiers' },
   { id: 'bricks', label: 'Briques de connaissance' },
   { id: 'premium', label: 'Atelier Premium' },
 ];
+
+function FileCategoryIcon({ category }: { category: FileCategory }) {
+  const props = { size: 18, style: { color: '#a87a3a', flexShrink: 0 } };
+  if (category === 'audio') return <Music {...props} />;
+  if (category === 'texte') return <FileText {...props} />;
+  return <FileIcon {...props} />;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} o`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+}
 
 const MOCK_BRICKS = [
   { section: '01', title: 'La membrane est une bicouche phospholipidique fluide', diff: 3, imp: 5 },
@@ -310,9 +327,130 @@ function SectionCard({
   );
 }
 
-export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, isPremium, isPrivate, showProgramme: showProgrammeProp, maxMembersTotal, maxMembersMonthly, members }: Props) {
+export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, isPremium, isPrivate, showProgramme: showProgrammeProp, maxMembersTotal, maxMembersMonthly, members, files: initialFiles }: Props) {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<NavSection>('general');
+
+  // Section — Fichiers
+  const [files, setFiles] = useState<WorkshopFile[]>(initialFiles);
+  const [uploadProgress, setUploadProgress] = useState<{ name: string; percent: number } | null>(null);
+  const [fileError, setFileError] = useState('');
+  const [fileDragOver, setFileDragOver] = useState(false);
+  const [editingFileId, setEditingFileId] = useState<string | null>(null);
+  const [editingFileName, setEditingFileName] = useState('');
+  const [pendingDeleteFile, setPendingDeleteFile] = useState<WorkshopFile | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Upload direct vers le stockage via une URL signée (ticket), sans passer
+  // par le serveur Next.js — contourne la limite de taille de requête de
+  // Vercel pour les Server Actions.
+  function uploadFileDirect(file: File, ticket: UploadTicket): Promise<boolean> {
+    return new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open(ticket.method, ticket.url, true);
+      for (const [key, value] of Object.entries(ticket.headers)) {
+        xhr.setRequestHeader(key, value);
+      }
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          setUploadProgress({ name: file.name, percent: Math.round((e.loaded / e.total) * 100) });
+        }
+      };
+      xhr.onload = () => resolve(xhr.status >= 200 && xhr.status < 300);
+      xhr.onerror = () => resolve(false);
+      xhr.send(file);
+    });
+  }
+
+  async function handleFiles(fileList: FileList | File[]) {
+    const list = Array.from(fileList);
+    if (list.length === 0) return;
+    setFileError('');
+
+    for (const file of list) {
+      setUploadProgress({ name: file.name, percent: 0 });
+      const mimeType = file.type || 'application/octet-stream';
+
+      const ticket = await createFileUploadTicket(workshopId, file.name, file.size, mimeType);
+      if (!ticket.success || !ticket.ticket || !ticket.path) {
+        setFileError(ticket.error ?? 'Erreur lors de la préparation du téléchargement');
+        continue;
+      }
+
+      const uploaded = await uploadFileDirect(file, ticket.ticket);
+      if (!uploaded) {
+        setFileError(`Erreur lors du téléchargement de « ${file.name} »`);
+        continue;
+      }
+
+      const result = await finalizeWorkshopFileUpload(workshopId, ticket.path, file.name, file.size, mimeType);
+      if (result.success && result.file) {
+        setFiles((prev) => [result.file!, ...prev]);
+      } else {
+        setFileError(result.error ?? 'Erreur lors de l’enregistrement');
+      }
+    }
+
+    setUploadProgress(null);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!e.target.files) return;
+    handleFiles(e.target.files);
+    e.target.value = '';
+  }
+
+  function handleFileDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setFileDragOver(false);
+    if (e.dataTransfer.files) handleFiles(e.dataTransfer.files);
+  }
+
+  async function handleDeleteFile(fileId: string) {
+    setFiles((prev) => prev.filter((f) => f.id !== fileId));
+    const result = await deleteWorkshopFile(workshopId, fileId);
+    if (!result.success) {
+      setFileError(result.error ?? 'Erreur lors de la suppression');
+    }
+  }
+
+  function confirmDeleteFile() {
+    if (!pendingDeleteFile) return;
+    handleDeleteFile(pendingDeleteFile.id);
+    setPendingDeleteFile(null);
+  }
+
+  function splitFileName(name: string): { base: string; extension: string } {
+    const dotIndex = name.lastIndexOf('.');
+    if (dotIndex <= 0) return { base: name, extension: '' };
+    return { base: name.slice(0, dotIndex), extension: name.slice(dotIndex) };
+  }
+
+  function startEditingFile(file: WorkshopFile) {
+    setEditingFileId(file.id);
+    setEditingFileName(splitFileName(file.name).base);
+  }
+
+  function cancelEditingFile() {
+    setEditingFileId(null);
+    setEditingFileName('');
+  }
+
+  async function handleRenameFile(fileId: string) {
+    const trimmed = editingFileName.trim();
+    if (!trimmed) {
+      setFileError('Le nom ne peut pas être vide');
+      return;
+    }
+    setFileError('');
+    const result = await renameWorkshopFile(workshopId, fileId, trimmed);
+    if (result.success && result.name) {
+      setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, name: result.name! } : f)));
+      cancelEditingFile();
+    } else {
+      setFileError(result.error ?? 'Erreur lors du renommage');
+    }
+  }
 
   // Section 5 — Atelier Premium (activation de test par mot de passe)
   const [premiumPassword, setPremiumPassword] = useState('');
@@ -1002,6 +1140,197 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         </>
         )}
 
+        {activeSection === 'files' && (
+        <>
+        {/* ── Fichiers ── */}
+        <SectionCard
+          title="Fichiers"
+          description="Tous les fichiers déposés dans cet atelier, triés par nom."
+        >
+          <div
+            onDragOver={(e) => { e.preventDefault(); setFileDragOver(true); }}
+            onDragLeave={() => setFileDragOver(false)}
+            onDrop={handleFileDrop}
+            style={{
+              border: `1.5px dashed ${fileDragOver ? '#a87a3a' : 'rgba(45,42,36,0.14)'}`,
+              borderRadius: 12,
+              background: fileDragOver ? 'rgba(168,122,58,0.06)' : 'transparent',
+              padding: '14px 16px',
+              marginBottom: files.length > 0 ? 8 : 0,
+              transition: 'all 0.12s',
+            }}
+          >
+            <Row label="Ajouter un fichier" hint="glisser-déposer ou parcourir · taille max. 50 Mo" noBorder>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={handleFileChange}
+                style={{ display: 'none' }}
+              />
+              <SmallBtn tone="dark" onClick={() => fileInputRef.current?.click()} disabled={uploadProgress !== null}>
+                {uploadProgress !== null ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> téléchargement… {uploadProgress.percent}%
+                  </span>
+                ) : (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Upload size={13} /> ajouter un fichier
+                  </span>
+                )}
+              </SmallBtn>
+            </Row>
+          </div>
+
+          {uploadProgress !== null && (
+            <div style={{ padding: '2px 0 8px' }}>
+              <div style={{ fontSize: 11.5, color: '#9a948a', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {uploadProgress.name}
+              </div>
+              <div style={{ height: 4, borderRadius: 999, background: 'rgba(45,42,36,0.08)', overflow: 'hidden' }}>
+                <div
+                  style={{
+                    height: '100%',
+                    width: `${uploadProgress.percent}%`,
+                    background: '#a87a3a',
+                    borderRadius: 999,
+                    transition: 'width 0.15s',
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {fileError && (
+            <div style={{ fontSize: 12, color: '#b85a4a', padding: '6px 0' }}>{fileError}</div>
+          )}
+
+          {files.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: '#9a948a', padding: '14px 0' }}>
+              aucun fichier déposé pour l’instant.
+            </div>
+          ) : (
+            <div style={{ marginTop: 12 }}>
+              {[...files]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((file, i, arr) => {
+                  const { base, extension } = splitFileName(file.name);
+                  const isEditing = editingFileId === file.id;
+                  return (
+                  <div
+                    key={file.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '11px 0',
+                      borderBottom: i < arr.length - 1 ? '1px solid rgba(45,42,36,0.06)' : 'none',
+                    }}
+                  >
+                    <FileCategoryIcon category={file.category} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {isEditing ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <input
+                            type="text"
+                            value={editingFileName}
+                            onChange={(e) => setEditingFileName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleRenameFile(file.id);
+                              if (e.key === 'Escape') cancelEditingFile();
+                            }}
+                            autoFocus
+                            style={{
+                              flex: 1,
+                              minWidth: 0,
+                              fontSize: 13,
+                              color: '#2d2a24',
+                              border: '1px solid rgba(168,122,58,0.40)',
+                              borderRadius: 6,
+                              padding: '3px 6px',
+                              background: '#fff',
+                              outline: 'none',
+                            }}
+                          />
+                          {extension && (
+                            <span style={{ fontSize: 13, color: '#9a948a', flexShrink: 0 }}>{extension}</span>
+                          )}
+                          <button
+                            onClick={() => handleRenameFile(file.id)}
+                            title="enregistrer"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7a9968', display: 'flex', alignItems: 'center', padding: 4, flexShrink: 0 }}
+                          >
+                            <Check size={15} />
+                          </button>
+                          <button
+                            onClick={cancelEditingFile}
+                            title="annuler"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#bdb8ad', display: 'flex', alignItems: 'center', padding: 4, flexShrink: 0 }}
+                          >
+                            <X size={15} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            fontSize: 13,
+                            color: '#2d2a24',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {base}
+                          {extension && <span style={{ color: '#9a948a' }}>{extension}</span>}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 11, color: '#9a948a', marginTop: 2 }}>
+                        {formatFileSize(file.size)}
+                      </div>
+                    </div>
+                    {!isEditing && (
+                      <>
+                        <button
+                          onClick={() => startEditingFile(file)}
+                          title="renommer"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#bdb8ad',
+                            display: 'flex',
+                            alignItems: 'center',
+                            padding: 4,
+                          }}
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          onClick={() => setPendingDeleteFile(file)}
+                          title="supprimer"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#bdb8ad',
+                            display: 'flex',
+                            alignItems: 'center',
+                            padding: 4,
+                          }}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  );
+                })}
+            </div>
+          )}
+        </SectionCard>
+        </>
+        )}
+
         {activeSection === 'bricks' && (
         <>
         {/* ── 4. Briques de connaissance ── */}
@@ -1640,6 +1969,111 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   Quitter sans enregistrer
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modale « confirmation suppression fichier » ── */}
+      {pendingDeleteFile && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 50,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(45,42,36,0.5)',
+            backdropFilter: 'blur(4px)',
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 20,
+              boxShadow: '0 30px 80px rgba(45,42,36,0.18)',
+              padding: 24,
+              width: '100%',
+              maxWidth: 360,
+              fontFamily: 'inherit',
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 16,
+                background: 'rgba(184,90,74,0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+              }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#b85a4a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14H6L5 6" />
+                <path d="M10 11v6M14 11v6" />
+                <path d="M9 6V4h6v2" />
+              </svg>
+            </div>
+            <h3
+              style={{
+                fontSize: 17,
+                fontWeight: 500,
+                color: '#2d2a24',
+                textAlign: 'center',
+                margin: '0 0 8px',
+              }}
+            >
+              Supprimer ce fichier ?
+            </h3>
+            <p
+              style={{
+                fontSize: 13,
+                color: '#7a766d',
+                textAlign: 'center',
+                margin: '0 0 20px',
+              }}
+            >
+              &quot;{pendingDeleteFile.name}&quot; sera définitivement supprimé. Cette action est irréversible.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setPendingDeleteFile(null)}
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(45,42,36,0.14)',
+                  background: 'transparent',
+                  color: '#5a564c',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmDeleteFile}
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(184,90,74,0.30)',
+                  background: 'rgba(184,90,74,0.10)',
+                  color: '#b85a4a',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                Supprimer
+              </button>
             </div>
           </div>
         </div>

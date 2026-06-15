@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import QuestionEditor, { Question, ResponseType, RESPONSE_TYPE_LABELS, emptyQuestion } from './QuestionEditor';
-import { getExamBankData, saveQuestion, saveQuestions, createPool as createPoolAction, deletePool as deletePoolAction, saveGeneratedExam } from '@/app/actions/examQuestions';
+import { getExamBankData, saveQuestion, saveQuestions, createPool as createPoolAction, updatePool as updatePoolAction, deletePool as deletePoolAction, saveGeneratedExam } from '@/app/actions/examQuestions';
 
 // ---- shared data ----
 type Pool = { id: string; name: string; color: string };
@@ -26,10 +26,11 @@ const RESPONSE_TYPE_COLORS: Record<ResponseType, string> = {
 type SortBy = 'difficulty' | 'name' | 'type' | 'label';
 
 const NEVER_EXAM_ID = '__never__';
+const NO_DIFFICULTY = 0;
+const NO_ANSWER_ID = '__no_answer__';
+const LINKED_ID = '__linked__';
 
-function diffDots(v: number): number {
-  return Math.ceil(v / 2);
-}
+const LABEL_COLORS = ['#9eb3b9', '#a890b8', '#7a9968', '#c89860', '#b85a4a', '#5f8a3f', '#a87a3a', '#9a948a', '#6b8ea8', '#c2603a'];
 
 function DiffDots({ level }: { level: number }) {
   return (
@@ -41,14 +42,14 @@ function DiffDots({ level }: { level: number }) {
 
 function TypePill({ type }: { type: ResponseType }) {
   const c = RESPONSE_TYPE_COLORS[type] || '#7a766d';
-  return <span style={{ fontSize: 10, fontWeight: 500, padding: '3px 8px', borderRadius: 999, background: `${c}28`, color: '#3a352c', letterSpacing: '0.02em' }}>{RESPONSE_TYPE_LABELS[type]}</span>;
+  return <span style={{ fontSize: 10, fontWeight: 500, padding: '3px 8px', borderRadius: 999, background: `${c}28`, color: '#3a352c', letterSpacing: '0.02em' }}>{RESPONSE_TYPE_LABELS[type] ?? type}</span>;
 }
 
 function Diff({ n }: { n: number }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
       <span style={{ fontSize: 9, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>diff</span>
-      {Array.from({ length: 5 }, (_, i) => <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: i < Math.ceil(n / 2) ? '#a87a3a' : 'rgba(45,42,36,0.12)', display: 'inline-block' }} />)}
+      {Array.from({ length: 5 }, (_, i) => <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: i < n ? '#a87a3a' : 'rgba(45,42,36,0.12)', display: 'inline-block' }} />)}
     </span>
   );
 }
@@ -67,7 +68,48 @@ function answerSummary(q: Question): string {
   if (q.responseType === 'sans_reponse') {
     return 'aucune réponse associée';
   }
+  if (q.responseType === 'sondage') {
+    const freeText = q.correctChoices.map((i) => q.choices[i]).filter(Boolean);
+    return freeText.length ? `sondage · réponse libre (${freeText.join(' · ')})` : 'sondage sans correction';
+  }
   return q.answer || '(réponse non définie)';
+}
+
+function hasNoAnswer(q: Question): boolean {
+  // sans_reponse / sondage : l'absence de réponse est voulue, pas "manquante"
+  if (q.responseType === 'sans_reponse' || q.responseType === 'sondage') return false;
+  if (q.responseType === 'qcm' || q.responseType === 'qcs') {
+    return q.correctChoices.map((i) => q.choices[i]).filter(Boolean).length === 0;
+  }
+  if (q.responseType === 'matching' || q.responseType === 'ordre') {
+    return q.choices.length === 0;
+  }
+  return !q.answer || !q.answer.trim();
+}
+
+// regroupe une liste de questions en lignes : une question seule, ou un groupe de questions liées
+// (les questions liées forment un bloc indissociable — sélection, envoi au générateur et affichage groupé)
+type Row = { kind: 'single'; q: Question } | { kind: 'group'; ids: string[]; members: Question[] };
+
+function groupIntoRows(list: Question[], allQuestions: Question[]): Row[] {
+  const rows: Row[] = [];
+  const seen = new Set<string>();
+  for (const q of list) {
+    if (seen.has(q.id)) continue;
+    if (q.linkedQuestionIds.length > 1) {
+      const members = q.linkedQuestionIds.map(id => allQuestions.find(p => p.id === id)).filter((p): p is Question => !!p);
+      members.forEach(m => seen.add(m.id));
+      rows.push({ kind: 'group', ids: q.linkedQuestionIds, members });
+    } else {
+      seen.add(q.id);
+      rows.push({ kind: 'single', q });
+    }
+  }
+  return rows;
+}
+
+function rowMembers(row: Row): Question[] {
+  return row.kind === 'group' ? row.members : [row.q];
 }
 
 function statusStyle(s: string) {
@@ -77,6 +119,21 @@ function statusStyle(s: string) {
 function IconBtn({ children, title, onClick }: { children: React.ReactNode; title: string; onClick?: () => void }) {
   return (
     <button title={title} onClick={onClick} style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid rgba(45,42,36,0.12)', background: 'rgba(255,255,255,0.7)', color: '#5a564c', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>{children}</button>
+  );
+}
+
+function ActiveChip({ label, color, negative, filterKey, onRemove, setDraggedKey }: { label: string; color?: string; negative: boolean; filterKey: string; onRemove: () => void; setDraggedKey: (key: string | null) => void }) {
+  return (
+    <span
+      draggable
+      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', filterKey); setDraggedKey(filterKey); }}
+      onDragEnd={() => setDraggedKey(null)}
+      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 6px 5px 11px', borderRadius: 999, border: negative ? '1px solid rgba(184,90,74,0.45)' : '1px solid rgba(45,42,36,0.30)', background: negative ? '#b85a4a' : '#2d2a24', color: '#f4f0e6', fontFamily: 'inherit', cursor: 'grab', clipPath: 'inset(0 round 999px)' }}
+    >
+      {color && <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, display: 'inline-block' }} />}
+      {label}
+      <button onClick={onRemove} style={{ border: 'none', background: 'none', color: '#f4f0e6', cursor: 'pointer', fontSize: 13, padding: '0 4px', lineHeight: 1, opacity: 0.7 }}>×</button>
+    </span>
   );
 }
 
@@ -172,36 +229,51 @@ function HistoryContent({ exams, justAddedId, onEdit, onNew }: { exams: Exam[]; 
 }
 
 // ---- BANK ----
-function BankContent({ questions, pools, exams, selected, onToggle, openId, setOpenId, onEditQuestion, onNewQuestion, onRequestLink, onUnlinkGroup, onCreatePool, onDeletePool }: {
+type FilterMode = 'pos' | 'neg';
+
+function BankContent({ questions, pools, exams, selected, onToggle, onToggleGroup, openId, setOpenId, onEditQuestion, onNewQuestion, onRequestLink, onSendToGenerator, onUnlinkGroup, onCreatePool, onUpdatePool, onDeletePool, onDuplicateQuestion }: {
   questions: Question[];
   pools: Pool[];
   exams: Exam[];
   selected: string[];
   onToggle: (id: string) => void;
+  onToggleGroup: (ids: string[]) => void;
   openId: string | null;
   setOpenId: (id: string | null) => void;
   onEditQuestion: (q: Question) => void;
   onNewQuestion: () => void;
   onRequestLink: () => void;
+  onSendToGenerator: () => void;
   onUnlinkGroup: (ids: string[]) => void;
   onCreatePool: (name: string) => string;
+  onUpdatePool: (pool: Pool) => void;
   onDeletePool: (id: string) => void;
+  onDuplicateQuestion: (q: Question) => void;
 }) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [pendingUnlinkKey, setPendingUnlinkKey] = useState<string | null>(null);
   const [filterPools, setFilterPools] = useState<string[]>([]);
   const [filterTypes, setFilterTypes] = useState<ResponseType[]>([]);
   const [filterDiffs, setFilterDiffs] = useState<number[]>([]);
   const [filterExams, setFilterExams] = useState<string[]>([]);
+  const [filterAnswer, setFilterAnswer] = useState<string[]>([]);
+  const [filterLinked, setFilterLinked] = useState<string[]>([]);
+  const [filterModes, setFilterModes] = useState<Record<string, FilterMode>>({});
+  const [draggedKey, setDraggedKey] = useState<string | null>(null);
+  const [dragOverZone, setDragOverZone] = useState<FilterMode | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>('difficulty');
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
   const [creatingLabel, setCreatingLabel] = useState(false);
   const [newLabelName, setNewLabelName] = useState('');
+  const [editingLabel, setEditingLabel] = useState<string | null>(null);
+  const [editLabelName, setEditLabelName] = useState('');
+  const [editLabelColor, setEditLabelColor] = useState('');
   const [pendingDeleteLabel, setPendingDeleteLabel] = useState<string | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
 
   const allTypes = Array.from(new Set(questions.map(q => q.responseType)));
-  const activeFilterCount = filterPools.length + filterTypes.length + filterDiffs.length + filterExams.length;
+  const activeFilterCount = filterPools.length + filterTypes.length + filterDiffs.length + filterExams.length + filterAnswer.length + filterLinked.length;
 
   useEffect(() => {
     if (!filterOpen) return;
@@ -212,23 +284,63 @@ function BankContent({ questions, pools, exams, selected, onToggle, openId, setO
     return () => document.removeEventListener('mousedown', handleClick);
   }, [filterOpen]);
 
+  useEffect(() => {
+    if (!filterOpen) {
+      setEditingLabel(null);
+      setCreatingLabel(false);
+    }
+  }, [filterOpen]);
+
+  function clearMode(key: string) {
+    setFilterModes(prev => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
   function togglePoolFilter(id: string) {
     setFilterPools(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
+    clearMode(`pool:${id}`);
   }
   function toggleTypeFilter(t: ResponseType) {
     setFilterTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
+    clearMode(`type:${t}`);
   }
   function toggleDiffFilter(d: number) {
     setFilterDiffs(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
+    clearMode(`diff:${d}`);
   }
   function toggleExamFilter(id: string) {
     setFilterExams(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    clearMode(`exam:${id}`);
+  }
+  function toggleAnswerFilter(id: string) {
+    setFilterAnswer(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    clearMode(`answer:${id}`);
+  }
+  function toggleLinkedFilter(id: string) {
+    setFilterLinked(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    clearMode(`linked:${id}`);
+  }
+  function setFilterMode(key: string, mode: FilterMode) {
+    setFilterModes(prev => ({ ...prev, [key]: mode }));
+  }
+  function handleDropOnZone(e: React.DragEvent, mode: FilterMode) {
+    e.preventDefault();
+    const key = e.dataTransfer.getData('text/plain') || draggedKey;
+    if (key) setFilterMode(key, mode);
+    setDraggedKey(null);
+    setDragOverZone(null);
   }
   function resetFilters() {
     setFilterPools([]);
     setFilterTypes([]);
     setFilterDiffs([]);
     setFilterExams([]);
+    setFilterAnswer([]);
+    setFilterLinked([]);
+    setFilterModes({});
   }
   function addLabel() {
     const name = newLabelName.trim();
@@ -237,56 +349,95 @@ function BankContent({ questions, pools, exams, selected, onToggle, openId, setO
     setNewLabelName('');
     setCreatingLabel(false);
   }
+  function openEditLabel(pool: Pool) {
+    setEditingLabel(pool.id);
+    setEditLabelName(pool.name);
+    setEditLabelColor(pool.color);
+    setCreatingLabel(false);
+  }
+  function saveEditLabel() {
+    if (!editingLabel) return;
+    const pool = pools.find(p => p.id === editingLabel);
+    if (!pool) return;
+    const name = editLabelName.trim();
+    onUpdatePool({ ...pool, name: name || pool.name, color: editLabelColor || pool.color });
+    setEditingLabel(null);
+  }
   function confirmDeleteLabel() {
     if (!pendingDeleteLabel) return;
     const id = pendingDeleteLabel;
     onDeletePool(id);
     setFilterPools(prev => prev.filter(p => p !== id));
+    clearMode(`pool:${id}`);
     setPendingDeleteLabel(null);
+    if (editingLabel === id) setEditingLabel(null);
   }
 
-  let visible = questions.filter(q => {
-    if (filterPools.length && !q.pools.some(p => filterPools.includes(p))) return false;
-    if (filterTypes.length && !filterTypes.includes(q.responseType)) return false;
-    if (filterDiffs.length && !(q.difficulty.enabled && filterDiffs.includes(diffDots(q.difficulty.value)))) return false;
-    if (filterExams.length && !filterExams.some(f => f === NEVER_EXAM_ID ? q.examIds.length === 0 : q.examIds.includes(f))) return false;
-    if (search.trim() && !q.content.toLowerCase().includes(search.trim().toLowerCase())) return false;
+  // chaque catégorie de filtre est répartie entre filtres positifs (le résultat doit correspondre)
+  // et négatifs (le résultat ne doit pas correspondre), selon filterModes (par défaut : positif)
+  const modeOf = (key: string): FilterMode => filterModes[key] ?? 'pos';
+  const posPools = filterPools.filter(id => modeOf(`pool:${id}`) === 'pos');
+  const negPools = filterPools.filter(id => modeOf(`pool:${id}`) === 'neg');
+  const posTypes = filterTypes.filter(t => modeOf(`type:${t}`) === 'pos');
+  const negTypes = filterTypes.filter(t => modeOf(`type:${t}`) === 'neg');
+  const posDiffs = filterDiffs.filter(d => modeOf(`diff:${d}`) === 'pos');
+  const negDiffs = filterDiffs.filter(d => modeOf(`diff:${d}`) === 'neg');
+  const posExams = filterExams.filter(e => modeOf(`exam:${e}`) === 'pos');
+  const negExams = filterExams.filter(e => modeOf(`exam:${e}`) === 'neg');
+  const posAnswer = filterAnswer.filter(a => modeOf(`answer:${a}`) === 'pos');
+  const negAnswer = filterAnswer.filter(a => modeOf(`answer:${a}`) === 'neg');
+  const posLinked = filterLinked.filter(l => modeOf(`linked:${l}`) === 'pos');
+  const negLinked = filterLinked.filter(l => modeOf(`linked:${l}`) === 'neg');
+
+  // group linked questions into a single row avant le filtrage, pour que les caractéristiques
+  // du groupe (libellés, types, difficulté, présence en examen, réponse…) soient l'union de ses membres
+  const allRows: Row[] = groupIntoRows(questions, questions);
+
+  let rows = allRows.filter(row => {
+    const members = rowMembers(row);
+    const rowPools = new Set(members.flatMap(m => m.pools));
+    const rowTypes = new Set(members.map(m => m.responseType));
+    const rowDiffs = new Set(members.map(m => m.difficulty.enabled ? m.difficulty.value : NO_DIFFICULTY));
+    const rowExamIds = new Set(members.flatMap(m => m.examIds));
+    const rowNeverExam = members.some(m => m.examIds.length === 0);
+    const rowNoAnswer = members.some(m => hasNoAnswer(m));
+    const rowLinked = row.kind === 'group';
+
+    if (posPools.length && !posPools.some(p => rowPools.has(p))) return false;
+    if (negPools.length && negPools.some(p => rowPools.has(p))) return false;
+    if (posTypes.length && !posTypes.some(t => rowTypes.has(t))) return false;
+    if (negTypes.length && negTypes.some(t => rowTypes.has(t))) return false;
+    if (posDiffs.length && !posDiffs.some(d => rowDiffs.has(d))) return false;
+    if (negDiffs.length && negDiffs.some(d => rowDiffs.has(d))) return false;
+    if (posExams.length && !posExams.some(f => f === NEVER_EXAM_ID ? rowNeverExam : rowExamIds.has(f))) return false;
+    if (negExams.length && negExams.some(f => f === NEVER_EXAM_ID ? rowNeverExam : rowExamIds.has(f))) return false;
+    if (posAnswer.length && !posAnswer.some(f => f === NO_ANSWER_ID ? rowNoAnswer : true)) return false;
+    if (negAnswer.length && negAnswer.some(f => f === NO_ANSWER_ID ? rowNoAnswer : false)) return false;
+    if (posLinked.length && !posLinked.some(f => f === LINKED_ID ? rowLinked : true)) return false;
+    if (negLinked.length && negLinked.some(f => f === LINKED_ID ? rowLinked : false)) return false;
+    if (search.trim() && !members.some(m => m.content.toLowerCase().includes(search.trim().toLowerCase()))) return false;
     return true;
   });
 
-  visible = [...visible].sort((a, b) => {
+  rows = [...rows].sort((a, b) => {
+    const qa = rowMembers(a)[0];
+    const qb = rowMembers(b)[0];
     switch (sortBy) {
       case 'difficulty':
-        return (b.difficulty.enabled ? b.difficulty.value : -1) - (a.difficulty.enabled ? a.difficulty.value : -1);
+        return (qb.difficulty.enabled ? qb.difficulty.value : -1) - (qa.difficulty.enabled ? qa.difficulty.value : -1);
       case 'name':
-        return a.content.localeCompare(b.content);
+        return qa.content.localeCompare(qb.content);
       case 'type':
-        return RESPONSE_TYPE_LABELS[a.responseType].localeCompare(RESPONSE_TYPE_LABELS[b.responseType]);
+        return (RESPONSE_TYPE_LABELS[qa.responseType] ?? '').localeCompare(RESPONSE_TYPE_LABELS[qb.responseType] ?? '');
       case 'label': {
-        const an = pools.find(p => p.id === a.pools[0])?.name ?? '';
-        const bn = pools.find(p => p.id === b.pools[0])?.name ?? '';
+        const an = pools.find(p => p.id === qa.pools[0])?.name ?? '';
+        const bn = pools.find(p => p.id === qb.pools[0])?.name ?? '';
         return an.localeCompare(bn);
       }
       default:
         return 0;
     }
   });
-
-  // group linked questions into a single collapsible row
-  type Row = { kind: 'single'; q: Question } | { kind: 'group'; ids: string[]; members: Question[] };
-  const rows: Row[] = [];
-  const seen = new Set<string>();
-  for (const q of visible) {
-    if (seen.has(q.id)) continue;
-    if (q.linkedQuestionIds.length > 1) {
-      const members = q.linkedQuestionIds.map(id => questions.find(p => p.id === id)).filter((p): p is Question => !!p);
-      members.forEach(m => seen.add(m.id));
-      rows.push({ kind: 'group', ids: q.linkedQuestionIds, members });
-    } else {
-      seen.add(q.id);
-      rows.push({ kind: 'single', q });
-    }
-  }
 
   function toggleExpand(key: string) {
     setExpandedGroups(prev => {
@@ -296,12 +447,18 @@ function BankContent({ questions, pools, exams, selected, onToggle, openId, setO
     });
   }
 
-  function renderQuestionBody(q: Question, indexBadge?: number) {
+  function renderQuestionBody(q: Question, opts?: { indexBadge?: number; selectable?: boolean }) {
+    const selectable = opts?.selectable ?? true;
+    const indexBadge = opts?.indexBadge;
     const isSel = selected.includes(q.id);
     const open = openId === q.id;
     return (
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px' }}>
-        <div onClick={() => onToggle(q.id)} style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, marginTop: 1, cursor: 'pointer', border: isSel ? 'none' : '1.5px solid rgba(45,42,36,0.18)', background: isSel ? '#7a9968' : '#fff', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>{isSel ? '✓' : ''}</div>
+        {selectable ? (
+          <div onClick={() => onToggle(q.id)} style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, marginTop: 1, cursor: 'pointer', border: isSel ? 'none' : '1.5px solid rgba(45,42,36,0.18)', background: isSel ? '#7a9968' : '#fff', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>{isSel ? '✓' : ''}</div>
+        ) : (
+          <div title="fait partie d'un groupe de questions liées" style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, marginTop: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>🔗</div>
+        )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13.5, color: '#2d2a24', lineHeight: 1.45, marginBottom: 8 }}>
             {indexBadge != null && <span style={{ fontSize: 11, color: '#a87a3a', fontVariantNumeric: 'tabular-nums', marginRight: 6 }}>{indexBadge}.</span>}
@@ -319,6 +476,9 @@ function BankContent({ questions, pools, exams, selected, onToggle, openId, setO
             <IconBtn title="modifier la question" onClick={() => onEditQuestion(q)}>
               <svg width="13" height="13" viewBox="0 0 14 14"><circle cx="7" cy="7" r="2.4" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M7 1.5v2M7 10.5v2M1.5 7h2M10.5 7h2M3 3l1.4 1.4M9.6 9.6L11 11M11 3L9.6 4.4M4.4 9.6L3 11" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
             </IconBtn>
+            <IconBtn title="dupliquer la question" onClick={() => onDuplicateQuestion(q)}>
+              <svg width="13" height="13" viewBox="0 0 14 14"><rect x="3.5" y="3.5" width="7" height="8" rx="1.4" fill="none" stroke="currentColor" strokeWidth="1.2"/><path d="M2 9V2.6A1 1 0 0 1 3 1.6h5" fill="none" stroke="currentColor" strokeWidth="1.2"/></svg>
+            </IconBtn>
           </div>
           {open && <div style={{ marginTop: 10, padding: '10px 12px', background: 'rgba(232,216,168,0.22)', borderRadius: 8, fontSize: 12.5, color: '#3a352c', lineHeight: 1.5 }}><span style={{ fontWeight: 600, color: '#7a4d20' }}>réponse · </span>{answerSummary(q)}</div>}
         </div>
@@ -326,21 +486,64 @@ function BankContent({ questions, pools, exams, selected, onToggle, openId, setO
     );
   }
 
-  function ActiveChip({ label, color, onRemove }: { label: string; color?: string; onRemove: () => void }) {
-    return (
-      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 6px 5px 11px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.30)', background: '#2d2a24', color: '#f4f0e6', fontFamily: 'inherit' }}>
-        {color && <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, display: 'inline-block' }} />}
-        {label}
-        <button onClick={onRemove} style={{ border: 'none', background: 'none', color: '#f4f0e6', cursor: 'pointer', fontSize: 13, padding: '0 4px', lineHeight: 1, opacity: 0.7 }}>×</button>
-      </span>
-    );
+  type ActiveFilter = { key: string; category: 'pool' | 'type' | 'diff' | 'exam' | 'answer' | 'linked'; value: string | number; label: string; color?: string };
+  const activeFilters: ActiveFilter[] = [
+    ...filterPools.map(id => ({ key: `pool:${id}`, category: 'pool' as const, value: id, label: pools.find(p => p.id === id)?.name ?? id, color: pools.find(p => p.id === id)?.color })),
+    ...filterTypes.map(t => ({ key: `type:${t}`, category: 'type' as const, value: t, label: RESPONSE_TYPE_LABELS[t] ?? t })),
+    ...filterDiffs.map(d => ({ key: `diff:${d}`, category: 'diff' as const, value: d, label: d === NO_DIFFICULTY ? 'sans difficulté' : `difficulté ${d}/5` })),
+    ...filterExams.map(eid => ({ key: `exam:${eid}`, category: 'exam' as const, value: eid, label: eid === NEVER_EXAM_ID ? 'jamais tombé en examen' : (exams.find(ex => ex.id === eid)?.title ?? eid) })),
+    ...filterAnswer.map(aid => ({ key: `answer:${aid}`, category: 'answer' as const, value: aid, label: 'question incomplète' })),
+    ...filterLinked.map(lid => ({ key: `linked:${lid}`, category: 'linked' as const, value: lid, label: 'questions liées' })),
+  ];
+  const positiveFilters = activeFilters.filter(f => modeOf(f.key) === 'pos');
+  const negativeFilters = activeFilters.filter(f => modeOf(f.key) === 'neg');
+
+  function removeFilter(f: ActiveFilter) {
+    switch (f.category) {
+      case 'pool': togglePoolFilter(f.value as string); break;
+      case 'type': toggleTypeFilter(f.value as ResponseType); break;
+      case 'diff': toggleDiffFilter(f.value as number); break;
+      case 'exam': toggleExamFilter(f.value as string); break;
+      case 'answer': toggleAnswerFilter(f.value as string); break;
+      case 'linked': toggleLinkedFilter(f.value as string); break;
+    }
   }
 
   return (
     <div style={{ padding: '20px 24px 24px', minHeight: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14, gap: 12 }}>
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24' }}>Banque de questions</div>
+          {activeFilterCount > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div
+                onDragEnter={e => e.preventDefault()}
+                onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverZone('pos'); }}
+                onDragLeave={() => setDragOverZone(prev => prev === 'pos' ? null : prev)}
+                onDrop={e => handleDropOnZone(e, 'pos')}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '4px 6px', borderRadius: 8, border: dragOverZone === 'pos' ? '1px dashed rgba(122,153,104,0.6)' : '1px dashed transparent', background: dragOverZone === 'pos' ? 'rgba(122,153,104,0.10)' : 'transparent' }}
+              >
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a' }}>inclure</span>
+                {positiveFilters.map(f => (
+                  <ActiveChip key={f.key} filterKey={f.key} label={f.label} color={f.color} negative={false} onRemove={() => removeFilter(f)} setDraggedKey={setDraggedKey} />
+                ))}
+                {positiveFilters.length === 0 && <span style={{ fontSize: 11, color: '#bdb8ad', fontStyle: 'italic' }}>glisse un filtre ici</span>}
+              </div>
+              <div
+                onDragEnter={e => e.preventDefault()}
+                onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverZone('neg'); }}
+                onDragLeave={() => setDragOverZone(prev => prev === 'neg' ? null : prev)}
+                onDrop={e => handleDropOnZone(e, 'neg')}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '4px 6px', borderRadius: 8, border: dragOverZone === 'neg' ? '1px dashed rgba(184,90,74,0.6)' : '1px dashed transparent', background: dragOverZone === 'neg' ? 'rgba(184,90,74,0.10)' : 'transparent' }}
+              >
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a' }}>exclure</span>
+                {negativeFilters.map(f => (
+                  <ActiveChip key={f.key} filterKey={f.key} label={f.label} color={f.color} negative={true} onRemove={() => removeFilter(f)} setDraggedKey={setDraggedKey} />
+                ))}
+                {negativeFilters.length === 0 && <span style={{ fontSize: 11, color: '#bdb8ad', fontStyle: 'italic' }}>glisse un filtre ici</span>}
+              </div>
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <button onClick={onNewQuestion} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, background: '#2d2a24', color: '#f4f0e6', border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
@@ -351,30 +554,19 @@ function BankContent({ questions, pools, exams, selected, onToggle, openId, setO
           </button>
         </div>
       </div>
-      {activeFilterCount > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a' }}>filtres actifs</span>
-          {filterPools.map(id => {
-            const l = pools.find(p => p.id === id);
-            return <ActiveChip key={'pool:' + id} label={l?.name ?? id} color={l?.color} onRemove={() => togglePoolFilter(id)} />;
-          })}
-          {filterTypes.map(t => (
-            <ActiveChip key={'type:' + t} label={RESPONSE_TYPE_LABELS[t]} onRemove={() => toggleTypeFilter(t)} />
-          ))}
-          {filterDiffs.map(d => (
-            <ActiveChip key={'diff:' + d} label={`difficulté ${d}/5`} onRemove={() => toggleDiffFilter(d)} />
-          ))}
-          {filterExams.map(eid => (
-            <ActiveChip key={'exam:' + eid} label={eid === NEVER_EXAM_ID ? 'jamais tombé en examen' : (exams.find(ex => ex.id === eid)?.title ?? eid)} onRemove={() => toggleExamFilter(eid)} />
-          ))}
-        </div>
-      )}
-      {selected.length >= 2 && (
+      {selected.length >= 1 && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px', borderRadius: 9, background: 'rgba(232,184,108,0.16)', border: '1px solid rgba(168,122,58,0.28)', marginBottom: 10 }}>
-          <span style={{ fontSize: 12, color: '#7a4d20' }}>{selected.length} questions sélectionnées</span>
-          <button onClick={onRequestLink} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 12px', borderRadius: 8, border: 'none', background: '#2d2a24', color: '#f4f0e6', cursor: 'pointer', fontFamily: 'inherit' }}>
-            🔗 lier ces questions
-          </button>
+          <span style={{ fontSize: 12, color: '#7a4d20' }}>{selected.length} question{selected.length > 1 ? 's' : ''} sélectionnée{selected.length > 1 ? 's' : ''}</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {selected.length >= 2 && (
+              <button onClick={onRequestLink} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(45,42,36,0.16)', background: 'transparent', color: '#5a564c', cursor: 'pointer', fontFamily: 'inherit' }}>
+                🔗 lier ces questions
+              </button>
+            )}
+            <button onClick={onSendToGenerator} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 12px', borderRadius: 8, border: 'none', background: '#2d2a24', color: '#f4f0e6', cursor: 'pointer', fontFamily: 'inherit' }}>
+              envoyer vers le générateur →
+            </button>
+          </div>
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
@@ -403,7 +595,24 @@ function BankContent({ questions, pools, exams, selected, onToggle, openId, setO
                       <button onClick={() => togglePoolFilter(l.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
                         <span style={{ width: 7, height: 7, borderRadius: '50%', background: l.color, display: 'inline-block' }} />{l.name}
                       </button>
-                      <button onClick={() => setPendingDeleteLabel(l.id)} title="supprimer le libellé" style={{ position: 'absolute', top: -6, right: -6, width: 14, height: 14, borderRadius: '50%', border: '1px solid rgba(45,42,36,0.15)', background: '#fff', color: '#9a948a', cursor: 'pointer', fontSize: 10, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                      <button onClick={() => editingLabel === l.id ? setEditingLabel(null) : openEditLabel(l)} title="modifier le libellé" style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', border: '1px solid rgba(45,42,36,0.15)', background: '#fff', color: '#9a948a', cursor: 'pointer', fontSize: 10, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="7" height="7" viewBox="0 0 14 14"><path d="M9.8 1.6l2.6 2.6L4.8 11.8l-3 .6.6-3z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" strokeLinecap="round"/></svg>
+                      </button>
+                      {editingLabel === l.id && (
+                        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 30, width: 190, background: '#fff', border: '1px solid rgba(45,42,36,0.10)', borderRadius: 12, boxShadow: '0 12px 32px rgba(45,42,36,0.16)', padding: 10 }}>
+                          <input autoFocus value={editLabelName} onChange={e => setEditLabelName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveEditLabel(); if (e.key === 'Escape') setEditingLabel(null); }} style={{ width: '100%', fontSize: 11.5, padding: '6px 8px', borderRadius: 8, border: '1px solid rgba(45,42,36,0.14)', outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box' as const }} />
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                            {LABEL_COLORS.map(c => (
+                              <button key={c} onClick={() => setEditLabelColor(c)} title={c} style={{ width: 16, height: 16, borderRadius: '50%', background: c, border: editLabelColor === c ? '2px solid #2d2a24' : '1px solid rgba(45,42,36,0.15)', cursor: 'pointer', padding: 0 }} />
+                            ))}
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                            <button onClick={saveEditLabel} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: 'none', background: '#2d2a24', color: '#f4f0e6', cursor: 'pointer', fontFamily: 'inherit' }}>enregistrer</button>
+                            <button onClick={() => setEditingLabel(null)} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: '1px solid rgba(45,42,36,0.10)', background: 'transparent', color: '#7a766d', cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
+                          </div>
+                          <button onClick={() => setPendingDeleteLabel(l.id)} style={{ width: '100%', fontSize: 11, padding: '5px 8px', borderRadius: 8, border: '1px solid rgba(184,90,74,0.30)', background: 'rgba(184,90,74,0.08)', color: '#b85a4a', cursor: 'pointer', fontFamily: 'inherit' }}>supprimer le libellé</button>
+                        </div>
+                      )}
                     </span>
                   );
                 })}
@@ -423,7 +632,7 @@ function BankContent({ questions, pools, exams, selected, onToggle, openId, setO
                   const active = filterTypes.includes(t);
                   return (
                     <button key={t} onClick={() => toggleTypeFilter(t)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
-                      {RESPONSE_TYPE_LABELS[t]}
+                      {RESPONSE_TYPE_LABELS[t] ?? t}
                     </button>
                   );
                 })}
@@ -438,22 +647,38 @@ function BankContent({ questions, pools, exams, selected, onToggle, openId, setO
                     </button>
                   );
                 })}
-              </div>
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a', marginBottom: 8 }}>présence en examen</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {exams.map(ex => {
-                  const active = filterExams.includes(ex.id);
+                {(() => {
+                  const active = filterDiffs.includes(NO_DIFFICULTY);
                   return (
-                    <button key={ex.id} onClick={() => toggleExamFilter(ex.id)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
-                      {ex.title}
+                    <button onClick={() => toggleDiffFilter(NO_DIFFICULTY)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
+                      <DiffDots level={0} />sans difficulté
                     </button>
                   );
-                })}
+                })()}
+              </div>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a', marginBottom: 8 }}>statut</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {(() => {
                   const active = filterExams.includes(NEVER_EXAM_ID);
                   return (
                     <button onClick={() => toggleExamFilter(NEVER_EXAM_ID)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
                       jamais tombé en examen
+                    </button>
+                  );
+                })()}
+                {(() => {
+                  const active = filterAnswer.includes(NO_ANSWER_ID);
+                  return (
+                    <button onClick={() => toggleAnswerFilter(NO_ANSWER_ID)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
+                      question incomplète
+                    </button>
+                  );
+                })()}
+                {(() => {
+                  const active = filterLinked.includes(LINKED_ID);
+                  return (
+                    <button onClick={() => toggleLinkedFilter(LINKED_ID)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
+                      questions liées
                     </button>
                   );
                 })()}
@@ -482,22 +707,33 @@ function BankContent({ questions, pools, exams, selected, onToggle, openId, setO
           const groupKey = row.ids.join(',');
           const expanded = expandedGroups.has(groupKey);
           const first = row.members[0];
+          const groupSelected = row.ids.every(id => selected.includes(id));
           return (
             <div key={groupKey} style={{ border: '1px solid rgba(168,122,58,0.30)', background: 'rgba(168,122,58,0.05)', borderRadius: 10, overflow: 'hidden' }}>
-              <div onClick={() => toggleExpand(groupKey)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', cursor: 'pointer' }}>
-                <span style={{ fontSize: 14, flexShrink: 0 }}>🔗</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, color: '#2d2a24', lineHeight: 1.45, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{first.content || '(sans énoncé)'}</div>
-                  <div style={{ fontSize: 11, color: '#7a4d20', marginTop: 4 }}>question liée · {row.members.length} parties</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px' }}>
+                <div onClick={() => onToggleGroup(row.ids)} title="sélectionner le groupe" style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, cursor: 'pointer', border: groupSelected ? 'none' : '1.5px solid rgba(45,42,36,0.18)', background: groupSelected ? '#7a9968' : '#fff', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>{groupSelected ? '✓' : ''}</div>
+                <div onClick={() => toggleExpand(groupKey)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                  <span style={{ fontSize: 14, flexShrink: 0 }}>🔗</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, color: '#2d2a24', lineHeight: 1.45, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{first.content || '(sans énoncé)'}</div>
+                    <div style={{ fontSize: 11, color: '#7a4d20', marginTop: 4 }}>question liée · {row.members.length} parties</div>
+                  </div>
                 </div>
-                <button onClick={e => { e.stopPropagation(); onUnlinkGroup(row.ids); }} title="délier le groupe" style={{ fontSize: 11, color: '#7a4d20', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', opacity: 0.75, flexShrink: 0 }}>délier ✕</button>
-                <span style={{ fontSize: 11, color: '#7a766d', flexShrink: 0 }}>{expanded ? 'replier ▴' : 'déplier ▾'}</span>
+                {pendingUnlinkKey === groupKey ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    <button onClick={() => { onUnlinkGroup(row.ids); setPendingUnlinkKey(null); }} style={{ fontSize: 11, color: '#b85a4a', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', opacity: 0.85 }}>confirmer ✓</button>
+                    <button onClick={() => setPendingUnlinkKey(null)} style={{ fontSize: 11, color: '#7a766d', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', opacity: 0.85 }}>annuler</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setPendingUnlinkKey(groupKey)} title="délier le groupe" style={{ fontSize: 11, color: '#7a4d20', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', opacity: 0.75, flexShrink: 0 }}>délier ✕</button>
+                )}
+                <span onClick={() => toggleExpand(groupKey)} style={{ fontSize: 11, color: '#7a766d', flexShrink: 0, cursor: 'pointer' }}>{expanded ? 'replier ▴' : 'déplier ▾'}</span>
               </div>
               {expanded && (
                 <div style={{ borderTop: '1px solid rgba(168,122,58,0.20)', display: 'flex', flexDirection: 'column', gap: 6, padding: '8px' }}>
                   {row.members.map((q, i) => (
-                    <div key={q.id} style={{ border: selected.includes(q.id) ? '1px solid rgba(122,153,104,0.4)' : '1px solid rgba(45,42,36,0.08)', background: selected.includes(q.id) ? 'rgba(122,153,104,0.07)' : 'rgba(255,255,255,0.85)', borderRadius: 9, overflow: 'hidden' }}>
-                      {renderQuestionBody(q, i + 1)}
+                    <div key={q.id} style={{ border: '1px solid rgba(45,42,36,0.08)', background: 'rgba(255,255,255,0.85)', borderRadius: 9, overflow: 'hidden' }}>
+                      {renderQuestionBody(q, { indexBadge: i + 1, selectable: false })}
                     </div>
                   ))}
                 </div>
@@ -535,8 +771,19 @@ function BankContent({ questions, pools, exams, selected, onToggle, openId, setO
 }
 
 // ---- GENERATOR ----
-function GeneratorContent({ questions, selected, editing, onCancelEdit, onGenerate }: { questions: Question[]; selected: string[]; editing: Exam | null; onCancelEdit: () => void; onGenerate: () => void }) {
-  const chosen = questions.filter(q => selected.includes(q.id));
+function GeneratorContent({ questions, draftIds, editing, onCancelEdit, onGenerate, onOpenQuestion, onRemoveFromDraft }: { questions: Question[]; draftIds: string[]; editing: Exam | null; onCancelEdit: () => void; onGenerate: () => void; onOpenQuestion: (id: string) => void; onRemoveFromDraft: (ids: string[]) => void }) {
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const chosen = draftIds.map(id => questions.find(q => q.id === id)).filter((q): q is Question => !!q);
+  const rows = groupIntoRows(chosen, questions);
+
+  function toggleExpand(key: string) {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
   return (
     <div style={{ padding: '20px 24px 24px', minHeight: '100%', display: 'flex', flexDirection: 'column', background: '#fbf7ef' }}>
       <div style={{ marginBottom: 14 }}>
@@ -562,15 +809,68 @@ function GeneratorContent({ questions, selected, editing, onCancelEdit, onGenera
       </div>
       <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: '#7a766d', marginBottom: 8 }}>questions retenues</div>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14, minHeight: 80 }}>
-        {chosen.length === 0 && <div style={{ fontFamily: "'Caveat', cursive", fontSize: 16, color: '#a87a3a', padding: '12px 0' }}>« coche des questions dans la banque pour les ajouter ici »</div>}
-        {chosen.map((q, i) => (
-          <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'rgba(252,249,242,0.9)', border: '1px solid rgba(45,42,36,0.06)', borderRadius: 9 }}>
-            <span style={{ fontSize: 11, color: '#9a948a', fontVariantNumeric: 'tabular-nums' }}>{String(i + 1).padStart(2, '0')}</span>
-            <TypePill type={q.responseType} />
-            <span style={{ flex: 1, fontSize: 12.5, color: '#3a352c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.content}</span>
-            <span style={{ fontSize: 15, color: '#b85a4a', cursor: 'pointer' }}>×</span>
-          </div>
-        ))}
+        {rows.length === 0 && <div style={{ fontFamily: "'Caveat', cursive", fontSize: 16, color: '#a87a3a', padding: '12px 0' }}>« coche des questions dans la banque puis envoie-les vers le générateur »</div>}
+        {rows.map((row, idx) => {
+          if (row.kind === 'single') {
+            const q = row.q;
+            const incomplete = hasNoAnswer(q);
+            return (
+              <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: incomplete ? 'rgba(184,90,74,0.06)' : 'rgba(252,249,242,0.9)', border: incomplete ? '1px solid rgba(184,90,74,0.25)' : '1px solid rgba(45,42,36,0.06)', borderRadius: 9 }}>
+                <span style={{ fontSize: 11, color: '#9a948a', fontVariantNumeric: 'tabular-nums' }}>{String(idx + 1).padStart(2, '0')}</span>
+                <TypePill type={q.responseType} />
+                <span style={{ flex: 1, fontSize: 12.5, color: '#3a352c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.content}</span>
+                {incomplete && (
+                  <button onClick={() => onOpenQuestion(q.id)} title="compléter la question" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '4px 9px', borderRadius: 999, border: '1px solid rgba(184,90,74,0.35)', background: 'rgba(184,90,74,0.10)', color: '#b85a4a', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+                    ⚠ question incomplète
+                  </button>
+                )}
+                <span onClick={() => onRemoveFromDraft([q.id])} style={{ fontSize: 15, color: '#b85a4a', cursor: 'pointer' }}>×</span>
+              </div>
+            );
+          }
+          const groupKey = row.ids.join(',');
+          const expanded = expandedGroups.has(groupKey);
+          const first = row.members[0];
+          const incompleteMember = row.members.find(m => hasNoAnswer(m));
+          return (
+            <div key={groupKey} style={{ border: '1px solid rgba(168,122,58,0.30)', background: 'rgba(168,122,58,0.05)', borderRadius: 9, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
+                <span style={{ fontSize: 11, color: '#9a948a', fontVariantNumeric: 'tabular-nums' }}>{String(idx + 1).padStart(2, '0')}</span>
+                <span style={{ fontSize: 14, flexShrink: 0 }}>🔗</span>
+                <div onClick={() => toggleExpand(groupKey)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                  <div style={{ fontSize: 12.5, color: '#3a352c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{first.content || '(sans énoncé)'}</div>
+                  <div style={{ fontSize: 10.5, color: '#7a4d20', marginTop: 2 }}>question liée · {row.members.length} parties</div>
+                </div>
+                {incompleteMember && (
+                  <button onClick={() => onOpenQuestion(incompleteMember.id)} title="compléter la question" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '4px 9px', borderRadius: 999, border: '1px solid rgba(184,90,74,0.35)', background: 'rgba(184,90,74,0.10)', color: '#b85a4a', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+                    ⚠ question incomplète
+                  </button>
+                )}
+                <span onClick={() => toggleExpand(groupKey)} style={{ fontSize: 11, color: '#7a766d', cursor: 'pointer', flexShrink: 0 }}>{expanded ? 'replier ▴' : 'déplier ▾'}</span>
+                <span onClick={() => onRemoveFromDraft(row.ids)} style={{ fontSize: 15, color: '#b85a4a', cursor: 'pointer' }}>×</span>
+              </div>
+              {expanded && (
+                <div style={{ borderTop: '1px solid rgba(168,122,58,0.20)', display: 'flex', flexDirection: 'column', gap: 6, padding: '8px' }}>
+                  {row.members.map((q, i) => {
+                    const inc = hasNoAnswer(q);
+                    return (
+                      <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(45,42,36,0.06)', borderRadius: 8 }}>
+                        <span style={{ fontSize: 11, color: '#a87a3a', fontVariantNumeric: 'tabular-nums' }}>{i + 1}.</span>
+                        <TypePill type={q.responseType} />
+                        <span style={{ flex: 1, fontSize: 12, color: '#3a352c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.content}</span>
+                        {inc && (
+                          <button onClick={() => onOpenQuestion(q.id)} title="compléter la question" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '4px 9px', borderRadius: 999, border: '1px solid rgba(184,90,74,0.35)', background: 'rgba(184,90,74,0.10)', color: '#b85a4a', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+                            ⚠ question incomplète
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
       <button onClick={onGenerate} style={{ padding: '13px 18px', borderRadius: 11, background: '#4f6b40', color: '#f4f0e6', border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, cursor: 'pointer', marginBottom: 8, boxShadow: '0 8px 20px rgba(79,107,64,0.28)' }}>
         {editing ? 'enregistrer les modifications →' : "générer l'examen →"}
@@ -602,7 +902,9 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const [editing, setEditing] = useState<Exam | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkCandidateIds, setLinkCandidateIds] = useState<string[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [draftIds, setDraftIds] = useState<string[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
 
   const GAP = 16;
@@ -671,10 +973,10 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       if (editing) {
         const rest = prev.filter(e => e.id !== editing.id);
         const existing = prev.find(e => e.id === editing.id);
-        saved = { ...existing!, date: "aujourd'hui", q: selected.length, questionIds: selected };
+        saved = { ...existing!, date: "aujourd'hui", q: draftIds.length, questionIds: draftIds };
         return [saved, ...rest];
       }
-      saved = { id, title, date: "aujourd'hui", q: selected.length, dur: '45 min', avg: '—', status: 'brouillon', taken: 0, questionIds: selected };
+      saved = { id, title, date: "aujourd'hui", q: draftIds.length, dur: '45 min', avg: '—', status: 'brouillon', taken: 0, questionIds: draftIds };
       return [saved, ...prev];
     });
     const hotId = editing ? editing.id : id;
@@ -683,6 +985,13 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     focus('history');
     setTimeout(() => setJustAdded(cur => cur === hotId ? null : cur), 2600);
     if (saved) saveGeneratedExam(workshopId, saved).catch(err => console.error('enregistrement examen échoué', err));
+  }
+
+  function handleOpenQuestion(id: string) {
+    const q = questions.find(p => p.id === id);
+    if (!q) return;
+    setEditingQuestion(q);
+    focus('bank');
   }
 
   function handleSaveQuestion(q: Question) {
@@ -695,6 +1004,12 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     saveQuestion(workshopId, q).catch(err => console.error('enregistrement question échoué', err));
   }
 
+  function handleDuplicateQuestion(q: Question) {
+    const copy: Question = { ...q, id: 'q' + Date.now() + Math.random().toString(36).slice(2, 7), linkedQuestionIds: [], examIds: [] };
+    setQuestions(prev => [copy, ...prev]);
+    saveQuestion(workshopId, copy).catch(err => console.error('duplication de la question échouée', err));
+  }
+
   function handleCreatePool(name: string): string {
     const id = 'pool' + Date.now();
     const pool = { id, name, color: '#9eb3b9' };
@@ -703,11 +1018,31 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     return id;
   }
 
+  function handleUpdatePool(pool: Pool) {
+    setPools(prev => prev.map(p => p.id === pool.id ? pool : p));
+    updatePoolAction(workshopId, pool).catch(err => console.error('modification du libellé échouée', err));
+  }
+
   function handleDeletePool(id: string) {
     setPools(prev => prev.filter(p => p.id !== id));
     const affected = questions.filter(q => q.pools.includes(id)).map(q => ({ ...q, pools: q.pools.filter(p => p !== id) }));
     setQuestions(prev => prev.map(q => q.pools.includes(id) ? { ...q, pools: q.pools.filter(p => p !== id) } : q));
     deletePoolAction(workshopId, id, affected).catch(err => console.error('suppression libellé échouée', err));
+  }
+
+  function handleRequestLink() {
+    // si une question sélectionnée appartient déjà à un groupe lié, on fusionne tous les membres de ce groupe
+    const merged = new Set<string>();
+    for (const id of selected) {
+      const q = questions.find(p => p.id === id);
+      if (q && q.linkedQuestionIds.length > 1) {
+        q.linkedQuestionIds.forEach(memberId => merged.add(memberId));
+      } else {
+        merged.add(id);
+      }
+    }
+    setLinkCandidateIds([...merged]);
+    setLinkModalOpen(true);
   }
 
   function handleLinkQuestions(orderedIds: string[]) {
@@ -719,6 +1054,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       return next;
     }));
     setLinkModalOpen(false);
+    setSelected(s => s.filter(id => !orderedIds.includes(id)));
     if (updated.length) saveQuestions(workshopId, updated).catch(err => console.error('liaison des questions échouée', err));
   }
 
@@ -730,7 +1066,25 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       updated.push(next);
       return next;
     }));
+    setSelected(s => [...new Set([...s, ...ids])]);
     if (updated.length) saveQuestions(workshopId, updated).catch(err => console.error('déliaison des questions échouée', err));
+  }
+
+  function handleToggleGroup(ids: string[]) {
+    setSelected(s => {
+      const allSelected = ids.every(id => s.includes(id));
+      if (allSelected) return s.filter(id => !ids.includes(id));
+      return [...new Set([...s, ...ids])];
+    });
+  }
+
+  function handleSendToGenerator() {
+    setDraftIds(prev => [...prev, ...selected.filter(id => !prev.includes(id))]);
+    setSelected([]);
+  }
+
+  function handleRemoveFromDraft(ids: string[]) {
+    setDraftIds(prev => prev.filter(id => !ids.includes(id)));
   }
 
   function rectFor(role: number) {
@@ -748,11 +1102,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <style>{`@keyframes examPop { 0% { background: rgba(232,184,108,0.42); } 100% { } }`}</style>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '14px 22px 12px', flexShrink: 0 }}>
-        <span style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24' }}>Génération d&apos;examen</span>
-        <span style={{ fontFamily: "'Caveat', cursive", fontSize: 15, color: '#a87a3a' }}>« clique une vignette pour l&apos;agrandir »</span>
-      </div>
-      <div ref={stageRef} style={{ flex: 1, position: 'relative', margin: '0 22px 20px', minHeight: 0 }}>
+      <div ref={stageRef} style={{ flex: 1, position: 'relative', margin: '22px 22px 20px', minHeight: 0 }}>
         {ready && IDS.map(id => {
           const role = order.indexOf(id);
           const r = rectFor(role);
@@ -768,18 +1118,37 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                     exams={exams}
                     selected={selected}
                     onToggle={id2 => setSelected(s => s.includes(id2) ? s.filter(x => x !== id2) : [...s, id2])}
+                    onToggleGroup={handleToggleGroup}
                     openId={openId}
                     setOpenId={setOpenId}
                     onEditQuestion={q => setEditingQuestion(q)}
                     onNewQuestion={() => setEditingQuestion(emptyQuestion())}
-                    onRequestLink={() => setLinkModalOpen(true)}
+                    onRequestLink={handleRequestLink}
+                    onSendToGenerator={handleSendToGenerator}
                     onUnlinkGroup={handleUnlinkGroup}
                     onCreatePool={handleCreatePool}
+                    onUpdatePool={handleUpdatePool}
                     onDeletePool={handleDeletePool}
+                    onDuplicateQuestion={handleDuplicateQuestion}
                   />
                 )}
-                {id === 'generator' && <GeneratorContent questions={questions} selected={selected} editing={editing} onCancelEdit={() => setEditing(null)} onGenerate={handleGenerate} />}
+                {id === 'generator' && <GeneratorContent questions={questions} draftIds={draftIds} editing={editing} onCancelEdit={() => setEditing(null)} onGenerate={handleGenerate} onOpenQuestion={handleOpenQuestion} onRemoveFromDraft={handleRemoveFromDraft} />}
               </div>
+              {id === 'bank' && editingQuestion && (
+                <>
+                  <QuestionEditor
+                    question={editingQuestion}
+                    allQuestions={questions}
+                    pools={pools}
+                    onCreatePool={handleCreatePool}
+                    onSave={handleSaveQuestion}
+                    onCancel={() => setEditingQuestion(null)}
+                  />
+                  {!r.main && (
+                    <div onClick={() => focus(id)} style={{ position: 'absolute', inset: 0, zIndex: 61, cursor: 'pointer' }} />
+                  )}
+                </>
+              )}
               {!r.main && (
                 <>
                   <div onClick={() => focus(id)} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 34, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', cursor: 'pointer', background: 'linear-gradient(180deg, rgba(252,249,242,0.96), rgba(252,249,242,0.0))' }}>
@@ -798,19 +1167,9 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
           );
         })}
       </div>
-      {editingQuestion && (
-        <QuestionEditor
-          question={editingQuestion}
-          allQuestions={questions}
-          pools={pools}
-          onCreatePool={handleCreatePool}
-          onSave={handleSaveQuestion}
-          onCancel={() => setEditingQuestion(null)}
-        />
-      )}
       {linkModalOpen && (
         <LinkOrderModal
-          questions={questions.filter(q => selected.includes(q.id))}
+          questions={questions.filter(q => linkCandidateIds.includes(q.id))}
           onConfirm={handleLinkQuestions}
           onCancel={() => setLinkModalOpen(false)}
         />

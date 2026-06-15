@@ -24,7 +24,7 @@ type TabId = 'programme' | 'examen' | 'analyse' | 'cours';
 const TABS: { id: TabId; label: string; soon?: string }[] = [
   { id: 'programme', label: 'Programme éducatif' },
   { id: 'examen', label: "Génération d'examen" },
-  { id: 'analyse', label: 'Analyse' },
+  { id: 'analyse', label: 'Analyse', soon: 'V2' },
   { id: 'cours', label: 'Génération de cours', soon: 'V2' },
 ];
 

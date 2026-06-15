@@ -26,9 +26,10 @@ export type Question = {
   answer: string;
   choices: string[];
   correctChoices: number[];
+  shuffleChoices: boolean;
   pools: string[];
   difficulty: { enabled: boolean; value: number };
-  duration: { enabled: boolean; minutes: number };
+  duration: { enabled: boolean; minutes: number; seconds: number };
   linkedQuestionIds: string[];
   examIds: string[];
 };
@@ -47,7 +48,7 @@ export const RESPONSE_TYPE_LABELS: Record<ResponseType, string> = {
   dessin: 'Dessin',
   audio: 'Audio',
   sondage: 'Sondage',
-  fill_blank: 'Fill in the blank',
+  fill_blank: 'Texte à trous',
   matching: 'Matching',
   ordre: "Trier dans l'ordre",
 };
@@ -58,6 +59,10 @@ const RESPONSE_TYPE_ORDER: ResponseType[] = [
 
 const CHOICE_BASED: ResponseType[] = ['qcs', 'qcm', 'sondage', 'matching', 'ordre'];
 
+// Types disponibles en V2 uniquement — affichés mais désactivés (badge V2)
+const QUESTION_TYPE_V2: QuestionType[] = ['visuel', 'audio'];
+const RESPONSE_TYPE_V2: ResponseType[] = ['dessin', 'audio', 'fill_blank', 'matching', 'ordre'];
+
 export function emptyQuestion(): Question {
   return {
     id: 'q' + Date.now(),
@@ -67,9 +72,10 @@ export function emptyQuestion(): Question {
     answer: '',
     choices: [],
     correctChoices: [],
+    shuffleChoices: false,
     pools: [],
-    difficulty: { enabled: false, value: 5 },
-    duration: { enabled: false, minutes: 2 },
+    difficulty: { enabled: false, value: 3 },
+    duration: { enabled: false, minutes: 2, seconds: 0 },
     linkedQuestionIds: [],
     examIds: [],
   };
@@ -77,7 +83,7 @@ export function emptyQuestion(): Question {
 
 // ─── Small building blocks (cohérents avec le design system du projet) ─────
 
-function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
+function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 8 }}>
       <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase' as const, color: '#9a948a' }}>{children}</div>
@@ -86,7 +92,7 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: stri
   );
 }
 
-function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[] }) {
+function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { value: T; label: string; soon?: boolean }[] }) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
       {options.map((o) => {
@@ -94,16 +100,17 @@ function Segmented<T extends string>({ value, onChange, options }: { value: T; o
         return (
           <button
             key={o.value}
-            onClick={() => onChange(o.value)}
+            onClick={() => !o.soon && onChange(o.value)}
+            disabled={o.soon}
             style={{
               fontSize: 12.5,
               padding: '7px 13px',
               borderRadius: 999,
-              cursor: 'pointer',
+              cursor: o.soon ? 'default' : 'pointer',
               fontFamily: 'inherit',
-              border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)',
-              background: active ? '#2d2a24' : 'rgba(255,255,255,0.7)',
-              color: active ? '#f4f0e6' : '#3a352c',
+              border: o.soon ? '1px solid rgba(45,42,36,0.08)' : active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)',
+              background: o.soon ? 'rgba(45,42,36,0.05)' : active ? '#2d2a24' : 'rgba(255,255,255,0.7)',
+              color: o.soon ? '#9a948a' : active ? '#f4f0e6' : '#3a352c',
               fontWeight: active ? 500 : 400,
               transition: 'all 0.12s',
             }}
@@ -166,6 +173,9 @@ function ChoiceListEditor({
   correctChoices: number[];
   onChange: (choices: string[], correctChoices: number[]) => void;
 }) {
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<number | null>(null);
+
   function updateChoice(i: number, value: string) {
     const next = [...choices];
     next[i] = value;
@@ -191,10 +201,24 @@ function ChoiceListEditor({
     onChange(next, correctChoices.map(remap));
   }
 
+  function reorderInsert(from: number, insertBefore: number) {
+    if (insertBefore === from || insertBefore === from + 1) return;
+    const next = [...choices];
+    const [item] = next.splice(from, 1);
+    const to = from < insertBefore ? insertBefore - 1 : insertBefore;
+    next.splice(to, 0, item);
+    const remap = (c: number) => {
+      if (c === from) return to;
+      if (from < to) return c > from && c <= to ? c - 1 : c;
+      return c >= to && c < from ? c + 1 : c;
+    };
+    onChange(next, correctChoices.map(remap));
+  }
+
   function toggleCorrect(i: number) {
     if (responseType === 'qcs') {
-      onChange(choices, [i]);
-    } else if (responseType === 'qcm') {
+      onChange(choices, correctChoices.includes(i) ? [] : [i]);
+    } else if (responseType === 'qcm' || responseType === 'sondage') {
       const has = correctChoices.includes(i);
       onChange(choices, has ? correctChoices.filter((c) => c !== i) : [...correctChoices, i]);
     }
@@ -203,6 +227,7 @@ function ChoiceListEditor({
   const showOrder = responseType === 'ordre';
   const showPairs = responseType === 'matching';
   const showCorrectMarker = responseType === 'qcs' || responseType === 'qcm';
+  const showFreeTextMarker = responseType === 'sondage';
 
   return (
     <div>
@@ -211,9 +236,48 @@ function ChoiceListEditor({
           « ajoute {showPairs ? 'des paires' : 'des options de réponse'} »
         </div>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-        {choices.map((c, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {choices.map((c, i) => {
+          const showLineBefore = dragIndex !== null && dragIndex !== i && dragIndex !== i - 1 && dropIndicator === i;
+          return (
+          <div key={i} style={{ marginBottom: 7 }}>
+            <div style={{
+              height: showLineBefore ? 3 : 0,
+              background: '#a87a3a',
+              borderRadius: 2,
+              margin: showLineBefore ? '0 0 4px' : '0',
+              transition: 'all 0.1s',
+            }} />
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (dragIndex === null) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              const before = (e.clientY - rect.top) < rect.height / 2;
+              setDropIndicator(before ? i : i + 1);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (dragIndex !== null && dropIndicator !== null) reorderInsert(dragIndex, dropIndicator);
+              setDragIndex(null);
+              setDropIndicator(null);
+            }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              opacity: dragIndex === i ? 0.4 : 1,
+              borderRadius: 9,
+              transition: 'opacity 0.12s',
+            }}
+          >
+            <span
+              draggable
+              onDragStart={() => setDragIndex(i)}
+              onDragEnd={() => { setDragIndex(null); setDropIndicator(null); }}
+              title="glisser pour réorganiser"
+              style={{ cursor: 'grab', color: '#c8c2b6', fontSize: 13, lineHeight: 1, padding: '0 2px', flexShrink: 0, userSelect: 'none' as const }}
+            >
+              ⠿
+            </span>
             {showOrder && (
               <span style={{ fontSize: 11, color: '#9a948a', fontVariantNumeric: 'tabular-nums', width: 18, textAlign: 'center' as const }}>{i + 1}</span>
             )}
@@ -232,11 +296,35 @@ function ChoiceListEditor({
                 {correctChoices.includes(i) ? '✓' : ''}
               </button>
             )}
+            {showFreeTextMarker && (
+              <button
+                onClick={() => toggleCorrect(i)}
+                title="réponse libre — l'étudiant écrit ce qu'il veut"
+                style={{
+                  width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                  border: correctChoices.includes(i) ? 'none' : '1.5px solid rgba(45,42,36,0.18)',
+                  background: correctChoices.includes(i) ? '#a87a3a' : '#fff',
+                  color: correctChoices.includes(i) ? '#fff' : 'rgba(45,42,36,0.25)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 10.5, cursor: 'pointer', padding: 0,
+                }}
+              >
+                ✎
+              </button>
+            )}
             {showPairs ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
                 <TextField value={c.split(' :: ')[0] ?? ''} onChange={(v) => updateChoice(i, `${v} :: ${c.split(' :: ')[1] ?? ''}`)} placeholder={`élément ${i + 1}`} />
                 <span style={{ fontSize: 12, color: '#9a948a' }}>→</span>
                 <TextField value={c.split(' :: ')[1] ?? ''} onChange={(v) => updateChoice(i, `${c.split(' :: ')[0] ?? ''} :: ${v}`)} placeholder="correspondance" />
+              </div>
+            ) : showFreeTextMarker && correctChoices.includes(i) ? (
+              <div style={{
+                flex: 1, fontSize: 13, color: '#a87a3a', border: '1px solid rgba(45,42,36,0.12)',
+                borderRadius: 9, padding: '9px 12px', background: 'rgba(45,42,36,0.03)',
+                fontFamily: 'inherit', boxSizing: 'border-box' as const, fontStyle: 'italic',
+              }}>
+                saisie libre
               </div>
             ) : (
               <div style={{ flex: 1 }}>
@@ -251,7 +339,21 @@ function ChoiceListEditor({
             )}
             <button onClick={() => removeChoice(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#b85a4a', fontSize: 16, padding: '0 2px', lineHeight: 1 }}>×</button>
           </div>
-        ))}
+          </div>
+          );
+        })}
+        {(() => {
+          const showLineAfter = dragIndex !== null && dragIndex !== choices.length - 1 && dropIndicator === choices.length;
+          return (
+            <div style={{
+              height: showLineAfter ? 3 : 0,
+              background: '#a87a3a',
+              borderRadius: 2,
+              margin: showLineAfter ? '0 0 4px' : '0',
+              transition: 'all 0.1s',
+            }} />
+          );
+        })()}
       </div>
       <button onClick={addChoice} style={{ marginTop: 10, fontSize: 12, padding: '7px 12px', borderRadius: 8, border: '1px dashed rgba(45,42,36,0.20)', background: 'transparent', color: '#7a766d', cursor: 'pointer', fontFamily: 'inherit' }}>
         + {showPairs ? 'paire' : 'option'}
@@ -283,7 +385,6 @@ export default function QuestionEditor({
   const [draft, setDraft] = useState<Question>(question);
   const [newPoolName, setNewPoolName] = useState('');
   const [creatingPool, setCreatingPool] = useState(false);
-  const [aiOpen, setAiOpen] = useState(false);
 
   const isNew = !allQuestions.some((q) => q.id === question.id);
   const canSave = draft.content.trim().length > 0;
@@ -308,12 +409,12 @@ export default function QuestionEditor({
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', justifyContent: 'flex-end' }}>
+    <div style={{ position: 'absolute', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       {/* backdrop */}
       <div onClick={onCancel} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
 
       {/* panel */}
-      <div style={{ position: 'relative', width: 460, maxWidth: '94vw', height: '100%', background: '#fcf9f2', boxShadow: '-16px 0 48px rgba(45,42,36,0.18)', display: 'flex', flexDirection: 'column', fontFamily: "'Inter Tight', system-ui, sans-serif" }}>
+      <div style={{ position: 'relative', width: 640, maxWidth: '100%', maxHeight: '100%', borderRadius: 18, background: '#fcf9f2', boxShadow: '0 24px 64px rgba(45,42,36,0.24)', display: 'flex', flexDirection: 'column', fontFamily: "'Inter Tight', system-ui, sans-serif", overflow: 'hidden' }}>
         {/* header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid rgba(45,42,36,0.08)', flexShrink: 0 }}>
           <div>
@@ -327,7 +428,7 @@ export default function QuestionEditor({
         <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px 24px' }}>
           {/* type de question */}
           <FieldLabel hint="Textuel par défaut · Visuel (image, graphique) et Audio disponibles">Type de question</FieldLabel>
-          <Segmented value={draft.questionType} onChange={(v) => patch({ questionType: v })} options={(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((k) => ({ value: k, label: QUESTION_TYPE_LABELS[k] }))} />
+          <Segmented value={draft.questionType} onChange={(v) => patch({ questionType: v })} options={(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((k) => ({ value: k, label: QUESTION_TYPE_LABELS[k], soon: QUESTION_TYPE_V2.includes(k) }))} />
 
           {draft.questionType === 'visuel' && (
             <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 10, border: '1px dashed rgba(45,42,36,0.18)', background: 'rgba(255,255,255,0.6)', fontSize: 12, color: '#7a766d' }}>
@@ -355,7 +456,7 @@ export default function QuestionEditor({
             <Segmented
               value={draft.responseType}
               onChange={(v) => patch({ responseType: v, choices: CHOICE_BASED.includes(v) ? (draft.choices.length ? draft.choices : ['', '']) : draft.choices, correctChoices: [] })}
-              options={RESPONSE_TYPE_ORDER.map((k) => ({ value: k, label: RESPONSE_TYPE_LABELS[k] }))}
+              options={RESPONSE_TYPE_ORDER.map((k) => ({ value: k, label: RESPONSE_TYPE_LABELS[k], soon: RESPONSE_TYPE_V2.includes(k) }))}
             />
           </div>
 
@@ -365,7 +466,12 @@ export default function QuestionEditor({
               <FieldLabel hint={
                 draft.responseType === 'qcs' ? 'une seule bonne réponse' :
                 draft.responseType === 'qcm' ? 'une ou plusieurs bonnes réponses' :
-                draft.responseType === 'sondage' ? 'sondage sans correction' :
+                draft.responseType === 'sondage' ? (
+                  <>
+                    sondage sans correction · option « réponse libre » disponible
+                    {draft.choices.length > 0 && <><br />active l&apos;icône ✎ sur une option pour permettre une réponse libre</>}
+                  </>
+                ) :
                 draft.responseType === 'matching' ? 'associe chaque élément à sa correspondance' :
                 "l'ordre de la liste ci-dessous est l'ordre correct"
               }>
@@ -377,6 +483,12 @@ export default function QuestionEditor({
                 correctChoices={draft.correctChoices}
                 onChange={(choices, correctChoices) => patch({ choices, correctChoices })}
               />
+              {(draft.responseType === 'qcs' || draft.responseType === 'qcm' || draft.responseType === 'sondage') && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
+                  <FieldLabel hint="mélange l'ordre des options pour chaque étudiant">Ordre aléatoire</FieldLabel>
+                  <MiniSwitch value={draft.shuffleChoices} onChange={(v) => patch({ shuffleChoices: v })} />
+                </div>
+              )}
             </div>
           )}
 
@@ -451,8 +563,8 @@ export default function QuestionEditor({
           </div>
           {draft.difficulty.enabled && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: -4 }}>
-              <input type="range" min={1} max={10} value={draft.difficulty.value} onChange={(e) => patch({ difficulty: { ...draft.difficulty, value: Number(e.target.value) } })} style={{ flex: 1, accentColor: '#a87a3a' }} />
-              <span style={{ fontSize: 12.5, color: '#2d2a24', fontVariantNumeric: 'tabular-nums', width: 32, textAlign: 'right' as const }}>{draft.difficulty.value}/10</span>
+              <input type="range" min={1} max={5} value={draft.difficulty.value} onChange={(e) => patch({ difficulty: { ...draft.difficulty, value: Number(e.target.value) } })} style={{ flex: 1, accentColor: '#a87a3a' }} />
+              <span style={{ fontSize: 12.5, color: '#2d2a24', fontVariantNumeric: 'tabular-nums', width: 32, textAlign: 'right' as const }}>{draft.difficulty.value}/5</span>
             </div>
           )}
 
@@ -464,24 +576,15 @@ export default function QuestionEditor({
           {draft.duration.enabled && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: -4 }}>
               <div style={{ width: 90 }}>
-                <input type="number" min={1} value={draft.duration.minutes} onChange={(e) => patch({ duration: { ...draft.duration, minutes: Math.max(1, Number(e.target.value) || 1) } })} style={{ width: '100%', fontSize: 13, color: '#2d2a24', border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: '#fff', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                <input type="number" min={0} value={draft.duration.minutes} onChange={(e) => patch({ duration: { ...draft.duration, minutes: Math.max(0, Number(e.target.value) || 0) } })} style={{ width: '100%', fontSize: 13, color: '#2d2a24', border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: '#fff', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
               </div>
               <span style={{ fontSize: 12.5, color: '#7a766d' }}>minutes</span>
+              <div style={{ width: 90 }}>
+                <input type="number" min={0} max={59} value={draft.duration.seconds} onChange={(e) => patch({ duration: { ...draft.duration, seconds: Math.min(59, Math.max(0, Number(e.target.value) || 0)) } })} style={{ width: '100%', fontSize: 13, color: '#2d2a24', border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: '#fff', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+              </div>
+              <span style={{ fontSize: 12.5, color: '#7a766d' }}>secondes</span>
             </div>
           )}
-
-          {/* discussion IA */}
-          <div style={{ marginTop: 18 }}>
-            <FieldLabel hint="discute avec l'IA pour générer ou retravailler cette question">Discussion IA</FieldLabel>
-            <button onClick={() => setAiOpen((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, padding: '8px 14px', borderRadius: 9, border: '1px solid rgba(168,122,58,0.30)', background: 'rgba(232,184,108,0.14)', color: '#7a4d20', cursor: 'pointer', fontFamily: 'inherit' }}>
-              <span style={{ fontSize: 14 }}>✦</span> discuter avec l&apos;IA
-            </button>
-            {aiOpen && (
-              <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.08)', background: 'rgba(255,255,255,0.7)' }}>
-                <textarea disabled placeholder="« reformule cette question pour un niveau débutant… » — bientôt disponible" rows={2} style={{ width: '100%', fontSize: 12.5, color: '#9a948a', border: '1px solid rgba(45,42,36,0.08)', borderRadius: 8, padding: '8px 10px', background: 'rgba(45,42,36,0.02)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', resize: 'none' as const }} />
-              </div>
-            )}
-          </div>
         </div>
 
         {/* footer */}
