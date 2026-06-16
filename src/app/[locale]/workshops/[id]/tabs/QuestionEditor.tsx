@@ -32,6 +32,8 @@ export type Question = {
   duration: { enabled: boolean; minutes: number; seconds: number };
   linkedQuestionIds: string[];
   examIds: string[];
+  createdAt?: string;
+  textLines?: number;
 };
 
 export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
@@ -54,7 +56,7 @@ export const RESPONSE_TYPE_LABELS: Record<ResponseType, string> = {
 };
 
 const RESPONSE_TYPE_ORDER: ResponseType[] = [
-  'sans_reponse', 'qcs', 'qcm', 'textuelle', 'dessin', 'audio', 'sondage', 'fill_blank', 'matching', 'ordre',
+  'textuelle', 'qcm', 'qcs', 'fill_blank', 'matching', 'ordre', 'dessin', 'audio', 'sondage', 'sans_reponse',
 ];
 
 const CHOICE_BASED: ResponseType[] = ['qcs', 'qcm', 'sondage', 'matching', 'ordre'];
@@ -78,6 +80,7 @@ export function emptyQuestion(): Question {
     duration: { enabled: false, minutes: 2, seconds: 0 },
     linkedQuestionIds: [],
     examIds: [],
+    textLines: 4,
   };
 }
 
@@ -503,6 +506,18 @@ export default function QuestionEditor({
                 {draft.responseType === 'fill_blank' ? 'Réponses attendues' : 'Réponse associée'}
               </FieldLabel>
               <TextField value={draft.answer} onChange={(v) => patch({ answer: v })} placeholder="Réponse de référence…" multiline rows={3} />
+              {draft.responseType === 'textuelle' && (
+                <div style={{ marginTop: 14, maxWidth: 160 }}>
+                  <FieldLabel hint="nombre de lignes proposées pour la réponse dans l'aperçu de l'examen">Nombre de lignes</FieldLabel>
+                  <input
+                    type="number"
+                    min={1}
+                    value={draft.textLines ?? 4}
+                    onChange={(e) => patch({ textLines: Math.max(1, Number(e.target.value) || 1) })}
+                    style={{ width: '100%', fontSize: 13, color: '#2d2a24', border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: '#fff', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                  />
+                </div>
+              )}
             </div>
           )}
           {draft.responseType === 'sans_reponse' && (

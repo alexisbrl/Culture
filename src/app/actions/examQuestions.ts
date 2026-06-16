@@ -3,6 +3,7 @@
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { revalidatePath } from 'next/cache';
 import type { Question } from '@/app/[locale]/workshops/[id]/tabs/QuestionEditor';
+import type { ExamConfig } from '@/app/[locale]/workshops/[id]/tabs/ExamenTab';
 
 export type ExamPool = { id: string; name: string; color: string };
 
@@ -16,6 +17,7 @@ export type GeneratedExam = {
   status: string;
   taken: number;
   questionIds?: string[];
+  config?: ExamConfig;
 };
 
 type QuestionRow = {
@@ -33,6 +35,8 @@ type QuestionRow = {
   duration: { enabled: boolean; minutes: number; seconds: number };
   linked_question_ids: string[];
   exam_ids: string[];
+  text_lines: number;
+  created_at: string;
 };
 
 function rowToQuestion(row: QuestionRow): Question {
@@ -50,6 +54,8 @@ function rowToQuestion(row: QuestionRow): Question {
     duration: row.duration ?? { enabled: false, minutes: 2, seconds: 0 },
     linkedQuestionIds: row.linked_question_ids ?? [],
     examIds: row.exam_ids ?? [],
+    textLines: row.text_lines ?? 4,
+    createdAt: row.created_at,
   };
 }
 
@@ -69,6 +75,7 @@ function questionToRow(workshopId: string, q: Question) {
     duration: q.duration,
     linked_question_ids: q.linkedQuestionIds,
     exam_ids: q.examIds,
+    text_lines: q.textLines ?? 4,
     updated_at: new Date().toISOString(),
   };
 }
@@ -83,7 +90,7 @@ export async function getExamBankData(workshopId: string): Promise<{
   const [questionsRes, poolsRes, examsRes] = await Promise.all([
     supabase.from('exam_questions').select('*').eq('workshop_id', workshopId).order('created_at', { ascending: true }),
     supabase.from('exam_pools').select('id, name, color').eq('workshop_id', workshopId).order('created_at', { ascending: true }),
-    supabase.from('exam_generated').select('id, title, date, q, dur, avg, status, taken, question_ids').eq('workshop_id', workshopId).order('created_at', { ascending: false }),
+    supabase.from('exam_generated').select('id, title, date, q, dur, avg, status, taken, question_ids, config').eq('workshop_id', workshopId).order('created_at', { ascending: false }),
   ]);
 
   const questions = (questionsRes.data ?? []).map(rowToQuestion);
@@ -98,6 +105,7 @@ export async function getExamBankData(workshopId: string): Promise<{
     status: e.status,
     taken: e.taken,
     questionIds: e.question_ids ?? [],
+    config: e.config ?? undefined,
   })) as GeneratedExam[];
 
   return { questions, pools, exams };
@@ -145,6 +153,19 @@ export async function deletePool(workshopId: string, poolId: string, affectedQue
   revalidatePath(`/workshops/${workshopId}`, 'page');
 }
 
+export async function deleteQuestion(workshopId: string, questionId: string, affectedQuestions: Question[]): Promise<void> {
+  const supabase = getSupabaseServerClient();
+
+  if (affectedQuestions.length > 0) {
+    const { error: updateError } = await supabase.from('exam_questions').upsert(affectedQuestions.map((q) => questionToRow(workshopId, q)));
+    if (updateError) throw new Error(updateError.message);
+  }
+
+  const { error } = await supabase.from('exam_questions').delete().eq('workshop_id', workshopId).eq('id', questionId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/workshops/${workshopId}`, 'page');
+}
+
 export async function saveGeneratedExam(workshopId: string, exam: GeneratedExam): Promise<void> {
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_generated').upsert({
@@ -158,7 +179,37 @@ export async function saveGeneratedExam(workshopId: string, exam: GeneratedExam)
     status: exam.status,
     taken: exam.taken,
     question_ids: exam.questionIds ?? [],
+    config: exam.config ?? {},
   });
   if (error) throw new Error(error.message);
   revalidatePath(`/workshops/${workshopId}`, 'page');
+}
+
+export type ExamDraft = { draftIds: string[]; config: ExamConfig; editingId: string | null };
+
+export async function getExamDraft(workshopId: string): Promise<ExamDraft | null> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.from('exam_draft').select('draft_ids, config, editing_id').eq('workshop_id', workshopId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return { draftIds: data.draft_ids ?? [], config: data.config as ExamConfig, editingId: data.editing_id ?? null };
+}
+
+export async function deleteGeneratedExam(workshopId: string, examId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from('exam_generated').delete().eq('workshop_id', workshopId).eq('id', examId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/workshops/${workshopId}`, 'page');
+}
+
+export async function saveExamDraft(workshopId: string, draft: ExamDraft): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.from('exam_draft').upsert({
+    workshop_id: workshopId,
+    draft_ids: draft.draftIds,
+    config: draft.config,
+    editing_id: draft.editingId,
+    updated_at: new Date().toISOString(),
+  });
+  if (error) throw new Error(error.message);
 }
