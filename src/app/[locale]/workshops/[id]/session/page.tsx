@@ -31,7 +31,7 @@ export default function SessionPage() {
   const pct = 41;
 
   return (
-    <div className="h-[calc(100vh-4rem)] bg-[#fcf9f2] font-sans flex flex-col">
+    <div className="h-[calc(100vh-65px)] bg-[#fcf9f2] font-sans flex flex-col">
       {/* top bar */}
       <div className="flex items-center justify-between px-6 py-3.5 border-b border-[#2d2a24]/[0.07] bg-white/70 backdrop-blur shrink-0">
         <Link href={`/${locale}/workshops/${id}`} className="text-[12.5px] text-[#5a564c] flex items-center gap-1.5 hover:text-[#2d2a24]">

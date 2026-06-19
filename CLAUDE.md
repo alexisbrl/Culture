@@ -3,7 +3,7 @@
 > Ce fichier est l'unique source de vérité pour tout développement sur ce projet. Il doit être lu intégralement à chaque nouvelle conversation.
 > **Toute modification structurante apportée au projet (stack, structure, conventions, décisions produit) doit être reflétée ici.**
 >
-> Dernière mise à jour : 15/06/2026
+> Dernière mise à jour : 18/06/2026
 
 ---
 
@@ -14,6 +14,9 @@ Si tu n'es pas certain d'une information (API, comportement d'une lib, structure
 
 ### Poser des questions avant d'exécuter
 **Après CHAQUE prompt de l'utilisateur**, avant d'exécuter quoi que ce soit, identifie systématiquement les ambiguïtés. S'il y en a — même mineures — pose tes questions de clarification et attends la réponse avant de commencer. N'exécute jamais sans avoir compris l'intention précise. S'il n'y a vraiment aucune ambiguïté, tu peux exécuter directement. Une question posée en amont vaut mieux que 30 minutes de travail à refaire.
+
+### Icônes : Lucide React uniquement
+**Toujours utiliser exclusivement les icônes de `lucide-react`.** Ne jamais créer d'icônes SVG inline custom, ne jamais utiliser d'autres librairies d'icônes (heroicons, react-icons, etc.). Si une icône Lucide ne correspond pas exactement au besoin, utiliser la plus proche ou un emoji texte — jamais du SVG personnalisé.
 
 ### MVP uniquement
 Ne pas développer de fonctionnalités hors-MVP avant que le MVP soit stable et validé. Se référer au périmètre MVP en section 10.
@@ -870,6 +873,20 @@ Sessions d'examens standardisés dans des **centres certifiés**. Chaque examen 
 > **Fix erreur React à la suppression d'une question** : dans `handleDeleteQuestion`, l'appel à `saveGeneratedExam(workshopId, next)` se faisait **à l'intérieur** de l'updater `setExams(prev => prev.map(...))`, ce qui déclenchait « Cannot update a component (`Router`) while rendering a different component (`ExamenTab`) » (un appel à une server action qui fait `revalidatePath`/`router.refresh()` ne doit jamais être exécuté depuis un updater de `setState`, qui s'exécute pendant la phase de rendu). Corrigé en collectant les examens mis à jour dans un tableau externe `updatedExams` pendant l'updater, puis en appelant `saveGeneratedExam` pour chacun **après** `setExams`. Vérifié (Claude in Chrome, hook `console.error`/`window.onerror`) : suppression d'une question depuis la banque → aucune erreur console, suppression bien persistée côté Supabase (`exam_questions`). **Pattern à appliquer pour tout futur `setXxx(prev => ...)` dont le corps appellerait une server action.**
 
 ---
+
+> **Refonte du système de sélection — questions multi-parties (Banque de questions)** [MODIFIÉ PAR CLAUDE - 18/06/2026] : dans `ExamenTab.tsx` et `QuestionEditor.tsx` :
+>
+> **Suppression du système de sélection et de liaison (linked questions)** :
+> - Retrait complet des cases à cocher, de l'état `selected`, du bouton « désélectionner », du bouton « 🔗 lier » et de `LinkOrderModal`.
+> - Retrait des handlers `handleRequestLink`, `handleLinkQuestions`, `handleUnlinkGroup`, `handleToggleGroup`, `handleSendToGenerator`.
+> - Retrait du système de regroupement en `Row` (`groupIntoRows`, `rowMembers`, `rowKey`, `type Row`) — la banque et l'éditeur A4 utilisent désormais une liste plate de `Question[]`.
+> - Colonne `linked_question_ids` supprimée de la table `exam_questions` (migration `add_question_parts_drop_linked_ids`, projet `hhkmrejjksjpfetwefju`) : toutes les liaisons existantes vidées avant suppression de la colonne.
+>
+> **Nouveau bouton « → » par question (envoi direct vers l'éditeur)** : toujours visible sur chaque ligne de la banque, appelle `handleSendOne(id)` → ajoute l'id à `draftIds` si absent. Plus de sélection préalable.
+>
+> **Questions multi-parties** : nouveau type `QuestionPart` (exporté par `QuestionEditor.tsx`) — `{ content, responseType, answer, choices, correctChoices, textLines }`. Chaque question peut avoir N parties supplémentaires, chacune avec ses propres champs indépendants. Colonne `parts jsonb NOT NULL DEFAULT '[]'` ajoutée à `exam_questions` (même migration). `rowToQuestion`/`questionToRow` dans `src/app/actions/examQuestions.ts` lisent/écrivent `parts`. Affichage dans la banque : badge « N parties » + dépliage inline. Affichage dans l'aperçu A4 (éditeur) : chaque partie est rendue comme un bloc de réponse séparé sous l'énoncé principal.
+>
+> **Rendu A4 simplifié** : `computePagination` et les chunks A4 utilisent `q.id` comme clé de ref (ex `qRefs.current[q.id]`) au lieu de `rowKey(row)`. La gouttière gauche et droite (poignée, pondération, numéro, ×) itèrent directement sur `{ gi, q }` sans Row intermédiaire.
 
 ## 18. BACKLOG TECHNIQUE (à traiter plus tard)
 

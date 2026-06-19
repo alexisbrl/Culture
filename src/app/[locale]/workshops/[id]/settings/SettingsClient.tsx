@@ -659,7 +659,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
       style={{
         fontFamily: "'Inter Tight', system-ui, sans-serif",
         color: '#2d2a24',
-        minHeight: '100vh',
+        minHeight: 'calc(100vh - 65px)',
         background: '#fcf9f2',
         display: 'flex',
         cursor: 'default',
@@ -677,7 +677,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           padding: '22px 16px',
           position: 'sticky',
           top: 0,
-          height: '100vh',
+          height: 'calc(100vh - 65px)',
           overflowY: 'auto',
           display: 'flex',
           flexDirection: 'column',

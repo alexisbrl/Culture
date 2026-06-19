@@ -31,7 +31,7 @@ export default function AvatarEditorPage() {
   const catDef = CATS.find(c => c.key === activeCat)!;
 
   return (
-    <div style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", background: '#fcf9f2', minHeight: '100vh', padding: '24px 40px 40px', color: '#2d2a24' }}>
+    <div style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", background: '#fcf9f2', minHeight: 'calc(100vh - 65px)', padding: '24px 40px 40px', color: '#2d2a24' }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&family=Caveat:wght@400;500;600&display=swap');`}</style>
 
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>

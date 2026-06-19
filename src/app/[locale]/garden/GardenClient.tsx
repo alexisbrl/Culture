@@ -404,7 +404,7 @@ export default function GardenClient({ locale, firstName }: Props) {
   const isLandAt = (k: CellKey) => isLand(state.tiles[k]);
 
   return (
-    <div className="relative w-full h-[calc(100vh-4rem)] overflow-hidden select-none">
+    <div className="relative w-full h-[calc(100vh-65px)] overflow-hidden select-none">
       <SceneStyles />
       <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, #cfe6e8 0%, #bcdbdf 55%, #a9ced6 100%)' }} />
 

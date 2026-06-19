@@ -2,7 +2,7 @@
 
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { revalidatePath } from 'next/cache';
-import type { Question } from '@/app/[locale]/workshops/[id]/tabs/QuestionEditor';
+import type { Question, QuestionPart } from '@/app/[locale]/workshops/[id]/tabs/QuestionEditor';
 import type { ExamConfig } from '@/app/[locale]/workshops/[id]/tabs/ExamenTab';
 
 export type ExamPool = { id: string; name: string; color: string };
@@ -23,6 +23,7 @@ export type GeneratedExam = {
 type QuestionRow = {
   id: string;
   workshop_id: string;
+  title: string;
   question_type: string;
   response_type: string;
   content: string;
@@ -31,17 +32,33 @@ type QuestionRow = {
   correct_choices: number[];
   shuffle_choices: boolean;
   pools: string[];
+  answer_optional: boolean;
   difficulty: { enabled: boolean; value: number };
   duration: { enabled: boolean; minutes: number; seconds: number };
-  linked_question_ids: string[];
+  parts: QuestionPart[];
   exam_ids: string[];
   text_lines: number;
   created_at: string;
 };
 
+function normalizePart(part: Partial<QuestionPart>): QuestionPart {
+  return {
+    content: part.content ?? '',
+    responseType: part.responseType ?? 'sans_reponse',
+    answer: part.answer ?? '',
+    choices: part.choices ?? [],
+    correctChoices: part.correctChoices ?? [],
+    textLines: part.textLines ?? 4,
+    answerOptional: part.answerOptional ?? false,
+    difficulty: part.difficulty ?? { enabled: false, value: 3 },
+    duration: part.duration ?? { enabled: false, minutes: 2, seconds: 0 },
+  };
+}
+
 function rowToQuestion(row: QuestionRow): Question {
   return {
     id: row.id,
+    title: row.title ?? '',
     questionType: row.question_type as Question['questionType'],
     responseType: row.response_type as Question['responseType'],
     content: row.content,
@@ -50,9 +67,10 @@ function rowToQuestion(row: QuestionRow): Question {
     correctChoices: row.correct_choices ?? [],
     shuffleChoices: row.shuffle_choices ?? false,
     pools: row.pools ?? [],
+    answerOptional: row.answer_optional ?? false,
     difficulty: row.difficulty ?? { enabled: false, value: 3 },
     duration: row.duration ?? { enabled: false, minutes: 2, seconds: 0 },
-    linkedQuestionIds: row.linked_question_ids ?? [],
+    parts: (row.parts ?? []).map(normalizePart),
     examIds: row.exam_ids ?? [],
     textLines: row.text_lines ?? 4,
     createdAt: row.created_at,
@@ -63,6 +81,7 @@ function questionToRow(workshopId: string, q: Question) {
   return {
     id: q.id,
     workshop_id: workshopId,
+    title: q.title ?? '',
     question_type: q.questionType,
     response_type: q.responseType,
     content: q.content,
@@ -71,9 +90,10 @@ function questionToRow(workshopId: string, q: Question) {
     correct_choices: q.correctChoices,
     shuffle_choices: q.shuffleChoices,
     pools: q.pools,
+    answer_optional: q.answerOptional,
     difficulty: q.difficulty,
     duration: q.duration,
-    linked_question_ids: q.linkedQuestionIds,
+    parts: q.parts ?? [],
     exam_ids: q.examIds,
     text_lines: q.textLines ?? 4,
     updated_at: new Date().toISOString(),

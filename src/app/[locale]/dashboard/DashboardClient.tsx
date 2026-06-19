@@ -230,7 +230,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
   }
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-[#eef6e2] via-[#e4efd4] to-[#d6e7cf] font-sans px-6 lg:px-10 py-8" style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", color: '#2d2a24' }}>
+    <div className="relative min-h-[calc(100vh-65px)] bg-gradient-to-b from-[#eef6e2] via-[#e4efd4] to-[#d6e7cf] font-sans px-6 lg:px-10 py-8" style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", color: '#2d2a24' }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&family=Caveat:wght@400;500;600&display=swap');`}</style>
 
       <div className="max-w-6xl mx-auto rounded-[20px] bg-[#fcf9f2]/92 backdrop-blur-xl border border-[#2d2a24]/[0.07] shadow-[0_40px_90px_rgba(45,42,36,0.16)] flex flex-col">
