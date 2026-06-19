@@ -30,7 +30,7 @@ export default function WorkshopNewClient({ locale }: { locale: string }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-[calc(100vh-65px)] bg-gray-50 flex flex-col">
       {/* Header */}
       <div className="bg-gradient-to-br from-slate-950 via-violet-950 to-indigo-950 text-white py-16">
         <div className="max-w-2xl mx-auto px-4">

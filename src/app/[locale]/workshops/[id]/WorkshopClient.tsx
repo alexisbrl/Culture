@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { QrCode } from 'lucide-react';
+import { QrCode, Settings } from 'lucide-react';
 import ShareQRModal from '@/components/ShareQRModal';
 import ProgrammeTab from './tabs/ProgrammeTab';
 import ExamenTab from './tabs/ExamenTab';
@@ -54,7 +54,7 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
   }, [locale, workshopId]);
 
   return (
-    <div style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", color: '#2d2a24', minHeight: '100vh', background: '#fcf9f2', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", color: '#2d2a24', minHeight: 'calc(100vh - 65px)', background: '#fcf9f2', display: 'flex', flexDirection: 'column' }}>
       {/* Google Fonts */}
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&family=Caveat:wght@400;500;600&display=swap');`}</style>
 
@@ -85,7 +85,7 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
               </button>
               {isOwner && (
                 <Link href={`/${locale}/workshops/${workshopId}/settings`} style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: '#5a564c', fontSize: 12.5, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <svg width="13" height="13" viewBox="0 0 14 14"><circle cx="7" cy="7" r="2.4" stroke="#5a564c" strokeWidth="1.3" fill="none"/><path d="M7 1.5v2M7 10.5v2M1.5 7h2M10.5 7h2M3 3l1.4 1.4M9.6 9.6L11 11M11 3L9.6 4.4M4.4 9.6L3 11" stroke="#5a564c" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                  <Settings size={13} color="#5a564c" strokeWidth={1.75} />
                   paramètres
                 </Link>
               )}

@@ -115,7 +115,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
 
       <div
         className="profile-root"
-        style={{ background: '#fcf9f2', minHeight: '100vh', padding: '28px 24px 48px' }}
+        style={{ background: '#fcf9f2', minHeight: 'calc(100vh - 65px)', padding: '28px 24px 48px' }}
       >
         {/* Breadcrumb */}
         <div

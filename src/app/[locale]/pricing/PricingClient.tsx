@@ -128,7 +128,7 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
     <>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Caveat:wght@400;600&display=swap');`}</style>
 
-      <div style={{ background: BG, minHeight: '100vh', fontFamily: "'Inter Tight', sans-serif", padding: '60px 20px 80px' }}>
+      <div style={{ background: BG, minHeight: 'calc(100vh - 65px)', fontFamily: "'Inter Tight', sans-serif", padding: '60px 20px 80px' }}>
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 48 }}>

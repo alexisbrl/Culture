@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
 import { usePathname } from 'next/navigation';
@@ -37,12 +38,7 @@ export default function Navbar() {
 
           {/* Logo */}
           <Link href={`/${locale}`} className="flex items-center gap-2 group">
-            <svg viewBox="0 0 22 22" className="w-7 h-7 group-hover:scale-105 transition-transform" aria-hidden>
-              <path d="M 11 20 L 11 11" stroke="#5a6b3e" strokeWidth="1.7" strokeLinecap="round" fill="none" />
-              <ellipse cx="11" cy="8.5" rx="6.5" ry="6" fill="#7a9968" />
-              <ellipse cx="8.8" cy="6.6" rx="3" ry="2.4" fill="#fff" opacity="0.28" />
-              <path d="M 11 14 q -4 -1 -5 -4" stroke="#5a6b3e" strokeWidth="1.2" strokeLinecap="round" fill="none" opacity="0.6" />
-            </svg>
+            <Image src="/logo-plant.png" alt="" width={28} height={28} className="w-7 h-7 group-hover:scale-105 transition-transform" />
             <span className="text-xl font-bold text-gray-900">Culture</span>
           </Link>
 

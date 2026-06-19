@@ -18,8 +18,21 @@ export type ResponseType =
   | 'matching'
   | 'ordre';
 
+export type QuestionPart = {
+  content: string;
+  responseType: ResponseType;
+  answer: string;
+  choices: string[];
+  correctChoices: number[];
+  textLines: number;
+  answerOptional: boolean;
+  difficulty: { enabled: boolean; value: number };
+  duration: { enabled: boolean; minutes: number; seconds: number };
+};
+
 export type Question = {
   id: string;
+  title: string;
   questionType: QuestionType;
   responseType: ResponseType;
   content: string;
@@ -28,9 +41,10 @@ export type Question = {
   correctChoices: number[];
   shuffleChoices: boolean;
   pools: string[];
+  answerOptional: boolean;
   difficulty: { enabled: boolean; value: number };
   duration: { enabled: boolean; minutes: number; seconds: number };
-  linkedQuestionIds: string[];
+  parts: QuestionPart[];
   examIds: string[];
   createdAt?: string;
   textLines?: number;
@@ -68,17 +82,19 @@ const RESPONSE_TYPE_V2: ResponseType[] = ['dessin', 'audio', 'fill_blank', 'matc
 export function emptyQuestion(): Question {
   return {
     id: 'q' + Date.now(),
+    title: '',
     questionType: 'textuel',
-    responseType: 'sans_reponse',
+    responseType: 'textuelle',
     content: '',
     answer: '',
     choices: [],
     correctChoices: [],
     shuffleChoices: false,
     pools: [],
+    answerOptional: false,
     difficulty: { enabled: false, value: 3 },
     duration: { enabled: false, minutes: 2, seconds: 0 },
-    linkedQuestionIds: [],
+    parts: [],
     examIds: [],
     textLines: 4,
   };
@@ -152,6 +168,49 @@ function TextField({ value, onChange, placeholder, multiline, rows = 3 }: { valu
     return <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows} style={style} />;
   }
   return <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={style} />;
+}
+
+function DifficultyDurationFields({
+  difficulty,
+  duration,
+  onDifficultyChange,
+  onDurationChange,
+}: {
+  difficulty: { enabled: boolean; value: number };
+  duration: { enabled: boolean; minutes: number; seconds: number };
+  onDifficultyChange: (v: { enabled: boolean; value: number }) => void;
+  onDurationChange: (v: { enabled: boolean; minutes: number; seconds: number }) => void;
+}) {
+  return (
+    <>
+      <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <FieldLabel hint="off par défaut — annote la difficulté de la question">Difficulté</FieldLabel>
+        <MiniSwitch value={difficulty.enabled} onChange={(v) => onDifficultyChange({ ...difficulty, enabled: v })} />
+      </div>
+      {difficulty.enabled && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: -4 }}>
+          <input type="range" min={1} max={5} value={difficulty.value} onChange={(e) => onDifficultyChange({ ...difficulty, value: Number(e.target.value) })} style={{ flex: 1, accentColor: '#a87a3a' }} />
+          <span style={{ fontSize: 12.5, color: '#2d2a24', fontVariantNumeric: 'tabular-nums', width: 32, textAlign: 'right' as const }}>{difficulty.value}/5</span>
+        </div>
+      )}
+      <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <FieldLabel hint="off par défaut — durée allouée, uniquement pour les examens projetés">Durée</FieldLabel>
+        <MiniSwitch value={duration.enabled} onChange={(v) => onDurationChange({ ...duration, enabled: v })} />
+      </div>
+      {duration.enabled && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: -4 }}>
+          <div style={{ width: 90 }}>
+            <input type="number" min={0} value={duration.minutes} onChange={(e) => onDurationChange({ ...duration, minutes: Math.max(0, Number(e.target.value) || 0) })} style={{ width: '100%', fontSize: 13, color: '#2d2a24', border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: '#fff', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+          </div>
+          <span style={{ fontSize: 12.5, color: '#7a766d' }}>minutes</span>
+          <div style={{ width: 90 }}>
+            <input type="number" min={0} max={59} value={duration.seconds} onChange={(e) => onDurationChange({ ...duration, seconds: Math.min(59, Math.max(0, Number(e.target.value) || 0)) })} style={{ width: '100%', fontSize: 13, color: '#2d2a24', border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: '#fff', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+          </div>
+          <span style={{ fontSize: 12.5, color: '#7a766d' }}>secondes</span>
+        </div>
+      )}
+    </>
+  );
 }
 
 function SectionDivider({ title }: { title: string }) {
@@ -411,6 +470,19 @@ export default function QuestionEditor({
     setCreatingPool(false);
   }
 
+  function emptyPart(): QuestionPart {
+    return { content: '', responseType: 'sans_reponse', answer: '', choices: [], correctChoices: [], textLines: 4, answerOptional: false, difficulty: { enabled: false, value: 3 }, duration: { enabled: false, minutes: 2, seconds: 0 } };
+  }
+
+  function patchPart(idx: number, p: Partial<QuestionPart>) {
+    const parts = draft.parts.map((pt, i) => i === idx ? { ...pt, ...p } : pt);
+    patch({ parts });
+  }
+
+  function removePart(idx: number) {
+    patch({ parts: draft.parts.filter((_, i) => i !== idx) });
+  }
+
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       {/* backdrop */}
@@ -429,6 +501,12 @@ export default function QuestionEditor({
 
         {/* body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px 24px' }}>
+          {/* titre */}
+          <div style={{ marginBottom: 18 }}>
+            <FieldLabel hint="optionnel — s'il est rempli, remplace l'énoncé comme titre affiché dans la banque de questions">Titre</FieldLabel>
+            <TextField value={draft.title} onChange={(v) => patch({ title: v })} placeholder="Titre court (optionnel)…" />
+          </div>
+
           {/* type de question */}
           <FieldLabel hint="Textuel par défaut · Visuel (image, graphique) et Audio disponibles">Type de question</FieldLabel>
           <Segmented value={draft.questionType} onChange={(v) => patch({ questionType: v })} options={(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((k) => ({ value: k, label: QUESTION_TYPE_LABELS[k], soon: QUESTION_TYPE_V2.includes(k) }))} />
@@ -497,25 +575,35 @@ export default function QuestionEditor({
 
           {hasAnswerField && (
             <div style={{ marginTop: draft.questionType === 'visuel' || draft.questionType === 'audio' ? 14 : 14 }}>
-              <FieldLabel hint={
-                draft.responseType === 'fill_blank' ? 'réponses attendues pour chaque trou, séparées par une virgule, dans l\'ordre' :
-                draft.responseType === 'dessin' ? 'description ou image de référence pour la correction (outil dessin à venir)' :
-                draft.responseType === 'audio' ? 'transcription ou éléments attendus dans la réponse audio' :
-                'utilisée pour la correction assistée par IA'
-              }>
-                {draft.responseType === 'fill_blank' ? 'Réponses attendues' : 'Réponse associée'}
-              </FieldLabel>
-              <TextField value={draft.answer} onChange={(v) => patch({ answer: v })} placeholder="Réponse de référence…" multiline rows={3} />
+              {!(draft.responseType === 'textuelle' && draft.answerOptional) && (
+                <>
+                  <FieldLabel hint={
+                    draft.responseType === 'fill_blank' ? 'réponses attendues pour chaque trou, séparées par une virgule, dans l\'ordre' :
+                    draft.responseType === 'dessin' ? 'description ou image de référence pour la correction (outil dessin à venir)' :
+                    draft.responseType === 'audio' ? 'transcription ou éléments attendus dans la réponse audio' :
+                    'utilisée pour la correction assistée par IA'
+                  }>
+                    {draft.responseType === 'fill_blank' ? 'Réponses attendues' : 'Réponse associée'}
+                  </FieldLabel>
+                  <TextField value={draft.answer} onChange={(v) => patch({ answer: v })} placeholder="Réponse de référence…" multiline rows={3} />
+                </>
+              )}
               {draft.responseType === 'textuelle' && (
-                <div style={{ marginTop: 14, maxWidth: 160 }}>
-                  <FieldLabel hint="nombre de lignes proposées pour la réponse dans l'aperçu de l'examen">Nombre de lignes</FieldLabel>
-                  <input
-                    type="number"
-                    min={1}
-                    value={draft.textLines ?? 4}
-                    onChange={(e) => patch({ textLines: Math.max(1, Number(e.target.value) || 1) })}
-                    style={{ width: '100%', fontSize: 13, color: '#2d2a24', border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: '#fff', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
-                  />
+                <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <FieldLabel hint="aucune réponse de référence n'est attendue (ex. dissertation)">Réponse libre</FieldLabel>
+                    <MiniSwitch value={draft.answerOptional} onChange={(v) => patch({ answerOptional: v })} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <FieldLabel hint="lignes affichées dans l'aperçu">Nombre de lignes</FieldLabel>
+                    <input
+                      type="number"
+                      min={1}
+                      value={draft.textLines ?? 4}
+                      onChange={(e) => patch({ textLines: Math.max(1, Number(e.target.value) || 1) })}
+                      style={{ width: 70, flexShrink: 0, fontSize: 13, color: '#2d2a24', border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: '#fff', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                    />
+                  </div>
                 </div>
               )}
             </div>
@@ -523,6 +611,81 @@ export default function QuestionEditor({
           {draft.responseType === 'sans_reponse' && (
             <div style={{ marginTop: 14, fontSize: 12, color: '#9a948a' }}>cette question n&apos;a pas de réponse associée — aucune correction ne sera proposée.</div>
           )}
+
+          <DifficultyDurationFields
+            difficulty={draft.difficulty}
+            duration={draft.duration}
+            onDifficultyChange={(difficulty) => patch({ difficulty })}
+            onDurationChange={(duration) => patch({ duration })}
+          />
+
+          {/* parties supplémentaires */}
+          <SectionDivider title="Parties supplémentaires" />
+          <div style={{ fontSize: 12, color: '#7a766d', marginBottom: 10 }}>
+            Une question peut avoir plusieurs parties indépendantes (énoncés et types de réponse distincts).
+          </div>
+          {draft.parts.map((part, idx) => {
+            const partChoiceBased = CHOICE_BASED.includes(part.responseType);
+            const partHasAnswer = !['sans_reponse', 'sondage'].includes(part.responseType) && !partChoiceBased;
+            return (
+              <div key={idx} style={{ marginBottom: 14, padding: '14px 16px', borderRadius: 12, border: '1px solid rgba(45,42,36,0.10)', background: 'rgba(255,255,255,0.55)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: '#5a564c' }}>Partie {idx + 2}</span>
+                  <button onClick={() => removePart(idx)} style={{ border: 'none', background: 'none', color: '#b85a4a', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 2px' }}>×</button>
+                </div>
+                <FieldLabel>Énoncé</FieldLabel>
+                <TextField value={part.content} onChange={(v) => patchPart(idx, { content: v })} placeholder="Énoncé de cette partie…" multiline rows={3} />
+                <div style={{ marginTop: 12 }}>
+                  <FieldLabel>Type de réponse</FieldLabel>
+                  <Segmented
+                    value={part.responseType}
+                    onChange={(v) => patchPart(idx, { responseType: v, choices: CHOICE_BASED.includes(v) ? (part.choices.length ? part.choices : ['', '']) : part.choices, correctChoices: [] })}
+                    options={RESPONSE_TYPE_ORDER.map((k) => ({ value: k, label: RESPONSE_TYPE_LABELS[k], soon: RESPONSE_TYPE_V2.includes(k) }))}
+                  />
+                </div>
+                {partChoiceBased && (
+                  <div style={{ marginTop: 12 }}>
+                    <FieldLabel>{part.responseType === 'matching' ? 'Paires à associer' : part.responseType === 'ordre' ? 'Éléments à ordonner' : 'Options de réponse'}</FieldLabel>
+                    <ChoiceListEditor responseType={part.responseType} choices={part.choices} correctChoices={part.correctChoices} onChange={(choices, correctChoices) => patchPart(idx, { choices, correctChoices })} />
+                  </div>
+                )}
+                {partHasAnswer && (
+                  <div style={{ marginTop: 12 }}>
+                    {!(part.responseType === 'textuelle' && part.answerOptional) && (
+                      <>
+                        <FieldLabel>Réponse associée</FieldLabel>
+                        <TextField value={part.answer} onChange={(v) => patchPart(idx, { answer: v })} placeholder="Réponse de référence…" multiline rows={2} />
+                      </>
+                    )}
+                    {part.responseType === 'textuelle' && (
+                      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <FieldLabel hint="aucune réponse de référence n'est attendue">Réponse libre</FieldLabel>
+                          <MiniSwitch value={part.answerOptional} onChange={(v) => patchPart(idx, { answerOptional: v })} />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                          <FieldLabel hint="lignes dans l'aperçu">Nombre de lignes</FieldLabel>
+                          <input type="number" min={1} value={part.textLines} onChange={(e) => patchPart(idx, { textLines: Math.max(1, Number(e.target.value) || 1) })} style={{ width: 70, flexShrink: 0, fontSize: 13, color: '#2d2a24', border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: '#fff', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <DifficultyDurationFields
+                  difficulty={part.difficulty}
+                  duration={part.duration}
+                  onDifficultyChange={(difficulty) => patchPart(idx, { difficulty })}
+                  onDurationChange={(duration) => patchPart(idx, { duration })}
+                />
+              </div>
+            );
+          })}
+          <button
+            onClick={() => patch({ parts: [...draft.parts, emptyPart()] })}
+            style={{ width: '100%', padding: '9px 14px', borderRadius: 10, border: '1px dashed rgba(45,42,36,0.18)', background: 'transparent', color: '#7a766d', fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 4 }}
+          >
+            + ajouter une partie
+          </button>
 
           {/* options avancées */}
           <SectionDivider title="Options par question" />
@@ -571,35 +734,6 @@ export default function QuestionEditor({
             )}
           </div>
 
-          {/* difficulté */}
-          <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <FieldLabel hint="off par défaut — annote la difficulté de la question">Difficulté</FieldLabel>
-            <MiniSwitch value={draft.difficulty.enabled} onChange={(v) => patch({ difficulty: { ...draft.difficulty, enabled: v } })} />
-          </div>
-          {draft.difficulty.enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: -4 }}>
-              <input type="range" min={1} max={5} value={draft.difficulty.value} onChange={(e) => patch({ difficulty: { ...draft.difficulty, value: Number(e.target.value) } })} style={{ flex: 1, accentColor: '#a87a3a' }} />
-              <span style={{ fontSize: 12.5, color: '#2d2a24', fontVariantNumeric: 'tabular-nums', width: 32, textAlign: 'right' as const }}>{draft.difficulty.value}/5</span>
-            </div>
-          )}
-
-          {/* durée */}
-          <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <FieldLabel hint="off par défaut — durée allouée, uniquement pour les examens projetés">Durée</FieldLabel>
-            <MiniSwitch value={draft.duration.enabled} onChange={(v) => patch({ duration: { ...draft.duration, enabled: v } })} />
-          </div>
-          {draft.duration.enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: -4 }}>
-              <div style={{ width: 90 }}>
-                <input type="number" min={0} value={draft.duration.minutes} onChange={(e) => patch({ duration: { ...draft.duration, minutes: Math.max(0, Number(e.target.value) || 0) } })} style={{ width: '100%', fontSize: 13, color: '#2d2a24', border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: '#fff', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
-              </div>
-              <span style={{ fontSize: 12.5, color: '#7a766d' }}>minutes</span>
-              <div style={{ width: 90 }}>
-                <input type="number" min={0} max={59} value={draft.duration.seconds} onChange={(e) => patch({ duration: { ...draft.duration, seconds: Math.min(59, Math.max(0, Number(e.target.value) || 0)) } })} style={{ width: '100%', fontSize: 13, color: '#2d2a24', border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: '#fff', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
-              </div>
-              <span style={{ fontSize: 12.5, color: '#7a766d' }}>secondes</span>
-            </div>
-          )}
         </div>
 
         {/* footer */}

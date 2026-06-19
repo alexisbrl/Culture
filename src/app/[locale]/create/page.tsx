@@ -17,7 +17,7 @@ export default function CreatePage() {
   const [vis, setVis] = useState<'private' | 'public'>('private');
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-[#fcf9f2] font-sans">
+    <div className="min-h-[calc(100vh-65px)] bg-[#fcf9f2] font-sans">
       <div className="max-w-5xl mx-auto px-6 py-8">
         {/* breadcrumb + header */}
         <div className="text-[11px] text-[#7a766d] mb-1">
