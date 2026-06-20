@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, Settings, Copy, Download, FileText, AlertTriangle } from 'lucide-react';
+import { Search, Settings, Settings2, Copy, Download, FileText, AlertTriangle, Check, SeparatorHorizontal, SendHorizontal, X, ArrowRight, Star, RefreshCw } from 'lucide-react';
 import QuestionEditor, { Question, ResponseType, RESPONSE_TYPE_LABELS, emptyQuestion } from './QuestionEditor';
 import { getExamBankData, saveQuestion, saveQuestions, createPool as createPoolAction, updatePool as updatePoolAction, deletePool as deletePoolAction, deleteQuestion as deleteQuestionAction, saveGeneratedExam, deleteGeneratedExam, getExamDraft, saveExamDraft } from '@/app/actions/examQuestions';
 
@@ -12,12 +12,18 @@ type Pool = { id: string; name: string; color: string };
 type Exam = { id: string; title: string; date: string; q: number; dur: string; avg: string; status: string; taken: number; questionIds?: string[]; config?: ExamConfig };
 
 // ---- aperçu de l'examen (config live) ----
-export type CandidateIdentity = { nom: boolean; prenom: boolean; tag: boolean; classe: boolean };
-export type ExamPresentation = { identity: CandidateIdentity; customFields: string[] };
+export type IdentitySide = 'left' | 'right' | 'hidden';
+export type CandidateIdentity = { nom: IdentitySide; prenom: IdentitySide; tag: IdentitySide; classe: IdentitySide; date: IdentitySide };
+export type CustomField = { id: string; label: string; side: IdentitySide };
+const DEFAULT_IDENTITY_ORDER: (keyof CandidateIdentity)[] = ['nom', 'prenom', 'tag', 'classe', 'date'];
+const IDENTITY_KEY_SET = new Set<string>(DEFAULT_IDENTITY_ORDER);
+const IDENTITY_LABELS: Record<keyof CandidateIdentity, string> = { nom: 'Nom', prenom: 'Prénom', tag: 'Tag - Culture', classe: 'Classe', date: 'Date' };
+export type ExamPresentation = { identity: CandidateIdentity; identityOrder: string[]; customFields: CustomField[] };
 export type ExamSection = { id: string; title: string; questionIds: string[] };
 export type QuestionWeight = { points: number; negative: { enabled: boolean; value: number }; eliminatory: boolean };
 export type ExamConfig = {
   title: string;
+  titleIncluded: boolean;
   durationMinutes: number;
   presentation: ExamPresentation;
   sections: ExamSection[];
@@ -57,8 +63,17 @@ const NO_ANSWER_ID = '__no_answer__';
 const A4_PAGE_HEIGHT = 1494; // ≈ ratio A4 (210×297mm) pour un bloc de 1056px de large
 const A4_ROW_GAP = 0; // les questions sont désormais collées (un seul bloc continu par section) — pas de marge entre lignes
 const A4_SECTION_HEADER_HEIGHT = 44; // hauteur approx. de la barre de titre de section (+ marge)
+const A4_TITLE_BLOCK_HEIGHT = 162; // hauteur approx. du titre d'examen centré en haut de la 1ère page (incl. ~1,5cm d'espace avant la 1ère partie)
+const A4_IDENTITY_ROW_HEIGHT = 24; // hauteur approx. d'une ligne d'identité candidat (nom/prénom/tag/classe/date)
 const A4_ROW_FALLBACK_HEIGHT = 396; // hauteur estimée avant la première mesure réelle
 const A4_BLOCK_WIDTH = 1056; // largeur du bloc question au format A4 dans l'aperçu
+const A4_MARGIN_PX = Math.round(A4_BLOCK_WIDTH / 21 * 1); // marge non imprimable de 1cm en haut et en bas de chaque page (1056px ≈ 21cm de large)
+const A4_PAGE_BREAK_HEIGHT = 56; // hauteur approx. du repère « saut de page » dans l'aperçu
+const PAGE_BREAK_PREFIX = 'pb';
+
+function isPageBreakId(id: string): boolean {
+  return id.startsWith(PAGE_BREAK_PREFIX);
+}
 
 const LABEL_COLORS = ['#9eb3b9', '#a890b8', '#7a9968', '#c89860', '#b85a4a', '#5f8a3f', '#a87a3a', '#9a948a', '#6b8ea8', '#c2603a'];
 
@@ -143,32 +158,46 @@ function hasNoAnswer(q: Question): boolean {
 }
 
 
+// une entrée aplatie est soit une vraie question, soit un repère « saut de page » (pseudo-question
+// déplaçable comme une question mais jamais affichée/imprimée dans l'examen final)
+type FlatEntry = { sectionIdx: number; kind: 'question'; q: Question } | { sectionIdx: number; kind: 'pagebreak'; id: string };
+
+function flatEntryId(entry: FlatEntry): string {
+  return entry.kind === 'pagebreak' ? entry.id : entry.q.id;
+}
+
 // calcule les sauts de page A4 : pour chaque indice (gi) dans la liste aplatie, indique si une nouvelle
 // page commence à cet indice, et si l'en-tête de section affiché à cet endroit est une « (suite) »
-// (saut au milieu d'une section). Un bloc de question n'est jamais coupé entre 2 pages.
+// (saut au milieu d'une section). Un bloc de question n'est jamais coupé entre 2 pages. Un repère
+// « saut de page » force toujours le passage à la page suivante juste après lui.
 type PaginationInfo = { pageStarts: Set<number>; continuationStarts: Set<number>; pageCount: number };
 
-function computePagination(flat: { sectionIdx: number; q: Question }[], rowHeights: Record<string, number>): PaginationInfo {
+function computePagination(flat: FlatEntry[], rowHeights: Record<string, number>, firstPageReservedHeight = 0): PaginationInfo {
   const pageStarts = new Set<number>();
   const continuationStarts = new Set<number>();
-  let used = 0;
+  const maxUsable = A4_PAGE_HEIGHT - A4_MARGIN_PX; // marge basse non imprimable réservée sur chaque page
+  let used = A4_MARGIN_PX + firstPageReservedHeight; // marge haute non imprimable réservée sur chaque page
   let curSection = -1;
+  let forceBreakNext = false;
   flat.forEach((entry, gi) => {
     let extra = 0;
     if (entry.sectionIdx !== curSection) {
       extra += A4_SECTION_HEADER_HEIGHT;
       curSection = entry.sectionIdx;
     }
-    const h = (rowHeights[entry.q.id] ?? A4_ROW_FALLBACK_HEIGHT) + A4_ROW_GAP;
+    const h = entry.kind === 'pagebreak'
+      ? (rowHeights[entry.id] ?? A4_PAGE_BREAK_HEIGHT)
+      : (rowHeights[entry.q.id] ?? A4_ROW_FALLBACK_HEIGHT) + A4_ROW_GAP;
     const total = extra + h;
-    if (gi > 0 && used + total > A4_PAGE_HEIGHT) {
+    if (gi > 0 && (forceBreakNext || used + total > maxUsable)) {
       pageStarts.add(gi);
-      used = 0;
+      used = A4_MARGIN_PX;
       if (extra === 0) {
         continuationStarts.add(gi);
         used += A4_SECTION_HEADER_HEIGHT;
       }
     }
+    forceBreakNext = entry.kind === 'pagebreak';
     used += total;
   });
   return { pageStarts, continuationStarts, pageCount: pageStarts.size + 1 };
@@ -176,6 +205,20 @@ function computePagination(flat: { sectionIdx: number; q: Question }[], rowHeigh
 
 function defaultWeight(): QuestionWeight {
   return { points: 1, negative: { enabled: false, value: 0 }, eliminatory: false };
+}
+
+// chaque partie supplémentaire d'une question a sa propre pondération indépendante, stockée sous une clé dérivée de l'id de la question
+function partWeightKey(questionId: string, partIdx: number): string {
+  return `${questionId}::part${partIdx}`;
+}
+
+function clearWeightingFor(weighting: Record<string, QuestionWeight>, id: string): Record<string, QuestionWeight> {
+  const next = { ...weighting };
+  delete next[id];
+  for (const key of Object.keys(next)) {
+    if (key.startsWith(`${id}::part`)) delete next[key];
+  }
+  return next;
 }
 
 // espace de réponse générique affiché dans l'aperçu A4 — proportionné/structuré selon le type de réponse
@@ -244,14 +287,79 @@ function renderAnswerSpace(q: Question) {
   }
 }
 
+// convertit l'ancien format booléen de identity (avant le drag and drop gauche/droite) vers IdentitySide
+function normalizeIdentitySide(value: unknown, fallback: IdentitySide): IdentitySide {
+  if (value === 'left' || value === 'right' || value === 'hidden') return value;
+  if (typeof value === 'boolean') return value ? fallback : 'hidden';
+  return fallback;
+}
+
+// complète les configs enregistrées avant l'ajout de titleIncluded / identity.date / du placement gauche-droite / des pilules personnalisées avec leurs valeurs par défaut
+function normalizeExamConfig(config: ExamConfig): ExamConfig {
+  const rawIdentity = config.presentation.identity as Partial<Record<keyof CandidateIdentity, unknown>>;
+  const rawCustomFields = config.presentation.customFields as unknown;
+  const customFields: CustomField[] = Array.isArray(rawCustomFields)
+    ? rawCustomFields.map((f, i) => {
+        if (typeof f === 'string') return { id: `cf-legacy-${i}`, label: f, side: 'hidden' as IdentitySide };
+        const obj = f as Partial<CustomField>;
+        return { id: obj.id ?? `cf-legacy-${i}`, label: obj.label ?? '', side: normalizeIdentitySide(obj.side, 'hidden') };
+      })
+    : [];
+  const validIds = [...DEFAULT_IDENTITY_ORDER, ...customFields.map(f => f.id)];
+  const saved = (config.presentation.identityOrder ?? []).filter((id): id is string => validIds.includes(id));
+  const missing = validIds.filter(id => !saved.includes(id));
+  return {
+    ...config,
+    titleIncluded: config.titleIncluded ?? true,
+    presentation: {
+      identity: {
+        nom: normalizeIdentitySide(rawIdentity.nom, 'left'),
+        prenom: normalizeIdentitySide(rawIdentity.prenom, 'left'),
+        tag: normalizeIdentitySide(rawIdentity.tag, 'left'),
+        classe: normalizeIdentitySide(rawIdentity.classe, 'left'),
+        date: normalizeIdentitySide(rawIdentity.date, 'right'),
+      },
+      customFields,
+      identityOrder: [...saved, ...missing],
+    },
+  };
+}
+
+function defaultPresentation(): ExamPresentation {
+  return { identity: { nom: 'left', prenom: 'left', tag: 'left', classe: 'hidden', date: 'right' }, identityOrder: [...DEFAULT_IDENTITY_ORDER], customFields: [] };
+}
+
 function defaultExamConfig(title?: string): ExamConfig {
   return {
     title: title ?? '',
+    titleIncluded: true,
     durationMinutes: 120,
-    presentation: { identity: { nom: true, prenom: true, tag: true, classe: false }, customFields: [] },
-    sections: [{ id: 'sec' + Date.now(), title: 'Section 1', questionIds: [] }],
+    presentation: defaultPresentation(),
+    sections: [{ id: 'sec' + Date.now(), title: 'Partie 1', questionIds: [] }],
     weighting: {},
   };
+}
+
+// favori de présentation — propre à l'utilisateur (navigateur), pas lié à un atelier en particulier ;
+// par défaut (avant toute sauvegarde) c'est la présentation par défaut elle-même.
+const FAVORITE_PRESENTATION_KEY = 'culture.examPresentationFavorite.v1';
+
+function getFavoritePresentation(): ExamPresentation {
+  if (typeof window === 'undefined') return defaultPresentation();
+  try {
+    const raw = window.localStorage.getItem(FAVORITE_PRESENTATION_KEY);
+    if (!raw) return defaultPresentation();
+    const parsed = JSON.parse(raw);
+    if (!parsed?.identity || !Array.isArray(parsed?.identityOrder)) return defaultPresentation();
+    return parsed as ExamPresentation;
+  } catch {
+    return defaultPresentation();
+  }
+}
+
+function saveFavoritePresentation(presentation: ExamPresentation) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(FAVORITE_PRESENTATION_KEY, JSON.stringify(presentation));
 }
 
 function formatDuration(minutes: number): string {
@@ -262,22 +370,26 @@ function formatDuration(minutes: number): string {
 }
 
 function configQuestionIds(config: ExamConfig): string[] {
-  return config.sections.flatMap(s => s.questionIds);
+  return config.sections.flatMap(s => s.questionIds).filter(id => !isPageBreakId(id));
 }
 
-// aplatit toutes les sections en une liste ordonnée de questions
-function flattenSections(sections: ExamSection[], allQuestions: Question[]): { sectionIdx: number; q: Question }[] {
-  const flat: { sectionIdx: number; q: Question }[] = [];
+// aplatit toutes les sections en une liste ordonnée de questions et de repères « saut de page »
+function flattenSections(sections: ExamSection[], allQuestions: Question[]): FlatEntry[] {
+  const flat: FlatEntry[] = [];
   sections.forEach((sec, sIdx) => {
     sec.questionIds.forEach(id => {
+      if (isPageBreakId(id)) {
+        flat.push({ sectionIdx: sIdx, kind: 'pagebreak', id });
+        return;
+      }
       const q = allQuestions.find(p => p.id === id);
-      if (q) flat.push({ sectionIdx: sIdx, q });
+      if (q) flat.push({ sectionIdx: sIdx, kind: 'question', q });
     });
   });
   return flat;
 }
 
-// déplace une question d'une position à une autre dans la liste aplatie,
+// déplace une question (ou un saut de page) d'une position à une autre dans la liste aplatie,
 // vers la section `targetSectionIdx`, puis reconstruit les questionIds de chaque section
 function moveSectionRow(sections: ExamSection[], allQuestions: Question[], fromFlatIdx: number, toFlatIdx: number, targetSectionIdx: number): ExamSection[] {
   if (fromFlatIdx === toFlatIdx) return sections;
@@ -291,10 +403,10 @@ function moveSectionRow(sections: ExamSection[], allQuestions: Question[], fromF
     if (i !== fromFlatIdx) insertAt++;
   }
   insertAt = Math.max(0, Math.min(withoutMoving.length, insertAt));
-  withoutMoving.splice(insertAt, 0, { sectionIdx: targetSectionIdx, q: moving.q });
+  withoutMoving.splice(insertAt, 0, { ...moving, sectionIdx: targetSectionIdx });
   const newSections = sections.map(s => ({ ...s, questionIds: [] as string[] }));
   withoutMoving.forEach(entry => {
-    newSections[entry.sectionIdx].questionIds.push(entry.q.id);
+    newSections[entry.sectionIdx].questionIds.push(flatEntryId(entry));
   });
   return newSections;
 }
@@ -304,7 +416,7 @@ function toggleQuestionInSections(sections: ExamSection[], id: string): ExamSect
   const included = sections.some(s => s.questionIds.includes(id));
   let next = sections.map(s => ({ ...s, questionIds: s.questionIds.filter(qid => qid !== id) }));
   if (!included) {
-    if (next.length === 0) next = [{ id: 'sec' + Date.now(), title: 'Section 1', questionIds: [] }];
+    if (next.length === 0) next = [{ id: 'sec' + Date.now(), title: 'Partie 1', questionIds: [] }];
     next[next.length - 1] = { ...next[next.length - 1], questionIds: [...next[next.length - 1].questionIds, id] };
   }
   return next;
@@ -317,6 +429,22 @@ function statusStyle(s: string) {
 function IconBtn({ children, title, onClick }: { children: React.ReactNode; title: string; onClick?: () => void }) {
   return (
     <button title={title} onClick={onClick} style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid rgba(45,42,36,0.12)', background: 'rgba(255,255,255,0.7)', color: '#5a564c', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>{children}</button>
+  );
+}
+
+// bouton « modifier la question » dans l'aperçu de l'éditeur d'examen — le cercle n'apparaît qu'au survol, pour indiquer que le bouton est cliquable
+function EditQuestionButton({ id, onOpenQuestion }: { id: string; onOpenQuestion: (id: string) => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={() => onOpenQuestion(id)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title="modifier la question"
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: hovered ? '1px solid rgba(45,42,36,0.14)' : '1px solid transparent', background: hovered ? 'rgba(45,42,36,0.045)' : 'transparent', color: hovered ? '#7a766d' : '#9a948a', cursor: 'pointer', padding: 0, flexShrink: 0, transition: 'background 0.12s, border-color 0.12s' }}
+    >
+      <Settings2 size={14} strokeWidth={1.85} />
+    </button>
   );
 }
 
@@ -406,7 +534,6 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
   onDuplicateQuestion: (q: Question) => void;
   onDeleteQuestion: (q: Question) => void;
 }) {
-  const [expandedParts, setExpandedParts] = useState<Set<string>>(new Set());
   const [filterQTypes, setFilterQTypes] = useState<string[]>([]);
   const [filterPools, setFilterPools] = useState<string[]>([]);
   const [filterTypes, setFilterTypes] = useState<ResponseType[]>([]);
@@ -590,38 +717,28 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
     }
   });
 
-  function toggleExpandParts(id: string) {
-    setExpandedParts(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
-
   function renderQuestionBody(q: Question) {
     const open = openId === q.id;
     const hasParts = q.parts.length > 0;
-    const partsExpanded = expandedParts.has(q.id);
     return (
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13.5, color: '#2d2a24', lineHeight: 1.45, marginBottom: 8 }}>
             {q.title.trim() || q.content || '(sans énoncé)'}
             {hasParts && (
-              <button onClick={() => toggleExpandParts(q.id)} style={{ display: 'inline', verticalAlign: 'middle', marginLeft: 8, fontSize: 10.5, padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(168,122,58,0.30)', background: 'rgba(232,184,108,0.12)', color: '#7a4d20', cursor: 'pointer', fontFamily: 'inherit' }}>
-                {q.parts.length + 1} parties {partsExpanded ? '▴' : '▾'}
-              </button>
+              <span style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: 8, fontSize: 10.5, padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(168,122,58,0.30)', background: 'rgba(232,184,108,0.12)', color: '#7a4d20' }}>
+                {q.parts.length + 1} parties
+              </span>
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <TypePill type={q.responseType} />
-            {q.difficulty.enabled && <Diff n={q.difficulty.value} />}
             {q.pools.map(pid => {
               const p = pools.find(pp => pp.id === pid);
               if (!p) return null;
               return <span key={pid} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 999, background: 'rgba(45,42,36,0.05)', color: '#5a564c' }}>#{p.name}</span>;
             })}
-            <button onClick={() => setOpenId(open ? null : q.id)} style={{ marginLeft: 'auto', fontSize: 11, color: '#a87a3a', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{open ? 'masquer la réponse ▴' : 'voir la réponse ▾'}</button>
+            <button onClick={() => setOpenId(open ? null : q.id)} style={{ marginLeft: 'auto', fontSize: 11, color: '#a87a3a', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{open ? 'masquer le détail ▴' : 'voir le détail ▾'}</button>
             <IconBtn title="modifier la question" onClick={() => onEditQuestion(q)}>
               <Settings size={13} strokeWidth={1.75} />
             </IconBtn>
@@ -632,9 +749,18 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
               <svg width="13" height="13" viewBox="0 0 14 14"><path d="M2.5 3.5h9M5.5 3.5V2.2a.7.7 0 0 1 .7-.7h1.6a.7.7 0 0 1 .7.7v1.3M3.5 3.5l.5 8.3a.8.8 0 0 0 .8.7h4.4a.8.8 0 0 0 .8-.7l.5-8.3" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </IconBtn>
           </div>
-          {open && <div style={{ marginTop: 10, padding: '10px 12px', background: 'rgba(232,216,168,0.22)', borderRadius: 8, fontSize: 12.5, color: '#3a352c', lineHeight: 1.5 }}><span style={{ fontWeight: 600, color: '#7a4d20' }}>réponse · </span>{answerSummary(q)}</div>}
-          {hasParts && partsExpanded && (
+          {open && (
             <div style={{ marginTop: 10, borderTop: '1px solid rgba(168,122,58,0.18)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(232,184,108,0.08)', border: '1px solid rgba(168,122,58,0.15)' }}>
+                <div style={{ fontSize: 11, color: '#a87a3a', marginBottom: 4 }}>Partie 1</div>
+                <div style={{ fontSize: 12.5, color: '#3a352c', marginBottom: 6 }}>{q.content || '(sans énoncé)'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                  <TypePill type={q.responseType} />
+                  {q.difficulty.enabled && <Diff n={q.difficulty.value} />}
+                  {q.duration.enabled && <span style={{ fontSize: 10.5, color: '#7a766d' }}>{q.duration.minutes}min {(q.duration.seconds ?? 0).toString().padStart(2, '0')}s</span>}
+                </div>
+                <div style={{ fontSize: 12, color: '#3a352c' }}><span style={{ fontWeight: 600, color: '#7a4d20' }}>réponse · </span>{answerSummary(q)}</div>
+              </div>
               {q.parts.map((part, i) => (
                 <div key={i} style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(232,184,108,0.08)', border: '1px solid rgba(168,122,58,0.15)' }}>
                   <div style={{ fontSize: 11, color: '#a87a3a', marginBottom: 4 }}>Partie {i + 2}</div>
@@ -642,7 +768,7 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
                     <TypePill type={part.responseType} />
                     {part.difficulty.enabled && <Diff n={part.difficulty.value} />}
-                    {part.duration.enabled && <span style={{ fontSize: 10.5, color: '#7a766d' }}>{part.duration.minutes}min {part.duration.seconds.toString().padStart(2, '0')}s</span>}
+                    {part.duration.enabled && <span style={{ fontSize: 10.5, color: '#7a766d' }}>{part.duration.minutes}min {(part.duration.seconds ?? 0).toString().padStart(2, '0')}s</span>}
                   </div>
                   <div style={{ fontSize: 12, color: '#3a352c' }}><span style={{ fontWeight: 600, color: '#7a4d20' }}>réponse · </span>{answerSummary(part)}</div>
                 </div>
@@ -650,7 +776,7 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
             </div>
           )}
         </div>
-        <button onClick={(e) => { e.stopPropagation(); onSendOne(q.id); }} title="envoyer vers l'éditeur d'examen" style={{ alignSelf: 'stretch', flexShrink: 0, marginRight: -14, marginTop: -12, marginBottom: -12, paddingLeft: 28, paddingRight: 28, borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderLeft: '1px solid rgba(45,42,36,0.10)', background: 'transparent', color: '#5a564c', cursor: 'pointer', fontFamily: 'inherit', fontSize: 30, fontWeight: 600, display: 'flex', alignItems: 'center' }}>→</button>
+        <button onClick={(e) => { e.stopPropagation(); onSendOne(q.id); }} title="envoyer vers l'éditeur d'examen" style={{ alignSelf: 'stretch', flexShrink: 0, marginRight: -14, marginTop: -12, marginBottom: -12, paddingLeft: 28, paddingRight: 28, borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderLeft: '1px solid rgba(45,42,36,0.10)', background: 'transparent', color: '#5a564c', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center' }}><SendHorizontal size={19} strokeWidth={2} /></button>
       </div>
     );
   }
@@ -964,13 +1090,36 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
   onClearEditor: () => void;
 }) {
   const [dragFlatIdx, setDragFlatIdx] = useState<number | null>(null);
+  const [hoveredRowKey, setHoveredRowKey] = useState<string | null>(null);
+  const [draggingIdentityKey, setDraggingIdentityKey] = useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = useState<number | null>(null);
   const [newFieldName, setNewFieldName] = useState('');
+  const [creatingCustomField, setCreatingCustomField] = useState(false);
   const [pendingRemoveSectionIdx, setPendingRemoveSectionIdx] = useState<number | null>(null);
   const [focusedSectionIdx, setFocusedSectionIdx] = useState<number | null>(null);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [confirmGenerateOpen, setConfirmGenerateOpen] = useState(false);
   const [pendingRemoveFromDraftId, setPendingRemoveFromDraftId] = useState<string | null>(null);
+  const [favoritePresentation, setFavoritePresentation] = useState<ExamPresentation>(defaultPresentation());
+  const [confirmApplyFavoriteOpen, setConfirmApplyFavoriteOpen] = useState(false);
+  const [confirmSaveFavoriteOpen, setConfirmSaveFavoriteOpen] = useState(false);
+
+  useEffect(() => {
+    setFavoritePresentation(getFavoritePresentation());
+  }, []);
+
+  useEffect(() => {
+    if (!draggingIdentityKey) return;
+    const clear = () => setDraggingIdentityKey(null);
+    window.addEventListener('dragend', clear);
+    window.addEventListener('drop', clear);
+    window.addEventListener('mouseup', clear);
+    return () => {
+      window.removeEventListener('dragend', clear);
+      window.removeEventListener('drop', clear);
+      window.removeEventListener('mouseup', clear);
+    };
+  }, [draggingIdentityKey]);
 
   const includedIds = configQuestionIds(config);
   const available = draftIds.map(id => questions.find(q => q.id === id)).filter((q): q is Question => !!q);
@@ -978,6 +1127,12 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
     const q = questions.find(p => p.id === id);
     return q && (hasNoAnswer(q) || !q.content.trim());
   }).length;
+  const totalPoints = includedIds.reduce((sum, id) => {
+    const q = questions.find(p => p.id === id);
+    const mainPoints = config.weighting[id]?.points ?? defaultWeight().points;
+    const partsPoints = q ? q.parts.reduce((s, _part, pi) => s + (config.weighting[partWeightKey(id, pi)]?.points ?? defaultWeight().points), 0) : 0;
+    return sum + mainPoints + partsPoints;
+  }, 0);
 
   function handleGenerateClick() {
     if (incompleteCount > 0) {
@@ -990,7 +1145,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
   const flat = flattenSections(config.sections, questions);
   let cursor = 0;
   const sectionRanges = config.sections.map(sec => {
-    const count = sec.questionIds.filter(id => questions.some(q => q.id === id)).length;
+    const count = sec.questionIds.filter(id => isPageBreakId(id) || questions.some(q => q.id === id)).length;
     const r = { start: cursor, end: cursor + count };
     cursor += count;
     return r;
@@ -1015,7 +1170,24 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
     }
     if (changed) setRowHeights(next);
   });
-  const { pageStarts, continuationStarts, pageCount } = computePagination(flat, rowHeights);
+  const titleBlockHeight = config.titleIncluded && config.title.trim() ? A4_TITLE_BLOCK_HEIGHT : 0;
+  const identity = config.presentation.identity;
+  const identityOrder = config.presentation.identityOrder;
+  function sideOfItem(id: string): IdentitySide {
+    if (IDENTITY_KEY_SET.has(id)) return identity[id as keyof CandidateIdentity];
+    return config.presentation.customFields.find(f => f.id === id)?.side ?? 'hidden';
+  }
+  function labelOfItem(id: string): string {
+    if (IDENTITY_KEY_SET.has(id)) return IDENTITY_LABELS[id as keyof CandidateIdentity];
+    return config.presentation.customFields.find(f => f.id === id)?.label ?? '';
+  }
+  const identityLeftKeys = identityOrder.filter(id => sideOfItem(id) === 'left');
+  const identityRightKeys = identityOrder.filter(id => sideOfItem(id) === 'right');
+  const identityBlockHeight = (identityLeftKeys.length > 0 || identityRightKeys.length > 0)
+    ? A4_IDENTITY_ROW_HEIGHT * Math.max(identityLeftKeys.length, identityRightKeys.length, 1) + 24
+    : 0;
+  const headerBlockHeight = rowHeights['__page1_header__'] ?? (titleBlockHeight + identityBlockHeight);
+  const { pageStarts, pageCount } = computePagination(flat, rowHeights, headerBlockHeight);
   function pageNumberOf(gi: number): number {
     let n = 1;
     pageStarts.forEach(p => { if (p <= gi) n++; });
@@ -1025,11 +1197,20 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
   function patchConfig(patch: Partial<ExamConfig>) {
     onConfigChange({ ...config, ...patch });
   }
+  function applyFavoritePresentation() {
+    patchConfig({ presentation: favoritePresentation });
+    setConfirmApplyFavoriteOpen(false);
+  }
+  function saveFavoriteFromCurrent() {
+    saveFavoritePresentation(config.presentation);
+    setFavoritePresentation(config.presentation);
+    setConfirmSaveFavoriteOpen(false);
+  }
   function updateSection(idx: number, patch: Partial<ExamSection>) {
     patchConfig({ sections: config.sections.map((s, i) => i === idx ? { ...s, ...patch } : s) });
   }
   function addSection() {
-    patchConfig({ sections: [...config.sections, { id: 'sec' + Date.now(), title: `Section ${config.sections.length + 1}`, questionIds: [] }] });
+    patchConfig({ sections: [...config.sections, { id: 'sec' + Date.now(), title: `Partie ${config.sections.length + 1}`, questionIds: [] }] });
   }
   function removeSection(idx: number) {
     if (config.sections.length <= 1) return;
@@ -1057,17 +1238,44 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
     setDragFlatIdx(null);
     setDropIndicator(null);
   }
-  function toggleIdentity(key: keyof CandidateIdentity) {
-    patchConfig({ presentation: { ...config.presentation, identity: { ...config.presentation.identity, [key]: !config.presentation.identity[key] } } });
+  function addPageBreak() {
+    const id = PAGE_BREAK_PREFIX + Date.now();
+    let next = config.sections.map(s => ({ ...s }));
+    if (next.length === 0) next = [{ id: 'sec' + Date.now(), title: 'Partie 1', questionIds: [] }];
+    next[next.length - 1] = { ...next[next.length - 1], questionIds: [...next[next.length - 1].questionIds, id] };
+    patchConfig({ sections: next });
+  }
+  function removePageBreak(id: string) {
+    patchConfig({ sections: config.sections.map(s => ({ ...s, questionIds: s.questionIds.filter(qid => qid !== id) })) });
+  }
+  // déplace l'item (champ d'identité fixe ou pilule personnalisée) vers `side`, en l'insérant juste avant `beforeId` dans l'ordre global (ou en fin de liste si absent)
+  function moveIdentity(id: string, side: IdentitySide, beforeId?: string) {
+    if (beforeId === id) return;
+    const withoutId = config.presentation.identityOrder.filter(k => k !== id);
+    let insertAt = withoutId.length;
+    if (beforeId && beforeId !== id) {
+      const idx = withoutId.indexOf(beforeId);
+      if (idx !== -1) insertAt = idx;
+    }
+    const identityOrder = [...withoutId.slice(0, insertAt), id, ...withoutId.slice(insertAt)];
+    const sameOrder = identityOrder.length === config.presentation.identityOrder.length && identityOrder.every((k, i) => k === config.presentation.identityOrder[i]);
+    if (sameOrder && sideOfItem(id) === side) return;
+    if (IDENTITY_KEY_SET.has(id)) {
+      patchConfig({ presentation: { ...config.presentation, identity: { ...config.presentation.identity, [id]: side }, identityOrder } });
+    } else {
+      patchConfig({ presentation: { ...config.presentation, customFields: config.presentation.customFields.map(f => f.id === id ? { ...f, side } : f), identityOrder } });
+    }
   }
   function addCustomField() {
-    const name = newFieldName.trim();
-    if (!name) return;
-    patchConfig({ presentation: { ...config.presentation, customFields: [...config.presentation.customFields, name] } });
+    const label = newFieldName.trim();
+    if (!label) return;
+    const id = 'cf' + Date.now();
+    patchConfig({ presentation: { ...config.presentation, customFields: [...config.presentation.customFields, { id, label, side: 'hidden' }], identityOrder: [...config.presentation.identityOrder, id] } });
     setNewFieldName('');
+    setCreatingCustomField(false);
   }
-  function removeCustomField(name: string) {
-    patchConfig({ presentation: { ...config.presentation, customFields: config.presentation.customFields.filter(f => f !== name) } });
+  function removeCustomField(id: string) {
+    patchConfig({ presentation: { ...config.presentation, customFields: config.presentation.customFields.filter(f => f.id !== id), identityOrder: config.presentation.identityOrder.filter(k => k !== id) } });
   }
   function toggleAvailable(id: string) {
     patchConfig({ sections: toggleQuestionInSections(config.sections, id) });
@@ -1085,8 +1293,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
     if (!pendingRemoveFromDraftId) return;
     const id = pendingRemoveFromDraftId;
     const sections = config.sections.map(sec => ({ ...sec, questionIds: sec.questionIds.filter(qid => qid !== id) }));
-    const weighting = { ...config.weighting };
-    delete weighting[id];
+    const weighting = clearWeightingFor(config.weighting, id);
     onConfigChange({ ...config, sections, weighting });
     onRemoveFromDraft([id]);
     setPendingRemoveFromDraftId(null);
@@ -1105,16 +1312,9 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
       </div>
     );
   }
-  function continuationLabel(title: string) {
-    return (
-      <div style={{ fontSize: 12, fontWeight: 600, color: '#a87a3a', marginBottom: 8 }}>
-        {title} <span style={{ fontWeight: 400, color: '#bdb8ad' }}>(suite)</span>
-      </div>
-    );
-  }
 
   return (
-    <div style={{ padding: '20px 24px 24px', height: '100%', boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column', background: '#fbf7ef' }}>
+    <div style={{ padding: '20px 12px 24px 24px', height: '100%', boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column', background: '#fbf7ef' }}>
       <div style={{ marginBottom: 14, flexShrink: 0, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div>
           <div style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24' }}>Éditeur d&apos;examen</div>
@@ -1146,7 +1346,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                   <button onClick={() => onOpenQuestion(q.id)} title="question incomplète - cliquer pour compléter" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 17, height: 17, borderRadius: '50%', border: '1px solid rgba(184,90,74,0.35)', background: 'rgba(184,90,74,0.10)', color: '#b85a4a', cursor: 'pointer', padding: 0, flexShrink: 0, alignSelf: 'flex-start' }}><AlertTriangle size={10} strokeWidth={2} /></button>
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, color: '#3a352c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.content || '(sans énoncé)'}</div>
+                  <div style={{ fontSize: 12, color: '#3a352c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.title.trim() || q.content || '(sans énoncé)'}</div>
                   {q.parts.length > 0 && <span style={{ fontSize: 10.5, color: '#7a4d20' }}>{q.parts.length + 1} parties</span>}
                 </div>
                 <span onClick={() => requestRemoveFromDraft(q.id)} title="retirer de la liste" style={{ fontSize: 14, color: '#b85a4a', cursor: 'pointer', flexShrink: 0 }}>×</span>
@@ -1155,184 +1355,411 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
           })}
         </div>
 
-        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', minHeight: 0 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: '#7a766d', marginBottom: 6 }}>intitulé</div>
-          <input value={config.title} onChange={e => patchConfig({ title: e.target.value })} style={{ width: '100%', fontSize: 15, fontWeight: 500, color: '#2d2a24', border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '10px 12px', marginBottom: 14, background: '#fff', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
+        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', minHeight: 0, paddingRight: 24, boxSizing: 'border-box' as const }}>
+          <div style={{ background: 'rgba(45,42,36,0.03)', borderRadius: 10, padding: 12, marginBottom: 16 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: '#7a766d', marginBottom: 8 }}>paramètres</div>
 
-          <div style={{ background: 'rgba(45,42,36,0.03)', borderRadius: 10, padding: 12, marginBottom: 14 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: '#7a766d', marginBottom: 8 }}>présentation</div>
-            <div style={{ fontSize: 11, color: '#5a564c', marginBottom: 6 }}>identité du candidat demandée</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 6, marginBottom: 8 }}>
-              {([['nom', 'nom'], ['prenom', 'prénom'], ['tag', 'tag'], ['classe', 'classe']] as [keyof CandidateIdentity, string][]).map(([key, label]) => {
-                const active = config.presentation.identity[key];
-                return (
-                  <button key={key} type="button" onClick={() => toggleIdentity(key)} style={{ fontSize: 11.5, padding: '5px 11px', borderRadius: 999, border: active ? '1px solid rgba(79,107,64,0.35)' : '1px solid rgba(45,42,36,0.14)', background: active ? 'rgba(79,107,64,0.14)' : 'transparent', color: active ? '#4f6b40' : '#9a948a', cursor: 'pointer', fontFamily: 'inherit' }}>{label}</button>
-                );
-              })}
-              {config.presentation.customFields.map(f => (
-                <span key={f} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, padding: '5px 6px 5px 11px', borderRadius: 999, border: '1px solid rgba(79,107,64,0.35)', background: 'rgba(79,107,64,0.14)', color: '#4f6b40' }}>
-                  {f}
-                  <button onClick={() => removeCustomField(f)} style={{ border: 'none', background: 'none', color: '#4f6b40', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: 0.7 }}>×</button>
-                </span>
+            <div style={{ fontSize: 11, color: '#5a564c', marginBottom: 6 }}>intitulé</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <input value={config.title} onChange={e => patchConfig({ title: e.target.value })} style={{ flex: 1, fontSize: 15, fontWeight: 500, color: '#2d2a24', border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '10px 12px', background: '#fff', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
+              <button
+                type="button"
+                onClick={() => patchConfig({ titleIncluded: !config.titleIncluded })}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '9px 14px', borderRadius: 999, border: config.titleIncluded ? '1px solid rgba(79,107,64,0.35)' : '1px solid rgba(45,42,36,0.14)', background: config.titleIncluded ? 'rgba(79,107,64,0.14)' : 'transparent', color: config.titleIncluded ? '#4f6b40' : '#9a948a', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' as const }}
+              >
+                {config.titleIncluded && <Check size={13} strokeWidth={2.5} />}
+                afficher
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ fontSize: 11, color: '#5a564c' }}>présentation</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => setConfirmApplyFavoriteOpen(true)}
+                  title="appliquer la présentation favorite"
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '5px 10px', borderRadius: 999, border: '1px solid rgba(168,122,58,0.30)', background: 'rgba(232,184,108,0.14)', color: '#7a4d20', cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  <Star size={11.5} strokeWidth={2} fill="#a87a3a" color="#a87a3a" />
+                  favori
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmSaveFavoriteOpen(true)}
+                  title="remplacer le favori par la présentation actuelle"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: '1px solid rgba(45,42,36,0.12)', background: 'transparent', color: '#7a766d', cursor: 'pointer', padding: 0 }}
+                >
+                  <RefreshCw size={12} strokeWidth={2} />
+                </button>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              {(['left', 'right'] as IdentitySide[]).map(side => (
+                <div
+                  key={side}
+                  onDragOver={e => { e.preventDefault(); if (draggingIdentityKey && sideOfItem(draggingIdentityKey) === side) moveIdentity(draggingIdentityKey, side); }}
+                  onDrop={e => { e.preventDefault(); if (draggingIdentityKey) moveIdentity(draggingIdentityKey, side); }}
+                  style={{ flex: 1, minHeight: 44, border: '1px dashed rgba(45,42,36,0.18)', borderRadius: 9, padding: 8, display: 'flex', flexWrap: 'wrap' as const, alignContent: 'flex-start' as const, gap: 6 }}
+                >
+                  <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em', width: '100%' }}>{side === 'left' ? 'à gauche' : 'à droite'}</div>
+                  {identityOrder.filter(id => sideOfItem(id) === side).map(id => {
+                    const removable = !IDENTITY_KEY_SET.has(id);
+                    return (
+                      <span
+                        key={id}
+                        draggable
+                        onDragStart={() => setDraggingIdentityKey(id)}
+                        onDragEnd={() => setDraggingIdentityKey(null)}
+                        onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (draggingIdentityKey && draggingIdentityKey !== id && sideOfItem(draggingIdentityKey) === side) moveIdentity(draggingIdentityKey, side, id); }}
+                        onDrop={e => { e.preventDefault(); e.stopPropagation(); if (draggingIdentityKey && draggingIdentityKey !== id) moveIdentity(draggingIdentityKey, side, id); }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, padding: removable ? '5px 6px 5px 11px' : '5px 11px', borderRadius: 999, border: '1px solid rgba(79,107,64,0.35)', background: 'rgba(79,107,64,0.14)', color: '#4f6b40', cursor: 'grab', opacity: draggingIdentityKey === id ? 0.4 : 1 }}
+                      >
+                        <span style={{ color: '#9a948a', fontSize: 11 }}>⠿</span>
+                        {labelOfItem(id)}
+                        {removable && (
+                          <button onClick={() => removeCustomField(id)} style={{ border: 'none', background: 'none', color: '#4f6b40', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: 0.7 }}>×</button>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
               ))}
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input value={newFieldName} onChange={e => setNewFieldName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomField(); } }} placeholder="champ personnalisé…" style={{ flex: 1, fontSize: 11.5, padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(45,42,36,0.12)', background: '#fff', fontFamily: 'inherit', outline: 'none' }} />
-              <button type="button" onClick={addCustomField} style={{ fontSize: 11.5, padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', cursor: 'pointer', fontFamily: 'inherit' }}>+ ajouter</button>
+            <div
+              onDragOver={e => { e.preventDefault(); if (draggingIdentityKey && sideOfItem(draggingIdentityKey) === 'hidden') moveIdentity(draggingIdentityKey, 'hidden'); }}
+              onDrop={e => { e.preventDefault(); if (draggingIdentityKey) moveIdentity(draggingIdentityKey, 'hidden'); }}
+              style={{ minHeight: 36, border: '1px dashed rgba(45,42,36,0.14)', borderRadius: 9, padding: 8, display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 6, marginBottom: 14 }}
+            >
+              <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em', width: '100%' }}>non affiché</div>
+              {identityOrder.filter(id => sideOfItem(id) === 'hidden').map(id => {
+                const removable = !IDENTITY_KEY_SET.has(id);
+                return (
+                  <span
+                    key={id}
+                    draggable
+                    onDragStart={() => setDraggingIdentityKey(id)}
+                    onDragEnd={() => setDraggingIdentityKey(null)}
+                    onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (draggingIdentityKey && draggingIdentityKey !== id && sideOfItem(draggingIdentityKey) === 'hidden') moveIdentity(draggingIdentityKey, 'hidden', id); }}
+                    onDrop={e => { e.preventDefault(); e.stopPropagation(); if (draggingIdentityKey && draggingIdentityKey !== id) moveIdentity(draggingIdentityKey, 'hidden', id); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, padding: removable ? '5px 6px 5px 11px' : '5px 11px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#9a948a', cursor: 'grab', opacity: draggingIdentityKey === id ? 0.4 : 1 }}
+                  >
+                    <span style={{ color: '#9a948a', fontSize: 11 }}>⠿</span>
+                    {labelOfItem(id)}
+                    {removable && (
+                      <button onClick={() => removeCustomField(id)} style={{ border: 'none', background: 'none', color: '#9a948a', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: 0.7 }}>×</button>
+                    )}
+                  </span>
+                );
+              })}
+              {creatingCustomField ? (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input
+                    autoFocus
+                    value={newFieldName}
+                    onChange={e => setNewFieldName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomField(); } if (e.key === 'Escape') { setCreatingCustomField(false); setNewFieldName(''); } }}
+                    placeholder="nom de la pilule…"
+                    style={{ fontSize: 11.5, padding: '5px 9px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.18)', background: '#fff', fontFamily: 'inherit', outline: 'none', width: 140 }}
+                  />
+                  <button type="button" onClick={addCustomField} style={{ fontSize: 11.5, padding: '5px 10px', borderRadius: 999, border: 'none', background: '#4f6b40', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>ajouter</button>
+                  <button type="button" onClick={() => { setCreatingCustomField(false); setNewFieldName(''); }} style={{ fontSize: 11.5, padding: '5px 8px', borderRadius: 999, border: 'none', background: 'none', color: '#9a948a', cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
+                </span>
+              ) : (
+                <button type="button" onClick={() => setCreatingCustomField(true)} style={{ fontSize: 11.5, padding: '5px 11px', borderRadius: 999, border: '1px dashed rgba(45,42,36,0.25)', background: 'transparent', color: '#5a564c', cursor: 'pointer', fontFamily: 'inherit' }}>+ pilule personnalisée</button>
+              )}
             </div>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
-            <div style={{ background: 'rgba(45,42,36,0.04)', borderRadius: 9, padding: '10px 12px' }}>
-              <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>questions</div>
-              <div style={{ fontSize: 14, color: '#2d2a24', fontWeight: 500, marginTop: 1 }}>{includedIds.length}</div>
-            </div>
-            <div style={{ background: 'rgba(45,42,36,0.04)', borderRadius: 9, padding: '10px 12px' }}>
-              <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>sections</div>
-              <div style={{ fontSize: 14, color: '#2d2a24', fontWeight: 500, marginTop: 1 }}>{config.sections.length}</div>
-            </div>
-            <div style={{ background: 'rgba(45,42,36,0.04)', borderRadius: 9, padding: '10px 12px' }}>
-              <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>pages</div>
-              <div style={{ fontSize: 14, color: '#2d2a24', fontWeight: 500, marginTop: 1 }}>{pageCount}</div>
-            </div>
-            <div style={{ background: 'rgba(45,42,36,0.04)', borderRadius: 9, padding: '10px 12px' }}>
-              <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>durée</div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 1 }}>
-                <input type="number" min={5} step={5} value={config.durationMinutes} onChange={e => patchConfig({ durationMinutes: Math.max(0, Number(e.target.value) || 0) })} style={{ width: 50, fontSize: 14, color: '#2d2a24', fontWeight: 500, border: 'none', background: 'transparent', fontFamily: 'inherit', padding: 0, outline: 'none' }} />
-                <span style={{ fontSize: 11, color: '#9a948a' }}>min · {formatDuration(config.durationMinutes)}</span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+              <div style={{ background: 'rgba(45,42,36,0.04)', borderRadius: 9, padding: '10px 12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>parties</div>
+                  <button type="button" onClick={addSection} style={{ fontSize: 13, fontWeight: 500, color: '#4f6b40', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>+ partie</button>
+                </div>
+                <div style={{ fontSize: 14, color: '#2d2a24', fontWeight: 500, marginTop: 1 }}>{config.sections.length}</div>
+              </div>
+              <div style={{ background: 'rgba(45,42,36,0.04)', borderRadius: 9, padding: '10px 12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>questions</div>
+                  <button type="button" onClick={addPageBreak} title="ajouter un saut de page" style={{ fontSize: 13, fontWeight: 500, color: '#4f6b40', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>+ saut de page</button>
+                </div>
+                <div style={{ fontSize: 14, color: '#2d2a24', fontWeight: 500, marginTop: 1 }}>{includedIds.length}</div>
+              </div>
+              <div style={{ background: 'rgba(45,42,36,0.04)', borderRadius: 9, padding: '10px 12px' }}>
+                <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>barème</div>
+                <div style={{ fontSize: 14, color: '#2d2a24', fontWeight: 500, marginTop: 1 }}>{totalPoints} pt{totalPoints === 1 ? '' : 's'}</div>
+              </div>
+              <div style={{ background: 'rgba(45,42,36,0.04)', borderRadius: 9, padding: '10px 12px' }}>
+                <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>durée</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 1 }}>
+                  <input type="number" min={5} step={5} value={config.durationMinutes} onChange={e => patchConfig({ durationMinutes: Math.max(0, Number(e.target.value) || 0) })} style={{ width: 50, fontSize: 14, color: '#2d2a24', fontWeight: 500, border: 'none', background: 'transparent', fontFamily: 'inherit', padding: 0, outline: 'none' }} />
+                  <span style={{ fontSize: 11, color: '#9a948a' }}>min · {formatDuration(config.durationMinutes)}</span>
+                </div>
               </div>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: '#7a766d' }}>déroulé de l&apos;examen</div>
-            <button type="button" onClick={addSection} style={{ fontSize: 11, color: '#4f6b40', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>+ section</button>
           </div>
 
-          {config.sections.map((section, sIdx) => {
-            const range = sectionRanges[sIdx];
-            const rowsInSection = flat.slice(range.start, range.end);
-            return (
-              <div key={section.id} style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <div style={{ flex: 1, position: 'relative' as const }}>
-                    <input
-                      value={section.title}
-                      onChange={e => updateSection(sIdx, { title: e.target.value })}
-                      onFocus={() => setFocusedSectionIdx(sIdx)}
-                      onBlur={() => setFocusedSectionIdx(null)}
-                      style={{ width: '100%', fontSize: 12.5, fontWeight: 600, color: '#7a4d20', background: focusedSectionIdx === sIdx ? 'rgba(168,122,58,0.08)' : 'transparent', border: focusedSectionIdx === sIdx ? '1px solid rgba(168,122,58,0.20)' : '1px solid transparent', borderRadius: 7, padding: '6px 28px 6px 10px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const }}
-                    />
-                    <span style={{ position: 'absolute' as const, right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'rgba(168,122,58,0.45)', pointerEvents: 'none' as const }}>✎</span>
-                  </div>
-                  {config.sections.length > 1 && (
-                    <button type="button" onClick={() => removeSection(sIdx)} title="supprimer la section" style={{ fontSize: 13, color: '#b85a4a', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>×</button>
-                  )}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {rowsInSection.length === 0 && (
-                    <div
-                      onDragOver={e => { e.preventDefault(); if (dragFlatIdx !== null) setDropIndicator(range.start); }}
-                      onDrop={e => { e.preventDefault(); handleDrop(range.start, sIdx); }}
-                      style={{ fontSize: 11.5, color: '#bdb8ad', padding: '14px', textAlign: 'center' as const, border: '1px dashed rgba(45,42,36,0.12)', borderRadius: 9, background: dropIndicator === range.start && dragFlatIdx !== null ? 'rgba(168,122,58,0.08)' : 'transparent' }}
-                    >
-                      section vide — glisse une question ici
-                    </div>
-                  )}
-                  {(() => {
-                    type FlatQ = { gi: number; localIdx: number; subStart: number; q: Question };
-                    let subCursor = 1;
-                    const subStarts = rowsInSection.map(entry => {
-                      const start = subCursor;
-                      subCursor += 1 + entry.q.parts.length;
-                      return start;
-                    });
-                    const chunks: FlatQ[][] = [];
-                    let current: FlatQ[] = [];
-                    rowsInSection.forEach((entry, localIdx) => {
-                      const gi = range.start + localIdx;
-                      if (localIdx > 0 && pageStarts.has(gi)) {
-                        chunks.push(current);
-                        current = [];
-                      }
-                      current.push({ gi, localIdx, subStart: subStarts[localIdx], q: entry.q });
-                    });
-                    if (current.length > 0) chunks.push(current);
-                    const incompleteIcon = (id: string) => (
-                      <button onClick={() => onOpenQuestion(id)} title="question incomplète - cliquer pour compléter" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: '1px solid rgba(184,90,74,0.35)', background: 'rgba(184,90,74,0.10)', color: '#b85a4a', cursor: 'pointer', padding: 0, flexShrink: 0 }}><AlertTriangle size={13} strokeWidth={2} /></button>
-                    );
-                    return chunks.map((chunk, chunkIdx) => (
-                      <div key={chunkIdx}>
-                        {chunk[0].gi === 0 && pageCount > 1 && pageLabel(1)}
-                        {pageStarts.has(chunk[0].gi) && pageBreakSeparator(chunk[0].gi)}
-                        {continuationStarts.has(chunk[0].gi) && continuationLabel(section.title)}
-                        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', justifyContent: 'center' }}>
-                          <div style={{ width: 26, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-                            {chunk.map(({ gi, q }) => {
-                              const rh = rowHeights[q.id];
-                              const incomplete = hasNoAnswer(q);
-                              return (
-                                <div key={q.id} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, paddingTop: 20, boxSizing: 'border-box' as const, opacity: dragFlatIdx === gi ? 0.4 : 1 }}>
-                                  <span draggable onDragStart={() => setDragFlatIdx(gi)} onDragEnd={() => { setDragFlatIdx(null); setDropIndicator(null); }} title="glisser pour réorganiser" style={{ cursor: 'grab', color: '#c8c2b6', fontSize: 13, lineHeight: 1, userSelect: 'none' as const }}>⠿</span>
-                                  {incomplete && incompleteIcon(q.id)}
-                                </div>
-                              );
-                            })}
-                          </div>
+          {(() => {
+            type Row =
+              | { kind: 'header'; key: string; sectionIdx: number }
+              | { kind: 'empty'; key: string; sectionIdx: number }
+              | { kind: 'pagebreak'; key: string; gi: number; sectionIdx: number; id: string }
+              | { kind: 'question'; key: string; gi: number; sectionIdx: number; subStart: number; q: Question };
 
-                          <div style={{ width: A4_BLOCK_WIDTH, flexShrink: 0, background: '#fff', border: '1px solid rgba(45,42,36,0.08)', borderRadius: 4, boxShadow: '0 2px 14px rgba(45,42,36,0.06)', overflow: 'hidden' }}>
-                            {chunk.map(({ gi, subStart, q }, idxInChunk) => {
-                              const showLineBefore = dragFlatIdx !== null && dragFlatIdx !== gi && dragFlatIdx !== gi - 1 && dropIndicator === gi;
-                              const dragOverProps = {
-                                onDragOver: (e: React.DragEvent) => { e.preventDefault(); if (dragFlatIdx === null) return; const rect = e.currentTarget.getBoundingClientRect(); const before = (e.clientY - rect.top) < rect.height / 2; setDropIndicator(before ? gi : gi + 1); },
-                                onDrop: (e: React.DragEvent) => { e.preventDefault(); if (dropIndicator !== null) handleDrop(dropIndicator, sIdx); else setDragFlatIdx(null); },
-                              };
-                              const divider = idxInChunk > 0 ? '1px solid rgba(45,42,36,0.08)' : 'none';
-                              const incomplete = hasNoAnswer(q);
-                              return (
-                                <div key={q.id} {...dragOverProps} ref={el => { qRefs.current[q.id] = el; }} style={{ borderTop: divider, background: incomplete ? 'rgba(184,90,74,0.04)' : 'transparent' }}>
-                                  <div style={{ height: showLineBefore ? 3 : 0, background: '#a87a3a', transition: 'all 0.1s' }} />
-                                  <div style={{ padding: '20px 34px' }}>
-                                    <div style={{ fontSize: 14, color: '#2d2a24', lineHeight: 1.6 }}>
-                                      <span style={{ color: '#a87a3a', fontWeight: 600, marginRight: 8 }}>{subStart}.</span>
-                                      {q.content || '(sans énoncé)'}
-                                    </div>
-                                    {renderAnswerSpace(q)}
-                                    {q.parts.map((part, pi) => (
-                                      <div key={pi} style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid rgba(45,42,36,0.08)' }}>
-                                        <div style={{ fontSize: 14, color: '#2d2a24', lineHeight: 1.6 }}>
-                                          <span style={{ color: '#a87a3a', fontWeight: 600, marginRight: 8 }}>{subStart + pi + 1}.</span>
-                                          {part.content || '(sans énoncé)'}
-                                        </div>
-                                        {renderAnswerSpace({ ...q, responseType: part.responseType, answer: part.answer, choices: part.choices, correctChoices: part.correctChoices, textLines: part.textLines })}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
+            const rows: Row[] = [];
+            let flatCursor = 0;
+            config.sections.forEach((section, sIdx) => {
+              rows.push({ kind: 'header', key: `h-${section.id}`, sectionIdx: sIdx });
+              let pushedAny = false;
+              let subCursor = 1;
+              section.questionIds.forEach(id => {
+                if (isPageBreakId(id)) {
+                  rows.push({ kind: 'pagebreak', key: id, gi: flatCursor, sectionIdx: sIdx, id });
+                  flatCursor++;
+                  pushedAny = true;
+                  return;
+                }
+                const q = questions.find(p => p.id === id);
+                if (!q) return;
+                rows.push({ kind: 'question', key: q.id, gi: flatCursor, sectionIdx: sIdx, subStart: subCursor, q });
+                subCursor += 1 + q.parts.length;
+                flatCursor++;
+                pushedAny = true;
+              });
+              if (!pushedAny) rows.push({ kind: 'empty', key: `e-${section.id}`, sectionIdx: sIdx });
+            });
 
-                          <div style={{ width: 86, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-                            {chunk.map(({ gi, q }) => {
-                              const rh = rowHeights[q.id];
-                              return (
-                                <div key={q.id} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 20, boxSizing: 'border-box' as const }}>
-                                  <span style={{ fontSize: 11, color: '#9a948a', fontVariantNumeric: 'tabular-nums' }}>{String(gi + 1).padStart(2, '0')}</span>
-                                  <WeightControls weight={config.weighting[q.id] ?? defaultWeight()} onChange={patch => updateWeight(q.id, patch)} />
-                                  <span onClick={() => toggleAvailable(q.id)} title="retirer de l'examen" style={{ fontSize: 15, color: '#b85a4a', cursor: 'pointer' }}>×</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    ));
-                  })()}
-                </div>
-              </div>
+            const chunks: Row[][] = [];
+            let current: Row[] = [];
+            rows.forEach(row => {
+              if ((row.kind === 'question' || row.kind === 'pagebreak') && row.gi > 0 && pageStarts.has(row.gi)) {
+                const carryOver: Row[] = [];
+                while (current.length > 0 && (current[current.length - 1].kind === 'header' || current[current.length - 1].kind === 'empty') && current[current.length - 1].sectionIdx === row.sectionIdx) {
+                  carryOver.unshift(current.pop()!);
+                }
+                if (current.length > 0) chunks.push(current);
+                current = carryOver;
+              }
+              current.push(row);
+            });
+            chunks.push(current);
+
+            const incompleteIcon = (id: string) => (
+              <button onClick={() => onOpenQuestion(id)} title="question incomplète - cliquer pour compléter" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: '1px solid rgba(184,90,74,0.35)', background: 'rgba(184,90,74,0.10)', color: '#b85a4a', cursor: 'pointer', padding: 0, flexShrink: 0 }}><AlertTriangle size={13} strokeWidth={2} /></button>
             );
-          })}
+
+            const COLUMN_GAP = 10; // espace entre les 3 colonnes (gauche/feuille/droite), distinct de A4_ROW_GAP
+
+            // 3 colonnes parallèles (gouttière gauche / feuille A4 / gouttière droite), chacune fait son
+            // propre .map() sur `chunk` — une ligne ne change jamais de colonne, seulement de position.
+            // Les mêmes handlers de drag (calcul avant/après identique) sont attachés aux 3 cellules d'une
+            // même ligne, pour pouvoir déposer en survolant n'importe laquelle des 3 zones.
+            const dragOverPropsFor = (gi: number, sectionIdx: number) => ({
+              onDragOver: (e: React.DragEvent) => { e.preventDefault(); if (dragFlatIdx === null) return; const rect = e.currentTarget.getBoundingClientRect(); const before = (e.clientY - rect.top) < rect.height / 2; setDropIndicator(before ? gi : gi + 1); },
+              onDrop: (e: React.DragEvent) => { e.preventDefault(); if (dropIndicator !== null) handleDrop(dropIndicator, sectionIdx); else setDragFlatIdx(null); },
+            });
+            const emptyDropPropsFor = (start: number, sectionIdx: number) => ({
+              onDragOver: (e: React.DragEvent) => { e.preventDefault(); if (dragFlatIdx !== null) setDropIndicator(start); },
+              onDrop: (e: React.DragEvent) => { e.preventDefault(); handleDrop(start, sectionIdx); },
+            });
+
+            return chunks.map((chunk, chunkIdx) => {
+              const firstQuestionRow = chunk.find(r => r.kind === 'question' || r.kind === 'pagebreak') as (Row & { kind: 'question' | 'pagebreak' }) | undefined;
+              const isPageBreak = !!firstQuestionRow && pageStarts.has(firstQuestionRow.gi);
+              return (
+                <div key={chunkIdx} style={{ marginBottom: 14 }}>
+                  {chunkIdx === 0 && pageCount > 1 && pageLabel(1)}
+                  {isPageBreak && pageBreakSeparator(firstQuestionRow!.gi)}
+                  {/* centrage via margin:auto plutôt que justifyContent:center — quand le contenu dépasse,
+                      les navigateurs refusent un scrollLeft négatif et la partie gauche resterait
+                      inaccessible ; avec margin:auto la marge se résout à 0 en cas de dépassement, donc
+                      tout reste atteignable en scrollant (le bord gauche est alors immédiatement visible). */}
+                  <div style={{ display: 'flex', gap: COLUMN_GAP, alignItems: 'flex-start', width: 'fit-content', margin: '0 auto' }}>
+                    {/* gouttière gauche : poignée de glisser-déposer + icône (⚠ incomplète / ⚙ éditer) */}
+                    <div style={{ width: 26, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ height: A4_MARGIN_PX, flexShrink: 0 }} />
+                      {chunkIdx === 0 && headerBlockHeight > 0 && <div style={{ height: headerBlockHeight, flexShrink: 0 }} />}
+                      {chunk.map(row => {
+                        const rh = rowHeights[row.key];
+                        if (row.kind === 'header' || row.kind === 'empty') {
+                          return <div key={row.key} style={{ height: rh, minHeight: rh ? undefined : A4_SECTION_HEADER_HEIGHT }} />;
+                        }
+                        if (row.kind === 'pagebreak') {
+                          return (
+                            <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_PAGE_BREAK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' as const, opacity: dragFlatIdx === row.gi ? 0.4 : 1 }}>
+                              <span draggable onDragStart={() => setDragFlatIdx(row.gi)} onDragEnd={() => { setDragFlatIdx(null); setDropIndicator(null); }} title="glisser pour réorganiser" style={{ cursor: 'grab', color: '#c8c2b6', fontSize: 13, lineHeight: 1, userSelect: 'none' as const }}>⠿</span>
+                            </div>
+                          );
+                        }
+                        const incomplete = hasNoAnswer(row.q);
+                        return (
+                          <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, paddingTop: 20, boxSizing: 'border-box' as const, opacity: dragFlatIdx === row.gi ? 0.4 : 1 }}>
+                            <span draggable onDragStart={() => setDragFlatIdx(row.gi)} onDragEnd={() => { setDragFlatIdx(null); setDropIndicator(null); }} onMouseEnter={() => setHoveredRowKey(row.key)} onMouseLeave={() => setHoveredRowKey(null)} title="glisser pour réorganiser" style={{ cursor: 'grab', color: '#c8c2b6', fontSize: 13, lineHeight: 1, userSelect: 'none' as const }}>⠿</span>
+                            {incomplete ? incompleteIcon(row.q.id) : <EditQuestionButton id={row.q.id} onOpenQuestion={onOpenQuestion} />}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* colonne centrale : la feuille A4 elle-même (fond blanc, bordure, ombre) */}
+                    <div style={{ width: A4_BLOCK_WIDTH, height: A4_PAGE_HEIGHT, flexShrink: 0, background: '#fff', border: '1px solid rgba(45,42,36,0.08)', borderRadius: 4, boxShadow: '0 2px 14px rgba(45,42,36,0.06)', overflow: 'hidden' }}>
+                      <div style={{ height: A4_MARGIN_PX, flexShrink: 0 }} />
+                      {chunkIdx === 0 && (identityBlockHeight > 0 || titleBlockHeight > 0) && (
+                        <div ref={el => { qRefs.current['__page1_header__'] = el; }}>
+                          {identityBlockHeight > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '24px 34px 0' }}>
+                              <div style={{ fontSize: 13, color: '#3a352c', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                {identityLeftKeys.map(key => (
+                                  <div key={key} style={{ display: 'flex', alignItems: 'baseline', gap: 6, width: 220 }}>
+                                    <span>{labelOfItem(key)}</span>
+                                    <span style={{ flex: 1, borderBottom: '1px solid rgba(45,42,36,0.3)' }} />
+                                  </div>
+                                ))}
+                              </div>
+                              <div style={{ fontSize: 13, color: '#3a352c', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                {identityRightKeys.map(key => (
+                                  <div key={key} style={{ display: 'flex', alignItems: 'baseline', gap: 6, width: 160 }}>
+                                    <span>{labelOfItem(key)}</span>
+                                    <span style={{ flex: 1, borderBottom: '1px solid rgba(45,42,36,0.3)' }} />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {titleBlockHeight > 0 && (
+                            <div style={{ padding: '28px 34px 90px', textAlign: 'center' as const, fontSize: 24, fontWeight: 600, color: '#2d2a24' }}>
+                              {config.title}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {chunk.map(row => {
+                        const section = config.sections[row.sectionIdx];
+                        if (row.kind === 'header') {
+                          return (
+                            <div key={row.key} ref={el => { qRefs.current[row.key] = el; }} style={{ position: 'relative' as const }}>
+                              <input
+                                value={section.title}
+                                onChange={e => updateSection(row.sectionIdx, { title: e.target.value })}
+                                onFocus={() => setFocusedSectionIdx(row.sectionIdx)}
+                                onBlur={() => setFocusedSectionIdx(null)}
+                                style={{ width: '100%', fontSize: 16, fontWeight: 600, color: '#7a4d20', background: focusedSectionIdx === row.sectionIdx ? 'rgba(168,122,58,0.06)' : 'transparent', border: 'none', padding: '14px 40px 10px 34px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const }}
+                              />
+                              <span style={{ position: 'absolute' as const, right: 16, top: 16, fontSize: 12, color: 'rgba(168,122,58,0.45)', pointerEvents: 'none' as const }}>✎</span>
+                            </div>
+                          );
+                        }
+                        if (row.kind === 'empty') {
+                          const start = sectionRanges[row.sectionIdx].start;
+                          return (
+                            <div
+                              key={row.key}
+                              ref={el => { qRefs.current[row.key] = el; }}
+                              {...emptyDropPropsFor(start, row.sectionIdx)}
+                              style={{ margin: '0 34px 14px', fontSize: 11.5, color: '#bdb8ad', padding: '14px', textAlign: 'center' as const, border: '1px dashed rgba(45,42,36,0.12)', borderRadius: 9, background: dropIndicator === start && dragFlatIdx !== null ? 'rgba(168,122,58,0.08)' : 'transparent' }}
+                            >
+                              partie vide — glisse une question ici
+                            </div>
+                          );
+                        }
+                        if (row.kind === 'pagebreak') {
+                          const gi = row.gi;
+                          const showLineBefore = dragFlatIdx !== null && dragFlatIdx !== gi && dragFlatIdx !== gi - 1 && dropIndicator === gi;
+                          return (
+                            <div key={row.key} {...dragOverPropsFor(gi, row.sectionIdx)} ref={el => { qRefs.current[row.key] = el; }}>
+                              <div style={{ height: showLineBefore ? 3 : 0, background: '#a87a3a', transition: 'all 0.1s' }} />
+                              <div style={{ margin: '10px 34px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: '1px dashed rgba(45,42,36,0.20)', borderRadius: 8, background: 'rgba(45,42,36,0.045)', color: '#9a948a', fontSize: 11.5 }}>
+                                <SeparatorHorizontal size={14} strokeWidth={1.75} />
+                                saut de page
+                              </div>
+                            </div>
+                          );
+                        }
+                        const { gi, subStart, q } = row;
+                        const showLineBefore = dragFlatIdx !== null && dragFlatIdx !== gi && dragFlatIdx !== gi - 1 && dropIndicator === gi;
+                        const incomplete = hasNoAnswer(q);
+                        const hovered = hoveredRowKey === row.key;
+                        return (
+                          <div key={row.key}>
+                            <div {...dragOverPropsFor(gi, row.sectionIdx)} ref={el => { qRefs.current[row.key] = el; }} style={{ background: hovered ? 'rgba(168,122,58,0.08)' : 'transparent', transition: 'background 0.1s' }}>
+                              <div style={{ height: showLineBefore ? 3 : 0, background: '#a87a3a', transition: 'all 0.1s' }} />
+                              <div style={{ padding: '20px 34px' }}>
+                                <div ref={el => { qRefs.current[`${q.id}::head`] = el; }}>
+                                  <div style={{ fontSize: 14, color: '#2d2a24', lineHeight: 1.6 }}>
+                                    <span style={{ color: '#a87a3a', fontWeight: 600, marginRight: 8 }}>{subStart}.</span>
+                                    {q.content || '(sans énoncé)'}
+                                  </div>
+                                  {renderAnswerSpace(q)}
+                                </div>
+                                {q.parts.map((part, pi) => (
+                                  <div key={pi} ref={el => { qRefs.current[partWeightKey(q.id, pi)] = el; }} style={{ marginTop: 40, paddingLeft: 28 }}>
+                                    <div style={{ fontSize: 14, color: '#2d2a24', lineHeight: 1.6 }}>
+                                      <span style={{ color: '#a87a3a', fontWeight: 600, marginRight: 8 }}>{subStart + pi + 1}.</span>
+                                      {part.content || '(sans énoncé)'}
+                                    </div>
+                                    {renderAnswerSpace({ ...q, responseType: part.responseType, answer: part.answer, choices: part.choices, correctChoices: part.correctChoices, textLines: part.textLines })}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* gouttière droite : numéro, pondération, bouton de suppression */}
+                    <div style={{ width: 86, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ height: A4_MARGIN_PX, flexShrink: 0 }} />
+                      {chunkIdx === 0 && headerBlockHeight > 0 && <div style={{ height: headerBlockHeight, flexShrink: 0 }} />}
+                      {chunk.map(row => {
+                        const rh = rowHeights[row.key];
+                        if (row.kind === 'header') {
+                          return (
+                            <div key={row.key} style={{ height: rh, minHeight: rh ? undefined : A4_SECTION_HEADER_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              {config.sections.length > 1 && (
+                                <button type="button" onClick={() => removeSection(row.sectionIdx)} title="supprimer la partie" style={{ fontSize: 15, color: '#b85a4a', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>×</button>
+                              )}
+                            </div>
+                          );
+                        }
+                        if (row.kind === 'empty') {
+                          return <div key={row.key} style={{ height: rh, minHeight: rh ? undefined : A4_SECTION_HEADER_HEIGHT }} />;
+                        }
+                        if (row.kind === 'pagebreak') {
+                          return (
+                            <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_PAGE_BREAK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <span onClick={() => removePageBreak(row.id)} title="retirer le saut de page" style={{ fontSize: 15, color: '#b85a4a', cursor: 'pointer' }}>×</span>
+                            </div>
+                          );
+                        }
+                        const { gi, q } = row;
+                        return (
+                          <div key={row.key} {...dragOverPropsFor(gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 20, boxSizing: 'border-box' as const }}>
+                            <span style={{ fontSize: 11, color: '#9a948a', fontVariantNumeric: 'tabular-nums' }}>{String(gi + 1).padStart(2, '0')}</span>
+                            <WeightControls weight={config.weighting[q.id] ?? defaultWeight()} onChange={patch => updateWeight(q.id, patch)} />
+                            {q.parts.map((_part, pi) => {
+                              const key = partWeightKey(q.id, pi);
+                              return (
+                                <div key={pi} style={{ height: rowHeights[key] ?? A4_ROW_FALLBACK_HEIGHT, marginTop: 40, paddingTop: 14, boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                                  <span style={{ fontSize: 9.5, color: '#bdb8ad' }} title={`pondération de la partie ${pi + 2}`}>part. {pi + 2}</span>
+                                  <WeightControls weight={config.weighting[key] ?? defaultWeight()} onChange={patch => updateWeight(key, patch)} />
+                                </div>
+                              );
+                            })}
+                            <span onClick={() => toggleAvailable(q.id)} title="retirer de l'examen" style={{ fontSize: 15, color: '#b85a4a', cursor: 'pointer' }}>×</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            });
+          })()}
 
           {dragFlatIdx !== null && (
             <div
@@ -1356,9 +1783,9 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
             <div onClick={() => setPendingRemoveSectionIdx(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
             <div style={{ position: 'relative', width: 420, maxWidth: '90vw', background: '#fcf9f2', borderRadius: 20, padding: 24, boxShadow: '0 24px 64px rgba(45,42,36,0.25)', fontFamily: "'Inter Tight', system-ui, sans-serif", textAlign: 'center' as const }}>
               <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(184,90,74,0.12)', color: '#b85a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 600, margin: '0 auto 12px' }}>!</div>
-              <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Supprimer la section « {section.title} » ?</div>
+              <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Supprimer la partie « {section.title} » ?</div>
               <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: 20 }}>
-                Les {count} question{count > 1 ? 's' : ''} de cette section ne seront plus dans l&apos;examen et retourneront dans la liste des questions envoyées.
+                Les {count} question{count > 1 ? 's' : ''} de cette partie ne seront plus dans l&apos;examen et retourneront dans la liste des questions envoyées.
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={() => setPendingRemoveSectionIdx(null)} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
@@ -1377,7 +1804,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
             <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: 20 }}>
               {editing
                 ? <>Les modifications en cours sur <strong style={{ color: '#2d2a24' }}>{editing.title}</strong> seront abandonnées. L&apos;examen déjà enregistré n&apos;est pas affecté.</>
-                : "L'intitulé, les sections, la pondération et les questions envoyées seront réinitialisés."}
+                : "L'intitulé, les parties, la pondération et les questions envoyées seront réinitialisés."}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setConfirmClearOpen(false)} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
@@ -1398,6 +1825,42 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setConfirmGenerateOpen(false)} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
               <button onClick={() => { setConfirmGenerateOpen(false); onGenerate(); }} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: '#4f6b40', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmApplyFavoriteOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={() => setConfirmApplyFavoriteOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
+          <div style={{ position: 'relative', width: 420, maxWidth: '90vw', background: '#fcf9f2', borderRadius: 20, padding: 24, boxShadow: '0 24px 64px rgba(45,42,36,0.25)', fontFamily: "'Inter Tight', system-ui, sans-serif", textAlign: 'center' as const }}>
+            <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: '#a87a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+              <Star size={18} strokeWidth={2} fill="#a87a3a" color="#a87a3a" />
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Appliquer la présentation favorite ?</div>
+            <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: 20 }}>
+              La section présentation va être remplacée par votre favori.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmApplyFavoriteOpen(false)} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
+              <button onClick={applyFavoritePresentation} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: '#4f6b40', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Appliquer</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmSaveFavoriteOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={() => setConfirmSaveFavoriteOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
+          <div style={{ position: 'relative', width: 420, maxWidth: '90vw', background: '#fcf9f2', borderRadius: 20, padding: 24, boxShadow: '0 24px 64px rgba(45,42,36,0.25)', fontFamily: "'Inter Tight', system-ui, sans-serif", textAlign: 'center' as const }}>
+            <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: '#a87a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+              <RefreshCw size={17} strokeWidth={2} />
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Remplacer le favori ?</div>
+            <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: 20 }}>
+              Enregistre la présentation actuelle comme favorite. Elle remplacera l&apos;ancienne favorite.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmSaveFavoriteOpen(false)} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
+              <button onClick={saveFavoriteFromCurrent} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: '#4f6b40', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Enregistrer</button>
             </div>
           </div>
         </div>
@@ -1446,6 +1909,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const [examConfig, setExamConfig] = useState<ExamConfig>(defaultExamConfig());
   const [pendingEditExam, setPendingEditExam] = useState<Exam | null>(null);
   const [openQuestionBlocked, setOpenQuestionBlocked] = useState(false);
+  const [introOpen, setIntroOpen] = useState(false);
 
   function isEditorEmpty() {
     return editing === null && draftIds.length === 0 && examConfig.title.trim() === '' && configQuestionIds(examConfig).length === 0;
@@ -1455,7 +1919,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     if (editing?.id === e.id || isEditorEmpty()) {
       setEditing(e);
       setDraftIds(e.questionIds ?? []);
-      setExamConfig(e.config?.sections ? e.config : defaultExamConfig(e.title));
+      setExamConfig(e.config?.sections ? normalizeExamConfig(e.config) : defaultExamConfig(e.title));
       focus('generator');
     } else {
       setPendingEditExam(e);
@@ -1464,6 +1928,9 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
 
   const GAP = 16;
   const SIDE_W = 320;
+  // sous cette largeur, les 3 panneaux passent d'une mise en page côte-à-côte (avec mise à l'échelle)
+  // à une pile verticale plein-largeur (échelle 1:1, scroll vertical) — reflow façon Gmail au zoom navigateur.
+  const STACK_BP = 860;
   const draftLoaded = useRef(false);
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1475,7 +1942,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       setExams(mappedExams);
       if (draft) {
         setDraftIds(draft.draftIds);
-        setExamConfig(draft.config?.sections ? draft.config : defaultExamConfig());
+        setExamConfig(draft.config?.sections ? normalizeExamConfig(draft.config) : defaultExamConfig());
         if (draft.editingId) {
           const found = mappedExams.find(e => e.id === draft.editingId);
           if (found) setEditing(found);
@@ -1504,19 +1971,19 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   useLayoutEffect(() => {
     const el = stageRef.current;
     if (!el) return;
-    let ro: ResizeObserver | null = null;
     const measure = () => {
       const w = Math.round(el.clientWidth);
       const h = Math.round(el.clientHeight);
       if (w > 0 && h > 0) {
         setDim(prev => (prev.w === w && prev.h === h) ? prev : { w, h });
-        if (ro) { ro.disconnect(); ro = null; }
       }
     };
+    // mesure en continu (et pas seulement au premier rendu) : un changement de zoom navigateur modifie
+    // la largeur en px CSS disponible et doit donc redéclencher le calcul de mise en page/reflow.
     measure();
-    ro = new ResizeObserver(measure);
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
-    return () => { if (ro) ro.disconnect(); };
+    return () => ro.disconnect();
   }, []);
 
   useLayoutEffect(() => {
@@ -1600,7 +2067,8 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     setQuestions(prev => {
       const exists = prev.some(p => p.id === q.id);
       if (exists) return prev.map(p => (p.id === q.id ? q : p));
-      return [q, ...prev];
+      const withCreatedAt = q.createdAt ? q : { ...q, createdAt: new Date().toISOString() };
+      return [withCreatedAt, ...prev];
     });
     setEditingQuestion(null);
     saveQuestion(workshopId, q).catch(err => console.error('enregistrement question échoué', err));
@@ -1623,8 +2091,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       if (!e.config) return e;
       if (!e.config.sections.some(sec => sec.questionIds.includes(id))) return e;
       const sections = e.config.sections.map(sec => ({ ...sec, questionIds: sec.questionIds.filter(qid => qid !== id) }));
-      const weighting = { ...e.config.weighting };
-      delete weighting[id];
+      const weighting = clearWeightingFor(e.config.weighting, id);
       const config = { ...e.config, sections, weighting };
       const questionIds = configQuestionIds(config);
       const next = { ...e, config, questionIds, q: questionIds.length };
@@ -1638,8 +2105,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     setExamConfig(prev => {
       if (!prev.sections.some(sec => sec.questionIds.includes(id))) return prev;
       const sections = prev.sections.map(sec => ({ ...sec, questionIds: sec.questionIds.filter(qid => qid !== id) }));
-      const weighting = { ...prev.weighting };
-      delete weighting[id];
+      const weighting = clearWeightingFor(prev.weighting, id);
       return { ...prev, sections, weighting };
     });
 
@@ -1676,6 +2142,14 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
 
   function rectFor(role: number) {
     const { w, h } = dim;
+    if (w < STACK_BP) {
+      // pile verticale plein-largeur : chaque panneau occupe toute la largeur disponible (s=1, pas de
+      // mise à l'échelle) ; le panneau focus (role 0) est plus grand, les 2 autres défilent en dessous.
+      const mainH = 620;
+      const sideH = 400;
+      const y = role === 0 ? 0 : role === 1 ? mainH + GAP : mainH + GAP + sideH + GAP;
+      return { x: 0, y, w, h: role === 0 ? mainH : sideH, main: role === 0 };
+    }
     const mainW = Math.max(360, w - SIDE_W - GAP);
     const sideH = (h - GAP) / 2;
     if (role === 0) return { x: 0, y: 0, w: mainW, h, main: true };
@@ -1683,21 +2157,26 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     return { x: mainW + GAP, y: sideH + GAP, w: SIDE_W, h: sideH, main: false };
   }
 
-  const mainW = Math.max(360, dim.w - SIDE_W - GAP);
+  const stacked = dim.w < STACK_BP;
+  const mainW = stacked ? dim.w : Math.max(360, dim.w - SIDE_W - GAP);
   const ready = dim.w > 0 && dim.h > 0;
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <style>{`@keyframes examPop { 0% { background: rgba(232,184,108,0.42); } 100% { } }`}</style>
-      <div ref={stageRef} style={{ flex: 1, position: 'relative', margin: '22px 22px 20px', minHeight: 0 }}>
+      <div ref={stageRef} style={{ flex: 1, position: 'relative', margin: '22px 22px 20px', minHeight: 0, overflow: stacked ? 'auto' : 'visible', paddingBottom: stacked ? 50 : 0 }}>
         {ready && IDS.map(id => {
           const role = order.indexOf(id);
           const r = rectFor(role);
           const s = r.w / mainW;
+          // historique/banque défilent via ce conteneur (l'éditeur gère son propre scroll interne) : on
+          // réserve une petite marge à droite pour décoller la scrollbar de la bordure de la tuile, comme
+          // c'est déjà le cas pour l'éditeur d'examen.
+          const contentW = id === 'generator' ? mainW : mainW - 16;
           return (
-            <div key={id} ref={el => { tileRefs.current[id] = el; }} style={{ position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h, borderRadius: 16, overflow: 'hidden', border: r.main ? '1px solid rgba(45,42,36,0.10)' : '1px solid rgba(45,42,36,0.08)', background: 'rgba(255,255,255,0.92)', boxShadow: r.main ? '0 16px 44px rgba(45,42,36,0.10)' : '0 6px 18px rgba(45,42,36,0.08)', zIndex: r.main ? 2 : 1 }}>
-              <div style={{ position: 'absolute', top: 0, left: 0, width: mainW, height: r.h / s, transform: `scale(${s})`, transformOrigin: '0 0', overflowY: id === 'generator' ? 'hidden' : 'auto', overflowX: 'hidden', background: id === 'generator' ? '#fbf7ef' : '#fcf9f2' }}>
-                {id === 'history' && <HistoryContent exams={exams} justAddedId={justAdded} onEdit={requestEditExam} onNew={() => { setEditing(null); setExamConfig(defaultExamConfig()); focus('generator'); }} onDelete={e => setPendingDeleteExam(e)} />}
+            <div key={id} ref={el => { tileRefs.current[id] = el; }} style={{ position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h, borderRadius: 16, overflow: 'hidden', border: r.main ? '1px solid rgba(45,42,36,0.10)' : '1px solid rgba(45,42,36,0.08)', background: id === 'generator' ? '#fbf7ef' : '#fcf9f2', boxShadow: r.main ? '0 16px 44px rgba(45,42,36,0.10)' : '0 6px 18px rgba(45,42,36,0.08)', zIndex: r.main ? 2 : 1 }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, width: contentW, height: r.h / s, transform: `scale(${s})`, transformOrigin: '0 0', overflowY: id === 'generator' ? 'hidden' : 'auto', overflowX: 'hidden', background: id === 'generator' ? '#fbf7ef' : '#fcf9f2' }}>
+                {id === 'history' && <HistoryContent exams={exams} justAddedId={justAdded} onEdit={requestEditExam} onNew={() => setIntroOpen(true)} onDelete={e => setPendingDeleteExam(e)} />}
                 {id === 'bank' && (
                   <BankContent
                     questions={questions}
@@ -1792,6 +2271,104 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         </div>,
         document.body
       )}
+      {introOpen && (() => {
+        const steps = [
+          { title: 'Constituez votre banque de questions', text: 'Créez vos questions manuellement ou laissez l’IA s’en charger à partir des fichiers de l’atelier.', side: 'left' as const },
+          { title: 'Composez votre examen', text: 'Envoyez vos questions vers l’éditeur, glissez-les dans des sections, ajustez la pondération et la difficulté.', side: 'right' as const },
+          { title: 'Générez et diffusez', text: 'L’examen est prêt : export PDF, passage en ligne, projection, ou intégration au programme éducatif.', side: 'left' as const },
+        ];
+        // bandes verticales (% de la hauteur totale de la popup) : en-tête, 3 lignes égales, pied de page
+        const HEADER_PCT = 16;
+        const FOOTER_PCT = 13;
+        const ROW_PCT = (100 - HEADER_PCT - FOOTER_PCT) / steps.length;
+        return createPortal(
+          <div style={{ position: 'fixed', inset: 0, zIndex: 95, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div onClick={() => setIntroOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.46)', backdropFilter: 'blur(3px)' }} />
+            <div style={{ position: 'relative', height: '90vh', width: 'calc(90vh * 0.75)', maxWidth: '92vw' }}>
+              {/* carte : fond, texte, bouton — clippée pour les coins arrondis */}
+              <div style={{ position: 'absolute', inset: 0, borderRadius: 28, overflow: 'hidden', background: 'linear-gradient(160deg, #fdf9ef 0%, #f6ead2 100%)', boxShadow: '0 28px 70px rgba(45,42,36,0.32)' }}>
+                <button onClick={() => setIntroOpen(false)} title="fermer" style={{ position: 'absolute', top: 18, right: 18, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: '50%', border: '1px solid rgba(45,42,36,0.12)', background: '#fff', color: '#2d2a24', cursor: 'pointer' }}>
+                  <X size={17} strokeWidth={2} />
+                </button>
+
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: `${HEADER_PCT}%`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 70px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 23, fontWeight: 600, color: '#2d2a24' }}>Comment fonctionne le générateur d&apos;examen</div>
+                  <div style={{ fontSize: 13.5, color: '#8a7f64', marginTop: 8 }}>Trois étapes pour passer de votre banque de questions à un examen prêt à être donné.</div>
+                </div>
+
+                {steps.map((step, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      position: 'absolute',
+                      top: `${HEADER_PCT + ROW_PCT * i}%`,
+                      height: `${ROW_PCT}%`,
+                      left: step.side === 'left' ? '46%' : '6%',
+                      right: step.side === 'left' ? '6%' : '46%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <div style={{ fontSize: 16, fontWeight: 600, color: '#7a4d20', marginBottom: 8 }}>{step.title}</div>
+                    <div style={{ fontSize: 13.5, color: '#3a352c', lineHeight: 1.65 }}>{step.text}</div>
+                  </div>
+                ))}
+
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${FOOTER_PCT}%`, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 32px', borderTop: '1px solid rgba(45,42,36,0.08)' }}>
+                  <button
+                    onClick={() => { setIntroOpen(false); setEditing(null); setExamConfig(defaultExamConfig()); focus('bank'); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 10, border: 'none', background: '#4f6b40', color: '#fff', fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    Commencer
+                    <ArrowRight size={16} strokeWidth={2} />
+                  </button>
+                </div>
+              </div>
+
+              {/* images : par-dessus la carte, non clippées — débordent du cadre pour l'effet « pop-out » */}
+              {steps.map((step, i) => (
+                <div
+                  key={i}
+                  style={{
+                    position: 'absolute',
+                    top: `${HEADER_PCT + ROW_PCT * (i + 0.5)}%`,
+                    transform: `translateY(-50%) rotate(${step.side === 'left' ? -4 : 4}deg)`,
+                    left: step.side === 'left' ? -64 : undefined,
+                    right: step.side === 'left' ? undefined : -64,
+                    width: 260,
+                    height: 230,
+                    zIndex: 2,
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    borderRadius: '46% 54% 58% 42% / 50% 46% 54% 50%',
+                    background: 'radial-gradient(circle at 32% 28%, #f2cf8e 0%, #dba85a 55%, #c98f43 100%)',
+                    boxShadow: '0 20px 46px rgba(168,122,58,0.38)',
+                  }} />
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'rgba(122,77,32,0.55)',
+                    textAlign: 'center',
+                  }}>
+                    image {i + 1}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
     </div>
   );
 }
