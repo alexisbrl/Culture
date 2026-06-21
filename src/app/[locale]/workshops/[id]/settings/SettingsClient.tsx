@@ -4,16 +4,18 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Check, ChevronLeft, FileText, Loader2, Mail, Music, Pencil, QrCode, RotateCcw, Trash2, Upload, X, File as FileIcon } from 'lucide-react';
-import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, activateWorkshopPremium } from '@/app/actions/workshops';
+import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, activateWorkshopPremium, inviteMemberByTag, getWorkshopInvitations, cancelInvitation, setMemberRole, removeMember, type PendingInvite } from '@/app/actions/workshops';
 import { createFileUploadTicket, finalizeWorkshopFileUpload, deleteWorkshopFile, renameWorkshopFile, type WorkshopFile, type FileCategory } from '@/app/actions/workshopFiles';
 import type { UploadTicket } from '@/lib/storage';
 import { COVER_GRADIENTS, COVER_GRADIENT_KEYS, COVER_EMOJIS, coverGradientFor, emojiFor } from '@/lib/workshopCover';
 import ShareQRModal from '@/components/ShareQRModal';
 
+type WorkshopRole = 'owner' | 'manager' | 'member';
+
 type Member = {
   id: string;
   userId: string;
-  role: 'owner' | 'member';
+  role: WorkshopRole;
   joinedAt: string;
   displayName: string;
   uniqueTag: string;
@@ -30,7 +32,7 @@ type Props = {
   emoji: string | null;
   createdAt: string;
   uniqueTag: string | null;
-  currentUserRole: 'owner' | 'member';
+  currentUserRole: WorkshopRole;
   isPremium: boolean;
   isPrivate: boolean;
   showProgramme: boolean;
@@ -49,6 +51,9 @@ const NAV_ITEMS: { id: NavSection; label: string }[] = [
   { id: 'bricks', label: 'Briques de connaissance' },
   { id: 'premium', label: 'Atelier Premium' },
 ];
+
+const ROLE_RANK: Record<WorkshopRole, number> = { owner: 3, manager: 2, member: 1 };
+const ROLE_LABEL: Record<WorkshopRole, string> = { owner: 'propriétaire', manager: 'gestionnaire', member: 'membre' };
 
 function FileCategoryIcon({ category }: { category: FileCategory }) {
   const props = { size: 18, style: { color: '#a87a3a', flexShrink: 0 } };
@@ -327,8 +332,14 @@ function SectionCard({
   );
 }
 
-export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, isPremium, isPrivate, showProgramme: showProgrammeProp, maxMembersTotal, maxMembersMonthly, members, files: initialFiles }: Props) {
+export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, isPremium, isPrivate, showProgramme: showProgrammeProp, maxMembersTotal, maxMembersMonthly, members, files: initialFiles }: Props) {
   const router = useRouter();
+
+  // Propriétaire vs gestionnaire : seul le propriétaire touche à l'argent (Premium)
+  // et à la suppression de l'atelier ; le reste est accessible aux deux.
+  const isOwner = currentUserRole === 'owner';
+  const actorRank = ROLE_RANK[currentUserRole];
+
   const [activeSection, setActiveSection] = useState<NavSection>('general');
 
   // Section — Fichiers
@@ -573,6 +584,61 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
   // Section 3 — Members
   const [tagInput, setTagInput] = useState('');
   const [localMembers, setLocalMembers] = useState<Member[]>(members);
+  const [inviting, setInviting] = useState(false);
+  const [inviteMsg, setInviteMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
+  const [cancelingInvite, setCancelingInvite] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isPremium) return;
+    getWorkshopInvitations(workshopId).then(setPendingInvites).catch(console.error);
+  }, [isPremium, workshopId]);
+
+  async function handleInvite() {
+    const tag = tagInput.trim();
+    if (!tag || inviting) return;
+    setInviting(true);
+    setInviteMsg(null);
+    const result = await inviteMemberByTag(workshopId, tag);
+    setInviting(false);
+    if (result.success) {
+      setInviteMsg({ type: 'success', text: `Invitation envoyée à ${result.displayName ?? tag}.` });
+      setTagInput('');
+      getWorkshopInvitations(workshopId).then(setPendingInvites).catch(console.error);
+    } else {
+      setInviteMsg({ type: 'error', text: result.error ?? 'Erreur lors de l’envoi' });
+    }
+  }
+
+  async function handleCancelInvite(targetUserId: string) {
+    setCancelingInvite(targetUserId);
+    const result = await cancelInvitation(workshopId, targetUserId);
+    setCancelingInvite(null);
+    if (result.success) {
+      setPendingInvites((prev) => prev.filter((p) => p.userId !== targetUserId));
+    }
+  }
+
+  // ── Gestion des rôles / exclusion (règles de rang appliquées côté serveur) ──
+  const [memberActionId, setMemberActionId] = useState<string | null>(null);
+
+  async function handleSetRole(m: Member, newRole: 'manager' | 'member') {
+    setMemberActionId(m.id);
+    const res = await setMemberRole(workshopId, m.userId, newRole);
+    setMemberActionId(null);
+    if (res.success) {
+      setLocalMembers((prev) => prev.map((x) => (x.id === m.id ? { ...x, role: newRole } : x)));
+    }
+  }
+
+  async function handleExcludeMember(m: Member) {
+    setMemberActionId(m.id);
+    const res = await removeMember(workshopId, m.userId);
+    setMemberActionId(null);
+    if (res.success) {
+      setLocalMembers((prev) => prev.filter((x) => x.id !== m.id));
+    }
+  }
 
   // Confirmation de sortie (modifications non enregistrées)
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -720,9 +786,9 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           Paramètres
         </div>
 
-        {/* Nav items */}
+        {/* Nav items — « Atelier Premium » réservé au propriétaire */}
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter((item) => item.id !== 'premium' || isOwner).map((item) => {
             const active = activeSection === item.id;
             return (
               <button
@@ -998,7 +1064,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           </Row>
         </SectionCard>
 
-        {/* ── Zone de danger ── */}
+        {/* ── Zone de danger (suppression) — propriétaire uniquement ── */}
+        {isOwner && (
         <SectionCard
           title="Zone de danger"
           description="Actions irréversibles — procédez avec prudence."
@@ -1013,6 +1080,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             </SmallBtn>
           </Row>
         </SectionCard>
+        )}
         </>
         )}
 
@@ -1024,29 +1092,81 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           description="Gérez les accès et les permissions des membres de l'atelier."
         >
           {isPremium ? (
+            <>
             <Row label="Inviter un utilisateur" hint="par tag">
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  type="text"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value.toUpperCase())}
-                  placeholder="#tag…"
-                  style={{
-                    fontSize: 13,
-                    fontFamily: "'ui-monospace', 'monospace', inherit",
-                    padding: '7px 12px',
-                    border: '1px solid rgba(45,42,36,0.14)',
-                    borderRadius: 9,
-                    outline: 'none',
-                    background: 'rgba(255,255,255,0.7)',
-                    color: '#2d2a24',
-                    width: 130,
-                    letterSpacing: '0.04em',
-                  }}
-                />
-                <SmallBtn tone="dark">inviter</SmallBtn>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="text"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleInvite(); }}
+                    placeholder="#tag…"
+                    style={{
+                      fontSize: 13,
+                      fontFamily: "'ui-monospace', 'monospace', inherit",
+                      padding: '7px 12px',
+                      border: '1px solid rgba(45,42,36,0.14)',
+                      borderRadius: 9,
+                      outline: 'none',
+                      background: 'rgba(255,255,255,0.7)',
+                      color: '#2d2a24',
+                      width: 130,
+                      letterSpacing: '0.04em',
+                    }}
+                  />
+                  <SmallBtn tone="dark" onClick={handleInvite} disabled={inviting || !tagInput.trim()}>
+                    {inviting ? 'envoi…' : 'inviter'}
+                  </SmallBtn>
+                </div>
+                {inviteMsg && (
+                  <span style={{ fontSize: 12, color: inviteMsg.type === 'success' ? '#4f6b40' : '#b85a4a', textAlign: 'right', maxWidth: 280 }}>
+                    {inviteMsg.text}
+                  </span>
+                )}
               </div>
             </Row>
+
+            {pendingInvites.length > 0 && (
+              <div style={{ marginTop: 4, marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9a948a', marginBottom: 8 }}>
+                  Invitations en attente ({pendingInvites.length})
+                </div>
+                {pendingInvites.map((inv) => (
+                  <div
+                    key={inv.userId}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '10px 12px',
+                      marginBottom: 6,
+                      borderRadius: 10,
+                      background: 'rgba(168,122,58,0.06)',
+                      border: '1px solid rgba(168,122,58,0.18)',
+                    }}
+                  >
+                    <Mail size={16} style={{ color: '#a87a3a', flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 450, color: '#2d2a24', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {inv.displayName}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#a87a3a' }}>
+                        en attente · {inv.uniqueTag}
+                      </div>
+                    </div>
+                    <SmallBtn
+                      tone="danger"
+                      onClick={() => handleCancelInvite(inv.userId)}
+                      disabled={cancelingInvite === inv.userId}
+                    >
+                      {cancelingInvite === inv.userId ? 'annulation…' : 'annuler'}
+                    </SmallBtn>
+                  </div>
+                ))}
+              </div>
+            )}
+            </>
           ) : (
             <Row label="Inviter un utilisateur" hint="par tag">
               <span
@@ -1111,29 +1231,28 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   {member.displayName}
                 </div>
                 <div style={{ fontSize: 11, color: '#9a948a' }}>
-                  {member.role === 'owner' ? 'propriétaire' : 'membre'} · {member.uniqueTag}
+                  {ROLE_LABEL[member.role]} · {member.uniqueTag}
                 </div>
               </div>
 
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                {member.role !== 'owner' && (
-                  <SmallBtn tone="ghost">promouvoir</SmallBtn>
-                )}
-                {member.role === 'member' && (
-                  <SmallBtn tone="ghost">rétrograder</SmallBtn>
-                )}
-                {member.role !== 'owner' && (
-                  <SmallBtn
-                    tone="danger"
-                    onClick={() =>
-                      setLocalMembers((prev) => prev.filter((m) => m.id !== member.id))
-                    }
-                  >
-                    virer
+              {/* Actions — uniquement sur un membre de rang strictement inférieur */}
+              {member.role !== 'owner' && actorRank > ROLE_RANK[member.role] && (
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  {member.role === 'member' && (
+                    <SmallBtn tone="ghost" disabled={memberActionId === member.id} onClick={() => handleSetRole(member, 'manager')}>
+                      promouvoir
+                    </SmallBtn>
+                  )}
+                  {member.role === 'manager' && (
+                    <SmallBtn tone="ghost" disabled={memberActionId === member.id} onClick={() => handleSetRole(member, 'member')}>
+                      rétrograder
+                    </SmallBtn>
+                  )}
+                  <SmallBtn tone="danger" disabled={memberActionId === member.id} onClick={() => handleExcludeMember(member)}>
+                    exclure
                   </SmallBtn>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           ))}
         </SectionCard>
@@ -1412,9 +1531,9 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         </>
         )}
 
-        {activeSection === 'premium' && (
+        {activeSection === 'premium' && isOwner && (
         <>
-        {/* ── 5. Atelier Premium ── */}
+        {/* ── 5. Atelier Premium (propriétaire uniquement) ── */}
         <SectionCard
           title="Atelier Premium"
           description="Activez le statut Premium pour débloquer des fonctionnalités avancées pour tous les membres."

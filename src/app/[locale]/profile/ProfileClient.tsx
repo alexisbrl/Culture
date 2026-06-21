@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useUser } from '@clerk/nextjs';
 import AvatarComposer from '@/components/avatar/AvatarComposer';
 import { AvatarConfig, loadAvatarConfig } from '@/components/avatar/avatarConfig';
 
@@ -88,8 +89,13 @@ function StatCard({ value, label }: { value: string | number; label: string }) {
 
 export default function ProfileClient({ locale, uniqueId, firstName, lastName }: Props) {
   const fullName = [firstName, lastName].filter(Boolean).join(' ') || 'Jardinier';
+  const { user } = useUser();
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
-  useEffect(() => { setAvatarConfig(loadAvatarConfig()); }, []);
+  // Avatar synchronisé au compte (publicMetadata.avatarParts), repli localStorage.
+  useEffect(() => {
+    const fromAccount = user?.publicMetadata?.avatarParts as AvatarConfig | undefined;
+    setAvatarConfig(fromAccount ?? loadAvatarConfig());
+  }, [user]);
 
   return (
     <>

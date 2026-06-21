@@ -22,7 +22,7 @@ export default async function WorkshopPage({ params }: Props) {
   const members = (workshop.workshop_members as any[]).map((m) => ({
     id: m.id,
     userId: m.user_id,
-    role: m.role as 'owner' | 'member',
+    role: m.role as 'owner' | 'manager' | 'member',
     joinedAt: m.joined_at,
     displayName: m.user_profiles?.display_name ?? 'Utilisateur',
     uniqueTag: m.user_profiles?.unique_tag ?? '',
@@ -36,6 +36,7 @@ export default async function WorkshopPage({ params }: Props) {
       createdAt={workshop.created_at}
       currentUserId={user.id}
       currentUserRole={workshop.currentUserRole}
+      isPremium={workshop.is_premium}
       members={members}
     />
   );

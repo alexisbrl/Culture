@@ -2,29 +2,41 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useUser } from '@clerk/nextjs';
 import AvatarComposer from '@/components/avatar/AvatarComposer';
 import { AvatarConfig, CATS, DEFAULT_CONFIG, loadAvatarConfig, saveAvatarConfig } from '@/components/avatar/avatarConfig';
+import { updateAvatarParts } from '@/app/actions/profile';
 
 export default function AvatarEditorPage() {
   const router = useRouter();
   const params = useParams();
   const locale = (params?.locale as string) ?? 'fr';
+  const { user, isLoaded } = useUser();
 
   const [config, setConfig] = useState<AvatarConfig>(DEFAULT_CONFIG);
   const [activeCat, setActiveCat] = useState<keyof AvatarConfig>('face');
   const [mounted, setMounted] = useState(false);
+  const [saving, setSaving] = useState(false);
 
+  // Chargement initial : depuis le compte (publicMetadata.avatarParts, synchronisé),
+  // sinon repli sur le localStorage (config existante non encore migrée).
   useEffect(() => {
-    setConfig(loadAvatarConfig());
+    if (mounted || !isLoaded) return;
+    const fromAccount = user?.publicMetadata?.avatarParts as AvatarConfig | undefined;
+    setConfig(fromAccount ?? loadAvatarConfig());
     setMounted(true);
-  }, []);
+  }, [isLoaded, user, mounted]);
 
   function pick(partId: string) {
     setConfig(prev => ({ ...prev, [activeCat]: partId }));
   }
 
-  function validate() {
-    saveAvatarConfig(config);
+  async function validate() {
+    if (saving) return;
+    setSaving(true);
+    saveAvatarConfig(config);            // cache local (évite le flicker)
+    await updateAvatarParts(config);     // source de vérité = compte (tous appareils)
+    await user?.reload();                // rafraîchit useUser (header / profil)
     router.push(`/${locale}/profile`);
   }
 
@@ -74,8 +86,8 @@ export default function AvatarEditorPage() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18 }}>
-              <button onClick={validate} style={{ padding: '12px 18px', borderRadius: 11, background: '#4f6b40', color: '#f4f0e6', border: 'none', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 500, cursor: 'pointer', boxShadow: '0 8px 20px rgba(79,107,64,0.30)' }}>
-                valider l&apos;avatar →
+              <button onClick={validate} disabled={saving} style={{ padding: '12px 18px', borderRadius: 11, background: '#4f6b40', color: '#f4f0e6', border: 'none', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 500, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 8px 20px rgba(79,107,64,0.30)' }}>
+                {saving ? 'enregistrement…' : 'valider l\'avatar →'}
               </button>
               <a href={`/${locale}/profile`} style={{ padding: '12px 18px', borderRadius: 11, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: '#5a564c', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 500, textAlign: 'center', textDecoration: 'none', display: 'block' }}>
                 annuler

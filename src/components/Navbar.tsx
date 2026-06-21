@@ -7,6 +7,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import { useUser, SignOutButton } from '@clerk/nextjs';
 import LinkButton from '@/components/LinkButton';
+import { markIntentionalSignOut } from '@/lib/signOutIntent';
 import AvatarSVG from '@/components/avatar/AvatarSVG';
 import type { AvatarConfig } from '@/components/avatar/types';
 import { DEFAULT_AVATAR } from '@/components/avatar/types';
@@ -123,7 +124,10 @@ export default function Navbar() {
                     </Link>
                     <div className="border-t border-gray-100 my-1" />
                     <SignOutButton redirectUrl={`/${locale}`}>
-                      <button className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600">
+                      <button
+                        onClick={markIntentionalSignOut}
+                        className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600"
+                      >
                         <LogOut className="w-4 h-4" />
                         {locale === 'fr' ? 'Se déconnecter' : 'Sign out'}
                       </button>
@@ -199,7 +203,10 @@ export default function Navbar() {
 
             {isSignedIn ? (
               <SignOutButton redirectUrl={`/${locale}`}>
-                <button className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg">
+                <button
+                  onClick={markIntentionalSignOut}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg"
+                >
                   <LogOut className="w-4 h-4" />
                   {locale === 'fr' ? 'Se déconnecter' : 'Sign out'}
                 </button>

@@ -5,6 +5,11 @@ import { getSupabaseServerClient } from '@/lib/supabase';
 import { revalidatePath } from 'next/cache';
 import { Resend } from 'resend';
 
+// Rôles d'un membre d'atelier, par rang décroissant : owner > manager > member.
+// owner = propriétaire, manager = gestionnaire, member = candidat.
+export type WorkshopRole = 'owner' | 'manager' | 'member';
+const ROLE_RANK: Record<WorkshopRole, number> = { owner: 3, manager: 2, member: 1 };
+
 function getResend() {
   if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY manquante');
   return new Resend(process.env.RESEND_API_KEY);
@@ -137,6 +142,7 @@ export type WorkshopCardData = {
   unique_tag: string | null;
   owner_name: string;
   is_premium: boolean;
+  role?: WorkshopRole;
 };
 
 export async function getUserWorkshops(): Promise<{
@@ -177,7 +183,7 @@ export async function getUserWorkshops(): Promise<{
       countMap[c.workshop_id] = (countMap[c.workshop_id] ?? 0) + 1;
     }
 
-    const roleMap: Record<string, 'owner' | 'member'> = {};
+    const roleMap: Record<string, WorkshopRole> = {};
     const lastVisitedMap: Record<string, string> = {};
     for (const m of memberships) {
       roleMap[m.workshop_id] = m.role;
@@ -213,6 +219,7 @@ export async function getUserWorkshops(): Promise<{
         unique_tag: w.unique_tag,
         owner_name: ownerNameMap[w.created_by] ?? 'Utilisateur',
         is_premium: w.is_premium,
+        role: roleMap[w.id],
       };
       if (roleMap[w.id] === 'owner') owned.push(item);
       else joined.push(item);
@@ -323,7 +330,7 @@ export async function getWorkshop(workshopId: string) {
     return {
       ...workshop,
       workshop_members: membersWithProfiles,
-      currentUserRole: membership.role as 'owner' | 'member',
+      currentUserRole: membership.role as WorkshopRole,
     };
   } catch (err) {
     console.error('getWorkshop error:', err);
@@ -430,7 +437,8 @@ export async function updateWorkshopDetails(
       .eq('user_id', userId)
       .single();
 
-    if (!membership || membership.role !== 'owner') {
+    // Réglages généraux : propriétaire ou gestionnaire.
+    if (!membership || (membership.role !== 'owner' && membership.role !== 'manager')) {
       return { success: false, error: 'Droits insuffisants' };
     }
 
@@ -462,24 +470,41 @@ export async function updateWorkshopDetails(
 
 // ─── Activer le statut Premium d'un atelier (propriétaire uniquement) ─────────
 //
-// [TEST TEMPORAIRE — 13/06/2026] En attendant l'intégration Stripe (voir mémoire
-// "Plan Stripe"), l'activation réelle ne devrait jamais avoir lieu sans paiement
-// vérifié. Cette action est un mode de test protégé par un mot de passe en dur
-// et désactivé en production (NODE_ENV === 'production') — à RETIRER une fois
-// le paiement Stripe branché sur cette action.
+// [TEST TEMPORAIRE — 13/06/2026, MAJ 21/06/2026] En attendant l'intégration Stripe
+// (voir mémoire "Plan Stripe"), l'activation réelle ne devrait jamais avoir lieu sans
+// paiement vérifié. Cette action est un mode de test protégé par un mot de passe en dur
+// ET réservé aux comptes administrateurs (allowlist par email).
+//
+// L'allowlist est par EMAIL (et non par user_id Clerk) volontairement : l'instance
+// Clerk de production est distincte de celle de dev, donc un même compte y a un user_id
+// différent — l'email, lui, est stable entre les deux. Le mécanisme fonctionne ainsi
+// à l'identique en local et en ligne (pas de "marche en dev, pas en prod").
+//
+// À RETIRER une fois le paiement Stripe branché sur cette action (mot de passe,
+// allowlist email, et paramètre `password`).
 const PREMIUM_TEST_ACTIVATION_PASSWORD = 'CultureMDP';
+const PREMIUM_TEST_ADMIN_EMAILS = ['alex.bourillon@gmail.com'];
 
 export async function activateWorkshopPremium(
   workshopId: string,
   password: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    if (process.env.NODE_ENV === 'production') {
-      return { success: false, error: 'Activation de test désactivée en production' };
-    }
-
     const { userId } = await auth();
     if (!userId) return { success: false, error: 'Non authentifié' };
+
+    // Réservé aux comptes administrateurs (par email, stable entre instances Clerk dev/prod).
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    const email = (
+      user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId)?.emailAddress ??
+      user.emailAddresses[0]?.emailAddress ??
+      ''
+    ).toLowerCase();
+
+    if (!PREMIUM_TEST_ADMIN_EMAILS.includes(email)) {
+      return { success: false, error: 'Activation réservée aux comptes administrateurs' };
+    }
 
     if (password !== PREMIUM_TEST_ACTIVATION_PASSWORD) {
       return { success: false, error: 'Mot de passe incorrect' };
@@ -726,9 +751,294 @@ export async function addMemberByTag(
   }
 }
 
-// ─── Remove member (owner only) ───────────────────────────────────────────────
+// ─── Invitations d'atelier ────────────────────────────────────────────────────
 
-export async function removeMember(
+export type PendingInvite = {
+  userId: string;
+  displayName: string;
+  uniqueTag: string;
+  createdAt: string;
+};
+
+// Inviter un utilisateur par tag (propriétaire d'un atelier Premium uniquement).
+// Crée une invitation en attente plutôt que d'ajouter directement le membre :
+// l'utilisateur invité doit l'accepter depuis son dashboard.
+export async function inviteMemberByTag(
+  workshopId: string,
+  uniqueTag: string
+): Promise<{ success: boolean; displayName?: string; error?: string }> {
+  try {
+    const { userId } = await auth();
+    if (!userId) return { success: false, error: 'Non authentifié' };
+
+    const supabase = getSupabaseServerClient();
+
+    // Le demandeur doit être propriétaire de l'atelier.
+    const { data: currentMembership } = await supabase
+      .from('workshop_members')
+      .select('role')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', userId)
+      .single();
+
+    // Inviter : propriétaire ou gestionnaire.
+    if (!currentMembership || (currentMembership.role !== 'owner' && currentMembership.role !== 'manager')) {
+      return { success: false, error: 'Droits insuffisants' };
+    }
+
+    // L'invitation est réservée aux ateliers Premium — vérification côté serveur
+    // (ne jamais se fier au gating UI, cf. CLAUDE.md « Atelier Premium »).
+    const { data: workshop } = await supabase
+      .from('workshops')
+      .select('is_premium')
+      .eq('id', workshopId)
+      .single();
+
+    if (!workshop?.is_premium) {
+      return { success: false, error: 'L\'invitation est réservée aux ateliers Premium' };
+    }
+
+    const { data: targetUser } = await supabase
+      .from('user_profiles')
+      .select('user_id, display_name')
+      .eq('unique_tag', uniqueTag.toUpperCase())
+      .single();
+
+    if (!targetUser) {
+      return {
+        success: false,
+        error: 'Utilisateur introuvable. Vérifiez le tag et assurez-vous que l\'utilisateur s\'est connecté à Culture.',
+      };
+    }
+
+    if (targetUser.user_id === userId) {
+      return { success: false, error: 'Vous ne pouvez pas vous inviter vous-même' };
+    }
+
+    const { data: existingMember } = await supabase
+      .from('workshop_members')
+      .select('id')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', targetUser.user_id)
+      .single();
+
+    if (existingMember) return { success: false, error: 'Cet utilisateur est déjà membre de l\'atelier' };
+
+    const { data: existingInvite } = await supabase
+      .from('workshop_invitations')
+      .select('id')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', targetUser.user_id)
+      .single();
+
+    if (existingInvite) return { success: false, error: 'Cet utilisateur a déjà été invité' };
+
+    const { error: insertError } = await supabase.from('workshop_invitations').insert({
+      workshop_id: workshopId,
+      user_id: targetUser.user_id,
+      invited_by: userId,
+    });
+
+    if (insertError) {
+      console.error('inviteMemberByTag insert error:', insertError);
+      return { success: false, error: 'Erreur lors de l\'envoi de l\'invitation' };
+    }
+
+    revalidatePath('/', 'layout');
+    return { success: true, displayName: targetUser.display_name };
+  } catch (err) {
+    console.error('inviteMemberByTag error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
+// Invitations en attente reçues par l'utilisateur courant (pour son dashboard).
+// Réutilise le format WorkshopCardData pour s'afficher comme une carte d'atelier.
+export async function getPendingInvitations(): Promise<WorkshopCardData[]> {
+  try {
+    const profile = await syncUserProfile();
+    if (!profile) return [];
+
+    const supabase = getSupabaseServerClient();
+
+    const { data: invitations } = await supabase
+      .from('workshop_invitations')
+      .select('workshop_id, created_at')
+      .eq('user_id', profile.userId)
+      .order('created_at', { ascending: false });
+
+    if (!invitations || invitations.length === 0) return [];
+
+    const workshopIds = invitations.map((i) => i.workshop_id);
+
+    const { data: workshops } = await supabase
+      .from('workshops')
+      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium')
+      .in('id', workshopIds)
+      .is('deleted_at', null);
+
+    if (!workshops || workshops.length === 0) return [];
+
+    const { data: counts } = await supabase
+      .from('workshop_members')
+      .select('workshop_id')
+      .in('workshop_id', workshopIds);
+
+    const countMap: Record<string, number> = {};
+    for (const c of counts ?? []) countMap[c.workshop_id] = (countMap[c.workshop_id] ?? 0) + 1;
+
+    const ownerIds = [...new Set(workshops.map((w) => w.created_by))];
+    const { data: profiles } = await supabase
+      .from('user_profiles')
+      .select('user_id, display_name')
+      .in('user_id', ownerIds);
+    const ownerNameMap = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p.display_name]));
+
+    const workshopMap = Object.fromEntries(workshops.map((w) => [w.id, w]));
+
+    // Conserver l'ordre des invitations (les plus récentes en premier).
+    return workshopIds
+      .filter((id) => workshopMap[id])
+      .map((id) => {
+        const w = workshopMap[id];
+        return {
+          id: w.id,
+          name: w.name,
+          created_at: w.created_at,
+          member_count: countMap[w.id] ?? 1,
+          description: w.description,
+          cover_gradient: w.cover_gradient,
+          cover_image_url: w.cover_image_url,
+          cover_image_active: w.cover_image_active,
+          emoji: w.emoji,
+          unique_tag: w.unique_tag,
+          owner_name: ownerNameMap[w.created_by] ?? 'Utilisateur',
+          is_premium: w.is_premium,
+        };
+      });
+  } catch (err) {
+    console.error('getPendingInvitations error:', err);
+    return [];
+  }
+}
+
+// Accepter une invitation : devient membre de l'atelier puis supprime l'invitation.
+export async function acceptInvitation(
+  workshopId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const profile = await syncUserProfile();
+    if (!profile) return { success: false, error: 'Non authentifié' };
+
+    const supabase = getSupabaseServerClient();
+
+    const { data: invite } = await supabase
+      .from('workshop_invitations')
+      .select('id')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', profile.userId)
+      .single();
+
+    if (!invite) return { success: false, error: 'Invitation introuvable' };
+
+    const { data: existing } = await supabase
+      .from('workshop_members')
+      .select('id')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', profile.userId)
+      .single();
+
+    if (!existing) {
+      await supabase.from('workshop_members').insert({
+        workshop_id: workshopId,
+        user_id: profile.userId,
+        role: 'member',
+      });
+    }
+
+    await supabase
+      .from('workshop_invitations')
+      .delete()
+      .eq('workshop_id', workshopId)
+      .eq('user_id', profile.userId);
+
+    revalidatePath('/', 'layout');
+    return { success: true };
+  } catch (err) {
+    console.error('acceptInvitation error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
+// Refuser une invitation : supprime simplement l'invitation (le propriétaire peut réinviter).
+export async function declineInvitation(
+  workshopId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { userId } = await auth();
+    if (!userId) return { success: false, error: 'Non authentifié' };
+
+    const supabase = getSupabaseServerClient();
+    await supabase
+      .from('workshop_invitations')
+      .delete()
+      .eq('workshop_id', workshopId)
+      .eq('user_id', userId);
+
+    revalidatePath('/', 'layout');
+    return { success: true };
+  } catch (err) {
+    console.error('declineInvitation error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
+// Invitations en attente d'un atelier (propriétaire uniquement) — pour la page Paramètres.
+export async function getWorkshopInvitations(workshopId: string): Promise<PendingInvite[]> {
+  try {
+    const { userId } = await auth();
+    if (!userId) return [];
+
+    const supabase = getSupabaseServerClient();
+
+    const { data: membership } = await supabase
+      .from('workshop_members')
+      .select('role')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', userId)
+      .single();
+
+    if (!membership || (membership.role !== 'owner' && membership.role !== 'manager')) return [];
+
+    const { data: invitations } = await supabase
+      .from('workshop_invitations')
+      .select('user_id, created_at')
+      .eq('workshop_id', workshopId)
+      .order('created_at', { ascending: false });
+
+    if (!invitations || invitations.length === 0) return [];
+
+    const invitedIds = invitations.map((i) => i.user_id);
+    const { data: profiles } = await supabase
+      .from('user_profiles')
+      .select('user_id, display_name, unique_tag')
+      .in('user_id', invitedIds);
+    const profMap = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p]));
+
+    return invitations.map((i) => ({
+      userId: i.user_id,
+      displayName: profMap[i.user_id]?.display_name ?? 'Utilisateur',
+      uniqueTag: profMap[i.user_id]?.unique_tag ?? '',
+      createdAt: i.created_at,
+    }));
+  } catch (err) {
+    console.error('getWorkshopInvitations error:', err);
+    return [];
+  }
+}
+
+// Annuler une invitation en attente (propriétaire uniquement).
+export async function cancelInvitation(
   workshopId: string,
   targetUserId: string
 ): Promise<{ success: boolean; error?: string }> {
@@ -738,19 +1048,127 @@ export async function removeMember(
 
     const supabase = getSupabaseServerClient();
 
-    const { data: currentMembership } = await supabase
+    const { data: membership } = await supabase
       .from('workshop_members')
       .select('role')
       .eq('workshop_id', workshopId)
       .eq('user_id', userId)
       .single();
 
-    if (!currentMembership || currentMembership.role !== 'owner') {
+    if (!membership || (membership.role !== 'owner' && membership.role !== 'manager')) {
       return { success: false, error: 'Droits insuffisants' };
     }
 
-    if (targetUserId === userId) {
-      return { success: false, error: 'Vous ne pouvez pas vous retirer vous-même' };
+    await supabase
+      .from('workshop_invitations')
+      .delete()
+      .eq('workshop_id', workshopId)
+      .eq('user_id', targetUserId);
+
+    revalidatePath('/', 'layout');
+    return { success: true };
+  } catch (err) {
+    console.error('cancelInvitation error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
+// ─── Changer le rôle d'un membre (propriétaire / gestionnaire, règles de rang) ──
+//
+// Règles (cf. CLAUDE.md §14) : on ne peut agir que sur un membre de rang
+// strictement inférieur au sien, jamais sur le propriétaire, et on ne peut pas
+// promouvoir au-dessus de son propre rang. `setMemberRole` ne gère que les rôles
+// gestionnaire/membre (le transfert de propriété est une opération distincte,
+// réservée au propriétaire, non couverte ici).
+export async function setMemberRole(
+  workshopId: string,
+  targetUserId: string,
+  newRole: 'manager' | 'member'
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { userId } = await auth();
+    if (!userId) return { success: false, error: 'Non authentifié' };
+    if (targetUserId === userId) return { success: false, error: 'Vous ne pouvez pas changer votre propre rôle' };
+
+    const supabase = getSupabaseServerClient();
+
+    const { data: actor } = await supabase
+      .from('workshop_members')
+      .select('role')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', userId)
+      .single();
+
+    const { data: target } = await supabase
+      .from('workshop_members')
+      .select('role')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', targetUserId)
+      .single();
+
+    if (!actor || !target) return { success: false, error: 'Membre introuvable' };
+
+    const actorRank = ROLE_RANK[actor.role as WorkshopRole] ?? 0;
+    const targetRank = ROLE_RANK[target.role as WorkshopRole] ?? 0;
+
+    // Jamais le propriétaire ; uniquement un rang strictement inférieur au sien.
+    if (target.role === 'owner' || actorRank <= targetRank) {
+      return { success: false, error: 'Droits insuffisants' };
+    }
+    // On ne peut pas promouvoir au-dessus de son propre rang.
+    if (ROLE_RANK[newRole] > actorRank) {
+      return { success: false, error: 'Droits insuffisants' };
+    }
+
+    await supabase
+      .from('workshop_members')
+      .update({ role: newRole })
+      .eq('workshop_id', workshopId)
+      .eq('user_id', targetUserId);
+
+    revalidatePath('/', 'layout');
+    return { success: true };
+  } catch (err) {
+    console.error('setMemberRole error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
+// ─── Exclure un membre (propriétaire / gestionnaire, règles de rang) ───────────
+
+export async function removeMember(
+  workshopId: string,
+  targetUserId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { userId } = await auth();
+    if (!userId) return { success: false, error: 'Non authentifié' };
+    if (targetUserId === userId) return { success: false, error: 'Vous ne pouvez pas vous retirer vous-même' };
+
+    const supabase = getSupabaseServerClient();
+
+    const { data: actor } = await supabase
+      .from('workshop_members')
+      .select('role')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', userId)
+      .single();
+
+    const { data: target } = await supabase
+      .from('workshop_members')
+      .select('role')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', targetUserId)
+      .single();
+
+    if (!actor || !target) return { success: false, error: 'Membre introuvable' };
+
+    const actorRank = ROLE_RANK[actor.role as WorkshopRole] ?? 0;
+    const targetRank = ROLE_RANK[target.role as WorkshopRole] ?? 0;
+
+    // Jamais le propriétaire ; uniquement un rang strictement inférieur au sien.
+    if (target.role === 'owner' || actorRank <= targetRank) {
+      return { success: false, error: 'Droits insuffisants' };
     }
 
     await supabase
