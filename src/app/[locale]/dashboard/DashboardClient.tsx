@@ -5,9 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   Plus, Search, Users, Crown, BookMarked, X, ArrowRight,
-  Trash2, RotateCcw, Maximize2, Loader2, Sprout,
+  Trash2, RotateCcw, Maximize2, Loader2, Sprout, Mail, Check,
 } from 'lucide-react';
-import { searchWorkshops, joinWorkshop, restoreWorkshop, getWorkshopPreview, WorkshopCardData } from '@/app/actions/workshops';
+import { searchWorkshops, joinWorkshop, restoreWorkshop, getWorkshopPreview, acceptInvitation, declineInvitation, WorkshopCardData } from '@/app/actions/workshops';
 import { coverStyleFor, emojiFor } from '@/lib/workshopCover';
 
 type TrashedWorkshop = { id: string; name: string; deleted_at: string; days_remaining: number };
@@ -18,6 +18,7 @@ type Props = {
   uniqueTag: string;
   ownedWorkshops: WorkshopCardData[];
   joinedWorkshops: WorkshopCardData[];
+  invitations: WorkshopCardData[];
   trashedWorkshops: TrashedWorkshop[];
 };
 
@@ -31,7 +32,8 @@ type PreviewData = {
   memberCount: number;
   isMember: boolean;
   isPremium?: boolean;
-  role?: 'owner' | 'member';
+  role?: 'owner' | 'manager' | 'member';
+  isInvitation?: boolean;
   isMock?: boolean;
 };
 
@@ -62,7 +64,7 @@ function seededHash(str: string): number {
   return h;
 }
 
-function workshopToPreview(w: WorkshopCardData, role: 'owner' | 'member'): PreviewData {
+function workshopToPreview(w: WorkshopCardData): PreviewData {
   return {
     id: w.id,
     name: w.name,
@@ -73,7 +75,22 @@ function workshopToPreview(w: WorkshopCardData, role: 'owner' | 'member'): Previ
     memberCount: w.member_count,
     isMember: true,
     isPremium: w.is_premium,
-    role,
+    role: w.role ?? 'member',
+  };
+}
+
+function invitationToPreview(w: WorkshopCardData): PreviewData {
+  return {
+    id: w.id,
+    name: w.name,
+    description: w.description,
+    coverStyle: coverStyleFor(w.id, w.cover_gradient, w.cover_image_url, w.cover_image_active),
+    emoji: emojiFor(w.id, w.emoji),
+    ownerName: w.owner_name,
+    memberCount: w.member_count,
+    isMember: false,
+    isPremium: w.is_premium,
+    isInvitation: true,
   };
 }
 
@@ -99,7 +116,7 @@ export default function DashboardClient(props: Props) {
   );
 }
 
-function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joinedWorkshops, trashedWorkshops }: Props) {
+function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joinedWorkshops, invitations, trashedWorkshops }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -108,6 +125,8 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
   const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; description: string | null; cover_gradient: string | null; cover_image_url: string | null; cover_image_active: boolean; emoji: string | null; unique_tag: string | null; member_count: number }>>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [decliningId, setDecliningId] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -142,7 +161,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
     };
   }, [searchOpen, preview, previewLoading]);
 
-  const hasWorkshops = ownedWorkshops.length > 0 || joinedWorkshops.length > 0;
+  const hasWorkshops = ownedWorkshops.length > 0 || joinedWorkshops.length > 0 || invitations.length > 0;
 
   // ── Deep link ?preview=ID ───────────────────────────────────────────────
   useEffect(() => {
@@ -151,7 +170,13 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
 
     const ownMatch = [...ownedWorkshops, ...joinedWorkshops].find((w) => w.id === previewId);
     if (ownMatch) {
-      setPreview(workshopToPreview(ownMatch, ownedWorkshops.includes(ownMatch) ? 'owner' : 'member'));
+      setPreview(workshopToPreview(ownMatch));
+      return;
+    }
+
+    const inviteMatch = invitations.find((w) => w.id === previewId);
+    if (inviteMatch) {
+      setPreview(invitationToPreview(inviteMatch));
       return;
     }
 
@@ -212,6 +237,25 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
     setJoiningId(null);
     if (result.success) {
       router.push(`/${locale}/workshops/${workshopId}`);
+    }
+  }
+
+  async function handleAcceptInvitation(workshopId: string) {
+    setAcceptingId(workshopId);
+    const result = await acceptInvitation(workshopId);
+    setAcceptingId(null);
+    if (result.success) {
+      router.push(`/${locale}/workshops/${workshopId}`);
+    }
+  }
+
+  async function handleDeclineInvitation(workshopId: string) {
+    setDecliningId(workshopId);
+    const result = await declineInvitation(workshopId);
+    setDecliningId(null);
+    if (result.success) {
+      setPreview(null);
+      router.refresh();
     }
   }
 
@@ -387,7 +431,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
                   {ownedWorkshops.map((w) => (
-                    <WorkshopCard key={w.id} workshop={w} locale={locale} onExpand={() => setPreview(workshopToPreview(w, 'owner'))} />
+                    <WorkshopCard key={w.id} workshop={w} locale={locale} onExpand={() => setPreview(workshopToPreview(w))} />
                   ))}
                   <Link
                     href={`/${locale}/workshops/new`}
@@ -399,8 +443,8 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                 </div>
               </section>
 
-              {/* joined */}
-              {joinedWorkshops.length > 0 && (
+              {/* joined + invitations */}
+              {(joinedWorkshops.length > 0 || invitations.length > 0) && (
                 <section>
                   <div className="flex items-center gap-2 mb-3.5">
                     <BookMarked className="w-4 h-4 text-[#7a9968]" />
@@ -408,8 +452,12 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                     <span className="text-[12px] text-[#9a948a]">({joinedWorkshops.length})</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                    {/* invitations en attente, en tête de liste */}
+                    {invitations.map((w) => (
+                      <InvitationCard key={`inv-${w.id}`} workshop={w} locale={locale} onOpen={() => setPreview(invitationToPreview(w))} />
+                    ))}
                     {joinedWorkshops.map((w) => (
-                      <WorkshopCard key={w.id} workshop={w} locale={locale} onExpand={() => setPreview(workshopToPreview(w, 'member'))} />
+                      <WorkshopCard key={w.id} workshop={w} locale={locale} onExpand={() => setPreview(workshopToPreview(w))} />
                     ))}
                   </div>
                 </section>
@@ -466,11 +514,23 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                   <button onClick={closePreview} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/85 flex items-center justify-center text-[#5a564c] hover:bg-white">
                     <X className="w-4 h-4" />
                   </button>
-                  {(preview.role || preview.isPremium) && (
+                  {(preview.role || preview.isPremium || preview.isInvitation) && (
                     <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                      {preview.isInvitation && (
+                        <span
+                          className="text-[11px] px-2.5 py-1 rounded-full font-medium inline-flex items-center gap-1"
+                          style={{ background: 'rgba(168,122,58,0.92)', color: '#fff' }}
+                        >
+                          <Mail className="w-3 h-3" /> invitation
+                        </span>
+                      )}
                       {preview.role && (
                         <span className="text-[11px] px-2.5 py-1 rounded-full bg-white/85 text-[#5a564c] font-medium">
-                          {preview.role === 'owner' ? (locale === 'fr' ? 'propriétaire' : 'owner') : (locale === 'fr' ? 'membre' : 'member')}
+                          {preview.role === 'owner'
+                            ? (locale === 'fr' ? 'propriétaire' : 'owner')
+                            : preview.role === 'manager'
+                            ? (locale === 'fr' ? 'gestionnaire' : 'manager')
+                            : (locale === 'fr' ? 'membre' : 'member')}
                         </span>
                       )}
                       {preview.isPremium && (
@@ -496,7 +556,28 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                     <p className="text-[13.5px] text-[#3a352c] leading-relaxed mb-5">{preview.description}</p>
                   )}
 
-                  {preview.isMock ? (
+                  {preview.isInvitation ? (
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => handleAcceptInvitation(preview.id)}
+                        disabled={acceptingId === preview.id || decliningId === preview.id}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#4f6b40] text-[#f4f0e6] text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)] disabled:opacity-60"
+                      >
+                        {acceptingId === preview.id
+                          ? <><Loader2 className="w-4 h-4 animate-spin" />{locale === 'fr' ? 'acceptation…' : 'accepting…'}</>
+                          : <><Check className="w-4 h-4" />{locale === 'fr' ? 'accepter l\'invitation' : 'accept invitation'}</>}
+                      </button>
+                      <button
+                        onClick={() => handleDeclineInvitation(preview.id)}
+                        disabled={acceptingId === preview.id || decliningId === preview.id}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] border border-[#b85a4a]/40 text-[#b85a4a] text-[13.5px] font-medium hover:bg-[#b85a4a]/[0.06] disabled:opacity-60"
+                      >
+                        {decliningId === preview.id
+                          ? <><Loader2 className="w-4 h-4 animate-spin" />{locale === 'fr' ? 'refus…' : 'declining…'}</>
+                          : <>{locale === 'fr' ? 'refuser' : 'decline'}</>}
+                      </button>
+                    </div>
+                  ) : preview.isMock ? (
                     <Link href={`/${locale}/dashboard`} onClick={closePreview} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#4f6b40] text-[#f4f0e6] text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)]">
                       {locale === 'fr' ? 'rejoindre l\'atelier' : 'join the workshop'} <ArrowRight className="w-4 h-4" />
                     </Link>
@@ -531,6 +612,24 @@ function WorkshopCard({ workshop, locale, onExpand }: { workshop: WorkshopCardDa
     <Link href={`/${locale}/workshops/${workshop.id}`} className="group rounded-2xl overflow-hidden bg-white/90 border border-[#2d2a24]/[0.08] shadow-[0_4px_16px_rgba(45,42,36,0.06)] hover:shadow-[0_10px_28px_rgba(45,42,36,0.12)] hover:-translate-y-0.5 transition flex flex-col">
       <div className="relative h-[90px]" style={coverStyle}>
         <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{emojiFor(workshop.id, workshop.emoji)}</div>
+        <div className="absolute top-2.5 left-2.5 flex flex-wrap items-center gap-1">
+          {workshop.is_premium && (
+            <span
+              className="inline-flex items-center gap-1 text-[10.5px] px-2 py-0.5 rounded-full font-semibold shadow-sm"
+              style={{ background: 'rgba(232,184,108,0.92)', color: '#7a4d20' }}
+            >
+              <Crown className="w-2.5 h-2.5" /> Premium
+            </span>
+          )}
+          {workshop.role === 'manager' && (
+            <span
+              className="inline-flex items-center text-[10.5px] px-2 py-0.5 rounded-full font-semibold shadow-sm"
+              style={{ background: 'rgba(122,153,104,0.92)', color: '#27331c' }}
+            >
+              gestionnaire
+            </span>
+          )}
+        </div>
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onExpand(); }}
           className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-white/0 group-hover:bg-white/85 flex items-center justify-center text-transparent group-hover:text-[#5a564c] transition"
@@ -547,5 +646,31 @@ function WorkshopCard({ workshop, locale, onExpand }: { workshop: WorkshopCardDa
         </div>
       </div>
     </Link>
+  );
+}
+
+function InvitationCard({ workshop, locale, onOpen }: { workshop: WorkshopCardData; locale: string; onOpen: () => void }) {
+  const coverStyle = coverStyleFor(workshop.id, workshop.cover_gradient, workshop.cover_image_url, workshop.cover_image_active);
+  return (
+    <button
+      onClick={onOpen}
+      className="group text-left rounded-2xl overflow-hidden bg-white/90 border-2 border-[#a87a3a]/45 shadow-[0_4px_16px_rgba(168,122,58,0.12)] hover:shadow-[0_10px_28px_rgba(168,122,58,0.18)] hover:-translate-y-0.5 transition flex flex-col"
+    >
+      <div className="relative h-[90px]" style={coverStyle}>
+        <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{emojiFor(workshop.id, workshop.emoji)}</div>
+        <span
+          className="absolute top-2.5 left-2.5 text-[10.5px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1"
+          style={{ background: 'rgba(168,122,58,0.92)', color: '#fff' }}
+        >
+          <Mail className="w-2.5 h-2.5" /> invitation
+        </span>
+      </div>
+      <div className="px-3.5 pt-3 pb-3.5">
+        <div className="font-medium text-[#2d2a24] text-sm mb-1 line-clamp-2">{workshop.name}</div>
+        <div className="text-[11.5px] text-[#a87a3a] font-medium truncate">
+          {locale === 'fr' ? 'invité par' : 'invited by'} {workshop.owner_name}
+        </div>
+      </div>
+    </button>
   );
 }

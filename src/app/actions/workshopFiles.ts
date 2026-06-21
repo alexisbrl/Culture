@@ -32,7 +32,8 @@ function categoryFor(mimeType: string): FileCategory {
   return 'autre';
 }
 
-async function requireOwner(workshopId: string): Promise<string | null> {
+// Gestion des fichiers : propriétaire OU gestionnaire (cf. rôles d'atelier).
+async function requireManager(workshopId: string): Promise<string | null> {
   const { userId } = await auth();
   if (!userId) return null;
 
@@ -44,7 +45,7 @@ async function requireOwner(workshopId: string): Promise<string | null> {
     .eq('user_id', userId)
     .single();
 
-  if (!membership || membership.role !== 'owner') return null;
+  if (!membership || (membership.role !== 'owner' && membership.role !== 'manager')) return null;
   return userId;
 }
 
@@ -80,7 +81,7 @@ export async function createFileUploadTicket(
   mimeType: string
 ): Promise<{ success: boolean; ticket?: UploadTicket; path?: string; error?: string }> {
   try {
-    const userId = await requireOwner(workshopId);
+    const userId = await requireManager(workshopId);
     if (!userId) return { success: false, error: 'Droits insuffisants' };
 
     if (fileSize > MAX_FILE_SIZE) {
@@ -110,7 +111,7 @@ export async function finalizeWorkshopFileUpload(
   mimeType: string
 ): Promise<{ success: boolean; file?: WorkshopFile; error?: string }> {
   try {
-    const userId = await requireOwner(workshopId);
+    const userId = await requireManager(workshopId);
     if (!userId) return { success: false, error: 'Droits insuffisants' };
 
     const supabase = getSupabaseServerClient();
@@ -162,7 +163,7 @@ export async function renameWorkshopFile(
   newBaseName: string
 ): Promise<{ success: boolean; name?: string; error?: string }> {
   try {
-    const userId = await requireOwner(workshopId);
+    const userId = await requireManager(workshopId);
     if (!userId) return { success: false, error: 'Droits insuffisants' };
 
     const trimmed = newBaseName.trim();
@@ -208,7 +209,7 @@ export async function deleteWorkshopFile(
   fileId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const userId = await requireOwner(workshopId);
+    const userId = await requireManager(workshopId);
     if (!userId) return { success: false, error: 'Droits insuffisants' };
 
     const supabase = getSupabaseServerClient();

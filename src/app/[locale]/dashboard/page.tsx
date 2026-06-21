@@ -1,7 +1,7 @@
 import { currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { getLocale } from 'next-intl/server';
-import { getUserWorkshops, getTrashWorkshops, syncUserProfile } from '@/app/actions/workshops';
+import { getUserWorkshops, getTrashWorkshops, syncUserProfile, getPendingInvitations } from '@/app/actions/workshops';
 import DashboardClient from './DashboardClient';
 
 export default async function DashboardPage() {
@@ -10,10 +10,11 @@ export default async function DashboardPage() {
 
   if (!user) redirect(`/${locale}/sign-in`);
 
-  const [{ owned, joined }, trashed, profile] = await Promise.all([
+  const [{ owned, joined }, trashed, profile, invitations] = await Promise.all([
     getUserWorkshops(),
     getTrashWorkshops(),
     syncUserProfile(),
+    getPendingInvitations(),
   ]);
 
   return (
@@ -23,6 +24,7 @@ export default async function DashboardPage() {
       uniqueTag={profile?.uniqueTag ?? ''}
       ownedWorkshops={owned}
       joinedWorkshops={joined}
+      invitations={invitations}
       trashedWorkshops={trashed}
     />
   );

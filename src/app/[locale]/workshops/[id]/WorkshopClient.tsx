@@ -15,11 +15,18 @@ type Props = {
   workshopName: string;
   createdAt: string;
   currentUserId: string;
-  currentUserRole: 'owner' | 'member';
-  members: { id: string; userId: string; role: 'owner' | 'member'; joinedAt: string; displayName: string; uniqueTag: string }[];
+  currentUserRole: 'owner' | 'manager' | 'member';
+  isPremium: boolean;
+  members: { id: string; userId: string; role: 'owner' | 'manager' | 'member'; joinedAt: string; displayName: string; uniqueTag: string }[];
 };
 
 type TabId = 'programme' | 'examen' | 'analyse' | 'cours';
+
+const ROLE_LABEL: Record<'owner' | 'manager' | 'member', string> = {
+  owner: 'propriétaire',
+  manager: 'gestionnaire',
+  member: 'membre',
+};
 
 const TABS: { id: TabId; label: string; soon?: string }[] = [
   { id: 'programme', label: 'Programme éducatif' },
@@ -42,8 +49,11 @@ function Chip({ children, tone = 'default' }: { children: React.ReactNode; tone?
   );
 }
 
-export default function WorkshopClient({ locale, workshopId, workshopName, currentUserRole, members }: Props) {
+export default function WorkshopClient({ locale, workshopId, workshopName, currentUserRole, isPremium, members }: Props) {
   const isOwner = currentUserRole === 'owner';
+  // Propriétaire ou gestionnaire : accès aux onglets de gestion + paramètres.
+  const canManage = currentUserRole === 'owner' || currentUserRole === 'manager';
+  const visibleTabs = canManage ? TABS : TABS.filter((t) => t.id === 'programme');
   const [activeTab, setActiveTab] = useState<TabId>('programme');
 
   const [shareOpen, setShareOpen] = useState(false);
@@ -72,8 +82,8 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <h1 style={{ margin: 0, fontSize: 22, fontWeight: 500, color: '#2d2a24', letterSpacing: '-0.015em' }}>{workshopName}</h1>
-              <Chip tone="amber">premium</Chip>
-              <Chip tone="dim">{isOwner ? 'propriétaire' : 'membre'}</Chip>
+              {isPremium && <Chip tone="amber">premium</Chip>}
+              <Chip tone="dim">{ROLE_LABEL[currentUserRole]}</Chip>
               <span style={{ fontSize: 12, color: '#7a766d' }}>
                 {members.length} membre{members.length > 1 ? 's' : ''}
               </span>
@@ -83,7 +93,7 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
                 <QrCode size={13} />
                 partager · QR
               </button>
-              {isOwner && (
+              {canManage && (
                 <Link href={`/${locale}/workshops/${workshopId}/settings`} style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: '#5a564c', fontSize: 12.5, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Settings size={13} color="#5a564c" strokeWidth={1.75} />
                   paramètres
@@ -95,7 +105,7 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 26, padding: '14px 24px 0', borderBottom: '1px solid rgba(45,42,36,0.08)' }}>
-          {TABS.map(t => (
+          {visibleTabs.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 0 12px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5, color: activeTab === t.id ? '#2d2a24' : '#7a766d', fontWeight: activeTab === t.id ? 500 : 400, borderBottom: activeTab === t.id ? '2px solid #a87a3a' : '2px solid transparent', marginBottom: -1 }}>
               {t.label}
               {t.soon && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 999, background: 'rgba(168,122,58,0.18)', color: '#7a4d20', fontWeight: 600, letterSpacing: '0.04em' }}>{t.soon}</span>}
@@ -107,9 +117,9 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
       {/* Tab content — fills remaining height */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {activeTab === 'programme' && <ProgrammeTab />}
-        {activeTab === 'examen' && <ExamenTab workshopId={workshopId} />}
-        {activeTab === 'analyse' && <AnalyseTab />}
-        {activeTab === 'cours' && <CoursTab />}
+        {canManage && activeTab === 'examen' && <ExamenTab workshopId={workshopId} />}
+        {canManage && activeTab === 'analyse' && <AnalyseTab />}
+        {canManage && activeTab === 'cours' && <CoursTab />}
       </div>
 
       {/* Share / QR modal */}

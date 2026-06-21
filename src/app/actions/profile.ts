@@ -3,6 +3,9 @@
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { getSupabaseServerClient } from '@/lib/supabase';
 import type { AvatarConfig } from '@/components/avatar/types';
+// Config de l'avatar « composer » (PNG : face/hair/brow/eyes/nose/mouth/top),
+// distincte du type legacy ci-dessus (numérique, AvatarSVG / Navbar visiteur).
+import type { AvatarConfig as AvatarParts } from '@/components/avatar/avatarConfig';
 
 // Génère un tag aléatoire de 7 caractères (sans lettres/chiffres ambigus)
 function generateUniqueId(): string {
@@ -107,6 +110,33 @@ export async function updateProfile(data: ProfileData): Promise<{ success: boole
   } catch (err) {
     console.error('updateProfile error:', err);
     return { success: false, error: 'Erreur lors de la sauvegarde.' };
+  }
+}
+
+// Persiste la config de l'avatar « composer » (PNG) dans Clerk publicMetadata,
+// sous la clé `avatarParts` — source de vérité synchronisée à travers tous les
+// appareils (remplace l'ancien stockage localStorage, propre à chaque appareil).
+export async function updateAvatarParts(
+  config: AvatarParts
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { userId } = await auth();
+    if (!userId) return { success: false, error: 'Non authentifié' };
+
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+
+    await client.users.updateUserMetadata(userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        avatarParts: config,
+      },
+    });
+
+    return { success: true };
+  } catch (err) {
+    console.error('updateAvatarParts error:', err);
+    return { success: false, error: 'Erreur lors de la sauvegarde de l\'avatar' };
   }
 }
 

@@ -19,7 +19,8 @@ export default async function SettingsPage({ params }: Props) {
   const workshop = await getWorkshop(id);
   if (!workshop) notFound();
 
-  if (workshop.currentUserRole !== 'owner') redirect(`/${locale}/workshops/${id}`);
+  // Paramètres accessibles au propriétaire et au gestionnaire ; un candidat est renvoyé.
+  if (workshop.currentUserRole === 'member') redirect(`/${locale}/workshops/${id}`);
 
   const files = await getWorkshopFiles(id);
 
@@ -27,7 +28,7 @@ export default async function SettingsPage({ params }: Props) {
   const members = (workshop.workshop_members as any[]).map((m) => ({
     id: m.id,
     userId: m.user_id,
-    role: m.role as 'owner' | 'member',
+    role: m.role as 'owner' | 'manager' | 'member',
     joinedAt: m.joined_at,
     displayName: m.user_profiles?.display_name ?? 'Utilisateur',
     uniqueTag: m.user_profiles?.unique_tag ?? '',

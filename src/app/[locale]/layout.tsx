@@ -11,6 +11,7 @@ import '../globals.css';
 import Navbar from '@/components/Navbar';
 import DashboardHeader from '@/components/DashboardHeader';
 import Footer from '@/components/Footer';
+import SessionWatcher from '@/components/SessionWatcher';
 
 const interTight = Inter_Tight({
   variable: '--font-sans',
@@ -63,6 +64,7 @@ export default async function LocaleLayout({ children, params }: Props) {
       <html lang={locale} className={`${interTight.variable} ${caveat.variable} ${geistMono.variable} h-full`}>
         <body className="min-h-full flex flex-col bg-white">
           <NextIntlClientProvider messages={messages}>
+            <SessionWatcher />
             {isLoggedIn ? <DashboardHeader /> : <Navbar />}
             <main className="flex-1">{children}</main>
             {!isLoggedIn && <Footer />}

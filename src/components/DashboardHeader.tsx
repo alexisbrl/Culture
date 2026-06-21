@@ -9,6 +9,7 @@ import { useUser, SignOutButton } from '@clerk/nextjs';
 import { UserCircle, LogOut, ChevronDown, Crown } from 'lucide-react';
 import AvatarComposer from '@/components/avatar/AvatarComposer';
 import { loadAvatarConfig, type AvatarConfig } from '@/components/avatar/avatarConfig';
+import { markIntentionalSignOut } from '@/lib/signOutIntent';
 
 export default function DashboardHeader() {
   const locale = useLocale();
@@ -17,7 +18,12 @@ export default function DashboardHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
 
-  useEffect(() => { setAvatarConfig(loadAvatarConfig()); }, []);
+  // Avatar synchronisé au compte (publicMetadata.avatarParts), repli localStorage
+  // pour les configs non encore migrées. Se met à jour quand `user` change.
+  useEffect(() => {
+    const fromAccount = user?.publicMetadata?.avatarParts as AvatarConfig | undefined;
+    setAvatarConfig(fromAccount ?? loadAvatarConfig());
+  }, [user]);
 
   const otherLocale = locale === 'fr' ? 'en' : 'fr';
   const pathWithoutLocale = pathname.replace(`/${locale}`, '') || '/dashboard';
@@ -93,7 +99,10 @@ export default function DashboardHeader() {
                   <div className="border-t border-gray-100 my-1" />
 
                   <SignOutButton redirectUrl={`/${locale}`}>
-                    <button className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600">
+                    <button
+                      onClick={markIntentionalSignOut}
+                      className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600"
+                    >
                       <LogOut className="w-4 h-4" />
                       {locale === 'fr' ? 'Se déconnecter' : 'Sign out'}
                     </button>
