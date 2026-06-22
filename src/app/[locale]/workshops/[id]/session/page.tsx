@@ -5,6 +5,7 @@ import { useLocale } from 'next-intl';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, PencilLine } from 'lucide-react';
+import { palette } from '@/lib/theme';
 
 const QUESTION = {
   n: 4,
@@ -42,7 +43,7 @@ export default function SessionPage() {
           <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#7a766d]">{QUESTION.n - 1}/{QUESTION.total}</span>
           <div className="flex gap-[3px]">
             {Array.from({ length: QUESTION.total }, (_, i) => (
-              <div key={i} className="w-2 h-3 rounded-full" style={{ background: i < QUESTION.n - 1 ? '#7a9968' : 'rgba(45,42,36,0.10)' }} />
+              <div key={i} className="w-2 h-3 rounded-full" style={{ background: i < QUESTION.n - 1 ? palette.greenSoft : 'rgba(45,42,36,0.10)' }} />
             ))}
           </div>
         </div>
@@ -127,7 +128,7 @@ export default function SessionPage() {
               <button
                 onClick={() => setStatus(status === 'idle' ? 'submitted' : 'idle')}
                 className="flex-1 px-[18px] py-3.5 rounded-xl text-[#f4f0e6] text-[15px] font-medium shadow-[0_8px_20px_rgba(79,107,64,0.28)] transition"
-                style={{ background: status === 'submitted' ? '#4f6b40' : '#7a9968' }}
+                style={{ background: status === 'submitted' ? palette.green : palette.greenSoft }}
               >
                 {status === 'submitted' ? (fr ? 'question suivante →' : 'next question →') : (fr ? 'valider et arroser →' : 'submit and water →')}
               </button>

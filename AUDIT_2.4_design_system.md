@@ -11,7 +11,26 @@
       `ink(alpha)` (translucides sur l'encre), `radius`, `shadow`.
 - [x] Migration de **`src/components/Modal.tsx`**.
 - [x] Migration de **`src/components/ConfirmDialog.tsx`**.
-- [x] Build vérifié (OK).
+- [x] **`src/app/[locale]/workshops/[id]/tabs/CoursTab.tsx`** (ink, inkMuted, amber).
+- [x] **`src/app/[locale]/workshops/[id]/WorkshopClient.tsx`** (ink, inkSoft, inkMuted, cream).
+- [x] **`src/app/[locale]/workshops/[id]/session/page.tsx`** (green, greenSoft).
+- [x] Build vérifié (OK) après chaque lot.
+
+## ⚠️ Méthode & constat important
+- **Migration sûre = `replace_all` sur `'#hex'` ENTRE QUOTES** : ça ne matche que les
+  valeurs autonomes ; les couleurs imbriquées dans une chaîne (dégradés, ombres,
+  `'1px solid rgba(...)'`) ne sont PAS touchées → aucun risque de casser le rendu.
+  Les `rgba(45,42,36,X)` (bordures/overlays) restent donc à migrer manuellement vers
+  `ink(X)` dans un second temps (conversion en template literal).
+- **Tous les fichiers ne sont PAS migrables vers le palette TS** : `create/page.tsx`
+  (et d'autres pages publiques) utilisent des couleurs en **classes Tailwind**
+  `text-[#2d2a24]` / `bg-[#...]`, pas en styles inline. Pour celles-là, la bonne
+  approche est d'ajouter des tokens dans la **config Tailwind / `globals.css`**
+  (`@theme`) et d'utiliser `text-ink`, etc. — PAS `palette` (qui est du JS, inutilisable
+  dans une classe). À traiter comme un chantier distinct.
+- **`AnalyseTab.tsx`** : mock V2 avec surtout des couleurs **décoratives** de graphiques
+  (avatars, barres) hors charte de marque → faible valeur, à ne migrer que pour les
+  tokens réels (ink/green/amber…), laisser les couleurs arbitraires.
 
 ## ⬜ À faire — migrer les fichiers restants vers les tokens
 Remplacer dans chaque fichier les couleurs en dur par les tokens de `theme.ts`.
@@ -49,11 +68,11 @@ Fichiers à migrer (du plus chargé au moins chargé — cf. audit, ~538 occurre
 - [ ] `src/app/[locale]/pricing/PricingClient.tsx` (~24 occ.)
 - [ ] `src/app/[locale]/dashboard/DashboardClient.tsx` (~21 occ.)
 - [ ] `src/app/[locale]/profile/avatar/page.tsx` (~21 occ.)
-- [ ] `src/app/[locale]/workshops/[id]/tabs/AnalyseTab.tsx` (~14 occ.)
-- [ ] `src/app/[locale]/workshops/[id]/WorkshopClient.tsx` (~9 occ.)
-- [ ] `src/app/[locale]/workshops/[id]/tabs/CoursTab.tsx` (~6 occ.)
-- [ ] `src/app/[locale]/workshops/[id]/session/page.tsx` (~5 occ.)
-- [ ] `src/app/[locale]/create/page.tsx` (~4 occ.)
+- [ ] `src/app/[locale]/workshops/[id]/tabs/AnalyseTab.tsx` (mock V2 — couleurs déco, faible priorité)
+- [x] ~~`src/app/[locale]/workshops/[id]/WorkshopClient.tsx`~~ ✅
+- [x] ~~`src/app/[locale]/workshops/[id]/tabs/CoursTab.tsx`~~ ✅
+- [x] ~~`src/app/[locale]/workshops/[id]/session/page.tsx`~~ ✅ (partiel : 2 tokens)
+- [ ] ~~`src/app/[locale]/create/page.tsx`~~ → **classes Tailwind, pas de palette TS** (chantier Tailwind)
 - [ ] `src/components/ShareQRModal.tsx`
 - [ ] `src/components/DashboardHeader.tsx`, `Navbar.tsx`, `Footer.tsx`, `WaitlistForm.tsx`
 - [ ] `src/app/[locale]/garden/GardenClient.tsx` (couleurs spécifiques au jardin — à évaluer : certaines sont propres au rendu isométrique, pas forcément à tokeniser)
