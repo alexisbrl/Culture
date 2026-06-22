@@ -1,9 +1,16 @@
 'use server';
 
 import { getSupabaseServerClient } from '@/lib/supabase';
+import { assertManager, requireManager } from '@/lib/authz';
 import { revalidatePath } from 'next/cache';
 import type { Question, QuestionPart } from '@/app/[locale]/workshops/[id]/tabs/QuestionEditor';
 import type { ExamConfig } from '@/app/[locale]/workshops/[id]/tabs/ExamenTab';
+
+// ⚠️ SÉCURITÉ — Le générateur d'examen est réservé aux gestionnaires (CLAUDE.md §14),
+// et la banque contient les RÉPONSES : aucune de ces actions ne doit être accessible
+// à un candidat ni à un non-membre. Chaque action vérifie donc le rôle côté serveur
+// via `requireManager`/`assertManager` (cf. src/lib/authz.ts) — ne jamais se fier au
+// fait que l'onglet est masqué côté client.
 
 export type ExamPool = { id: string; name: string; color: string };
 
@@ -105,6 +112,11 @@ export async function getExamBankData(workshopId: string): Promise<{
   pools: ExamPool[];
   exams: GeneratedExam[];
 }> {
+  // Lecture réservée aux gestionnaires (la banque contient les réponses).
+  if (!(await requireManager(workshopId))) {
+    return { questions: [], pools: [], exams: [] };
+  }
+
   const supabase = getSupabaseServerClient();
 
   const [questionsRes, poolsRes, examsRes] = await Promise.all([
@@ -132,6 +144,7 @@ export async function getExamBankData(workshopId: string): Promise<{
 }
 
 export async function saveQuestion(workshopId: string, question: Question): Promise<void> {
+  await assertManager(workshopId);
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_questions').upsert(questionToRow(workshopId, question));
   if (error) throw new Error(error.message);
@@ -140,6 +153,7 @@ export async function saveQuestion(workshopId: string, question: Question): Prom
 
 export async function saveQuestions(workshopId: string, questions: Question[]): Promise<void> {
   if (questions.length === 0) return;
+  await assertManager(workshopId);
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_questions').upsert(questions.map((q) => questionToRow(workshopId, q)));
   if (error) throw new Error(error.message);
@@ -147,6 +161,7 @@ export async function saveQuestions(workshopId: string, questions: Question[]): 
 }
 
 export async function createPool(workshopId: string, pool: ExamPool): Promise<void> {
+  await assertManager(workshopId);
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_pools').insert({ id: pool.id, workshop_id: workshopId, name: pool.name, color: pool.color });
   if (error) throw new Error(error.message);
@@ -154,6 +169,7 @@ export async function createPool(workshopId: string, pool: ExamPool): Promise<vo
 }
 
 export async function updatePool(workshopId: string, pool: ExamPool): Promise<void> {
+  await assertManager(workshopId);
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_pools').update({ name: pool.name, color: pool.color }).eq('workshop_id', workshopId).eq('id', pool.id);
   if (error) throw new Error(error.message);
@@ -161,6 +177,7 @@ export async function updatePool(workshopId: string, pool: ExamPool): Promise<vo
 }
 
 export async function deletePool(workshopId: string, poolId: string, affectedQuestions: Question[]): Promise<void> {
+  await assertManager(workshopId);
   const supabase = getSupabaseServerClient();
 
   if (affectedQuestions.length > 0) {
@@ -174,6 +191,7 @@ export async function deletePool(workshopId: string, poolId: string, affectedQue
 }
 
 export async function deleteQuestion(workshopId: string, questionId: string, affectedQuestions: Question[]): Promise<void> {
+  await assertManager(workshopId);
   const supabase = getSupabaseServerClient();
 
   if (affectedQuestions.length > 0) {
@@ -187,6 +205,7 @@ export async function deleteQuestion(workshopId: string, questionId: string, aff
 }
 
 export async function saveGeneratedExam(workshopId: string, exam: GeneratedExam): Promise<void> {
+  await assertManager(workshopId);
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_generated').upsert({
     id: exam.id,
@@ -208,6 +227,7 @@ export async function saveGeneratedExam(workshopId: string, exam: GeneratedExam)
 export type ExamDraft = { draftIds: string[]; config: ExamConfig; editingId: string | null };
 
 export async function getExamDraft(workshopId: string): Promise<ExamDraft | null> {
+  if (!(await requireManager(workshopId))) return null;
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase.from('exam_draft').select('draft_ids, config, editing_id').eq('workshop_id', workshopId).maybeSingle();
   if (error) throw new Error(error.message);
@@ -216,6 +236,7 @@ export async function getExamDraft(workshopId: string): Promise<ExamDraft | null
 }
 
 export async function deleteGeneratedExam(workshopId: string, examId: string): Promise<void> {
+  await assertManager(workshopId);
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_generated').delete().eq('workshop_id', workshopId).eq('id', examId);
   if (error) throw new Error(error.message);
@@ -223,6 +244,7 @@ export async function deleteGeneratedExam(workshopId: string, examId: string): P
 }
 
 export async function saveExamDraft(workshopId: string, draft: ExamDraft): Promise<void> {
+  await assertManager(workshopId);
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_draft').upsert({
     workshop_id: workshopId,

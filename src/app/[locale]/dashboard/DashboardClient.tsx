@@ -7,7 +7,7 @@ import {
   Plus, Search, Users, Crown, BookMarked, X, ArrowRight,
   Trash2, RotateCcw, Maximize2, Loader2, Sprout, Mail, Check,
 } from 'lucide-react';
-import { searchWorkshops, joinWorkshop, restoreWorkshop, getWorkshopPreview, acceptInvitation, declineInvitation, WorkshopCardData } from '@/app/actions/workshops';
+import { searchWorkshops, requestToJoinWorkshop, restoreWorkshop, getWorkshopPreview, acceptInvitation, declineInvitation, WorkshopCardData } from '@/app/actions/workshops';
 import { coverStyleFor, emojiFor } from '@/lib/workshopCover';
 
 type TrashedWorkshop = { id: string; name: string; deleted_at: string; days_remaining: number };
@@ -31,6 +31,7 @@ type PreviewData = {
   ownerName: string;
   memberCount: number;
   isMember: boolean;
+  hasRequested?: boolean;
   isPremium?: boolean;
   role?: 'owner' | 'manager' | 'member';
   isInvitation?: boolean;
@@ -193,6 +194,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
         ownerName: data.ownerName,
         memberCount: data.memberCount,
         isMember: data.isMember,
+        hasRequested: data.hasRequested,
         isPremium: data.isPremium,
       });
     });
@@ -231,13 +233,18 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
     setIsSearching(false);
   }
 
-  async function handleJoinAndOpen(workshopId: string) {
+  async function handleRequestJoin(workshopId: string) {
     setJoiningId(workshopId);
-    const result = await joinWorkshop(workshopId);
+    const result = await requestToJoinWorkshop(workshopId);
     setJoiningId(null);
-    if (result.success) {
+    if (!result.success) return;
+    // Déjà membre (cas limite) → on ouvre l'atelier. Sinon la demande est en attente
+    // d'une validation : on reflète l'état « demande envoyée » dans la preview.
+    if (result.status === 'already_member') {
       router.push(`/${locale}/workshops/${workshopId}`);
+      return;
     }
+    setPreview((prev) => (prev && prev.id === workshopId ? { ...prev, hasRequested: true } : prev));
   }
 
   async function handleAcceptInvitation(workshopId: string) {
@@ -352,6 +359,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                               ownerName: data.ownerName,
                               memberCount: data.memberCount,
                               isMember: data.isMember,
+                              hasRequested: data.hasRequested,
                               isPremium: data.isPremium,
                             });
                           });
@@ -585,15 +593,26 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                     <Link href={`/${locale}/workshops/${preview.id}`} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#2d2a24] text-[#f4f0e6] text-[13.5px] font-medium">
                       {locale === 'fr' ? 'entrer dans l\'atelier' : 'enter the workshop'} <ArrowRight className="w-4 h-4" />
                     </Link>
+                  ) : preview.hasRequested ? (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#a87a3a]/[0.12] text-[#a87a3a] text-[13.5px] font-medium">
+                        <Check className="w-4 h-4" />{locale === 'fr' ? 'demande envoyée' : 'request sent'}
+                      </span>
+                      <span className="text-[12px] text-[#7a766d]">
+                        {locale === 'fr'
+                          ? 'en attente de validation par un gestionnaire de l\'atelier.'
+                          : 'waiting for a workshop manager to approve.'}
+                      </span>
+                    </div>
                   ) : (
                     <button
-                      onClick={() => handleJoinAndOpen(preview.id)}
+                      onClick={() => handleRequestJoin(preview.id)}
                       disabled={joiningId === preview.id}
                       className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#4f6b40] text-[#f4f0e6] text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)] disabled:opacity-60"
                     >
                       {joiningId === preview.id
-                        ? <><Loader2 className="w-4 h-4 animate-spin" />{locale === 'fr' ? 'inscription…' : 'joining…'}</>
-                        : <>{locale === 'fr' ? 'rejoindre l\'atelier' : 'join the workshop'} <ArrowRight className="w-4 h-4" /></>}
+                        ? <><Loader2 className="w-4 h-4 animate-spin" />{locale === 'fr' ? 'envoi…' : 'sending…'}</>
+                        : <>{locale === 'fr' ? 'demander à rejoindre' : 'request to join'} <ArrowRight className="w-4 h-4" /></>}
                     </button>
                   )}
                 </div>
