@@ -96,16 +96,28 @@ une chaîne) :
   Analyse, Examen, Programme, QuestionEditor, ShareQRModal, WorkshopClient, CoursTab,
   session, Modal, ConfirmDialog. **Build OK.**
 
-### Reste (mineur, non bloquant) — vrais chantiers restants
-- **`rgba(45,42,36,X)` imbriqués dans des chaînes** (`border: '1px solid rgba(...)'`,
-  ombres) : non migrés (nécessitent une conversion en template literal `\`… ${ink(X)}\``,
-  au cas par cas). Neutres (encre), pas des couleurs de marque.
-- **Tints non-encre** (`rgba(255,255,255,…)`, `rgba(184,90,74,…)` danger, amber,
-  green) en chaînes : à tokeniser si besoin (ajouter des helpers `withAlpha`).
-- **7 attributs SVG double-quote** (`stroke="#2d2a24"`) : idéalement passer ces SVG
-  inline en icônes Lucide (cf. règle §1) puis supprimer.
-- **Pages en classes Tailwind** (`text-[#2d2a24]`, ex. `create/page.tsx`) : chantier
-  distinct → définir les tokens dans `globals.css` `@theme` (`text-ink`, `bg-cream`…).
+### Items 1-4 — TRAITÉS (23/06/2026)
+- **Item 1 — `rgba(45,42,36,X)` imbriqués** : convertis en `\`… ${ink(X)}\`` (template
+  literal) via script ancré sur `: '…'` (valeurs de style uniquement → exclut les blocs
+  `<style>`). ✅
+- **Item 2 — tints non-encre** : `withAlpha(hex, alpha)` + token `amberGlow` ajoutés à
+  `theme.ts`. `rgba(255,255,255/184,90,74/168,122,58/232,184,108/79,107,64/122,153,104, a)`
+  → `withAlpha(palette.X, a)`, autonomes et imbriqués. ✅
+- **Item 3 — attributs SVG/icônes** : props de couleur des **icônes Lucide** (ExamenTab)
+  → `palette.*`. ✅ Les `<svg>` **décoratifs** (avatars, plantes, arbres, verres dans
+  Footer/AvatarSVG/GardenClient/ProfileClient/PricingClient/ProgrammeTab/CoursTab) sont
+  **laissés volontairement** : ce sont des palettes d'illustration, pas la charte de marque.
+- **Item 4 — classes Tailwind** : tokens sémantiques ajoutés à `@theme` (globals.css :
+  `--color-ink`, `-cream`, `-green`, `-amber`, `-danger`…) → utilitaires `text-ink`,
+  `bg-cream`, `border-ink/[0.08]`, etc. Classes `[#hex]` de marque migrées dans
+  `create`, `dashboard`, `garden`, `session`. ✅
+
+### Reste vraiment mineur (optionnel)
+- Quelques props d'icônes isolées (`<Settings color="#5a564c">` WorkshopClient,
+  `<X color="#fff">` SettingsClient) — cosmétique, non migrées.
+- `rgba` d'encre dans de rares branches de ternaire `? '…'` (non ancrées sur `: '`).
+- Classes de **dégradés décoratifs** (`from-[#eef6e2]`…) : artwork, laissées.
+- `DashboardHeader` : pas de hex de marque en classe arbitraire (rien à faire).
 
 ## Comment relancer
 « Continue l'audit §2.4 : migre le prochain fichier de la checklist
