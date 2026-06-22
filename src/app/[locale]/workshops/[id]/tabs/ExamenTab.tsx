@@ -490,7 +490,7 @@ function HistoryContent({ exams, justAddedId, onEdit, onNew, onDelete }: { exams
             <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr 0.8fr 1fr 1fr 1.1fr', gap: 12, alignItems: 'center', padding: '14px', borderRadius: 12, background: hot ? withAlpha(palette.amberGlow, 0.18) : withAlpha(palette.paper, 0.8), border: hot ? '1.5px solid rgba(168,122,58,0.45)' : `1px solid ${ink(0.08)}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                 <span style={{ width: 36, height: 36, borderRadius: 9, background: ink(0.05), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <FileText size={18} color="#a87a3a" strokeWidth={1.75} />
+                  <FileText size={18} color={palette.amber} strokeWidth={1.75} />
                 </span>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 500, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</div>
@@ -508,7 +508,7 @@ function HistoryContent({ exams, justAddedId, onEdit, onNew, onDelete }: { exams
                 <IconBtn title="dupliquer"><Copy size={14} strokeWidth={1.75} /></IconBtn>
                 <IconBtn title="exporter"><Download size={14} strokeWidth={1.75} /></IconBtn>
                 <IconBtn title="supprimer" onClick={() => onDelete(e)}>
-                  <svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 4h9M5.5 4V2.5h3V4M5.5 6.5v4M8.5 6.5v4M3.5 4l.7 8h5.6l.7-8" stroke="#b85a4a" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 4h9M5.5 4V2.5h3V4M5.5 6.5v4M8.5 6.5v4M3.5 4l.7 8h5.6l.7-8" stroke={palette.danger} strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </IconBtn>
               </div>
             </div>
@@ -857,7 +857,7 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: withAlpha(palette.paper, 0.7), border: `1px solid ${ink(0.08)}`, borderRadius: 9 }}>
-          <Search size={14} color="#7a766d" strokeWidth={1.75} />
+          <Search size={14} color={palette.inkSoft} strokeWidth={1.75} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="chercher une question…" style={{ flex: 1, fontSize: 12.5, color: '#3a352c', border: 'none', outline: 'none', background: 'transparent', fontFamily: 'inherit' }} />
         </div>
         <div ref={filterRef} style={{ position: 'relative' }}>
@@ -1373,7 +1373,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                   title="appliquer la présentation favorite"
                   style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '5px 10px', borderRadius: 999, border: `1px solid ${withAlpha(palette.amber, 0.30)}`, background: withAlpha(palette.amberGlow, 0.14), color: '#7a4d20', cursor: 'pointer', fontFamily: 'inherit' }}
                 >
-                  <Star size={11.5} strokeWidth={2} fill="#a87a3a" color="#a87a3a" />
+                  <Star size={11.5} strokeWidth={2} fill={palette.amber} color={palette.amber} />
                   favori
                 </button>
                 <button
@@ -1809,7 +1809,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
           width={420}
           iconTone="accent"
           confirmTone="confirm"
-          icon={<Star size={18} strokeWidth={2} fill="#a87a3a" color="#a87a3a" />}
+          icon={<Star size={18} strokeWidth={2} fill={palette.amber} color={palette.amber} />}
           title="Appliquer la présentation favorite ?"
           description="La section présentation va être remplacée par votre favori."
           confirmLabel="Appliquer"
@@ -2225,7 +2225,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       )}
       {openQuestionBlocked && createPortal(
         <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', zIndex: 90, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 999, background: palette.ink, color: palette.parchment, fontFamily: "'Inter Tight', system-ui, sans-serif", fontSize: 12.5, boxShadow: `0 12px 32px ${ink(0.30)}` }}>
-          <AlertTriangle size={14} strokeWidth={2} color="#e8b86c" />
+          <AlertTriangle size={14} strokeWidth={2} color={palette.amberGlow} />
           question déjà en cours d&apos;édition
         </div>,
         document.body
