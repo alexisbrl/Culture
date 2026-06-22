@@ -1,6 +1,6 @@
 'use client';
 
-import { palette, ink } from '@/lib/theme';
+import { palette, ink, withAlpha } from '@/lib/theme';
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
@@ -126,7 +126,7 @@ function Row({
         justifyContent: 'space-between',
         gap: 16,
         padding: '14px 0',
-        borderBottom: noBorder ? 'none' : '1px solid rgba(45,42,36,0.06)',
+        borderBottom: noBorder ? 'none' : `1px solid ${ink(0.06)}`,
         flexWrap: 'wrap',
       }}
     >
@@ -189,12 +189,12 @@ function SmallBtn({
   const styles = {
     ghost: {
       bg: 'transparent',
-      border: '1px solid rgba(45,42,36,0.16)',
+      border: `1px solid ${ink(0.16)}`,
       color: palette.inkMuted,
     },
     danger: {
-      bg: 'rgba(184,90,74,0.10)',
-      border: '1px solid rgba(184,90,74,0.30)',
+      bg: withAlpha(palette.danger, 0.10),
+      border: `1px solid ${withAlpha(palette.danger, 0.30)}`,
       color: palette.danger,
     },
     dark: {
@@ -248,9 +248,9 @@ function SectionCard({
       </div>
       <div
         style={{
-          background: 'rgba(255,255,255,0.85)',
+          background: withAlpha(palette.paper, 0.85),
           borderRadius: 14,
-          border: '1px solid rgba(45,42,36,0.07)',
+          border: `1px solid ${ink(0.07)}`,
           padding: '6px 18px',
         }}
       >
@@ -716,7 +716,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         style={{
           width: 232,
           flexShrink: 0,
-          borderRight: '1px solid rgba(45,42,36,0.07)',
+          borderRight: `1px solid ${ink(0.07)}`,
           background: 'rgba(252,249,242,0.6)',
           padding: '22px 16px',
           position: 'sticky',
@@ -776,7 +776,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   padding: '8px 10px',
                   borderRadius: 9,
                   border: 'none',
-                  background: active ? 'rgba(168,122,58,0.14)' : 'transparent',
+                  background: active ? withAlpha(palette.amber, 0.14) : 'transparent',
                   color: active ? '#7a4d20' : palette.inkMuted,
                   fontWeight: active ? 500 : 400,
                   fontSize: 13,
@@ -816,9 +816,9 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 alignItems: 'center',
                 gap: 8,
                 padding: '7px 12px',
-                border: '1px solid rgba(45,42,36,0.14)',
+                border: `1px solid ${ink(0.14)}`,
                 borderRadius: 9,
-                background: 'rgba(255,255,255,0.7)',
+                background: withAlpha(palette.paper, 0.7),
                 width: 300,
               }}
             >
@@ -863,10 +863,10 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 fontSize: 13,
                 fontFamily: 'inherit',
                 padding: '8px 12px',
-                border: '1px solid rgba(45,42,36,0.14)',
+                border: `1px solid ${ink(0.14)}`,
                 borderRadius: 9,
                 outline: 'none',
-                background: 'rgba(255,255,255,0.7)',
+                background: withAlpha(palette.paper, 0.7),
                 color: palette.ink,
                 width: 260,
                 resize: 'vertical',
@@ -915,7 +915,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       backgroundImage: coverImage ? `url(${coverImage})` : 'none',
                       backgroundSize: 'cover',
                       backgroundPosition: 'center',
-                      border: useCustomCover && coverImage ? '2px solid #2d2a24' : '2px dashed rgba(45,42,36,0.22)',
+                      border: useCustomCover && coverImage ? '2px solid #2d2a24' : `2px dashed ${ink(0.22)}`,
                       cursor: uploadingCover ? 'default' : 'pointer',
                       padding: 0,
                       display: 'flex',
@@ -980,7 +980,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    background: 'rgba(255,255,255,0.7)',
+                    background: withAlpha(palette.paper, 0.7),
                     border: selectedEmoji === e ? '2px solid #2d2a24' : '2px solid transparent',
                     cursor: 'pointer',
                     padding: 0,
@@ -1015,7 +1015,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           <Row label="QR code" hint="redirige directement vers l'atelier" noBorder>
             <button
               onClick={() => setShareOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
             >
               <QrCode size={13} />
               partager · QR
@@ -1065,10 +1065,10 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       fontSize: 13,
                       fontFamily: "'ui-monospace', 'monospace', inherit",
                       padding: '7px 12px',
-                      border: '1px solid rgba(45,42,36,0.14)',
+                      border: `1px solid ${ink(0.14)}`,
                       borderRadius: 9,
                       outline: 'none',
-                      background: 'rgba(255,255,255,0.7)',
+                      background: withAlpha(palette.paper, 0.7),
                       color: palette.ink,
                       width: 130,
                       letterSpacing: '0.04em',
@@ -1101,8 +1101,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       padding: '10px 12px',
                       marginBottom: 6,
                       borderRadius: 10,
-                      background: 'rgba(168,122,58,0.06)',
-                      border: '1px solid rgba(168,122,58,0.18)',
+                      background: withAlpha(palette.amber, 0.06),
+                      border: `1px solid ${withAlpha(palette.amber, 0.18)}`,
                     }}
                   >
                     <Mail size={16} style={{ color: palette.amber, flexShrink: 0 }} />
@@ -1133,7 +1133,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   fontSize: 12,
                   color: palette.inkFaint,
                   background: ink(0.05),
-                  border: '1px solid rgba(45,42,36,0.08)',
+                  border: `1px solid ${ink(0.08)}`,
                   borderRadius: 9,
                   padding: '7px 12px',
                 }}
@@ -1159,8 +1159,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     padding: '10px 12px',
                     marginBottom: 6,
                     borderRadius: 10,
-                    background: 'rgba(79,107,64,0.06)',
-                    border: '1px solid rgba(79,107,64,0.18)',
+                    background: withAlpha(palette.green, 0.06),
+                    border: `1px solid ${withAlpha(palette.green, 0.18)}`,
                   }}
                 >
                   <UserPlus size={16} style={{ color: palette.green, flexShrink: 0 }} />
@@ -1274,7 +1274,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             style={{
               border: `1.5px dashed ${fileDragOver ? palette.amber : ink(0.14)}`,
               borderRadius: 12,
-              background: fileDragOver ? 'rgba(168,122,58,0.06)' : 'transparent',
+              background: fileDragOver ? withAlpha(palette.amber, 0.06) : 'transparent',
               padding: '14px 16px',
               marginBottom: files.length > 0 ? 8 : 0,
               transition: 'all 0.12s',
@@ -1365,7 +1365,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                               minWidth: 0,
                               fontSize: 13,
                               color: palette.ink,
-                              border: '1px solid rgba(168,122,58,0.40)',
+                              border: `1px solid ${withAlpha(palette.amber, 0.40)}`,
                               borderRadius: 6,
                               padding: '3px 6px',
                               background: palette.paper,
@@ -1537,7 +1537,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
               alignItems: 'center',
               justifyContent: 'space-between',
               paddingTop: 12,
-              borderTop: '1px solid rgba(45,42,36,0.06)',
+              borderTop: `1px solid ${ink(0.06)}`,
               marginTop: 4,
             }}
           >
@@ -1567,8 +1567,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   fontWeight: 500,
                   padding: '4px 10px',
                   borderRadius: 999,
-                  background: 'rgba(232,184,108,0.20)',
-                  border: '1px solid rgba(168,122,58,0.30)',
+                  background: withAlpha(palette.amberGlow, 0.20),
+                  border: `1px solid ${withAlpha(palette.amber, 0.30)}`,
                   color: '#7a4d20',
                   letterSpacing: '0.02em',
                 }}
@@ -1589,8 +1589,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     fontWeight: 500,
                     padding: '4px 10px',
                     borderRadius: 999,
-                    background: 'rgba(232,184,108,0.20)',
-                    border: '1px solid rgba(168,122,58,0.30)',
+                    background: withAlpha(palette.amberGlow, 0.20),
+                    border: `1px solid ${withAlpha(palette.amber, 0.30)}`,
                     color: '#7a4d20',
                     letterSpacing: '0.02em',
                   }}
@@ -1614,10 +1614,10 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 style={{
                   fontSize: 13,
                   padding: '7px 12px',
-                  border: '1px solid rgba(45,42,36,0.14)',
+                  border: `1px solid ${ink(0.14)}`,
                   borderRadius: 9,
                   outline: 'none',
-                  background: 'rgba(255,255,255,0.7)',
+                  background: withAlpha(palette.paper, 0.7),
                   color: palette.ink,
                   width: 160,
                 }}
@@ -1629,8 +1629,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   fontSize: 12.5,
                   fontWeight: 500,
                   color: palette.danger,
-                  background: 'rgba(184,90,74,0.08)',
-                  border: '1px solid rgba(184,90,74,0.18)',
+                  background: withAlpha(palette.danger, 0.08),
+                  border: `1px solid ${withAlpha(palette.danger, 0.18)}`,
                   borderRadius: 9,
                   padding: '8px 12px',
                   margin: '4px 0 12px',
@@ -1659,8 +1659,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             gap: 12,
             background: palette.paper,
             borderRadius: 12,
-            boxShadow: '0 10px 30px rgba(45,42,36,0.16)',
-            border: '1px solid rgba(45,42,36,0.08)',
+            boxShadow: `0 10px 30px ${ink(0.16)}`,
+            border: `1px solid ${ink(0.08)}`,
             padding: '10px 14px',
           }}
         >
@@ -1686,7 +1686,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         <Modal width={400} onClose={() => setDeleteStep('idle')}>
             {(deleteStep === 'confirm' || deleteStep === 'sending') && (
               <>
-                <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(184,90,74,0.12)', color: palette.danger, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <div style={{ width: 38, height: 38, borderRadius: '50%', background: withAlpha(palette.danger, 0.12), color: palette.danger, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
                   <Trash2 size={17} />
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6 }}>
@@ -1717,7 +1717,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     style={{
                       fontSize: 12,
                       color: palette.danger,
-                      background: 'rgba(184,90,74,0.08)',
+                      background: withAlpha(palette.danger, 0.08),
                       padding: '8px 12px',
                       borderRadius: 9,
                       textAlign: 'center',
@@ -1734,7 +1734,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       flex: 1,
                       padding: '10px 14px',
                       borderRadius: 10,
-                      border: '1px solid rgba(45,42,36,0.14)',
+                      border: `1px solid ${ink(0.14)}`,
                       background: 'transparent',
                       color: palette.inkMuted,
                       fontSize: 13,
@@ -1783,7 +1783,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
             {(deleteStep === 'enter_code' || deleteStep === 'verifying') && (
               <>
-                <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: palette.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <div style={{ width: 38, height: 38, borderRadius: '50%', background: withAlpha(palette.amberGlow, 0.18), color: palette.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
                   <Mail size={17} />
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6 }}>
@@ -1815,7 +1815,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     fontFamily: 'ui-monospace, monospace',
                     letterSpacing: '0.5em',
                     padding: '12px 16px',
-                    border: '2px solid rgba(45,42,36,0.14)',
+                    border: `2px solid ${ink(0.14)}`,
                     borderRadius: 12,
                     outline: 'none',
                     boxSizing: 'border-box',
@@ -1829,7 +1829,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     style={{
                       fontSize: 12,
                       color: palette.danger,
-                      background: 'rgba(184,90,74,0.08)',
+                      background: withAlpha(palette.danger, 0.08),
                       padding: '8px 12px',
                       borderRadius: 9,
                       textAlign: 'center',
@@ -1852,7 +1852,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       gap: 6,
                       padding: '10px 14px',
                       borderRadius: 10,
-                      border: '1px solid rgba(45,42,36,0.14)',
+                      border: `1px solid ${ink(0.14)}`,
                       background: 'transparent',
                       color: palette.inkMuted,
                       fontSize: 13,
@@ -1906,7 +1906,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
       {/* ── Modale « modifications non enregistrées » ── */}
       {showLeaveConfirm && (
         <Modal width={400} onClose={() => { setShowLeaveConfirm(false); setPendingHref(null); }}>
-          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: palette.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+          <div style={{ width: 38, height: 38, borderRadius: '50%', background: withAlpha(palette.amberGlow, 0.18), color: palette.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
             <AlertTriangle size={18} strokeWidth={2} />
           </div>
           <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6 }}>Modifications non enregistrées</div>
@@ -1944,7 +1944,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             <div style={{ display: 'flex', gap: 10 }}>
               <button
                 onClick={() => { setShowLeaveConfirm(false); setPendingHref(null); }}
-                style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: palette.inkMuted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
+                style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: `1px solid ${ink(0.14)}`, background: 'transparent', color: palette.inkMuted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 Annuler
               </button>
@@ -1975,7 +1975,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
       {/* ── Modale « confirmation activation Premium » ── */}
       {showPremiumConfirm && (
         <Modal width={400} onClose={() => { setShowPremiumConfirm(false); setPremiumError(''); }}>
-          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: palette.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+          <div style={{ width: 38, height: 38, borderRadius: '50%', background: withAlpha(palette.amberGlow, 0.18), color: palette.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
             <AlertTriangle size={18} strokeWidth={2} />
           </div>
           <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6 }}>Passer l&apos;atelier Premium</div>
@@ -2007,7 +2007,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             </button>
             <button
               onClick={() => { setShowPremiumConfirm(false); setPremiumError(''); }}
-              style={{ padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: palette.inkMuted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
+              style={{ padding: '11px 14px', borderRadius: 10, border: `1px solid ${ink(0.14)}`, background: 'transparent', color: palette.inkMuted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
             >
               Annuler
             </button>

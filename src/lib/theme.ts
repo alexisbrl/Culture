@@ -38,10 +38,24 @@ export const palette = {
   // Danger
   danger: '#b85a4a',
 
+  amberGlow: '#e8b86c',  // ambre clair (pastilles, surbrillances)
+
   // Teintes translucides récurrentes (fonds de pastilles d'icône)
   dangerTint: 'rgba(184,90,74,0.12)',
   amberTint: 'rgba(232,184,108,0.18)',
 } as const;
+
+/**
+ * Couleur de marque + opacité → rgba. Ex. withAlpha(palette.danger, 0.12).
+ * Pour l'encre (#2d2a24), préférer le raccourci `ink(alpha)` ci-dessous.
+ */
+export function withAlpha(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 /**
  * Translucide sur l'encre (#2d2a24) — bordures, fonds légers, ombres, overlays.

@@ -1,6 +1,6 @@
 'use client';
 
-import { palette, ink } from '@/lib/theme';
+import { palette, ink, withAlpha } from '@/lib/theme';
 
 import { useState } from 'react';
 import type { SubscriptionTier } from '@/lib/subscription';
@@ -82,7 +82,7 @@ function TierCTA({ tier, current, annual, dark }: {
   if (isCurrent) {
     return (
       <button disabled style={{
-        width: '100%', padding: '11px 0', borderRadius: 10, border: dark ? '1.5px solid rgba(244,240,230,0.18)' : '1.5px solid rgba(45,42,36,0.16)',
+        width: '100%', padding: '11px 0', borderRadius: 10, border: dark ? '1.5px solid rgba(244,240,230,0.18)' : `1.5px solid ${ink(0.16)}`,
         background: 'transparent', color: dark ? 'rgba(244,240,230,0.6)' : TEXT_MUTED,
         fontSize: 14, fontWeight: 500, fontFamily: "'Inter Tight', sans-serif", cursor: 'default',
       }}>
@@ -120,8 +120,8 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
   const [annual, setAnnual] = useState(false);
 
   const cardBase: React.CSSProperties = {
-    background: 'rgba(255,255,255,0.85)',
-    border: '1.5px solid rgba(45,42,36,0.12)',
+    background: withAlpha(palette.paper, 0.85),
+    border: `1.5px solid ${ink(0.12)}`,
     borderRadius: 20, padding: '32px 28px',
     display: 'flex', flexDirection: 'column',
   };
@@ -187,8 +187,8 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
           <div style={{
             ...cardBase,
             transform: 'translateY(-8px)',
-            boxShadow: '0 30px 60px rgba(168,122,58,0.18)',
-            border: currentTier === 'premium' ? `2px solid ${AMBER_LIGHT}` : '1.5px solid rgba(168,122,58,0.45)',
+            boxShadow: `0 30px 60px ${withAlpha(palette.amber, 0.18)}`,
+            border: currentTier === 'premium' ? `2px solid ${AMBER_LIGHT}` : `1.5px solid ${withAlpha(palette.amber, 0.45)}`,
             position: 'relative',
           }}>
             {currentTier === 'premium' ? (
@@ -257,8 +257,8 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
         {/* Atelier Premium */}
         <div style={{
           maxWidth: 1100, margin: '0 auto',
-          background: 'linear-gradient(135deg, rgba(232,184,108,0.18), rgba(168,122,58,0.10))',
-          border: '1.5px solid rgba(168,122,58,0.35)', borderRadius: 20, padding: '28px 32px',
+          background: `linear-gradient(135deg, ${withAlpha(palette.amberGlow, 0.18)}, ${withAlpha(palette.amber, 0.10)})`,
+          border: `1.5px solid ${withAlpha(palette.amber, 0.35)}`, borderRadius: 20, padding: '28px 32px',
           display: 'grid', gridTemplateColumns: '1fr auto', gap: 24, alignItems: 'center',
         }}>
           <div>

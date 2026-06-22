@@ -1,6 +1,6 @@
 'use client';
 
-import { palette, ink } from '@/lib/theme';
+import { palette, ink, withAlpha } from '@/lib/theme';
 
 import { useState, useRef, useEffect } from 'react';
 
@@ -90,8 +90,8 @@ function ExerciseNode({ ex, x }: { ex: ExItem; x: number }) {
   const isCur = ex.state === 'current';
   const isExam = ex.exam;
   const size = isCur ? 64 : 50;
-  const bg = isDone ? (isExam ? palette.amberLight : P.plantDeep) : isCur ? palette.amber : 'rgba(255,255,255,0.6)';
-  const ring = isCur ? '#e8c86a' : isDone ? 'rgba(255,255,255,0.75)' : ink(0.14);
+  const bg = isDone ? (isExam ? palette.amberLight : P.plantDeep) : isCur ? palette.amber : withAlpha(palette.paper, 0.6);
+  const ring = isCur ? '#e8c86a' : isDone ? withAlpha(palette.paper, 0.75) : ink(0.14);
   const style: React.CSSProperties = {
     position: 'absolute', left: x, top: 0, transform: 'translate(-50%, -50%)',
     width: size, height: size, borderRadius: '50%',
@@ -100,13 +100,13 @@ function ExerciseNode({ ex, x }: { ex: ExItem; x: number }) {
     color: isDone || isCur ? palette.paper : palette.inkFaint,
     fontSize: isCur ? 22 : 17, textDecoration: 'none',
     cursor: isCur ? 'pointer' : 'default', zIndex: 4,
-    boxShadow: isCur ? '0 10px 24px rgba(168,122,58,0.42), 0 0 0 8px rgba(232,200,106,0.16)' : isDone ? '0 6px 14px rgba(79,107,64,0.28)' : '0 3px 8px rgba(45,42,36,0.10)',
+    boxShadow: isCur ? '0 10px 24px rgba(168,122,58,0.42), 0 0 0 8px rgba(232,200,106,0.16)' : isDone ? '0 6px 14px rgba(79,107,64,0.28)' : `0 3px 8px ${ink(0.10)}`,
   };
   if (isCur) {
     return (
       <a href="#" style={style}>
         {isExam ? '◆' : '💧'}
-        <span style={{ position: 'absolute', top: -30, left: '50%', transform: 'translateX(-50%)', background: palette.ink, color: palette.parchment, fontFamily: 'inherit', fontSize: 11, padding: '4px 9px', borderRadius: 8, whiteSpace: 'nowrap', boxShadow: '0 6px 14px rgba(45,42,36,0.22)' }}>prochain</span>
+        <span style={{ position: 'absolute', top: -30, left: '50%', transform: 'translateX(-50%)', background: palette.ink, color: palette.parchment, fontFamily: 'inherit', fontSize: 11, padding: '4px 9px', borderRadius: 8, whiteSpace: 'nowrap', boxShadow: `0 6px 14px ${ink(0.22)}` }}>prochain</span>
       </a>
     );
   }
@@ -177,13 +177,13 @@ function ChapterColumn({ ch, expanded, onToggle }: { ch: Chapter; expanded: bool
         ) : (
           <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             {ch.status === 'current' && (
-              <a href="#" style={{ display: 'flex', alignItems: 'center', gap: 7, textDecoration: 'none', background: palette.amber, color: palette.parchment, fontFamily: 'inherit', fontSize: 12, padding: '7px 12px', borderRadius: 999, marginBottom: 6, boxShadow: '0 8px 18px rgba(168,122,58,0.34)' }}>
-                <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(255,255,255,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 }}>▶</span>
+              <a href="#" style={{ display: 'flex', alignItems: 'center', gap: 7, textDecoration: 'none', background: palette.amber, color: palette.parchment, fontFamily: 'inherit', fontSize: 12, padding: '7px 12px', borderRadius: 999, marginBottom: 6, boxShadow: `0 8px 18px ${withAlpha(palette.amber, 0.34)}` }}>
+                <span style={{ width: 20, height: 20, borderRadius: '50%', background: withAlpha(palette.paper, 0.22), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 }}>▶</span>
                 lancer le prochain
               </a>
             )}
             {isDone && <div style={{ marginBottom: 6, fontSize: 26, filter: 'drop-shadow(0 4px 8px rgba(200,152,96,0.4))' }}>🏅</div>}
-            {isLocked && <div style={{ marginBottom: 6, width: 30, height: 30, borderRadius: '50%', background: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: palette.inkFaint, border: '2px solid rgba(45,42,36,0.12)' }}>🔒</div>}
+            {isLocked && <div style={{ marginBottom: 6, width: 30, height: 30, borderRadius: '50%', background: withAlpha(palette.paper, 0.6), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: palette.inkFaint, border: `2px solid ${ink(0.12)}` }}>🔒</div>}
             <CoiledVine status={ch.status} />
           </div>
         )}
@@ -199,7 +199,7 @@ function ChapterColumn({ ch, expanded, onToggle }: { ch: Chapter; expanded: bool
             <div style={{ fontSize: 13, fontWeight: 500, color: isLocked ? palette.inkFaint : palette.ink }}>{ch.label}</div>
             <div style={{ fontSize: 11, color: palette.inkSoft }}>{ch.done} / {ch.total} exercices</div>
           </div>
-          <button onClick={onToggle} title={expanded ? 'enrouler' : 'dérouler'} style={{ width: 26, height: 26, borderRadius: '50%', cursor: 'pointer', border: '1px solid rgba(45,42,36,0.16)', background: 'rgba(255,255,255,0.8)', color: palette.inkMuted, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}>{expanded ? '⌃' : '⌄'}</button>
+          <button onClick={onToggle} title={expanded ? 'enrouler' : 'dérouler'} style={{ width: 26, height: 26, borderRadius: '50%', cursor: 'pointer', border: `1px solid ${ink(0.16)}`, background: withAlpha(palette.paper, 0.8), color: palette.inkMuted, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}>{expanded ? '⌃' : '⌄'}</button>
         </div>
         <div style={{ width: 150, height: 5, borderRadius: 3, background: ink(0.10), overflow: 'hidden', marginTop: 7 }}>
           <div style={{ width: (ch.done / ch.total * 100) + '%', height: '100%', background: isDone ? palette.amberLight : P.plantAccent }} />
@@ -212,7 +212,7 @@ function ChapterColumn({ ch, expanded, onToggle }: { ch: Chapter; expanded: bool
 function SideCard() {
   return (
     <div style={{ width: 264, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ background: 'rgba(255,255,255,0.78)', border: '1px solid rgba(45,42,36,0.08)', borderRadius: 16, padding: '18px 18px 16px', textAlign: 'center', boxShadow: '0 8px 26px rgba(45,42,36,0.06)' }}>
+      <div style={{ background: withAlpha(palette.paper, 0.78), border: `1px solid ${ink(0.08)}`, borderRadius: 16, padding: '18px 18px 16px', textAlign: 'center', boxShadow: `0 8px 26px ${ink(0.06)}` }}>
         <div style={{ position: 'relative', width: 150, height: 140, margin: '0 auto' }}>
           <div style={{ position: 'absolute', left: '50%', bottom: 14, transform: 'translateX(-50%)', width: 92, height: 16, borderRadius: '50%', background: ink(0.12), filter: 'blur(4px)' }} />
           {/* Tree placeholder (paulownia-style SVG) */}
@@ -231,15 +231,15 @@ function SideCard() {
         </div>
         <div style={{ fontSize: 11, color: palette.inkSoft, marginTop: 6 }}>58 % du parcours · 6 briques pour niv. 3</div>
       </div>
-      <div style={{ background: 'rgba(255,255,255,0.78)', border: '1px solid rgba(45,42,36,0.08)', borderRadius: 16, padding: '14px 16px' }}>
+      <div style={{ background: withAlpha(palette.paper, 0.78), border: `1px solid ${ink(0.08)}`, borderRadius: 16, padding: '14px 16px' }}>
         <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft, marginBottom: 10 }}>l&apos;atelier</div>
         {([['membres', '38 jardiniers'], ['propriétaire', 'Pr. C. Vaisse'], ['briques', '142 · 5 chapitres'], ['ta série', '12 jours 🔥']] as [string, string][]).map(([k, v]) => (
-          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid rgba(45,42,36,0.05)', fontSize: 12.5 }}>
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${ink(0.05)}`, fontSize: 12.5 }}>
             <span style={{ color: palette.inkSoft }}>{k}</span>
             <span style={{ color: palette.ink, fontWeight: 500 }}>{v}</span>
           </div>
         ))}
-        <a href="#" style={{ display: 'block', textAlign: 'center', marginTop: 14, padding: '11px 14px', borderRadius: 10, background: P.plantDeep, color: palette.parchment, textDecoration: 'none', fontSize: 13, fontWeight: 500, boxShadow: '0 6px 16px rgba(79,107,64,0.28)' }}>continuer le parcours →</a>
+        <a href="#" style={{ display: 'block', textAlign: 'center', marginTop: 14, padding: '11px 14px', borderRadius: 10, background: P.plantDeep, color: palette.parchment, textDecoration: 'none', fontSize: 13, fontWeight: 500, boxShadow: `0 6px 16px ${withAlpha(palette.green, 0.28)}` }}>continuer le parcours →</a>
       </div>
     </div>
   );
@@ -248,7 +248,7 @@ function SideCard() {
 function Legend() {
   const items: [string, string][] = [['terminé', P.plantDeep], ['en cours', palette.amber], ['à venir', ink(0.18)]];
   return (
-    <div style={{ display: 'flex', gap: 14, alignItems: 'center', background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(45,42,36,0.08)', borderRadius: 999, padding: '6px 14px', fontSize: 11.5, color: palette.inkMuted }}>
+    <div style={{ display: 'flex', gap: 14, alignItems: 'center', background: withAlpha(palette.paper, 0.72), border: `1px solid ${ink(0.08)}`, borderRadius: 999, padding: '6px 14px', fontSize: 11.5, color: palette.inkMuted }}>
       {items.map(([l, c]) => (
         <span key={l} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 11, height: 11, borderRadius: '50%', background: c, display: 'inline-block' }} />{l}
@@ -279,9 +279,9 @@ export default function ProgrammeTab() {
     return {
       position: 'absolute', top: '46%', [side]: 12, transform: 'translateY(-50%)',
       width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', zIndex: 9,
-      border: '1px solid rgba(45,42,36,0.12)', background: 'rgba(255,255,255,0.9)',
+      border: `1px solid ${ink(0.12)}`, background: withAlpha(palette.paper, 0.9),
       color: palette.inkMuted, fontSize: 22, lineHeight: '1', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      boxShadow: '0 6px 16px rgba(45,42,36,0.16)', fontFamily: 'inherit',
+      boxShadow: `0 6px 16px ${ink(0.16)}`, fontFamily: 'inherit',
     };
   }
 
@@ -293,7 +293,7 @@ export default function ProgrammeTab() {
       `}</style>
       <SideCard />
 
-      <div style={{ flex: 1, position: 'relative', borderRadius: 18, overflow: 'hidden', border: '1px solid rgba(45,42,36,0.07)', background: 'linear-gradient(180deg, #eef0dd 0%, #e6ecdc 46%, #dce7d2 100%)' }}>
+      <div style={{ flex: 1, position: 'relative', borderRadius: 18, overflow: 'hidden', border: `1px solid ${ink(0.07)}`, background: 'linear-gradient(180deg, #eef0dd 0%, #e6ecdc 46%, #dce7d2 100%)' }}>
         {/* sky / sun glow */}
         <div style={{ position: 'absolute', top: -70, right: -50, width: 240, height: 240, borderRadius: '50%', background: 'radial-gradient(circle, rgba(246,201,112,0.34), rgba(246,201,112,0) 70%)', pointerEvents: 'none' }} />
         <svg width="100%" height="120" style={{ position: 'absolute', top: 10, left: 0, pointerEvents: 'none' }}>
@@ -307,7 +307,7 @@ export default function ProgrammeTab() {
 
         {/* shelf / floor */}
         <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: POT_ZONE - 18, background: 'linear-gradient(180deg, #d8c3a0 0%, #c9b08a 30%, #bea271 100%)', pointerEvents: 'none' }}>
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 6, background: 'rgba(255,255,255,0.25)' }} />
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 6, background: withAlpha(palette.paper, 0.25) }} />
           <div style={{ position: 'absolute', top: 6, left: 0, right: 0, height: 10, background: ink(0.10) }} />
         </div>
 

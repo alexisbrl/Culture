@@ -1,6 +1,6 @@
 'use client';
 
-import { palette } from '@/lib/theme';
+import { palette, withAlpha } from '@/lib/theme';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -529,7 +529,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                       {preview.isInvitation && (
                         <span
                           className="text-[11px] px-2.5 py-1 rounded-full font-medium inline-flex items-center gap-1"
-                          style={{ background: 'rgba(168,122,58,0.92)', color: palette.paper }}
+                          style={{ background: withAlpha(palette.amber, 0.92), color: palette.paper }}
                         >
                           <Mail className="w-3 h-3" /> invitation
                         </span>
@@ -546,7 +546,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                       {preview.isPremium && (
                         <span
                           className="text-[11px] px-2.5 py-1 rounded-full font-medium"
-                          style={{ background: 'rgba(232,184,108,0.85)', color: '#7a4d20' }}
+                          style={{ background: withAlpha(palette.amberGlow, 0.85), color: '#7a4d20' }}
                         >
                           Premium
                         </span>
@@ -637,7 +637,7 @@ function WorkshopCard({ workshop, locale, onExpand }: { workshop: WorkshopCardDa
           {workshop.is_premium && (
             <span
               className="inline-flex items-center gap-1 text-[10.5px] px-2 py-0.5 rounded-full font-semibold shadow-sm"
-              style={{ background: 'rgba(232,184,108,0.92)', color: '#7a4d20' }}
+              style={{ background: withAlpha(palette.amberGlow, 0.92), color: '#7a4d20' }}
             >
               <Crown className="w-2.5 h-2.5" /> Premium
             </span>
@@ -645,7 +645,7 @@ function WorkshopCard({ workshop, locale, onExpand }: { workshop: WorkshopCardDa
           {workshop.role === 'manager' && (
             <span
               className="inline-flex items-center text-[10.5px] px-2 py-0.5 rounded-full font-semibold shadow-sm"
-              style={{ background: 'rgba(122,153,104,0.92)', color: '#27331c' }}
+              style={{ background: withAlpha(palette.greenSoft, 0.92), color: '#27331c' }}
             >
               gestionnaire
             </span>
@@ -681,7 +681,7 @@ function InvitationCard({ workshop, locale, onOpen }: { workshop: WorkshopCardDa
         <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{emojiFor(workshop.id, workshop.emoji)}</div>
         <span
           className="absolute top-2.5 left-2.5 text-[10.5px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1"
-          style={{ background: 'rgba(168,122,58,0.92)', color: palette.paper }}
+          style={{ background: withAlpha(palette.amber, 0.92), color: palette.paper }}
         >
           <Mail className="w-2.5 h-2.5" /> invitation
         </span>

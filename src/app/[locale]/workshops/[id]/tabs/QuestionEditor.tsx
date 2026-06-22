@@ -1,6 +1,6 @@
 'use client';
 
-import { palette, ink } from '@/lib/theme';
+import { palette, ink, withAlpha } from '@/lib/theme';
 
 import { useState } from 'react';
 
@@ -129,8 +129,8 @@ function Segmented<T extends string>({ value, onChange, options }: { value: T; o
               borderRadius: 999,
               cursor: o.soon ? 'default' : 'pointer',
               fontFamily: 'inherit',
-              border: o.soon ? '1px solid rgba(45,42,36,0.08)' : active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)',
-              background: o.soon ? ink(0.05) : active ? palette.ink : 'rgba(255,255,255,0.7)',
+              border: o.soon ? '1px solid rgba(45,42,36,0.08)' : active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`,
+              background: o.soon ? ink(0.05) : active ? palette.ink : withAlpha(palette.paper, 0.7),
               color: o.soon ? palette.inkFaint : active ? palette.parchment : '#3a352c',
               fontWeight: active ? 500 : 400,
               transition: 'all 0.12s',
@@ -162,7 +162,7 @@ function MiniSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean
 
 function TextField({ value, onChange, placeholder, multiline, rows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; multiline?: boolean; rows?: number }) {
   const style: React.CSSProperties = {
-    width: '100%', fontSize: 13, color: palette.ink, border: '1px solid rgba(45,42,36,0.12)',
+    width: '100%', fontSize: 13, color: palette.ink, border: `1px solid ${ink(0.12)}`,
     borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none',
     fontFamily: 'inherit', boxSizing: 'border-box', resize: 'vertical' as const,
   };
@@ -202,11 +202,11 @@ function DifficultyDurationFields({
       {duration.enabled && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: -4 }}>
           <div style={{ width: 90 }}>
-            <input type="number" min={0} value={duration.minutes} onChange={(e) => onDurationChange({ ...duration, minutes: Math.max(0, Number(e.target.value) || 0) })} style={{ width: '100%', fontSize: 13, color: palette.ink, border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+            <input type="number" min={0} value={duration.minutes} onChange={(e) => onDurationChange({ ...duration, minutes: Math.max(0, Number(e.target.value) || 0) })} style={{ width: '100%', fontSize: 13, color: palette.ink, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
           </div>
           <span style={{ fontSize: 12.5, color: palette.inkSoft }}>minutes</span>
           <div style={{ width: 90 }}>
-            <input type="number" min={0} max={59} value={duration.seconds} onChange={(e) => onDurationChange({ ...duration, seconds: Math.min(59, Math.max(0, Number(e.target.value) || 0)) })} style={{ width: '100%', fontSize: 13, color: palette.ink, border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+            <input type="number" min={0} max={59} value={duration.seconds} onChange={(e) => onDurationChange({ ...duration, seconds: Math.min(59, Math.max(0, Number(e.target.value) || 0)) })} style={{ width: '100%', fontSize: 13, color: palette.ink, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
           </div>
           <span style={{ fontSize: 12.5, color: palette.inkSoft }}>secondes</span>
         </div>
@@ -351,7 +351,7 @@ function ChoiceListEditor({
                 title={responseType === 'qcs' ? 'bonne réponse (unique)' : 'bonne réponse'}
                 style={{
                   width: 20, height: 20, borderRadius: responseType === 'qcs' ? '50%' : 6, flexShrink: 0,
-                  border: correctChoices.includes(i) ? 'none' : '1.5px solid rgba(45,42,36,0.18)',
+                  border: correctChoices.includes(i) ? 'none' : `1.5px solid ${ink(0.18)}`,
                   background: correctChoices.includes(i) ? palette.greenSoft : palette.paper,
                   color: palette.paper, display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 11, cursor: 'pointer', padding: 0,
@@ -366,7 +366,7 @@ function ChoiceListEditor({
                 title="réponse libre — l'étudiant écrit ce qu'il veut"
                 style={{
                   width: 20, height: 20, borderRadius: 6, flexShrink: 0,
-                  border: correctChoices.includes(i) ? 'none' : '1.5px solid rgba(45,42,36,0.18)',
+                  border: correctChoices.includes(i) ? 'none' : `1.5px solid ${ink(0.18)}`,
                   background: correctChoices.includes(i) ? palette.amber : palette.paper,
                   color: correctChoices.includes(i) ? palette.paper : ink(0.25),
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -384,7 +384,7 @@ function ChoiceListEditor({
               </div>
             ) : showFreeTextMarker && correctChoices.includes(i) ? (
               <div style={{
-                flex: 1, fontSize: 13, color: palette.amber, border: '1px solid rgba(45,42,36,0.12)',
+                flex: 1, fontSize: 13, color: palette.amber, border: `1px solid ${ink(0.12)}`,
                 borderRadius: 9, padding: '9px 12px', background: ink(0.03),
                 fontFamily: 'inherit', boxSizing: 'border-box' as const, fontStyle: 'italic',
               }}>
@@ -419,7 +419,7 @@ function ChoiceListEditor({
           );
         })()}
       </div>
-      <button onClick={addChoice} style={{ marginTop: 10, fontSize: 12, padding: '7px 12px', borderRadius: 8, border: '1px dashed rgba(45,42,36,0.20)', background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>
+      <button onClick={addChoice} style={{ marginTop: 10, fontSize: 12, padding: '7px 12px', borderRadius: 8, border: `1px dashed ${ink(0.20)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>
         + {showPairs ? 'paire' : 'option'}
       </button>
       {(responseType === 'qcs' || responseType === 'qcm') && choices.length > 0 && correctChoices.length === 0 && (
@@ -491,14 +491,14 @@ export default function QuestionEditor({
       <div onClick={onCancel} style={{ position: 'absolute', inset: 0, background: ink(0.42), backdropFilter: 'blur(2px)' }} />
 
       {/* panel */}
-      <div style={{ position: 'relative', width: 640, maxWidth: '100%', maxHeight: '100%', borderRadius: 18, background: palette.cream, boxShadow: '0 24px 64px rgba(45,42,36,0.24)', display: 'flex', flexDirection: 'column', fontFamily: "'Inter Tight', system-ui, sans-serif", overflow: 'hidden' }}>
+      <div style={{ position: 'relative', width: 640, maxWidth: '100%', maxHeight: '100%', borderRadius: 18, background: palette.cream, boxShadow: `0 24px 64px ${ink(0.24)}`, display: 'flex', flexDirection: 'column', fontFamily: "'Inter Tight', system-ui, sans-serif", overflow: 'hidden' }}>
         {/* header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid rgba(45,42,36,0.08)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: `1px solid ${ink(0.08)}`, flexShrink: 0 }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 500, color: palette.ink }}>{isNew ? 'Nouvelle question' : 'Modifier la question'}</div>
             <div style={{ fontSize: 12, color: palette.inkSoft }}>générée manuellement ou retravaillée avec l&apos;IA</div>
           </div>
-          <button onClick={onCancel} style={{ width: 30, height: 30, borderRadius: 9, border: '1px solid rgba(45,42,36,0.10)', background: 'rgba(255,255,255,0.7)', color: palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontFamily: 'inherit' }}>×</button>
+          <button onClick={onCancel} style={{ width: 30, height: 30, borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.7), color: palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontFamily: 'inherit' }}>×</button>
         </div>
 
         {/* body */}
@@ -514,15 +514,15 @@ export default function QuestionEditor({
           <Segmented value={draft.questionType} onChange={(v) => patch({ questionType: v })} options={(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((k) => ({ value: k, label: QUESTION_TYPE_LABELS[k], soon: QUESTION_TYPE_V2.includes(k) }))} />
 
           {draft.questionType === 'visuel' && (
-            <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 10, border: '1px dashed rgba(45,42,36,0.18)', background: 'rgba(255,255,255,0.6)', fontSize: 12, color: palette.inkSoft }}>
+            <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 10, border: `1px dashed ${ink(0.18)}`, background: withAlpha(palette.paper, 0.6), fontSize: 12, color: palette.inkSoft }}>
               <div style={{ marginBottom: 6 }}>📎 joindre une image ou un graphique</div>
-              <button disabled style={{ fontSize: 11.5, padding: '6px 11px', borderRadius: 7, border: '1px solid rgba(45,42,36,0.10)', background: ink(0.04), color: palette.inkFaint, cursor: 'not-allowed', fontFamily: 'inherit' }}>
+              <button disabled style={{ fontSize: 11.5, padding: '6px 11px', borderRadius: 7, border: `1px solid ${ink(0.10)}`, background: ink(0.04), color: palette.inkFaint, cursor: 'not-allowed', fontFamily: 'inherit' }}>
                 éditer l&apos;image — outil basique à venir
               </button>
             </div>
           )}
           {draft.questionType === 'audio' && (
-            <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 10, border: '1px dashed rgba(45,42,36,0.18)', background: 'rgba(255,255,255,0.6)', fontSize: 12, color: palette.inkSoft }}>
+            <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 10, border: `1px dashed ${ink(0.18)}`, background: withAlpha(palette.paper, 0.6), fontSize: 12, color: palette.inkSoft }}>
               🎙️ enregistrement / import audio — outil à venir
             </div>
           )}
@@ -603,7 +603,7 @@ export default function QuestionEditor({
                       min={1}
                       value={draft.textLines ?? 4}
                       onChange={(e) => patch({ textLines: Math.max(1, Number(e.target.value) || 1) })}
-                      style={{ width: 70, flexShrink: 0, fontSize: 13, color: palette.ink, border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                      style={{ width: 70, flexShrink: 0, fontSize: 13, color: palette.ink, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
                     />
                   </div>
                 </div>
@@ -630,7 +630,7 @@ export default function QuestionEditor({
             const partChoiceBased = CHOICE_BASED.includes(part.responseType);
             const partHasAnswer = !['sans_reponse', 'sondage'].includes(part.responseType) && !partChoiceBased;
             return (
-              <div key={idx} style={{ marginBottom: 14, padding: '14px 16px', borderRadius: 12, border: '1px solid rgba(45,42,36,0.10)', background: 'rgba(255,255,255,0.55)' }}>
+              <div key={idx} style={{ marginBottom: 14, padding: '14px 16px', borderRadius: 12, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.55) }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                   <span style={{ fontSize: 12, fontWeight: 500, color: palette.inkMuted }}>Partie {idx + 2}</span>
                   <button onClick={() => removePart(idx)} style={{ border: 'none', background: 'none', color: palette.danger, cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 2px' }}>×</button>
@@ -667,7 +667,7 @@ export default function QuestionEditor({
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                           <FieldLabel hint="lignes dans l'aperçu">Nombre de lignes</FieldLabel>
-                          <input type="number" min={1} value={part.textLines} onChange={(e) => patchPart(idx, { textLines: Math.max(1, Number(e.target.value) || 1) })} style={{ width: 70, flexShrink: 0, fontSize: 13, color: palette.ink, border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                          <input type="number" min={1} value={part.textLines} onChange={(e) => patchPart(idx, { textLines: Math.max(1, Number(e.target.value) || 1) })} style={{ width: 70, flexShrink: 0, fontSize: 13, color: palette.ink, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
                         </div>
                       </div>
                     )}
@@ -684,7 +684,7 @@ export default function QuestionEditor({
           })}
           <button
             onClick={() => patch({ parts: [...draft.parts, emptyPart()] })}
-            style={{ width: '100%', padding: '9px 14px', borderRadius: 10, border: '1px dashed rgba(45,42,36,0.18)', background: 'transparent', color: palette.inkSoft, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 4 }}
+            style={{ width: '100%', padding: '9px 14px', borderRadius: 10, border: `1px dashed ${ink(0.18)}`, background: 'transparent', color: palette.inkSoft, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 4 }}
           >
             + ajouter une partie
           </button>
@@ -701,7 +701,7 @@ export default function QuestionEditor({
                   const p = pools.find((pp) => pp.id === pid);
                   if (!p) return null;
                   return (
-                    <span key={pid} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 10px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.10)', background: palette.ink, color: palette.parchment }}>
+                    <span key={pid} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 10px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: palette.ink, color: palette.parchment }}>
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
                       {p.name}
                       <button onClick={() => togglePool(pid)} style={{ border: 'none', background: 'none', color: palette.parchment, cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: 0.7 }}>×</button>
@@ -715,8 +715,8 @@ export default function QuestionEditor({
                 <div style={{ flex: 1 }}>
                   <TextField value={newPoolName} onChange={setNewPoolName} placeholder="nom du libellé…" />
                 </div>
-                <button onClick={addPool} style={{ fontSize: 12, padding: '0 14px', borderRadius: 9, border: '1px solid rgba(45,42,36,0.10)', background: 'rgba(255,255,255,0.7)', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>ajouter</button>
-                <button onClick={() => { setCreatingPool(false); setNewPoolName(''); }} style={{ fontSize: 12, padding: '0 14px', borderRadius: 9, border: '1px solid rgba(45,42,36,0.10)', background: 'transparent', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
+                <button onClick={addPool} style={{ fontSize: 12, padding: '0 14px', borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.7), color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>ajouter</button>
+                <button onClick={() => { setCreatingPool(false); setNewPoolName(''); }} style={{ fontSize: 12, padding: '0 14px', borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
               </div>
             ) : (
               <select
@@ -725,7 +725,7 @@ export default function QuestionEditor({
                   if (e.target.value === '__new__') setCreatingPool(true);
                   else if (e.target.value) togglePool(e.target.value);
                 }}
-                style={{ width: '100%', fontSize: 13, color: palette.inkMuted, border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', cursor: 'pointer' }}
+                style={{ width: '100%', fontSize: 13, color: palette.inkMuted, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', cursor: 'pointer' }}
               >
                 <option value="">+ ajouter un libellé…</option>
                 {pools.filter((p) => !draft.pools.includes(p.id)).map((p) => (
@@ -739,8 +739,8 @@ export default function QuestionEditor({
         </div>
 
         {/* footer */}
-        <div style={{ display: 'flex', gap: 10, padding: '14px 22px', borderTop: '1px solid rgba(45,42,36,0.08)', flexShrink: 0, background: palette.cream }}>
-          <button onClick={onCancel} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: palette.inkMuted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+        <div style={{ display: 'flex', gap: 10, padding: '14px 22px', borderTop: `1px solid ${ink(0.08)}`, flexShrink: 0, background: palette.cream }}>
+          <button onClick={onCancel} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: `1px solid ${ink(0.14)}`, background: 'transparent', color: palette.inkMuted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
             Annuler
           </button>
           <button

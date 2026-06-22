@@ -1,6 +1,6 @@
 'use client';
 
-import { palette, ink } from '@/lib/theme';
+import { palette, ink, withAlpha } from '@/lib/theme';
 
 const KPIS = [
   { v: '38', l: 'membres', sub: '+5 ce mois', tone: palette.greenSoft },
@@ -39,7 +39,7 @@ function heatColor(m: number) {
 
 function ACard({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div style={{ background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(45,42,36,0.08)', borderRadius: 14, padding: '16px 18px', ...style }}>
+    <div style={{ background: withAlpha(palette.paper, 0.85), border: `1px solid ${ink(0.08)}`, borderRadius: 14, padding: '16px 18px', ...style }}>
       {children}
     </div>
   );
@@ -66,9 +66,9 @@ export default function AnalyseTab() {
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {['7 jours', '30 jours', 'tout'].map((p, i) => (
-            <button key={p} style={{ fontSize: 11.5, padding: '5px 12px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: i === 1 ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: i === 1 ? palette.ink : 'rgba(255,255,255,0.7)', color: i === 1 ? palette.parchment : '#3a352c' }}>{p}</button>
+            <button key={p} style={{ fontSize: 11.5, padding: '5px 12px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: i === 1 ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: i === 1 ? palette.ink : withAlpha(palette.paper, 0.7), color: i === 1 ? palette.parchment : '#3a352c' }}>{p}</button>
           ))}
-          <button style={{ fontSize: 11.5, padding: '5px 12px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.10)', background: 'rgba(255,255,255,0.7)', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>exporter CSV</button>
+          <button style={{ fontSize: 11.5, padding: '5px 12px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.7), color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>exporter CSV</button>
         </div>
       </div>
 
@@ -125,7 +125,7 @@ export default function AnalyseTab() {
 
       {/* Members table */}
       <ACard style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(45,42,36,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: '14px 18px', borderBottom: `1px solid ${ink(0.07)}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 13, fontWeight: 500, color: palette.ink }}>Progression par membre</span>
           <span style={{ fontSize: 11, color: palette.inkSoft }}>6 sur 38 · trier par progression ▾</span>
         </div>
@@ -133,7 +133,7 @@ export default function AnalyseTab() {
           <span>membre</span><span>section en cours</span><span>progression</span><span>dernière activité</span><span style={{ textAlign: 'right' as const }}>note</span>
         </div>
         {MEMBERS.map((m, i) => (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.4fr 2fr 1fr 0.8fr', gap: 12, padding: '11px 18px', alignItems: 'center', borderBottom: i === MEMBERS.length - 1 ? 'none' : '1px solid rgba(45,42,36,0.05)' }}>
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.4fr 2fr 1fr 0.8fr', gap: 12, padding: '11px 18px', alignItems: 'center', borderBottom: i === MEMBERS.length - 1 ? 'none' : `1px solid ${ink(0.05)}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 28, height: 28, borderRadius: '50%', background: `linear-gradient(135deg, ${m.toneA}, ${m.toneB})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.paper, fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{m.name[0]}</div>
               <div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { palette, ink } from '@/lib/theme';
+import { palette, ink, withAlpha } from '@/lib/theme';
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
@@ -64,15 +64,15 @@ export default function AvatarEditorPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 24, alignItems: 'start' }}>
 
           {/* COLONNE GAUCHE */}
-          <div style={{ background: 'linear-gradient(180deg, #f6f2eb, #ece6db)', border: '1px solid rgba(45,42,36,0.07)', borderRadius: 20, padding: '26px 26px 22px' }}>
+          <div style={{ background: 'linear-gradient(180deg, #f6f2eb, #ece6db)', border: `1px solid ${ink(0.07)}`, borderRadius: 20, padding: '26px 26px 22px' }}>
             {/* Disque preview */}
             <div style={{
               position: 'relative', width: 320, height: 320, margin: '0 auto',
               borderRadius: '50%',
               background: 'radial-gradient(120% 120% at 50% 18%, #f4efe2 0%, #e6ecdc 55%, #d6e2cd 100%)',
-              boxShadow: 'inset 0 2px 10px rgba(45,42,36,0.06), 0 14px 34px rgba(45,42,36,0.10)',
+              boxShadow: `inset 0 2px 10px ${ink(0.06)}, 0 14px 34px ${ink(0.10)}`,
               overflow: 'hidden',
-              border: '1px solid rgba(45,42,36,0.06)',
+              border: `1px solid ${ink(0.06)}`,
             }}>
               <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 96, background: 'linear-gradient(180deg, rgba(168,184,150,0) 0%, rgba(168,184,150,0.45) 100%)' }} />
               <div style={{ position: 'absolute', left: '50%', bottom: 34, transform: 'translateX(-50%)', width: 150, height: 20, borderRadius: '50%', background: ink(0.14), filter: 'blur(7px)' }} />
@@ -88,26 +88,26 @@ export default function AvatarEditorPage() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18 }}>
-              <button onClick={validate} disabled={saving} style={{ padding: '12px 18px', borderRadius: 11, background: palette.green, color: palette.parchment, border: 'none', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 500, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 8px 20px rgba(79,107,64,0.30)' }}>
+              <button onClick={validate} disabled={saving} style={{ padding: '12px 18px', borderRadius: 11, background: palette.green, color: palette.parchment, border: 'none', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 500, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: `0 8px 20px ${withAlpha(palette.green, 0.30)}` }}>
                 {saving ? 'enregistrement…' : 'valider l\'avatar →'}
               </button>
-              <a href={`/${locale}/profile`} style={{ padding: '12px 18px', borderRadius: 11, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: palette.inkMuted, fontFamily: 'inherit', fontSize: 13.5, fontWeight: 500, textAlign: 'center', textDecoration: 'none', display: 'block' }}>
+              <a href={`/${locale}/profile`} style={{ padding: '12px 18px', borderRadius: 11, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontFamily: 'inherit', fontSize: 13.5, fontWeight: 500, textAlign: 'center', textDecoration: 'none', display: 'block' }}>
                 annuler
               </a>
             </div>
           </div>
 
           {/* COLONNE DROITE */}
-          <div style={{ background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(45,42,36,0.07)', borderRadius: 20, padding: '20px 22px 24px' }}>
+          <div style={{ background: withAlpha(palette.paper, 0.72), border: `1px solid ${ink(0.07)}`, borderRadius: 20, padding: '20px 22px 24px' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
               {CATS.map(c => (
-                <button key={c.key} onClick={() => setActiveCat(c.key)} style={{ padding: '7px 14px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: activeCat === c.key ? 500 : 400, border: activeCat === c.key ? '1px solid transparent' : '1px solid rgba(45,42,36,0.12)', background: activeCat === c.key ? palette.green : 'rgba(255,255,255,0.6)', color: activeCat === c.key ? palette.parchment : palette.inkMuted, boxShadow: activeCat === c.key ? '0 4px 12px rgba(79,107,64,0.26)' : 'none', transition: 'all .15s ease' }}>
+                <button key={c.key} onClick={() => setActiveCat(c.key)} style={{ padding: '7px 14px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: activeCat === c.key ? 500 : 400, border: activeCat === c.key ? '1px solid transparent' : `1px solid ${ink(0.12)}`, background: activeCat === c.key ? palette.green : withAlpha(palette.paper, 0.6), color: activeCat === c.key ? palette.parchment : palette.inkMuted, boxShadow: activeCat === c.key ? '0 4px 12px rgba(79,107,64,0.26)' : 'none', transition: 'all .15s ease' }}>
                   {c.label}
                 </button>
               ))}
             </div>
 
-            <div style={{ borderTop: '1px solid rgba(45,42,36,0.07)', margin: '14px 0 16px' }} />
+            <div style={{ borderTop: `1px solid ${ink(0.07)}`, margin: '14px 0 16px' }} />
 
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
               <div style={{ fontSize: 14, fontWeight: 500 }}>{catDef.label}</div>
@@ -129,7 +129,7 @@ export default function AvatarEditorPage() {
                       background: isActive
                         ? 'radial-gradient(120% 120% at 50% 20%, #faf5e8, #eef0dd)'
                         : 'radial-gradient(120% 120% at 50% 20%, #fbf9f3, #f1efe7)',
-                      boxShadow: isActive ? '0 8px 20px rgba(168,122,58,0.20)' : '0 2px 8px rgba(45,42,36,0.05)',
+                      boxShadow: isActive ? '0 8px 20px rgba(168,122,58,0.20)' : `0 2px 8px ${ink(0.05)}`,
                       overflow: 'hidden',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       transition: 'all .15s ease',
@@ -155,7 +155,7 @@ export default function AvatarEditorPage() {
                         width: 20, height: 20, borderRadius: '50%',
                         background: palette.amber, color: palette.paper, fontSize: 12,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        boxShadow: '0 2px 6px rgba(168,122,58,0.4)', zIndex: 2,
+                        boxShadow: `0 2px 6px ${withAlpha(palette.amber, 0.4)}`, zIndex: 2,
                       }}>✓</span>
                     )}
                   </button>

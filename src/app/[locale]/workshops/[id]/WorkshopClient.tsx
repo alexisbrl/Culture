@@ -8,7 +8,7 @@ import ProgrammeTab from './tabs/ProgrammeTab';
 import ExamenTab from './tabs/ExamenTab';
 import AnalyseTab from './tabs/AnalyseTab';
 import CoursTab from './tabs/CoursTab';
-import { palette, ink } from '@/lib/theme';
+import { palette, ink, withAlpha } from '@/lib/theme';
 
 type Props = {
   locale: string;
@@ -38,9 +38,9 @@ const TABS: { id: TabId; label: string; soon?: string }[] = [
 
 function Chip({ children, tone = 'default' }: { children: React.ReactNode; tone?: 'default' | 'amber' | 'sage' | 'dim' }) {
   const styles = {
-    default: { bg: 'rgba(255,255,255,0.7)', border: ink(0.08), color: palette.ink },
-    amber: { bg: 'rgba(232,184,108,0.20)', border: 'rgba(168,122,58,0.30)', color: '#7a4d20' },
-    sage: { bg: 'rgba(122,153,104,0.18)', border: 'rgba(79,107,64,0.30)', color: '#3f5630' },
+    default: { bg: withAlpha(palette.paper, 0.7), border: ink(0.08), color: palette.ink },
+    amber: { bg: withAlpha(palette.amberGlow, 0.20), border: withAlpha(palette.amber, 0.30), color: '#7a4d20' },
+    sage: { bg: withAlpha(palette.greenSoft, 0.18), border: withAlpha(palette.green, 0.30), color: '#3f5630' },
     dim: { bg: ink(0.06), border: ink(0.10), color: palette.inkMuted },
   }[tone];
   return (
@@ -90,12 +90,12 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
               </span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setShareOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+              <button onClick={() => setShareOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
                 <QrCode size={13} />
                 partager · QR
               </button>
               {canManage && (
-                <Link href={`/${locale}/workshops/${workshopId}/settings`} style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: palette.inkMuted, fontSize: 12.5, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Link href={`/${locale}/workshops/${workshopId}/settings`} style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Settings size={13} color="#5a564c" strokeWidth={1.75} />
                   paramètres
                 </Link>
@@ -105,11 +105,11 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 26, padding: '14px 24px 0', borderBottom: '1px solid rgba(45,42,36,0.08)' }}>
+        <div style={{ display: 'flex', gap: 26, padding: '14px 24px 0', borderBottom: `1px solid ${ink(0.08)}` }}>
           {visibleTabs.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 0 12px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5, color: activeTab === t.id ? palette.ink : palette.inkSoft, fontWeight: activeTab === t.id ? 500 : 400, borderBottom: activeTab === t.id ? '2px solid #a87a3a' : '2px solid transparent', marginBottom: -1 }}>
               {t.label}
-              {t.soon && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 999, background: 'rgba(168,122,58,0.18)', color: '#7a4d20', fontWeight: 600, letterSpacing: '0.04em' }}>{t.soon}</span>}
+              {t.soon && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 999, background: withAlpha(palette.amber, 0.18), color: '#7a4d20', fontWeight: 600, letterSpacing: '0.04em' }}>{t.soon}</span>}
             </button>
           ))}
         </div>

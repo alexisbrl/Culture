@@ -1,6 +1,6 @@
 'use client';
 
-import { palette } from '@/lib/theme';
+import { palette, withAlpha } from '@/lib/theme';
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -73,7 +73,7 @@ function StatCard({ value, label }: { value: string | number; label: string }) {
   return (
     <div
       style={{
-        background: 'rgba(255,255,255,0.7)',
+        background: withAlpha(palette.paper, 0.7),
         borderRadius: 12,
         padding: '12px 14px',
         display: 'flex',
@@ -211,7 +211,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
               <span
                 style={{
                   fontSize: 12,
-                  background: 'rgba(232,184,108,0.25)',
+                  background: withAlpha(palette.amberGlow, 0.25),
                   color: palette.amber,
                   padding: '3px 10px',
                   borderRadius: 8,
@@ -265,7 +265,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
             style={{
               gridColumn: 'span 2',
               background: SUB_CARD_GRADIENT,
-              border: '1.5px solid rgba(232,184,108,0.4)',
+              border: `1.5px solid ${withAlpha(palette.amberGlow, 0.4)}`,
               borderRadius: 18,
               padding: '22px 24px',
             }}
@@ -300,7 +300,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
           {/* Watering can / energy card */}
           <div
             style={{
-              background: 'rgba(255,255,255,0.6)',
+              background: withAlpha(palette.paper, 0.6),
               border: '1.5px solid rgba(90,72,56,0.12)',
               borderRadius: 18,
               padding: '22px 24px',
@@ -327,7 +327,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
                     width: 14,
                     height: 32,
                     borderRadius: 4,
-                    background: i < 8 ? palette.greenSoft : 'rgba(122,153,104,0.18)',
+                    background: i < 8 ? palette.greenSoft : withAlpha(palette.greenSoft, 0.18),
                   }}
                 />
               ))}
