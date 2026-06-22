@@ -3,14 +3,14 @@
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { randomInt } from 'node:crypto';
 import { getSupabaseServerClient } from '@/lib/supabase';
-import { requireManager, requireOwner } from '@/lib/authz';
+import { requireMember, requireManager, requireOwner, ROLE_RANK } from '@/lib/authz';
 import { revalidatePath } from 'next/cache';
 import { Resend } from 'resend';
 
-// Rôles d'un membre d'atelier, par rang décroissant : owner > manager > member.
-// owner = propriétaire, manager = gestionnaire, member = candidat.
+// Rangs d'atelier : la valeur ROLE_RANK vient de la source unique `@/lib/authz`.
+// Le type est redéclaré ici en union littérale (un fichier `'use server'` ne peut
+// pas réexporter un type), identique à celui d'authz.
 export type WorkshopRole = 'owner' | 'manager' | 'member';
-const ROLE_RANK: Record<WorkshopRole, number> = { owner: 3, manager: 2, member: 1 };
 
 function getResend() {
   if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY manquante');
@@ -441,22 +441,10 @@ export async function updateWorkshopDetails(
   }
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { userId } = await auth();
-    if (!userId) return { success: false, error: 'Non authentifié' };
+    // Réglages généraux : propriétaire ou gestionnaire.
+    if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
     const supabase = getSupabaseServerClient();
-
-    const { data: membership } = await supabase
-      .from('workshop_members')
-      .select('role')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId)
-      .single();
-
-    // Réglages généraux : propriétaire ou gestionnaire.
-    if (!membership || (membership.role !== 'owner' && membership.role !== 'manager')) {
-      return { success: false, error: 'Droits insuffisants' };
-    }
 
     const update: Record<string, string | boolean | number | null> = {};
     if (details.name !== undefined) update.name = details.name;
@@ -519,18 +507,12 @@ export async function activateWorkshopPremium(
       return { success: false, error: 'Mot de passe incorrect' };
     }
 
-    const supabase = getSupabaseServerClient();
-
-    const { data: membership } = await supabase
-      .from('workshop_members')
-      .select('role')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId)
-      .single();
-
-    if (!membership || membership.role !== 'owner') {
+    // Activation Premium : propriétaire uniquement.
+    if (!(await requireOwner(workshopId))) {
       return { success: false, error: 'Droits insuffisants' };
     }
+
+    const supabase = getSupabaseServerClient();
 
     const { data: workshop } = await supabase
       .from('workshops')
@@ -564,21 +546,10 @@ export async function uploadWorkshopCover(
   formData: FormData
 ): Promise<{ success: boolean; url?: string; error?: string }> {
   try {
-    const { userId } = await auth();
-    if (!userId) return { success: false, error: 'Non authentifié' };
+    // Couverture personnalisée : propriétaire uniquement.
+    if (!(await requireOwner(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
     const supabase = getSupabaseServerClient();
-
-    const { data: membership } = await supabase
-      .from('workshop_members')
-      .select('role')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId)
-      .single();
-
-    if (!membership || membership.role !== 'owner') {
-      return { success: false, error: 'Droits insuffisants' };
-    }
 
     const file = formData.get('file');
     if (!(file instanceof File)) return { success: false, error: 'Fichier manquant' };
@@ -880,23 +851,12 @@ export async function inviteMemberByTag(
   uniqueTag: string
 ): Promise<{ success: boolean; displayName?: string; error?: string }> {
   try {
-    const { userId } = await auth();
-    if (!userId) return { success: false, error: 'Non authentifié' };
+    // Inviter : propriétaire ou gestionnaire.
+    const ctx = await requireManager(workshopId);
+    if (!ctx) return { success: false, error: 'Droits insuffisants' };
+    const userId = ctx.userId;
 
     const supabase = getSupabaseServerClient();
-
-    // Le demandeur doit être propriétaire de l'atelier.
-    const { data: currentMembership } = await supabase
-      .from('workshop_members')
-      .select('role')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId)
-      .single();
-
-    // Inviter : propriétaire ou gestionnaire.
-    if (!currentMembership || (currentMembership.role !== 'owner' && currentMembership.role !== 'manager')) {
-      return { success: false, error: 'Droits insuffisants' };
-    }
 
     // L'invitation est réservée aux ateliers Premium — vérification côté serveur
     // (ne jamais se fier au gating UI, cf. CLAUDE.md « Atelier Premium »).
@@ -1108,19 +1068,9 @@ export async function declineInvitation(
 // Invitations en attente d'un atelier (propriétaire uniquement) — pour la page Paramètres.
 export async function getWorkshopInvitations(workshopId: string): Promise<PendingInvite[]> {
   try {
-    const { userId } = await auth();
-    if (!userId) return [];
+    if (!(await requireManager(workshopId))) return [];
 
     const supabase = getSupabaseServerClient();
-
-    const { data: membership } = await supabase
-      .from('workshop_members')
-      .select('role')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId)
-      .single();
-
-    if (!membership || (membership.role !== 'owner' && membership.role !== 'manager')) return [];
 
     const { data: invitations } = await supabase
       .from('workshop_invitations')
@@ -1155,21 +1105,9 @@ export async function cancelInvitation(
   targetUserId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { userId } = await auth();
-    if (!userId) return { success: false, error: 'Non authentifié' };
+    if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
     const supabase = getSupabaseServerClient();
-
-    const { data: membership } = await supabase
-      .from('workshop_members')
-      .select('role')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId)
-      .single();
-
-    if (!membership || (membership.role !== 'owner' && membership.role !== 'manager')) {
-      return { success: false, error: 'Droits insuffisants' };
-    }
 
     await supabase
       .from('workshop_invitations')
@@ -1198,18 +1136,11 @@ export async function setMemberRole(
   newRole: 'manager' | 'member'
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { userId } = await auth();
-    if (!userId) return { success: false, error: 'Non authentifié' };
-    if (targetUserId === userId) return { success: false, error: 'Vous ne pouvez pas changer votre propre rôle' };
+    const actor = await requireMember(workshopId);
+    if (!actor) return { success: false, error: 'Droits insuffisants' };
+    if (targetUserId === actor.userId) return { success: false, error: 'Vous ne pouvez pas changer votre propre rôle' };
 
     const supabase = getSupabaseServerClient();
-
-    const { data: actor } = await supabase
-      .from('workshop_members')
-      .select('role')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId)
-      .single();
 
     const { data: target } = await supabase
       .from('workshop_members')
@@ -1218,9 +1149,9 @@ export async function setMemberRole(
       .eq('user_id', targetUserId)
       .single();
 
-    if (!actor || !target) return { success: false, error: 'Membre introuvable' };
+    if (!target) return { success: false, error: 'Membre introuvable' };
 
-    const actorRank = ROLE_RANK[actor.role as WorkshopRole] ?? 0;
+    const actorRank = ROLE_RANK[actor.role] ?? 0;
     const targetRank = ROLE_RANK[target.role as WorkshopRole] ?? 0;
 
     // Jamais le propriétaire ; uniquement un rang strictement inférieur au sien.
@@ -1253,18 +1184,11 @@ export async function removeMember(
   targetUserId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { userId } = await auth();
-    if (!userId) return { success: false, error: 'Non authentifié' };
-    if (targetUserId === userId) return { success: false, error: 'Vous ne pouvez pas vous retirer vous-même' };
+    const actor = await requireMember(workshopId);
+    if (!actor) return { success: false, error: 'Droits insuffisants' };
+    if (targetUserId === actor.userId) return { success: false, error: 'Vous ne pouvez pas vous retirer vous-même' };
 
     const supabase = getSupabaseServerClient();
-
-    const { data: actor } = await supabase
-      .from('workshop_members')
-      .select('role')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId)
-      .single();
 
     const { data: target } = await supabase
       .from('workshop_members')
@@ -1273,9 +1197,9 @@ export async function removeMember(
       .eq('user_id', targetUserId)
       .single();
 
-    if (!actor || !target) return { success: false, error: 'Membre introuvable' };
+    if (!target) return { success: false, error: 'Membre introuvable' };
 
-    const actorRank = ROLE_RANK[actor.role as WorkshopRole] ?? 0;
+    const actorRank = ROLE_RANK[actor.role] ?? 0;
     const targetRank = ROLE_RANK[target.role as WorkshopRole] ?? 0;
 
     // Jamais le propriétaire ; uniquement un rang strictement inférieur au sien.
@@ -1509,20 +1433,10 @@ export async function restoreWorkshop(
   workshopId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { userId } = await auth();
-    if (!userId) return { success: false, error: 'Non authentifié' };
+    // Restauration = propriétaire uniquement (rôle, cohérent avec la suppression).
+    if (!(await requireOwner(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
     const supabase = getSupabaseServerClient();
-
-    const { data: workshop } = await supabase
-      .from('workshops')
-      .select('created_by')
-      .eq('id', workshopId)
-      .single();
-
-    if (!workshop || workshop.created_by !== userId) {
-      return { success: false, error: 'Droits insuffisants' };
-    }
 
     await supabase
       .from('workshops')
