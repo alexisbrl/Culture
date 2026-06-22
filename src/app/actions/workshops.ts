@@ -4,6 +4,7 @@ import { auth, clerkClient } from '@clerk/nextjs/server';
 import { randomInt } from 'node:crypto';
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { requireMember, requireManager, requireOwner, ROLE_RANK } from '@/lib/authz';
+import { generateTag } from '@/lib/tag';
 import { revalidatePath } from 'next/cache';
 import { Resend } from 'resend';
 
@@ -23,21 +24,12 @@ function generateCode(): string {
   return randomInt(100000, 1000000).toString();
 }
 
-// Génère un tag aléatoire de 7 caractères (sans lettres/chiffres ambigus)
-function generateWorkshopTag(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let id = '';
-  for (let i = 0; i < 7; i++) {
-    id += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return id;
-}
-
-// Génère un tag d'atelier garanti unique (max 10 tentatives)
+// Génère un tag d'atelier garanti unique (max 10 tentatives).
+// Le générateur de base est partagé avec les tags utilisateur (cf. @/lib/tag).
 async function generateUniqueWorkshopTag(): Promise<string> {
   const supabase = getSupabaseServerClient();
   for (let attempt = 0; attempt < 10; attempt++) {
-    const candidate = generateWorkshopTag();
+    const candidate = generateTag();
     const { data } = await supabase
       .from('workshops')
       .select('id')
