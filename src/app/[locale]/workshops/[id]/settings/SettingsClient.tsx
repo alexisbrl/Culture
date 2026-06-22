@@ -3,7 +3,9 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Check, ChevronLeft, Download, FileText, Loader2, Mail, Music, Pencil, QrCode, RotateCcw, Trash2, Upload, UserPlus, X, File as FileIcon } from 'lucide-react';
+import { AlertTriangle, Check, ChevronLeft, Download, FileText, Loader2, Mail, Music, Pencil, QrCode, RotateCcw, Trash2, Upload, UserPlus, X, File as FileIcon } from 'lucide-react';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import Modal from '@/components/Modal';
 import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, activateWorkshopPremium, inviteMemberByTag, getWorkshopInvitations, cancelInvitation, setMemberRole, removeMember, getJoinRequests, approveJoinRequest, rejectJoinRequest, type PendingInvite } from '@/app/actions/workshops';
 import { createFileUploadTicket, finalizeWorkshopFileUpload, deleteWorkshopFile, renameWorkshopFile, getFileDownloadUrl, type WorkshopFile, type FileCategory } from '@/app/actions/workshopFiles';
 import type { UploadTicket } from '@/lib/storage';
@@ -1679,65 +1681,18 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
       {/* ── Delete modal ── */}
       {deleteStep !== 'idle' && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(45,42,36,0.5)',
-            backdropFilter: 'blur(4px)',
-            padding: 16,
-          }}
-        >
-          <div
-            style={{
-              background: '#fff',
-              borderRadius: 20,
-              boxShadow: '0 30px 80px rgba(45,42,36,0.18)',
-              padding: 24,
-              width: '100%',
-              maxWidth: 360,
-              fontFamily: 'inherit',
-            }}
-          >
+        <Modal width={400} onClose={() => setDeleteStep('idle')}>
             {(deleteStep === 'confirm' || deleteStep === 'sending') && (
               <>
-                <div
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 16,
-                    background: 'rgba(184,90,74,0.12)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    margin: '0 auto 16px',
-                  }}
-                >
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#b85a4a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6l-1 14H6L5 6" />
-                    <path d="M10 11v6M14 11v6" />
-                    <path d="M9 6V4h6v2" />
-                  </svg>
+                <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(184,90,74,0.12)', color: '#b85a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                  <Trash2 size={17} />
                 </div>
-                <h3
-                  style={{
-                    fontSize: 17,
-                    fontWeight: 500,
-                    color: '#2d2a24',
-                    textAlign: 'center',
-                    margin: '0 0 8px',
-                  }}
-                >
+                <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>
                   Mettre en corbeille ?
-                </h3>
+                </div>
                 <p
                   style={{
-                    fontSize: 13,
+                    fontSize: 12.5,
                     color: '#7a766d',
                     textAlign: 'center',
                     margin: '0 0 6px',
@@ -1826,34 +1781,15 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
             {(deleteStep === 'enter_code' || deleteStep === 'verifying') && (
               <>
-                <div
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 16,
-                    background: 'rgba(232,184,108,0.18)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    margin: '0 auto 16px',
-                  }}
-                >
-                  <Mail size={22} color="#c89860" />
+                <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: '#a87a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                  <Mail size={17} />
                 </div>
-                <h3
-                  style={{
-                    fontSize: 17,
-                    fontWeight: 500,
-                    color: '#2d2a24',
-                    textAlign: 'center',
-                    margin: '0 0 8px',
-                  }}
-                >
+                <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>
                   Code envoyé !
-                </h3>
+                </div>
                 <p
                   style={{
-                    fontSize: 13,
+                    fontSize: 12.5,
                     color: '#7a766d',
                     textAlign: 'center',
                     margin: '0 0 20px',
@@ -1959,8 +1895,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 </div>
               </>
             )}
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Share / QR modal */}
@@ -1968,318 +1903,114 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
       {/* ── Modale « modifications non enregistrées » ── */}
       {showLeaveConfirm && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(45,42,36,0.5)',
-            backdropFilter: 'blur(4px)',
-            padding: 16,
-          }}
-        >
-          <div
-            style={{
-              background: '#fff',
-              borderRadius: 20,
-              boxShadow: '0 30px 80px rgba(45,42,36,0.18)',
-              padding: 24,
-              width: '100%',
-              maxWidth: 360,
-              fontFamily: 'inherit',
-            }}
-          >
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 16,
-                background: 'rgba(168,122,58,0.12)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 16px',
-              }}
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a87a3a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 9v4" />
-                <path d="M12 17h.01" />
-                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-              </svg>
+        <Modal width={400} onClose={() => { setShowLeaveConfirm(false); setPendingHref(null); }}>
+          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: '#a87a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+            <AlertTriangle size={18} strokeWidth={2} />
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Modifications non enregistrées</div>
+          <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: canSave ? 20 : 10 }}>
+            Si vous quittez maintenant, les modifications apportées seront perdues.
+          </div>
+          {!canSave && (
+            <div style={{ fontSize: 12, color: '#b85a4a', marginBottom: 16 }}>
+              le nom de l&apos;atelier ne peut pas être vide
             </div>
-            <h3
-              style={{
-                fontSize: 17,
-                fontWeight: 500,
-                color: '#2d2a24',
-                textAlign: 'center',
-                margin: '0 0 8px',
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button
+              disabled={!canSave}
+              onClick={async () => {
+                await handleSaveDetails();
+                setShowLeaveConfirm(false);
+                router.push(leaveTargetHref());
+                setPendingHref(null);
               }}
-            >
-              Modifications non enregistrées
-            </h3>
-            <p
               style={{
+                padding: '11px 14px',
+                borderRadius: 10,
+                background: canSave ? '#2d2a24' : 'rgba(45,42,36,0.12)',
+                color: canSave ? '#fff' : '#9a948a',
+                border: 'none',
                 fontSize: 13,
-                color: '#7a766d',
-                textAlign: 'center',
-                margin: '0 0 20px',
+                fontWeight: 500,
+                cursor: canSave ? 'pointer' : 'not-allowed',
+                fontFamily: 'inherit',
               }}
             >
-              Si vous quittez maintenant, les modifications apportées seront perdues.
-            </p>
-            {!canSave && (
-              <p style={{ fontSize: 12, color: '#b85a4a', textAlign: 'center', margin: '-8px 0 16px' }}>
-                le nom de l&apos;atelier ne peut pas être vide
-              </p>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              Enregistrer et quitter
+            </button>
+            <div style={{ display: 'flex', gap: 10 }}>
               <button
-                disabled={!canSave}
-                onClick={async () => {
-                  await handleSaveDetails();
-                  setShowLeaveConfirm(false);
-                  router.push(leaveTargetHref());
-                  setPendingHref(null);
-                }}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 10,
-                  background: canSave ? '#2d2a24' : 'rgba(45,42,36,0.12)',
-                  color: canSave ? '#fff' : '#9a948a',
-                  border: 'none',
-                  fontSize: 13,
-                  fontWeight: 500,
-                  cursor: canSave ? 'pointer' : 'not-allowed',
-                  fontFamily: 'inherit',
-                }}
+                onClick={() => { setShowLeaveConfirm(false); setPendingHref(null); }}
+                style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
               >
-                Enregistrer et quitter
+                Annuler
               </button>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button
-                  onClick={() => {
-                    setShowLeaveConfirm(false);
-                    setPendingHref(null);
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '10px 14px',
-                    borderRadius: 10,
-                    border: '1px solid rgba(45,42,36,0.14)',
-                    background: 'transparent',
-                    color: '#5a564c',
-                    fontSize: 13,
-                    cursor: 'pointer',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  Annuler
-                </button>
-                <button
-                  onClick={() => {
-                    setShowLeaveConfirm(false);
-                    router.push(leaveTargetHref());
-                    setPendingHref(null);
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '10px 14px',
-                    borderRadius: 10,
-                    border: '1px solid rgba(184,90,74,0.30)',
-                    background: 'rgba(184,90,74,0.10)',
-                    color: '#b85a4a',
-                    fontSize: 13,
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  Quitter sans enregistrer
-                </button>
-              </div>
+              <button
+                onClick={() => { setShowLeaveConfirm(false); router.push(leaveTargetHref()); setPendingHref(null); }}
+                style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: '#b85a4a', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Quitter sans enregistrer
+              </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* ── Modale « confirmation suppression fichier » ── */}
       {pendingDeleteFile && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(45,42,36,0.5)',
-            backdropFilter: 'blur(4px)',
-            padding: 16,
-          }}
-        >
-          <div
-            style={{
-              background: '#fff',
-              borderRadius: 20,
-              boxShadow: '0 30px 80px rgba(45,42,36,0.18)',
-              padding: 24,
-              width: '100%',
-              maxWidth: 360,
-              fontFamily: 'inherit',
-            }}
-          >
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 16,
-                background: 'rgba(184,90,74,0.12)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 16px',
-              }}
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#b85a4a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14H6L5 6" />
-                <path d="M10 11v6M14 11v6" />
-                <path d="M9 6V4h6v2" />
-              </svg>
-            </div>
-            <h3
-              style={{
-                fontSize: 17,
-                fontWeight: 500,
-                color: '#2d2a24',
-                textAlign: 'center',
-                margin: '0 0 8px',
-              }}
-            >
-              Supprimer ce fichier ?
-            </h3>
-            <p
-              style={{
-                fontSize: 13,
-                color: '#7a766d',
-                textAlign: 'center',
-                margin: '0 0 20px',
-              }}
-            >
-              &quot;{pendingDeleteFile.name}&quot; sera définitivement supprimé. Cette action est irréversible.
-            </p>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => setPendingDeleteFile(null)}
-                style={{
-                  flex: 1,
-                  padding: '10px 14px',
-                  borderRadius: 10,
-                  border: '1px solid rgba(45,42,36,0.14)',
-                  background: 'transparent',
-                  color: '#5a564c',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                }}
-              >
-                Annuler
-              </button>
-              <button
-                onClick={confirmDeleteFile}
-                style={{
-                  flex: 1,
-                  padding: '10px 14px',
-                  borderRadius: 10,
-                  border: '1px solid rgba(184,90,74,0.30)',
-                  background: 'rgba(184,90,74,0.10)',
-                  color: '#b85a4a',
-                  fontSize: 13,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                }}
-              >
-                Supprimer
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          width={400}
+          icon={<Trash2 size={17} />}
+          title="Supprimer ce fichier ?"
+          description={<>&quot;{pendingDeleteFile.name}&quot; sera définitivement supprimé. Cette action est irréversible.</>}
+          confirmLabel="Supprimer"
+          onCancel={() => setPendingDeleteFile(null)}
+          onConfirm={confirmDeleteFile}
+        />
       )}
 
       {/* ── Modale « confirmation activation Premium » ── */}
       {showPremiumConfirm && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(45,42,36,0.5)', backdropFilter: 'blur(4px)', padding: 16 }}>
-          <div style={{ background: '#fff', borderRadius: 20, boxShadow: '0 30px 80px rgba(45,42,36,0.18)', padding: 24, width: '100%', maxWidth: 360, fontFamily: 'inherit' }}>
-            <div
+        <Modal width={400} onClose={() => { setShowPremiumConfirm(false); setPremiumError(''); }}>
+          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: '#a87a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+            <AlertTriangle size={18} strokeWidth={2} />
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Passer l&apos;atelier Premium</div>
+          <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: 20 }}>
+            Cette action est définitive et irréversible : l&apos;atelier deviendra privé pour toujours et tous ses membres (actuels et futurs) auront un accès Premium à vie.
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button
+              disabled={activatingPremium || !premiumPassword}
+              onClick={handleActivatePremium}
               style={{
-                width: 48,
-                height: 48,
-                borderRadius: 16,
-                background: 'rgba(168,122,58,0.12)',
+                padding: '11px 14px',
+                borderRadius: 10,
+                background: (activatingPremium || !premiumPassword) ? 'rgba(45,42,36,0.12)' : '#2d2a24',
+                color: (activatingPremium || !premiumPassword) ? '#9a948a' : '#fff',
+                border: 'none',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: (activatingPremium || !premiumPassword) ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                margin: '0 auto 16px',
+                gap: 6,
               }}
             >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a87a3a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 9v4" />
-                <path d="M12 17h.01" />
-                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-              </svg>
-            </div>
-            <h3 style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24', textAlign: 'center', margin: '0 0 8px' }}>
-              Passer l&apos;atelier Premium
-            </h3>
-            <p style={{ fontSize: 13, color: '#7a766d', textAlign: 'center', margin: '0 0 20px' }}>
-              Cette action est définitive et irréversible : l&apos;atelier deviendra privé pour toujours et tous ses membres (actuels et futurs) auront un accès Premium à vie.
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <button
-                disabled={activatingPremium || !premiumPassword}
-                onClick={handleActivatePremium}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 10,
-                  background: (activatingPremium || !premiumPassword) ? 'rgba(45,42,36,0.12)' : '#2d2a24',
-                  color: (activatingPremium || !premiumPassword) ? '#9a948a' : '#fff',
-                  border: 'none',
-                  fontSize: 13,
-                  fontWeight: 500,
-                  cursor: (activatingPremium || !premiumPassword) ? 'not-allowed' : 'pointer',
-                  fontFamily: 'inherit',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                }}
-              >
-                {activatingPremium ? <Loader2 size={14} className="animate-spin" /> : null}
-                Confirmer l&apos;activation
-              </button>
-              <button
-                onClick={() => { setShowPremiumConfirm(false); setPremiumError(''); }}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 10,
-                  border: '1px solid rgba(45,42,36,0.14)',
-                  background: 'transparent',
-                  color: '#5a564c',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                }}
-              >
-                Annuler
-              </button>
-            </div>
+              {activatingPremium ? <Loader2 size={14} className="animate-spin" /> : null}
+              Confirmer l&apos;activation
+            </button>
+            <button
+              onClick={() => { setShowPremiumConfirm(false); setPremiumError(''); }}
+              style={{ padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              Annuler
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

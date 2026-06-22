@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, Settings, Settings2, Copy, Download, FileText, AlertTriangle, Check, SeparatorHorizontal, SendHorizontal, X, ArrowRight, Star, RefreshCw } from 'lucide-react';
 import QuestionEditor, { Question, ResponseType, RESPONSE_TYPE_LABELS, emptyQuestion } from './QuestionEditor';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import { getExamBankData, saveQuestion, saveQuestions, createPool as createPoolAction, updatePool as updatePoolAction, deletePool as deletePoolAction, deleteQuestion as deleteQuestionAction, saveGeneratedExam, deleteGeneratedExam, getExamDraft, saveExamDraft } from '@/app/actions/examQuestions';
 
 // ---- shared data ----
@@ -1024,52 +1025,41 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
       {pendingDeleteQuestion && (() => {
         const q = pendingDeleteQuestion;
         const affectedExams = exams.filter(e => (e.config?.sections ?? []).some(sec => sec.questionIds.includes(q.id)));
-        return createPortal(
-          <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div onClick={() => setPendingDeleteQuestion(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
-            <div style={{ position: 'relative', width: 420, maxWidth: '90vw', background: '#fcf9f2', borderRadius: 20, padding: 24, boxShadow: '0 24px 64px rgba(45,42,36,0.25)', fontFamily: "'Inter Tight', system-ui, sans-serif", textAlign: 'center' as const }}>
-              <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(184,90,74,0.12)', color: '#b85a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 600, margin: '0 auto 12px' }}>!</div>
-              <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Supprimer cette question ?</div>
-              <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: affectedExams.length > 0 ? 10 : 20 }}>
-                Cette action est irréversible.
+        return (
+          <ConfirmDialog
+            portal
+            width={420}
+            title="Supprimer cette question ?"
+            description="Cette action est irréversible."
+            confirmLabel="Supprimer"
+            onCancel={() => setPendingDeleteQuestion(null)}
+            onConfirm={() => { onDeleteQuestion(q); setPendingDeleteQuestion(null); }}
+          >
+            {affectedExams.length > 0 && (
+              <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 9, background: 'rgba(184,90,74,0.08)', textAlign: 'left' as const }}>
+                <div style={{ fontSize: 11.5, color: '#b85a4a', marginBottom: 6 }}>Elle sera retirée des examens suivants :</div>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#5a564c' }}>
+                  {affectedExams.map(e => <li key={e.id}>{e.title}</li>)}
+                </ul>
               </div>
-              {affectedExams.length > 0 && (
-                <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 9, background: 'rgba(184,90,74,0.08)', textAlign: 'left' as const }}>
-                  <div style={{ fontSize: 11.5, color: '#b85a4a', marginBottom: 6 }}>Elle sera retirée des examens suivants :</div>
-                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#5a564c' }}>
-                    {affectedExams.map(e => <li key={e.id}>{e.title}</li>)}
-                  </ul>
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => setPendingDeleteQuestion(null)} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
-                <button onClick={() => { onDeleteQuestion(q); setPendingDeleteQuestion(null); }} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: '#b85a4a', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Supprimer</button>
-              </div>
-            </div>
-          </div>,
-          document.body
+            )}
+          </ConfirmDialog>
         );
       })()}
       {pendingDeleteLabel && (() => {
         const label = pools.find(p => p.id === pendingDeleteLabel);
         if (!label) return null;
         const count = questions.filter(q => q.pools.includes(label.id)).length;
-        return createPortal(
-          <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div onClick={() => setPendingDeleteLabel(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
-            <div style={{ position: 'relative', width: 380, maxWidth: '90vw', background: '#fcf9f2', borderRadius: 20, padding: 24, boxShadow: '0 24px 64px rgba(45,42,36,0.25)', fontFamily: "'Inter Tight', system-ui, sans-serif", textAlign: 'center' as const }}>
-              <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(184,90,74,0.12)', color: '#b85a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 600, margin: '0 auto 12px' }}>!</div>
-              <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Supprimer le libellé « {label.name} » ?</div>
-              <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: 20 }}>
-                {count > 0 ? `Il sera retiré de ${count} question${count > 1 ? 's' : ''}. ` : ''}Cette action est irréversible.
-              </div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => setPendingDeleteLabel(null)} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
-                <button onClick={confirmDeleteLabel} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: '#b85a4a', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Supprimer</button>
-              </div>
-            </div>
-          </div>,
-          document.body
+        return (
+          <ConfirmDialog
+            portal
+            width={380}
+            title={`Supprimer le libellé « ${label.name} » ?`}
+            description={`${count > 0 ? `Il sera retiré de ${count} question${count > 1 ? 's' : ''}. ` : ''}Cette action est irréversible.`}
+            confirmLabel="Supprimer"
+            onCancel={() => setPendingDeleteLabel(null)}
+            onConfirm={confirmDeleteLabel}
+          />
         );
       })()}
     </div>
@@ -1779,107 +1769,74 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
         if (!section) return null;
         const count = section.questionIds.filter(id => questions.some(q => q.id === id)).length;
         return (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div onClick={() => setPendingRemoveSectionIdx(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
-            <div style={{ position: 'relative', width: 420, maxWidth: '90vw', background: '#fcf9f2', borderRadius: 20, padding: 24, boxShadow: '0 24px 64px rgba(45,42,36,0.25)', fontFamily: "'Inter Tight', system-ui, sans-serif", textAlign: 'center' as const }}>
-              <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(184,90,74,0.12)', color: '#b85a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 600, margin: '0 auto 12px' }}>!</div>
-              <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Supprimer la partie « {section.title} » ?</div>
-              <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: 20 }}>
-                Les {count} question{count > 1 ? 's' : ''} de cette partie ne seront plus dans l&apos;examen et retourneront dans la liste des questions envoyées.
-              </div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => setPendingRemoveSectionIdx(null)} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
-                <button onClick={confirmRemoveSection} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: '#b85a4a', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Supprimer</button>
-              </div>
-            </div>
-          </div>
+          <ConfirmDialog
+            width={420}
+            title={`Supprimer la partie « ${section.title} » ?`}
+            description={<>Les {count} question{count > 1 ? 's' : ''} de cette partie ne seront plus dans l&apos;examen et retourneront dans la liste des questions envoyées.</>}
+            confirmLabel="Supprimer"
+            onCancel={() => setPendingRemoveSectionIdx(null)}
+            onConfirm={confirmRemoveSection}
+          />
         );
       })()}
       {confirmClearOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div onClick={() => setConfirmClearOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
-          <div style={{ position: 'relative', width: 420, maxWidth: '90vw', background: '#fcf9f2', borderRadius: 20, padding: 24, boxShadow: '0 24px 64px rgba(45,42,36,0.25)', fontFamily: "'Inter Tight', system-ui, sans-serif", textAlign: 'center' as const }}>
-            <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(184,90,74,0.12)', color: '#b85a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 600, margin: '0 auto 12px' }}>!</div>
-            <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>{editing ? 'Annuler les modifications ?' : "Effacer l'éditeur d'examen ?"}</div>
-            <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: 20 }}>
-              {editing
-                ? <>Les modifications en cours sur <strong style={{ color: '#2d2a24' }}>{editing.title}</strong> seront abandonnées. L&apos;examen déjà enregistré n&apos;est pas affecté.</>
-                : "L'intitulé, les parties, la pondération et les questions envoyées seront réinitialisés."}
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setConfirmClearOpen(false)} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
-              <button onClick={() => { setConfirmClearOpen(false); onClearEditor(); }} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: '#b85a4a', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>{editing ? 'Annuler les modifications' : 'Effacer'}</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          width={420}
+          title={editing ? 'Annuler les modifications ?' : "Effacer l'éditeur d'examen ?"}
+          description={editing
+            ? <>Les modifications en cours sur <strong style={{ color: '#2d2a24' }}>{editing.title}</strong> seront abandonnées. L&apos;examen déjà enregistré n&apos;est pas affecté.</>
+            : "L'intitulé, les parties, la pondération et les questions envoyées seront réinitialisés."}
+          confirmLabel={editing ? 'Annuler les modifications' : 'Effacer'}
+          onCancel={() => setConfirmClearOpen(false)}
+          onConfirm={() => { setConfirmClearOpen(false); onClearEditor(); }}
+        />
       )}
       {confirmGenerateOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div onClick={() => setConfirmGenerateOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
-          <div style={{ position: 'relative', width: 420, maxWidth: '90vw', background: '#fcf9f2', borderRadius: 20, padding: 24, boxShadow: '0 24px 64px rgba(45,42,36,0.25)', fontFamily: "'Inter Tight', system-ui, sans-serif", textAlign: 'center' as const }}>
-            <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(184,90,74,0.12)', color: '#b85a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 600, margin: '0 auto 12px' }}>!</div>
-            <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Enregistrer malgré tout ?</div>
-            <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: 20 }}>
-              {incompleteCount} question{incompleteCount > 1 ? 's' : ''} de cet examen {incompleteCount > 1 ? 'sont incomplètes' : 'est incomplète'} (sans réponse associée ou sans énoncé).
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setConfirmGenerateOpen(false)} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
-              <button onClick={() => { setConfirmGenerateOpen(false); onGenerate(); }} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: '#4f6b40', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Enregistrer</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          width={420}
+          confirmTone="confirm"
+          title="Enregistrer malgré tout ?"
+          description={<>{incompleteCount} question{incompleteCount > 1 ? 's' : ''} de cet examen {incompleteCount > 1 ? 'sont incomplètes' : 'est incomplète'} (sans réponse associée ou sans énoncé).</>}
+          confirmLabel="Enregistrer"
+          onCancel={() => setConfirmGenerateOpen(false)}
+          onConfirm={() => { setConfirmGenerateOpen(false); onGenerate(); }}
+        />
       )}
       {confirmApplyFavoriteOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div onClick={() => setConfirmApplyFavoriteOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
-          <div style={{ position: 'relative', width: 420, maxWidth: '90vw', background: '#fcf9f2', borderRadius: 20, padding: 24, boxShadow: '0 24px 64px rgba(45,42,36,0.25)', fontFamily: "'Inter Tight', system-ui, sans-serif", textAlign: 'center' as const }}>
-            <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: '#a87a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-              <Star size={18} strokeWidth={2} fill="#a87a3a" color="#a87a3a" />
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Appliquer la présentation favorite ?</div>
-            <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: 20 }}>
-              La section présentation va être remplacée par votre favori.
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setConfirmApplyFavoriteOpen(false)} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
-              <button onClick={applyFavoritePresentation} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: '#4f6b40', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Appliquer</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          width={420}
+          iconTone="accent"
+          confirmTone="confirm"
+          icon={<Star size={18} strokeWidth={2} fill="#a87a3a" color="#a87a3a" />}
+          title="Appliquer la présentation favorite ?"
+          description="La section présentation va être remplacée par votre favori."
+          confirmLabel="Appliquer"
+          onCancel={() => setConfirmApplyFavoriteOpen(false)}
+          onConfirm={applyFavoritePresentation}
+        />
       )}
       {confirmSaveFavoriteOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div onClick={() => setConfirmSaveFavoriteOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
-          <div style={{ position: 'relative', width: 420, maxWidth: '90vw', background: '#fcf9f2', borderRadius: 20, padding: 24, boxShadow: '0 24px 64px rgba(45,42,36,0.25)', fontFamily: "'Inter Tight', system-ui, sans-serif", textAlign: 'center' as const }}>
-            <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: '#a87a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-              <RefreshCw size={17} strokeWidth={2} />
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Remplacer le favori ?</div>
-            <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: 20 }}>
-              Enregistre la présentation actuelle comme favorite. Elle remplacera l&apos;ancienne favorite.
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setConfirmSaveFavoriteOpen(false)} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
-              <button onClick={saveFavoriteFromCurrent} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: '#4f6b40', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Enregistrer</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          width={420}
+          iconTone="accent"
+          confirmTone="confirm"
+          icon={<RefreshCw size={17} strokeWidth={2} />}
+          title="Remplacer le favori ?"
+          description={<>Enregistre la présentation actuelle comme favorite. Elle remplacera l&apos;ancienne favorite.</>}
+          confirmLabel="Enregistrer"
+          onCancel={() => setConfirmSaveFavoriteOpen(false)}
+          onConfirm={saveFavoriteFromCurrent}
+        />
       )}
       {pendingRemoveFromDraftId && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div onClick={() => setPendingRemoveFromDraftId(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
-          <div style={{ position: 'relative', width: 420, maxWidth: '90vw', background: '#fcf9f2', borderRadius: 20, padding: 24, boxShadow: '0 24px 64px rgba(45,42,36,0.25)', fontFamily: "'Inter Tight', system-ui, sans-serif", textAlign: 'center' as const }}>
-            <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(184,90,74,0.12)', color: '#b85a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 600, margin: '0 auto 12px' }}>!</div>
-            <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Retirer cette question ?</div>
-            <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: 20 }}>
-              Elle est cochée dans l&apos;examen en cours — la retirer de la liste des questions envoyées la retirera aussi de l&apos;aperçu.
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setPendingRemoveFromDraftId(null)} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
-              <button onClick={confirmRemoveFromDraft} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: '#b85a4a', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Retirer</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          width={420}
+          title="Retirer cette question ?"
+          description={<>Elle est cochée dans l&apos;examen en cours — la retirer de la liste des questions envoyées la retirera aussi de l&apos;aperçu.</>}
+          confirmLabel="Retirer"
+          onCancel={() => setPendingRemoveFromDraftId(null)}
+          onConfirm={confirmRemoveFromDraft}
+        />
       )}
     </div>
   );
