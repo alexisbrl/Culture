@@ -3,9 +3,9 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Check, ChevronLeft, FileText, Loader2, Mail, Music, Pencil, QrCode, RotateCcw, Trash2, Upload, X, File as FileIcon } from 'lucide-react';
-import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, activateWorkshopPremium, inviteMemberByTag, getWorkshopInvitations, cancelInvitation, setMemberRole, removeMember, type PendingInvite } from '@/app/actions/workshops';
-import { createFileUploadTicket, finalizeWorkshopFileUpload, deleteWorkshopFile, renameWorkshopFile, type WorkshopFile, type FileCategory } from '@/app/actions/workshopFiles';
+import { Check, ChevronLeft, Download, FileText, Loader2, Mail, Music, Pencil, QrCode, RotateCcw, Trash2, Upload, UserPlus, X, File as FileIcon } from 'lucide-react';
+import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, activateWorkshopPremium, inviteMemberByTag, getWorkshopInvitations, cancelInvitation, setMemberRole, removeMember, getJoinRequests, approveJoinRequest, rejectJoinRequest, type PendingInvite } from '@/app/actions/workshops';
+import { createFileUploadTicket, finalizeWorkshopFileUpload, deleteWorkshopFile, renameWorkshopFile, getFileDownloadUrl, type WorkshopFile, type FileCategory } from '@/app/actions/workshopFiles';
 import type { UploadTicket } from '@/lib/storage';
 import { COVER_GRADIENTS, COVER_GRADIENT_KEYS, COVER_EMOJIS, coverGradientFor, emojiFor } from '@/lib/workshopCover';
 import ShareQRModal from '@/components/ShareQRModal';
@@ -34,10 +34,7 @@ type Props = {
   uniqueTag: string | null;
   currentUserRole: WorkshopRole;
   isPremium: boolean;
-  isPrivate: boolean;
   showProgramme: boolean;
-  maxMembersTotal: number | null;
-  maxMembersMonthly: number | null;
   members: Member[];
   files: WorkshopFile[];
 };
@@ -140,45 +137,6 @@ function Row({
   );
 }
 
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        background: 'rgba(45,42,36,0.06)',
-        borderRadius: 999,
-        padding: 3,
-        gap: 2,
-      }}
-    >
-      {(['privé', 'public'] as const).map((opt) => {
-        const active = (opt === 'public') === value;
-        return (
-          <button
-            key={opt}
-            onClick={() => onChange(opt === 'public')}
-            style={{
-              padding: '5px 14px',
-              borderRadius: 999,
-              border: 'none',
-              fontSize: 12,
-              fontWeight: active ? 500 : 400,
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              background: active ? '#fff' : 'transparent',
-              color: active ? '#2d2a24' : '#7a766d',
-              boxShadow: active ? '0 1px 4px rgba(45,42,36,0.12)' : 'none',
-              transition: 'all 0.15s',
-            }}
-          >
-            {opt}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 function Switch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
@@ -210,40 +168,6 @@ function Switch({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
         }}
       />
     </button>
-  );
-}
-
-function NumInput({
-  value,
-  onChange,
-  suffix,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  suffix: string;
-}) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-      <input
-        type="text"
-        inputMode="numeric"
-        value={value}
-        onChange={(e) => onChange(e.target.value.replace(/\D/g, ''))}
-        style={{
-          width: 90,
-          textAlign: 'right',
-          fontSize: 13,
-          fontFamily: 'inherit',
-          padding: '6px 10px',
-          border: '1px solid rgba(45,42,36,0.14)',
-          borderRadius: 9,
-          outline: 'none',
-          background: 'rgba(255,255,255,0.7)',
-          color: '#2d2a24',
-        }}
-      />
-      <span style={{ fontSize: 12, color: '#9a948a', whiteSpace: 'nowrap' }}>{suffix}</span>
-    </div>
   );
 }
 
@@ -332,7 +256,7 @@ function SectionCard({
   );
 }
 
-export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, isPremium, isPrivate, showProgramme: showProgrammeProp, maxMembersTotal, maxMembersMonthly, members, files: initialFiles }: Props) {
+export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, isPremium, showProgramme: showProgrammeProp, members, files: initialFiles }: Props) {
   const router = useRouter();
 
   // Propriétaire vs gestionnaire : seul le propriétaire touche à l'argent (Premium)
@@ -350,7 +274,26 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [editingFileName, setEditingFileName] = useState('');
   const [pendingDeleteFile, setPendingDeleteFile] = useState<WorkshopFile | null>(null);
+  const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Téléchargement : on demande au serveur une URL signée (gestionnaire requis),
+  // puis on déclenche le téléchargement côté navigateur.
+  async function handleDownloadFile(fileId: string) {
+    setDownloadingFileId(fileId);
+    const result = await getFileDownloadUrl(workshopId, fileId);
+    setDownloadingFileId(null);
+    if (!result.success || !result.url) {
+      setFileError(result.error ?? 'Erreur lors du téléchargement');
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = result.url;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
 
   // Upload direct vers le stockage via une URL signée (ticket), sans passer
   // par le serveur Next.js — contourne la limite de taille de requête de
@@ -524,13 +467,11 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
     }
   }
 
-  // Section 2 — Visibility
-  // Un atelier Premium est définitivement privé (voir activateWorkshopPremium) : le
-  // toggle est verrouillé sur « privé » et ne peut plus être changé.
-  const [isPublic, setIsPublic] = useState(!isPrivate);
+  // Section 2 — Accès & limites
+  // Tous les ateliers sont privés : on rejoint un atelier uniquement sur invitation
+  // ou via une demande d'adhésion validée par un gestionnaire. Il n'y a donc plus de
+  // réglage public/privé (cf. audit §1.2).
   const [showProgramme, setShowProgramme] = useState(showProgrammeProp);
-  const [maxTotal, setMaxTotal] = useState(maxMembersTotal != null ? String(maxMembersTotal) : '200');
-  const [maxMonthly, setMaxMonthly] = useState(maxMembersMonthly != null ? String(maxMembersMonthly) : '40');
 
   // Valeurs courantes de tous les champs des sections « Général » et « Visibilité & accès ».
   // Toute clé ajoutée ici (et au snapshot ci-dessous) participe automatiquement à isDirty
@@ -542,10 +483,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
     emoji: selectedEmoji,
     coverImage,
     useCustomCover,
-    isPublic,
     showProgramme,
-    maxTotal,
-    maxMonthly,
   };
 
   // Baseline used to detect unsaved changes
@@ -566,10 +504,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
       coverImageUrl: coverImage,
       coverImageActive: useCustomCover,
       emoji: selectedEmoji,
-      isPrivate: !isPublic,
       showProgramme,
-      maxMembersTotal: maxTotal.length > 0 ? Number(maxTotal) : null,
-      maxMembersMonthly: maxMonthly.length > 0 ? Number(maxMonthly) : null,
     });
     setSavingDetails(false);
     if (result.success) {
@@ -589,10 +524,49 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [cancelingInvite, setCancelingInvite] = useState<string | null>(null);
 
+  // Demandes d'adhésion en attente (valables pour TOUS les ateliers, pas seulement Premium).
+  const [joinRequests, setJoinRequests] = useState<PendingInvite[]>([]);
+  const [joinReqActionId, setJoinReqActionId] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isPremium) return;
     getWorkshopInvitations(workshopId).then(setPendingInvites).catch(console.error);
   }, [isPremium, workshopId]);
+
+  useEffect(() => {
+    getJoinRequests(workshopId).then(setJoinRequests).catch(console.error);
+  }, [workshopId]);
+
+  async function handleApproveJoinRequest(targetUserId: string) {
+    setJoinReqActionId(targetUserId);
+    const result = await approveJoinRequest(workshopId, targetUserId);
+    setJoinReqActionId(null);
+    if (!result.success) return;
+    const approved = joinRequests.find((r) => r.userId === targetUserId);
+    setJoinRequests((prev) => prev.filter((r) => r.userId !== targetUserId));
+    if (approved) {
+      setLocalMembers((prev) => [
+        ...prev,
+        {
+          id: `req-${targetUserId}`,
+          userId: targetUserId,
+          role: 'member',
+          joinedAt: new Date().toISOString(),
+          displayName: approved.displayName,
+          uniqueTag: approved.uniqueTag,
+        },
+      ]);
+    }
+  }
+
+  async function handleRejectJoinRequest(targetUserId: string) {
+    setJoinReqActionId(targetUserId);
+    const result = await rejectJoinRequest(workshopId, targetUserId);
+    setJoinReqActionId(null);
+    if (result.success) {
+      setJoinRequests((prev) => prev.filter((r) => r.userId !== targetUserId));
+    }
+  }
 
   async function handleInvite() {
     const tag = tagInput.trim();
@@ -1025,32 +999,13 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           </Row>
         </SectionCard>
 
-        {/* ── 2. Visibilité & accès ── */}
+        {/* ── 2. Accès & limites ── */}
         <SectionCard
-          title="Visibilité & accès"
-          description="Contrôlez qui peut accéder à votre atelier et comment."
+          title="Accès & limites"
+          description="Tous les ateliers sont privés : on les rejoint via une demande validée par un gestionnaire ou sur invitation."
         >
-          <Row
-            label="Visibilité"
-            hint={isPremium ? 'atelier premium · définitivement privé' : 'un atelier privé se rejoint via tag ou invitation'}
-          >
-            {isPremium ? (
-              <span style={{ fontSize: 13, color: '#7a766d' }}>privé</span>
-            ) : (
-              <Toggle value={isPublic} onChange={setIsPublic} />
-            )}
-          </Row>
-
           <Row label="Afficher le programme éducatif">
             <Switch value={showProgramme} onChange={setShowProgramme} />
-          </Row>
-
-          <Row label="Nombre maximal de candidats (total)">
-            <NumInput value={maxTotal} onChange={setMaxTotal} suffix="membres" />
-          </Row>
-
-          <Row label="Nombre maximal de candidats (mensuel)">
-            <NumInput value={maxMonthly} onChange={setMaxMonthly} suffix="/ mois" />
           </Row>
 
           <Row label="QR code" hint="redirige directement vers l'atelier" noBorder>
@@ -1182,6 +1137,48 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 disponible pour les ateliers Premium
               </span>
             </Row>
+          )}
+
+          {/* Demandes d'adhésion en attente (tous les ateliers) */}
+          {joinRequests.length > 0 && (
+            <div style={{ marginTop: 4, marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9a948a', marginBottom: 8 }}>
+                Demandes d&apos;adhésion ({joinRequests.length})
+              </div>
+              {joinRequests.map((req) => (
+                <div
+                  key={req.userId}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '10px 12px',
+                    marginBottom: 6,
+                    borderRadius: 10,
+                    background: 'rgba(79,107,64,0.06)',
+                    border: '1px solid rgba(79,107,64,0.18)',
+                  }}
+                >
+                  <UserPlus size={16} style={{ color: '#4f6b40', flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 450, color: '#2d2a24', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {req.displayName}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#7a766d' }}>
+                      demande · {req.uniqueTag}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <SmallBtn tone="dark" onClick={() => handleApproveJoinRequest(req.userId)} disabled={joinReqActionId === req.userId}>
+                      {joinReqActionId === req.userId ? '…' : 'accepter'}
+                    </SmallBtn>
+                    <SmallBtn tone="danger" onClick={() => handleRejectJoinRequest(req.userId)} disabled={joinReqActionId === req.userId}>
+                      refuser
+                    </SmallBtn>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
 
           {/* Member list */}
@@ -1409,6 +1406,22 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     </div>
                     {!isEditing && (
                       <>
+                        <button
+                          onClick={() => handleDownloadFile(file.id)}
+                          disabled={downloadingFileId === file.id}
+                          title="télécharger"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#bdb8ad',
+                            display: 'flex',
+                            alignItems: 'center',
+                            padding: 4,
+                          }}
+                        >
+                          {downloadingFileId === file.id ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+                        </button>
                         <button
                           onClick={() => startEditingFile(file)}
                           title="renommer"

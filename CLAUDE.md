@@ -3,7 +3,7 @@
 > Ce fichier est l'unique source de vérité pour tout développement sur ce projet. Il doit être lu intégralement à chaque nouvelle conversation.
 > **Toute modification structurante apportée au projet (stack, structure, conventions, décisions produit) doit être reflétée ici.**
 >
-> Dernière mise à jour : 21/06/2026
+> Dernière mise à jour : 22/06/2026
 
 ---
 
@@ -249,7 +249,7 @@ Variables clés :
 | Décomposition en briques de connaissance | Via IA. Briques modifiables manuellement. |
 | Génération de questions | Via IA. Types : QCM, réponse ouverte, fill in the blank, matching, trier dans l'ordre. |
 | Parcours d'apprentissage séquencé | Enchaînement d'exercices sans gamification visuelle |
-| Gestion d'un atelier | Public/privé, rôles gestionnaire/candidat, paramètres de base |
+| Gestion d'un atelier | Ateliers toujours privés (adhésion validée), rôles gestionnaire/candidat, paramètres de base |
 | Correction assistée | Suggestion IA + correction manuelle par le gestionnaire |
 | Architecture API-first | APIs internes propres par domaine dès la V1 |
 
@@ -428,14 +428,12 @@ Un propriétaire peut activer le statut Premium sur son atelier. C'est une opér
 
 | Paramètre | Détail |
 |---|---|
-| Public / Privé | Visibilité de l'atelier |
-| Nombre max de candidats total | Limite globale |
-| Nombre max de candidats mensuel | Limite par mois |
+| Demandes d'adhésion | **[MODIFIÉ PAR CLAUDE - 22/06/2026]** Tous les ateliers sont privés ; on les rejoint via une **demande validée** par un gestionnaire/propriétaire (accepter/refuser), ou sur invitation. La notion public/privé et les limites de candidats (total/mensuel) ont été retirées — les quotas seront gérés par les structures via l'API. |
 | Afficher / cacher le programme éducatif | Pour les candidats |
 | Inviter un utilisateur | Devient membre candidat. **Réservé aux ateliers Premium** [MODIFIÉ PAR CLAUDE - 13/06/2026] — voir section 17 « Atelier Premium — implémentation ». |
 | Exclure un membre | Uniquement de rang inférieur au gestionnaire qui exclut (candidat < gestionnaire < propriétaire) |
 | Changer le rang d'un membre | Promouvoir : rang ≤ au sien / Rétrograder : rang < au sien |
-| QR code | Redirige vers l'atelier. Option : avec ou sans bypass de validation (atelier privé) |
+| QR code | Redirige vers l'atelier (Preview `?preview=`). Rejoindre passe par une demande validée comme partout. |
 | Passer Premium | **Irréversible.** Voir section 12 et section 17 « Atelier Premium — implémentation ». |
 | Donner la propriété | Uniquement le propriétaire. Il perd son statut de propriétaire. |
 | Supprimer l'atelier | Uniquement le propriétaire. |
@@ -986,7 +984,35 @@ Sessions d'examens standardisés dans des **centres certifiés**. Chaque examen 
 >
 > **Dashboard — badge gestionnaire** [MODIFIÉ PAR CLAUDE - 21/06/2026] : `getUserWorkshops` remonte désormais le vrai rôle (`WorkshopCardData.role?`), alimenté dans `roleMap`. Un atelier où l'utilisateur est *gestionnaire* reste dans « ateliers rejoints » mais affiche : une pastille verte « gestionnaire » sur la carte (`WorkshopCard`, à côté de la pastille Premium éventuelle) ET le bon libellé dans la Preview (`workshopToPreview` utilise `w.role` ; `PreviewData.role` étendu à `owner|manager|member`).
 
+> **Passe de sécurité (audit `AUDIT.md`, section 1) + nettoyages associés** [AJOUTÉ PAR CLAUDE - 22/06/2026]
+>
+> ⚠️ **Cette entrée fait autorité et remplace les descriptions antérieures** concernant la visibilité public/privé, les limites de candidats, et l'ajout direct de membres (entrées plus anciennes des sections 12/14/17 désormais obsolètes sur ces points précis).
+>
+> **Contrôle d'accès centralisé — `src/lib/authz.ts`** : nouveau module, **point d'entrée unique** des droits d'atelier. Exporte `WorkshopRole`, `ROLE_RANK`, `requireWorkshopRole(workshopId, minRole)` et les raccourcis `requireMember` / `requireManager` / `requireOwner` (renvoient `{ userId, role } | null`) + `assertManager` (variante qui lève). **Règle :** toute server action agissant sur un atelier DOIT appeler l'un de ces helpers en tête — une server action `'use server'` est une URL POST publique, le garde de la page ne protège pas l'action. Déjà appliqué à `examQuestions.ts`, `workshopFiles.ts`, aux demandes d'adhésion et à la suppression d'atelier ; **reste à étendre** aux autres actions de `workshops.ts` (`updateWorkshopDetails`, `setMemberRole`, `removeMember`, invitations…) qui font encore le check en ligne.
+>
+> **1.1 — IDOR éditeur d'examen corrigé** : les 12 server actions de `src/app/actions/examQuestions.ts` étaient appelables sur n'importe quel `workshopId` sans aucune vérification (lecture/écriture/suppression des questions et examens de tout atelier). Chacune vérifie désormais `requireManager` (lectures `getExamBankData`/`getExamDraft` → retour vide si non autorisé ; écritures → `assertManager` qui lève). La banque contenant les réponses, elle est interdite aux candidats.
+>
+> **1.2 — Tous les ateliers sont privés ; adhésion sur validation** : la notion public/privé est **abandonnée**. Migration `drop_workshops_private_column` (colonne `workshops.private` supprimée). Nouveau modèle :
+> - Table `workshop_join_requests` (migration `add_workshop_join_requests_table`, miroir de `workshop_invitations`, RLS server-only sans policy).
+> - `joinWorkshop` **remplacé** par `requestToJoinWorkshop(workshopId)` : crée une **demande en attente** (idempotent ; renvoie `already_member` si déjà membre), n'ajoute jamais directement.
+> - Server actions : `getJoinRequests` / `approveJoinRequest` / `rejectJoinRequest` (gestionnaire, via `requireManager`) et `cancelJoinRequest` (le demandeur). `getWorkshopPreview` renvoie désormais `hasRequested`.
+> - UI : Dashboard → bouton « demander à rejoindre » / état « demande envoyée » (`DashboardClient`) ; Paramètres → Membres & rôles → section « Demandes d'adhésion » (accepter/refuser, `SettingsClient`).
+> - Retraits associés : toggle Public/Privé des Paramètres (+ composant `Toggle` mort), gestion `isPrivate` de `updateWorkshopDetails`, sélecteur de visibilité de la **page de création** (mock non branché). La recherche d'atelier (nom/tag/QR) est **inchangée** — seul le mode d'admission change.
+> - **À terme (API)** : l'équivalent d'un atelier « public » sera l'auto-approbation des demandes via l'API publique (ajout d'étudiants par les structures).
+>
+> **1.3 — Limites de candidats supprimées** : colonnes `max_members_total` / `max_members_monthly` supprimées (migration `drop_workshop_member_limit_columns`), UI et `updateWorkshopDetails` nettoyés (composant `NumInput` mort retiré). Les quotas seront gérés par les structures via l'API.
+>
+> **1.4 — Fichiers confidentiels** : bucket `workshop-files` **privé** (confirmé), aucune URL publique. `getWorkshopFiles` verrouillé `requireManager`. Téléchargement gestionnaire ajouté : `createSignedDownloadUrl` dans `src/lib/storage.ts` (URL signée éphémère 120 s, force le téléchargement avec le bon nom), action `getFileDownloadUrl(workshopId, fileId)` (`requireManager`), bouton « télécharger » (Lucide `Download`) par ligne de fichier dans `SettingsClient`.
+>
+> **1.5 — Code mort supprimé** : `addMemberByTag` (ajout direct avec rôle au choix, `'owner'` inclus) retiré. L'ajout par tag légitime passe par `inviteMemberByTag` (Premium, conservé).
+>
+> **1.7 — Codes de suppression durcis** (`requestDeletionCode` / `confirmDeletion`) : génération via `crypto.randomInt` (CSPRNG, plus de `Math.random`) ; validité 15 min inchangée ; **délai minimal de 5 s entre deux essais** + **plafond de 25 essais** par code (au-delà, code invalidé → renvoyer un email ; jamais de blocage durable) via nouvelles colonnes `deletion_codes.attempts` / `last_attempt_at` (migration `add_deletion_codes_attempt_tracking`). Les deux fonctions utilisent désormais `requireOwner` (basé sur le **rôle** et non `created_by`, pour gérer correctement un futur transfert de propriété).
+>
+> **1.6 — Facturation / Stripe : différé** (Stripe non branché). Voir l'item dédié dans le backlog §18 ci-dessous.
+
 ## 18. BACKLOG TECHNIQUE (à traiter plus tard)
+
+- **Intégration Stripe & facturation (audit §1.6)** [AJOUTÉ PAR CLAUDE - 22/06/2026] : le webhook `src/app/api/webhooks/stripe/route.ts` est un **stub inerte** (renvoie `{ received: true }` sans rien faire). Sujets à traiter au branchement réel : (1) **vérifier la signature** Stripe avec `stripe.webhooks.constructEvent(body, sig, STRIPE_WEBHOOK_SECRET)` avant tout traitement ; (2) gérer les événements `customer.subscription.created/updated/deleted` + `invoice.payment_failed` → `setUserTier` (`src/lib/subscription.ts`) ; (3) **idempotence** (un même événement peut être reçu plusieurs fois) ; (4) remplacer le mécanisme **temporaire** d'activation Premium d'atelier (`activateWorkshopPremium`, mot de passe `CultureMDP` + allowlist email) par une activation **uniquement après paiement confirmé** ; (5) **facturation ~3,5 €/membre** à l'acceptation d'une invitation/demande d'adhésion sur un atelier Premium (point d'ancrage : TODO dans `approveJoinRequest`). Plan détaillé : mémoire `stripe_integration_plan.md`.
 
 - **Nettoyage des utilisateurs supprimés** [AJOUTÉ PAR CLAUDE - 14/06/2026] : `workshops.created_by` et `workshop_members.user_id` stockent l'ID Clerk en texte brut, sans clé étrangère ni cascade. Si un utilisateur ayant créé/rejoint des ateliers est supprimé de Clerk, ses lignes deviennent orphelines (le code retombe sur `'Utilisateur'` pour l'affichage, donc pas de crash, mais atelier "fantôme"). À prévoir : soit un webhook Clerk `user.deleted` qui nettoie/réassigne ces lignes côté Supabase, soit un job de nettoyage manuel.
 
@@ -994,4 +1020,4 @@ Sessions d'examens standardisés dans des **centres certifiés**. Chaque examen 
 
 ---
 
-*Dernière mise à jour : 21/06/2026*
+*Dernière mise à jour : 22/06/2026*

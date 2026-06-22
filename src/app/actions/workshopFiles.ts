@@ -1,8 +1,8 @@
 'use server';
 
-import { auth } from '@clerk/nextjs/server';
 import { getSupabaseServerClient } from '@/lib/supabase';
-import { buildWorkshopFileKey, createUploadTicket, deleteObject, type UploadTicket } from '@/lib/storage';
+import { requireManager } from '@/lib/authz';
+import { buildWorkshopFileKey, createUploadTicket, createSignedDownloadUrl, deleteObject, type UploadTicket } from '@/lib/storage';
 import { revalidatePath } from 'next/cache';
 
 export type FileCategory = 'audio' | 'texte' | 'autre';
@@ -32,26 +32,16 @@ function categoryFor(mimeType: string): FileCategory {
   return 'autre';
 }
 
-// Gestion des fichiers : propriétaire OU gestionnaire (cf. rôles d'atelier).
-async function requireManager(workshopId: string): Promise<string | null> {
-  const { userId } = await auth();
-  if (!userId) return null;
-
-  const supabase = getSupabaseServerClient();
-  const { data: membership } = await supabase
-    .from('workshop_members')
-    .select('role')
-    .eq('workshop_id', workshopId)
-    .eq('user_id', userId)
-    .single();
-
-  if (!membership || (membership.role !== 'owner' && membership.role !== 'manager')) return null;
-  return userId;
-}
+// Gestion des fichiers : propriétaire OU gestionnaire — contrôle d'accès factorisé
+// dans `@/lib/authz` (requireManager), partagé avec les autres server actions.
 
 // ─── Lister les fichiers d'un atelier ────────────────────────────────────────
 
 export async function getWorkshopFiles(workshopId: string): Promise<WorkshopFile[]> {
+  // Lecture réservée aux gestionnaires (cf. §1.4 de l'audit : ne plus exposer la
+  // liste des fichiers d'un atelier à n'importe quel utilisateur connecté).
+  if (!(await requireManager(workshopId))) return [];
+
   const supabase = getSupabaseServerClient();
   const { data } = await supabase
     .from('workshop_files')
@@ -81,8 +71,7 @@ export async function createFileUploadTicket(
   mimeType: string
 ): Promise<{ success: boolean; ticket?: UploadTicket; path?: string; error?: string }> {
   try {
-    const userId = await requireManager(workshopId);
-    if (!userId) return { success: false, error: 'Droits insuffisants' };
+    if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
     if (fileSize > MAX_FILE_SIZE) {
       return { success: false, error: 'Fichier trop lourd (50 Mo maximum)' };
@@ -111,8 +100,8 @@ export async function finalizeWorkshopFileUpload(
   mimeType: string
 ): Promise<{ success: boolean; file?: WorkshopFile; error?: string }> {
   try {
-    const userId = await requireManager(workshopId);
-    if (!userId) return { success: false, error: 'Droits insuffisants' };
+    const ctx = await requireManager(workshopId);
+    if (!ctx) return { success: false, error: 'Droits insuffisants' };
 
     const supabase = getSupabaseServerClient();
     const category = categoryFor(mimeType);
@@ -126,7 +115,7 @@ export async function finalizeWorkshopFileUpload(
         mime_type: mimeType,
         category,
         storage_path: path,
-        created_by: userId,
+        created_by: ctx.userId,
       })
       .select('id, name, size, mime_type, category, created_at')
       .single();
@@ -155,6 +144,38 @@ export async function finalizeWorkshopFileUpload(
   }
 }
 
+// ─── Télécharger un fichier (gestionnaire uniquement) ────────────────────────
+//
+// Les fichiers sont confidentiels : le bucket est privé et n'expose aucune URL
+// publique. On génère à la demande une URL signée de courte durée, et seulement
+// après vérification que l'appelant est gestionnaire de CET atelier.
+export async function getFileDownloadUrl(
+  workshopId: string,
+  fileId: string
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  try {
+    if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+
+    const supabase = getSupabaseServerClient();
+    const { data: row } = await supabase
+      .from('workshop_files')
+      .select('storage_path, name')
+      .eq('id', fileId)
+      .eq('workshop_id', workshopId)
+      .maybeSingle();
+
+    if (!row) return { success: false, error: 'Fichier introuvable' };
+
+    const url = await createSignedDownloadUrl(row.storage_path, row.name);
+    if (!url) return { success: false, error: 'Erreur lors de la préparation du téléchargement' };
+
+    return { success: true, url };
+  } catch (err) {
+    console.error('getFileDownloadUrl error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
 // ─── Renommer un fichier (l'extension d'origine est toujours conservée) ──────
 
 export async function renameWorkshopFile(
@@ -163,8 +184,7 @@ export async function renameWorkshopFile(
   newBaseName: string
 ): Promise<{ success: boolean; name?: string; error?: string }> {
   try {
-    const userId = await requireManager(workshopId);
-    if (!userId) return { success: false, error: 'Droits insuffisants' };
+    if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
     const trimmed = newBaseName.trim();
     if (!trimmed) return { success: false, error: 'Le nom ne peut pas être vide' };
@@ -209,8 +229,7 @@ export async function deleteWorkshopFile(
   fileId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const userId = await requireManager(workshopId);
-    if (!userId) return { success: false, error: 'Droits insuffisants' };
+    if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
     const supabase = getSupabaseServerClient();
     const { data: row } = await supabase

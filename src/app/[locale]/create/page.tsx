@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { useLocale } from 'next-intl';
 import Link from 'next/link';
 import { Upload, FileText, X, ChevronRight } from 'lucide-react';
@@ -14,7 +13,6 @@ const FILES = [
 export default function CreatePage() {
   const locale = useLocale();
   const fr = locale === 'fr';
-  const [vis, setVis] = useState<'private' | 'public'>('private');
 
   return (
     <div className="min-h-[calc(100vh-65px)] bg-[#fcf9f2] font-sans">
@@ -86,7 +84,7 @@ export default function CreatePage() {
             </div>
           </div>
 
-          {/* SIDE — identity + visibility */}
+          {/* SIDE — identity */}
           <div className="flex flex-col gap-3.5 lg:sticky lg:top-4">
             <div className="bg-white/85 border border-[#2d2a24]/[0.08] rounded-[14px] px-[18px] py-4">
               <div className="text-[10px] font-semibold tracking-[0.16em] uppercase text-[#7a766d] mb-3">
@@ -107,38 +105,6 @@ export default function CreatePage() {
                 placeholder={fr ? 'une phrase pour situer la matière…' : 'one line to set the scene…'}
                 className="w-full px-3 py-2.5 border border-[#2d2a24]/[0.14] rounded-lg text-[12.5px] bg-white text-[#2d2a24] h-14 resize-none leading-snug outline-none focus:border-[#a87a3a]/50"
               />
-            </div>
-
-            <div className="bg-white/85 border border-[#2d2a24]/[0.08] rounded-[14px] px-[18px] py-4">
-              <div className="text-[10px] font-semibold tracking-[0.16em] uppercase text-[#7a766d] mb-1">
-                {fr ? '③ visibilité' : '③ visibility'}
-              </div>
-              <div className="text-[11.5px] text-[#9a948a] mb-3">
-                {fr ? 'le reste se règle ensuite dans les paramètres.' : 'everything else is set later in settings.'}
-              </div>
-              <div className="flex flex-col gap-2">
-                {([
-                  { id: 'private', t: fr ? 'Privé' : 'Private', d: fr ? 'on rejoint via un tag ou une invitation' : 'join via a tag or an invite' },
-                  { id: 'public', t: fr ? 'Public' : 'Public', d: fr ? 'visible dans la recherche par tous' : 'visible in search to everyone' },
-                ] as const).map((o) => (
-                  <button
-                    key={o.id}
-                    onClick={() => setVis(o.id)}
-                    className={`flex items-start gap-2.5 text-left px-3 py-2.5 rounded-[10px] transition ${
-                      vis === o.id ? 'bg-[#e8b86c]/[0.16] border-[1.5px] border-[#a87a3a]/40' : 'bg-white/60 border border-[#2d2a24]/10'
-                    }`}
-                  >
-                    <span
-                      className="w-4 h-4 rounded-full mt-0.5 shrink-0 transition"
-                      style={{ border: vis === o.id ? '5px solid #a87a3a' : '2px solid rgba(45,42,36,0.25)' }}
-                    />
-                    <span>
-                      <span className="block text-[13px] font-medium text-[#2d2a24]">{o.t}</span>
-                      <span className="text-[11.5px] text-[#7a766d]">{o.d}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
             </div>
 
             <Link

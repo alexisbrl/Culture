@@ -1,7 +1,9 @@
 'use server';
 
 import { auth, clerkClient } from '@clerk/nextjs/server';
+import { randomInt } from 'node:crypto';
 import { getSupabaseServerClient } from '@/lib/supabase';
+import { requireManager, requireOwner } from '@/lib/authz';
 import { revalidatePath } from 'next/cache';
 import { Resend } from 'resend';
 
@@ -15,8 +17,10 @@ function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
 }
 
+// Code à 6 chiffres généré avec un générateur cryptographiquement sûr
+// (randomInt — pas de biais de modulo, non prédictible, contrairement à Math.random).
 function generateCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return randomInt(100000, 1000000).toString();
 }
 
 // Génère un tag aléatoire de 7 caractères (sans lettres/chiffres ambigus)
@@ -296,7 +300,7 @@ export async function getWorkshop(workshopId: string) {
     // 2. Récupérer l'atelier
     const { data: workshop } = await supabase
       .from('workshops')
-      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium, private, show_programme, max_members_total, max_members_monthly')
+      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium, show_programme')
       .eq('id', workshopId)
       .single();
 
@@ -352,6 +356,7 @@ export async function getWorkshopPreview(workshopId: string): Promise<{
   ownerName: string;
   memberCount: number;
   isMember: boolean;
+  hasRequested: boolean;
   isPremium: boolean;
 } | null> {
   try {
@@ -376,6 +381,19 @@ export async function getWorkshopPreview(workshopId: string): Promise<{
 
     const members = workshopMembers ?? [];
     const owner = members.find((m) => m.role === 'owner');
+    const isMember = members.some((m) => m.user_id === userId);
+
+    // Demande d'adhésion déjà en attente pour l'utilisateur courant (non-membre) ?
+    let hasRequested = false;
+    if (!isMember) {
+      const { data: request } = await supabase
+        .from('workshop_join_requests')
+        .select('id')
+        .eq('workshop_id', workshopId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      hasRequested = !!request;
+    }
 
     let ownerName = 'Utilisateur';
     if (owner) {
@@ -398,7 +416,8 @@ export async function getWorkshopPreview(workshopId: string): Promise<{
       emoji: workshop.emoji,
       ownerName,
       memberCount: members.length,
-      isMember: members.some((m) => m.user_id === userId),
+      isMember,
+      hasRequested,
       isPremium: workshop.is_premium,
     };
   } catch (err) {
@@ -418,10 +437,7 @@ export async function updateWorkshopDetails(
     coverImageUrl?: string | null;
     coverImageActive?: boolean;
     emoji?: string;
-    isPrivate?: boolean;
     showProgramme?: boolean;
-    maxMembersTotal?: number | null;
-    maxMembersMonthly?: number | null;
   }
 ): Promise<{ success: boolean; error?: string }> {
   try {
@@ -450,13 +466,6 @@ export async function updateWorkshopDetails(
     if (details.coverImageActive !== undefined) update.cover_image_active = details.coverImageActive;
     if (details.emoji !== undefined) update.emoji = details.emoji;
     if (details.showProgramme !== undefined) update.show_programme = details.showProgramme;
-    if (details.maxMembersTotal !== undefined) update.max_members_total = details.maxMembersTotal;
-    if (details.maxMembersMonthly !== undefined) update.max_members_monthly = details.maxMembersMonthly;
-    if (details.isPrivate !== undefined) {
-      const { data: w } = await supabase.from('workshops').select('is_premium').eq('id', workshopId).single();
-      // Un atelier Premium est définitivement privé — on ignore toute tentative de le rendre public.
-      update.private = w?.is_premium ? true : details.isPrivate;
-    }
 
     await supabase.from('workshops').update(update).eq('id', workshopId);
 
@@ -537,7 +546,7 @@ export async function activateWorkshopPremium(
 
     await supabase
       .from('workshops')
-      .update({ is_premium: true, premium_activated_at: new Date().toISOString(), private: true })
+      .update({ is_premium: true, premium_activated_at: new Date().toISOString() })
       .eq('id', workshopId);
 
     revalidatePath('/', 'layout');
@@ -657,96 +666,199 @@ export async function searchWorkshops(query: string): Promise<
   }
 }
 
-// ─── Join a workshop ──────────────────────────────────────────────────────────
+// ─── Demandes d'adhésion (tous les ateliers sont privés) ──────────────────────
+//
+// Tous les ateliers sont privés : rejoindre un atelier ne crée jamais directement
+// une adhésion, mais une DEMANDE en attente, qu'un gestionnaire ou le propriétaire
+// doit valider (`approveJoinRequest`). C'est le miroir des invitations. À terme,
+// une API publique pourra approuver automatiquement (équivalent d'un atelier public).
 
-export async function joinWorkshop(
+export type JoinRequestStatus = 'requested' | 'already_member';
+
+export async function requestToJoinWorkshop(
   workshopId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; status?: JoinRequestStatus; error?: string }> {
   try {
     const profile = await syncUserProfile();
     if (!profile) return { success: false, error: 'Non authentifié' };
 
     const supabase = getSupabaseServerClient();
 
-    const { data: existing } = await supabase
+    // L'atelier doit exister et ne pas être en corbeille.
+    const { data: workshop } = await supabase
+      .from('workshops')
+      .select('id')
+      .eq('id', workshopId)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (!workshop) return { success: false, error: 'Atelier introuvable' };
+
+    // Déjà membre → rien à faire.
+    const { data: existingMember } = await supabase
       .from('workshop_members')
       .select('id')
       .eq('workshop_id', workshopId)
       .eq('user_id', profile.userId)
-      .single();
+      .maybeSingle();
 
-    if (existing) return { success: false, error: 'Déjà membre' };
+    if (existingMember) return { success: true, status: 'already_member' };
 
-    await supabase.from('workshop_members').insert({
+    // Demande déjà en attente → idempotent.
+    const { data: existingRequest } = await supabase
+      .from('workshop_join_requests')
+      .select('id')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', profile.userId)
+      .maybeSingle();
+
+    if (existingRequest) return { success: true, status: 'requested' };
+
+    const { error: insertError } = await supabase.from('workshop_join_requests').insert({
       workshop_id: workshopId,
       user_id: profile.userId,
-      role: 'member',
     });
 
+    if (insertError) {
+      console.error('requestToJoinWorkshop insert error:', insertError);
+      return { success: false, error: 'Erreur lors de l\'envoi de la demande' };
+    }
+
     revalidatePath('/', 'layout');
-    return { success: true };
+    return { success: true, status: 'requested' };
   } catch (err) {
-    console.error('joinWorkshop error:', err);
+    console.error('requestToJoinWorkshop error:', err);
     return { success: false, error: 'Erreur serveur' };
   }
 }
 
-// ─── Add member by unique tag (owner only) ────────────────────────────────────
+// Demandes d'adhésion en attente d'un atelier (gestionnaire/propriétaire) — page Paramètres.
+// Réutilise le type PendingInvite (même forme : userId / displayName / uniqueTag / createdAt).
+export async function getJoinRequests(workshopId: string): Promise<PendingInvite[]> {
+  try {
+    if (!(await requireManager(workshopId))) return [];
 
-export async function addMemberByTag(
+    const supabase = getSupabaseServerClient();
+
+    const { data: requests } = await supabase
+      .from('workshop_join_requests')
+      .select('user_id, created_at')
+      .eq('workshop_id', workshopId)
+      .order('created_at', { ascending: false });
+
+    if (!requests || requests.length === 0) return [];
+
+    const requesterIds = requests.map((r) => r.user_id);
+    const { data: profiles } = await supabase
+      .from('user_profiles')
+      .select('user_id, display_name, unique_tag')
+      .in('user_id', requesterIds);
+    const profMap = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p]));
+
+    return requests.map((r) => ({
+      userId: r.user_id,
+      displayName: profMap[r.user_id]?.display_name ?? 'Utilisateur',
+      uniqueTag: profMap[r.user_id]?.unique_tag ?? '',
+      createdAt: r.created_at,
+    }));
+  } catch (err) {
+    console.error('getJoinRequests error:', err);
+    return [];
+  }
+}
+
+// Approuver une demande d'adhésion : ajoute le membre puis supprime la demande.
+export async function approveJoinRequest(
   workshopId: string,
-  uniqueTag: string,
-  role: 'owner' | 'member'
-): Promise<{ success: boolean; displayName?: string; error?: string }> {
+  targetUserId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+
+    const supabase = getSupabaseServerClient();
+
+    const { data: request } = await supabase
+      .from('workshop_join_requests')
+      .select('id')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', targetUserId)
+      .maybeSingle();
+
+    if (!request) return { success: false, error: 'Demande introuvable' };
+
+    // TODO (§12) : facturer le propriétaire si l'atelier est Premium (~3,5 €/membre).
+
+    const { data: existing } = await supabase
+      .from('workshop_members')
+      .select('id')
+      .eq('workshop_id', workshopId)
+      .eq('user_id', targetUserId)
+      .maybeSingle();
+
+    if (!existing) {
+      await supabase.from('workshop_members').insert({
+        workshop_id: workshopId,
+        user_id: targetUserId,
+        role: 'member',
+      });
+    }
+
+    await supabase
+      .from('workshop_join_requests')
+      .delete()
+      .eq('workshop_id', workshopId)
+      .eq('user_id', targetUserId);
+
+    revalidatePath('/', 'layout');
+    return { success: true };
+  } catch (err) {
+    console.error('approveJoinRequest error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
+// Refuser une demande d'adhésion : supprime la demande (l'utilisateur peut redemander).
+export async function rejectJoinRequest(
+  workshopId: string,
+  targetUserId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+
+    const supabase = getSupabaseServerClient();
+    await supabase
+      .from('workshop_join_requests')
+      .delete()
+      .eq('workshop_id', workshopId)
+      .eq('user_id', targetUserId);
+
+    revalidatePath('/', 'layout');
+    return { success: true };
+  } catch (err) {
+    console.error('rejectJoinRequest error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
+// Annuler sa propre demande d'adhésion (depuis le dashboard du demandeur).
+export async function cancelJoinRequest(
+  workshopId: string
+): Promise<{ success: boolean; error?: string }> {
   try {
     const { userId } = await auth();
     if (!userId) return { success: false, error: 'Non authentifié' };
 
     const supabase = getSupabaseServerClient();
-
-    const { data: currentMembership } = await supabase
-      .from('workshop_members')
-      .select('role')
+    await supabase
+      .from('workshop_join_requests')
+      .delete()
       .eq('workshop_id', workshopId)
-      .eq('user_id', userId)
-      .single();
-
-    if (!currentMembership || currentMembership.role !== 'owner') {
-      return { success: false, error: 'Droits insuffisants' };
-    }
-
-    const { data: targetUser } = await supabase
-      .from('user_profiles')
-      .select('user_id, display_name')
-      .eq('unique_tag', uniqueTag.toUpperCase())
-      .single();
-
-    if (!targetUser) {
-      return {
-        success: false,
-        error: 'Utilisateur introuvable. Vérifiez le tag et assurez-vous que l\'utilisateur s\'est connecté à Culture.',
-      };
-    }
-
-    const { data: existing } = await supabase
-      .from('workshop_members')
-      .select('id')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', targetUser.user_id)
-      .single();
-
-    if (existing) return { success: false, error: 'Cet utilisateur est déjà dans l\'atelier' };
-
-    await supabase.from('workshop_members').insert({
-      workshop_id: workshopId,
-      user_id: targetUser.user_id,
-      role,
-    });
+      .eq('user_id', userId);
 
     revalidatePath('/', 'layout');
-    return { success: true, displayName: targetUser.display_name };
+    return { success: true };
   } catch (err) {
-    console.error('addMemberByTag error:', err);
+    console.error('cancelJoinRequest error:', err);
     return { success: false, error: 'Erreur serveur' };
   }
 }
@@ -1191,23 +1303,23 @@ export async function requestDeletionCode(
   workshopId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { userId } = await auth();
-    if (!userId) return { success: false, error: 'Non authentifié' };
+    // Suppression = propriétaire uniquement (rôle, pas created_by — gère le futur
+    // transfert de propriété).
+    const ctx = await requireOwner(workshopId);
+    if (!ctx) return { success: false, error: 'Droits insuffisants' };
+    const userId = ctx.userId;
 
     const supabase = getSupabaseServerClient();
 
-    // Vérifier que l'utilisateur est propriétaire
     const { data: workshop } = await supabase
       .from('workshops')
-      .select('name, created_by')
+      .select('name')
       .eq('id', workshopId)
       .single();
 
-    if (!workshop || workshop.created_by !== userId) {
-      return { success: false, error: 'Droits insuffisants' };
-    }
+    if (!workshop) return { success: false, error: 'Atelier introuvable' };
 
-    // Supprimer les anciens codes pour cet atelier
+    // Supprimer les anciens codes pour cet atelier (compteur d'essais remis à zéro)
     await supabase
       .from('deletion_codes')
       .delete()
@@ -1273,33 +1385,54 @@ export async function confirmDeletion(
   code: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { userId } = await auth();
-    if (!userId) return { success: false, error: 'Non authentifié' };
+    // Suppression = propriétaire uniquement (rôle, pas created_by — gère le futur
+    // transfert de propriété).
+    const ctx = await requireOwner(workshopId);
+    if (!ctx) return { success: false, error: 'Droits insuffisants' };
+    const userId = ctx.userId;
 
     const supabase = getSupabaseServerClient();
 
-    // Valider le code
+    // Charger le code et son suivi anti-brute-force.
     const { data: codeRecord } = await supabase
       .from('deletion_codes')
-      .select('code, expires_at')
+      .select('code, expires_at, attempts, last_attempt_at')
       .eq('workshop_id', workshopId)
       .eq('user_id', userId)
       .single();
 
     if (!codeRecord) return { success: false, error: 'Code introuvable. Renvoyez un nouveau code.' };
     if (new Date(codeRecord.expires_at) < new Date()) return { success: false, error: 'Code expiré. Renvoyez un nouveau code.' };
+
+    // Plafond de 25 essais : au-delà, le code est invalidé et l'utilisateur doit
+    // renvoyer un nouveau code (jamais bloqué durablement).
+    if (codeRecord.attempts >= 25) {
+      await supabase.from('deletion_codes').delete().eq('workshop_id', workshopId).eq('user_id', userId);
+      return { success: false, error: 'Trop de tentatives. Renvoyez un nouveau code.' };
+    }
+
+    // Délai minimal de 5 s entre deux essais (anti-brute-force).
+    if (codeRecord.last_attempt_at && Date.now() - new Date(codeRecord.last_attempt_at).getTime() < 5000) {
+      return { success: false, error: 'Veuillez patienter quelques secondes avant de réessayer.' };
+    }
+
+    // Enregistrer l'essai (compteur + horodatage) AVANT de comparer le code.
+    await supabase
+      .from('deletion_codes')
+      .update({ attempts: codeRecord.attempts + 1, last_attempt_at: new Date().toISOString() })
+      .eq('workshop_id', workshopId)
+      .eq('user_id', userId);
+
     if (codeRecord.code !== code) return { success: false, error: 'Code incorrect.' };
 
-    // Récupérer l'atelier et ses propriétaires
+    // Récupérer le nom de l'atelier (pour l'email de notification).
     const { data: workshop } = await supabase
       .from('workshops')
-      .select('name, created_by')
+      .select('name')
       .eq('id', workshopId)
       .single();
 
-    if (!workshop || workshop.created_by !== userId) {
-      return { success: false, error: 'Droits insuffisants' };
-    }
+    if (!workshop) return { success: false, error: 'Atelier introuvable' };
 
     const { data: owners } = await supabase
       .from('workshop_members')

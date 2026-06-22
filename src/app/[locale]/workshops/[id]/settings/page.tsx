@@ -48,10 +48,7 @@ export default async function SettingsPage({ params }: Props) {
       uniqueTag={workshop.unique_tag}
       currentUserRole={workshop.currentUserRole}
       isPremium={workshop.is_premium}
-      isPrivate={workshop.private}
       showProgramme={workshop.show_programme}
-      maxMembersTotal={workshop.max_members_total}
-      maxMembersMonthly={workshop.max_members_monthly}
       members={members}
       files={files}
     />

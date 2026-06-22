@@ -42,3 +42,19 @@ export async function deleteObject(key: string): Promise<void> {
   const supabase = getSupabaseServerClient();
   await supabase.storage.from(WORKSHOP_FILES_BUCKET).remove([key]);
 }
+
+// Génère une URL de téléchargement signée, de courte durée de vie, pour un objet
+// d'un bucket privé. `downloadName` force le téléchargement (plutôt qu'un affichage
+// inline) en proposant ce nom de fichier au navigateur. Renvoie null en cas d'échec.
+export async function createSignedDownloadUrl(
+  key: string,
+  downloadName?: string,
+  expiresInSeconds = 120,
+): Promise<string | null> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.storage
+    .from(WORKSHOP_FILES_BUCKET)
+    .createSignedUrl(key, expiresInSeconds, downloadName ? { download: downloadName } : undefined);
+  if (error || !data) return null;
+  return data.signedUrl;
+}
