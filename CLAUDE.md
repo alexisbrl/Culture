@@ -1034,4 +1034,6 @@ Sessions d'examens standardisés dans des **centres certifiés**. Chaque examen 
 
 ---
 
+> **Design system — tokens de couleur centralisés** [AJOUTÉ PAR CLAUDE - 22/06/2026] : `src/lib/theme.ts` est la **source de vérité des couleurs** pour les styles inline — `palette` (tokens nommés par rôle : `ink`, `inkMuted`, `cream`, `green`, `amber`, `danger`…), `ink(alpha)` (translucides sur l'encre `#2d2a24`), `radius`, `shadow`. **Ne plus écrire de couleur de marque en dur dans un `style={{}}`** : utiliser ces tokens (ex. `color: palette.ink`, `border: \`1px solid ${ink(0.14)}\``). Audit §2.4 : toutes les couleurs de marque hex inline ont été migrées. Restes documentés dans `AUDIT_2.4_design_system.md` (rgba imbriqués dans des chaînes, pages en classes Tailwind `text-[#…]` → à tokeniser via `@theme` dans `globals.css`, quelques attributs SVG). `theme.ts` doit rester synchronisé avec les variables CSS de `globals.css` (`--primary`…) utilisées par les classes Tailwind.
+
 *Dernière mise à jour : 22/06/2026*
