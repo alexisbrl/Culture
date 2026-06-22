@@ -1,5 +1,7 @@
 'use client';
 
+import { palette, ink } from '@/lib/theme';
+
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -55,7 +57,7 @@ const ROLE_RANK: Record<WorkshopRole, number> = { owner: 3, manager: 2, member: 
 const ROLE_LABEL: Record<WorkshopRole, string> = { owner: 'propriétaire', manager: 'gestionnaire', member: 'membre' };
 
 function FileCategoryIcon({ category }: { category: FileCategory }) {
-  const props = { size: 18, style: { color: '#a87a3a', flexShrink: 0 } };
+  const props = { size: 18, style: { color: palette.amber, flexShrink: 0 } };
   if (category === 'audio') return <Music {...props} />;
   if (category === 'texte') return <FileText {...props} />;
   return <FileIcon {...props} />;
@@ -85,7 +87,7 @@ function avatarGradient(name: string) {
 function DotRow({ label, value, max }: { label: string; value: number; max: number }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-      <span style={{ fontSize: 10, color: '#9a948a', width: 28 }}>{label}</span>
+      <span style={{ fontSize: 10, color: palette.inkFaint, width: 28 }}>{label}</span>
       <div style={{ display: 'flex', gap: 3 }}>
         {Array.from({ length: max }).map((_, i) => (
           <div
@@ -94,7 +96,7 @@ function DotRow({ label, value, max }: { label: string; value: number; max: numb
               width: 6,
               height: 6,
               borderRadius: '50%',
-              background: i < value ? '#a87a3a' : 'rgba(45,42,36,0.12)',
+              background: i < value ? palette.amber : ink(0.12),
             }}
           />
         ))}
@@ -129,8 +131,8 @@ function Row({
       }}
     >
       <div>
-        <div style={{ fontSize: 13.5, fontWeight: 450, color: '#2d2a24' }}>{label}</div>
-        {hint && <div style={{ fontSize: 11.5, color: '#9a948a', marginTop: 2 }}>{hint}</div>}
+        <div style={{ fontSize: 13.5, fontWeight: 450, color: palette.ink }}>{label}</div>
+        {hint && <div style={{ fontSize: 11.5, color: palette.inkFaint, marginTop: 2 }}>{hint}</div>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         {children}
@@ -148,7 +150,7 @@ function Switch({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
         height: 24,
         borderRadius: 999,
         border: 'none',
-        background: value ? '#7a9968' : 'rgba(45,42,36,0.14)',
+        background: value ? palette.greenSoft : ink(0.14),
         cursor: 'pointer',
         padding: 3,
         display: 'flex',
@@ -165,7 +167,7 @@ function Switch({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
           width: 18,
           height: 18,
           borderRadius: '50%',
-          background: '#fff',
+          background: palette.paper,
           boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
         }}
       />
@@ -188,22 +190,22 @@ function SmallBtn({
     ghost: {
       bg: 'transparent',
       border: '1px solid rgba(45,42,36,0.16)',
-      color: '#5a564c',
+      color: palette.inkMuted,
     },
     danger: {
       bg: 'rgba(184,90,74,0.10)',
       border: '1px solid rgba(184,90,74,0.30)',
-      color: '#b85a4a',
+      color: palette.danger,
     },
     dark: {
-      bg: '#2d2a24',
+      bg: palette.ink,
       border: '1px solid #2d2a24',
-      color: '#fff',
+      color: palette.paper,
     },
     amber: {
-      bg: '#a87a3a',
+      bg: palette.amber,
       border: '1px solid #a87a3a',
-      color: '#fff',
+      color: palette.paper,
     },
   }[tone];
 
@@ -214,9 +216,9 @@ function SmallBtn({
       style={{
         padding: '7px 14px',
         borderRadius: 9,
-        background: disabled ? 'rgba(45,42,36,0.12)' : styles.bg,
+        background: disabled ? ink(0.12) : styles.bg,
         border: disabled ? '1px solid rgba(45,42,36,0.12)' : styles.border,
-        color: disabled ? '#9a948a' : styles.color,
+        color: disabled ? palette.inkFaint : styles.color,
         fontSize: 12.5,
         cursor: disabled ? 'not-allowed' : 'pointer',
         fontFamily: 'inherit',
@@ -241,8 +243,8 @@ function SectionCard({
   return (
     <div style={{ marginBottom: 36 }}>
       <div style={{ marginBottom: 10 }}>
-        <div style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24', marginBottom: 3 }}>{title}</div>
-        <div style={{ fontSize: 12.5, color: '#9a948a' }}>{description}</div>
+        <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink, marginBottom: 3 }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: palette.inkFaint }}>{description}</div>
       </div>
       <div
         style={{
@@ -700,9 +702,9 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
     <div
       style={{
         fontFamily: "'Inter Tight', system-ui, sans-serif",
-        color: '#2d2a24',
+        color: palette.ink,
         minHeight: 'calc(100vh - 65px)',
-        background: '#fcf9f2',
+        background: palette.cream,
         display: 'flex',
         cursor: 'default',
       }}
@@ -735,7 +737,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             gap: 8,
             fontSize: 14,
             fontWeight: 500,
-            color: '#5a564c',
+            color: palette.inkMuted,
             textDecoration: 'none',
             marginBottom: 20,
             padding: '8px 10px',
@@ -775,7 +777,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   borderRadius: 9,
                   border: 'none',
                   background: active ? 'rgba(168,122,58,0.14)' : 'transparent',
-                  color: active ? '#7a4d20' : '#5a564c',
+                  color: active ? '#7a4d20' : palette.inkMuted,
                   fontWeight: active ? 500 : 400,
                   fontSize: 13,
                   cursor: 'pointer',
@@ -825,7 +827,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   fontSize: 13,
                   fontFamily: 'ui-monospace, monospace',
                   letterSpacing: '0.04em',
-                  color: '#9a948a',
+                  color: palette.inkFaint,
                   flexShrink: 0,
                 }}
               >
@@ -842,7 +844,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   border: 'none',
                   outline: 'none',
                   background: 'transparent',
-                  color: '#2d2a24',
+                  color: palette.ink,
                   flex: 1,
                   minWidth: 0,
                   padding: 0,
@@ -865,7 +867,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 borderRadius: 9,
                 outline: 'none',
                 background: 'rgba(255,255,255,0.7)',
-                color: '#2d2a24',
+                color: palette.ink,
                 width: 260,
                 resize: 'vertical',
               }}
@@ -909,7 +911,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       width: 32,
                       height: 32,
                       borderRadius: 9,
-                      backgroundColor: coverImage ? 'transparent' : 'rgba(45,42,36,0.06)',
+                      backgroundColor: coverImage ? 'transparent' : ink(0.06),
                       backgroundImage: coverImage ? `url(${coverImage})` : 'none',
                       backgroundSize: 'cover',
                       backgroundPosition: 'center',
@@ -920,7 +922,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontSize: 14,
-                      color: '#9a948a',
+                      color: palette.inkFaint,
                     }}
                   >
                     {uploadingCover ? <Loader2 size={14} className="animate-spin" /> : !coverImage && '+'}
@@ -936,7 +938,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                         width: 16,
                         height: 16,
                         borderRadius: '50%',
-                        background: '#b85a4a',
+                        background: palette.danger,
                         border: '1px solid #fcf9f2',
                         display: 'flex',
                         alignItems: 'center',
@@ -958,7 +960,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 />
               </div>
               {uploadError && (
-                <span style={{ fontSize: 11, color: '#b85a4a' }}>{uploadError}</span>
+                <span style={{ fontSize: 11, color: palette.danger }}>{uploadError}</span>
               )}
             </div>
           </Row>
@@ -991,7 +993,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           </Row>
 
           <Row label="Date de création" noBorder>
-            <span style={{ fontSize: 13, color: '#7a766d' }}>
+            <span style={{ fontSize: 13, color: palette.inkSoft }}>
               {new Date(createdAt).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', {
                 day: 'numeric',
                 month: 'long',
@@ -1013,7 +1015,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           <Row label="QR code" hint="redirige directement vers l'atelier" noBorder>
             <button
               onClick={() => setShareOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: '#5a564c', fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
             >
               <QrCode size={13} />
               partager · QR
@@ -1067,7 +1069,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       borderRadius: 9,
                       outline: 'none',
                       background: 'rgba(255,255,255,0.7)',
-                      color: '#2d2a24',
+                      color: palette.ink,
                       width: 130,
                       letterSpacing: '0.04em',
                     }}
@@ -1077,7 +1079,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   </SmallBtn>
                 </div>
                 {inviteMsg && (
-                  <span style={{ fontSize: 12, color: inviteMsg.type === 'success' ? '#4f6b40' : '#b85a4a', textAlign: 'right', maxWidth: 280 }}>
+                  <span style={{ fontSize: 12, color: inviteMsg.type === 'success' ? palette.green : palette.danger, textAlign: 'right', maxWidth: 280 }}>
                     {inviteMsg.text}
                   </span>
                 )}
@@ -1086,7 +1088,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
             {pendingInvites.length > 0 && (
               <div style={{ marginTop: 4, marginBottom: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9a948a', marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: palette.inkFaint, marginBottom: 8 }}>
                   Invitations en attente ({pendingInvites.length})
                 </div>
                 {pendingInvites.map((inv) => (
@@ -1103,12 +1105,12 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       border: '1px solid rgba(168,122,58,0.18)',
                     }}
                   >
-                    <Mail size={16} style={{ color: '#a87a3a', flexShrink: 0 }} />
+                    <Mail size={16} style={{ color: palette.amber, flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 450, color: '#2d2a24', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: 13, fontWeight: 450, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {inv.displayName}
                       </div>
-                      <div style={{ fontSize: 11, color: '#a87a3a' }}>
+                      <div style={{ fontSize: 11, color: palette.amber }}>
                         en attente · {inv.uniqueTag}
                       </div>
                     </div>
@@ -1129,8 +1131,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
               <span
                 style={{
                   fontSize: 12,
-                  color: '#9a948a',
-                  background: 'rgba(45,42,36,0.05)',
+                  color: palette.inkFaint,
+                  background: ink(0.05),
                   border: '1px solid rgba(45,42,36,0.08)',
                   borderRadius: 9,
                   padding: '7px 12px',
@@ -1144,7 +1146,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           {/* Demandes d'adhésion en attente (tous les ateliers) */}
           {joinRequests.length > 0 && (
             <div style={{ marginTop: 4, marginBottom: 8 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9a948a', marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: palette.inkFaint, marginBottom: 8 }}>
                 Demandes d&apos;adhésion ({joinRequests.length})
               </div>
               {joinRequests.map((req) => (
@@ -1161,12 +1163,12 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     border: '1px solid rgba(79,107,64,0.18)',
                   }}
                 >
-                  <UserPlus size={16} style={{ color: '#4f6b40', flexShrink: 0 }} />
+                  <UserPlus size={16} style={{ color: palette.green, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 450, color: '#2d2a24', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 13, fontWeight: 450, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {req.displayName}
                     </div>
-                    <div style={{ fontSize: 11, color: '#7a766d' }}>
+                    <div style={{ fontSize: 11, color: palette.inkSoft }}>
                       demande · {req.uniqueTag}
                     </div>
                   </div>
@@ -1208,7 +1210,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   justifyContent: 'center',
                   fontSize: 12,
                   fontWeight: 600,
-                  color: '#fff',
+                  color: palette.paper,
                   flexShrink: 0,
                 }}
               >
@@ -1221,7 +1223,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   style={{
                     fontSize: 13,
                     fontWeight: 450,
-                    color: '#2d2a24',
+                    color: palette.ink,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
@@ -1229,7 +1231,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 >
                   {member.displayName}
                 </div>
-                <div style={{ fontSize: 11, color: '#9a948a' }}>
+                <div style={{ fontSize: 11, color: palette.inkFaint }}>
                   {ROLE_LABEL[member.role]} · {member.uniqueTag}
                 </div>
               </div>
@@ -1270,7 +1272,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             onDragLeave={() => setFileDragOver(false)}
             onDrop={handleFileDrop}
             style={{
-              border: `1.5px dashed ${fileDragOver ? '#a87a3a' : 'rgba(45,42,36,0.14)'}`,
+              border: `1.5px dashed ${fileDragOver ? palette.amber : ink(0.14)}`,
               borderRadius: 12,
               background: fileDragOver ? 'rgba(168,122,58,0.06)' : 'transparent',
               padding: '14px 16px',
@@ -1302,15 +1304,15 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
           {uploadProgress !== null && (
             <div style={{ padding: '2px 0 8px' }}>
-              <div style={{ fontSize: 11.5, color: '#9a948a', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 11.5, color: palette.inkFaint, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {uploadProgress.name}
               </div>
-              <div style={{ height: 4, borderRadius: 999, background: 'rgba(45,42,36,0.08)', overflow: 'hidden' }}>
+              <div style={{ height: 4, borderRadius: 999, background: ink(0.08), overflow: 'hidden' }}>
                 <div
                   style={{
                     height: '100%',
                     width: `${uploadProgress.percent}%`,
-                    background: '#a87a3a',
+                    background: palette.amber,
                     borderRadius: 999,
                     transition: 'width 0.15s',
                   }}
@@ -1320,11 +1322,11 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           )}
 
           {fileError && (
-            <div style={{ fontSize: 12, color: '#b85a4a', padding: '6px 0' }}>{fileError}</div>
+            <div style={{ fontSize: 12, color: palette.danger, padding: '6px 0' }}>{fileError}</div>
           )}
 
           {files.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: '#9a948a', padding: '14px 0' }}>
+            <div style={{ fontSize: 12.5, color: palette.inkFaint, padding: '14px 0' }}>
               aucun fichier déposé pour l’instant.
             </div>
           ) : (
@@ -1362,28 +1364,28 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                               flex: 1,
                               minWidth: 0,
                               fontSize: 13,
-                              color: '#2d2a24',
+                              color: palette.ink,
                               border: '1px solid rgba(168,122,58,0.40)',
                               borderRadius: 6,
                               padding: '3px 6px',
-                              background: '#fff',
+                              background: palette.paper,
                               outline: 'none',
                             }}
                           />
                           {extension && (
-                            <span style={{ fontSize: 13, color: '#9a948a', flexShrink: 0 }}>{extension}</span>
+                            <span style={{ fontSize: 13, color: palette.inkFaint, flexShrink: 0 }}>{extension}</span>
                           )}
                           <button
                             onClick={() => handleRenameFile(file.id)}
                             title="enregistrer"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7a9968', display: 'flex', alignItems: 'center', padding: 4, flexShrink: 0 }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.greenSoft, display: 'flex', alignItems: 'center', padding: 4, flexShrink: 0 }}
                           >
                             <Check size={15} />
                           </button>
                           <button
                             onClick={cancelEditingFile}
                             title="annuler"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#bdb8ad', display: 'flex', alignItems: 'center', padding: 4, flexShrink: 0 }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.inkGhost, display: 'flex', alignItems: 'center', padding: 4, flexShrink: 0 }}
                           >
                             <X size={15} />
                           </button>
@@ -1392,17 +1394,17 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                         <div
                           style={{
                             fontSize: 13,
-                            color: '#2d2a24',
+                            color: palette.ink,
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
                           }}
                         >
                           {base}
-                          {extension && <span style={{ color: '#9a948a' }}>{extension}</span>}
+                          {extension && <span style={{ color: palette.inkFaint }}>{extension}</span>}
                         </div>
                       )}
-                      <div style={{ fontSize: 11, color: '#9a948a', marginTop: 2 }}>
+                      <div style={{ fontSize: 11, color: palette.inkFaint, marginTop: 2 }}>
                         {formatFileSize(file.size)}
                       </div>
                     </div>
@@ -1416,7 +1418,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                             background: 'none',
                             border: 'none',
                             cursor: 'pointer',
-                            color: '#bdb8ad',
+                            color: palette.inkGhost,
                             display: 'flex',
                             alignItems: 'center',
                             padding: 4,
@@ -1431,7 +1433,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                             background: 'none',
                             border: 'none',
                             cursor: 'pointer',
-                            color: '#bdb8ad',
+                            color: palette.inkGhost,
                             display: 'flex',
                             alignItems: 'center',
                             padding: 4,
@@ -1446,7 +1448,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                             background: 'none',
                             border: 'none',
                             cursor: 'pointer',
-                            color: '#bdb8ad',
+                            color: palette.inkGhost,
                             display: 'flex',
                             alignItems: 'center',
                             padding: 4,
@@ -1509,7 +1511,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   <div
                     style={{
                       fontSize: 13,
-                      color: '#2d2a24',
+                      color: palette.ink,
                       marginBottom: 4,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -1539,7 +1541,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
               marginTop: 4,
             }}
           >
-            <span style={{ fontSize: 12, color: '#9a948a' }}>5 sur 142 affichées</span>
+            <span style={{ fontSize: 12, color: palette.inkFaint }}>5 sur 142 affichées</span>
             <SmallBtn tone="ghost">voir toutes les briques</SmallBtn>
           </div>
         </SectionCard>
@@ -1616,7 +1618,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   borderRadius: 9,
                   outline: 'none',
                   background: 'rgba(255,255,255,0.7)',
-                  color: '#2d2a24',
+                  color: palette.ink,
                   width: 160,
                 }}
               />
@@ -1626,7 +1628,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 style={{
                   fontSize: 12.5,
                   fontWeight: 500,
-                  color: '#b85a4a',
+                  color: palette.danger,
                   background: 'rgba(184,90,74,0.08)',
                   border: '1px solid rgba(184,90,74,0.18)',
                   borderRadius: 9,
@@ -1655,7 +1657,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             display: 'flex',
             alignItems: 'center',
             gap: 12,
-            background: '#fff',
+            background: palette.paper,
             borderRadius: 12,
             boxShadow: '0 10px 30px rgba(45,42,36,0.16)',
             border: '1px solid rgba(45,42,36,0.08)',
@@ -1663,7 +1665,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           }}
         >
           {isDirty && !detailsSaved && (
-            <span style={{ fontSize: 12.5, color: !canSave ? '#b85a4a' : '#7a766d' }}>
+            <span style={{ fontSize: 12.5, color: !canSave ? palette.danger : palette.inkSoft }}>
               {!canSave ? "le nom de l'atelier ne peut pas être vide" : 'modifications non enregistrées'}
             </span>
           )}
@@ -1684,16 +1686,16 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         <Modal width={400} onClose={() => setDeleteStep('idle')}>
             {(deleteStep === 'confirm' || deleteStep === 'sending') && (
               <>
-                <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(184,90,74,0.12)', color: '#b85a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(184,90,74,0.12)', color: palette.danger, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
                   <Trash2 size={17} />
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>
+                <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6 }}>
                   Mettre en corbeille ?
                 </div>
                 <p
                   style={{
                     fontSize: 12.5,
-                    color: '#7a766d',
+                    color: palette.inkSoft,
                     textAlign: 'center',
                     margin: '0 0 6px',
                   }}
@@ -1703,7 +1705,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 <p
                   style={{
                     fontSize: 11.5,
-                    color: '#9a948a',
+                    color: palette.inkFaint,
                     textAlign: 'center',
                     margin: '0 0 20px',
                   }}
@@ -1714,7 +1716,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   <p
                     style={{
                       fontSize: 12,
-                      color: '#b85a4a',
+                      color: palette.danger,
                       background: 'rgba(184,90,74,0.08)',
                       padding: '8px 12px',
                       borderRadius: 9,
@@ -1734,7 +1736,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       borderRadius: 10,
                       border: '1px solid rgba(45,42,36,0.14)',
                       background: 'transparent',
-                      color: '#5a564c',
+                      color: palette.inkMuted,
                       fontSize: 13,
                       cursor: 'pointer',
                       fontFamily: 'inherit',
@@ -1753,8 +1755,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       gap: 8,
                       padding: '10px 14px',
                       borderRadius: 10,
-                      background: '#b85a4a',
-                      color: '#fff',
+                      background: palette.danger,
+                      color: palette.paper,
                       border: 'none',
                       fontSize: 13,
                       fontWeight: 500,
@@ -1781,16 +1783,16 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
             {(deleteStep === 'enter_code' || deleteStep === 'verifying') && (
               <>
-                <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: '#a87a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: palette.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
                   <Mail size={17} />
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>
+                <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6 }}>
                   Code envoyé !
                 </div>
                 <p
                   style={{
                     fontSize: 12.5,
-                    color: '#7a766d',
+                    color: palette.inkSoft,
                     textAlign: 'center',
                     margin: '0 0 20px',
                   }}
@@ -1826,7 +1828,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   <p
                     style={{
                       fontSize: 12,
-                      color: '#b85a4a',
+                      color: palette.danger,
                       background: 'rgba(184,90,74,0.08)',
                       padding: '8px 12px',
                       borderRadius: 9,
@@ -1852,7 +1854,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       borderRadius: 10,
                       border: '1px solid rgba(45,42,36,0.14)',
                       background: 'transparent',
-                      color: '#5a564c',
+                      color: palette.inkMuted,
                       fontSize: 13,
                       cursor: 'pointer',
                       fontFamily: 'inherit',
@@ -1872,8 +1874,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       gap: 8,
                       padding: '10px 14px',
                       borderRadius: 10,
-                      background: '#b85a4a',
-                      color: '#fff',
+                      background: palette.danger,
+                      color: palette.paper,
                       border: 'none',
                       fontSize: 13,
                       fontWeight: 500,
@@ -1904,15 +1906,15 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
       {/* ── Modale « modifications non enregistrées » ── */}
       {showLeaveConfirm && (
         <Modal width={400} onClose={() => { setShowLeaveConfirm(false); setPendingHref(null); }}>
-          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: '#a87a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: palette.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
             <AlertTriangle size={18} strokeWidth={2} />
           </div>
-          <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Modifications non enregistrées</div>
-          <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: canSave ? 20 : 10 }}>
+          <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6 }}>Modifications non enregistrées</div>
+          <div style={{ fontSize: 12.5, color: palette.inkSoft, marginBottom: canSave ? 20 : 10 }}>
             Si vous quittez maintenant, les modifications apportées seront perdues.
           </div>
           {!canSave && (
-            <div style={{ fontSize: 12, color: '#b85a4a', marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: palette.danger, marginBottom: 16 }}>
               le nom de l&apos;atelier ne peut pas être vide
             </div>
           )}
@@ -1928,8 +1930,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
               style={{
                 padding: '11px 14px',
                 borderRadius: 10,
-                background: canSave ? '#2d2a24' : 'rgba(45,42,36,0.12)',
-                color: canSave ? '#fff' : '#9a948a',
+                background: canSave ? palette.ink : ink(0.12),
+                color: canSave ? palette.paper : palette.inkFaint,
                 border: 'none',
                 fontSize: 13,
                 fontWeight: 500,
@@ -1942,13 +1944,13 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             <div style={{ display: 'flex', gap: 10 }}>
               <button
                 onClick={() => { setShowLeaveConfirm(false); setPendingHref(null); }}
-                style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
+                style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: palette.inkMuted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 Annuler
               </button>
               <button
                 onClick={() => { setShowLeaveConfirm(false); router.push(leaveTargetHref()); setPendingHref(null); }}
-                style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: '#b85a4a', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
+                style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: palette.danger, color: palette.paper, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 Quitter sans enregistrer
               </button>
@@ -1973,11 +1975,11 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
       {/* ── Modale « confirmation activation Premium » ── */}
       {showPremiumConfirm && (
         <Modal width={400} onClose={() => { setShowPremiumConfirm(false); setPremiumError(''); }}>
-          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: '#a87a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(232,184,108,0.18)', color: palette.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
             <AlertTriangle size={18} strokeWidth={2} />
           </div>
-          <div style={{ fontSize: 15, fontWeight: 500, color: '#2d2a24', marginBottom: 6 }}>Passer l&apos;atelier Premium</div>
-          <div style={{ fontSize: 12.5, color: '#7a766d', marginBottom: 20 }}>
+          <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6 }}>Passer l&apos;atelier Premium</div>
+          <div style={{ fontSize: 12.5, color: palette.inkSoft, marginBottom: 20 }}>
             Cette action est définitive et irréversible : l&apos;atelier deviendra privé pour toujours et tous ses membres (actuels et futurs) auront un accès Premium à vie.
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1987,8 +1989,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
               style={{
                 padding: '11px 14px',
                 borderRadius: 10,
-                background: (activatingPremium || !premiumPassword) ? 'rgba(45,42,36,0.12)' : '#2d2a24',
-                color: (activatingPremium || !premiumPassword) ? '#9a948a' : '#fff',
+                background: (activatingPremium || !premiumPassword) ? ink(0.12) : palette.ink,
+                color: (activatingPremium || !premiumPassword) ? palette.inkFaint : palette.paper,
                 border: 'none',
                 fontSize: 13,
                 fontWeight: 500,
@@ -2005,7 +2007,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             </button>
             <button
               onClick={() => { setShowPremiumConfirm(false); setPremiumError(''); }}
-              style={{ padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#5a564c', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
+              style={{ padding: '11px 14px', borderRadius: 10, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: palette.inkMuted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
             >
               Annuler
             </button>

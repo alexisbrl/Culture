@@ -5,7 +5,7 @@ import { useLocale } from 'next-intl';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, PencilLine } from 'lucide-react';
-import { palette } from '@/lib/theme';
+import { palette, ink } from '@/lib/theme';
 
 const QUESTION = {
   n: 4,
@@ -43,7 +43,7 @@ export default function SessionPage() {
           <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#7a766d]">{QUESTION.n - 1}/{QUESTION.total}</span>
           <div className="flex gap-[3px]">
             {Array.from({ length: QUESTION.total }, (_, i) => (
-              <div key={i} className="w-2 h-3 rounded-full" style={{ background: i < QUESTION.n - 1 ? palette.greenSoft : 'rgba(45,42,36,0.10)' }} />
+              <div key={i} className="w-2 h-3 rounded-full" style={{ background: i < QUESTION.n - 1 ? palette.greenSoft : ink(0.10) }} />
             ))}
           </div>
         </div>

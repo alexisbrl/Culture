@@ -1,5 +1,7 @@
 'use client';
 
+import { palette, ink } from '@/lib/theme';
+
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
@@ -43,21 +45,21 @@ export default function AvatarEditorPage() {
   const catDef = CATS.find(c => c.key === activeCat)!;
 
   return (
-    <div style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", background: '#fcf9f2', minHeight: 'calc(100vh - 65px)', padding: '24px 40px 40px', color: '#2d2a24' }}>
+    <div style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", background: palette.cream, minHeight: 'calc(100vh - 65px)', padding: '24px 40px 40px', color: palette.ink }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&family=Caveat:wght@400;500;600&display=swap');`}</style>
 
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         {/* Breadcrumb */}
-        <div style={{ fontSize: 12, color: '#9a948a', marginBottom: 10 }}>
-          <a href={`/${locale}/profile`} style={{ color: '#7a766d', textDecoration: 'none' }}>profil</a>
+        <div style={{ fontSize: 12, color: palette.inkFaint, marginBottom: 10 }}>
+          <a href={`/${locale}/profile`} style={{ color: palette.inkSoft, textDecoration: 'none' }}>profil</a>
           <span style={{ margin: '0 7px', color: '#c2bba8' }}>›</span>
-          <span style={{ color: '#5a564c' }}>éditer l&apos;avatar</span>
+          <span style={{ color: palette.inkMuted }}>éditer l&apos;avatar</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 4 }}>
           <h2 style={{ margin: 0, fontSize: 26, fontWeight: 500, letterSpacing: '-0.015em' }}>personnalise ton jardinier</h2>
-          <span style={{ fontFamily: "'Caveat', cursive", fontSize: 18, color: '#a87a3a' }}>« assemble ton personnage »</span>
+          <span style={{ fontFamily: "'Caveat', cursive", fontSize: 18, color: palette.amber }}>« assemble ton personnage »</span>
         </div>
-        <div style={{ fontSize: 13, color: '#7a766d', marginBottom: 22 }}>chaque élément se combine librement aux autres. ton choix s&apos;aperçoit en direct.</div>
+        <div style={{ fontSize: 13, color: palette.inkSoft, marginBottom: 22 }}>chaque élément se combine librement aux autres. ton choix s&apos;aperçoit en direct.</div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 24, alignItems: 'start' }}>
 
@@ -73,7 +75,7 @@ export default function AvatarEditorPage() {
               border: '1px solid rgba(45,42,36,0.06)',
             }}>
               <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 96, background: 'linear-gradient(180deg, rgba(168,184,150,0) 0%, rgba(168,184,150,0.45) 100%)' }} />
-              <div style={{ position: 'absolute', left: '50%', bottom: 34, transform: 'translateX(-50%)', width: 150, height: 20, borderRadius: '50%', background: 'rgba(45,42,36,0.14)', filter: 'blur(7px)' }} />
+              <div style={{ position: 'absolute', left: '50%', bottom: 34, transform: 'translateX(-50%)', width: 150, height: 20, borderRadius: '50%', background: ink(0.14), filter: 'blur(7px)' }} />
               {mounted && (
                 <div style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)' }}>
                   <AvatarComposer config={config} size={330} frame="bust" />
@@ -82,14 +84,14 @@ export default function AvatarEditorPage() {
             </div>
 
             <div style={{ textAlign: 'center', marginTop: 14 }}>
-              <div style={{ fontFamily: "'Caveat', cursive", fontSize: 17, color: '#a87a3a' }}>« aperçu en direct »</div>
+              <div style={{ fontFamily: "'Caveat', cursive", fontSize: 17, color: palette.amber }}>« aperçu en direct »</div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18 }}>
-              <button onClick={validate} disabled={saving} style={{ padding: '12px 18px', borderRadius: 11, background: '#4f6b40', color: '#f4f0e6', border: 'none', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 500, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 8px 20px rgba(79,107,64,0.30)' }}>
+              <button onClick={validate} disabled={saving} style={{ padding: '12px 18px', borderRadius: 11, background: palette.green, color: palette.parchment, border: 'none', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 500, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 8px 20px rgba(79,107,64,0.30)' }}>
                 {saving ? 'enregistrement…' : 'valider l\'avatar →'}
               </button>
-              <a href={`/${locale}/profile`} style={{ padding: '12px 18px', borderRadius: 11, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: '#5a564c', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 500, textAlign: 'center', textDecoration: 'none', display: 'block' }}>
+              <a href={`/${locale}/profile`} style={{ padding: '12px 18px', borderRadius: 11, background: 'transparent', border: '1px solid rgba(45,42,36,0.16)', color: palette.inkMuted, fontFamily: 'inherit', fontSize: 13.5, fontWeight: 500, textAlign: 'center', textDecoration: 'none', display: 'block' }}>
                 annuler
               </a>
             </div>
@@ -99,7 +101,7 @@ export default function AvatarEditorPage() {
           <div style={{ background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(45,42,36,0.07)', borderRadius: 20, padding: '20px 22px 24px' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
               {CATS.map(c => (
-                <button key={c.key} onClick={() => setActiveCat(c.key)} style={{ padding: '7px 14px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: activeCat === c.key ? 500 : 400, border: activeCat === c.key ? '1px solid transparent' : '1px solid rgba(45,42,36,0.12)', background: activeCat === c.key ? '#4f6b40' : 'rgba(255,255,255,0.6)', color: activeCat === c.key ? '#f4f0e6' : '#5a564c', boxShadow: activeCat === c.key ? '0 4px 12px rgba(79,107,64,0.26)' : 'none', transition: 'all .15s ease' }}>
+                <button key={c.key} onClick={() => setActiveCat(c.key)} style={{ padding: '7px 14px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: activeCat === c.key ? 500 : 400, border: activeCat === c.key ? '1px solid transparent' : '1px solid rgba(45,42,36,0.12)', background: activeCat === c.key ? palette.green : 'rgba(255,255,255,0.6)', color: activeCat === c.key ? palette.parchment : palette.inkMuted, boxShadow: activeCat === c.key ? '0 4px 12px rgba(79,107,64,0.26)' : 'none', transition: 'all .15s ease' }}>
                   {c.label}
                 </button>
               ))}
@@ -109,7 +111,7 @@ export default function AvatarEditorPage() {
 
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
               <div style={{ fontSize: 14, fontWeight: 500 }}>{catDef.label}</div>
-              <div style={{ fontSize: 12, color: '#9a948a', fontStyle: 'italic' }}>{catDef.hint}</div>
+              <div style={{ fontSize: 12, color: palette.inkFaint, fontStyle: 'italic' }}>{catDef.hint}</div>
             </div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
@@ -123,7 +125,7 @@ export default function AvatarEditorPage() {
                     style={{
                       position: 'relative', padding: 0, cursor: 'pointer',
                       width: 130, height: 130, borderRadius: 16,
-                      border: `2px solid ${isActive ? '#a87a3a' : 'rgba(45,42,36,0.08)'}`,
+                      border: `2px solid ${isActive ? palette.amber : ink(0.08)}`,
                       background: isActive
                         ? 'radial-gradient(120% 120% at 50% 20%, #faf5e8, #eef0dd)'
                         : 'radial-gradient(120% 120% at 50% 20%, #fbf9f3, #f1efe7)',
@@ -151,7 +153,7 @@ export default function AvatarEditorPage() {
                       <span style={{
                         position: 'absolute', top: 7, right: 7,
                         width: 20, height: 20, borderRadius: '50%',
-                        background: '#a87a3a', color: '#fff', fontSize: 12,
+                        background: palette.amber, color: palette.paper, fontSize: 12,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         boxShadow: '0 2px 6px rgba(168,122,58,0.4)', zIndex: 2,
                       }}>✓</span>

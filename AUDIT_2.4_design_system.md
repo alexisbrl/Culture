@@ -84,6 +84,29 @@ Fichiers à migrer (du plus chargé au moins chargé — cf. audit, ~538 occurre
       pour qu'elles lisent les mêmes valeurs, soit (idéal) exposer la palette en
       variables CSS et lire `var(--…)` aussi dans les styles inline.
 
+## ✅ Achèvement — migration inline complète (22/06/2026)
+Migration en masse via 2 scripts temporaires (supprimés depuis), sûrs (remplacent
+uniquement les valeurs autonomes entre quotes, jamais les couleurs imbriquées dans
+une chaîne) :
+- **Toutes les couleurs de marque hex autonomes** (`'#2d2a24'`, `'#fcf9f2'`,
+  `'#4f6b40'`, `'#a87a3a'`, `'#b85a4a'`, etc.) → `palette.*`. **Reste : 0** (vérifié
+  par grep, hors `theme.ts`).
+- **Tous les `rgba(45,42,36,X)` d'encre autonomes** → `ink(X)`.
+- Fichiers migrés : Dashboard, Garden(+engine), Pricing, Profile(+avatar), Settings,
+  Analyse, Examen, Programme, QuestionEditor, ShareQRModal, WorkshopClient, CoursTab,
+  session, Modal, ConfirmDialog. **Build OK.**
+
+### Reste (mineur, non bloquant) — vrais chantiers restants
+- **`rgba(45,42,36,X)` imbriqués dans des chaînes** (`border: '1px solid rgba(...)'`,
+  ombres) : non migrés (nécessitent une conversion en template literal `\`… ${ink(X)}\``,
+  au cas par cas). Neutres (encre), pas des couleurs de marque.
+- **Tints non-encre** (`rgba(255,255,255,…)`, `rgba(184,90,74,…)` danger, amber,
+  green) en chaînes : à tokeniser si besoin (ajouter des helpers `withAlpha`).
+- **7 attributs SVG double-quote** (`stroke="#2d2a24"`) : idéalement passer ces SVG
+  inline en icônes Lucide (cf. règle §1) puis supprimer.
+- **Pages en classes Tailwind** (`text-[#2d2a24]`, ex. `create/page.tsx`) : chantier
+  distinct → définir les tokens dans `globals.css` `@theme` (`text-ink`, `bg-cream`…).
+
 ## Comment relancer
 « Continue l'audit §2.4 : migre le prochain fichier de la checklist
 `AUDIT_2.4_design_system.md` vers les tokens de `src/lib/theme.ts`, sans changer

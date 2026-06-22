@@ -1,5 +1,7 @@
 'use client';
 
+import { palette } from '@/lib/theme';
+
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useUser } from '@clerk/nextjs';
@@ -16,8 +18,8 @@ type Props = {
 const HERO_GRADIENT = 'linear-gradient(180deg, #f6f2eb, #ece6db)';
 const AVATAR_GRADIENT = 'linear-gradient(180deg, #efe9d8, #dbe6d6)';
 const SUB_CARD_GRADIENT = 'linear-gradient(180deg, rgba(232,184,108,0.20), rgba(232,184,108,0.06))';
-const DARK_BG = '#2d2a24';
-const DARK_TEXT = '#f4f0e6';
+const DARK_BG = palette.ink;
+const DARK_TEXT = palette.parchment;
 
 function GardenerAvatar() {
   return (
@@ -79,7 +81,7 @@ function StatCard({ value, label }: { value: string | number; label: string }) {
         gap: 2,
       }}
     >
-      <span style={{ fontSize: 24, fontWeight: 500, color: '#2d2a24', lineHeight: 1.1 }}>
+      <span style={{ fontSize: 24, fontWeight: 500, color: palette.ink, lineHeight: 1.1 }}>
         {value}
       </span>
       <span style={{ fontSize: 12, color: '#8a7f72' }}>{label}</span>
@@ -121,7 +123,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
 
       <div
         className="profile-root"
-        style={{ background: '#fcf9f2', minHeight: 'calc(100vh - 65px)', padding: '28px 24px 48px' }}
+        style={{ background: palette.cream, minHeight: 'calc(100vh - 65px)', padding: '28px 24px 48px' }}
       >
         {/* Breadcrumb */}
         <div
@@ -181,13 +183,13 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
               style={{
                 fontFamily: 'Caveat, cursive',
                 fontSize: 18,
-                color: '#a87a3a',
+                color: palette.amber,
                 marginBottom: 2,
               }}
             >
               bonjour {firstName || 'jardinier'},
             </div>
-            <div style={{ fontSize: 28, fontWeight: 500, color: '#2d2a24', marginBottom: 10 }}>
+            <div style={{ fontSize: 28, fontWeight: 500, color: palette.ink, marginBottom: 10 }}>
               {fullName}
             </div>
 
@@ -210,7 +212,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
                 style={{
                   fontSize: 12,
                   background: 'rgba(232,184,108,0.25)',
-                  color: '#a87a3a',
+                  color: palette.amber,
                   padding: '3px 10px',
                   borderRadius: 8,
                   fontWeight: 500,
@@ -272,7 +274,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
               style={{
                 fontSize: 11,
                 fontWeight: 600,
-                color: '#a87a3a',
+                color: palette.amber,
                 textTransform: 'uppercase',
                 letterSpacing: '0.1em',
                 marginBottom: 6,
@@ -280,7 +282,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
             >
               abonnement
             </div>
-            <div style={{ fontSize: 20, fontWeight: 600, color: '#2d2a24', marginBottom: 10 }}>
+            <div style={{ fontSize: 20, fontWeight: 600, color: palette.ink, marginBottom: 10 }}>
               ★ Premium · 10 €/mois
             </div>
             <div style={{ fontSize: 13, color: '#5a4838', lineHeight: 1.6, marginBottom: 16 }}>
@@ -308,7 +310,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
               style={{
                 fontSize: 11,
                 fontWeight: 600,
-                color: '#a87a3a',
+                color: palette.amber,
                 textTransform: 'uppercase',
                 letterSpacing: '0.1em',
                 marginBottom: 12,
@@ -325,7 +327,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
                     width: 14,
                     height: 32,
                     borderRadius: 4,
-                    background: i < 8 ? '#7a9968' : 'rgba(122,153,104,0.18)',
+                    background: i < 8 ? palette.greenSoft : 'rgba(122,153,104,0.18)',
                   }}
                 />
               ))}

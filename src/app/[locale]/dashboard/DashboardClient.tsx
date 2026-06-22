@@ -1,5 +1,7 @@
 'use client';
 
+import { palette } from '@/lib/theme';
+
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -281,7 +283,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
   }
 
   return (
-    <div className="relative min-h-[calc(100vh-65px)] bg-gradient-to-b from-[#eef6e2] via-[#e4efd4] to-[#d6e7cf] font-sans px-6 lg:px-10 py-8" style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", color: '#2d2a24' }}>
+    <div className="relative min-h-[calc(100vh-65px)] bg-gradient-to-b from-[#eef6e2] via-[#e4efd4] to-[#d6e7cf] font-sans px-6 lg:px-10 py-8" style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", color: palette.ink }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&family=Caveat:wght@400;500;600&display=swap');`}</style>
 
       <div className="max-w-6xl mx-auto rounded-[20px] bg-[#fcf9f2]/92 backdrop-blur-xl border border-[#2d2a24]/[0.07] shadow-[0_40px_90px_rgba(45,42,36,0.16)] flex flex-col">
@@ -527,7 +529,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                       {preview.isInvitation && (
                         <span
                           className="text-[11px] px-2.5 py-1 rounded-full font-medium inline-flex items-center gap-1"
-                          style={{ background: 'rgba(168,122,58,0.92)', color: '#fff' }}
+                          style={{ background: 'rgba(168,122,58,0.92)', color: palette.paper }}
                         >
                           <Mail className="w-3 h-3" /> invitation
                         </span>
@@ -679,7 +681,7 @@ function InvitationCard({ workshop, locale, onOpen }: { workshop: WorkshopCardDa
         <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{emojiFor(workshop.id, workshop.emoji)}</div>
         <span
           className="absolute top-2.5 left-2.5 text-[10.5px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1"
-          style={{ background: 'rgba(168,122,58,0.92)', color: '#fff' }}
+          style={{ background: 'rgba(168,122,58,0.92)', color: palette.paper }}
         >
           <Mail className="w-2.5 h-2.5" /> invitation
         </span>

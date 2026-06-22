@@ -1,5 +1,7 @@
 'use client';
 
+import { palette } from '@/lib/theme';
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Sprout, Check, Hammer, Maximize2, Move, Package, ArrowLeftRight, X, Sparkles, Blocks, Eraser, Droplets } from 'lucide-react';
 import {
@@ -829,7 +831,7 @@ function StructureArt({ s, originX, originY, dimmed }: { s: Structure; originX: 
 
 function StructGhost({ col, row, kind, originX, originY, mode, onClick }: { col: number; row: number; kind: StructureKind; originX: number; originY: number; mode: 'deploy' | 'move'; onClick: () => void }) {
   const [hover, setHover] = useState(false);
-  const accent = mode === 'move' ? '#3f7fb0' : '#5f8a3f';
+  const accent = mode === 'move' ? '#3f7fb0' : palette.greenBrand;
   const cells = footprint(kind, col, row);
   const { w, h } = STRUCT_SIZE[kind];
   const center = isoPos(col + (w - 1) / 2, row + (h - 1) / 2, originX, originY);
@@ -843,7 +845,7 @@ function StructGhost({ col, row, kind, originX, originY, mode, onClick }: { col:
         return <polygon key={k} points={`${x},${y - hh} ${x + hw},${y} ${x},${y + hh} ${x - hw},${y}`} fill={hover ? `${accent}44` : `${accent}1c`} stroke={accent} strokeWidth={1.3} strokeDasharray="5 4" strokeLinejoin="round" />;
       })}
       <g transform={`translate(${center.x} ${center.y})`}>
-        <circle r={13} fill={hover ? accent : '#fff'} stroke={accent} strokeWidth={1.4} />
+        <circle r={13} fill={hover ? accent : palette.paper} stroke={accent} strokeWidth={1.4} />
         <g transform="scale(0.55)">
           <BlockGlyph kind={kind} />
         </g>

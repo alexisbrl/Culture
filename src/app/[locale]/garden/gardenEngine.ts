@@ -1,3 +1,4 @@
+import { palette } from '@/lib/theme';
 // gardenEngine — Terra-Nil-inspired garden: one FIXED island of land cells sitting
 // in water. The user never changes the island outline; instead they PAINT the
 // surface of each cell (grass / path / tall grass / earth / water-lake / bridge)
@@ -151,7 +152,7 @@ export const PAL = {
   grassBevel: '#d4e8ad',
   grassEdgeShade: '#79a456',
   blade: '#7fa856',
-  bladeDeep: '#5f8a3f',
+  bladeDeep: palette.greenBrand,
   // earth surface
   earthTopLight: '#d2b683',
   earthTopDark: '#bd9c64',

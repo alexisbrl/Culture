@@ -8,7 +8,7 @@ import ProgrammeTab from './tabs/ProgrammeTab';
 import ExamenTab from './tabs/ExamenTab';
 import AnalyseTab from './tabs/AnalyseTab';
 import CoursTab from './tabs/CoursTab';
-import { palette } from '@/lib/theme';
+import { palette, ink } from '@/lib/theme';
 
 type Props = {
   locale: string;
@@ -38,10 +38,10 @@ const TABS: { id: TabId; label: string; soon?: string }[] = [
 
 function Chip({ children, tone = 'default' }: { children: React.ReactNode; tone?: 'default' | 'amber' | 'sage' | 'dim' }) {
   const styles = {
-    default: { bg: 'rgba(255,255,255,0.7)', border: 'rgba(45,42,36,0.08)', color: palette.ink },
+    default: { bg: 'rgba(255,255,255,0.7)', border: ink(0.08), color: palette.ink },
     amber: { bg: 'rgba(232,184,108,0.20)', border: 'rgba(168,122,58,0.30)', color: '#7a4d20' },
     sage: { bg: 'rgba(122,153,104,0.18)', border: 'rgba(79,107,64,0.30)', color: '#3f5630' },
-    dim: { bg: 'rgba(45,42,36,0.06)', border: 'rgba(45,42,36,0.10)', color: palette.inkMuted },
+    dim: { bg: ink(0.06), border: ink(0.10), color: palette.inkMuted },
   }[tone];
   return (
     <span style={{ fontSize: 11, fontWeight: 500, padding: '4px 10px', borderRadius: 999, background: styles.bg, border: `1px solid ${styles.border}`, color: styles.color, letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
