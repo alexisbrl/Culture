@@ -1034,10 +1034,6 @@ Sessions d'examens standardisés dans des **centres certifiés**. Chaque examen 
 
 ---
 
-> **Design system — source de vérité UNIQUE (variables CSS @theme)** [AJOUTÉ PAR CLAUDE - 22/06/2026, UNIFIÉ 23/06/2026] : les couleurs sont définies **une seule fois** dans `src/app/globals.css` (bloc `@theme` : `--color-ink`, `--color-cream`, `--color-green`, `--color-amber`, `--color-danger`…). Tailwind v4 les expose comme variables CSS sur `:root`, donc :
-> - **Classes Tailwind** : `text-ink`, `bg-cream`, `border-ink/[0.08]`, etc.
-> - **Styles inline** : via `src/lib/theme.ts` — `palette.ink` vaut `var(--color-ink)` (aucun hex en dur dans `theme.ts`). `ink(alpha)` et `withAlpha(palette.X, alpha)` produisent du `color-mix(in srgb, var(--color-…) N%, transparent)` (même mécanisme que les opacités Tailwind `bg-ink/42`). `radius`, `shadow` aussi.
->
-> **Pour changer/ajouter une couleur** : éditer `@theme` dans `globals.css`, puis (si besoin inline) ajouter l'entrée correspondante dans `palette` (`theme.ts`) avec `v('nom')`. **Ne JAMAIS remettre de hex en dur** dans `theme.ts` ni dans un `style={{}}` / une classe `[#hex]`. Audit §2.4 : toutes les couleurs de marque inline + classes Tailwind arbitraires ont été migrées (cf. `AUDIT_2.4_design_system.md`). Restes mineurs : couleurs d'**illustrations décoratives** (avatars/plantes/arbres) volontairement laissées (artwork, hors charte).
+> **Design system — tokens de couleur centralisés** [AJOUTÉ PAR CLAUDE - 22/06/2026] : `src/lib/theme.ts` est la **source de vérité des couleurs** pour les styles inline — `palette` (tokens nommés par rôle : `ink`, `inkMuted`, `cream`, `green`, `amber`, `danger`…), `ink(alpha)` (translucides sur l'encre `#2d2a24`), `radius`, `shadow`. **Ne plus écrire de couleur de marque en dur dans un `style={{}}`** : utiliser ces tokens (ex. `color: palette.ink`, `border: \`1px solid ${ink(0.14)}\``). Audit §2.4 : toutes les couleurs de marque hex inline ont été migrées. Restes documentés dans `AUDIT_2.4_design_system.md` (rgba imbriqués dans des chaînes, pages en classes Tailwind `text-[#…]` → à tokeniser via `@theme` dans `globals.css`, quelques attributs SVG). `theme.ts` doit rester synchronisé avec les variables CSS de `globals.css` (`--primary`…) utilisées par les classes Tailwind.
 
 *Dernière mise à jour : 22/06/2026*
