@@ -33,6 +33,16 @@ PDF en priorité pour la V1. Les autres formats (Word, PowerPoint, audio, vidéo
 ### Irréversibilité du passage Premium d'un atelier
 Cette opération ne doit jamais pouvoir être annulée, quelle que soit la situation.
 
+### Migrations de base de données : jamais de destruction avant déploiement du code [AJOUTÉ PAR CLAUDE - 22/06/2026]
+La base Supabase (`hhkmrejjksjpfetwefju`) est **partagée par le code local ET le code déployé en production** (scellow.com). Une migration prend effet **immédiatement**, alors qu'un changement de code n'est en ligne qu'après `push → PR → merge dans main → déploiement Vercel`.
+
+**Conséquence — règle de séquencement « expand / contract » :**
+- **Ajouter** une colonne/table (expand) : sans danger à tout moment (le code déployé l'ignore).
+- **Supprimer ou renommer** une colonne/table, ou changer un type (contract) : **interdit tant que le code déployé en production lit encore cet objet**. Sinon, ses requêtes échouent — et comme beaucoup de `select` ne lisent que `{ data }` en ignorant `{ error }`, l'échec est **silencieux** (`data = null`, pas de log) et casse la fonctionnalité sans alerte.
+- Ordre correct pour retirer un champ : (1) déployer le code qui ne l'utilise plus → (2) seulement ensuite, appliquer la migration de suppression.
+
+> **Incident de référence (22/06/2026)** : suppression de `workshops.private` / `max_members_total` / `max_members_monthly` appliquée sur la prod alors que le code déployé (`2774bf5`) les sélectionnait encore dans `getWorkshop` → tous les ateliers cassés en ligne. Correctif : recréation des colonnes (migration `restore_workshop_columns_for_deployed_code`). Voir l'action de suivi au backlog §18.
+
 ### Mettre à jour ce fichier
 À la fin de chaque grosse tâche (nouvelle feature déployée, PR mergée, refactor structurant), mettre à jour ce CLAUDE.md si la structure, la stack, les conventions ou les spécifications produit ont évolué. Taguer la modification `[MODIFIÉ PAR CLAUDE - JJ/MM/AAAA]`.
 
@@ -1009,8 +1019,12 @@ Sessions d'examens standardisés dans des **centres certifiés**. Chaque examen 
 > **1.7 — Codes de suppression durcis** (`requestDeletionCode` / `confirmDeletion`) : génération via `crypto.randomInt` (CSPRNG, plus de `Math.random`) ; validité 15 min inchangée ; **délai minimal de 5 s entre deux essais** + **plafond de 25 essais** par code (au-delà, code invalidé → renvoyer un email ; jamais de blocage durable) via nouvelles colonnes `deletion_codes.attempts` / `last_attempt_at` (migration `add_deletion_codes_attempt_tracking`). Les deux fonctions utilisent désormais `requireOwner` (basé sur le **rôle** et non `created_by`, pour gérer correctement un futur transfert de propriété).
 >
 > **1.6 — Facturation / Stripe : différé** (Stripe non branché). Voir l'item dédié dans le backlog §18 ci-dessous.
+>
+> ⚠️ **État schéma vs prod (22/06/2026)** : les colonnes `private` / `max_members_total` / `max_members_monthly` décrites comme « supprimées » ci-dessus ont dû être **temporairement recréées** en base pour ne pas casser le code encore déployé en production (incident du 22/06, cf. règle « Migrations » §1). Le code de la branche ne les utilise plus ; elles seront re-supprimées une fois la branche déployée — action tracée au backlog §18.
 
 ## 18. BACKLOG TECHNIQUE (à traiter plus tard)
+
+- **Re-supprimer 3 colonnes une fois le code « tout privé » déployé** [AJOUTÉ PAR CLAUDE - 22/06/2026] : les colonnes `workshops.private`, `max_members_total`, `max_members_monthly` ont dû être **recréées** (migration `restore_workshop_columns_for_deployed_code`) pour réparer la prod, car le code actuellement déployé (`2774bf5`) les sélectionne encore — voir la règle « Migrations » en §1 et l'incident du 22/06. Le code de la branche sécurité (`e9d541e`, ateliers tout privés) ne les référence plus. **Action : dès que `e9d541e` est mergé dans `main` et déployé en production, ré-appliquer une migration `drop column` sur ces 3 colonnes** (l'ordre expand/contract sera alors respecté). Tant que ce n'est pas déployé, NE PAS les re-supprimer.
 
 - **Intégration Stripe & facturation (audit §1.6)** [AJOUTÉ PAR CLAUDE - 22/06/2026] : le webhook `src/app/api/webhooks/stripe/route.ts` est un **stub inerte** (renvoie `{ received: true }` sans rien faire). Sujets à traiter au branchement réel : (1) **vérifier la signature** Stripe avec `stripe.webhooks.constructEvent(body, sig, STRIPE_WEBHOOK_SECRET)` avant tout traitement ; (2) gérer les événements `customer.subscription.created/updated/deleted` + `invoice.payment_failed` → `setUserTier` (`src/lib/subscription.ts`) ; (3) **idempotence** (un même événement peut être reçu plusieurs fois) ; (4) remplacer le mécanisme **temporaire** d'activation Premium d'atelier (`activateWorkshopPremium`, mot de passe `CultureMDP` + allowlist email) par une activation **uniquement après paiement confirmé** ; (5) **facturation ~3,5 €/membre** à l'acceptation d'une invitation/demande d'adhésion sur un atelier Premium (point d'ancrage : TODO dans `approveJoinRequest`). Plan détaillé : mémoire `stripe_integration_plan.md`.
 
