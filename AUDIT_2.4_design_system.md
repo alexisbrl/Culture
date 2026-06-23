@@ -6,6 +6,31 @@
 > Migration **progressive** : on remplace `'#2d2a24'` → `palette.ink`,
 > `'rgba(45,42,36,0.14)'` → `ink(0.14)`, etc.
 
+## ⚠️ Modèle de couleurs : pourquoi DEUX tables (et la piste pour n'en avoir qu'une)
+
+**État retenu (fonctionne) :** deux tables aux **mêmes 16 valeurs** —
+`src/lib/theme.ts` (hex littéraux, pour les **styles inline**) + bloc `@theme inline`
+de `globals.css` (pour les **classes Tailwind** `text-ink`…). À garder synchronisées
+(adjacentes, documentées). Inconvénient : changer une couleur = la modifier aux 2 endroits.
+
+**Pourquoi pas une source unique de variables CSS lues partout ?** Testé 2× (22-23/06/2026),
+ça casse : **la chaîne de build CSS supprime les variables de couleur consommées
+uniquement par des styles inline en JS** (elle ne « voit » pas cet usage). Détail :
+- `@theme inline` → n'émet pas les `--color-*` sur `:root` → `var()` ne résout pas en inline.
+- `@theme` non-inline → tree-shake les variables non utilisées par une **classe**.
+- `:root { … }` simple → le minificateur (lightningcss) élague les custom properties
+  non référencées dans le CSS (ex. `--brand-paper` disparu en prod, OK en dev → piège).
+
+**Solution envisageable pour UNE seule table (non implémentée) :** un **script de
+génération au build**. Une seule table source (un JSON/TS de 16 hex) ; un script lancé
+via `prebuild`/`predev` **génère** les deux cibles (le bloc CSS `@theme` ET la palette
+`theme.ts`). Zéro doublon manuel. Coût : une étape de build + des fichiers « générés »
+à ne pas éditer à la main. **Décision (23/06/2026) : NON implémenté pour l'instant** —
+le doublon de 16 valeurs est trivial et visible ; un codegen ajouterait une fragilité
+(fichiers générés périmés, étape oubliée, casse aux montées de version Tailwind/Next)
+disproportionnée à ce stade. À reconsidérer si : palette beaucoup plus grande, plusieurs
+thèmes (dark/white-label), ou dérives répétées.
+
 ## ✅ Fait
 - [x] Création de **`src/lib/theme.ts`** : `palette` (tokens nommés sémantiquement),
       `ink(alpha)` (translucides sur l'encre), `radius`, `shadow`.

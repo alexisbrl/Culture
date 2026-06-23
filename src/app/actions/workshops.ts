@@ -5,6 +5,7 @@ import { randomInt } from 'node:crypto';
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { requireMember, requireManager, requireOwner, ROLE_RANK } from '@/lib/authz';
 import { generateTag } from '@/lib/tag';
+import { EMAIL_FROM, deletionCodeEmail, workshopTrashedEmail } from '@/lib/emails';
 import { revalidatePath } from 'next/cache';
 import { Resend } from 'resend';
 
@@ -1263,29 +1264,8 @@ export async function requestDeletionCode(
 
     // Envoyer le code par email
     const resend = getResend();
-    await resend.emails.send({
-      from: 'Culture <onboarding@resend.dev>',
-      to: ownerEmail,
-      subject: `🗑️ Code de suppression : ${code}`,
-      html: `
-        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-          <div style="text-align: center; margin-bottom: 24px;">
-            <span style="font-size: 32px;">🪴</span>
-            <h1 style="color: #5f8a3f; font-size: 24px; margin: 8px 0;">Culture</h1>
-          </div>
-          <h2 style="color: #111827; font-size: 18px;">Confirmation de suppression</h2>
-          <p style="color: #6b7280;">Bonjour ${ownerName},</p>
-          <p style="color: #6b7280;">Vous avez demandé la suppression de l'atelier <strong style="color: #111827;">"${workshop.name}"</strong>.</p>
-          <p style="color: #6b7280;">Voici votre code de confirmation :</p>
-          <div style="background: #f3f4f6; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
-            <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #5f8a3f;">${code}</span>
-          </div>
-          <p style="color: #9ca3af; font-size: 13px;">Ce code expire dans 15 minutes. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
-          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
-          <p style="color: #d1d5db; font-size: 12px; text-align: center;">© Culture · scellow.com</p>
-        </div>
-      `,
-    });
+    const mail = deletionCodeEmail({ ownerName, workshopName: workshop.name, code });
+    await resend.emails.send({ from: EMAIL_FROM, to: ownerEmail, subject: mail.subject, html: mail.html });
 
     return { success: true };
   } catch (err) {
@@ -1384,28 +1364,8 @@ export async function confirmDeletion(
         if (!ownerEmail) continue;
         const ownerName = `${ownerUser.firstName ?? ''} ${ownerUser.lastName ?? ''}`.trim() || ownerEmail;
 
-        await resend.emails.send({
-          from: 'Culture <onboarding@resend.dev>',
-          to: ownerEmail,
-          subject: `🗑️ Atelier "${workshop.name}" mis en corbeille`,
-          html: `
-            <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-              <div style="text-align: center; margin-bottom: 24px;">
-                <span style="font-size: 32px;">🪴</span>
-                <h1 style="color: #5f8a3f; font-size: 24px; margin: 8px 0;">Culture</h1>
-              </div>
-              <h2 style="color: #111827; font-size: 18px;">Atelier mis en corbeille</h2>
-              <p style="color: #6b7280;">Bonjour ${ownerName},</p>
-              <p style="color: #6b7280;">L'atelier <strong style="color: #111827;">"${workshop.name}"</strong> a été mis en corbeille par <strong>${actionBy}</strong>.</p>
-              <div style="background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 16px; margin: 20px 0;">
-                <p style="color: #92400e; margin: 0; font-size: 14px;">⏳ Cet atelier sera <strong>définitivement supprimé dans 7 jours</strong> si aucune restauration n'est effectuée.</p>
-              </div>
-              <p style="color: #6b7280;">Si c'est une erreur, connectez-vous sur <a href="https://scellow.com" style="color: #5f8a3f;">scellow.com</a> et restaurez l'atelier depuis votre corbeille.</p>
-              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
-              <p style="color: #d1d5db; font-size: 12px; text-align: center;">© Culture · scellow.com</p>
-            </div>
-          `,
-        });
+        const mail = workshopTrashedEmail({ ownerName, workshopName: workshop.name, actionBy });
+        await resend.emails.send({ from: EMAIL_FROM, to: ownerEmail, subject: mail.subject, html: mail.html });
       }
     } catch (emailErr) {
       console.error('Email notification error (non-blocking):', emailErr);
