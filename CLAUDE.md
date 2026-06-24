@@ -223,6 +223,11 @@ npm run test:e2e     # Playwright
 ### Claude in Chrome
 L'extension Claude in Chrome est activée. Claude peut l'utiliser pour ouvrir l'application dans un navigateur, tester l'UI et itérer jusqu'à ce que le rendu soit correct. À utiliser systématiquement pour valider le rendu visuel avant de considérer une feature terminée.
 
+### Lint & CI [AJOUTÉ PAR CLAUDE - 24/06/2026]
+- `npm run lint` (= `eslint .`) doit passer **sans erreur** avant tout commit/PR. La config (`eslint.config.mjs`) ignore `.claude/**`, `_handoff/**`, `culture-design-system/**` (maquettes/worktrees locaux). Les règles « React Compiler readiness » (`react-hooks/set-state-in-effect`, `refs`, `immutability`, `purity`) sont volontairement en `warn` (patterns hydration-safe légitimes) : **ne pas les repasser en `error`** sans raison, et ne pas « corriger » un warning hydration en retirant l'effet (cela réintroduit un hydration mismatch).
+- `npm run typecheck` (= `tsc --noEmit`) en local ; en CI le typecheck fiable passe par `npm run build` (régénère `next-env.d.ts` + types de routes).
+- **CI** : `.github/workflows/ci.yml` (job `lint` sans secret + job `build` avec secrets dépôt). Le job `build` nécessite que les *repository secrets* GitHub soient renseignés (mêmes valeurs que Vercel). Idéalement, protéger `main` en exigeant la CI verte avant merge.
+
 ---
 
 ## 8. VARIABLES D'ENVIRONNEMENT

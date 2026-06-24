@@ -123,10 +123,23 @@ retirant les effets réintroduirait des hydration mismatches. À traiter en §3.
 (décider de les passer en `warn`) plutôt que par des refactors risqués. Warnings restants : `exhaustive-deps`
 ×4, `no-img-element` ×1, parse ×1.
 
-### 3.4 — Le lint ne protège rien
-ESLint scanne aussi `.claude/worktrees/` (copies d'agents) → bruit massif. Il manque un `eslint.config` avec
-`ignores`. Surtout : `next build` **ne bloque pas** sur les erreurs lint → rien n'empêche de pousser du code
-cassé. Pas de CI.
+### 3.4 — Le lint ne protège rien ✅ RÉSOLU (24/06/2026)
+- **Bruit ESLint** : `eslint.config.mjs` ignore désormais `.claude/**` (worktrees d'agents) ainsi que les
+  dossiers de maquettes locaux non suivis `_handoff/**` et `culture-design-system/**`. `eslint .` ne scanne
+  plus que `src/` + les configs racine.
+- **Règles react-compiler-readiness** passées en `warn` (set-state-in-effect / refs / immutability / purity) :
+  les 14 « erreurs » légitimes (§3.3) deviennent des warnings non bloquants → `eslint .` = **0 erreur / 20
+  warnings**, exit 0. Toute *vraie* erreur (type, import mort, entité non échappée…) reste `error` et fait
+  échouer la commande.
+- **CI** : nouveau workflow `.github/workflows/ci.yml` (push `main` + toutes les PR) :
+  - job **lint** (`npm run lint`) — sans secret, c'est le garde-fou qui bloque le code cassé ;
+  - job **build** (`npm run build`) — régénère `next-env.d.ts` + types de routes et **vérifie les types**
+    (typecheck fiable) ; nécessite les variables d'env du dépôt (GitHub → Settings → Secrets and variables →
+    Actions), mêmes valeurs que Vercel.
+- Scripts ajoutés : `npm run lint` (= `eslint .`) et `npm run typecheck` (= `tsc --noEmit`).
+
+> ⚠️ **À faire côté GitHub (hors code)** : ajouter les *repository secrets* (Clerk/Supabase/Resend) pour que
+> le job `build` passe, puis activer une *branch protection rule* sur `main` exigeant la CI verte avant merge.
 
 ### 3.5 — Types obsolètes
 `supabase.ts:22-34` — les types `WorkshopMember`, `WorkshopWithRole`, `WorkshopDetail` ne connaissent que
@@ -203,7 +216,7 @@ Le build avertit : `middleware` → renommer en `proxy`. À planifier.
 | **4** | Composant `<ConfirmDialog>` + `<Modal>` partagés | 🟠 DRY | M | ⭐⭐⭐⭐⭐ | à faire |
 | **5** | Centraliser les tokens de couleur (fin du `#fcf9f2` en dur) | 🟠 DRY | M | ⭐⭐⭐⭐ | à faire |
 | **6** | Découper `ExamenTab` & `SettingsClient` en sous-composants | 🟡 Clarté | L | ⭐⭐⭐⭐ | ✅ fait (24/06) |
-| **7** | Config ESLint (`ignores` worktrees) + faire échouer le build/CI sur erreurs ; corriger les erreurs | 🟡 Process | S | ⭐⭐⭐⭐ | à faire |
+| **7** | Config ESLint (`ignores` worktrees) + faire échouer le build/CI sur erreurs ; corriger les erreurs | 🟡 Process | S | ⭐⭐⭐⭐ | ✅ fait (24/06 — §3.3+§3.4) |
 | **8** | Installer Vitest + Playwright (promis dans CLAUDE.md, absents) | Process | M | ⭐⭐⭐ | à faire |
 | **9** | Resserrer `revalidatePath` ; sortir le cleanup corbeille en cron | 🟢 Perf | S | ⭐⭐⭐ | à faire |
 | **10** | Extraire types métier dans `lib/` + factoriser emails/tags | 🔵 Durabilité | M | ⭐⭐⭐ | à faire |
