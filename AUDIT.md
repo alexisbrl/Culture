@@ -96,10 +96,12 @@ footer). À extraire en `lib/emails.ts` avec un layout commun — indispensable 
 Extraction **sans changement de comportement** (tranches verbatim) — `tsc --noEmit` + `next build` OK.
 Branche `refactor/split-large-files`.
 
-### 3.2 — Bug React confirmé par le lint
-`SettingsClient.tsx:486` — `SectionCard` est un composant **défini pendant le render** : il se remonte à
-chaque rendu, réinitialisant son état (et coûtant en perf). Le lint le signale comme erreur. À sortir au
-niveau module.
+### 3.2 — Composants définis pendant le render ✅ RÉSOLU (24/06/2026)
+- `SectionCard` (anciennement `SettingsClient.tsx:486`) : déjà sorti au niveau module lors du découpage §3.1
+  (vit maintenant dans `settings/settingsShared.tsx`).
+- Audit complémentaire : la seule autre instance réelle du même anti-pattern, `Card` défini dans le render de
+  `Panel` (`garden/GardenClient.tsx`), a été extraite au niveau module en `ItemCard` (props `armed`/`onArm`
+  au lieu d'une closure). Vérifié : plus aucun composant défini dans un corps de composant (`tsc` + `next build` OK).
 
 ### 3.3 — Autres erreurs lint réelles (pas du bruit)
 - `DashboardHeader.tsx:25` — `setState` synchrone dans un `useEffect` (cascade de renders).

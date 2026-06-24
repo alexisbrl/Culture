@@ -857,6 +857,23 @@ function StructGhost({ col, row, kind, originX, originY, mode, onClick }: { col:
 // ===========================================================================
 // Panel (surfaces + objects + deco)
 
+type ItemGroup = { sig: string; kind: AnyKind; plant: Plant | null; count: number };
+
+// Carte d'item de l'inventaire — au niveau module (et non définie dans le render de Panel,
+// ce qui la recréait à chaque rendu et remontait les boutons). cf. audit §3.2.
+function ItemCard({ g, armed, onArm }: { g: ItemGroup; armed: boolean; onArm: (sig: string) => void }) {
+  return (
+    <button
+      onClick={() => onArm(g.sig)}
+      title={g.plant ? SPECIES_LABEL[g.plant.species] : KIND_LABEL[g.kind]}
+      className={`relative aspect-square rounded-xl border flex items-center justify-center transition-colors ${armed ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
+    >
+      <ItemThumb kind={g.kind} plant={g.plant} />
+      <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#3a4a2a] text-white text-[10px] font-semibold flex items-center justify-center">{g.count}</span>
+    </button>
+  );
+}
+
 function Panel({
   open, onToggle, tab, setTab, surfaceGroups, objectGroups, armedSig, armedCos, onArmItem, onArmCos, t,
 }: {
@@ -872,19 +889,6 @@ function Panel({
   onArmCos: (cos: Cosmetic | 'erase') => void;
   t: (f: string, e: string) => string;
 }) {
-  const Card = ({ g }: { g: { sig: string; kind: AnyKind; plant: Plant | null; count: number } }) => {
-    const armed = armedSig === g.sig;
-    return (
-      <button
-        onClick={() => onArmItem(g.sig)}
-        title={g.plant ? SPECIES_LABEL[g.plant.species] : KIND_LABEL[g.kind]}
-        className={`relative aspect-square rounded-xl border flex items-center justify-center transition-colors ${armed ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
-      >
-        <ItemThumb kind={g.kind} plant={g.plant} />
-        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#3a4a2a] text-white text-[10px] font-semibold flex items-center justify-center">{g.count}</span>
-      </button>
-    );
-  };
   return (
     <div className="absolute top-1/2 left-5 -translate-y-1/2 z-20 flex items-start gap-2">
       <div className={`overflow-hidden transition-all duration-300 ${open ? 'w-64 opacity-100' : 'w-0 opacity-0'}`} style={{ pointerEvents: open ? 'auto' : 'none' }}>
@@ -910,11 +914,11 @@ function Panel({
                   <ItemThumb kind="grass" plant={null} />
                   <span className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-green-brand text-white flex items-center justify-center"><Eraser className="w-2.5 h-2.5" /></span>
                 </button>
-                {surfaceGroups.map((g) => <Card key={g.sig} g={g} />)}
+                {surfaceGroups.map((g) => <ItemCard key={g.sig} g={g} armed={armedSig === g.sig} onArm={onArmItem} />)}
               </div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5d6b4a]/70 mt-3 mb-1.5 px-0.5">{t('Objets', 'Objects')}</p>
               <div className="grid grid-cols-3 gap-2">
-                {objectGroups.map((g) => <Card key={g.sig} g={g} />)}
+                {objectGroups.map((g) => <ItemCard key={g.sig} g={g} armed={armedSig === g.sig} onArm={onArmItem} />)}
                 {objectGroups.length === 0 && <p className="col-span-3 text-xs text-ink-faint py-2 text-center">{t('Aucun objet', 'No objects')}</p>}
               </div>
             </div>
