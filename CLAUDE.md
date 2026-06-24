@@ -3,7 +3,7 @@
 > Ce fichier est l'unique source de vérité pour tout développement sur ce projet. Il doit être lu intégralement à chaque nouvelle conversation.
 > **Toute modification structurante apportée au projet (stack, structure, conventions, décisions produit) doit être reflétée ici.**
 >
-> Dernière mise à jour : 22/06/2026
+> Dernière mise à jour : 24/06/2026
 
 ---
 
@@ -1036,4 +1036,10 @@ Sessions d'examens standardisés dans des **centres certifiés**. Chaque examen 
 
 > **Design system — tokens de couleur centralisés** [AJOUTÉ PAR CLAUDE - 22/06/2026] : `src/lib/theme.ts` est la **source de vérité des couleurs** pour les styles inline — `palette` (tokens nommés par rôle : `ink`, `inkMuted`, `cream`, `green`, `amber`, `danger`…), `ink(alpha)` (translucides sur l'encre `#2d2a24`), `radius`, `shadow`. **Ne plus écrire de couleur de marque en dur dans un `style={{}}`** : utiliser ces tokens (ex. `color: palette.ink`, `border: \`1px solid ${ink(0.14)}\``). Audit §2.4 : toutes les couleurs de marque hex inline ont été migrées. Restes documentés dans `AUDIT_2.4_design_system.md` (rgba imbriqués dans des chaînes, pages en classes Tailwind `text-[#…]` → à tokeniser via `@theme` dans `globals.css`, quelques attributs SVG). `theme.ts` doit rester synchronisé avec les variables CSS de `globals.css` (`--primary`…) utilisées par les classes Tailwind.
 
-*Dernière mise à jour : 22/06/2026*
+> **Découpage des deux fichiers monstres (audit §3.1)** [AJOUTÉ PAR CLAUDE - 24/06/2026] : `ExamenTab.tsx` (2334 l.) et `SettingsClient.tsx` (2019 l.) ont été éclatés en sous-composants, **sans changement de comportement** (extraction verbatim, `tsc` + `next build` OK). Beaucoup d'entrées plus haut référencent encore « dans `ExamenTab.tsx` → `BankContent` », « dans `SettingsClient.tsx` » : le code correspondant vit désormais dans les fichiers ci-dessous (même logique, juste déplacée).
+> - **Onglet examen** — `src/app/[locale]/workshops/[id]/tabs/` : `ExamenTab.tsx` ne contient plus que l'orchestrateur (état partagé, tuiles history/bank/generator, modales examen). `tabs/examen/` contient `examShared.tsx` (types `ExamConfig`/`Question`-adjacents, constantes A4, helpers purs comme `computePagination`/`defaultExamConfig` et petits composants `DiffDots`/`TypePill`/`WeightControls`/`renderAnswerSpace`…), `HistoryContent.tsx`, `BankContent.tsx`, `GeneratorContent.tsx`. ⚠️ `examQuestions.ts` importe toujours `type { ExamConfig }` depuis `ExamenTab` (ré-exporté depuis `examShared`) — ne pas casser ce ré-export.
+> - **Paramètres d'atelier** — `src/app/[locale]/workshops/[id]/settings/` : `SettingsClient.tsx` garde la section **Général**, la machinerie « modifications non enregistrées » (formValues/isDirty/intercepteur de navigation/beforeunload), la barre d'enregistrement et les modales de suppression/partage/quitter, et orchestre les sections. `settingsShared.tsx` (types de rôle, `NAV_ITEMS`, `ROLE_RANK`/`ROLE_LABEL`, helpers `Row`/`Switch`/`SmallBtn`/`SectionCard`/`DotRow`/`FileCategoryIcon`/`formatFileSize`/`MOCK_BRICKS`/`avatarGradient`), `MembersSection.tsx`, `FilesSection.tsx`, `PremiumSection.tsx`, `BricksSection.tsx`. **Les 4 sections sont auto-contenues** (état/effets/handlers/modales propres) et **montées en permanence** dans le parent (toggle `display:'contents'`/`'none'`) — c'est volontaire : ça préserve la persistance d'état entre onglets et l'exécution des effets au chargement, exactement comme avant quand l'état vivait dans le parent toujours monté. **Ne pas** repasser en `{activeSection === 'x' && <Section/>}` (montage conditionnel) sans réfléchir : ça réintroduirait des régressions (upload en cours perdu au changement d'onglet, reset des mises à jour optimistes des membres).
+>
+> Pattern de découpage à réutiliser pour tout futur fichier surdimensionné : tranches verbatim (pas de réécriture), un module `xShared` pour types/constantes/helpers/petits composants, un fichier par responsabilité, validé par `tsc --noEmit` + `next build`.
+
+*Dernière mise à jour : 24/06/2026 [MODIFIÉ PAR CLAUDE]*

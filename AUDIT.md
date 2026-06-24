@@ -85,13 +85,16 @@ footer). À extraire en `lib/emails.ts` avec un layout commun — indispensable 
 
 ## 🟡 3. CLARTÉ & LISIBILITÉ
 
-### 3.1 — Deux fichiers monstres
-- `src/app/[locale]/workshops/[id]/tabs/ExamenTab.tsx` : **2 374 lignes**
-- `src/app/[locale]/workshops/[id]/settings/SettingsClient.tsx` : **2 273 lignes**
+### 3.1 — Deux fichiers monstres ✅ RÉSOLU (24/06/2026)
+- ~~`ExamenTab.tsx` : **2 374 lignes**~~ → **510 lignes** (orchestrateur). Sous-composants extraits dans
+  `tabs/examen/` : `examShared.tsx` (types/constantes/helpers), `HistoryContent.tsx`, `BankContent.tsx`,
+  `GeneratorContent.tsx`.
+- ~~`SettingsClient.tsx` : **2 273 lignes**~~ → **896 lignes** (Général + machinerie « modifications non
+  enregistrées » + modales). Sections extraites dans `settings/` : `settingsShared.tsx` (types/helpers),
+  `MembersSection.tsx`, `FilesSection.tsx`, `PremiumSection.tsx`, `BricksSection.tsx`.
 
-Un nouveau dev mettra des jours à entrer dedans. Le CLAUDE.md décrit 15+ refontes successives sur ces fichiers
-— ils ont grossi par sédimentation. À découper en sous-composants (`<BankContent>`, `<GeneratorContent>`,
-`<SectionGeneral>`, `<MembersSection>`…), idéalement un fichier par responsabilité.
+Extraction **sans changement de comportement** (tranches verbatim) — `tsc --noEmit` + `next build` OK.
+Branche `refactor/split-large-files`.
 
 ### 3.2 — Bug React confirmé par le lint
 `SettingsClient.tsx:486` — `SectionCard` est un composant **défini pendant le render** : il se remonte à
@@ -183,7 +186,7 @@ Le build avertit : `middleware` → renommer en `proxy`. À planifier.
 | — | Durcir les codes de suppression (crypto + délai/plafond) | 🔴 Sécu | S | ⭐⭐⭐ | ✅ fait (1.7) |
 | **4** | Composant `<ConfirmDialog>` + `<Modal>` partagés | 🟠 DRY | M | ⭐⭐⭐⭐⭐ | à faire |
 | **5** | Centraliser les tokens de couleur (fin du `#fcf9f2` en dur) | 🟠 DRY | M | ⭐⭐⭐⭐ | à faire |
-| **6** | Découper `ExamenTab` & `SettingsClient` en sous-composants | 🟡 Clarté | L | ⭐⭐⭐⭐ | à faire |
+| **6** | Découper `ExamenTab` & `SettingsClient` en sous-composants | 🟡 Clarté | L | ⭐⭐⭐⭐ | ✅ fait (24/06) |
 | **7** | Config ESLint (`ignores` worktrees) + faire échouer le build/CI sur erreurs ; corriger les erreurs | 🟡 Process | S | ⭐⭐⭐⭐ | à faire |
 | **8** | Installer Vitest + Playwright (promis dans CLAUDE.md, absents) | Process | M | ⭐⭐⭐ | à faire |
 | **9** | Resserrer `revalidatePath` ; sortir le cleanup corbeille en cron | 🟢 Perf | S | ⭐⭐⭐ | à faire |
