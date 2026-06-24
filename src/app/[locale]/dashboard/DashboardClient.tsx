@@ -1,5 +1,7 @@
 'use client';
 
+import { palette, withAlpha } from '@/lib/theme';
+
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -281,23 +283,23 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
   }
 
   return (
-    <div className="relative min-h-[calc(100vh-65px)] bg-gradient-to-b from-[#eef6e2] via-[#e4efd4] to-[#d6e7cf] font-sans px-6 lg:px-10 py-8" style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", color: '#2d2a24' }}>
+    <div className="relative min-h-[calc(100vh-65px)] bg-gradient-to-b from-[#eef6e2] via-[#e4efd4] to-[#d6e7cf] font-sans px-6 lg:px-10 py-8" style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", color: palette.ink }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&family=Caveat:wght@400;500;600&display=swap');`}</style>
 
-      <div className="max-w-6xl mx-auto rounded-[20px] bg-[#fcf9f2]/92 backdrop-blur-xl border border-[#2d2a24]/[0.07] shadow-[0_40px_90px_rgba(45,42,36,0.16)] flex flex-col">
+      <div className="max-w-6xl mx-auto rounded-[20px] bg-cream/92 backdrop-blur-xl border border-ink/[0.07] shadow-[0_40px_90px_rgba(45,42,36,0.16)] flex flex-col">
         {/* header */}
         <div className="flex items-center justify-between px-7 pt-6">
           <div>
-            <div className="text-[10px] font-semibold tracking-[0.16em] uppercase text-[#7a766d] mb-1">
+            <div className="text-[10px] font-semibold tracking-[0.16em] uppercase text-ink-soft mb-1">
               {locale === 'fr' ? 'bonjour' : 'hello'}
             </div>
-            <div className="text-[23px] font-medium text-[#2d2a24] tracking-tight">
+            <div className="text-[23px] font-medium text-ink tracking-tight">
               {locale === 'fr' ? `${firstName}, voici tes ateliers.` : `${firstName}, here are your workshops.`}
             </div>
           </div>
           <Link
             href={`/${locale}/workshops/new`}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-[#4f6b40] text-[#f4f0e6] text-[13px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)] hover:opacity-90 transition"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-green text-parchment text-[13px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)] hover:opacity-90 transition"
           >
             <Plus className="w-4 h-4" />
             {locale === 'fr' ? 'nouvel atelier' : 'new workshop'}
@@ -306,40 +308,40 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
 
         {/* search */}
         <div ref={searchContainerRef} className="relative px-7 pt-5">
-          <div className="flex items-center gap-3 px-[18px] py-3 bg-white rounded-[14px] border border-[#2d2a24]/[0.08] shadow-[0_6px_22px_rgba(45,42,36,0.06)]">
-            <Search className="w-[18px] h-[18px] text-[#7a766d]" />
+          <div className="flex items-center gap-3 px-[18px] py-3 bg-white rounded-[14px] border border-ink/[0.08] shadow-[0_6px_22px_rgba(45,42,36,0.06)]">
+            <Search className="w-[18px] h-[18px] text-ink-soft" />
             <input
               ref={searchInputRef}
               value={searchQuery}
               onFocus={() => setSearchOpen(true)}
               onChange={(e) => handleSearch(e.target.value)}
               placeholder={locale === 'fr' ? 'rechercher par nom, matière ou tag…' : 'search by name, subject or tag…'}
-              className="flex-1 bg-transparent outline-none text-[15px] text-[#2d2a24]"
+              className="flex-1 bg-transparent outline-none text-[15px] text-ink"
             />
             {searchOpen ? (
               <button
                 onClick={closeSearch}
-                className="text-[10px] px-1.5 py-0.5 rounded bg-[#2d2a24]/[0.06] text-[#5a564c] font-mono hover:bg-[#2d2a24]/10"
+                className="text-[10px] px-1.5 py-0.5 rounded bg-ink/[0.06] text-ink-muted font-mono hover:bg-ink/10"
               >
                 esc
               </button>
             ) : (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#2d2a24]/[0.06] text-[#5a564c] font-mono">⌘K</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-ink/[0.06] text-ink-muted font-mono">⌘K</span>
             )}
           </div>
 
           {/* explorer panel — overlays the workshops below while search is active */}
           {searchOpen && (
-          <div className="absolute left-7 right-7 top-full mt-2 z-20 max-h-[75vh] overflow-y-auto rounded-2xl bg-[#fcf9f2] border border-[#2d2a24]/[0.08] shadow-[0_20px_50px_rgba(45,42,36,0.18)] px-5 pt-5 pb-4">
+          <div className="absolute left-7 right-7 top-full mt-2 z-20 max-h-[75vh] overflow-y-auto rounded-2xl bg-cream border border-ink/[0.08] shadow-[0_20px_50px_rgba(45,42,36,0.18)] px-5 pt-5 pb-4">
             {searchQuery.trim().length >= 2 ? (
               <>
-                <div className="text-[13px] font-medium text-[#2d2a24] mb-3">
+                <div className="text-[13px] font-medium text-ink mb-3">
                   {locale === 'fr' ? 'résultats' : 'results'}
                 </div>
                 {isSearching ? (
-                  <div className="text-[13px] text-[#7a766d] py-3">{locale === 'fr' ? 'recherche…' : 'searching…'}</div>
+                  <div className="text-[13px] text-ink-soft py-3">{locale === 'fr' ? 'recherche…' : 'searching…'}</div>
                 ) : searchResults.length === 0 ? (
-                  <div className="text-[13px] text-[#7a766d] py-3">{locale === 'fr' ? 'aucun atelier trouvé' : 'no workshop found'}</div>
+                  <div className="text-[13px] text-ink-soft py-3">{locale === 'fr' ? 'aucun atelier trouvé' : 'no workshop found'}</div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-2">
                     {searchResults.map((w) => (
@@ -364,14 +366,14 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                             });
                           });
                         }}
-                        className="cursor-pointer rounded-2xl overflow-hidden bg-white/90 border border-[#2d2a24]/[0.08] shadow-[0_4px_16px_rgba(45,42,36,0.06)] flex flex-col"
+                        className="cursor-pointer rounded-2xl overflow-hidden bg-white/90 border border-ink/[0.08] shadow-[0_4px_16px_rgba(45,42,36,0.06)] flex flex-col"
                       >
                         <div className="relative h-[90px]" style={coverStyleFor(w.id, w.cover_gradient, w.cover_image_url, w.cover_image_active)}>
                           <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{emojiFor(w.id, w.emoji)}</div>
                         </div>
                         <div className="px-3.5 pt-3 pb-3.5">
-                          <div className="font-medium text-[#2d2a24] text-sm mb-1">{w.name}</div>
-                          <div className="text-[11.5px] text-[#7a766d] flex items-center gap-1.5">
+                          <div className="font-medium text-ink text-sm mb-1">{w.name}</div>
+                          <div className="text-[11.5px] text-ink-soft flex items-center gap-1.5">
                             <Users className="w-3 h-3" />
                             {w.member_count} {locale === 'fr' ? 'membres' : 'members'}
                           </div>
@@ -383,20 +385,20 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
               </>
             ) : null}
 
-            <div className="text-[13px] font-medium text-[#2d2a24] mb-3.5 mt-3">{locale === 'fr' ? 'proposés par Culture' : 'offered by Culture'}</div>
+            <div className="text-[13px] font-medium text-ink mb-3.5 mt-3">{locale === 'fr' ? 'proposés par Culture' : 'offered by Culture'}</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
               {cultureModulesToShow.map((m) => (
                 <div
                   key={m.id}
                   onClick={() => setPreview(moduleToPreview(m))}
-                  className="cursor-pointer rounded-2xl overflow-hidden bg-white/90 border border-[#2d2a24]/[0.08] shadow-[0_4px_16px_rgba(45,42,36,0.06)] flex flex-col"
+                  className="cursor-pointer rounded-2xl overflow-hidden bg-white/90 border border-ink/[0.08] shadow-[0_4px_16px_rgba(45,42,36,0.06)] flex flex-col"
                 >
                   <div className="relative h-[90px]" style={{ background: TONE_CSS[m.tone] }}>
                     <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{m.emoji}</div>
                   </div>
                   <div className="px-3.5 pt-3 pb-3.5">
-                    <div className="font-medium text-[#2d2a24] text-sm mb-1">{m.name}</div>
-                    <div className="text-[11.5px] text-[#7a766d] flex items-center gap-1.5">
+                    <div className="font-medium text-ink text-sm mb-1">{m.name}</div>
+                    <div className="text-[11.5px] text-ink-soft flex items-center gap-1.5">
                       <Users className="w-3 h-3" />
                       {m.members.toLocaleString('fr')} {locale === 'fr' ? 'membres' : 'members'}
                     </div>
@@ -412,18 +414,18 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
         <div className="px-7 pt-6 pb-7">
           {!hasWorkshops ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-[#7a9968]/15 flex items-center justify-center mb-4">
-                <Sprout className="w-8 h-8 text-[#4f6b40]" />
+              <div className="w-16 h-16 rounded-2xl bg-green-soft/15 flex items-center justify-center mb-4">
+                <Sprout className="w-8 h-8 text-green" />
               </div>
-              <h3 className="text-[15px] font-medium text-[#2d2a24] mb-2">
+              <h3 className="text-[15px] font-medium text-ink mb-2">
                 {locale === 'fr' ? 'aucun atelier pour le moment' : 'no workshops yet'}
               </h3>
-              <p className="text-[#7a766d] text-[13px] mb-6 max-w-xs">
+              <p className="text-ink-soft text-[13px] mb-6 max-w-xs">
                 {locale === 'fr'
                   ? 'créez votre premier atelier ou rejoignez-en un existant via la recherche.'
                   : 'create your first workshop or join one via search.'}
               </p>
-              <Link href={`/${locale}/workshops/new`} className="flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#4f6b40] text-[#f4f0e6] text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)]">
+              <Link href={`/${locale}/workshops/new`} className="flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-green text-parchment text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)]">
                 <Plus className="w-4 h-4" />
                 {locale === 'fr' ? 'créer un atelier' : 'create a workshop'}
               </Link>
@@ -433,9 +435,9 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
               {/* owned */}
               <section>
                 <div className="flex items-center gap-2 mb-3.5">
-                  <Crown className="w-4 h-4 text-[#a87a3a]" />
-                  <h2 className="text-[13px] font-medium text-[#2d2a24]">{locale === 'fr' ? 'mes ateliers' : 'my workshops'}</h2>
-                  <span className="text-[12px] text-[#9a948a]">({ownedWorkshops.length})</span>
+                  <Crown className="w-4 h-4 text-amber" />
+                  <h2 className="text-[13px] font-medium text-ink">{locale === 'fr' ? 'mes ateliers' : 'my workshops'}</h2>
+                  <span className="text-[12px] text-ink-faint">({ownedWorkshops.length})</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
                   {ownedWorkshops.map((w) => (
@@ -443,7 +445,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                   ))}
                   <Link
                     href={`/${locale}/workshops/new`}
-                    className="rounded-2xl border border-dashed border-[#2d2a24]/[0.18] flex flex-col items-center justify-center gap-2 text-[#9a948a] hover:text-[#4f6b40] hover:border-[#4f6b40]/40 transition min-h-[160px]"
+                    className="rounded-2xl border border-dashed border-ink/[0.18] flex flex-col items-center justify-center gap-2 text-ink-faint hover:text-green hover:border-green/40 transition min-h-[160px]"
                   >
                     <Plus className="w-5 h-5" />
                     <span className="text-[12.5px] font-medium">{locale === 'fr' ? 'nouvel atelier' : 'new workshop'}</span>
@@ -455,9 +457,9 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
               {(joinedWorkshops.length > 0 || invitations.length > 0) && (
                 <section>
                   <div className="flex items-center gap-2 mb-3.5">
-                    <BookMarked className="w-4 h-4 text-[#7a9968]" />
-                    <h2 className="text-[13px] font-medium text-[#2d2a24]">{locale === 'fr' ? 'ateliers rejoints' : 'joined workshops'}</h2>
-                    <span className="text-[12px] text-[#9a948a]">({joinedWorkshops.length})</span>
+                    <BookMarked className="w-4 h-4 text-green-soft" />
+                    <h2 className="text-[13px] font-medium text-ink">{locale === 'fr' ? 'ateliers rejoints' : 'joined workshops'}</h2>
+                    <span className="text-[12px] text-ink-faint">({joinedWorkshops.length})</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
                     {/* invitations en attente, en tête de liste */}
@@ -475,15 +477,15 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
               {trashedWorkshops.length > 0 && (
                 <section>
                   <div className="flex items-center gap-2 mb-3.5">
-                    <Trash2 className="w-4 h-4 text-[#b85a4a]" />
-                    <h2 className="text-[13px] font-medium text-[#2d2a24]">{locale === 'fr' ? 'corbeille' : 'trash'}</h2>
-                    <span className="text-[12px] text-[#9a948a]">({trashedWorkshops.length})</span>
+                    <Trash2 className="w-4 h-4 text-danger" />
+                    <h2 className="text-[13px] font-medium text-ink">{locale === 'fr' ? 'corbeille' : 'trash'}</h2>
+                    <span className="text-[12px] text-ink-faint">({trashedWorkshops.length})</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
                     {trashedWorkshops.map((w) => (
-                      <div key={w.id} className="rounded-2xl border border-[#b85a4a]/20 bg-white/60 p-4 opacity-80">
-                        <div className="font-medium text-[#7a766d] text-sm line-through mb-2">{w.name}</div>
-                        <p className="text-[11.5px] text-[#a87a3a] mb-3">
+                      <div key={w.id} className="rounded-2xl border border-danger/20 bg-white/60 p-4 opacity-80">
+                        <div className="font-medium text-ink-soft text-sm line-through mb-2">{w.name}</div>
+                        <p className="text-[11.5px] text-amber mb-3">
                           {w.days_remaining > 0
                             ? (locale === 'fr' ? `suppression définitive dans ${w.days_remaining} jour(s)` : `permanently deleted in ${w.days_remaining} day(s)`)
                             : (locale === 'fr' ? 'suppression imminente' : 'deletion imminent')}
@@ -491,7 +493,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                         <button
                           onClick={() => handleRestore(w.id)}
                           disabled={restoringId === w.id}
-                          className="flex items-center gap-2 text-[12px] font-medium text-[#4f6b40] hover:text-[#3f5630] disabled:opacity-50"
+                          className="flex items-center gap-2 text-[12px] font-medium text-green hover:text-[#3f5630] disabled:opacity-50"
                         >
                           {restoringId === w.id
                             ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />{locale === 'fr' ? 'restauration…' : 'restoring…'}</>
@@ -509,17 +511,17 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
 
       {/* preview modal */}
       {(preview || previewLoading) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2d2a24]/50 backdrop-blur-sm p-4" onClick={closePreview}>
-          <div className="w-full max-w-2xl rounded-[20px] bg-[#fcf9f2] shadow-[0_30px_80px_rgba(45,42,36,0.25)] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-sm p-4" onClick={closePreview}>
+          <div className="w-full max-w-2xl rounded-[20px] bg-cream shadow-[0_30px_80px_rgba(45,42,36,0.25)] overflow-hidden" onClick={(e) => e.stopPropagation()}>
             {previewLoading && !preview ? (
               <div className="flex items-center justify-center h-[300px]">
-                <Loader2 className="w-6 h-6 animate-spin text-[#7a766d]" />
+                <Loader2 className="w-6 h-6 animate-spin text-ink-soft" />
               </div>
             ) : preview && (
               <>
                 <div className="relative h-[180px]" style={preview.coverStyle}>
                   <div className="absolute left-4 bottom-4 w-11 h-11 rounded-xl bg-white/90 flex items-center justify-center shadow-md text-xl">{preview.emoji}</div>
-                  <button onClick={closePreview} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/85 flex items-center justify-center text-[#5a564c] hover:bg-white">
+                  <button onClick={closePreview} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/85 flex items-center justify-center text-ink-muted hover:bg-white">
                     <X className="w-4 h-4" />
                   </button>
                   {(preview.role || preview.isPremium || preview.isInvitation) && (
@@ -527,13 +529,13 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                       {preview.isInvitation && (
                         <span
                           className="text-[11px] px-2.5 py-1 rounded-full font-medium inline-flex items-center gap-1"
-                          style={{ background: 'rgba(168,122,58,0.92)', color: '#fff' }}
+                          style={{ background: withAlpha(palette.amber, 0.92), color: palette.paper }}
                         >
                           <Mail className="w-3 h-3" /> invitation
                         </span>
                       )}
                       {preview.role && (
-                        <span className="text-[11px] px-2.5 py-1 rounded-full bg-white/85 text-[#5a564c] font-medium">
+                        <span className="text-[11px] px-2.5 py-1 rounded-full bg-white/85 text-ink-muted font-medium">
                           {preview.role === 'owner'
                             ? (locale === 'fr' ? 'propriétaire' : 'owner')
                             : preview.role === 'manager'
@@ -544,7 +546,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                       {preview.isPremium && (
                         <span
                           className="text-[11px] px-2.5 py-1 rounded-full font-medium"
-                          style={{ background: 'rgba(232,184,108,0.85)', color: '#7a4d20' }}
+                          style={{ background: withAlpha(palette.amberGlow, 0.85), color: '#7a4d20' }}
                         >
                           Premium
                         </span>
@@ -553,11 +555,11 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                   )}
                 </div>
                 <div className="p-6">
-                  <h2 className="text-[20px] font-medium text-[#2d2a24] mb-1.5">{preview.name}</h2>
-                  <div className="flex items-center gap-2 text-[12.5px] text-[#7a766d] mb-4">
+                  <h2 className="text-[20px] font-medium text-ink mb-1.5">{preview.name}</h2>
+                  <div className="flex items-center gap-2 text-[12.5px] text-ink-soft mb-4">
                     <Users className="w-3.5 h-3.5" />
                     <span>{preview.memberCount.toLocaleString('fr')} {locale === 'fr' ? 'membres' : 'members'}</span>
-                    <span className="w-[2px] h-[2px] rounded-full bg-[#7a766d]" />
+                    <span className="w-[2px] h-[2px] rounded-full bg-ink-soft" />
                     <span>{locale === 'fr' ? 'créé par' : 'created by'} {preview.ownerName}</span>
                   </div>
                   {preview.description && (
@@ -569,7 +571,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                       <button
                         onClick={() => handleAcceptInvitation(preview.id)}
                         disabled={acceptingId === preview.id || decliningId === preview.id}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#4f6b40] text-[#f4f0e6] text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)] disabled:opacity-60"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-green text-parchment text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)] disabled:opacity-60"
                       >
                         {acceptingId === preview.id
                           ? <><Loader2 className="w-4 h-4 animate-spin" />{locale === 'fr' ? 'acceptation…' : 'accepting…'}</>
@@ -578,7 +580,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                       <button
                         onClick={() => handleDeclineInvitation(preview.id)}
                         disabled={acceptingId === preview.id || decliningId === preview.id}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] border border-[#b85a4a]/40 text-[#b85a4a] text-[13.5px] font-medium hover:bg-[#b85a4a]/[0.06] disabled:opacity-60"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] border border-danger/40 text-danger text-[13.5px] font-medium hover:bg-danger/[0.06] disabled:opacity-60"
                       >
                         {decliningId === preview.id
                           ? <><Loader2 className="w-4 h-4 animate-spin" />{locale === 'fr' ? 'refus…' : 'declining…'}</>
@@ -586,19 +588,19 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                       </button>
                     </div>
                   ) : preview.isMock ? (
-                    <Link href={`/${locale}/dashboard`} onClick={closePreview} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#4f6b40] text-[#f4f0e6] text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)]">
+                    <Link href={`/${locale}/dashboard`} onClick={closePreview} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-green text-parchment text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)]">
                       {locale === 'fr' ? 'rejoindre l\'atelier' : 'join the workshop'} <ArrowRight className="w-4 h-4" />
                     </Link>
                   ) : preview.isMember ? (
-                    <Link href={`/${locale}/workshops/${preview.id}`} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#2d2a24] text-[#f4f0e6] text-[13.5px] font-medium">
+                    <Link href={`/${locale}/workshops/${preview.id}`} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-ink text-parchment text-[13.5px] font-medium">
                       {locale === 'fr' ? 'entrer dans l\'atelier' : 'enter the workshop'} <ArrowRight className="w-4 h-4" />
                     </Link>
                   ) : preview.hasRequested ? (
                     <div className="flex flex-col gap-1.5">
-                      <span className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#a87a3a]/[0.12] text-[#a87a3a] text-[13.5px] font-medium">
+                      <span className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-amber/[0.12] text-amber text-[13.5px] font-medium">
                         <Check className="w-4 h-4" />{locale === 'fr' ? 'demande envoyée' : 'request sent'}
                       </span>
-                      <span className="text-[12px] text-[#7a766d]">
+                      <span className="text-[12px] text-ink-soft">
                         {locale === 'fr'
                           ? 'en attente de validation par un gestionnaire de l\'atelier.'
                           : 'waiting for a workshop manager to approve.'}
@@ -608,7 +610,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                     <button
                       onClick={() => handleRequestJoin(preview.id)}
                       disabled={joiningId === preview.id}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#4f6b40] text-[#f4f0e6] text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)] disabled:opacity-60"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-green text-parchment text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)] disabled:opacity-60"
                     >
                       {joiningId === preview.id
                         ? <><Loader2 className="w-4 h-4 animate-spin" />{locale === 'fr' ? 'envoi…' : 'sending…'}</>
@@ -628,14 +630,14 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
 function WorkshopCard({ workshop, locale, onExpand }: { workshop: WorkshopCardData; locale: string; onExpand: () => void }) {
   const coverStyle = coverStyleFor(workshop.id, workshop.cover_gradient, workshop.cover_image_url, workshop.cover_image_active);
   return (
-    <Link href={`/${locale}/workshops/${workshop.id}`} className="group rounded-2xl overflow-hidden bg-white/90 border border-[#2d2a24]/[0.08] shadow-[0_4px_16px_rgba(45,42,36,0.06)] hover:shadow-[0_10px_28px_rgba(45,42,36,0.12)] hover:-translate-y-0.5 transition flex flex-col">
+    <Link href={`/${locale}/workshops/${workshop.id}`} className="group rounded-2xl overflow-hidden bg-white/90 border border-ink/[0.08] shadow-[0_4px_16px_rgba(45,42,36,0.06)] hover:shadow-[0_10px_28px_rgba(45,42,36,0.12)] hover:-translate-y-0.5 transition flex flex-col">
       <div className="relative h-[90px]" style={coverStyle}>
         <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{emojiFor(workshop.id, workshop.emoji)}</div>
         <div className="absolute top-2.5 left-2.5 flex flex-wrap items-center gap-1">
           {workshop.is_premium && (
             <span
               className="inline-flex items-center gap-1 text-[10.5px] px-2 py-0.5 rounded-full font-semibold shadow-sm"
-              style={{ background: 'rgba(232,184,108,0.92)', color: '#7a4d20' }}
+              style={{ background: withAlpha(palette.amberGlow, 0.92), color: '#7a4d20' }}
             >
               <Crown className="w-2.5 h-2.5" /> Premium
             </span>
@@ -643,7 +645,7 @@ function WorkshopCard({ workshop, locale, onExpand }: { workshop: WorkshopCardDa
           {workshop.role === 'manager' && (
             <span
               className="inline-flex items-center text-[10.5px] px-2 py-0.5 rounded-full font-semibold shadow-sm"
-              style={{ background: 'rgba(122,153,104,0.92)', color: '#27331c' }}
+              style={{ background: withAlpha(palette.greenSoft, 0.92), color: '#27331c' }}
             >
               gestionnaire
             </span>
@@ -651,15 +653,15 @@ function WorkshopCard({ workshop, locale, onExpand }: { workshop: WorkshopCardDa
         </div>
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onExpand(); }}
-          className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-white/0 group-hover:bg-white/85 flex items-center justify-center text-transparent group-hover:text-[#5a564c] transition"
+          className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-white/0 group-hover:bg-white/85 flex items-center justify-center text-transparent group-hover:text-ink-muted transition"
           aria-label="agrandir"
         >
           <Maximize2 className="w-3.5 h-3.5" />
         </button>
       </div>
       <div className="px-3.5 pt-3 pb-3.5">
-        <div className="font-medium text-[#2d2a24] text-sm mb-1 line-clamp-2">{workshop.name}</div>
-        <div className="text-[11.5px] text-[#7a766d] flex items-center gap-1.5">
+        <div className="font-medium text-ink text-sm mb-1 line-clamp-2">{workshop.name}</div>
+        <div className="text-[11.5px] text-ink-soft flex items-center gap-1.5">
           <Users className="w-3 h-3" />
           {workshop.member_count} {locale === 'fr' ? 'membres' : 'members'}
         </div>
@@ -673,20 +675,20 @@ function InvitationCard({ workshop, locale, onOpen }: { workshop: WorkshopCardDa
   return (
     <button
       onClick={onOpen}
-      className="group text-left rounded-2xl overflow-hidden bg-white/90 border-2 border-[#a87a3a]/45 shadow-[0_4px_16px_rgba(168,122,58,0.12)] hover:shadow-[0_10px_28px_rgba(168,122,58,0.18)] hover:-translate-y-0.5 transition flex flex-col"
+      className="group text-left rounded-2xl overflow-hidden bg-white/90 border-2 border-amber/45 shadow-[0_4px_16px_rgba(168,122,58,0.12)] hover:shadow-[0_10px_28px_rgba(168,122,58,0.18)] hover:-translate-y-0.5 transition flex flex-col"
     >
       <div className="relative h-[90px]" style={coverStyle}>
         <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{emojiFor(workshop.id, workshop.emoji)}</div>
         <span
           className="absolute top-2.5 left-2.5 text-[10.5px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1"
-          style={{ background: 'rgba(168,122,58,0.92)', color: '#fff' }}
+          style={{ background: withAlpha(palette.amber, 0.92), color: palette.paper }}
         >
           <Mail className="w-2.5 h-2.5" /> invitation
         </span>
       </div>
       <div className="px-3.5 pt-3 pb-3.5">
-        <div className="font-medium text-[#2d2a24] text-sm mb-1 line-clamp-2">{workshop.name}</div>
-        <div className="text-[11.5px] text-[#a87a3a] font-medium truncate">
+        <div className="font-medium text-ink text-sm mb-1 line-clamp-2">{workshop.name}</div>
+        <div className="text-[11.5px] text-amber font-medium truncate">
           {locale === 'fr' ? 'invité par' : 'invited by'} {workshop.owner_name}
         </div>
       </div>

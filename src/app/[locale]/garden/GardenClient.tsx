@@ -1,5 +1,7 @@
 'use client';
 
+import { palette } from '@/lib/theme';
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Sprout, Check, Hammer, Maximize2, Move, Package, ArrowLeftRight, X, Sparkles, Blocks, Eraser, Droplets } from 'lucide-react';
 import {
@@ -517,7 +519,7 @@ export default function GardenClient({ locale, firstName }: Props) {
       </div>
 
       <div className="absolute top-5 left-5 flex items-center gap-2 rounded-full bg-white/85 backdrop-blur px-3.5 py-2 shadow-sm border border-black/5">
-        <Sprout className="w-4 h-4 text-[#5f8a3f]" />
+        <Sprout className="w-4 h-4 text-green-brand" />
         <span className="text-sm font-semibold text-[#3a4a2a] tabular-nums">{state.xp}</span>
         <span className="text-xs text-[#5d6b4a]/70">XP</span>
       </div>
@@ -525,7 +527,7 @@ export default function GardenClient({ locale, firstName }: Props) {
       <div className="absolute top-5 right-5 flex flex-col items-end gap-2">
         <button
           onClick={toggleEdit}
-          className={`flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium shadow-sm border transition-colors ${editMode ? 'bg-[#5f8a3f] text-white border-[#5f8a3f]' : 'bg-white/85 backdrop-blur text-[#3a4a2a] border-black/5 hover:bg-white'}`}
+          className={`flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium shadow-sm border transition-colors ${editMode ? 'bg-green-brand text-white border-green-brand' : 'bg-white/85 backdrop-blur text-[#3a4a2a] border-black/5 hover:bg-white'}`}
         >
           {editMode ? <Check className="w-4 h-4" /> : <Hammer className="w-4 h-4" />}
           {editMode ? t('Terminer', 'Done') : t('Modifier', 'Edit')}
@@ -829,7 +831,7 @@ function StructureArt({ s, originX, originY, dimmed }: { s: Structure; originX: 
 
 function StructGhost({ col, row, kind, originX, originY, mode, onClick }: { col: number; row: number; kind: StructureKind; originX: number; originY: number; mode: 'deploy' | 'move'; onClick: () => void }) {
   const [hover, setHover] = useState(false);
-  const accent = mode === 'move' ? '#3f7fb0' : '#5f8a3f';
+  const accent = mode === 'move' ? '#3f7fb0' : palette.greenBrand;
   const cells = footprint(kind, col, row);
   const { w, h } = STRUCT_SIZE[kind];
   const center = isoPos(col + (w - 1) / 2, row + (h - 1) / 2, originX, originY);
@@ -843,7 +845,7 @@ function StructGhost({ col, row, kind, originX, originY, mode, onClick }: { col:
         return <polygon key={k} points={`${x},${y - hh} ${x + hw},${y} ${x},${y + hh} ${x - hw},${y}`} fill={hover ? `${accent}44` : `${accent}1c`} stroke={accent} strokeWidth={1.3} strokeDasharray="5 4" strokeLinejoin="round" />;
       })}
       <g transform={`translate(${center.x} ${center.y})`}>
-        <circle r={13} fill={hover ? accent : '#fff'} stroke={accent} strokeWidth={1.4} />
+        <circle r={13} fill={hover ? accent : palette.paper} stroke={accent} strokeWidth={1.4} />
         <g transform="scale(0.55)">
           <BlockGlyph kind={kind} />
         </g>
@@ -876,7 +878,7 @@ function Panel({
       <button
         onClick={() => onArmItem(g.sig)}
         title={g.plant ? SPECIES_LABEL[g.plant.species] : KIND_LABEL[g.kind]}
-        className={`relative aspect-square rounded-xl border flex items-center justify-center transition-colors ${armed ? 'border-[#5f8a3f] bg-[#eef3e2] ring-2 ring-[#5f8a3f]/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
+        className={`relative aspect-square rounded-xl border flex items-center justify-center transition-colors ${armed ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
       >
         <ItemThumb kind={g.kind} plant={g.plant} />
         <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#3a4a2a] text-white text-[10px] font-semibold flex items-center justify-center">{g.count}</span>
@@ -903,17 +905,17 @@ function Panel({
                 <button
                   onClick={() => onArmItem('grass')}
                   title={t('Herbe (réinitialiser)', 'Grass (reset)')}
-                  className={`relative aspect-square rounded-xl border flex items-center justify-center ${armedSig === 'grass' ? 'border-[#5f8a3f] bg-[#eef3e2] ring-2 ring-[#5f8a3f]/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
+                  className={`relative aspect-square rounded-xl border flex items-center justify-center ${armedSig === 'grass' ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
                 >
                   <ItemThumb kind="grass" plant={null} />
-                  <span className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-[#5f8a3f] text-white flex items-center justify-center"><Eraser className="w-2.5 h-2.5" /></span>
+                  <span className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-green-brand text-white flex items-center justify-center"><Eraser className="w-2.5 h-2.5" /></span>
                 </button>
                 {surfaceGroups.map((g) => <Card key={g.sig} g={g} />)}
               </div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5d6b4a]/70 mt-3 mb-1.5 px-0.5">{t('Objets', 'Objects')}</p>
               <div className="grid grid-cols-3 gap-2">
                 {objectGroups.map((g) => <Card key={g.sig} g={g} />)}
-                {objectGroups.length === 0 && <p className="col-span-3 text-xs text-[#9a948a] py-2 text-center">{t('Aucun objet', 'No objects')}</p>}
+                {objectGroups.length === 0 && <p className="col-span-3 text-xs text-ink-faint py-2 text-center">{t('Aucun objet', 'No objects')}</p>}
               </div>
             </div>
           ) : (
@@ -926,7 +928,7 @@ function Panel({
               </div>
               <div className="grid grid-cols-3 gap-2">
                 {COSMETICS.map((cos) => (
-                  <button key={cos} onClick={() => onArmCos(cos)} title={COS_LABEL[cos]} className={`aspect-square rounded-xl border flex items-center justify-center ${armedCos === cos ? 'border-[#5f8a3f] bg-[#eef3e2] ring-2 ring-[#5f8a3f]/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}>
+                  <button key={cos} onClick={() => onArmCos(cos)} title={COS_LABEL[cos]} className={`aspect-square rounded-xl border flex items-center justify-center ${armedCos === cos ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}>
                     <svg width="34" height="34" viewBox="-17 -22 34 30"><CosmeticGlyph cos={cos} /></svg>
                   </button>
                 ))}

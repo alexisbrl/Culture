@@ -2,6 +2,7 @@
 
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
+import { palette, ink, radius, shadow } from '@/lib/theme';
 
 // Coquille de modale partagée (carte crème centrée + fond flouté). C'est la partie
 // dupliquée d'innombrables modales du projet : backdrop `position:fixed` cliquable
@@ -27,8 +28,8 @@ type ModalProps = {
 export default function Modal({ onClose, width = 420, portal = false, children }: ModalProps) {
   const node = (
     <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
-      <div style={{ position: 'relative', width, maxWidth: '90vw', background: '#fcf9f2', borderRadius: 20, padding: 24, boxShadow: '0 24px 64px rgba(45,42,36,0.25)', fontFamily: "'Inter Tight', system-ui, sans-serif", textAlign: 'center' as const }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: ink(0.42), backdropFilter: 'blur(2px)' }} />
+      <div style={{ position: 'relative', width, maxWidth: '90vw', background: palette.cream, borderRadius: radius.xl, padding: 24, boxShadow: shadow.modal, fontFamily: "'Inter Tight', system-ui, sans-serif", textAlign: 'center' as const }}>
         {children}
       </div>
     </div>

@@ -6,16 +6,7 @@ import type { AvatarConfig } from '@/components/avatar/types';
 // Config de l'avatar « composer » (PNG : face/hair/brow/eyes/nose/mouth/top),
 // distincte du type legacy ci-dessus (numérique, AvatarSVG / Navbar visiteur).
 import type { AvatarConfig as AvatarParts } from '@/components/avatar/avatarConfig';
-
-// Génère un tag aléatoire de 7 caractères (sans lettres/chiffres ambigus)
-function generateUniqueId(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let id = '';
-  for (let i = 0; i < 7; i++) {
-    id += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return id;
-}
+import { generateTag } from '@/lib/tag';
 
 // Vérifie dans Supabase qu'un tag n'est pas déjà utilisé
 async function isTagAvailable(tag: string): Promise<boolean> {
@@ -48,7 +39,7 @@ export async function ensureUniqueId(): Promise<string> {
   // Générer un ID véritablement unique (max 10 tentatives)
   let uniqueId = '';
   for (let attempt = 0; attempt < 10; attempt++) {
-    const candidate = generateUniqueId();
+    const candidate = generateTag();
     if (await isTagAvailable(candidate)) {
       uniqueId = candidate;
       break;

@@ -1,5 +1,7 @@
 'use client';
 
+import { palette, ink, withAlpha } from '@/lib/theme';
+
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, Settings, Settings2, Copy, Download, FileText, AlertTriangle, Check, SeparatorHorizontal, SendHorizontal, X, ArrowRight, Star, RefreshCw } from 'lucide-react';
@@ -33,14 +35,14 @@ export type ExamConfig = {
 
 // ---- small helpers ----
 const RESPONSE_TYPE_COLORS: Record<ResponseType, string> = {
-  sans_reponse: '#7a766d',
-  qcs: '#c89860',
-  qcm: '#7a9968',
+  sans_reponse: palette.inkSoft,
+  qcs: palette.amberLight,
+  qcm: palette.greenSoft,
   textuelle: '#9eb3b9',
   dessin: '#a890b8',
   audio: '#a890b8',
   sondage: '#9eb3b9',
-  fill_blank: '#c89860',
+  fill_blank: palette.amberLight,
   matching: '#a890b8',
   ordre: '#a890b8',
 };
@@ -76,32 +78,32 @@ function isPageBreakId(id: string): boolean {
   return id.startsWith(PAGE_BREAK_PREFIX);
 }
 
-const LABEL_COLORS = ['#9eb3b9', '#a890b8', '#7a9968', '#c89860', '#b85a4a', '#5f8a3f', '#a87a3a', '#9a948a', '#6b8ea8', '#c2603a'];
+const LABEL_COLORS = ['#9eb3b9', '#a890b8', palette.greenSoft, palette.amberLight, palette.danger, palette.greenBrand, palette.amber, palette.inkFaint, '#6b8ea8', '#c2603a'];
 
 function DiffDots({ level }: { level: number }) {
   return (
     <span style={{ display: 'inline-flex', gap: 3 }}>
-      {Array.from({ length: 5 }, (_, i) => <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: i < level ? '#a87a3a' : 'rgba(45,42,36,0.15)', display: 'inline-block' }} />)}
+      {Array.from({ length: 5 }, (_, i) => <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: i < level ? palette.amber : ink(0.15), display: 'inline-block' }} />)}
     </span>
   );
 }
 
 function TypePill({ type }: { type: ResponseType }) {
-  const c = RESPONSE_TYPE_COLORS[type] || '#7a766d';
+  const c = RESPONSE_TYPE_COLORS[type] || palette.inkSoft;
   return <span style={{ fontSize: 10, fontWeight: 500, padding: '3px 8px', borderRadius: 999, background: `${c}28`, color: '#3a352c', letterSpacing: '0.02em' }}>{RESPONSE_TYPE_LABELS[type] ?? type}</span>;
 }
 
 function WeightControls({ weight, onChange }: { weight: QuestionWeight; onChange: (patch: Partial<QuestionWeight>) => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-      <input type="number" min={0} step={0.5} value={weight.points} onChange={e => onChange({ points: Number(e.target.value) || 0 })} title="points" style={{ width: 42, fontSize: 11, padding: '4px 5px', borderRadius: 6, border: '1px solid rgba(45,42,36,0.14)', background: '#fff', fontFamily: 'inherit', textAlign: 'center' as const }} />
+      <input type="number" min={0} step={0.5} value={weight.points} onChange={e => onChange({ points: Number(e.target.value) || 0 })} title="points" style={{ width: 42, fontSize: 11, padding: '4px 5px', borderRadius: 6, border: `1px solid ${ink(0.14)}`, background: palette.paper, fontFamily: 'inherit', textAlign: 'center' as const }} />
       {!weight.eliminatory && (
-        <button type="button" onClick={() => onChange({ negative: { ...weight.negative, enabled: !weight.negative.enabled } })} title="points négatifs" style={{ fontSize: 11, padding: '4px 7px', borderRadius: 6, border: weight.negative.enabled ? '1px solid rgba(184,90,74,0.4)' : '1px solid rgba(45,42,36,0.12)', background: weight.negative.enabled ? 'rgba(184,90,74,0.12)' : 'rgba(255,255,255,0.7)', color: weight.negative.enabled ? '#b85a4a' : '#9a948a', cursor: 'pointer', fontFamily: 'inherit' }}>−</button>
+        <button type="button" onClick={() => onChange({ negative: { ...weight.negative, enabled: !weight.negative.enabled } })} title="points négatifs" style={{ fontSize: 11, padding: '4px 7px', borderRadius: 6, border: weight.negative.enabled ? '1px solid rgba(184,90,74,0.4)' : `1px solid ${ink(0.12)}`, background: weight.negative.enabled ? withAlpha(palette.danger, 0.12) : withAlpha(palette.paper, 0.7), color: weight.negative.enabled ? palette.danger : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>−</button>
       )}
       {!weight.eliminatory && weight.negative.enabled && (
-        <input type="number" min={0} step={0.5} value={weight.negative.value} onChange={e => onChange({ negative: { ...weight.negative, value: Number(e.target.value) || 0 } })} title="valeur du point négatif" style={{ width: 42, fontSize: 11, padding: '4px 5px', borderRadius: 6, border: '1px solid rgba(184,90,74,0.3)', background: '#fff', fontFamily: 'inherit', textAlign: 'center' as const, color: '#b85a4a' }} />
+        <input type="number" min={0} step={0.5} value={weight.negative.value} onChange={e => onChange({ negative: { ...weight.negative, value: Number(e.target.value) || 0 } })} title="valeur du point négatif" style={{ width: 42, fontSize: 11, padding: '4px 5px', borderRadius: 6, border: `1px solid ${withAlpha(palette.danger, 0.3)}`, background: palette.paper, fontFamily: 'inherit', textAlign: 'center' as const, color: palette.danger }} />
       )}
-      <button type="button" onClick={() => onChange({ eliminatory: !weight.eliminatory, negative: weight.eliminatory ? weight.negative : { ...weight.negative, enabled: false } })} title="question éliminatoire" style={{ fontSize: 11, padding: '4px 7px', borderRadius: 6, border: weight.eliminatory ? '1px solid rgba(184,90,74,0.4)' : '1px solid rgba(45,42,36,0.12)', background: weight.eliminatory ? '#b85a4a' : 'rgba(255,255,255,0.7)', color: weight.eliminatory ? '#fff' : '#9a948a', cursor: 'pointer', fontFamily: 'inherit' }}>⚑</button>
+      <button type="button" onClick={() => onChange({ eliminatory: !weight.eliminatory, negative: weight.eliminatory ? weight.negative : { ...weight.negative, enabled: false } })} title="question éliminatoire" style={{ fontSize: 11, padding: '4px 7px', borderRadius: 6, border: weight.eliminatory ? '1px solid rgba(184,90,74,0.4)' : `1px solid ${ink(0.12)}`, background: weight.eliminatory ? palette.danger : withAlpha(palette.paper, 0.7), color: weight.eliminatory ? palette.paper : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>⚑</button>
     </div>
   );
 }
@@ -109,8 +111,8 @@ function WeightControls({ weight, onChange }: { weight: QuestionWeight; onChange
 function Diff({ n }: { n: number }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-      <span style={{ fontSize: 9, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>diff</span>
-      {Array.from({ length: 5 }, (_, i) => <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: i < n ? '#a87a3a' : 'rgba(45,42,36,0.12)', display: 'inline-block' }} />)}
+      <span style={{ fontSize: 9, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>diff</span>
+      {Array.from({ length: 5 }, (_, i) => <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: i < n ? palette.amber : ink(0.12), display: 'inline-block' }} />)}
     </span>
   );
 }
@@ -226,7 +228,7 @@ function clearWeightingFor(weighting: Record<string, QuestionWeight>, id: string
 function renderAnswerSpace(q: Question) {
   const blankLines = (n: number) => (
     <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: 22 }}>
-      {Array.from({ length: n }, (_, i) => <div key={i} style={{ borderBottom: '1px solid rgba(45,42,36,0.18)' }} />)}
+      {Array.from({ length: n }, (_, i) => <div key={i} style={{ borderBottom: `1px solid ${ink(0.18)}` }} />)}
     </div>
   );
 
@@ -241,7 +243,7 @@ function renderAnswerSpace(q: Question) {
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
           {q.choices.map((c, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ width: 14, height: 14, border: '1.5px solid rgba(45,42,36,0.35)', borderRadius: q.responseType === 'qcm' ? 3 : 999, flexShrink: 0, display: 'inline-block' }} />
+              <span style={{ width: 14, height: 14, border: `1.5px solid ${ink(0.35)}`, borderRadius: q.responseType === 'qcm' ? 3 : 999, flexShrink: 0, display: 'inline-block' }} />
               <span style={{ fontSize: 13, color: '#3a352c' }}>{c}</span>
             </div>
           ))}
@@ -268,7 +270,7 @@ function renderAnswerSpace(q: Question) {
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
           {q.choices.map((c, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ width: 26, height: 26, border: '1.5px solid rgba(45,42,36,0.35)', borderRadius: 6, flexShrink: 0 }} />
+              <span style={{ width: 26, height: 26, border: `1.5px solid ${ink(0.35)}`, borderRadius: 6, flexShrink: 0 }} />
               <span style={{ fontSize: 13, color: '#3a352c' }}>{c}</span>
             </div>
           ))}
@@ -276,9 +278,9 @@ function renderAnswerSpace(q: Question) {
       );
     }
     case 'dessin':
-      return <div style={{ marginTop: 14, height: 180, border: '1px dashed rgba(45,42,36,0.22)', borderRadius: 6 }} />;
+      return <div style={{ marginTop: 14, height: 180, border: `1px dashed ${ink(0.22)}`, borderRadius: 6 }} />;
     case 'audio':
-      return <div style={{ marginTop: 14, height: 60, border: '1px dashed rgba(45,42,36,0.22)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, color: '#9a948a' }}>🎙 espace de réponse audio</div>;
+      return <div style={{ marginTop: 14, height: 60, border: `1px dashed ${ink(0.22)}`, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, color: palette.inkFaint }}>🎙 espace de réponse audio</div>;
     case 'fill_blank':
       return blankLines(3);
     case 'textuelle':
@@ -424,12 +426,12 @@ function toggleQuestionInSections(sections: ExamSection[], id: string): ExamSect
 }
 
 function statusStyle(s: string) {
-  return ({ publié: { bg: 'rgba(122,153,104,0.20)', fg: '#3f5630' }, brouillon: { bg: 'rgba(232,184,108,0.22)', fg: '#7a4d20' }, archivé: { bg: 'rgba(45,42,36,0.07)', fg: '#7a766d' } } as Record<string, { bg: string; fg: string }>)[s] ?? { bg: 'rgba(45,42,36,0.07)', fg: '#7a766d' };
+  return ({ publié: { bg: withAlpha(palette.greenSoft, 0.20), fg: '#3f5630' }, brouillon: { bg: withAlpha(palette.amberGlow, 0.22), fg: '#7a4d20' }, archivé: { bg: ink(0.07), fg: palette.inkSoft } } as Record<string, { bg: string; fg: string }>)[s] ?? { bg: ink(0.07), fg: palette.inkSoft };
 }
 
 function IconBtn({ children, title, onClick }: { children: React.ReactNode; title: string; onClick?: () => void }) {
   return (
-    <button title={title} onClick={onClick} style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid rgba(45,42,36,0.12)', background: 'rgba(255,255,255,0.7)', color: '#5a564c', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>{children}</button>
+    <button title={title} onClick={onClick} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${ink(0.12)}`, background: withAlpha(palette.paper, 0.7), color: palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>{children}</button>
   );
 }
 
@@ -442,7 +444,7 @@ function EditQuestionButton({ id, onOpenQuestion }: { id: string; onOpenQuestion
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       title="modifier la question"
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: hovered ? '1px solid rgba(45,42,36,0.14)' : '1px solid transparent', background: hovered ? 'rgba(45,42,36,0.045)' : 'transparent', color: hovered ? '#7a766d' : '#9a948a', cursor: 'pointer', padding: 0, flexShrink: 0, transition: 'background 0.12s, border-color 0.12s' }}
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: hovered ? '1px solid rgba(45,42,36,0.14)' : '1px solid transparent', background: hovered ? ink(0.045) : 'transparent', color: hovered ? palette.inkSoft : palette.inkFaint, cursor: 'pointer', padding: 0, flexShrink: 0, transition: 'background 0.12s, border-color 0.12s' }}
     >
       <Settings2 size={14} strokeWidth={1.85} />
     </button>
@@ -455,11 +457,11 @@ function ActiveChip({ label, color, negative, filterKey, onRemove, setDraggedKey
       draggable
       onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', filterKey); setDraggedKey(filterKey); }}
       onDragEnd={() => setDraggedKey(null)}
-      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 6px 5px 11px', borderRadius: 999, border: negative ? '1px solid rgba(184,90,74,0.45)' : '1px solid rgba(45,42,36,0.30)', background: negative ? '#b85a4a' : '#2d2a24', color: '#f4f0e6', fontFamily: 'inherit', cursor: 'grab', clipPath: 'inset(0 round 999px)' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 6px 5px 11px', borderRadius: 999, border: negative ? '1px solid rgba(184,90,74,0.45)' : `1px solid ${ink(0.30)}`, background: negative ? palette.danger : palette.ink, color: palette.parchment, fontFamily: 'inherit', cursor: 'grab', clipPath: 'inset(0 round 999px)' }}
     >
       {color && <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, display: 'inline-block' }} />}
       {label}
-      <button onClick={onRemove} style={{ border: 'none', background: 'none', color: '#f4f0e6', cursor: 'pointer', fontSize: 13, padding: '0 4px', lineHeight: 1, opacity: 0.7 }}>×</button>
+      <button onClick={onRemove} style={{ border: 'none', background: 'none', color: palette.parchment, cursor: 'pointer', fontSize: 13, padding: '0 4px', lineHeight: 1, opacity: 0.7 }}>×</button>
     </span>
   );
 }
@@ -470,14 +472,14 @@ function HistoryContent({ exams, justAddedId, onEdit, onNew, onDelete }: { exams
     <div style={{ padding: '20px 24px 24px', minHeight: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
-          <div style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24' }}>Examens générés</div>
-          <div style={{ fontSize: 12.5, color: '#7a766d' }}>{exams.length} examens · historique de l&apos;atelier</div>
+          <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>Examens générés</div>
+          <div style={{ fontSize: 12.5, color: palette.inkSoft }}>{exams.length} examens · historique de l&apos;atelier</div>
         </div>
-        <button onClick={onNew} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, background: '#2d2a24', color: '#f4f0e6', border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+        <button onClick={onNew} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, background: palette.ink, color: palette.parchment, border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
           <span style={{ fontSize: 15 }}>+</span> nouvel examen
         </button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr 0.8fr 1fr 1fr 1.1fr', gap: 12, padding: '0 14px 8px', fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr 0.8fr 1fr 1fr 1.1fr', gap: 12, padding: '0 14px 8px', fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint }}>
         <span>examen</span><span>date</span><span>questions</span><span>passé par</span><span>note moy.</span><span style={{ textAlign: 'right' as const }}>actions</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -485,20 +487,20 @@ function HistoryContent({ exams, justAddedId, onEdit, onNew, onDelete }: { exams
           const st = statusStyle(e.status);
           const hot = e.id === justAddedId;
           return (
-            <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr 0.8fr 1fr 1fr 1.1fr', gap: 12, alignItems: 'center', padding: '14px', borderRadius: 12, background: hot ? 'rgba(232,184,108,0.18)' : 'rgba(255,255,255,0.8)', border: hot ? '1.5px solid rgba(168,122,58,0.45)' : '1px solid rgba(45,42,36,0.08)' }}>
+            <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr 0.8fr 1fr 1fr 1.1fr', gap: 12, alignItems: 'center', padding: '14px', borderRadius: 12, background: hot ? withAlpha(palette.amberGlow, 0.18) : withAlpha(palette.paper, 0.8), border: hot ? '1.5px solid rgba(168,122,58,0.45)' : `1px solid ${ink(0.08)}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                <span style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(45,42,36,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <FileText size={18} color="#a87a3a" strokeWidth={1.75} />
+                <span style={{ width: 36, height: 36, borderRadius: 9, background: ink(0.05), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <FileText size={18} color={palette.amber} strokeWidth={1.75} />
                 </span>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 500, color: '#2d2a24', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</div>
+                  <div style={{ fontSize: 13.5, fontWeight: 500, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</div>
                   <span style={{ display: 'inline-block', marginTop: 4, fontSize: 10, padding: '2px 8px', borderRadius: 999, background: st.bg, color: st.fg }}>{e.status}</span>
                 </div>
               </div>
-              <span style={{ fontSize: 12, color: '#5a564c' }}>{e.date}</span>
-              <span style={{ fontSize: 12.5, color: '#2d2a24', fontVariantNumeric: 'tabular-nums' }}>{e.q}</span>
-              <span style={{ fontSize: 12, color: '#5a564c', fontVariantNumeric: 'tabular-nums' }}>{e.taken > 0 ? `${e.taken} membres` : '—'}</span>
-              <span style={{ fontSize: 12.5, color: e.avg === '—' ? '#bdb8ad' : '#2d2a24', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{e.avg}</span>
+              <span style={{ fontSize: 12, color: palette.inkMuted }}>{e.date}</span>
+              <span style={{ fontSize: 12.5, color: palette.ink, fontVariantNumeric: 'tabular-nums' }}>{e.q}</span>
+              <span style={{ fontSize: 12, color: palette.inkMuted, fontVariantNumeric: 'tabular-nums' }}>{e.taken > 0 ? `${e.taken} membres` : '—'}</span>
+              <span style={{ fontSize: 12.5, color: e.avg === '—' ? palette.inkGhost : palette.ink, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{e.avg}</span>
               <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                 <IconBtn title="modifier" onClick={() => onEdit(e)}>
                   <Settings size={14} strokeWidth={1.75} />
@@ -506,7 +508,7 @@ function HistoryContent({ exams, justAddedId, onEdit, onNew, onDelete }: { exams
                 <IconBtn title="dupliquer"><Copy size={14} strokeWidth={1.75} /></IconBtn>
                 <IconBtn title="exporter"><Download size={14} strokeWidth={1.75} /></IconBtn>
                 <IconBtn title="supprimer" onClick={() => onDelete(e)}>
-                  <svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 4h9M5.5 4V2.5h3V4M5.5 6.5v4M8.5 6.5v4M3.5 4l.7 8h5.6l.7-8" stroke="#b85a4a" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 4h9M5.5 4V2.5h3V4M5.5 6.5v4M8.5 6.5v4M3.5 4l.7 8h5.6l.7-8" stroke={palette.danger} strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </IconBtn>
               </div>
             </div>
@@ -724,10 +726,10 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
     return (
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13.5, color: '#2d2a24', lineHeight: 1.45, marginBottom: 8 }}>
+          <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.45, marginBottom: 8 }}>
             {q.title.trim() || q.content || '(sans énoncé)'}
             {hasParts && (
-              <span style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: 8, fontSize: 10.5, padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(168,122,58,0.30)', background: 'rgba(232,184,108,0.12)', color: '#7a4d20' }}>
+              <span style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: 8, fontSize: 10.5, padding: '2px 8px', borderRadius: 6, border: `1px solid ${withAlpha(palette.amber, 0.30)}`, background: withAlpha(palette.amberGlow, 0.12), color: '#7a4d20' }}>
                 {q.parts.length + 1} parties
               </span>
             )}
@@ -737,9 +739,9 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
             {q.pools.map(pid => {
               const p = pools.find(pp => pp.id === pid);
               if (!p) return null;
-              return <span key={pid} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 999, background: 'rgba(45,42,36,0.05)', color: '#5a564c' }}>#{p.name}</span>;
+              return <span key={pid} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 999, background: ink(0.05), color: palette.inkMuted }}>#{p.name}</span>;
             })}
-            <button onClick={() => setOpenId(open ? null : q.id)} style={{ marginLeft: 'auto', fontSize: 11, color: '#a87a3a', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{open ? 'masquer le détail ▴' : 'voir le détail ▾'}</button>
+            <button onClick={() => setOpenId(open ? null : q.id)} style={{ marginLeft: 'auto', fontSize: 11, color: palette.amber, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{open ? 'masquer le détail ▴' : 'voir le détail ▾'}</button>
             <IconBtn title="modifier la question" onClick={() => onEditQuestion(q)}>
               <Settings size={13} strokeWidth={1.75} />
             </IconBtn>
@@ -751,25 +753,25 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
             </IconBtn>
           </div>
           {open && (
-            <div style={{ marginTop: 10, borderTop: '1px solid rgba(168,122,58,0.18)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(232,184,108,0.08)', border: '1px solid rgba(168,122,58,0.15)' }}>
-                <div style={{ fontSize: 11, color: '#a87a3a', marginBottom: 4 }}>Partie 1</div>
+            <div style={{ marginTop: 10, borderTop: `1px solid ${withAlpha(palette.amber, 0.18)}`, paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ padding: '8px 10px', borderRadius: 8, background: withAlpha(palette.amberGlow, 0.08), border: `1px solid ${withAlpha(palette.amber, 0.15)}` }}>
+                <div style={{ fontSize: 11, color: palette.amber, marginBottom: 4 }}>Partie 1</div>
                 <div style={{ fontSize: 12.5, color: '#3a352c', marginBottom: 6 }}>{q.content || '(sans énoncé)'}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
                   <TypePill type={q.responseType} />
                   {q.difficulty.enabled && <Diff n={q.difficulty.value} />}
-                  {q.duration.enabled && <span style={{ fontSize: 10.5, color: '#7a766d' }}>{q.duration.minutes}min {(q.duration.seconds ?? 0).toString().padStart(2, '0')}s</span>}
+                  {q.duration.enabled && <span style={{ fontSize: 10.5, color: palette.inkSoft }}>{q.duration.minutes}min {(q.duration.seconds ?? 0).toString().padStart(2, '0')}s</span>}
                 </div>
                 <div style={{ fontSize: 12, color: '#3a352c' }}><span style={{ fontWeight: 600, color: '#7a4d20' }}>réponse · </span>{answerSummary(q)}</div>
               </div>
               {q.parts.map((part, i) => (
-                <div key={i} style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(232,184,108,0.08)', border: '1px solid rgba(168,122,58,0.15)' }}>
-                  <div style={{ fontSize: 11, color: '#a87a3a', marginBottom: 4 }}>Partie {i + 2}</div>
+                <div key={i} style={{ padding: '8px 10px', borderRadius: 8, background: withAlpha(palette.amberGlow, 0.08), border: `1px solid ${withAlpha(palette.amber, 0.15)}` }}>
+                  <div style={{ fontSize: 11, color: palette.amber, marginBottom: 4 }}>Partie {i + 2}</div>
                   <div style={{ fontSize: 12.5, color: '#3a352c', marginBottom: 6 }}>{part.content || '(sans énoncé)'}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
                     <TypePill type={part.responseType} />
                     {part.difficulty.enabled && <Diff n={part.difficulty.value} />}
-                    {part.duration.enabled && <span style={{ fontSize: 10.5, color: '#7a766d' }}>{part.duration.minutes}min {(part.duration.seconds ?? 0).toString().padStart(2, '0')}s</span>}
+                    {part.duration.enabled && <span style={{ fontSize: 10.5, color: palette.inkSoft }}>{part.duration.minutes}min {(part.duration.seconds ?? 0).toString().padStart(2, '0')}s</span>}
                   </div>
                   <div style={{ fontSize: 12, color: '#3a352c' }}><span style={{ fontWeight: 600, color: '#7a4d20' }}>réponse · </span>{answerSummary(part)}</div>
                 </div>
@@ -777,7 +779,7 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
             </div>
           )}
         </div>
-        <button onClick={(e) => { e.stopPropagation(); onSendOne(q.id); }} title="envoyer vers l'éditeur d'examen" style={{ alignSelf: 'stretch', flexShrink: 0, marginRight: -14, marginTop: -12, marginBottom: -12, paddingLeft: 28, paddingRight: 28, borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderLeft: '1px solid rgba(45,42,36,0.10)', background: 'transparent', color: '#5a564c', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center' }}><SendHorizontal size={19} strokeWidth={2} /></button>
+        <button onClick={(e) => { e.stopPropagation(); onSendOne(q.id); }} title="envoyer vers l'éditeur d'examen" style={{ alignSelf: 'stretch', flexShrink: 0, marginRight: -14, marginTop: -12, marginBottom: -12, paddingLeft: 28, paddingRight: 28, borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderLeft: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center' }}><SendHorizontal size={19} strokeWidth={2} /></button>
       </div>
     );
   }
@@ -811,7 +813,7 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14, gap: 12 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24' }}>Banque de questions</div>
+            <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>Banque de questions</div>
           </div>
           {activeFilterCount > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -820,67 +822,67 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
                 onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverZone('pos'); }}
                 onDragLeave={() => setDragOverZone(prev => prev === 'pos' ? null : prev)}
                 onDrop={e => handleDropOnZone(e, 'pos')}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '4px 6px', borderRadius: 8, border: dragOverZone === 'pos' ? '1px dashed rgba(122,153,104,0.6)' : '1px dashed transparent', background: dragOverZone === 'pos' ? 'rgba(122,153,104,0.10)' : 'transparent' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '4px 6px', borderRadius: 8, border: dragOverZone === 'pos' ? '1px dashed rgba(122,153,104,0.6)' : '1px dashed transparent', background: dragOverZone === 'pos' ? withAlpha(palette.greenSoft, 0.10) : 'transparent' }}
               >
-                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a' }}>inclure</span>
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint }}>inclure</span>
                 {positiveFilters.map(f => (
                   <ActiveChip key={f.key} filterKey={f.key} label={f.label} color={f.color} negative={false} onRemove={() => removeFilter(f)} setDraggedKey={setDraggedKey} />
                 ))}
-                {positiveFilters.length === 0 && <span style={{ fontSize: 11, color: '#bdb8ad', fontStyle: 'italic' }}>glisse un filtre ici</span>}
+                {positiveFilters.length === 0 && <span style={{ fontSize: 11, color: palette.inkGhost, fontStyle: 'italic' }}>glisse un filtre ici</span>}
               </div>
               <div
                 onDragEnter={e => e.preventDefault()}
                 onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverZone('neg'); }}
                 onDragLeave={() => setDragOverZone(prev => prev === 'neg' ? null : prev)}
                 onDrop={e => handleDropOnZone(e, 'neg')}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '4px 6px', borderRadius: 8, border: dragOverZone === 'neg' ? '1px dashed rgba(184,90,74,0.6)' : '1px dashed transparent', background: dragOverZone === 'neg' ? 'rgba(184,90,74,0.10)' : 'transparent' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '4px 6px', borderRadius: 8, border: dragOverZone === 'neg' ? '1px dashed rgba(184,90,74,0.6)' : '1px dashed transparent', background: dragOverZone === 'neg' ? withAlpha(palette.danger, 0.10) : 'transparent' }}
               >
-                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a' }}>exclure</span>
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint }}>exclure</span>
                 {negativeFilters.map(f => (
                   <ActiveChip key={f.key} filterKey={f.key} label={f.label} color={f.color} negative={true} onRemove={() => removeFilter(f)} setDraggedKey={setDraggedKey} />
                 ))}
-                {negativeFilters.length === 0 && <span style={{ fontSize: 11, color: '#bdb8ad', fontStyle: 'italic' }}>glisse un filtre ici</span>}
+                {negativeFilters.length === 0 && <span style={{ fontSize: 11, color: palette.inkGhost, fontStyle: 'italic' }}>glisse un filtre ici</span>}
               </div>
             </div>
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          <button onClick={onNewQuestion} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, background: '#2d2a24', color: '#f4f0e6', border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+          <button onClick={onNewQuestion} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, background: palette.ink, color: palette.parchment, border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
             <span style={{ fontSize: 15 }}>+</span> nouvelle question
           </button>
-          <button style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, background: '#a87a3a', color: '#f4f0e6', border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer', boxShadow: '0 6px 16px rgba(168,122,58,0.28)' }}>
+          <button style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, background: palette.amber, color: palette.parchment, border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer', boxShadow: `0 6px 16px ${withAlpha(palette.amber, 0.28)}` }}>
             <span style={{ fontSize: 14 }}>✦</span> générer par IA
           </button>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(45,42,36,0.08)', borderRadius: 9 }}>
-          <Search size={14} color="#7a766d" strokeWidth={1.75} />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: withAlpha(palette.paper, 0.7), border: `1px solid ${ink(0.08)}`, borderRadius: 9 }}>
+          <Search size={14} color={palette.inkSoft} strokeWidth={1.75} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="chercher une question…" style={{ flex: 1, fontSize: 12.5, color: '#3a352c', border: 'none', outline: 'none', background: 'transparent', fontFamily: 'inherit' }} />
         </div>
         <div ref={filterRef} style={{ position: 'relative' }}>
-          <button onClick={() => setFilterOpen(o => !o)} style={{ fontSize: 12, padding: '8px 14px', borderRadius: 9, border: activeFilterCount > 0 ? '1px solid rgba(168,122,58,0.45)' : '1px solid rgba(45,42,36,0.10)', background: activeFilterCount > 0 ? 'rgba(232,184,108,0.18)' : 'rgba(255,255,255,0.7)', color: activeFilterCount > 0 ? '#7a4d20' : '#5a564c', cursor: 'pointer', fontFamily: 'inherit' }}>
+          <button onClick={() => setFilterOpen(o => !o)} style={{ fontSize: 12, padding: '8px 14px', borderRadius: 9, border: activeFilterCount > 0 ? '1px solid rgba(168,122,58,0.45)' : `1px solid ${ink(0.10)}`, background: activeFilterCount > 0 ? withAlpha(palette.amberGlow, 0.18) : withAlpha(palette.paper, 0.7), color: activeFilterCount > 0 ? '#7a4d20' : palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>
             filtres{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''} ▾
           </button>
           {filterOpen && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 6, width: 300, background: '#fff', border: '1px solid rgba(45,42,36,0.10)', borderRadius: 12, boxShadow: '0 12px 32px rgba(45,42,36,0.16)', zIndex: 20, display: 'flex', flexDirection: 'column', maxHeight: 'min(520px, calc(100vh - 200px))' }}>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 6, width: 300, background: palette.paper, border: `1px solid ${ink(0.10)}`, borderRadius: 12, boxShadow: `0 12px 32px ${ink(0.16)}`, zIndex: 20, display: 'flex', flexDirection: 'column', maxHeight: 'min(520px, calc(100vh - 200px))' }}>
             <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px 10px', flexShrink: 0 }}>
-                <span style={{ fontSize: 13, fontWeight: 500, color: '#2d2a24' }}>filtres</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: palette.ink }}>filtres</span>
                 {activeFilterCount > 0 && (
-                  <button onClick={resetFilters} style={{ fontSize: 11.5, color: '#a87a3a', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>réinitialiser</button>
+                  <button onClick={resetFilters} style={{ fontSize: 11.5, color: palette.amber, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>réinitialiser</button>
                 )}
               </div>
               <div style={{ overflowY: 'auto', padding: '0 14px 14px', flex: 1, minHeight: 0 }}>
                 {/* Type de question — visible seulement si plusieurs types présents dans la banque */}
-                {allQTypes.length > 1 && <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a', marginBottom: 8 }}>type de question</div>}
+                {allQTypes.length > 1 && <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>type de question</div>}
                 {allQTypes.length > 1 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
                     {allQTypes.map(qt => {
                       const active = filterQTypes.includes(qt);
                       const labels: Record<string, string> = { textuel: 'Textuel', visuel: 'Visuel', audio: 'Audio' };
                       return (
-                        <button key={qt} onClick={() => toggleQTypeFilter(qt)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
+                        <button key={qt} onClick={() => toggleQTypeFilter(qt)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: active ? palette.ink : ink(0.04), color: active ? palette.parchment : '#3a352c' }}>
                           {labels[qt] ?? qt}
                         </button>
                       );
@@ -888,24 +890,24 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
                   </div>
                 )}
                 {/* Type de réponse */}
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a', marginBottom: 8 }}>type de réponse</div>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>type de réponse</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
                   {allTypes.map(t => {
                     const active = filterTypes.includes(t);
                     return (
-                      <button key={t} onClick={() => toggleTypeFilter(t)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
+                      <button key={t} onClick={() => toggleTypeFilter(t)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: active ? palette.ink : ink(0.04), color: active ? palette.parchment : '#3a352c' }}>
                         {RESPONSE_TYPE_LABELS[t] ?? t}
                       </button>
                     );
                   })}
                 </div>
                 {/* Statut */}
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a', marginBottom: 8 }}>statut</div>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>statut</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
                   {(() => {
                     const active = filterExams.includes(NEVER_EXAM_ID);
                     return (
-                      <button onClick={() => toggleExamFilter(NEVER_EXAM_ID)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
+                      <button onClick={() => toggleExamFilter(NEVER_EXAM_ID)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: active ? palette.ink : ink(0.04), color: active ? palette.parchment : '#3a352c' }}>
                         Nouveau
                       </button>
                     );
@@ -913,24 +915,24 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
                   {(() => {
                     const active = filterAnswer.includes(NO_ANSWER_ID);
                     return (
-                      <button onClick={() => toggleAnswerFilter(NO_ANSWER_ID)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
+                      <button onClick={() => toggleAnswerFilter(NO_ANSWER_ID)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: active ? palette.ink : ink(0.04), color: active ? palette.parchment : '#3a352c' }}>
                         Incomplète
                       </button>
                     );
                   })()}
                 </div>
                 {/* Libellés */}
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a', marginBottom: 8 }}>libellés</div>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>libellés</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
                   {pools.map(l => {
                     const active = filterPools.includes(l.id);
                     const displayName = l.name.length > 18 ? l.name.slice(0, 18) + '…' : l.name;
                     return (
                       <span key={l.id} style={{ position: 'relative', display: 'inline-flex' }}>
-                        <button onClick={() => togglePoolFilter(l.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
+                        <button onClick={() => togglePoolFilter(l.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: active ? palette.ink : ink(0.04), color: active ? palette.parchment : '#3a352c' }}>
                           <span style={{ width: 7, height: 7, borderRadius: '50%', background: l.color, display: 'inline-block' }} />{displayName}
                         </button>
-                        <button onClick={() => editingLabel === l.id ? setEditingLabel(null) : openEditLabel(l)} title="modifier le libellé" style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', border: '1px solid rgba(45,42,36,0.15)', background: '#fff', color: '#9a948a', cursor: 'pointer', fontSize: 10, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <button onClick={() => editingLabel === l.id ? setEditingLabel(null) : openEditLabel(l)} title="modifier le libellé" style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', border: `1px solid ${ink(0.15)}`, background: palette.paper, color: palette.inkFaint, cursor: 'pointer', fontSize: 10, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <svg width="7" height="7" viewBox="0 0 14 14"><path d="M9.8 1.6l2.6 2.6L4.8 11.8l-3 .6.6-3z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" strokeLinecap="round"/></svg>
                         </button>
                       </span>
@@ -938,21 +940,21 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
                   })}
                   {creatingLabel ? (
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <input autoFocus value={newLabelName} onChange={e => setNewLabelName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addLabel(); if (e.key === 'Escape') { setCreatingLabel(false); setNewLabelName(''); } }} placeholder="nom du libellé…" style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.18)', outline: 'none', fontFamily: 'inherit', width: 110 }} />
-                      <button onClick={addLabel} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.10)', background: '#2d2a24', color: '#f4f0e6', cursor: 'pointer', fontFamily: 'inherit' }}>ajouter</button>
-                      <button onClick={() => { setCreatingLabel(false); setNewLabelName(''); }} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.10)', background: 'transparent', color: '#9a948a', cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
+                      <input autoFocus value={newLabelName} onChange={e => setNewLabelName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addLabel(); if (e.key === 'Escape') { setCreatingLabel(false); setNewLabelName(''); } }} placeholder="nom du libellé…" style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, border: `1px solid ${ink(0.18)}`, outline: 'none', fontFamily: 'inherit', width: 110 }} />
+                      <button onClick={addLabel} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: palette.ink, color: palette.parchment, cursor: 'pointer', fontFamily: 'inherit' }}>ajouter</button>
+                      <button onClick={() => { setCreatingLabel(false); setNewLabelName(''); }} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
                     </span>
                   ) : (
-                    <button onClick={() => setCreatingLabel(true)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: '1px dashed rgba(45,42,36,0.20)', background: 'transparent', color: '#7a766d', cursor: 'pointer', fontFamily: 'inherit' }}>+ libellé</button>
+                    <button onClick={() => setCreatingLabel(true)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px dashed ${ink(0.20)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>+ libellé</button>
                   )}
                 </div>
                 {/* Difficulté */}
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#9a948a', marginBottom: 8 }}>difficulté</div>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>difficulté</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {[1, 2, 3, 4, 5].map(d => {
                     const active = filterDiffs.includes(d);
                     return (
-                      <button key={d} onClick={() => toggleDiffFilter(d)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
+                      <button key={d} onClick={() => toggleDiffFilter(d)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: active ? palette.ink : ink(0.04), color: active ? palette.parchment : '#3a352c' }}>
                         <DiffDots level={d} />{d}/5
                       </button>
                     );
@@ -960,7 +962,7 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
                   {(() => {
                     const active = filterDiffs.includes(NO_DIFFICULTY);
                     return (
-                      <button onClick={() => toggleDiffFilter(NO_DIFFICULTY)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : '1px solid rgba(45,42,36,0.10)', background: active ? '#2d2a24' : 'rgba(45,42,36,0.04)', color: active ? '#f4f0e6' : '#3a352c' }}>
+                      <button onClick={() => toggleDiffFilter(NO_DIFFICULTY)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: active ? palette.ink : ink(0.04), color: active ? palette.parchment : '#3a352c' }}>
                         <DiffDots level={0} />sans difficulté
                       </button>
                     );
@@ -973,18 +975,18 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
                 return (
                   <>
                   <div onClick={() => setEditingLabel(null)} style={{ position: 'absolute', inset: 0, zIndex: 29, background: 'rgba(252,249,242,0.7)', borderRadius: 12 }} />
-                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 30, width: 190, background: '#fff', border: '1px solid rgba(45,42,36,0.10)', borderRadius: 12, boxShadow: '0 12px 32px rgba(45,42,36,0.16)', padding: 10 }}>
-                    <input autoFocus value={editLabelName} onChange={e => setEditLabelName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveEditLabel(); if (e.key === 'Escape') setEditingLabel(null); }} style={{ width: '100%', fontSize: 11.5, padding: '6px 8px', borderRadius: 8, border: '1px solid rgba(45,42,36,0.14)', outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box' as const }} />
+                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 30, width: 190, background: palette.paper, border: `1px solid ${ink(0.10)}`, borderRadius: 12, boxShadow: `0 12px 32px ${ink(0.16)}`, padding: 10 }}>
+                    <input autoFocus value={editLabelName} onChange={e => setEditLabelName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveEditLabel(); if (e.key === 'Escape') setEditingLabel(null); }} style={{ width: '100%', fontSize: 11.5, padding: '6px 8px', borderRadius: 8, border: `1px solid ${ink(0.14)}`, outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box' as const }} />
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
                       {LABEL_COLORS.map(c => (
-                        <button key={c} onClick={() => setEditLabelColor(c)} title={c} style={{ width: 16, height: 16, borderRadius: '50%', background: c, border: editLabelColor === c ? '2px solid #2d2a24' : '1px solid rgba(45,42,36,0.15)', cursor: 'pointer', padding: 0 }} />
+                        <button key={c} onClick={() => setEditLabelColor(c)} title={c} style={{ width: 16, height: 16, borderRadius: '50%', background: c, border: editLabelColor === c ? '2px solid #2d2a24' : `1px solid ${ink(0.15)}`, cursor: 'pointer', padding: 0 }} />
                       ))}
                     </div>
                     <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                      <button onClick={saveEditLabel} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: 'none', background: '#2d2a24', color: '#f4f0e6', cursor: 'pointer', fontFamily: 'inherit' }}>enregistrer</button>
-                      <button onClick={() => setEditingLabel(null)} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: '1px solid rgba(45,42,36,0.10)', background: 'transparent', color: '#7a766d', cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
+                      <button onClick={saveEditLabel} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: 'none', background: palette.ink, color: palette.parchment, cursor: 'pointer', fontFamily: 'inherit' }}>enregistrer</button>
+                      <button onClick={() => setEditingLabel(null)} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
                     </div>
-                    <button onClick={() => setPendingDeleteLabel(label.id)} style={{ width: '100%', fontSize: 11, padding: '5px 8px', borderRadius: 8, border: '1px solid rgba(184,90,74,0.30)', background: 'rgba(184,90,74,0.08)', color: '#b85a4a', cursor: 'pointer', fontFamily: 'inherit' }}>supprimer le libellé</button>
+                    <button onClick={() => setPendingDeleteLabel(label.id)} style={{ width: '100%', fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${withAlpha(palette.danger, 0.30)}`, background: withAlpha(palette.danger, 0.08), color: palette.danger, cursor: 'pointer', fontFamily: 'inherit' }}>supprimer le libellé</button>
                   </div>
                   </>
                 );
@@ -993,8 +995,8 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', borderRadius: 9, border: '1px solid rgba(45,42,36,0.10)', background: 'rgba(255,255,255,0.7)', overflow: 'hidden' }}>
-          <button type="button" title={sortDir === 'asc' ? 'ordre croissant' : 'ordre décroissant'} onClick={() => setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')} style={{ width: 30, height: 30, border: 'none', borderRight: '1px solid rgba(45,42,36,0.10)', background: 'transparent', color: '#5a564c', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.7), overflow: 'hidden' }}>
+          <button type="button" title={sortDir === 'asc' ? 'ordre croissant' : 'ordre décroissant'} onClick={() => setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')} style={{ width: 30, height: 30, border: 'none', borderRight: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
             <svg width="13" height="13" viewBox="0 0 14 14">
               {sortDir === 'asc' ? (
                 <path d="M7 12V2M3 6l4-4 4 4" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -1003,7 +1005,7 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
               )}
             </svg>
           </button>
-          <select value={sortBy} onChange={e => changeSortBy(e.target.value as SortBy)} style={{ fontSize: 12, padding: '8px 10px', border: 'none', background: 'transparent', color: '#5a564c', cursor: 'pointer', fontFamily: 'inherit', outline: 'none' }}>
+          <select value={sortBy} onChange={e => changeSortBy(e.target.value as SortBy)} style={{ fontSize: 12, padding: '8px 10px', border: 'none', background: 'transparent', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit', outline: 'none' }}>
             <option value="recent">trier · date d'ajout</option>
             <option value="name">trier · nom</option>
             <option value="type">trier · type</option>
@@ -1014,12 +1016,12 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {filtered.map(q => (
-          <div key={q.id} style={{ border: '1px solid rgba(45,42,36,0.08)', background: 'rgba(255,255,255,0.8)', borderRadius: 10, overflow: 'hidden' }}>
+          <div key={q.id} style={{ border: `1px solid ${ink(0.08)}`, background: withAlpha(palette.paper, 0.8), borderRadius: 10, overflow: 'hidden' }}>
             {renderQuestionBody(q)}
           </div>
         ))}
         {filtered.length === 0 && (
-          <div style={{ fontFamily: "'Caveat', cursive", fontSize: 16, color: '#a87a3a', padding: '20px 0', textAlign: 'center' as const }}>« aucune question ne correspond à ces filtres »</div>
+          <div style={{ fontFamily: "'Caveat', cursive", fontSize: 16, color: palette.amber, padding: '20px 0', textAlign: 'center' as const }}>« aucune question ne correspond à ces filtres »</div>
         )}
       </div>
       {pendingDeleteQuestion && (() => {
@@ -1036,9 +1038,9 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
             onConfirm={() => { onDeleteQuestion(q); setPendingDeleteQuestion(null); }}
           >
             {affectedExams.length > 0 && (
-              <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 9, background: 'rgba(184,90,74,0.08)', textAlign: 'left' as const }}>
-                <div style={{ fontSize: 11.5, color: '#b85a4a', marginBottom: 6 }}>Elle sera retirée des examens suivants :</div>
-                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#5a564c' }}>
+              <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 9, background: withAlpha(palette.danger, 0.08), textAlign: 'left' as const }}>
+                <div style={{ fontSize: 11.5, color: palette.danger, marginBottom: 6 }}>Elle sera retirée des examens suivants :</div>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: palette.inkMuted }}>
                   {affectedExams.map(e => <li key={e.id}>{e.title}</li>)}
                 </ul>
               </div>
@@ -1291,71 +1293,71 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
 
   // repères visuels de pagination A4 — un bloc de question n'est jamais coupé entre 2 pages
   function pageLabel(n: number) {
-    return <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase' as const, color: '#bdb8ad', marginBottom: 10 }}>page {n} / {pageCount}</div>;
+    return <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase' as const, color: palette.inkGhost, marginBottom: 10 }}>page {n} / {pageCount}</div>;
   }
   function pageBreakSeparator(gi: number) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 20px' }}>
-        <div style={{ flex: 1, borderTop: '1px dashed rgba(45,42,36,0.15)' }} />
-        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase' as const, color: '#bdb8ad', whiteSpace: 'nowrap' as const }}>page {pageNumberOf(gi)} / {pageCount}</span>
-        <div style={{ flex: 1, borderTop: '1px dashed rgba(45,42,36,0.15)' }} />
+        <div style={{ flex: 1, borderTop: `1px dashed ${ink(0.15)}` }} />
+        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase' as const, color: palette.inkGhost, whiteSpace: 'nowrap' as const }}>page {pageNumberOf(gi)} / {pageCount}</span>
+        <div style={{ flex: 1, borderTop: `1px dashed ${ink(0.15)}` }} />
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '20px 12px 24px 24px', height: '100%', boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column', background: '#fbf7ef' }}>
+    <div style={{ padding: '20px 12px 24px 24px', height: '100%', boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column', background: palette.creamAlt }}>
       <div style={{ marginBottom: 14, flexShrink: 0, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div>
-          <div style={{ fontSize: 17, fontWeight: 500, color: '#2d2a24' }}>Éditeur d&apos;examen</div>
-          <div style={{ fontSize: 12.5, color: '#7a766d' }}>les questions s&apos;enchaînent dans cet ordre — glisse pour réorganiser</div>
+          <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>Éditeur d&apos;examen</div>
+          <div style={{ fontSize: 12.5, color: palette.inkSoft }}>les questions s&apos;enchaînent dans cet ordre — glisse pour réorganiser</div>
         </div>
-        <button onClick={() => setConfirmClearOpen(true)} style={{ flexShrink: 0, fontSize: 12, padding: '8px 14px', borderRadius: 9, border: '1px solid rgba(184,90,74,0.28)', background: 'rgba(184,90,74,0.08)', color: '#b85a4a', cursor: 'pointer', fontFamily: 'inherit' }}>
+        <button onClick={() => setConfirmClearOpen(true)} style={{ flexShrink: 0, fontSize: 12, padding: '8px 14px', borderRadius: 9, border: `1px solid ${withAlpha(palette.danger, 0.28)}`, background: withAlpha(palette.danger, 0.08), color: palette.danger, cursor: 'pointer', fontFamily: 'inherit' }}>
           {editing ? 'annuler les modifications' : "réinitialiser l'éditeur"}
         </button>
       </div>
       {editing && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: 'rgba(232,184,108,0.18)', border: '1px solid rgba(168,122,58,0.35)', marginBottom: 14, flexShrink: 0 }}>
-          <span style={{ fontSize: 14, color: '#a87a3a' }}>✎</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: withAlpha(palette.amberGlow, 0.18), border: `1px solid ${withAlpha(palette.amber, 0.35)}`, marginBottom: 14, flexShrink: 0 }}>
+          <span style={{ fontSize: 14, color: palette.amber }}>✎</span>
           <div style={{ flex: 1, fontSize: 12.5, color: '#3a352c' }}>Modification de <b style={{ fontWeight: 600 }}>{editing.title}</b></div>
           <button onClick={onCancelEdit} style={{ fontSize: 11.5, color: '#7a4d20', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>annuler ✕</button>
         </div>
       )}
       <div style={{ display: 'flex', gap: 16, alignItems: 'stretch', flex: 1, minHeight: 0 }}>
-        <div style={{ width: 230, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, borderRight: '1px solid rgba(45,42,36,0.08)', paddingRight: 16, overflowY: 'auto', minHeight: 0 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: '#7a766d' }}>questions envoyées</div>
-          <div style={{ fontSize: 11, color: '#9a948a', marginBottom: 4 }}>coche pour ajouter à l&apos;examen</div>
-          {available.length === 0 && <div style={{ fontFamily: "'Caveat', cursive", fontSize: 15, color: '#a87a3a' }}>« envoie des questions depuis la banque »</div>}
+        <div style={{ width: 230, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, borderRight: `1px solid ${ink(0.08)}`, paddingRight: 16, overflowY: 'auto', minHeight: 0 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft }}>questions envoyées</div>
+          <div style={{ fontSize: 11, color: palette.inkFaint, marginBottom: 4 }}>coche pour ajouter à l&apos;examen</div>
+          {available.length === 0 && <div style={{ fontFamily: "'Caveat', cursive", fontSize: 15, color: palette.amber }}>« envoie des questions depuis la banque »</div>}
           {available.map(q => {
             const included = includedIds.includes(q.id);
             const incomplete = hasNoAnswer(q) || !q.content.trim();
             return (
-              <div key={q.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 9px', borderRadius: 8, background: included ? 'rgba(79,107,64,0.08)' : 'rgba(255,255,255,0.7)', border: '1px solid rgba(45,42,36,0.06)' }}>
-                <input type="checkbox" checked={included} onChange={() => toggleAvailable(q.id)} style={{ marginTop: 2, flexShrink: 0, accentColor: '#4f6b40' }} />
+              <div key={q.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 9px', borderRadius: 8, background: included ? withAlpha(palette.green, 0.08) : withAlpha(palette.paper, 0.7), border: `1px solid ${ink(0.06)}` }}>
+                <input type="checkbox" checked={included} onChange={() => toggleAvailable(q.id)} style={{ marginTop: 2, flexShrink: 0, accentColor: palette.green }} />
                 {incomplete && (
-                  <button onClick={() => onOpenQuestion(q.id)} title="question incomplète - cliquer pour compléter" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 17, height: 17, borderRadius: '50%', border: '1px solid rgba(184,90,74,0.35)', background: 'rgba(184,90,74,0.10)', color: '#b85a4a', cursor: 'pointer', padding: 0, flexShrink: 0, alignSelf: 'flex-start' }}><AlertTriangle size={10} strokeWidth={2} /></button>
+                  <button onClick={() => onOpenQuestion(q.id)} title="question incomplète - cliquer pour compléter" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 17, height: 17, borderRadius: '50%', border: `1px solid ${withAlpha(palette.danger, 0.35)}`, background: withAlpha(palette.danger, 0.10), color: palette.danger, cursor: 'pointer', padding: 0, flexShrink: 0, alignSelf: 'flex-start' }}><AlertTriangle size={10} strokeWidth={2} /></button>
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, color: '#3a352c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.title.trim() || q.content || '(sans énoncé)'}</div>
                   {q.parts.length > 0 && <span style={{ fontSize: 10.5, color: '#7a4d20' }}>{q.parts.length + 1} parties</span>}
                 </div>
-                <span onClick={() => requestRemoveFromDraft(q.id)} title="retirer de la liste" style={{ fontSize: 14, color: '#b85a4a', cursor: 'pointer', flexShrink: 0 }}>×</span>
+                <span onClick={() => requestRemoveFromDraft(q.id)} title="retirer de la liste" style={{ fontSize: 14, color: palette.danger, cursor: 'pointer', flexShrink: 0 }}>×</span>
               </div>
             );
           })}
         </div>
 
         <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', minHeight: 0, paddingRight: 24, boxSizing: 'border-box' as const }}>
-          <div style={{ background: 'rgba(45,42,36,0.03)', borderRadius: 10, padding: 12, marginBottom: 16 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: '#7a766d', marginBottom: 8 }}>paramètres</div>
+          <div style={{ background: ink(0.03), borderRadius: 10, padding: 12, marginBottom: 16 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft, marginBottom: 8 }}>paramètres</div>
 
-            <div style={{ fontSize: 11, color: '#5a564c', marginBottom: 6 }}>intitulé</div>
+            <div style={{ fontSize: 11, color: palette.inkMuted, marginBottom: 6 }}>intitulé</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <input value={config.title} onChange={e => patchConfig({ title: e.target.value })} style={{ flex: 1, fontSize: 15, fontWeight: 500, color: '#2d2a24', border: '1px solid rgba(45,42,36,0.12)', borderRadius: 9, padding: '10px 12px', background: '#fff', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
+              <input value={config.title} onChange={e => patchConfig({ title: e.target.value })} style={{ flex: 1, fontSize: 15, fontWeight: 500, color: palette.ink, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '10px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
               <button
                 type="button"
                 onClick={() => patchConfig({ titleIncluded: !config.titleIncluded })}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '9px 14px', borderRadius: 999, border: config.titleIncluded ? '1px solid rgba(79,107,64,0.35)' : '1px solid rgba(45,42,36,0.14)', background: config.titleIncluded ? 'rgba(79,107,64,0.14)' : 'transparent', color: config.titleIncluded ? '#4f6b40' : '#9a948a', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' as const }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '9px 14px', borderRadius: 999, border: config.titleIncluded ? '1px solid rgba(79,107,64,0.35)' : `1px solid ${ink(0.14)}`, background: config.titleIncluded ? withAlpha(palette.green, 0.14) : 'transparent', color: config.titleIncluded ? palette.green : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' as const }}
               >
                 {config.titleIncluded && <Check size={13} strokeWidth={2.5} />}
                 afficher
@@ -1363,22 +1365,22 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <div style={{ fontSize: 11, color: '#5a564c' }}>présentation</div>
+              <div style={{ fontSize: 11, color: palette.inkMuted }}>présentation</div>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button
                   type="button"
                   onClick={() => setConfirmApplyFavoriteOpen(true)}
                   title="appliquer la présentation favorite"
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '5px 10px', borderRadius: 999, border: '1px solid rgba(168,122,58,0.30)', background: 'rgba(232,184,108,0.14)', color: '#7a4d20', cursor: 'pointer', fontFamily: 'inherit' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '5px 10px', borderRadius: 999, border: `1px solid ${withAlpha(palette.amber, 0.30)}`, background: withAlpha(palette.amberGlow, 0.14), color: '#7a4d20', cursor: 'pointer', fontFamily: 'inherit' }}
                 >
-                  <Star size={11.5} strokeWidth={2} fill="#a87a3a" color="#a87a3a" />
+                  <Star size={11.5} strokeWidth={2} fill={palette.amber} color={palette.amber} />
                   favori
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmSaveFavoriteOpen(true)}
                   title="remplacer le favori par la présentation actuelle"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: '1px solid rgba(45,42,36,0.12)', background: 'transparent', color: '#7a766d', cursor: 'pointer', padding: 0 }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: `1px solid ${ink(0.12)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', padding: 0 }}
                 >
                   <RefreshCw size={12} strokeWidth={2} />
                 </button>
@@ -1390,9 +1392,9 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                   key={side}
                   onDragOver={e => { e.preventDefault(); if (draggingIdentityKey && sideOfItem(draggingIdentityKey) === side) moveIdentity(draggingIdentityKey, side); }}
                   onDrop={e => { e.preventDefault(); if (draggingIdentityKey) moveIdentity(draggingIdentityKey, side); }}
-                  style={{ flex: 1, minHeight: 44, border: '1px dashed rgba(45,42,36,0.18)', borderRadius: 9, padding: 8, display: 'flex', flexWrap: 'wrap' as const, alignContent: 'flex-start' as const, gap: 6 }}
+                  style={{ flex: 1, minHeight: 44, border: `1px dashed ${ink(0.18)}`, borderRadius: 9, padding: 8, display: 'flex', flexWrap: 'wrap' as const, alignContent: 'flex-start' as const, gap: 6 }}
                 >
-                  <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em', width: '100%' }}>{side === 'left' ? 'à gauche' : 'à droite'}</div>
+                  <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em', width: '100%' }}>{side === 'left' ? 'à gauche' : 'à droite'}</div>
                   {identityOrder.filter(id => sideOfItem(id) === side).map(id => {
                     const removable = !IDENTITY_KEY_SET.has(id);
                     return (
@@ -1403,12 +1405,12 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                         onDragEnd={() => setDraggingIdentityKey(null)}
                         onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (draggingIdentityKey && draggingIdentityKey !== id && sideOfItem(draggingIdentityKey) === side) moveIdentity(draggingIdentityKey, side, id); }}
                         onDrop={e => { e.preventDefault(); e.stopPropagation(); if (draggingIdentityKey && draggingIdentityKey !== id) moveIdentity(draggingIdentityKey, side, id); }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, padding: removable ? '5px 6px 5px 11px' : '5px 11px', borderRadius: 999, border: '1px solid rgba(79,107,64,0.35)', background: 'rgba(79,107,64,0.14)', color: '#4f6b40', cursor: 'grab', opacity: draggingIdentityKey === id ? 0.4 : 1 }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, padding: removable ? '5px 6px 5px 11px' : '5px 11px', borderRadius: 999, border: `1px solid ${withAlpha(palette.green, 0.35)}`, background: withAlpha(palette.green, 0.14), color: palette.green, cursor: 'grab', opacity: draggingIdentityKey === id ? 0.4 : 1 }}
                       >
-                        <span style={{ color: '#9a948a', fontSize: 11 }}>⠿</span>
+                        <span style={{ color: palette.inkFaint, fontSize: 11 }}>⠿</span>
                         {labelOfItem(id)}
                         {removable && (
-                          <button onClick={() => removeCustomField(id)} style={{ border: 'none', background: 'none', color: '#4f6b40', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: 0.7 }}>×</button>
+                          <button onClick={() => removeCustomField(id)} style={{ border: 'none', background: 'none', color: palette.green, cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: 0.7 }}>×</button>
                         )}
                       </span>
                     );
@@ -1419,9 +1421,9 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
             <div
               onDragOver={e => { e.preventDefault(); if (draggingIdentityKey && sideOfItem(draggingIdentityKey) === 'hidden') moveIdentity(draggingIdentityKey, 'hidden'); }}
               onDrop={e => { e.preventDefault(); if (draggingIdentityKey) moveIdentity(draggingIdentityKey, 'hidden'); }}
-              style={{ minHeight: 36, border: '1px dashed rgba(45,42,36,0.14)', borderRadius: 9, padding: 8, display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 6, marginBottom: 14 }}
+              style={{ minHeight: 36, border: `1px dashed ${ink(0.14)}`, borderRadius: 9, padding: 8, display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 6, marginBottom: 14 }}
             >
-              <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em', width: '100%' }}>non affiché</div>
+              <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em', width: '100%' }}>non affiché</div>
               {identityOrder.filter(id => sideOfItem(id) === 'hidden').map(id => {
                 const removable = !IDENTITY_KEY_SET.has(id);
                 return (
@@ -1432,12 +1434,12 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                     onDragEnd={() => setDraggingIdentityKey(null)}
                     onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (draggingIdentityKey && draggingIdentityKey !== id && sideOfItem(draggingIdentityKey) === 'hidden') moveIdentity(draggingIdentityKey, 'hidden', id); }}
                     onDrop={e => { e.preventDefault(); e.stopPropagation(); if (draggingIdentityKey && draggingIdentityKey !== id) moveIdentity(draggingIdentityKey, 'hidden', id); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, padding: removable ? '5px 6px 5px 11px' : '5px 11px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.14)', background: 'transparent', color: '#9a948a', cursor: 'grab', opacity: draggingIdentityKey === id ? 0.4 : 1 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, padding: removable ? '5px 6px 5px 11px' : '5px 11px', borderRadius: 999, border: `1px solid ${ink(0.14)}`, background: 'transparent', color: palette.inkFaint, cursor: 'grab', opacity: draggingIdentityKey === id ? 0.4 : 1 }}
                   >
-                    <span style={{ color: '#9a948a', fontSize: 11 }}>⠿</span>
+                    <span style={{ color: palette.inkFaint, fontSize: 11 }}>⠿</span>
                     {labelOfItem(id)}
                     {removable && (
-                      <button onClick={() => removeCustomField(id)} style={{ border: 'none', background: 'none', color: '#9a948a', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: 0.7 }}>×</button>
+                      <button onClick={() => removeCustomField(id)} style={{ border: 'none', background: 'none', color: palette.inkFaint, cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: 0.7 }}>×</button>
                     )}
                   </span>
                 );
@@ -1450,47 +1452,47 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                     onChange={e => setNewFieldName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomField(); } if (e.key === 'Escape') { setCreatingCustomField(false); setNewFieldName(''); } }}
                     placeholder="nom de la pilule…"
-                    style={{ fontSize: 11.5, padding: '5px 9px', borderRadius: 999, border: '1px solid rgba(45,42,36,0.18)', background: '#fff', fontFamily: 'inherit', outline: 'none', width: 140 }}
+                    style={{ fontSize: 11.5, padding: '5px 9px', borderRadius: 999, border: `1px solid ${ink(0.18)}`, background: palette.paper, fontFamily: 'inherit', outline: 'none', width: 140 }}
                   />
-                  <button type="button" onClick={addCustomField} style={{ fontSize: 11.5, padding: '5px 10px', borderRadius: 999, border: 'none', background: '#4f6b40', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>ajouter</button>
-                  <button type="button" onClick={() => { setCreatingCustomField(false); setNewFieldName(''); }} style={{ fontSize: 11.5, padding: '5px 8px', borderRadius: 999, border: 'none', background: 'none', color: '#9a948a', cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
+                  <button type="button" onClick={addCustomField} style={{ fontSize: 11.5, padding: '5px 10px', borderRadius: 999, border: 'none', background: palette.green, color: palette.paper, cursor: 'pointer', fontFamily: 'inherit' }}>ajouter</button>
+                  <button type="button" onClick={() => { setCreatingCustomField(false); setNewFieldName(''); }} style={{ fontSize: 11.5, padding: '5px 8px', borderRadius: 999, border: 'none', background: 'none', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
                 </span>
               ) : (
-                <button type="button" onClick={() => setCreatingCustomField(true)} style={{ fontSize: 11.5, padding: '5px 11px', borderRadius: 999, border: '1px dashed rgba(45,42,36,0.25)', background: 'transparent', color: '#5a564c', cursor: 'pointer', fontFamily: 'inherit' }}>+ pilule personnalisée</button>
+                <button type="button" onClick={() => setCreatingCustomField(true)} style={{ fontSize: 11.5, padding: '5px 11px', borderRadius: 999, border: `1px dashed ${ink(0.25)}`, background: 'transparent', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>+ pilule personnalisée</button>
               )}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-              <div style={{ background: 'rgba(45,42,36,0.04)', borderRadius: 9, padding: '10px 12px' }}>
+              <div style={{ background: ink(0.04), borderRadius: 9, padding: '10px 12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>parties</div>
-                  <button type="button" onClick={addSection} style={{ fontSize: 13, fontWeight: 500, color: '#4f6b40', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>+ partie</button>
+                  <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>parties</div>
+                  <button type="button" onClick={addSection} style={{ fontSize: 13, fontWeight: 500, color: palette.green, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>+ partie</button>
                 </div>
-                <div style={{ fontSize: 14, color: '#2d2a24', fontWeight: 500, marginTop: 1 }}>{config.sections.length}</div>
+                <div style={{ fontSize: 14, color: palette.ink, fontWeight: 500, marginTop: 1 }}>{config.sections.length}</div>
               </div>
-              <div style={{ background: 'rgba(45,42,36,0.04)', borderRadius: 9, padding: '10px 12px' }}>
+              <div style={{ background: ink(0.04), borderRadius: 9, padding: '10px 12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>questions</div>
-                  <button type="button" onClick={addPageBreak} title="ajouter un saut de page" style={{ fontSize: 13, fontWeight: 500, color: '#4f6b40', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>+ saut de page</button>
+                  <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>questions</div>
+                  <button type="button" onClick={addPageBreak} title="ajouter un saut de page" style={{ fontSize: 13, fontWeight: 500, color: palette.green, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>+ saut de page</button>
                 </div>
-                <div style={{ fontSize: 14, color: '#2d2a24', fontWeight: 500, marginTop: 1 }}>{includedIds.length}</div>
+                <div style={{ fontSize: 14, color: palette.ink, fontWeight: 500, marginTop: 1 }}>{includedIds.length}</div>
               </div>
-              <div style={{ background: 'rgba(45,42,36,0.04)', borderRadius: 9, padding: '10px 12px' }}>
-                <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>barème</div>
-                <div style={{ fontSize: 14, color: '#2d2a24', fontWeight: 500, marginTop: 1 }}>{totalPoints} pt{totalPoints === 1 ? '' : 's'}</div>
+              <div style={{ background: ink(0.04), borderRadius: 9, padding: '10px 12px' }}>
+                <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>barème</div>
+                <div style={{ fontSize: 14, color: palette.ink, fontWeight: 500, marginTop: 1 }}>{totalPoints} pt{totalPoints === 1 ? '' : 's'}</div>
               </div>
-              <div style={{ background: 'rgba(45,42,36,0.04)', borderRadius: 9, padding: '10px 12px' }}>
-                <div style={{ fontSize: 9.5, color: '#9a948a', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>durée</div>
+              <div style={{ background: ink(0.04), borderRadius: 9, padding: '10px 12px' }}>
+                <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>durée</div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 1 }}>
-                  <input type="number" min={5} step={5} value={config.durationMinutes} onChange={e => patchConfig({ durationMinutes: Math.max(0, Number(e.target.value) || 0) })} style={{ width: 50, fontSize: 14, color: '#2d2a24', fontWeight: 500, border: 'none', background: 'transparent', fontFamily: 'inherit', padding: 0, outline: 'none' }} />
-                  <span style={{ fontSize: 11, color: '#9a948a' }}>min · {formatDuration(config.durationMinutes)}</span>
+                  <input type="number" min={5} step={5} value={config.durationMinutes} onChange={e => patchConfig({ durationMinutes: Math.max(0, Number(e.target.value) || 0) })} style={{ width: 50, fontSize: 14, color: palette.ink, fontWeight: 500, border: 'none', background: 'transparent', fontFamily: 'inherit', padding: 0, outline: 'none' }} />
+                  <span style={{ fontSize: 11, color: palette.inkFaint }}>min · {formatDuration(config.durationMinutes)}</span>
                 </div>
               </div>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: '#7a766d' }}>déroulé de l&apos;examen</div>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft }}>déroulé de l&apos;examen</div>
           </div>
 
           {(() => {
@@ -1539,7 +1541,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
             chunks.push(current);
 
             const incompleteIcon = (id: string) => (
-              <button onClick={() => onOpenQuestion(id)} title="question incomplète - cliquer pour compléter" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: '1px solid rgba(184,90,74,0.35)', background: 'rgba(184,90,74,0.10)', color: '#b85a4a', cursor: 'pointer', padding: 0, flexShrink: 0 }}><AlertTriangle size={13} strokeWidth={2} /></button>
+              <button onClick={() => onOpenQuestion(id)} title="question incomplète - cliquer pour compléter" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: `1px solid ${withAlpha(palette.danger, 0.35)}`, background: withAlpha(palette.danger, 0.10), color: palette.danger, cursor: 'pointer', padding: 0, flexShrink: 0 }}><AlertTriangle size={13} strokeWidth={2} /></button>
             );
 
             const COLUMN_GAP = 10; // espace entre les 3 colonnes (gauche/feuille/droite), distinct de A4_ROW_GAP
@@ -1596,7 +1598,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                     </div>
 
                     {/* colonne centrale : la feuille A4 elle-même (fond blanc, bordure, ombre) */}
-                    <div style={{ width: A4_BLOCK_WIDTH, height: A4_PAGE_HEIGHT, flexShrink: 0, background: '#fff', border: '1px solid rgba(45,42,36,0.08)', borderRadius: 4, boxShadow: '0 2px 14px rgba(45,42,36,0.06)', overflow: 'hidden' }}>
+                    <div style={{ width: A4_BLOCK_WIDTH, height: A4_PAGE_HEIGHT, flexShrink: 0, background: palette.paper, border: `1px solid ${ink(0.08)}`, borderRadius: 4, boxShadow: `0 2px 14px ${ink(0.06)}`, overflow: 'hidden' }}>
                       <div style={{ height: A4_MARGIN_PX, flexShrink: 0 }} />
                       {chunkIdx === 0 && (identityBlockHeight > 0 || titleBlockHeight > 0) && (
                         <div ref={el => { qRefs.current['__page1_header__'] = el; }}>
@@ -1606,7 +1608,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                                 {identityLeftKeys.map(key => (
                                   <div key={key} style={{ display: 'flex', alignItems: 'baseline', gap: 6, width: 220 }}>
                                     <span>{labelOfItem(key)}</span>
-                                    <span style={{ flex: 1, borderBottom: '1px solid rgba(45,42,36,0.3)' }} />
+                                    <span style={{ flex: 1, borderBottom: `1px solid ${ink(0.3)}` }} />
                                   </div>
                                 ))}
                               </div>
@@ -1614,14 +1616,14 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                                 {identityRightKeys.map(key => (
                                   <div key={key} style={{ display: 'flex', alignItems: 'baseline', gap: 6, width: 160 }}>
                                     <span>{labelOfItem(key)}</span>
-                                    <span style={{ flex: 1, borderBottom: '1px solid rgba(45,42,36,0.3)' }} />
+                                    <span style={{ flex: 1, borderBottom: `1px solid ${ink(0.3)}` }} />
                                   </div>
                                 ))}
                               </div>
                             </div>
                           )}
                           {titleBlockHeight > 0 && (
-                            <div style={{ padding: '28px 34px 90px', textAlign: 'center' as const, fontSize: 24, fontWeight: 600, color: '#2d2a24' }}>
+                            <div style={{ padding: '28px 34px 90px', textAlign: 'center' as const, fontSize: 24, fontWeight: 600, color: palette.ink }}>
                               {config.title}
                             </div>
                           )}
@@ -1637,9 +1639,9 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                                 onChange={e => updateSection(row.sectionIdx, { title: e.target.value })}
                                 onFocus={() => setFocusedSectionIdx(row.sectionIdx)}
                                 onBlur={() => setFocusedSectionIdx(null)}
-                                style={{ width: '100%', fontSize: 16, fontWeight: 600, color: '#7a4d20', background: focusedSectionIdx === row.sectionIdx ? 'rgba(168,122,58,0.06)' : 'transparent', border: 'none', padding: '14px 40px 10px 34px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const }}
+                                style={{ width: '100%', fontSize: 16, fontWeight: 600, color: '#7a4d20', background: focusedSectionIdx === row.sectionIdx ? withAlpha(palette.amber, 0.06) : 'transparent', border: 'none', padding: '14px 40px 10px 34px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const }}
                               />
-                              <span style={{ position: 'absolute' as const, right: 16, top: 16, fontSize: 12, color: 'rgba(168,122,58,0.45)', pointerEvents: 'none' as const }}>✎</span>
+                              <span style={{ position: 'absolute' as const, right: 16, top: 16, fontSize: 12, color: withAlpha(palette.amber, 0.45), pointerEvents: 'none' as const }}>✎</span>
                             </div>
                           );
                         }
@@ -1650,7 +1652,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                               key={row.key}
                               ref={el => { qRefs.current[row.key] = el; }}
                               {...emptyDropPropsFor(start, row.sectionIdx)}
-                              style={{ margin: '0 34px 14px', fontSize: 11.5, color: '#bdb8ad', padding: '14px', textAlign: 'center' as const, border: '1px dashed rgba(45,42,36,0.12)', borderRadius: 9, background: dropIndicator === start && dragFlatIdx !== null ? 'rgba(168,122,58,0.08)' : 'transparent' }}
+                              style={{ margin: '0 34px 14px', fontSize: 11.5, color: palette.inkGhost, padding: '14px', textAlign: 'center' as const, border: `1px dashed ${ink(0.12)}`, borderRadius: 9, background: dropIndicator === start && dragFlatIdx !== null ? withAlpha(palette.amber, 0.08) : 'transparent' }}
                             >
                               partie vide — glisse une question ici
                             </div>
@@ -1661,8 +1663,8 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                           const showLineBefore = dragFlatIdx !== null && dragFlatIdx !== gi && dragFlatIdx !== gi - 1 && dropIndicator === gi;
                           return (
                             <div key={row.key} {...dragOverPropsFor(gi, row.sectionIdx)} ref={el => { qRefs.current[row.key] = el; }}>
-                              <div style={{ height: showLineBefore ? 3 : 0, background: '#a87a3a', transition: 'all 0.1s' }} />
-                              <div style={{ margin: '10px 34px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: '1px dashed rgba(45,42,36,0.20)', borderRadius: 8, background: 'rgba(45,42,36,0.045)', color: '#9a948a', fontSize: 11.5 }}>
+                              <div style={{ height: showLineBefore ? 3 : 0, background: palette.amber, transition: 'all 0.1s' }} />
+                              <div style={{ margin: '10px 34px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: `1px dashed ${ink(0.20)}`, borderRadius: 8, background: ink(0.045), color: palette.inkFaint, fontSize: 11.5 }}>
                                 <SeparatorHorizontal size={14} strokeWidth={1.75} />
                                 saut de page
                               </div>
@@ -1675,20 +1677,20 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                         const hovered = hoveredRowKey === row.key;
                         return (
                           <div key={row.key}>
-                            <div {...dragOverPropsFor(gi, row.sectionIdx)} ref={el => { qRefs.current[row.key] = el; }} style={{ background: hovered ? 'rgba(168,122,58,0.08)' : 'transparent', transition: 'background 0.1s' }}>
-                              <div style={{ height: showLineBefore ? 3 : 0, background: '#a87a3a', transition: 'all 0.1s' }} />
+                            <div {...dragOverPropsFor(gi, row.sectionIdx)} ref={el => { qRefs.current[row.key] = el; }} style={{ background: hovered ? withAlpha(palette.amber, 0.08) : 'transparent', transition: 'background 0.1s' }}>
+                              <div style={{ height: showLineBefore ? 3 : 0, background: palette.amber, transition: 'all 0.1s' }} />
                               <div style={{ padding: '20px 34px' }}>
                                 <div ref={el => { qRefs.current[`${q.id}::head`] = el; }}>
-                                  <div style={{ fontSize: 14, color: '#2d2a24', lineHeight: 1.6 }}>
-                                    <span style={{ color: '#a87a3a', fontWeight: 600, marginRight: 8 }}>{subStart}.</span>
+                                  <div style={{ fontSize: 14, color: palette.ink, lineHeight: 1.6 }}>
+                                    <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{subStart}.</span>
                                     {q.content || '(sans énoncé)'}
                                   </div>
                                   {renderAnswerSpace(q)}
                                 </div>
                                 {q.parts.map((part, pi) => (
                                   <div key={pi} ref={el => { qRefs.current[partWeightKey(q.id, pi)] = el; }} style={{ marginTop: 40, paddingLeft: 28 }}>
-                                    <div style={{ fontSize: 14, color: '#2d2a24', lineHeight: 1.6 }}>
-                                      <span style={{ color: '#a87a3a', fontWeight: 600, marginRight: 8 }}>{subStart + pi + 1}.</span>
+                                    <div style={{ fontSize: 14, color: palette.ink, lineHeight: 1.6 }}>
+                                      <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{subStart + pi + 1}.</span>
                                       {part.content || '(sans énoncé)'}
                                     </div>
                                     {renderAnswerSpace({ ...q, responseType: part.responseType, answer: part.answer, choices: part.choices, correctChoices: part.correctChoices, textLines: part.textLines })}
@@ -1711,7 +1713,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                           return (
                             <div key={row.key} style={{ height: rh, minHeight: rh ? undefined : A4_SECTION_HEADER_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               {config.sections.length > 1 && (
-                                <button type="button" onClick={() => removeSection(row.sectionIdx)} title="supprimer la partie" style={{ fontSize: 15, color: '#b85a4a', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>×</button>
+                                <button type="button" onClick={() => removeSection(row.sectionIdx)} title="supprimer la partie" style={{ fontSize: 15, color: palette.danger, background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>×</button>
                               )}
                             </div>
                           );
@@ -1722,25 +1724,25 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                         if (row.kind === 'pagebreak') {
                           return (
                             <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_PAGE_BREAK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <span onClick={() => removePageBreak(row.id)} title="retirer le saut de page" style={{ fontSize: 15, color: '#b85a4a', cursor: 'pointer' }}>×</span>
+                              <span onClick={() => removePageBreak(row.id)} title="retirer le saut de page" style={{ fontSize: 15, color: palette.danger, cursor: 'pointer' }}>×</span>
                             </div>
                           );
                         }
                         const { gi, q } = row;
                         return (
                           <div key={row.key} {...dragOverPropsFor(gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 20, boxSizing: 'border-box' as const }}>
-                            <span style={{ fontSize: 11, color: '#9a948a', fontVariantNumeric: 'tabular-nums' }}>{String(gi + 1).padStart(2, '0')}</span>
+                            <span style={{ fontSize: 11, color: palette.inkFaint, fontVariantNumeric: 'tabular-nums' }}>{String(gi + 1).padStart(2, '0')}</span>
                             <WeightControls weight={config.weighting[q.id] ?? defaultWeight()} onChange={patch => updateWeight(q.id, patch)} />
                             {q.parts.map((_part, pi) => {
                               const key = partWeightKey(q.id, pi);
                               return (
                                 <div key={pi} style={{ height: rowHeights[key] ?? A4_ROW_FALLBACK_HEIGHT, marginTop: 40, paddingTop: 14, boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                                  <span style={{ fontSize: 9.5, color: '#bdb8ad' }} title={`pondération de la partie ${pi + 2}`}>part. {pi + 2}</span>
+                                  <span style={{ fontSize: 9.5, color: palette.inkGhost }} title={`pondération de la partie ${pi + 2}`}>part. {pi + 2}</span>
                                   <WeightControls weight={config.weighting[key] ?? defaultWeight()} onChange={patch => updateWeight(key, patch)} />
                                 </div>
                               );
                             })}
-                            <span onClick={() => toggleAvailable(q.id)} title="retirer de l'examen" style={{ fontSize: 15, color: '#b85a4a', cursor: 'pointer' }}>×</span>
+                            <span onClick={() => toggleAvailable(q.id)} title="retirer de l'examen" style={{ fontSize: 15, color: palette.danger, cursor: 'pointer' }}>×</span>
                           </div>
                         );
                       })}
@@ -1755,11 +1757,11 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
             <div
               onDragOver={e => { e.preventDefault(); setDropIndicator(flat.length); }}
               onDrop={e => { e.preventDefault(); handleDrop(flat.length, config.sections.length - 1); }}
-              style={{ height: 18, marginTop: -8, marginBottom: 14, borderRadius: 6, background: dropIndicator === flat.length ? 'rgba(168,122,58,0.12)' : 'transparent', border: dropIndicator === flat.length ? '1px dashed rgba(168,122,58,0.4)' : '1px dashed transparent' }}
+              style={{ height: 18, marginTop: -8, marginBottom: 14, borderRadius: 6, background: dropIndicator === flat.length ? withAlpha(palette.amber, 0.12) : 'transparent', border: dropIndicator === flat.length ? '1px dashed rgba(168,122,58,0.4)' : '1px dashed transparent' }}
             />
           )}
 
-          <button onClick={handleGenerateClick} style={{ width: '100%', padding: '9px', borderRadius: 9, background: '#4f6b40', border: 'none', color: '#f4f0e6', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', boxSizing: 'border-box' as const }}>
+          <button onClick={handleGenerateClick} style={{ width: '100%', padding: '9px', borderRadius: 9, background: palette.green, border: 'none', color: palette.parchment, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', boxSizing: 'border-box' as const }}>
             {editing ? 'enregistrer les modifications' : "enregistrer l'examen"}
           </button>
         </div>
@@ -1784,7 +1786,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
           width={420}
           title={editing ? 'Annuler les modifications ?' : "Effacer l'éditeur d'examen ?"}
           description={editing
-            ? <>Les modifications en cours sur <strong style={{ color: '#2d2a24' }}>{editing.title}</strong> seront abandonnées. L&apos;examen déjà enregistré n&apos;est pas affecté.</>
+            ? <>Les modifications en cours sur <strong style={{ color: palette.ink }}>{editing.title}</strong> seront abandonnées. L&apos;examen déjà enregistré n&apos;est pas affecté.</>
             : "L'intitulé, les parties, la pondération et les questions envoyées seront réinitialisés."}
           confirmLabel={editing ? 'Annuler les modifications' : 'Effacer'}
           onCancel={() => setConfirmClearOpen(false)}
@@ -1807,7 +1809,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
           width={420}
           iconTone="accent"
           confirmTone="confirm"
-          icon={<Star size={18} strokeWidth={2} fill="#a87a3a" color="#a87a3a" />}
+          icon={<Star size={18} strokeWidth={2} fill={palette.amber} color={palette.amber} />}
           title="Appliquer la présentation favorite ?"
           description="La section présentation va être remplacée par votre favori."
           confirmLabel="Appliquer"
@@ -2131,8 +2133,8 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
           // c'est déjà le cas pour l'éditeur d'examen.
           const contentW = id === 'generator' ? mainW : mainW - 16;
           return (
-            <div key={id} ref={el => { tileRefs.current[id] = el; }} style={{ position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h, borderRadius: 16, overflow: 'hidden', border: r.main ? '1px solid rgba(45,42,36,0.10)' : '1px solid rgba(45,42,36,0.08)', background: id === 'generator' ? '#fbf7ef' : '#fcf9f2', boxShadow: r.main ? '0 16px 44px rgba(45,42,36,0.10)' : '0 6px 18px rgba(45,42,36,0.08)', zIndex: r.main ? 2 : 1 }}>
-              <div style={{ position: 'absolute', top: 0, left: 0, width: contentW, height: r.h / s, transform: `scale(${s})`, transformOrigin: '0 0', overflowY: id === 'generator' ? 'hidden' : 'auto', overflowX: 'hidden', background: id === 'generator' ? '#fbf7ef' : '#fcf9f2' }}>
+            <div key={id} ref={el => { tileRefs.current[id] = el; }} style={{ position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h, borderRadius: 16, overflow: 'hidden', border: r.main ? '1px solid rgba(45,42,36,0.10)' : `1px solid ${ink(0.08)}`, background: id === 'generator' ? palette.creamAlt : palette.cream, boxShadow: r.main ? '0 16px 44px rgba(45,42,36,0.10)' : `0 6px 18px ${ink(0.08)}`, zIndex: r.main ? 2 : 1 }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, width: contentW, height: r.h / s, transform: `scale(${s})`, transformOrigin: '0 0', overflowY: id === 'generator' ? 'hidden' : 'auto', overflowX: 'hidden', background: id === 'generator' ? palette.creamAlt : palette.cream }}>
                 {id === 'history' && <HistoryContent exams={exams} justAddedId={justAdded} onEdit={requestEditExam} onNew={() => setIntroOpen(true)} onDelete={e => setPendingDeleteExam(e)} />}
                 {id === 'bank' && (
                   <BankContent
@@ -2171,11 +2173,11 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
               {!r.main && (
                 <>
                   <div onClick={() => focus(id)} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 34, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', cursor: 'pointer', background: 'linear-gradient(180deg, rgba(252,249,242,0.96), rgba(252,249,242,0.0))' }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#a87a3a', display: 'inline-block' }} />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#2d2a24' }}>{META[id]}</span>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: palette.amber, display: 'inline-block' }} />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: palette.ink }}>{META[id]}</span>
                   </div>
-                  <div onClick={() => focus(id)} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(45,42,36,0.0)', transition: 'background 180ms ease', cursor: 'pointer' }}>
-                    <button onClick={e => { e.stopPropagation(); focus(id); }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 999, border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: 'rgba(255,255,255,0.96)', color: '#2d2a24', fontSize: 12.5, fontWeight: 500, boxShadow: '0 6px 18px rgba(45,42,36,0.20)', opacity: 0, pointerEvents: 'none' }}>
+                  <div onClick={() => focus(id)} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: ink(0.0), transition: 'background 180ms ease', cursor: 'pointer' }}>
+                    <button onClick={e => { e.stopPropagation(); focus(id); }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 999, border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: withAlpha(palette.paper, 0.96), color: palette.ink, fontSize: 12.5, fontWeight: 500, boxShadow: `0 6px 18px ${ink(0.20)}`, opacity: 0, pointerEvents: 'none' }}>
                       <svg width="14" height="14" viewBox="0 0 14 14"><path d="M5.5 1.5H1.5V5.5M8.5 12.5h4V8.5M1.5 8.5v4h4M12.5 5.5v-4h-4" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       agrandir
                     </button>
@@ -2188,17 +2190,17 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       </div>
       {pendingDeleteExam && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div onClick={() => setPendingDeleteExam(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
-          <div style={{ position: 'relative', zIndex: 1, background: '#fcf9f2', borderRadius: 20, padding: '32px 28px 24px', maxWidth: 380, width: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(184,90,74,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>!</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: '#2d2a24' }}>Supprimer l&apos;examen ?</div>
-            <div style={{ fontSize: 13, color: '#5a564c', lineHeight: 1.5 }}>
-              <strong style={{ color: '#2d2a24' }}>{pendingDeleteExam.title}</strong>
+          <div onClick={() => setPendingDeleteExam(null)} style={{ position: 'absolute', inset: 0, background: ink(0.42), backdropFilter: 'blur(2px)' }} />
+          <div style={{ position: 'relative', zIndex: 1, background: palette.cream, borderRadius: 20, padding: '32px 28px 24px', maxWidth: 380, width: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: withAlpha(palette.danger, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>!</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>Supprimer l&apos;examen ?</div>
+            <div style={{ fontSize: 13, color: palette.inkMuted, lineHeight: 1.5 }}>
+              <strong style={{ color: palette.ink }}>{pendingDeleteExam.title}</strong>
               <br />Cette action est irréversible.
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 8, width: '100%' }}>
-              <button onClick={() => setPendingDeleteExam(null)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid rgba(45,42,36,0.15)', background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: '#5a564c', cursor: 'pointer' }}>Annuler</button>
-              <button onClick={() => pendingDeleteExam && handleDeleteExam(pendingDeleteExam)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#b85a4a', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: '#fff', cursor: 'pointer' }}>Supprimer</button>
+              <button onClick={() => setPendingDeleteExam(null)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: `1px solid ${ink(0.15)}`, background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: palette.inkMuted, cursor: 'pointer' }}>Annuler</button>
+              <button onClick={() => pendingDeleteExam && handleDeleteExam(pendingDeleteExam)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: palette.danger, fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: palette.paper, cursor: 'pointer' }}>Supprimer</button>
             </div>
           </div>
         </div>,
@@ -2206,24 +2208,24 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       )}
       {pendingEditExam && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div onClick={() => setPendingEditExam(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.42)', backdropFilter: 'blur(2px)' }} />
-          <div style={{ position: 'relative', zIndex: 1, background: '#fcf9f2', borderRadius: 20, padding: '32px 28px 24px', maxWidth: 380, width: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(184,90,74,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>!</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: '#2d2a24' }}>Éditeur déjà en cours d&apos;utilisation</div>
-            <div style={{ fontSize: 13, color: '#5a564c', lineHeight: 1.5 }}>
-              L&apos;éditeur d&apos;examen contient déjà des modifications en cours{editing ? <> pour <strong style={{ color: '#2d2a24' }}>{editing.title}</strong></> : ''}. Termine ou efface l&apos;éditeur avant de modifier <strong style={{ color: '#2d2a24' }}>{pendingEditExam.title}</strong>.
+          <div onClick={() => setPendingEditExam(null)} style={{ position: 'absolute', inset: 0, background: ink(0.42), backdropFilter: 'blur(2px)' }} />
+          <div style={{ position: 'relative', zIndex: 1, background: palette.cream, borderRadius: 20, padding: '32px 28px 24px', maxWidth: 380, width: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: withAlpha(palette.danger, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>!</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>Éditeur déjà en cours d&apos;utilisation</div>
+            <div style={{ fontSize: 13, color: palette.inkMuted, lineHeight: 1.5 }}>
+              L&apos;éditeur d&apos;examen contient déjà des modifications en cours{editing ? <> pour <strong style={{ color: palette.ink }}>{editing.title}</strong></> : ''}. Termine ou efface l&apos;éditeur avant de modifier <strong style={{ color: palette.ink }}>{pendingEditExam.title}</strong>.
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 8, width: '100%' }}>
-              <button onClick={() => setPendingEditExam(null)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid rgba(45,42,36,0.15)', background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: '#5a564c', cursor: 'pointer' }}>Annuler</button>
-              <button onClick={() => { setPendingEditExam(null); focus('generator'); }} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#4f6b40', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: '#fff', cursor: 'pointer' }}>Aller à l&apos;éditeur</button>
+              <button onClick={() => setPendingEditExam(null)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: `1px solid ${ink(0.15)}`, background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: palette.inkMuted, cursor: 'pointer' }}>Annuler</button>
+              <button onClick={() => { setPendingEditExam(null); focus('generator'); }} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: palette.green, fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: palette.paper, cursor: 'pointer' }}>Aller à l&apos;éditeur</button>
             </div>
           </div>
         </div>,
         document.body
       )}
       {openQuestionBlocked && createPortal(
-        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', zIndex: 90, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 999, background: '#2d2a24', color: '#f4f0e6', fontFamily: "'Inter Tight', system-ui, sans-serif", fontSize: 12.5, boxShadow: '0 12px 32px rgba(45,42,36,0.30)' }}>
-          <AlertTriangle size={14} strokeWidth={2} color="#e8b86c" />
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', zIndex: 90, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 999, background: palette.ink, color: palette.parchment, fontFamily: "'Inter Tight', system-ui, sans-serif", fontSize: 12.5, boxShadow: `0 12px 32px ${ink(0.30)}` }}>
+          <AlertTriangle size={14} strokeWidth={2} color={palette.amberGlow} />
           question déjà en cours d&apos;édition
         </div>,
         document.body
@@ -2240,16 +2242,16 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         const ROW_PCT = (100 - HEADER_PCT - FOOTER_PCT) / steps.length;
         return createPortal(
           <div style={{ position: 'fixed', inset: 0, zIndex: 95, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div onClick={() => setIntroOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(45,42,36,0.46)', backdropFilter: 'blur(3px)' }} />
+            <div onClick={() => setIntroOpen(false)} style={{ position: 'absolute', inset: 0, background: ink(0.46), backdropFilter: 'blur(3px)' }} />
             <div style={{ position: 'relative', height: '90vh', width: 'calc(90vh * 0.75)', maxWidth: '92vw' }}>
               {/* carte : fond, texte, bouton — clippée pour les coins arrondis */}
-              <div style={{ position: 'absolute', inset: 0, borderRadius: 28, overflow: 'hidden', background: 'linear-gradient(160deg, #fdf9ef 0%, #f6ead2 100%)', boxShadow: '0 28px 70px rgba(45,42,36,0.32)' }}>
-                <button onClick={() => setIntroOpen(false)} title="fermer" style={{ position: 'absolute', top: 18, right: 18, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: '50%', border: '1px solid rgba(45,42,36,0.12)', background: '#fff', color: '#2d2a24', cursor: 'pointer' }}>
+              <div style={{ position: 'absolute', inset: 0, borderRadius: 28, overflow: 'hidden', background: 'linear-gradient(160deg, #fdf9ef 0%, #f6ead2 100%)', boxShadow: `0 28px 70px ${ink(0.32)}` }}>
+                <button onClick={() => setIntroOpen(false)} title="fermer" style={{ position: 'absolute', top: 18, right: 18, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: '50%', border: `1px solid ${ink(0.12)}`, background: palette.paper, color: palette.ink, cursor: 'pointer' }}>
                   <X size={17} strokeWidth={2} />
                 </button>
 
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: `${HEADER_PCT}%`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 70px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 23, fontWeight: 600, color: '#2d2a24' }}>Comment fonctionne le générateur d&apos;examen</div>
+                  <div style={{ fontSize: 23, fontWeight: 600, color: palette.ink }}>Comment fonctionne le générateur d&apos;examen</div>
                   <div style={{ fontSize: 13.5, color: '#8a7f64', marginTop: 8 }}>Trois étapes pour passer de votre banque de questions à un examen prêt à être donné.</div>
                 </div>
 
@@ -2272,10 +2274,10 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                   </div>
                 ))}
 
-                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${FOOTER_PCT}%`, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 32px', borderTop: '1px solid rgba(45,42,36,0.08)' }}>
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${FOOTER_PCT}%`, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 32px', borderTop: `1px solid ${ink(0.08)}` }}>
                   <button
                     onClick={() => { setIntroOpen(false); setEditing(null); setExamConfig(defaultExamConfig()); focus('bank'); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 10, border: 'none', background: '#4f6b40', color: '#fff', fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 10, border: 'none', background: palette.green, color: palette.paper, fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}
                   >
                     Commencer
                     <ArrowRight size={16} strokeWidth={2} />
@@ -2304,7 +2306,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                     inset: 0,
                     borderRadius: '46% 54% 58% 42% / 50% 46% 54% 50%',
                     background: 'radial-gradient(circle at 32% 28%, #f2cf8e 0%, #dba85a 55%, #c98f43 100%)',
-                    boxShadow: '0 20px 46px rgba(168,122,58,0.38)',
+                    boxShadow: `0 20px 46px ${withAlpha(palette.amber, 0.38)}`,
                   }} />
                   <div style={{
                     position: 'absolute',

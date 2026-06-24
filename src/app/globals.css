@@ -51,6 +51,25 @@
   --color-culture-cream: #fcf9f2;
   --color-culture-ink: #2d2a24;
   --color-culture-muted: #7a766d;
+
+  /* Design tokens sémantiques — DOIVENT rester alignés sur src/lib/theme.ts (palette).
+     Génèrent les utilitaires text-ink, bg-cream, border-ink, text-green, etc. */
+  --color-ink: #2d2a24;
+  --color-ink-muted: #5a564c;
+  --color-ink-soft: #7a766d;
+  --color-ink-faint: #9a948a;
+  --color-ink-ghost: #bdb8ad;
+  --color-cream: #fcf9f2;
+  --color-cream-alt: #fbf7ef;
+  --color-parchment: #f4f0e6;
+  --color-paper: #ffffff;
+  --color-green: #4f6b40;
+  --color-green-brand: #5f8a3f;
+  --color-green-soft: #7a9968;
+  --color-amber: #a87a3a;
+  --color-amber-light: #c89860;
+  --color-amber-glow: #e8b86c;
+  --color-danger: #b85a4a;
 }
 
 :root {

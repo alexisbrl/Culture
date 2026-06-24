@@ -1,14 +1,16 @@
 'use client';
 
+import { palette, ink, withAlpha } from '@/lib/theme';
+
 import { useState } from 'react';
 import type { SubscriptionTier } from '@/lib/subscription';
 
-const AMBER       = '#a87a3a';
+const AMBER       = palette.amber;
 const AMBER_LIGHT = '#e8b86c';
 const AMBER_PALE  = '#e8d8a8';
-const BG          = '#fcf9f2';
-const DARK        = '#2d2a24';
-const TEXT_MUTED  = '#7a766d';
+const BG          = palette.cream;
+const DARK        = palette.ink;
+const TEXT_MUTED  = palette.inkSoft;
 
 // ---- Glyphs ----
 
@@ -80,7 +82,7 @@ function TierCTA({ tier, current, annual, dark }: {
   if (isCurrent) {
     return (
       <button disabled style={{
-        width: '100%', padding: '11px 0', borderRadius: 10, border: dark ? '1.5px solid rgba(244,240,230,0.18)' : '1.5px solid rgba(45,42,36,0.16)',
+        width: '100%', padding: '11px 0', borderRadius: 10, border: dark ? '1.5px solid rgba(244,240,230,0.18)' : `1.5px solid ${ink(0.16)}`,
         background: 'transparent', color: dark ? 'rgba(244,240,230,0.6)' : TEXT_MUTED,
         fontSize: 14, fontWeight: 500, fontFamily: "'Inter Tight', sans-serif", cursor: 'default',
       }}>
@@ -96,7 +98,7 @@ function TierCTA({ tier, current, annual, dark }: {
   };
 
   const bg = tier === 'premium_plus' ? AMBER_PALE : tier === 'premium' ? AMBER_LIGHT : DARK;
-  const color = tier === 'premium_plus' ? DARK : '#fff';
+  const color = tier === 'premium_plus' ? DARK : palette.paper;
 
   return (
     <button
@@ -118,8 +120,8 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
   const [annual, setAnnual] = useState(false);
 
   const cardBase: React.CSSProperties = {
-    background: 'rgba(255,255,255,0.85)',
-    border: '1.5px solid rgba(45,42,36,0.12)',
+    background: withAlpha(palette.paper, 0.85),
+    border: `1.5px solid ${ink(0.12)}`,
     borderRadius: 20, padding: '32px 28px',
     display: 'flex', flexDirection: 'column',
   };
@@ -141,12 +143,12 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
           <p style={{ fontSize: 13, color: TEXT_MUTED, marginBottom: 24 }}>
             Tout commence gratuitement. Grandis à ton rythme.
           </p>
-          <div style={{ display: 'inline-flex', background: 'rgba(45,42,36,0.06)', borderRadius: 100, padding: 4, gap: 2 }}>
+          <div style={{ display: 'inline-flex', background: ink(0.06), borderRadius: 100, padding: 4, gap: 2 }}>
             {(['mensuel', 'annuel'] as const).map((opt) => (
               <button key={opt} onClick={() => setAnnual(opt === 'annuel')} style={{
                 border: 'none', borderRadius: 100, padding: '6px 18px', fontSize: 13,
                 fontFamily: "'Inter Tight', sans-serif", fontWeight: 500, cursor: 'pointer',
-                background: (annual ? opt === 'annuel' : opt === 'mensuel') ? '#fff' : 'transparent',
+                background: (annual ? opt === 'annuel' : opt === 'mensuel') ? palette.paper : 'transparent',
                 color: (annual ? opt === 'annuel' : opt === 'mensuel') ? DARK : TEXT_MUTED,
                 boxShadow: (annual ? opt === 'annuel' : opt === 'mensuel') ? '0 1px 4px rgba(0,0,0,0.10)' : 'none',
                 transition: 'all 0.15s',
@@ -185,16 +187,16 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
           <div style={{
             ...cardBase,
             transform: 'translateY(-8px)',
-            boxShadow: '0 30px 60px rgba(168,122,58,0.18)',
-            border: currentTier === 'premium' ? `2px solid ${AMBER_LIGHT}` : '1.5px solid rgba(168,122,58,0.45)',
+            boxShadow: `0 30px 60px ${withAlpha(palette.amber, 0.18)}`,
+            border: currentTier === 'premium' ? `2px solid ${AMBER_LIGHT}` : `1.5px solid ${withAlpha(palette.amber, 0.45)}`,
             position: 'relative',
           }}>
             {currentTier === 'premium' ? (
-              <div style={{ position: 'absolute', top: -16, left: '50%', transform: 'translateX(-50%)', background: AMBER_LIGHT, color: '#fff', fontSize: 12, fontWeight: 700, padding: '4px 14px', borderRadius: 100, whiteSpace: 'nowrap' }}>
+              <div style={{ position: 'absolute', top: -16, left: '50%', transform: 'translateX(-50%)', background: AMBER_LIGHT, color: palette.paper, fontSize: 12, fontWeight: 700, padding: '4px 14px', borderRadius: 100, whiteSpace: 'nowrap' }}>
                 ★ ton offre actuelle
               </div>
             ) : (
-              <div style={{ position: 'absolute', top: -16, left: '50%', transform: 'translateX(-50%)', background: 'rgba(45,42,36,0.12)', color: DARK, fontSize: 12, fontWeight: 700, padding: '4px 14px', borderRadius: 100, whiteSpace: 'nowrap' }}>
+              <div style={{ position: 'absolute', top: -16, left: '50%', transform: 'translateX(-50%)', background: ink(0.12), color: DARK, fontSize: 12, fontWeight: 700, padding: '4px 14px', borderRadius: 100, whiteSpace: 'nowrap' }}>
                 ★ recommandé
               </div>
             )}
@@ -228,8 +230,8 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
             {currentTier === 'premium_plus' && <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: AMBER_PALE, marginBottom: 12 }}>● ton offre actuelle</div>}
             <div style={{ marginBottom: 16 }}><TreeGlyph /></div>
             <div style={{ fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: 'rgba(244,240,230,0.45)', marginBottom: 4 }}>arbre</div>
-            <div style={{ fontSize: 22, fontWeight: 600, color: '#f4f0e6', marginBottom: 8 }}>Premium+</div>
-            <div style={{ fontSize: 20, fontWeight: 500, color: '#f4f0e6', marginBottom: 2 }}>
+            <div style={{ fontSize: 22, fontWeight: 600, color: palette.parchment, marginBottom: 8 }}>Premium+</div>
+            <div style={{ fontSize: 20, fontWeight: 500, color: palette.parchment, marginBottom: 2 }}>
               {annual ? '20 €' : '25 €'} <span style={{ fontSize: 14, color: 'rgba(244,240,230,0.55)' }}>/ mois</span>
             </div>
             <div style={{ fontFamily: "'Caveat', cursive", fontSize: 16, color: AMBER_PALE, marginBottom: 4 }}>
@@ -255,14 +257,14 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
         {/* Atelier Premium */}
         <div style={{
           maxWidth: 1100, margin: '0 auto',
-          background: 'linear-gradient(135deg, rgba(232,184,108,0.18), rgba(168,122,58,0.10))',
-          border: '1.5px solid rgba(168,122,58,0.35)', borderRadius: 20, padding: '28px 32px',
+          background: `linear-gradient(135deg, ${withAlpha(palette.amberGlow, 0.18)}, ${withAlpha(palette.amber, 0.10)})`,
+          border: `1.5px solid ${withAlpha(palette.amber, 0.35)}`, borderRadius: 20, padding: '28px 32px',
           display: 'grid', gridTemplateColumns: '1fr auto', gap: 24, alignItems: 'center',
         }}>
           <div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', background: AMBER_LIGHT, color: '#fff', padding: '3px 10px', borderRadius: 100 }}>atelier premium</span>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', background: '#e05c3a', color: '#fff', padding: '3px 10px', borderRadius: 100 }}>irréversible</span>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', background: AMBER_LIGHT, color: palette.paper, padding: '3px 10px', borderRadius: 100 }}>atelier premium</span>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', background: '#e05c3a', color: palette.paper, padding: '3px 10px', borderRadius: 100 }}>irréversible</span>
             </div>
             <h3 style={{ fontSize: 18, fontWeight: 500, color: DARK, margin: '0 0 8px' }}>débloque ton atelier pour tous tes membres, à vie.</h3>
             <p style={{ fontSize: 13, color: TEXT_MUTED, margin: '0 0 4px' }}>
@@ -270,7 +272,7 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
             </p>
             <div style={{ fontFamily: "'Caveat', cursive", fontSize: 17, color: AMBER }}>« écoles, formations, équipes — c&apos;est pour vous. »</div>
           </div>
-          <button onClick={() => alert('Disponible prochainement.')} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: AMBER_LIGHT, color: '#fff', fontSize: 14, fontWeight: 600, fontFamily: "'Inter Tight', sans-serif", cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          <button onClick={() => alert('Disponible prochainement.')} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: AMBER_LIGHT, color: palette.paper, fontSize: 14, fontWeight: 600, fontFamily: "'Inter Tight', sans-serif", cursor: 'pointer', whiteSpace: 'nowrap' }}>
             activer pour un atelier →
           </button>
         </div>
