@@ -623,7 +623,6 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                         }
                         const { gi, subStart, q } = row;
                         const showLineBefore = dragFlatIdx !== null && dragFlatIdx !== gi && dragFlatIdx !== gi - 1 && dropIndicator === gi;
-                        const incomplete = hasNoAnswer(q);
                         const hovered = hoveredRowKey === row.key;
                         return (
                           <div key={row.key}>

@@ -498,7 +498,7 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
             </svg>
           </button>
           <select value={sortBy} onChange={e => changeSortBy(e.target.value as SortBy)} style={{ fontSize: 12, padding: '8px 10px', border: 'none', background: 'transparent', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit', outline: 'none' }}>
-            <option value="recent">trier · date d'ajout</option>
+            <option value="recent">trier · date d&apos;ajout</option>
             <option value="name">trier · nom</option>
             <option value="type">trier · type</option>
             <option value="difficulty">trier · difficulté</option>

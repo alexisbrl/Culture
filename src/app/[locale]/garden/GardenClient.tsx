@@ -182,7 +182,7 @@ export default function GardenClient({ locale, firstName }: Props) {
     [invGroups]
   );
   const objectGroups = useMemo(
-    () => [...invGroups.values()].filter((g) => g.kind === 'tree' || isStructureKind(g.kind)).sort((a, b) => (a.kind === 'tree' ? -1 : 1)),
+    () => [...invGroups.values()].filter((g) => g.kind === 'tree' || isStructureKind(g.kind)).sort((a) => (a.kind === 'tree' ? -1 : 1)),
     [invGroups]
   );
 
@@ -403,7 +403,6 @@ export default function GardenClient({ locale, firstName }: Props) {
   }, [menuFor, originX, originY, toScreen]);
 
   const moving = movingTree || movingStruct;
-  const isLandAt = (k: CellKey) => isLand(state.tiles[k]);
 
   return (
     <div className="relative w-full h-[calc(100vh-65px)] overflow-hidden select-none">

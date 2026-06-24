@@ -20,31 +20,31 @@ function LegalPageClient({ locale }: { locale: string }) {
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">1. Éditeur du site</h2>
               <p className="text-gray-600 leading-relaxed">
-                Le site Culture (accessible temporairement via scellow.com) est édité à titre personnel dans le cadre d'un projet en phase bêta. Toute information de contact est disponible via la page Contact.
+                Le site Culture (accessible temporairement via scellow.com) est édité à titre personnel dans le cadre d&apos;un projet en phase bêta. Toute information de contact est disponible via la page Contact.
               </p>
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">2. Données personnelles</h2>
               <p className="text-gray-600 leading-relaxed">
-                Les données collectées via le formulaire de liste d'attente (prénom, email, rôle) sont utilisées uniquement pour vous contacter dans le cadre du programme bêta. Elles ne sont jamais vendues ni partagées avec des tiers. Conformément au RGPD, vous disposez d'un droit d'accès, de rectification et de suppression. Pour exercer ces droits : contact@evalia.app.
+                Les données collectées via le formulaire de liste d&apos;attente (prénom, email, rôle) sont utilisées uniquement pour vous contacter dans le cadre du programme bêta. Elles ne sont jamais vendues ni partagées avec des tiers. Conformément au RGPD, vous disposez d&apos;un droit d&apos;accès, de rectification et de suppression. Pour exercer ces droits : contact@evalia.app.
               </p>
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">3. Cookies</h2>
               <p className="text-gray-600 leading-relaxed">
-                Ce site utilise des cookies fonctionnels essentiels uniquement. Aucun cookie publicitaire ou de tracking tiers n'est utilisé à ce stade.
+                Ce site utilise des cookies fonctionnels essentiels uniquement. Aucun cookie publicitaire ou de tracking tiers n&apos;est utilisé à ce stade.
               </p>
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">4. Propriété intellectuelle</h2>
               <p className="text-gray-600 leading-relaxed">
-                L'ensemble du contenu de ce site (textes, visuels, marque Culture) est protégé. Toute reproduction sans autorisation est interdite.
+                L&apos;ensemble du contenu de ce site (textes, visuels, marque Culture) est protégé. Toute reproduction sans autorisation est interdite.
               </p>
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-3">5. Limitation de responsabilité</h2>
               <p className="text-gray-600 leading-relaxed">
-                Le site est fourni en l'état, dans le cadre d'une phase bêta. L'éditeur ne peut être tenu responsable des interruptions de service ou des informations inexactes.
+                Le site est fourni en l&apos;état, dans le cadre d&apos;une phase bêta. L&apos;éditeur ne peut être tenu responsable des interruptions de service ou des informations inexactes.
               </p>
             </div>
           </div>

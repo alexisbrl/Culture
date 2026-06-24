@@ -140,8 +140,11 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
   // URL vers laquelle naviguer une fois la confirmation résolue (lien cliqué intercepté).
   // Si null, le bouton « retour à l'atelier » est utilisé par défaut.
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  // `isDirty` recalculé à chaque render ; on garde sa dernière valeur dans un ref
+  // (mis à jour en effet, pas pendant le render) pour les handlers beforeunload/click
+  // enregistrés une seule fois au montage, sans closure obsolète.
   const isDirtyRef = useRef(isDirty);
-  isDirtyRef.current = isDirty;
+  useEffect(() => { isDirtyRef.current = isDirty; });
 
   // Avertir avant de fermer/recharger l'onglet si des modifications ne sont pas enregistrées.
   useEffect(() => {
@@ -552,7 +555,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             noBorder
           >
             <SmallBtn tone="danger" onClick={() => setDeleteStep('confirm')}>
-              supprimer l'atelier
+              supprimer l&apos;atelier
             </SmallBtn>
           </Row>
         </SectionCard>

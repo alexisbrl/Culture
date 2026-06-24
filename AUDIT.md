@@ -103,11 +103,25 @@ Branche `refactor/split-large-files`.
   `Panel` (`garden/GardenClient.tsx`), a été extraite au niveau module en `ItemCard` (props `armed`/`onArm`
   au lieu d'une closure). Vérifié : plus aucun composant défini dans un corps de composant (`tsc` + `next build` OK).
 
-### 3.3 — Autres erreurs lint réelles (pas du bruit)
-- `DashboardHeader.tsx:25` — `setState` synchrone dans un `useEffect` (cascade de renders).
-- `legal/page.tsx` — apostrophes non échappées (9 erreurs).
-- `Date.now()` appelé pendant le render dans `ExamenTab` (impureté).
-- Imports inutilisés (`Crown`, `NextResponse`, `useLocale`…).
+### 3.3 — Erreurs lint réelles ✅ TRAITÉ (24/06/2026)
+Lint avant : **27 erreurs / 14 warnings** → après : **14 erreurs / 6 warnings** (`tsc` + `next build` OK).
+Corrigé (toutes sûres, comportement préservé) :
+- **Apostrophes non échappées** (`react/no-unescaped-entities`, 11 erreurs) : `legal/page.tsx`,
+  `SettingsClient.tsx`, `BankContent.tsx` → `&apos;` (rendu identique).
+- **`Date.now()` (`react-hooks/purity`)** dans `ExamenTab` : extrait dans un helper module `newExamId()`.
+- **Ref écrit pendant le render** (`react-hooks/refs`) dans `SettingsClient` (`isDirtyRef.current = isDirty`)
+  → déplacé dans un `useEffect` (comportement identique : lu par les handlers post-montage).
+- **Imports / variables inutilisés** (8) : `NextResponse` (middleware), `useLocale` (contact), `locale`
+  (about), `GardenerAvatar` (ProfileClient, fonction morte), `isOwner` (WorkshopClient), `isLandAt`/`b`
+  (GardenClient), `incomplete` (GeneratorContent).
+
+**Restant (14 erreurs / 6 warnings) → relève du §3.4**, pas des « vrais bugs » : ce sont des règles de
+*React-Compiler-readiness* (`react-hooks/set-state-in-effect` ×11, `react-hooks/refs` ×2 curseur de drag,
+`react-hooks/immutability` ×1 PRNG dans `useMemo`) qui signalent des patterns **légitimes** — inits
+client-only/hydration-safe (lecture `window`/localStorage/searchParams après montage). Les « corriger » en
+retirant les effets réintroduirait des hydration mismatches. À traiter en §3.4 via la **config ESLint**
+(décider de les passer en `warn`) plutôt que par des refactors risqués. Warnings restants : `exhaustive-deps`
+×4, `no-img-element` ×1, parse ×1.
 
 ### 3.4 — Le lint ne protège rien
 ESLint scanne aussi `.claude/worktrees/` (copies d'agents) → bruit massif. Il manque un `eslint.config` avec

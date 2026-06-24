@@ -51,7 +51,6 @@ function Chip({ children, tone = 'default' }: { children: React.ReactNode; tone?
 }
 
 export default function WorkshopClient({ locale, workshopId, workshopName, currentUserRole, isPremium, members }: Props) {
-  const isOwner = currentUserRole === 'owner';
   // Propriétaire ou gestionnaire : accès aux onglets de gestion + paramètres.
   const canManage = currentUserRole === 'owner' || currentUserRole === 'manager';
   const visibleTabs = canManage ? TABS : TABS.filter((t) => t.id === 'programme');

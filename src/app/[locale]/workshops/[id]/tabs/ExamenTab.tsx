@@ -26,6 +26,9 @@ const META: Record<string, string> = { history: 'Examen généré', bank: 'Banqu
 const IDS = ['history', 'bank', 'generator'] as const;
 type PanelId = typeof IDS[number];
 
+// génération d'id unique au niveau module (hors composant) — évite l'appel impur Date.now() dans le render
+function newExamId() { return 'e' + Date.now(); }
+
 // ---- MAIN EXAMEN TAB ----
 export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -152,7 +155,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   }
 
   function handleGenerate() {
-    const id = 'e' + Date.now();
+    const id = newExamId();
     const title = examConfig.title;
     const questionIds = configQuestionIds(examConfig);
     const dur = formatDuration(examConfig.durationMinutes);
