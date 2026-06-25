@@ -2,7 +2,7 @@
 
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { assertManager, requireManager } from '@/lib/authz';
-import { revalidatePath } from 'next/cache';
+import { revalidateWorkshop } from '@/lib/revalidate';
 import type { Question, QuestionPart } from '@/app/[locale]/workshops/[id]/tabs/QuestionEditor';
 import type { ExamConfig } from '@/app/[locale]/workshops/[id]/tabs/ExamenTab';
 
@@ -148,7 +148,7 @@ export async function saveQuestion(workshopId: string, question: Question): Prom
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_questions').upsert(questionToRow(workshopId, question));
   if (error) throw new Error(error.message);
-  revalidatePath(`/workshops/${workshopId}`, 'page');
+  revalidateWorkshop();
 }
 
 export async function saveQuestions(workshopId: string, questions: Question[]): Promise<void> {
@@ -157,7 +157,7 @@ export async function saveQuestions(workshopId: string, questions: Question[]): 
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_questions').upsert(questions.map((q) => questionToRow(workshopId, q)));
   if (error) throw new Error(error.message);
-  revalidatePath(`/workshops/${workshopId}`, 'page');
+  revalidateWorkshop();
 }
 
 export async function createPool(workshopId: string, pool: ExamPool): Promise<void> {
@@ -165,7 +165,7 @@ export async function createPool(workshopId: string, pool: ExamPool): Promise<vo
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_pools').insert({ id: pool.id, workshop_id: workshopId, name: pool.name, color: pool.color });
   if (error) throw new Error(error.message);
-  revalidatePath(`/workshops/${workshopId}`, 'page');
+  revalidateWorkshop();
 }
 
 export async function updatePool(workshopId: string, pool: ExamPool): Promise<void> {
@@ -173,7 +173,7 @@ export async function updatePool(workshopId: string, pool: ExamPool): Promise<vo
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_pools').update({ name: pool.name, color: pool.color }).eq('workshop_id', workshopId).eq('id', pool.id);
   if (error) throw new Error(error.message);
-  revalidatePath(`/workshops/${workshopId}`, 'page');
+  revalidateWorkshop();
 }
 
 export async function deletePool(workshopId: string, poolId: string, affectedQuestions: Question[]): Promise<void> {
@@ -187,7 +187,7 @@ export async function deletePool(workshopId: string, poolId: string, affectedQue
 
   const { error } = await supabase.from('exam_pools').delete().eq('workshop_id', workshopId).eq('id', poolId);
   if (error) throw new Error(error.message);
-  revalidatePath(`/workshops/${workshopId}`, 'page');
+  revalidateWorkshop();
 }
 
 export async function deleteQuestion(workshopId: string, questionId: string, affectedQuestions: Question[]): Promise<void> {
@@ -201,7 +201,7 @@ export async function deleteQuestion(workshopId: string, questionId: string, aff
 
   const { error } = await supabase.from('exam_questions').delete().eq('workshop_id', workshopId).eq('id', questionId);
   if (error) throw new Error(error.message);
-  revalidatePath(`/workshops/${workshopId}`, 'page');
+  revalidateWorkshop();
 }
 
 export async function saveGeneratedExam(workshopId: string, exam: GeneratedExam): Promise<void> {
@@ -221,7 +221,7 @@ export async function saveGeneratedExam(workshopId: string, exam: GeneratedExam)
     config: exam.config ?? {},
   });
   if (error) throw new Error(error.message);
-  revalidatePath(`/workshops/${workshopId}`, 'page');
+  revalidateWorkshop();
 }
 
 export type ExamDraft = { draftIds: string[]; config: ExamConfig; editingId: string | null };
@@ -240,7 +240,7 @@ export async function deleteGeneratedExam(workshopId: string, examId: string): P
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_generated').delete().eq('workshop_id', workshopId).eq('id', examId);
   if (error) throw new Error(error.message);
-  revalidatePath(`/workshops/${workshopId}`, 'page');
+  revalidateWorkshop();
 }
 
 export async function saveExamDraft(workshopId: string, draft: ExamDraft): Promise<void> {

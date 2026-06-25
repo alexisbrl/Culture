@@ -3,7 +3,7 @@
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { requireManager } from '@/lib/authz';
 import { buildWorkshopFileKey, createUploadTicket, createSignedDownloadUrl, deleteObject, type UploadTicket } from '@/lib/storage';
-import { revalidatePath } from 'next/cache';
+import { revalidateWorkshop } from '@/lib/revalidate';
 
 export type FileCategory = 'audio' | 'texte' | 'autre';
 
@@ -126,7 +126,7 @@ export async function finalizeWorkshopFileUpload(
       return { success: false, error: 'Erreur lors de l’enregistrement' };
     }
 
-    revalidatePath(`/`, 'layout');
+    revalidateWorkshop();
     return {
       success: true,
       file: {
@@ -214,7 +214,7 @@ export async function renameWorkshopFile(
       return { success: false, error: 'Erreur serveur' };
     }
 
-    revalidatePath('/', 'layout');
+    revalidateWorkshop();
     return { success: true, name: newName };
   } catch (err) {
     console.error('renameWorkshopFile error:', err);
@@ -244,7 +244,7 @@ export async function deleteWorkshopFile(
     await deleteObject(row.storage_path);
     await supabase.from('workshop_files').delete().eq('id', fileId).eq('workshop_id', workshopId);
 
-    revalidatePath(`/`, 'layout');
+    revalidateWorkshop();
     return { success: true };
   } catch (err) {
     console.error('deleteWorkshopFile error:', err);

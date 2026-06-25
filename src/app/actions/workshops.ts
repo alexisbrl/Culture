@@ -6,7 +6,7 @@ import { getSupabaseServerClient } from '@/lib/supabase';
 import { requireMember, requireManager, requireOwner, ROLE_RANK } from '@/lib/authz';
 import { generateTag } from '@/lib/tag';
 import { EMAIL_FROM, deletionCodeEmail, workshopTrashedEmail } from '@/lib/emails';
-import { revalidatePath } from 'next/cache';
+import { revalidateWorkshop, revalidateDashboard } from '@/lib/revalidate';
 import { Resend } from 'resend';
 
 // Rangs d'atelier : la valeur ROLE_RANK vient de la source unique `@/lib/authz`.
@@ -100,7 +100,7 @@ export async function createWorkshop(
       role: 'owner',
     });
 
-    revalidatePath('/', 'layout');
+    revalidateDashboard();
     return { success: true, id: workshop.id };
   } catch (err) {
     console.error(err);
@@ -450,7 +450,9 @@ export async function updateWorkshopDetails(
 
     await supabase.from('workshops').update(update).eq('id', workshopId);
 
-    revalidatePath('/', 'layout');
+    // Détails affichés à la fois sur la page atelier et sur la carte du dashboard.
+    revalidateWorkshop();
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('updateWorkshopDetails error:', err);
@@ -524,7 +526,9 @@ export async function activateWorkshopPremium(
       .update({ is_premium: true, premium_activated_at: new Date().toISOString() })
       .eq('id', workshopId);
 
-    revalidatePath('/', 'layout');
+    // Badge Premium visible sur la page atelier ET sur la carte du dashboard.
+    revalidateWorkshop();
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('activateWorkshopPremium error:', err);
@@ -572,7 +576,9 @@ export async function uploadWorkshopCover(
 
     await supabase.from('workshops').update({ cover_image_url: url, cover_image_active: true }).eq('id', workshopId);
 
-    revalidatePath('/', 'layout');
+    // Couverture visible sur la page atelier ET sur la carte du dashboard.
+    revalidateWorkshop();
+    revalidateDashboard();
     return { success: true, url };
   } catch (err) {
     console.error('uploadWorkshopCover error:', err);
@@ -688,7 +694,8 @@ export async function requestToJoinWorkshop(
       return { success: false, error: 'Erreur lors de l\'envoi de la demande' };
     }
 
-    revalidatePath('/', 'layout');
+    // L'état « demande envoyée » s'affiche sur le dashboard du demandeur.
+    revalidateDashboard();
     return { success: true, status: 'requested' };
   } catch (err) {
     console.error('requestToJoinWorkshop error:', err);
@@ -773,7 +780,9 @@ export async function approveJoinRequest(
       .eq('workshop_id', workshopId)
       .eq('user_id', targetUserId);
 
-    revalidatePath('/', 'layout');
+    // Nouveau membre : liste des membres (paramètres) + nombre de membres (cartes dashboard).
+    revalidateWorkshop();
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('approveJoinRequest error:', err);
@@ -796,7 +805,8 @@ export async function rejectJoinRequest(
       .eq('workshop_id', workshopId)
       .eq('user_id', targetUserId);
 
-    revalidatePath('/', 'layout');
+    // Liste des demandes d'adhésion (page Paramètres → Membres & rôles).
+    revalidateWorkshop();
     return { success: true };
   } catch (err) {
     console.error('rejectJoinRequest error:', err);
@@ -819,7 +829,8 @@ export async function cancelJoinRequest(
       .eq('workshop_id', workshopId)
       .eq('user_id', userId);
 
-    revalidatePath('/', 'layout');
+    // L'état « demande envoyée » disparaît du dashboard du demandeur.
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('cancelJoinRequest error:', err);
@@ -909,7 +920,8 @@ export async function inviteMemberByTag(
       return { success: false, error: 'Erreur lors de l\'envoi de l\'invitation' };
     }
 
-    revalidatePath('/', 'layout');
+    // Liste des invitations en attente (page Paramètres → Membres & rôles).
+    revalidateWorkshop();
     return { success: true, displayName: targetUser.display_name };
   } catch (err) {
     console.error('inviteMemberByTag error:', err);
@@ -1027,7 +1039,9 @@ export async function acceptInvitation(
       .eq('workshop_id', workshopId)
       .eq('user_id', profile.userId);
 
-    revalidatePath('/', 'layout');
+    // Le demandeur devient membre : nouvel atelier dans sa liste + accès à sa page.
+    revalidateDashboard();
+    revalidateWorkshop();
     return { success: true };
   } catch (err) {
     console.error('acceptInvitation error:', err);
@@ -1050,7 +1064,8 @@ export async function declineInvitation(
       .eq('workshop_id', workshopId)
       .eq('user_id', userId);
 
-    revalidatePath('/', 'layout');
+    // L'invitation disparaît de la liste des invitations reçues (dashboard de l'invité).
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('declineInvitation error:', err);
@@ -1108,7 +1123,8 @@ export async function cancelInvitation(
       .eq('workshop_id', workshopId)
       .eq('user_id', targetUserId);
 
-    revalidatePath('/', 'layout');
+    // Liste des invitations en attente (page Paramètres → Membres & rôles).
+    revalidateWorkshop();
     return { success: true };
   } catch (err) {
     console.error('cancelInvitation error:', err);
@@ -1162,7 +1178,8 @@ export async function setMemberRole(
       .eq('workshop_id', workshopId)
       .eq('user_id', targetUserId);
 
-    revalidatePath('/', 'layout');
+    // Rôle affiché dans la liste des membres + pastilles de rôle (page atelier / paramètres).
+    revalidateWorkshop();
     return { success: true };
   } catch (err) {
     console.error('setMemberRole error:', err);
@@ -1206,7 +1223,9 @@ export async function removeMember(
       .eq('workshop_id', workshopId)
       .eq('user_id', targetUserId);
 
-    revalidatePath('/', 'layout');
+    // Membre retiré : liste des membres (paramètres) + nombre de membres (cartes dashboard).
+    revalidateWorkshop();
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('removeMember error:', err);
@@ -1371,7 +1390,8 @@ export async function confirmDeletion(
       console.error('Email notification error (non-blocking):', emailErr);
     }
 
-    revalidatePath('/', 'layout');
+    // L'atelier quitte « mes ateliers » et apparaît dans la corbeille (dashboard).
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('confirmDeletion error:', err);
@@ -1395,7 +1415,8 @@ export async function restoreWorkshop(
       .update({ deleted_at: null, deleted_by: null })
       .eq('id', workshopId);
 
-    revalidatePath('/', 'layout');
+    // L'atelier réapparaît dans « mes ateliers » et quitte la corbeille (dashboard).
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('restoreWorkshop error:', err);

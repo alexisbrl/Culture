@@ -160,10 +160,23 @@ peuvent donc plus diverger des colonnes réelles, et `role` est resserré sur l'
 
 ## 🟢 4. EFFICACITÉ
 
-### 4.1 — `revalidatePath('/', 'layout')` partout
-Presque chaque mutation invalide **tout le cache de l'app** (`'/'` + `'layout'`). C'est un marteau-pilon : un
-renommage de fichier invalide le rendu de toutes les pages. `examQuestions.ts` fait mieux
-(`/workshops/${id}`, `'page'`). À harmoniser sur le scope le plus étroit possible.
+### 4.1 — `revalidatePath('/', 'layout')` partout ✅ RÉSOLU (25/06/2026)
+Presque chaque mutation invalidait **tout le cache de l'app** (`'/'` + `'layout'`) : un marteau-pilon (un
+renommage de fichier d'atelier invalidait aussi le Jardin, le Profil, la page Tarifs…). À noter : l'exemple
+`examQuestions.ts` que cet audit citait comme « fait mieux » était en réalité **mal scopé** — il passait
+`/workshops/${id}` sans le segment `[locale]`, donc ne matchait probablement aucune entrée de cache (le
+`revalidatePath` opère sur la *structure de fichiers de route*, pas l'URL ; cf. doc Next 16).
+
+**Corrigé :** nouveau module `src/lib/revalidate.ts` exposant deux helpers à scope étroit, basés sur les
+**patterns de route** corrects (avec `[locale]`/`[id]` + `type`) :
+- `revalidateWorkshop()` → `revalidatePath('/[locale]/workshops/[id]', 'layout')` (page atelier + paramètres
+  + session) ;
+- `revalidateDashboard()` → `revalidatePath('/[locale]/dashboard', 'page')` (mes ateliers / rejoints /
+  corbeille / recherche).
+
+Chacune des **27 mutations** (16 dans `workshops.ts`, 3 dans `workshopFiles.ts`, 8 dans `examQuestions.ts`) a
+été re-scopée selon ce qu'elle modifie réellement (atelier, dashboard, ou les deux — voir les commentaires en
+ligne). Plus aucun `revalidatePath('/', 'layout')` dans le code. `next build` ✅.
 
 ### 4.2 — Requêtes N+1
 - `confirmDeletion` (`workshops.ts:1332`) boucle `client.users.getUser()` (appel réseau Clerk) **par
@@ -228,7 +241,7 @@ Le build avertit : `middleware` → renommer en `proxy`. À planifier.
 | **6** | Découper `ExamenTab` & `SettingsClient` en sous-composants | 🟡 Clarté | L | ⭐⭐⭐⭐ | ✅ fait (24/06) |
 | **7** | Config ESLint (`ignores` worktrees) + faire échouer le build/CI sur erreurs ; corriger les erreurs | 🟡 Process | S | ⭐⭐⭐⭐ | ✅ fait (24/06 — §3.3+§3.4) |
 | **8** | Installer Vitest + Playwright (promis dans CLAUDE.md, absents) | Process | M | ⭐⭐⭐ | à faire |
-| **9** | Resserrer `revalidatePath` ; sortir le cleanup corbeille en cron | 🟢 Perf | S | ⭐⭐⭐ | à faire |
+| **9** | Resserrer `revalidatePath` ; sortir le cleanup corbeille en cron | 🟢 Perf | S | ⭐⭐⭐ | 🔶 partiel (§4.1 `revalidatePath` ✅ 25/06 ; §4.3 cleanup cron à faire) |
 | **10** | Extraire types métier dans `lib/` + factoriser emails/tags | 🔵 Durabilité | M | ⭐⭐⭐ | à faire |
 | **11** | Plan i18n progressif + générer les types Supabase | 🔵 Durabilité | L | ⭐⭐⭐ | à faire |
 | **12** | Intégration Stripe (voir §1.6) + facturation membres Premium | 🔴 Sécu/Facturation | L | ⭐⭐⭐⭐ | à faire (bloque la prod payante) |
