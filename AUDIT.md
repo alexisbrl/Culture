@@ -178,11 +178,14 @@ Chacune des **27 mutations** (16 dans `workshops.ts`, 3 dans `workshopFiles.ts`,
 été re-scopée selon ce qu'elle modifie réellement (atelier, dashboard, ou les deux — voir les commentaires en
 ligne). Plus aucun `revalidatePath('/', 'layout')` dans le code. `next build` ✅.
 
-### 4.2 — Requêtes N+1
-- `confirmDeletion` (`workshops.ts:1332`) boucle `client.users.getUser()` (appel réseau Clerk) **par
-  propriétaire**.
-- Plusieurs actions enchaînent des requêtes Supabase séquentielles qui pourraient être parallélisées
-  (`Promise.all`) ou jointes — `getExamBankData` montre la bonne approche avec `Promise.all`.
+### 4.2 — Requêtes N+1 ✅ RÉSOLU (25/06/2026)
+- `confirmDeletion` bouclait `client.users.getUser()` (un appel réseau Clerk **par propriétaire**) + envois
+  d'emails séquentiels. Corrigé : un seul `client.users.getUserList({ userId: ownerIds })` (batch) +
+  `Promise.all` sur les envois Resend. Les deux `select` indépendants (nom de l'atelier / liste des
+  propriétaires) sont aussi parallélisés.
+- `getUserWorkshops` (chemin chaud, appelé à **chaque** chargement du dashboard) enchaînait deux `select`
+  Supabase indépendants (ateliers / nombre de membres) — parallélisés via `Promise.all`.
+- Audit confirmé : plus aucune boucle Clerk `getUser` ailleurs (les autres appels sont unitaires).
 
 ### 4.3 — `getUserWorkshops` appelle `cleanupExpiredWorkshops` à chaque chargement
 `workshops.ts:156` — le nettoyage de la corbeille tourne à **chaque** affichage du dashboard de **chaque**
@@ -246,11 +249,12 @@ Le build avertit : `middleware` → renommer en `proxy`. À planifier.
 | **11** | Plan i18n progressif + générer les types Supabase | 🔵 Durabilité | L | ⭐⭐⭐ | à faire |
 | **12** | Intégration Stripe (voir §1.6) + facturation membres Premium | 🔴 Sécu/Facturation | L | ⭐⭐⭐⭐ | à faire (bloque la prod payante) |
 
-> **Sections 1 (sécurité), 2 (DRY) et 3 (clarté) traitées.** Prochaine priorité conseillée : section 4
-> (efficacité — resserrer `revalidatePath`, sortir le cleanup corbeille en cron). #12 (Stripe) reste
+> **Sections 1 (sécurité), 2 (DRY), 3 (clarté) traitées ; section 4 (efficacité) : §4.1 + §4.2 faits.**
+> Reste : §4.3 (sortir le cleanup corbeille en cron) puis section 5 (durabilité). #12 (Stripe) reste
 > indispensable avant toute mise en production payante.
 
 ---
 
-*Audit généré par Claude Code le 21/06/2026. Sections 1 (sécurité, 22/06), 2 (DRY, 22/06) et 3 (clarté,
-24-25/06) traitées et appliquées au code ; les sections 4 (efficacité) et 5 (durabilité) restent d'actualité.*
+*Audit généré par Claude Code le 21/06/2026. Sections 1 (sécurité, 22/06), 2 (DRY, 22/06), 3 (clarté,
+24-25/06) et §4.1-4.2 (efficacité, 25/06) traitées et appliquées au code ; reste §4.3 et la section 5
+(durabilité).*

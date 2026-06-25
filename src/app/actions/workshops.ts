@@ -163,17 +163,19 @@ export async function getUserWorkshops(): Promise<{
 
     const workshopIds = memberships.map((m) => m.workshop_id);
 
-    // Exclure les ateliers en corbeille
-    const { data: workshops } = await supabase
-      .from('workshops')
-      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium')
-      .in('id', workshopIds)
-      .is('deleted_at', null);
-
-    const { data: counts } = await supabase
-      .from('workshop_members')
-      .select('workshop_id')
-      .in('workshop_id', workshopIds);
+    // Ateliers (hors corbeille) + nombre de membres : requêtes indépendantes →
+    // lancées en parallèle (audit 4.2, chemin chaud appelé à chaque dashboard).
+    const [{ data: workshops }, { data: counts }] = await Promise.all([
+      supabase
+        .from('workshops')
+        .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium')
+        .in('id', workshopIds)
+        .is('deleted_at', null),
+      supabase
+        .from('workshop_members')
+        .select('workshop_id')
+        .in('workshop_id', workshopIds),
+    ]);
 
     const countMap: Record<string, number> = {};
     for (const c of counts ?? []) {
@@ -1340,20 +1342,14 @@ export async function confirmDeletion(
 
     if (codeRecord.code !== code) return { success: false, error: 'Code incorrect.' };
 
-    // Récupérer le nom de l'atelier (pour l'email de notification).
-    const { data: workshop } = await supabase
-      .from('workshops')
-      .select('name')
-      .eq('id', workshopId)
-      .single();
+    // Nom de l'atelier (pour l'email) + liste des propriétaires : requêtes
+    // indépendantes → lancées en parallèle (audit 4.2).
+    const [{ data: workshop }, { data: owners }] = await Promise.all([
+      supabase.from('workshops').select('name').eq('id', workshopId).single(),
+      supabase.from('workshop_members').select('user_id').eq('workshop_id', workshopId).eq('role', 'owner'),
+    ]);
 
     if (!workshop) return { success: false, error: 'Atelier introuvable' };
-
-    const { data: owners } = await supabase
-      .from('workshop_members')
-      .select('user_id')
-      .eq('workshop_id', workshopId)
-      .eq('role', 'owner');
 
     // Soft delete
     await supabase
@@ -1368,24 +1364,33 @@ export async function confirmDeletion(
       .eq('workshop_id', workshopId)
       .eq('user_id', userId);
 
-    // Envoyer email de notification à tous les propriétaires
+    // Envoyer un email de notification à tous les propriétaires.
+    // Audit 4.2 : on évite le N+1 (un `getUser` Clerk par propriétaire) — un seul
+    // `getUserList` batch pour tous les propriétaires, et envois Resend en parallèle.
     try {
       const resend = getResend();
       const client = await clerkClient();
 
-      const currentUser = await client.users.getUser(userId);
+      const ownerIds = (owners ?? []).map((o) => o.user_id);
+      const [currentUser, ownerList] = await Promise.all([
+        client.users.getUser(userId),
+        ownerIds.length > 0
+          ? client.users.getUserList({ userId: ownerIds, limit: ownerIds.length })
+          : Promise.resolve({ data: [] as Awaited<ReturnType<typeof client.users.getUser>>[] }),
+      ]);
+
       const actionBy = `${currentUser.firstName ?? ''} ${currentUser.lastName ?? ''}`.trim() ||
         currentUser.emailAddresses[0]?.emailAddress || 'Un propriétaire';
 
-      for (const owner of owners ?? []) {
-        const ownerUser = await client.users.getUser(owner.user_id);
-        const ownerEmail = ownerUser.emailAddresses[0]?.emailAddress;
-        if (!ownerEmail) continue;
-        const ownerName = `${ownerUser.firstName ?? ''} ${ownerUser.lastName ?? ''}`.trim() || ownerEmail;
-
-        const mail = workshopTrashedEmail({ ownerName, workshopName: workshop.name, actionBy });
-        await resend.emails.send({ from: EMAIL_FROM, to: ownerEmail, subject: mail.subject, html: mail.html });
-      }
+      await Promise.all(
+        ownerList.data.flatMap((ownerUser) => {
+          const ownerEmail = ownerUser.emailAddresses[0]?.emailAddress;
+          if (!ownerEmail) return [];
+          const ownerName = `${ownerUser.firstName ?? ''} ${ownerUser.lastName ?? ''}`.trim() || ownerEmail;
+          const mail = workshopTrashedEmail({ ownerName, workshopName: workshop.name, actionBy });
+          return [resend.emails.send({ from: EMAIL_FROM, to: ownerEmail, subject: mail.subject, html: mail.html })];
+        })
+      );
     } catch (emailErr) {
       console.error('Email notification error (non-blocking):', emailErr);
     }
