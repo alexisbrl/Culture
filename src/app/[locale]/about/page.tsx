@@ -1,15 +1,13 @@
 import { useTranslations } from 'next-intl';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { getLocale } from 'next-intl/server';
 import { BookOpen, Zap, BarChart3 } from 'lucide-react';
 
-export default async function AboutPage() {
-  const locale = await getLocale();
-  return <AboutPageClient locale={locale} />;
+export default function AboutPage() {
+  return <AboutPageClient />;
 }
 
-function AboutPageClient({ locale }: { locale: string }) {
+function AboutPageClient() {
   const t = useTranslations('about');
 
   const values = [

@@ -3,7 +3,7 @@
 > Ce fichier est l'unique source de vérité pour tout développement sur ce projet. Il doit être lu intégralement à chaque nouvelle conversation.
 > **Toute modification structurante apportée au projet (stack, structure, conventions, décisions produit) doit être reflétée ici.**
 >
-> Dernière mise à jour : 22/06/2026
+> Dernière mise à jour : 25/06/2026
 
 ---
 
@@ -222,6 +222,11 @@ npm run test:e2e     # Playwright
 
 ### Claude in Chrome
 L'extension Claude in Chrome est activée. Claude peut l'utiliser pour ouvrir l'application dans un navigateur, tester l'UI et itérer jusqu'à ce que le rendu soit correct. À utiliser systématiquement pour valider le rendu visuel avant de considérer une feature terminée.
+
+### Lint & CI [AJOUTÉ PAR CLAUDE - 24/06/2026]
+- `npm run lint` (= `eslint .`) doit passer **sans erreur** avant tout commit/PR. La config (`eslint.config.mjs`) ignore `.claude/**`, `_handoff/**`, `culture-design-system/**` (maquettes/worktrees locaux). Les règles « React Compiler readiness » (`react-hooks/set-state-in-effect`, `refs`, `immutability`, `purity`) sont volontairement en `warn` (patterns hydration-safe légitimes) : **ne pas les repasser en `error`** sans raison, et ne pas « corriger » un warning hydration en retirant l'effet (cela réintroduit un hydration mismatch).
+- `npm run typecheck` (= `tsc --noEmit`) en local ; en CI le typecheck fiable passe par `npm run build` (régénère `next-env.d.ts` + types de routes).
+- **CI** : `.github/workflows/ci.yml` (job `lint` sans secret + job `build` avec secrets dépôt). Le job `build` nécessite que les *repository secrets* GitHub soient renseignés (mêmes valeurs que Vercel). Idéalement, protéger `main` en exigeant la CI verte avant merge.
 
 ---
 
@@ -1032,8 +1037,18 @@ Sessions d'examens standardisés dans des **centres certifiés**. Chaque examen 
 
 - **Popup d'intro « + nouvel examen » à finaliser** [AJOUTÉ PAR CLAUDE - 20/06/2026] : `ExamenTab.tsx` (`HistoryContent`, état `introOpen`) affiche une popup d'introduction (« Comment fonctionne le générateur d'examen ») avant d'aller à la banque de questions. Les 3 illustrations sont actuellement des placeholders CSS (blob ambre en dégradé radial) en attendant les vraies images fournies par l'utilisateur — à remplacer par des `<img>` aux mêmes dimensions/position (260×230, débordant du cadre de ±64px, rotation ±4deg) une fois les fichiers reçus.
 
+- **Typer le client Supabase de bout en bout (`createClient<Database>`)** [AJOUTÉ PAR CLAUDE - 25/06/2026] : le schéma est désormais généré (`src/lib/database.types.ts`, audit §3.5), mais `getSupabaseServerClient` (`src/lib/supabase.ts`) renvoie volontairement un client **non typé**. Le passer à `createClient<Database>(url, key)` donnerait une sécurité de type sur toutes les requêtes `.from()`, mais révèle **~15 incohérences réelles** à corriger d'abord : colonnes nullables traitées comme non-null (`workshops.created_at`, `unique_tag`…), colonnes `jsonb` (`Json`) castées directement en `string[]` dans `examQuestions.ts`, `role: string` (DB) vs `WorkshopRole` côté code, et un `update(...)` typé `Record<string, …>` rejeté. C'est une **migration à part entière** (plusieurs fichiers d'actions) — à faire quand on s'attaque à la section 4/5 de l'audit, pas dans le périmètre 3.5.
+
 ---
 
 > **Design system — tokens de couleur centralisés** [AJOUTÉ PAR CLAUDE - 22/06/2026] : `src/lib/theme.ts` est la **source de vérité des couleurs** pour les styles inline — `palette` (tokens nommés par rôle : `ink`, `inkMuted`, `cream`, `green`, `amber`, `danger`…), `ink(alpha)` (translucides sur l'encre `#2d2a24`), `radius`, `shadow`. **Ne plus écrire de couleur de marque en dur dans un `style={{}}`** : utiliser ces tokens (ex. `color: palette.ink`, `border: \`1px solid ${ink(0.14)}\``). Audit §2.4 : toutes les couleurs de marque hex inline ont été migrées. Restes documentés dans `AUDIT_2.4_design_system.md` (rgba imbriqués dans des chaînes, pages en classes Tailwind `text-[#…]` → à tokeniser via `@theme` dans `globals.css`, quelques attributs SVG). `theme.ts` doit rester synchronisé avec les variables CSS de `globals.css` (`--primary`…) utilisées par les classes Tailwind.
 
-*Dernière mise à jour : 22/06/2026*
+> **Découpage des deux fichiers monstres (audit §3.1)** [AJOUTÉ PAR CLAUDE - 24/06/2026] : `ExamenTab.tsx` (2334 l.) et `SettingsClient.tsx` (2019 l.) ont été éclatés en sous-composants, **sans changement de comportement** (extraction verbatim, `tsc` + `next build` OK). Beaucoup d'entrées plus haut référencent encore « dans `ExamenTab.tsx` → `BankContent` », « dans `SettingsClient.tsx` » : le code correspondant vit désormais dans les fichiers ci-dessous (même logique, juste déplacée).
+> - **Onglet examen** — `src/app/[locale]/workshops/[id]/tabs/` : `ExamenTab.tsx` ne contient plus que l'orchestrateur (état partagé, tuiles history/bank/generator, modales examen). `tabs/examen/` contient `examShared.tsx` (types `ExamConfig`/`Question`-adjacents, constantes A4, helpers purs comme `computePagination`/`defaultExamConfig` et petits composants `DiffDots`/`TypePill`/`WeightControls`/`renderAnswerSpace`…), `HistoryContent.tsx`, `BankContent.tsx`, `GeneratorContent.tsx`. ⚠️ `examQuestions.ts` importe toujours `type { ExamConfig }` depuis `ExamenTab` (ré-exporté depuis `examShared`) — ne pas casser ce ré-export.
+> - **Paramètres d'atelier** — `src/app/[locale]/workshops/[id]/settings/` : `SettingsClient.tsx` garde la section **Général**, la machinerie « modifications non enregistrées » (formValues/isDirty/intercepteur de navigation/beforeunload), la barre d'enregistrement et les modales de suppression/partage/quitter, et orchestre les sections. `settingsShared.tsx` (types de rôle, `NAV_ITEMS`, `ROLE_RANK`/`ROLE_LABEL`, helpers `Row`/`Switch`/`SmallBtn`/`SectionCard`/`DotRow`/`FileCategoryIcon`/`formatFileSize`/`MOCK_BRICKS`/`avatarGradient`), `MembersSection.tsx`, `FilesSection.tsx`, `PremiumSection.tsx`, `BricksSection.tsx`. **Les 4 sections sont auto-contenues** (état/effets/handlers/modales propres) et **montées en permanence** dans le parent (toggle `display:'contents'`/`'none'`) — c'est volontaire : ça préserve la persistance d'état entre onglets et l'exécution des effets au chargement, exactement comme avant quand l'état vivait dans le parent toujours monté. **Ne pas** repasser en `{activeSection === 'x' && <Section/>}` (montage conditionnel) sans réfléchir : ça réintroduirait des régressions (upload en cours perdu au changement d'onglet, reset des mises à jour optimistes des membres).
+>
+> Pattern de découpage à réutiliser pour tout futur fichier surdimensionné : tranches verbatim (pas de réécriture), un module `xShared` pour types/constantes/helpers/petits composants, un fichier par responsabilité, validé par `tsc --noEmit` + `next build`.
+
+> **Types Supabase générés = source de vérité du schéma (audit §3.5)** [AJOUTÉ PAR CLAUDE - 25/06/2026] : `src/lib/database.types.ts` est **généré** (MCP Supabase `generate_typescript_types`, ou CLI `supabase gen types typescript --project-id hhkmrejjksjpfetwefju > src/lib/database.types.ts`) — **ne pas l'éditer à la main**, et le **régénérer après chaque migration**. Il est ignoré par ESLint (`eslint.config.mjs`). Les types métier de `src/lib/supabase.ts` (`UserProfile`, `Workshop`, `WorkshopMember`, `WorkshopWithRole`, `WorkshopDetail`) en **dérivent** désormais (`Tables<'workshops'>`, `Omit<Tables<'workshop_members'>, 'role'> & { role: WorkshopRole }`…) au lieu d'être maintenus à la main — ils ne peuvent donc plus diverger des colonnes réelles (avant ce correctif, ils ne connaissaient que `'owner' | 'member'`, sans `'manager'`, et n'étaient importés nulle part : exports morts ayant dérivé en silence). `role` est resserré sur l'union partagée `WorkshopRole` de `src/lib/authz.ts` (le check Postgres `owner | manager | member` n'apparaît pas comme enum dans le schéma généré, donc `role` y est `string`). Le client reste non typé — cf. l'item « Typer le client Supabase de bout en bout » au backlog §18.
+
+*Dernière mise à jour : 25/06/2026 [MODIFIÉ PAR CLAUDE]*

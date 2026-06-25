@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Évite de faire tourner plusieurs CI en parallèle sur une même branche/PR.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Garde-fou principal (audit §3.4 « le lint ne protège rien ») : échoue sur toute
+  # erreur ESLint. Ne nécessite aucun secret — tourne sur chaque push/PR.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  # Vérification des types + bundle. `next build` régénère next-env.d.ts et les types
+  # de routes PUIS exécute la validation TypeScript — c'est notre typecheck fiable.
+  # Nécessite les mêmes variables d'environnement que Vercel : à renseigner dans
+  # GitHub → Settings → Secrets and variables → Actions (Repository secrets).
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_SIGN_IN_URL: /fr/sign-in
+          NEXT_PUBLIC_CLERK_SIGN_UP_URL: /fr/sign-up
+          NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: /fr/create
+          NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: /fr/create
+          CLERK_WEBHOOK_SIGNING_SECRET: ${{ secrets.CLERK_WEBHOOK_SIGNING_SECRET }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}

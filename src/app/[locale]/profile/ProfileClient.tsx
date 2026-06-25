@@ -21,54 +21,6 @@ const SUB_CARD_GRADIENT = 'linear-gradient(180deg, rgba(232,184,108,0.20), rgba(
 const DARK_BG = palette.ink;
 const DARK_TEXT = palette.parchment;
 
-function GardenerAvatar() {
-  return (
-    <svg width="120" height="120" viewBox="0 0 120 120">
-      <circle cx="60" cy="60" r="58" fill="#f1ead4" />
-      <ellipse cx="60" cy="100" rx="60" ry="14" fill="#cfd9c0" />
-      <ellipse cx="60" cy="103" rx="60" ry="10" fill="#a8b896" />
-      <ellipse cx="60" cy="98" rx="14" ry="3" fill="#000" opacity="0.18" />
-      <rect x="54" y="80" width="5" height="18" rx="2" fill="#5a4838" />
-      <rect x="61" y="80" width="5" height="18" rx="2" fill="#5a4838" />
-      <path d="M 44 60 Q 60 56 76 60 L 78 84 Q 60 86 42 84 Z" fill="url(#tunic)" />
-      <g transform="translate(86 66)">
-        <rect x="-10" y="-6" width="14" height="8" rx="1.4" fill="#6e8a55" />
-        <rect x="-10" y="-6" width="14" height="2" fill="#5a7245" />
-        <path d="M 4 -3 L 11 -8 L 11 -1 Z" fill="#6e8a55" />
-        <path
-          d="M -10 -4 q -4 -2 -4 -6 q 0 -2 3 -2"
-          fill="none"
-          stroke="#5a7245"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-        />
-      </g>
-      <path d="M 76 62 Q 84 62 88 66" stroke="#7a9968" strokeWidth="6" strokeLinecap="round" fill="none" />
-      <path d="M 44 62 Q 38 70 38 78" stroke="#7a9968" strokeWidth="6" strokeLinecap="round" fill="none" />
-      <rect x="56" y="56" width="8" height="6" fill="#e8c8a4" />
-      <ellipse cx="60" cy="50" rx="13" ry="14" fill="#f0d2ad" />
-      <path d="M 47 46 Q 50 40 60 38 Q 70 40 73 46 Q 70 42 60 41 Q 50 42 47 46 Z" fill="#3a2a1c" />
-      <path d="M 54 51 q 2 -1 4 0" stroke="#2d2a24" strokeWidth="1.2" fill="none" strokeLinecap="round" />
-      <path d="M 62 51 q 2 -1 4 0" stroke="#2d2a24" strokeWidth="1.2" fill="none" strokeLinecap="round" />
-      <path d="M 56 56 q 4 2 8 0" stroke="#2d2a24" strokeWidth="1.2" fill="none" strokeLinecap="round" />
-      <ellipse cx="60" cy="38" rx="22" ry="5" fill="url(#hat)" />
-      <ellipse cx="60" cy="34" rx="12" ry="6" fill="#c8b89a" />
-      <ellipse cx="60" cy="32" rx="11" ry="3" fill="#a89878" />
-      <rect x="50" y="35" width="20" height="2" fill="#a87a3a" opacity="0.85" />
-      <defs>
-        <linearGradient id="hat" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#d6c4a0" />
-          <stop offset="1" stopColor="#a08a72" />
-        </linearGradient>
-        <linearGradient id="tunic" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#7a9968" />
-          <stop offset="1" stopColor="#4f6b40" />
-        </linearGradient>
-      </defs>
-    </svg>
-  );
-}
-
 function StatCard({ value, label }: { value: string | number; label: string }) {
   return (
     <div
