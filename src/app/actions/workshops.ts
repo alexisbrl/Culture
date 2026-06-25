@@ -109,20 +109,11 @@ export async function createWorkshop(
 }
 
 // ─── Cleanup expired trashed workshops ───────────────────────────────────────
-
-async function cleanupExpiredWorkshops() {
-  try {
-    const supabase = getSupabaseServerClient();
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    await supabase
-      .from('workshops')
-      .delete()
-      .not('deleted_at', 'is', null)
-      .lt('deleted_at', sevenDaysAgo);
-  } catch (err) {
-    console.error('cleanupExpiredWorkshops error:', err);
-  }
-}
+//
+// Audit 4.3 : le nettoyage (suppression définitive des ateliers en corbeille
+// depuis > 7 jours) ne tourne plus à chaque lecture du dashboard. Il est
+// désormais une tâche planifiée pg_cron côté base (job `cleanup-expired-trashed-
+// workshops`, tous les jours à 03:00 UTC, migration `schedule_trash_cleanup_cron`).
 
 // ─── Get user's workshops ─────────────────────────────────────────────────────
 
@@ -149,8 +140,6 @@ export async function getUserWorkshops(): Promise<{
   try {
     const profile = await syncUserProfile();
     if (!profile) return { owned: [], joined: [] };
-
-    await cleanupExpiredWorkshops();
 
     const supabase = getSupabaseServerClient();
 
