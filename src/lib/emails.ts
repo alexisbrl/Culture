@@ -54,7 +54,7 @@ export function workshopTrashedEmail(args: { ownerName: string; workshopName: st
       <div style="background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 16px; margin: 20px 0;">
         <p style="color: #92400e; margin: 0; font-size: 14px;">⏳ Cet atelier sera <strong>définitivement supprimé dans 7 jours</strong> si aucune restauration n'est effectuée.</p>
       </div>
-      ${p(`Si c'est une erreur, connectez-vous sur <a href="https://scellow.com" style="color: #5f8a3f;">scellow.com</a> et restaurez l'atelier depuis votre corbeille.`)}
+      ${p(`Si c'est une erreur, connectez-vous sur <a href="https://scellow.com" style="color: #5f8a3f;">scellow.com</a> et restaurez l'atelier depuis la <strong style="color: #111827;">corbeille</strong>, tout en bas de votre tableau de bord.`)}
     `),
   };
 }

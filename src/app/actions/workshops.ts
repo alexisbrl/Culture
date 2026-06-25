@@ -6,7 +6,7 @@ import { getSupabaseServerClient } from '@/lib/supabase';
 import { requireMember, requireManager, requireOwner, ROLE_RANK } from '@/lib/authz';
 import { generateTag } from '@/lib/tag';
 import { EMAIL_FROM, deletionCodeEmail, workshopTrashedEmail } from '@/lib/emails';
-import { revalidatePath } from 'next/cache';
+import { revalidateWorkshop, revalidateDashboard } from '@/lib/revalidate';
 import { Resend } from 'resend';
 
 // Rangs d'atelier : la valeur ROLE_RANK vient de la source unique `@/lib/authz`.
@@ -100,7 +100,7 @@ export async function createWorkshop(
       role: 'owner',
     });
 
-    revalidatePath('/', 'layout');
+    revalidateDashboard();
     return { success: true, id: workshop.id };
   } catch (err) {
     console.error(err);
@@ -109,20 +109,11 @@ export async function createWorkshop(
 }
 
 // ─── Cleanup expired trashed workshops ───────────────────────────────────────
-
-async function cleanupExpiredWorkshops() {
-  try {
-    const supabase = getSupabaseServerClient();
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    await supabase
-      .from('workshops')
-      .delete()
-      .not('deleted_at', 'is', null)
-      .lt('deleted_at', sevenDaysAgo);
-  } catch (err) {
-    console.error('cleanupExpiredWorkshops error:', err);
-  }
-}
+//
+// Audit 4.3 : le nettoyage (suppression définitive des ateliers en corbeille
+// depuis > 7 jours) ne tourne plus à chaque lecture du dashboard. Il est
+// désormais une tâche planifiée pg_cron côté base (job `cleanup-expired-trashed-
+// workshops`, tous les jours à 03:00 UTC, migration `schedule_trash_cleanup_cron`).
 
 // ─── Get user's workshops ─────────────────────────────────────────────────────
 
@@ -150,8 +141,6 @@ export async function getUserWorkshops(): Promise<{
     const profile = await syncUserProfile();
     if (!profile) return { owned: [], joined: [] };
 
-    await cleanupExpiredWorkshops();
-
     const supabase = getSupabaseServerClient();
 
     const { data: memberships } = await supabase
@@ -163,17 +152,19 @@ export async function getUserWorkshops(): Promise<{
 
     const workshopIds = memberships.map((m) => m.workshop_id);
 
-    // Exclure les ateliers en corbeille
-    const { data: workshops } = await supabase
-      .from('workshops')
-      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium')
-      .in('id', workshopIds)
-      .is('deleted_at', null);
-
-    const { data: counts } = await supabase
-      .from('workshop_members')
-      .select('workshop_id')
-      .in('workshop_id', workshopIds);
+    // Ateliers (hors corbeille) + nombre de membres : requêtes indépendantes →
+    // lancées en parallèle (audit 4.2, chemin chaud appelé à chaque dashboard).
+    const [{ data: workshops }, { data: counts }] = await Promise.all([
+      supabase
+        .from('workshops')
+        .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium')
+        .in('id', workshopIds)
+        .is('deleted_at', null),
+      supabase
+        .from('workshop_members')
+        .select('workshop_id')
+        .in('workshop_id', workshopIds),
+    ]);
 
     const countMap: Record<string, number> = {};
     for (const c of counts ?? []) {
@@ -450,7 +441,9 @@ export async function updateWorkshopDetails(
 
     await supabase.from('workshops').update(update).eq('id', workshopId);
 
-    revalidatePath('/', 'layout');
+    // Détails affichés à la fois sur la page atelier et sur la carte du dashboard.
+    revalidateWorkshop();
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('updateWorkshopDetails error:', err);
@@ -524,7 +517,9 @@ export async function activateWorkshopPremium(
       .update({ is_premium: true, premium_activated_at: new Date().toISOString() })
       .eq('id', workshopId);
 
-    revalidatePath('/', 'layout');
+    // Badge Premium visible sur la page atelier ET sur la carte du dashboard.
+    revalidateWorkshop();
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('activateWorkshopPremium error:', err);
@@ -572,7 +567,9 @@ export async function uploadWorkshopCover(
 
     await supabase.from('workshops').update({ cover_image_url: url, cover_image_active: true }).eq('id', workshopId);
 
-    revalidatePath('/', 'layout');
+    // Couverture visible sur la page atelier ET sur la carte du dashboard.
+    revalidateWorkshop();
+    revalidateDashboard();
     return { success: true, url };
   } catch (err) {
     console.error('uploadWorkshopCover error:', err);
@@ -688,7 +685,8 @@ export async function requestToJoinWorkshop(
       return { success: false, error: 'Erreur lors de l\'envoi de la demande' };
     }
 
-    revalidatePath('/', 'layout');
+    // L'état « demande envoyée » s'affiche sur le dashboard du demandeur.
+    revalidateDashboard();
     return { success: true, status: 'requested' };
   } catch (err) {
     console.error('requestToJoinWorkshop error:', err);
@@ -773,7 +771,9 @@ export async function approveJoinRequest(
       .eq('workshop_id', workshopId)
       .eq('user_id', targetUserId);
 
-    revalidatePath('/', 'layout');
+    // Nouveau membre : liste des membres (paramètres) + nombre de membres (cartes dashboard).
+    revalidateWorkshop();
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('approveJoinRequest error:', err);
@@ -796,7 +796,8 @@ export async function rejectJoinRequest(
       .eq('workshop_id', workshopId)
       .eq('user_id', targetUserId);
 
-    revalidatePath('/', 'layout');
+    // Liste des demandes d'adhésion (page Paramètres → Membres & rôles).
+    revalidateWorkshop();
     return { success: true };
   } catch (err) {
     console.error('rejectJoinRequest error:', err);
@@ -819,7 +820,8 @@ export async function cancelJoinRequest(
       .eq('workshop_id', workshopId)
       .eq('user_id', userId);
 
-    revalidatePath('/', 'layout');
+    // L'état « demande envoyée » disparaît du dashboard du demandeur.
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('cancelJoinRequest error:', err);
@@ -909,7 +911,8 @@ export async function inviteMemberByTag(
       return { success: false, error: 'Erreur lors de l\'envoi de l\'invitation' };
     }
 
-    revalidatePath('/', 'layout');
+    // Liste des invitations en attente (page Paramètres → Membres & rôles).
+    revalidateWorkshop();
     return { success: true, displayName: targetUser.display_name };
   } catch (err) {
     console.error('inviteMemberByTag error:', err);
@@ -1027,7 +1030,9 @@ export async function acceptInvitation(
       .eq('workshop_id', workshopId)
       .eq('user_id', profile.userId);
 
-    revalidatePath('/', 'layout');
+    // Le demandeur devient membre : nouvel atelier dans sa liste + accès à sa page.
+    revalidateDashboard();
+    revalidateWorkshop();
     return { success: true };
   } catch (err) {
     console.error('acceptInvitation error:', err);
@@ -1050,7 +1055,8 @@ export async function declineInvitation(
       .eq('workshop_id', workshopId)
       .eq('user_id', userId);
 
-    revalidatePath('/', 'layout');
+    // L'invitation disparaît de la liste des invitations reçues (dashboard de l'invité).
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('declineInvitation error:', err);
@@ -1108,7 +1114,8 @@ export async function cancelInvitation(
       .eq('workshop_id', workshopId)
       .eq('user_id', targetUserId);
 
-    revalidatePath('/', 'layout');
+    // Liste des invitations en attente (page Paramètres → Membres & rôles).
+    revalidateWorkshop();
     return { success: true };
   } catch (err) {
     console.error('cancelInvitation error:', err);
@@ -1162,7 +1169,8 @@ export async function setMemberRole(
       .eq('workshop_id', workshopId)
       .eq('user_id', targetUserId);
 
-    revalidatePath('/', 'layout');
+    // Rôle affiché dans la liste des membres + pastilles de rôle (page atelier / paramètres).
+    revalidateWorkshop();
     return { success: true };
   } catch (err) {
     console.error('setMemberRole error:', err);
@@ -1206,7 +1214,9 @@ export async function removeMember(
       .eq('workshop_id', workshopId)
       .eq('user_id', targetUserId);
 
-    revalidatePath('/', 'layout');
+    // Membre retiré : liste des membres (paramètres) + nombre de membres (cartes dashboard).
+    revalidateWorkshop();
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('removeMember error:', err);
@@ -1321,20 +1331,14 @@ export async function confirmDeletion(
 
     if (codeRecord.code !== code) return { success: false, error: 'Code incorrect.' };
 
-    // Récupérer le nom de l'atelier (pour l'email de notification).
-    const { data: workshop } = await supabase
-      .from('workshops')
-      .select('name')
-      .eq('id', workshopId)
-      .single();
+    // Nom de l'atelier (pour l'email) + liste des propriétaires : requêtes
+    // indépendantes → lancées en parallèle (audit 4.2).
+    const [{ data: workshop }, { data: owners }] = await Promise.all([
+      supabase.from('workshops').select('name').eq('id', workshopId).single(),
+      supabase.from('workshop_members').select('user_id').eq('workshop_id', workshopId).eq('role', 'owner'),
+    ]);
 
     if (!workshop) return { success: false, error: 'Atelier introuvable' };
-
-    const { data: owners } = await supabase
-      .from('workshop_members')
-      .select('user_id')
-      .eq('workshop_id', workshopId)
-      .eq('role', 'owner');
 
     // Soft delete
     await supabase
@@ -1349,29 +1353,39 @@ export async function confirmDeletion(
       .eq('workshop_id', workshopId)
       .eq('user_id', userId);
 
-    // Envoyer email de notification à tous les propriétaires
+    // Envoyer un email de notification à tous les propriétaires.
+    // Audit 4.2 : on évite le N+1 (un `getUser` Clerk par propriétaire) — un seul
+    // `getUserList` batch pour tous les propriétaires, et envois Resend en parallèle.
     try {
       const resend = getResend();
       const client = await clerkClient();
 
-      const currentUser = await client.users.getUser(userId);
+      const ownerIds = (owners ?? []).map((o) => o.user_id);
+      const [currentUser, ownerList] = await Promise.all([
+        client.users.getUser(userId),
+        ownerIds.length > 0
+          ? client.users.getUserList({ userId: ownerIds, limit: ownerIds.length })
+          : Promise.resolve({ data: [] as Awaited<ReturnType<typeof client.users.getUser>>[] }),
+      ]);
+
       const actionBy = `${currentUser.firstName ?? ''} ${currentUser.lastName ?? ''}`.trim() ||
         currentUser.emailAddresses[0]?.emailAddress || 'Un propriétaire';
 
-      for (const owner of owners ?? []) {
-        const ownerUser = await client.users.getUser(owner.user_id);
-        const ownerEmail = ownerUser.emailAddresses[0]?.emailAddress;
-        if (!ownerEmail) continue;
-        const ownerName = `${ownerUser.firstName ?? ''} ${ownerUser.lastName ?? ''}`.trim() || ownerEmail;
-
-        const mail = workshopTrashedEmail({ ownerName, workshopName: workshop.name, actionBy });
-        await resend.emails.send({ from: EMAIL_FROM, to: ownerEmail, subject: mail.subject, html: mail.html });
-      }
+      await Promise.all(
+        ownerList.data.flatMap((ownerUser) => {
+          const ownerEmail = ownerUser.emailAddresses[0]?.emailAddress;
+          if (!ownerEmail) return [];
+          const ownerName = `${ownerUser.firstName ?? ''} ${ownerUser.lastName ?? ''}`.trim() || ownerEmail;
+          const mail = workshopTrashedEmail({ ownerName, workshopName: workshop.name, actionBy });
+          return [resend.emails.send({ from: EMAIL_FROM, to: ownerEmail, subject: mail.subject, html: mail.html })];
+        })
+      );
     } catch (emailErr) {
       console.error('Email notification error (non-blocking):', emailErr);
     }
 
-    revalidatePath('/', 'layout');
+    // L'atelier quitte « mes ateliers » et apparaît dans la corbeille (dashboard).
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('confirmDeletion error:', err);
@@ -1395,7 +1409,8 @@ export async function restoreWorkshop(
       .update({ deleted_at: null, deleted_by: null })
       .eq('id', workshopId);
 
-    revalidatePath('/', 'layout');
+    // L'atelier réapparaît dans « mes ateliers » et quitte la corbeille (dashboard).
+    revalidateDashboard();
     return { success: true };
   } catch (err) {
     console.error('restoreWorkshop error:', err);
