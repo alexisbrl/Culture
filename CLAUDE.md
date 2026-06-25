@@ -3,7 +3,7 @@
 > Ce fichier est l'unique source de vérité pour tout développement sur ce projet. Il doit être lu intégralement à chaque nouvelle conversation.
 > **Toute modification structurante apportée au projet (stack, structure, conventions, décisions produit) doit être reflétée ici.**
 >
-> Dernière mise à jour : 24/06/2026
+> Dernière mise à jour : 25/06/2026
 
 ---
 
@@ -1037,6 +1037,8 @@ Sessions d'examens standardisés dans des **centres certifiés**. Chaque examen 
 
 - **Popup d'intro « + nouvel examen » à finaliser** [AJOUTÉ PAR CLAUDE - 20/06/2026] : `ExamenTab.tsx` (`HistoryContent`, état `introOpen`) affiche une popup d'introduction (« Comment fonctionne le générateur d'examen ») avant d'aller à la banque de questions. Les 3 illustrations sont actuellement des placeholders CSS (blob ambre en dégradé radial) en attendant les vraies images fournies par l'utilisateur — à remplacer par des `<img>` aux mêmes dimensions/position (260×230, débordant du cadre de ±64px, rotation ±4deg) une fois les fichiers reçus.
 
+- **Typer le client Supabase de bout en bout (`createClient<Database>`)** [AJOUTÉ PAR CLAUDE - 25/06/2026] : le schéma est désormais généré (`src/lib/database.types.ts`, audit §3.5), mais `getSupabaseServerClient` (`src/lib/supabase.ts`) renvoie volontairement un client **non typé**. Le passer à `createClient<Database>(url, key)` donnerait une sécurité de type sur toutes les requêtes `.from()`, mais révèle **~15 incohérences réelles** à corriger d'abord : colonnes nullables traitées comme non-null (`workshops.created_at`, `unique_tag`…), colonnes `jsonb` (`Json`) castées directement en `string[]` dans `examQuestions.ts`, `role: string` (DB) vs `WorkshopRole` côté code, et un `update(...)` typé `Record<string, …>` rejeté. C'est une **migration à part entière** (plusieurs fichiers d'actions) — à faire quand on s'attaque à la section 4/5 de l'audit, pas dans le périmètre 3.5.
+
 ---
 
 > **Design system — tokens de couleur centralisés** [AJOUTÉ PAR CLAUDE - 22/06/2026] : `src/lib/theme.ts` est la **source de vérité des couleurs** pour les styles inline — `palette` (tokens nommés par rôle : `ink`, `inkMuted`, `cream`, `green`, `amber`, `danger`…), `ink(alpha)` (translucides sur l'encre `#2d2a24`), `radius`, `shadow`. **Ne plus écrire de couleur de marque en dur dans un `style={{}}`** : utiliser ces tokens (ex. `color: palette.ink`, `border: \`1px solid ${ink(0.14)}\``). Audit §2.4 : toutes les couleurs de marque hex inline ont été migrées. Restes documentés dans `AUDIT_2.4_design_system.md` (rgba imbriqués dans des chaînes, pages en classes Tailwind `text-[#…]` → à tokeniser via `@theme` dans `globals.css`, quelques attributs SVG). `theme.ts` doit rester synchronisé avec les variables CSS de `globals.css` (`--primary`…) utilisées par les classes Tailwind.
@@ -1047,4 +1049,6 @@ Sessions d'examens standardisés dans des **centres certifiés**. Chaque examen 
 >
 > Pattern de découpage à réutiliser pour tout futur fichier surdimensionné : tranches verbatim (pas de réécriture), un module `xShared` pour types/constantes/helpers/petits composants, un fichier par responsabilité, validé par `tsc --noEmit` + `next build`.
 
-*Dernière mise à jour : 24/06/2026 [MODIFIÉ PAR CLAUDE]*
+> **Types Supabase générés = source de vérité du schéma (audit §3.5)** [AJOUTÉ PAR CLAUDE - 25/06/2026] : `src/lib/database.types.ts` est **généré** (MCP Supabase `generate_typescript_types`, ou CLI `supabase gen types typescript --project-id hhkmrejjksjpfetwefju > src/lib/database.types.ts`) — **ne pas l'éditer à la main**, et le **régénérer après chaque migration**. Il est ignoré par ESLint (`eslint.config.mjs`). Les types métier de `src/lib/supabase.ts` (`UserProfile`, `Workshop`, `WorkshopMember`, `WorkshopWithRole`, `WorkshopDetail`) en **dérivent** désormais (`Tables<'workshops'>`, `Omit<Tables<'workshop_members'>, 'role'> & { role: WorkshopRole }`…) au lieu d'être maintenus à la main — ils ne peuvent donc plus diverger des colonnes réelles (avant ce correctif, ils ne connaissaient que `'owner' | 'member'`, sans `'manager'`, et n'étaient importés nulle part : exports morts ayant dérivé en silence). `role` est resserré sur l'union partagée `WorkshopRole` de `src/lib/authz.ts` (le check Postgres `owner | manager | member` n'apparaît pas comme enum dans le schéma généré, donc `role` y est `string`). Le client reste non typé — cf. l'item « Typer le client Supabase de bout en bout » au backlog §18.
+
+*Dernière mise à jour : 25/06/2026 [MODIFIÉ PAR CLAUDE]*

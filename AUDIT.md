@@ -141,10 +141,20 @@ retirant les effets réintroduirait des hydration mismatches. À traiter en §3.
 > ⚠️ **À faire côté GitHub (hors code)** : ajouter les *repository secrets* (Clerk/Supabase/Resend) pour que
 > le job `build` passe, puis activer une *branch protection rule* sur `main` exigeant la CI verte avant merge.
 
-### 3.5 — Types obsolètes
-`supabase.ts:22-34` — les types `WorkshopMember`, `WorkshopWithRole`, `WorkshopDetail` ne connaissent que
-`'owner' | 'member'`, alors que le rôle `'manager'` existe partout ailleurs. Désynchronisé et trompeur.
-Idéalement : **générer les types depuis Supabase** (`supabase gen types`) au lieu de les maintenir à la main.
+### 3.5 — Types obsolètes ✅ (25/06/2026)
+`supabase.ts:22-34` — les types `WorkshopMember`, `WorkshopWithRole`, `WorkshopDetail` ne connaissaient que
+`'owner' | 'member'`, alors que le rôle `'manager'` existe partout ailleurs. Désynchronisé et trompeur
+(d'autant que ces types n'étaient **importés nulle part** — exports morts, d'où la dérive silencieuse).
+
+**Corrigé :** le schéma Supabase est désormais **généré** dans `src/lib/database.types.ts` (source de vérité,
+régénérable via le MCP / `supabase gen types`). Les types métier de `supabase.ts` en **dérivent**
+(`Tables<'workshops'>`, `Omit<Tables<'workshop_members'>, 'role'> & { role: WorkshopRole }`…) — ils ne
+peuvent donc plus diverger des colonnes réelles, et `role` est resserré sur l'union partagée `WorkshopRole`
+(`owner | manager | member`) de `lib/authz.ts`.
+
+> **Suivi (non bloquant) :** typer le client (`createClient<Database>`) donnerait une sécurité de bout en bout
+> sur toutes les requêtes `.from()`, mais révèle ~15 incohérences réelles de nullabilité/`Json` à corriger sur
+> de nombreux fichiers — migration à part entière, tracée au backlog CLAUDE.md §18.
 
 ---
 
@@ -223,10 +233,11 @@ Le build avertit : `middleware` → renommer en `proxy`. À planifier.
 | **11** | Plan i18n progressif + générer les types Supabase | 🔵 Durabilité | L | ⭐⭐⭐ | à faire |
 | **12** | Intégration Stripe (voir §1.6) + facturation membres Premium | 🔴 Sécu/Facturation | L | ⭐⭐⭐⭐ | à faire (bloque la prod payante) |
 
-> **Section 1 (sécurité) traitée.** Prochaine priorité conseillée : #4 (modales partagées) puis #7 (CI/lint).
-> #12 (Stripe) reste indispensable avant toute mise en production payante.
+> **Sections 1 (sécurité), 2 (DRY) et 3 (clarté) traitées.** Prochaine priorité conseillée : section 4
+> (efficacité — resserrer `revalidatePath`, sortir le cleanup corbeille en cron). #12 (Stripe) reste
+> indispensable avant toute mise en production payante.
 
 ---
 
-*Audit généré par Claude Code le 21/06/2026. Section 1 (sécurité) traitée et appliquée au code le 22/06/2026 ;
-le reste du rapport (DRY, clarté, efficacité, durabilité) est toujours d'actualité.*
+*Audit généré par Claude Code le 21/06/2026. Sections 1 (sécurité, 22/06), 2 (DRY, 22/06) et 3 (clarté,
+24-25/06) traitées et appliquées au code ; les sections 4 (efficacité) et 5 (durabilité) restent d'actualité.*

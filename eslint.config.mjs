@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Types Supabase générés (régénérés via la CLI / le MCP) — ne pas linter.
+    "src/lib/database.types.ts",
     // Worktrees / copies de travail des agents Claude — hors périmètre du lint
     // (sinon ESLint scanne des dizaines de copies du code en local → bruit massif).
     ".claude/**",
