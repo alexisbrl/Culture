@@ -1055,5 +1055,24 @@
       "title": "Create your account 🚀",
       "subtitle": "Join Culture and create your first workshop"
     }
+  },
+  "emails": {
+    "deletion": {
+      "subject": "🗑️ Deletion code: {code}",
+      "title": "Deletion confirmation",
+      "greeting": "Hi {name},",
+      "intro": "You requested the deletion of the workshop “{workshop}”.",
+      "codeLabel": "Here is your confirmation code:",
+      "expiry": "This code expires in 15 minutes. If you didn't request this, please ignore this email."
+    },
+    "trashed": {
+      "subject": "🗑️ Workshop “{workshop}” moved to trash",
+      "title": "Workshop moved to trash",
+      "greeting": "Hi {name},",
+      "intro": "The workshop “{workshop}” was moved to trash by {actionBy}.",
+      "warning": "⏳ This workshop will be permanently deleted in 7 days unless it is restored.",
+      "restore": "If this was a mistake, restore the workshop from the trash, at the very bottom of your dashboard.",
+      "restoreCta": "Open scellow.com"
+    }
   }
 }

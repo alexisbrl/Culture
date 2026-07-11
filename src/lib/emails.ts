@@ -4,9 +4,20 @@
 //
 // ⚠️ Les couleurs sont en HEX littéral (et non via les tokens de `theme.ts`) :
 // les clients mail ne supportent pas les variables CSS, tout doit être inline.
+//
+// i18n : chaque builder est `async` et prend la `locale` du DESTINATAIRE (pas de
+// celui qui déclenche l'action) — un email envoyé à plusieurs personnes est
+// construit une fois par destinataire, chacun dans sa langue. Les textes vivent
+// dans `messages/{fr,en}.json` sous le namespace `emails`, lus via
+// `getTranslations({ locale })` (locale explicite → hors contexte de requête OK).
+// next-intl interdit les balises HTML dans un message `t()` simple : les libellés
+// restent du texte pur, toute mise en forme (gras, lien, boutons) vit ici.
+
+import { getTranslations } from 'next-intl/server';
 
 export const EMAIL_FROM = 'Culture <onboarding@resend.dev>';
 
+export type EmailLocale = 'fr' | 'en';
 export type EmailContent = { subject: string; html: string };
 
 /** Enveloppe commune : conteneur + en-tête de marque + contenu + pied de page. */
@@ -29,32 +40,47 @@ function layout(title: string, contentHtml: string): string {
 const p = (html: string) => `<p style="color: #6b7280;">${html}</p>`;
 
 /** Email : code de confirmation de suppression d'atelier. */
-export function deletionCodeEmail(args: { ownerName: string; workshopName: string; code: string }): EmailContent {
+export async function deletionCodeEmail(args: {
+  ownerName: string;
+  workshopName: string;
+  code: string;
+  locale: EmailLocale;
+}): Promise<EmailContent> {
+  const t = await getTranslations({ locale: args.locale, namespace: 'emails' });
   return {
-    subject: `🗑️ Code de suppression : ${args.code}`,
-    html: layout('Confirmation de suppression', `
-      ${p(`Bonjour ${args.ownerName},`)}
-      ${p(`Vous avez demandé la suppression de l'atelier <strong style="color: #111827;">"${args.workshopName}"</strong>.`)}
-      ${p('Voici votre code de confirmation :')}
+    subject: t('deletion.subject', { code: args.code }),
+    html: layout(t('deletion.title'), `
+      ${p(t('deletion.greeting', { name: args.ownerName }))}
+      ${p(t('deletion.intro', { workshop: args.workshopName }))}
+      ${p(t('deletion.codeLabel'))}
       <div style="background: #f3f4f6; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
         <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #5f8a3f;">${args.code}</span>
       </div>
-      <p style="color: #9ca3af; font-size: 13px;">Ce code expire dans 15 minutes. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
+      <p style="color: #9ca3af; font-size: 13px;">${t('deletion.expiry')}</p>
     `),
   };
 }
 
 /** Email : notification de mise en corbeille d'un atelier. */
-export function workshopTrashedEmail(args: { ownerName: string; workshopName: string; actionBy: string }): EmailContent {
+export async function workshopTrashedEmail(args: {
+  ownerName: string;
+  workshopName: string;
+  actionBy: string;
+  locale: EmailLocale;
+}): Promise<EmailContent> {
+  const t = await getTranslations({ locale: args.locale, namespace: 'emails' });
   return {
-    subject: `🗑️ Atelier "${args.workshopName}" mis en corbeille`,
-    html: layout('Atelier mis en corbeille', `
-      ${p(`Bonjour ${args.ownerName},`)}
-      ${p(`L'atelier <strong style="color: #111827;">"${args.workshopName}"</strong> a été mis en corbeille par <strong>${args.actionBy}</strong>.`)}
+    subject: t('trashed.subject', { workshop: args.workshopName }),
+    html: layout(t('trashed.title'), `
+      ${p(t('trashed.greeting', { name: args.ownerName }))}
+      ${p(t('trashed.intro', { workshop: args.workshopName, actionBy: args.actionBy }))}
       <div style="background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 16px; margin: 20px 0;">
-        <p style="color: #92400e; margin: 0; font-size: 14px;">⏳ Cet atelier sera <strong>définitivement supprimé dans 7 jours</strong> si aucune restauration n'est effectuée.</p>
+        <p style="color: #92400e; margin: 0; font-size: 14px;">${t('trashed.warning')}</p>
       </div>
-      ${p(`Si c'est une erreur, connectez-vous sur <a href="https://scellow.com" style="color: #5f8a3f;">scellow.com</a> et restaurez l'atelier depuis la <strong style="color: #111827;">corbeille</strong>, tout en bas de votre tableau de bord.`)}
+      ${p(t('trashed.restore'))}
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="https://scellow.com" style="display: inline-block; background: #5f8a3f; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 14px; padding: 12px 24px; border-radius: 10px;">${t('trashed.restoreCta')}</a>
+      </div>
     `),
   };
 }
