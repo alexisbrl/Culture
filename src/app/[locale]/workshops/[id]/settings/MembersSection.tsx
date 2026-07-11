@@ -40,6 +40,9 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
     if (!result.success) return;
     const approved = joinRequests.find((r) => r.userId === targetUserId);
     setJoinRequests((prev) => prev.filter((r) => r.userId !== targetUserId));
+    // Le serveur supprime aussi une éventuelle invitation en attente pour ce
+    // même couple (résolution symétrique) — refléter ça côté client.
+    setPendingInvites((prev) => prev.filter((p) => p.userId !== targetUserId));
     if (approved) {
       setLocalMembers((prev) => [
         ...prev,
@@ -72,9 +75,27 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
     const result = await inviteMemberByTag(workshopId, tag);
     setInviting(false);
     if (result.success) {
-      setInviteMsg({ type: 'success', text: t('members.inviteSent', { name: result.displayName ?? tag }) });
       setTagInput('');
-      getWorkshopInvitations(workshopId).then(setPendingInvites).catch(console.error);
+      if (result.autoJoined && result.userId) {
+        // Cette personne avait déjà une demande d'adhésion en attente : elle est
+        // ajoutée directement plutôt qu'invitée (résolution symétrique).
+        setInviteMsg({ type: 'success', text: t('members.memberAdded', { name: result.displayName ?? tag }) });
+        setJoinRequests((prev) => prev.filter((r) => r.userId !== result.userId));
+        setLocalMembers((prev) => [
+          ...prev,
+          {
+            id: `inv-${result.userId}`,
+            userId: result.userId!,
+            role: 'member',
+            joinedAt: new Date().toISOString(),
+            displayName: result.displayName ?? tag,
+            uniqueTag: tag,
+          },
+        ]);
+      } else {
+        setInviteMsg({ type: 'success', text: t('members.inviteSent', { name: result.displayName ?? tag }) });
+        getWorkshopInvitations(workshopId).then(setPendingInvites).catch(console.error);
+      }
     } else {
       setInviteMsg({ type: 'error', text: result.error ?? t('err.send') });
     }

@@ -708,6 +708,7 @@
       "inviting": "envoi…",
       "invite": "inviter",
       "inviteSent": "Invitation envoyée à {name}.",
+      "memberAdded": "{name} avait déjà demandé à rejoindre l'atelier : ajouté(e) directement.",
       "premiumOnly": "disponible pour les ateliers Premium",
       "pendingInvites": "Invitations en attente ({count})",
       "waiting": "en attente",

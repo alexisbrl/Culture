@@ -23,7 +23,7 @@ export type PendingInvite = {
   createdAt: string;
 };
 
-export type JoinRequestStatus = 'requested' | 'already_member';
+export type JoinRequestStatus = 'requested' | 'already_member' | 'joined';
 
 export type WorkshopRole = 'owner' | 'manager' | 'member';
 
@@ -316,8 +316,13 @@ export async function requestToJoinWorkshop(
     if (!profile) return { success: false, error: 'Non authentifié' };
 
     const result = await membersLib.requestToJoin(workshopId, profile.userId);
-    // L'état « demande envoyée » s'affiche sur le dashboard du demandeur.
-    if (result.success) revalidateDashboard();
+    if (result.success) {
+      // L'état « demande envoyée » s'affiche sur le dashboard du demandeur.
+      revalidateDashboard();
+      // Ajout direct (invitation déjà en attente) : nouveau membre visible sur
+      // la page atelier / Membres & rôles également.
+      if (result.status === 'joined') revalidateWorkshop();
+    }
     return result;
   } catch (err) {
     console.error('requestToJoinWorkshop error:', err);
@@ -398,19 +403,25 @@ export async function cancelJoinRequest(
 
 // Inviter un utilisateur par tag (propriétaire d'un atelier Premium uniquement).
 // Crée une invitation en attente plutôt que d'ajouter directement le membre :
-// l'utilisateur invité doit l'accepter depuis son dashboard.
+// l'utilisateur invité doit l'accepter depuis son dashboard. Exception : si
+// cette personne avait déjà une demande d'adhésion en attente, elle est ajoutée
+// directement (voir membersLib.inviteByTag, `autoJoined`).
 export async function inviteMemberByTag(
   workshopId: string,
   uniqueTag: string
-): Promise<{ success: boolean; displayName?: string; error?: string }> {
+): Promise<{ success: boolean; displayName?: string; userId?: string; autoJoined?: boolean; error?: string }> {
   try {
     // Inviter : propriétaire ou gestionnaire.
     const ctx = await requireManager(workshopId);
     if (!ctx) return { success: false, error: 'Droits insuffisants' };
 
     const result = await membersLib.inviteByTag(workshopId, ctx.userId, uniqueTag);
-    // Liste des invitations en attente (page Paramètres → Membres & rôles).
-    if (result.success) revalidateWorkshop();
+    if (result.success) {
+      // Liste des invitations en attente (page Paramètres → Membres & rôles).
+      revalidateWorkshop();
+      // Ajout direct : nouveau membre visible sur le dashboard de la personne.
+      if (result.autoJoined) revalidateDashboard();
+    }
     return result;
   } catch (err) {
     console.error('inviteMemberByTag error:', err);

@@ -21,7 +21,7 @@ export type PendingInvite = {
   createdAt: string;
 };
 
-export type JoinRequestStatus = 'requested' | 'already_member';
+export type JoinRequestStatus = 'requested' | 'already_member' | 'joined';
 
 export type MemberActionResult = { success: boolean; error?: string };
 
@@ -59,6 +59,25 @@ export async function requestToJoin(
     .maybeSingle();
 
   if (existingRequest) return { success: true, status: 'requested' };
+
+  // L'atelier avait déjà invité cette personne : pas besoin d'une demande en plus
+  // à faire valider, on l'ajoute directement (résolution symétrique de inviteByTag
+  // ci-dessous — évite deux entrées en attente pour le même couple).
+  const { data: existingInvite } = await supabase
+    .from('workshop_invitations')
+    .select('id')
+    .eq('workshop_id', workshopId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (existingInvite) {
+    // On délègue à acceptInvitation plutôt que de dupliquer l'insert : garantit
+    // que toute règle future qui y sera ajoutée (facturation Premium — TODO §12,
+    // notification…) s'applique aussi à cet ajout direct.
+    const result = await acceptInvitation(workshopId, userId);
+    if (!result.success) return result;
+    return { success: true, status: 'joined' };
+  }
 
   const { error: insertError } = await supabase.from('workshop_join_requests').insert({
     workshop_id: workshopId,
@@ -124,15 +143,31 @@ export async function approveJoinRequest(
     .maybeSingle();
 
   if (!existing) {
-    await supabase.from('workshop_members').insert({
+    const { error: insertError } = await supabase.from('workshop_members').insert({
       workshop_id: workshopId,
       user_id: targetUserId,
       role: 'member',
     });
+
+    // Symétrique de acceptInvitation : ignorer uniquement la violation de
+    // contrainte unique (course avec acceptInvitation), pas les autres erreurs.
+    if (insertError && insertError.code !== '23505') {
+      console.error('approveJoinRequest insert error:', insertError);
+      return { success: false, error: "Erreur lors de l'ajout du membre" };
+    }
   }
 
   await supabase
     .from('workshop_join_requests')
+    .delete()
+    .eq('workshop_id', workshopId)
+    .eq('user_id', targetUserId);
+
+  // La personne est désormais membre : une invitation en attente pour ce même
+  // couple (workshop, user) devient sans objet — sinon elle resterait affichée
+  // indéfiniment (« Invitations en attente ») alors que la personne est déjà membre.
+  await supabase
+    .from('workshop_invitations')
     .delete()
     .eq('workshop_id', workshopId)
     .eq('user_id', targetUserId);
@@ -174,7 +209,7 @@ export async function inviteByTag(
   workshopId: string,
   actorUserId: string,
   uniqueTag: string
-): Promise<{ success: boolean; displayName?: string; error?: string }> {
+): Promise<{ success: boolean; displayName?: string; userId?: string; autoJoined?: boolean; error?: string }> {
   const supabase = getSupabaseServerClient();
 
   // L'invitation est réservée aux ateliers Premium — vérification côté serveur
@@ -215,6 +250,25 @@ export async function inviteByTag(
 
   if (existingMember) return { success: false, error: "Cet utilisateur est déjà membre de l'atelier" };
 
+  // Cette personne avait déjà demandé à rejoindre l'atelier : pas besoin de
+  // l'inviter en plus, on l'ajoute directement (résolution symétrique de
+  // requestToJoin ci-dessus — évite deux entrées en attente pour le même couple).
+  const { data: existingRequest } = await supabase
+    .from('workshop_join_requests')
+    .select('id')
+    .eq('workshop_id', workshopId)
+    .eq('user_id', targetUser.user_id)
+    .maybeSingle();
+
+  if (existingRequest) {
+    // On délègue à approveJoinRequest plutôt que de dupliquer l'insert : garantit
+    // que toute règle future qui y sera ajoutée (facturation Premium — TODO §12,
+    // notification…) s'applique aussi à cet ajout direct.
+    const result = await approveJoinRequest(workshopId, targetUser.user_id);
+    if (!result.success) return result;
+    return { success: true, displayName: targetUser.display_name, userId: targetUser.user_id, autoJoined: true };
+  }
+
   const { data: existingInvite } = await supabase
     .from('workshop_invitations')
     .select('id')
@@ -235,7 +289,7 @@ export async function inviteByTag(
     return { success: false, error: "Erreur lors de l'envoi de l'invitation" };
   }
 
-  return { success: true, displayName: targetUser.display_name };
+  return { success: true, displayName: targetUser.display_name, userId: targetUser.user_id };
 }
 
 export async function listPendingInvitationsForUser(userId: string): Promise<WorkshopCardData[]> {
@@ -321,15 +375,33 @@ export async function acceptInvitation(
     .single();
 
   if (!existing) {
-    await supabase.from('workshop_members').insert({
+    const { error: insertError } = await supabase.from('workshop_members').insert({
       workshop_id: workshopId,
       user_id: userId,
       role: 'member',
     });
+
+    // Code 23505 = violation de contrainte unique (workshop_id, user_id) : une
+    // requête concurrente (ex. approveJoinRequest) a déjà créé le membre entre
+    // notre lecture et notre insert — état recherché atteint, on continue.
+    // Toute autre erreur est réelle : ne pas supprimer l'invitation ni annoncer
+    // un succès si la personne n'a en fait pas été ajoutée.
+    if (insertError && insertError.code !== '23505') {
+      console.error('acceptInvitation insert error:', insertError);
+      return { success: false, error: "Erreur lors de l'ajout du membre" };
+    }
   }
 
   await supabase
     .from('workshop_invitations')
+    .delete()
+    .eq('workshop_id', workshopId)
+    .eq('user_id', userId);
+
+  // Symétrique de approveJoinRequest : une demande d'adhésion en attente pour ce
+  // même couple devient sans objet une fois l'invitation acceptée.
+  await supabase
+    .from('workshop_join_requests')
     .delete()
     .eq('workshop_id', workshopId)
     .eq('user_id', userId);
