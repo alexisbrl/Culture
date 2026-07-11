@@ -548,6 +548,28 @@ export async function removeMember(
   }
 }
 
+// ─── Quitter l'atelier (membre / gestionnaire — jamais le propriétaire) ────────
+
+export async function leaveWorkshop(
+  workshopId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const actor = await requireMember(workshopId);
+    if (!actor) return { success: false, error: 'Droits insuffisants' };
+
+    const result = await membersLib.leaveWorkshop(workshopId, actor);
+    if (result.success) {
+      // Atelier quitté : liste des membres (paramètres) + nombre de membres (cartes dashboard).
+      revalidateWorkshop();
+      revalidateDashboard();
+    }
+    return result;
+  } catch (err) {
+    console.error('leaveWorkshop error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
 // ─── Request deletion code (send email) ──────────────────────────────────────
 
 export async function requestDeletionCode(

@@ -441,6 +441,28 @@ export async function setMemberRole(
   return { success: true };
 }
 
+// un membre ou un gestionnaire peut quitter l'atelier de son propre chef ; le
+// propriétaire ne le peut pas (il doit d'abord transférer la propriété ou
+// supprimer l'atelier — opérations distinctes, non couvertes ici)
+export async function leaveWorkshop(
+  workshopId: string,
+  actor: { userId: string; role: WorkshopRole }
+): Promise<MemberActionResult> {
+  if (actor.role === 'owner') {
+    return { success: false, error: "Le propriétaire ne peut pas quitter l'atelier" };
+  }
+
+  const supabase = getSupabaseServerClient();
+
+  await supabase
+    .from('workshop_members')
+    .delete()
+    .eq('workshop_id', workshopId)
+    .eq('user_id', actor.userId);
+
+  return { success: true };
+}
+
 export async function removeMember(
   workshopId: string,
   actor: { userId: string; role: WorkshopRole },
