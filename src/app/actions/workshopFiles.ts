@@ -1,10 +1,14 @@
 'use server';
 
-import { getSupabaseServerClient } from '@/lib/supabase';
 import { requireManager } from '@/lib/authz';
-import { buildWorkshopFileKey, createUploadTicket, createSignedDownloadUrl, deleteObject, type UploadTicket } from '@/lib/storage';
+import * as filesLib from '@/lib/workshops/files';
+import { type UploadTicket } from '@/lib/storage';
 import { revalidateWorkshop } from '@/lib/revalidate';
 
+// Logique métier : voir @/lib/workshops/files (audit §5.2). Les wrappers
+// `'use server'` ici ne portent plus que l'authz Clerk et la revalidation
+// Next.js. Types redéclarés ici (un fichier `'use server'` ne peut pas
+// réexporter un type importé — cf. @/app/actions/workshops pour le détail).
 export type FileCategory = 'audio' | 'texte' | 'autre';
 
 export type WorkshopFile = {
@@ -16,22 +20,6 @@ export type WorkshopFile = {
   createdAt: string;
 };
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 Mo (limite globale Supabase sur le plan Free)
-
-function categoryFor(mimeType: string): FileCategory {
-  if (mimeType.startsWith('audio/')) return 'audio';
-  if (
-    mimeType.startsWith('text/') ||
-    mimeType === 'application/pdf' ||
-    mimeType === 'application/msword' ||
-    mimeType === 'application/vnd.ms-powerpoint' ||
-    mimeType.startsWith('application/vnd.openxmlformats-officedocument')
-  ) {
-    return 'texte';
-  }
-  return 'autre';
-}
-
 // Gestion des fichiers : propriétaire OU gestionnaire — contrôle d'accès factorisé
 // dans `@/lib/authz` (requireManager), partagé avec les autres server actions.
 
@@ -41,22 +29,7 @@ export async function getWorkshopFiles(workshopId: string): Promise<WorkshopFile
   // Lecture réservée aux gestionnaires (cf. §1.4 de l'audit : ne plus exposer la
   // liste des fichiers d'un atelier à n'importe quel utilisateur connecté).
   if (!(await requireManager(workshopId))) return [];
-
-  const supabase = getSupabaseServerClient();
-  const { data } = await supabase
-    .from('workshop_files')
-    .select('id, name, size, mime_type, category, created_at')
-    .eq('workshop_id', workshopId)
-    .order('created_at', { ascending: false });
-
-  return (data ?? []).map((f) => ({
-    id: f.id,
-    name: f.name,
-    size: f.size,
-    mimeType: f.mime_type,
-    category: f.category as FileCategory,
-    createdAt: f.created_at,
-  }));
+  return await filesLib.listFiles(workshopId);
 }
 
 // ─── Ajouter un fichier (upload direct vers le stockage via URL signée) ──────
@@ -72,18 +45,7 @@ export async function createFileUploadTicket(
 ): Promise<{ success: boolean; ticket?: UploadTicket; path?: string; error?: string }> {
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
-
-    if (fileSize > MAX_FILE_SIZE) {
-      return { success: false, error: 'Fichier trop lourd (50 Mo maximum)' };
-    }
-
-    const path = buildWorkshopFileKey(workshopId, fileName);
-    const ticket = await createUploadTicket(path, mimeType);
-    if (!ticket) {
-      return { success: false, error: 'Erreur lors de la préparation du téléchargement' };
-    }
-
-    return { success: true, ticket, path };
+    return await filesLib.createUploadTicketFor(workshopId, fileName, fileSize, mimeType);
   } catch (err) {
     console.error('createFileUploadTicket error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -103,41 +65,9 @@ export async function finalizeWorkshopFileUpload(
     const ctx = await requireManager(workshopId);
     if (!ctx) return { success: false, error: 'Droits insuffisants' };
 
-    const supabase = getSupabaseServerClient();
-    const category = categoryFor(mimeType);
-
-    const { data: row, error: insertError } = await supabase
-      .from('workshop_files')
-      .insert({
-        workshop_id: workshopId,
-        name,
-        size,
-        mime_type: mimeType,
-        category,
-        storage_path: path,
-        created_by: ctx.userId,
-      })
-      .select('id, name, size, mime_type, category, created_at')
-      .single();
-
-    if (insertError || !row) {
-      console.error('finalizeWorkshopFileUpload insert error:', insertError);
-      await deleteObject(path);
-      return { success: false, error: 'Erreur lors de l’enregistrement' };
-    }
-
-    revalidateWorkshop();
-    return {
-      success: true,
-      file: {
-        id: row.id,
-        name: row.name,
-        size: row.size,
-        mimeType: row.mime_type,
-        category: row.category as FileCategory,
-        createdAt: row.created_at,
-      },
-    };
+    const result = await filesLib.finalizeUpload(workshopId, ctx.userId, path, name, size, mimeType);
+    if (result.success) revalidateWorkshop();
+    return result;
   } catch (err) {
     console.error('finalizeWorkshopFileUpload error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -155,21 +85,7 @@ export async function getFileDownloadUrl(
 ): Promise<{ success: boolean; url?: string; error?: string }> {
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
-
-    const supabase = getSupabaseServerClient();
-    const { data: row } = await supabase
-      .from('workshop_files')
-      .select('storage_path, name')
-      .eq('id', fileId)
-      .eq('workshop_id', workshopId)
-      .maybeSingle();
-
-    if (!row) return { success: false, error: 'Fichier introuvable' };
-
-    const url = await createSignedDownloadUrl(row.storage_path, row.name);
-    if (!url) return { success: false, error: 'Erreur lors de la préparation du téléchargement' };
-
-    return { success: true, url };
+    return await filesLib.getDownloadUrl(workshopId, fileId);
   } catch (err) {
     console.error('getFileDownloadUrl error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -186,36 +102,9 @@ export async function renameWorkshopFile(
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
-    const trimmed = newBaseName.trim();
-    if (!trimmed) return { success: false, error: 'Le nom ne peut pas être vide' };
-
-    const supabase = getSupabaseServerClient();
-    const { data: row } = await supabase
-      .from('workshop_files')
-      .select('name')
-      .eq('id', fileId)
-      .eq('workshop_id', workshopId)
-      .single();
-
-    if (!row) return { success: false, error: 'Fichier introuvable' };
-
-    const dotIndex = row.name.lastIndexOf('.');
-    const extension = dotIndex > 0 ? row.name.slice(dotIndex) : '';
-    const newName = `${trimmed}${extension}`;
-
-    const { error } = await supabase
-      .from('workshop_files')
-      .update({ name: newName })
-      .eq('id', fileId)
-      .eq('workshop_id', workshopId);
-
-    if (error) {
-      console.error('renameWorkshopFile error:', error);
-      return { success: false, error: 'Erreur serveur' };
-    }
-
-    revalidateWorkshop();
-    return { success: true, name: newName };
+    const result = await filesLib.rename(workshopId, fileId, newBaseName);
+    if (result.success) revalidateWorkshop();
+    return result;
   } catch (err) {
     console.error('renameWorkshopFile error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -231,21 +120,9 @@ export async function deleteWorkshopFile(
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
-    const supabase = getSupabaseServerClient();
-    const { data: row } = await supabase
-      .from('workshop_files')
-      .select('storage_path')
-      .eq('id', fileId)
-      .eq('workshop_id', workshopId)
-      .single();
-
-    if (!row) return { success: false, error: 'Fichier introuvable' };
-
-    await deleteObject(row.storage_path);
-    await supabase.from('workshop_files').delete().eq('id', fileId).eq('workshop_id', workshopId);
-
-    revalidateWorkshop();
-    return { success: true };
+    const result = await filesLib.remove(workshopId, fileId);
+    if (result.success) revalidateWorkshop();
+    return result;
   } catch (err) {
     console.error('deleteWorkshopFile error:', err);
     return { success: false, error: 'Erreur serveur' };
