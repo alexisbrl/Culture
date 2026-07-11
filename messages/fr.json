@@ -1055,5 +1055,24 @@
       "title": "Créez votre compte 🚀",
       "subtitle": "Rejoignez Culture et créez votre premier atelier"
     }
+  },
+  "emails": {
+    "deletion": {
+      "subject": "🗑️ Code de suppression : {code}",
+      "title": "Confirmation de suppression",
+      "greeting": "Bonjour {name},",
+      "intro": "Vous avez demandé la suppression de l'atelier « {workshop} ».",
+      "codeLabel": "Voici votre code de confirmation :",
+      "expiry": "Ce code expire dans 15 minutes. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email."
+    },
+    "trashed": {
+      "subject": "🗑️ Atelier « {workshop} » mis en corbeille",
+      "title": "Atelier mis en corbeille",
+      "greeting": "Bonjour {name},",
+      "intro": "L'atelier « {workshop} » a été mis en corbeille par {actionBy}.",
+      "warning": "⏳ Cet atelier sera définitivement supprimé dans 7 jours si aucune restauration n'est effectuée.",
+      "restore": "Si c'est une erreur, restaurez l'atelier depuis la corbeille, tout en bas de votre tableau de bord.",
+      "restoreCta": "Ouvrir scellow.com"
+    }
   }
 }

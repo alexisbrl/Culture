@@ -131,6 +131,36 @@ export async function updateAvatarParts(
   }
 }
 
+// Persiste la langue préférée de l'utilisateur (publicMetadata.locale) — source
+// de vérité pour la langue de ses emails transactionnels. Synchronisée depuis
+// l'URL par DashboardHeader (auto-sync au chargement et au changement de langue).
+export async function setUserLocale(locale: 'fr' | 'en'): Promise<{ success: boolean }> {
+  try {
+    if (locale !== 'fr' && locale !== 'en') return { success: false };
+
+    const { userId } = await auth();
+    if (!userId) return { success: false };
+
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+
+    // No-op si déjà à jour (évite une écriture Clerk inutile).
+    if (user.publicMetadata?.locale === locale) return { success: true };
+
+    await client.users.updateUserMetadata(userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        locale,
+      },
+    });
+
+    return { success: true };
+  } catch (err) {
+    console.error('setUserLocale error:', err);
+    return { success: false };
+  }
+}
+
 // Charge les données privées du profil (serveur uniquement)
 export async function getPrivateProfileData(): Promise<{
   phone: string;

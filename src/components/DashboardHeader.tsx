@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
@@ -10,6 +10,7 @@ import { UserCircle, LogOut, ChevronDown, Crown } from 'lucide-react';
 import AvatarComposer from '@/components/avatar/AvatarComposer';
 import { loadAvatarConfig, type AvatarConfig } from '@/components/avatar/avatarConfig';
 import { markIntentionalSignOut } from '@/lib/signOutIntent';
+import { setUserLocale } from '@/app/actions/profile';
 
 export default function DashboardHeader() {
   const t = useTranslations('nav');
@@ -25,6 +26,21 @@ export default function DashboardHeader() {
     const fromAccount = user?.publicMetadata?.avatarParts as AvatarConfig | undefined;
     setAvatarConfig(fromAccount ?? loadAvatarConfig());
   }, [user]);
+
+  // Synchronise la langue préférée du compte (publicMetadata.locale) avec la
+  // locale de l'URL — capture le choix initial ET chaque changement de langue,
+  // pour tout utilisateur connecté (ce header est monté sur toutes les pages
+  // connectées). Source de vérité pour la langue des emails transactionnels.
+  // Le ref évite d'ré-écrire tant que le token Clerk n'a pas rafraîchi
+  // `publicMetadata` (la condition resterait vraie sur un churn de `user`).
+  const syncedLocaleRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    if (user.publicMetadata?.locale === locale) return;
+    if (syncedLocaleRef.current === locale) return;
+    syncedLocaleRef.current = locale;
+    void setUserLocale(locale as 'fr' | 'en');
+  }, [user, locale]);
 
   const otherLocale = locale === 'fr' ? 'en' : 'fr';
   const pathWithoutLocale = pathname.replace(`/${locale}`, '') || '/dashboard';

@@ -13,11 +13,19 @@ import { clerkClient } from '@clerk/nextjs/server';
 import { Resend } from 'resend';
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { generateTag } from '@/lib/tag';
-import { EMAIL_FROM, deletionCodeEmail, workshopTrashedEmail } from '@/lib/emails';
+import { EMAIL_FROM, deletionCodeEmail, workshopTrashedEmail, type EmailLocale } from '@/lib/emails';
 
 function getResend() {
   if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY manquante');
   return new Resend(process.env.RESEND_API_KEY);
+}
+
+// Locale préférée d'un utilisateur pour ses emails, lue depuis Clerk
+// (`publicMetadata.locale`, synchronisée depuis l'URL par DashboardHeader).
+// Repli sur 'fr' (defaultLocale) tant qu'aucune préférence n'est enregistrée.
+function emailLocaleOf(publicMetadata: unknown): EmailLocale {
+  const locale = (publicMetadata as { locale?: unknown } | null | undefined)?.locale;
+  return locale === 'en' ? 'en' : 'fr';
 }
 
 // Code à 6 chiffres généré avec un générateur cryptographiquement sûr
@@ -109,9 +117,14 @@ export async function requestDeletionCode(
 
   const ownerName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || ownerEmail;
 
-  // Envoyer le code par email
+  // Envoyer le code par email, dans la langue du propriétaire.
   const resend = getResend();
-  const mail = deletionCodeEmail({ ownerName, workshopName: workshop.name, code });
+  const mail = await deletionCodeEmail({
+    ownerName,
+    workshopName: workshop.name,
+    code,
+    locale: emailLocaleOf(user.publicMetadata),
+  });
   await resend.emails.send({ from: EMAIL_FROM, to: ownerEmail, subject: mail.subject, html: mail.html });
 
   return { success: true };
@@ -196,13 +209,20 @@ export async function confirmDeletion(
     const actionBy = `${currentUser.firstName ?? ''} ${currentUser.lastName ?? ''}`.trim() ||
       currentUser.emailAddresses[0]?.emailAddress || 'Un propriétaire';
 
+    // Un email par propriétaire, chacun construit dans SA langue
+    // (`emailLocaleOf`) — build + envoi lancés en parallèle pour tous.
     await Promise.all(
-      ownerList.data.flatMap((ownerUser) => {
+      ownerList.data.map(async (ownerUser) => {
         const ownerEmail = ownerUser.emailAddresses[0]?.emailAddress;
-        if (!ownerEmail) return [];
+        if (!ownerEmail) return;
         const ownerName = `${ownerUser.firstName ?? ''} ${ownerUser.lastName ?? ''}`.trim() || ownerEmail;
-        const mail = workshopTrashedEmail({ ownerName, workshopName: workshop.name, actionBy });
-        return [resend.emails.send({ from: EMAIL_FROM, to: ownerEmail, subject: mail.subject, html: mail.html })];
+        const mail = await workshopTrashedEmail({
+          ownerName,
+          workshopName: workshop.name,
+          actionBy,
+          locale: emailLocaleOf(ownerUser.publicMetadata),
+        });
+        await resend.emails.send({ from: EMAIL_FROM, to: ownerEmail, subject: mail.subject, html: mail.html });
       })
     );
   } catch (emailErr) {
