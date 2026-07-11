@@ -10,28 +10,22 @@ import { palette, ink, withAlpha } from '@/lib/theme';
 import { type Question, type ResponseType } from '../QuestionEditor';
 
 // ---- shared data ----
-export type Pool = { id: string; name: string; color: string };
+//
+// Types de domaine déplacés vers @/lib/workshops/examTypes (audit §5.3).
+// `Pool`/`Exam` sont des alias historiques de `ExamPool`/`GeneratedExam` — le
+// reste de l'onglet examen (BankContent, GeneratorContent, HistoryContent) les
+// importe sous ces noms depuis ce fichier, inchangé.
+import type {
+  IdentitySide, CandidateIdentity, CustomField, ExamPresentation, ExamSection, QuestionWeight, ExamConfig,
+  ExamPool, GeneratedExam,
+} from '@/lib/workshops/examTypes';
+export type { IdentitySide, CandidateIdentity, CustomField, ExamPresentation, ExamSection, QuestionWeight, ExamConfig };
+export type Pool = ExamPool;
+export type Exam = GeneratedExam;
 
-export type Exam = { id: string; title: string; date: string; q: number; dur: string; avg: string; status: string; taken: number; questionIds?: string[]; config?: ExamConfig };
-
-// ---- aperçu de l'examen (config live) ----
-export type IdentitySide = 'left' | 'right' | 'hidden';
-export type CandidateIdentity = { nom: IdentitySide; prenom: IdentitySide; tag: IdentitySide; classe: IdentitySide; date: IdentitySide };
-export type CustomField = { id: string; label: string; side: IdentitySide };
 export const DEFAULT_IDENTITY_ORDER: (keyof CandidateIdentity)[] = ['nom', 'prenom', 'tag', 'classe', 'date'];
 export const IDENTITY_KEY_SET = new Set<string>(DEFAULT_IDENTITY_ORDER);
 export const IDENTITY_LABELS: Record<keyof CandidateIdentity, string> = { nom: 'Nom', prenom: 'Prénom', tag: 'Tag - Culture', classe: 'Classe', date: 'Date' };
-export type ExamPresentation = { identity: CandidateIdentity; identityOrder: string[]; customFields: CustomField[] };
-export type ExamSection = { id: string; title: string; questionIds: string[] };
-export type QuestionWeight = { points: number; negative: { enabled: boolean; value: number }; eliminatory: boolean };
-export type ExamConfig = {
-  title: string;
-  titleIncluded: boolean;
-  durationMinutes: number;
-  presentation: ExamPresentation;
-  sections: ExamSection[];
-  weighting: Record<string, QuestionWeight>;
-};
 
 // ---- small helpers ----
 export const RESPONSE_TYPE_COLORS: Record<ResponseType, string> = {

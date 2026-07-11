@@ -19,9 +19,6 @@ import HistoryContent from './examen/HistoryContent';
 import BankContent from './examen/BankContent';
 import GeneratorContent from './examen/GeneratorContent';
 
-// ré-exporté pour les server actions (examQuestions.ts) qui importent ce type depuis ce module
-export type { ExamConfig } from './examen/examShared';
-
 // ---- PANEL TITLES ----
 const IDS = ['history', 'bank', 'generator'] as const;
 type PanelId = typeof IDS[number];

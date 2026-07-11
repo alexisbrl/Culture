@@ -6,52 +6,13 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 
 // ─── Types ────────────────────────────────────────────────────────────────
-
-export type QuestionType = 'textuel' | 'visuel' | 'audio';
-
-export type ResponseType =
-  | 'sans_reponse'
-  | 'qcs'
-  | 'qcm'
-  | 'textuelle'
-  | 'dessin'
-  | 'audio'
-  | 'sondage'
-  | 'fill_blank'
-  | 'matching'
-  | 'ordre';
-
-export type QuestionPart = {
-  content: string;
-  responseType: ResponseType;
-  answer: string;
-  choices: string[];
-  correctChoices: number[];
-  textLines: number;
-  answerOptional: boolean;
-  difficulty: { enabled: boolean; value: number };
-  duration: { enabled: boolean; minutes: number; seconds: number };
-};
-
-export type Question = {
-  id: string;
-  title: string;
-  questionType: QuestionType;
-  responseType: ResponseType;
-  content: string;
-  answer: string;
-  choices: string[];
-  correctChoices: number[];
-  shuffleChoices: boolean;
-  pools: string[];
-  answerOptional: boolean;
-  difficulty: { enabled: boolean; value: number };
-  duration: { enabled: boolean; minutes: number; seconds: number };
-  parts: QuestionPart[];
-  examIds: string[];
-  createdAt?: string;
-  textLines?: number;
-};
+//
+// Définitions déplacées vers @/lib/workshops/examTypes (audit §5.3) : ce sont
+// des types de domaine (persistés en base, consommés par les server actions),
+// pas des types d'UI. Ré-exportés ici pour ne pas casser les nombreux imports
+// existants (`from './QuestionEditor'`) dans le reste de l'onglet examen.
+import type { QuestionType, ResponseType, QuestionPart, Question } from '@/lib/workshops/examTypes';
+export type { QuestionType, ResponseType, QuestionPart, Question };
 
 export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   textuel: 'Textuel',
