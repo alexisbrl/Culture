@@ -1,13 +1,14 @@
 'use client';
 
 import { palette, ink, withAlpha } from '@/lib/theme';
+import { useTranslations } from 'next-intl';
 
 const KPIS = [
-  { v: '38', l: 'membres', sub: '+5 ce mois', tone: palette.greenSoft },
-  { v: '61 %', l: 'progression moyenne', sub: '+4 pts / 7 j', tone: palette.amberLight },
-  { v: '118', l: 'briques maîtrisées (moy.)', sub: 'sur 142', tone: '#9eb3b9' },
-  { v: '14,2/20', l: 'note moyenne examens', sub: '3 examens passés', tone: '#a890b8' },
-];
+  { v: '38', lKey: 'members', sub: '+5 ce mois', tone: palette.greenSoft },
+  { v: '61 %', lKey: 'avgProgress', sub: '+4 pts / 7 j', tone: palette.amberLight },
+  { v: '118', lKey: 'masteredBricks', sub: 'sur 142', tone: '#9eb3b9' },
+  { v: '14,2/20', lKey: 'avgExamScore', sub: '3 examens passés', tone: '#a890b8' },
+] as const;
 
 const MEMBERS = [
   { name: 'Claire V.', role: 'propriétaire', section: 'terminé', pct: 100, last: "aujourd'hui", note: '19,5', toneA: '#b8c8a4', toneB: palette.greenSoft },
@@ -54,21 +55,27 @@ function AKicker({ children }: { children: React.ReactNode }) {
 }
 
 export default function AnalyseTab() {
+  const t = useTranslations('analyse');
   const plantAccent = palette.greenSoft;
+  const periods = [
+    { key: 'd7', label: t('period.d7') },
+    { key: 'd30', label: t('period.d30') },
+    { key: 'all', label: t('period.all') },
+  ];
 
   return (
     <div style={{ padding: '18px 22px 24px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' as const }}>
       {/* header */}
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 500, color: palette.ink }}>Tableau de bord</div>
-          <div style={{ fontSize: 12, color: palette.inkSoft }}>vue gestionnaire · 38 membres · mis à jour il y a 5 min</div>
+          <div style={{ fontSize: 16, fontWeight: 500, color: palette.ink }}>{t('header.title')}</div>
+          <div style={{ fontSize: 12, color: palette.inkSoft }}>{t('header.subtitle', { count: 38, minutes: 5 })}</div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {['7 jours', '30 jours', 'tout'].map((p, i) => (
-            <button key={p} style={{ fontSize: 11.5, padding: '5px 12px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: i === 1 ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: i === 1 ? palette.ink : withAlpha(palette.paper, 0.7), color: i === 1 ? palette.parchment : '#3a352c' }}>{p}</button>
+          {periods.map((p, i) => (
+            <button key={p.key} style={{ fontSize: 11.5, padding: '5px 12px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: i === 1 ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: i === 1 ? palette.ink : withAlpha(palette.paper, 0.7), color: i === 1 ? palette.parchment : '#3a352c' }}>{p.label}</button>
           ))}
-          <button style={{ fontSize: 11.5, padding: '5px 12px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.7), color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>exporter CSV</button>
+          <button style={{ fontSize: 11.5, padding: '5px 12px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.7), color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>{t('exportCsv')}</button>
         </div>
       </div>
 
@@ -78,7 +85,7 @@ export default function AnalyseTab() {
           <ACard key={i} style={{ padding: '14px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: k.tone, display: 'inline-block' }} />
-              <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkSoft }}>{k.l}</span>
+              <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkSoft }}>{t(`kpi.${k.lKey}`)}</span>
             </div>
             <div style={{ fontSize: 28, fontWeight: 500, color: palette.ink, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>{k.v}</div>
             <div style={{ fontSize: 11, color: '#5a8a4a', marginTop: 2 }}>{k.sub}</div>
@@ -89,7 +96,7 @@ export default function AnalyseTab() {
       <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 14, marginBottom: 14 }}>
         {/* Mastery heatmap */}
         <ACard>
-          <AKicker>maîtrise par section (moyenne du groupe)</AKicker>
+          <AKicker>{t('masteryHeatmap.kicker')}</AKicker>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {SECTIONS.map(s => (
               <div key={s.n} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -106,7 +113,7 @@ export default function AnalyseTab() {
 
         {/* Distribution */}
         <ACard>
-          <AKicker>répartition · section en cours</AKicker>
+          <AKicker>{t('distribution.kicker')}</AKicker>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 150, paddingTop: 10 }}>
             {DIST.map((d, i) => {
               const max = Math.max(...DIST);
@@ -119,18 +126,18 @@ export default function AnalyseTab() {
               );
             })}
           </div>
-          <div style={{ fontFamily: "'Caveat', cursive", fontSize: 15, color: palette.amber, marginTop: 10, textAlign: 'center' as const }}>« le gros du groupe est sur la mitochondrie »</div>
+          <div style={{ fontFamily: "'Caveat', cursive", fontSize: 15, color: palette.amber, marginTop: 10, textAlign: 'center' as const }}>{t('distribution.insight')}</div>
         </ACard>
       </div>
 
       {/* Members table */}
       <ACard style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ padding: '14px 18px', borderBottom: `1px solid ${ink(0.07)}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 13, fontWeight: 500, color: palette.ink }}>Progression par membre</span>
-          <span style={{ fontSize: 11, color: palette.inkSoft }}>6 sur 38 · trier par progression ▾</span>
+          <span style={{ fontSize: 13, fontWeight: 500, color: palette.ink }}>{t('membersTable.title')}</span>
+          <span style={{ fontSize: 11, color: palette.inkSoft }}>{t('membersTable.count', { shown: 6, total: 38 })}</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.4fr 2fr 1fr 0.8fr', gap: 12, padding: '8px 18px', background: ink(0.03), fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint }}>
-          <span>membre</span><span>section en cours</span><span>progression</span><span>dernière activité</span><span style={{ textAlign: 'right' as const }}>note</span>
+          <span>{t('membersTable.col.member')}</span><span>{t('membersTable.col.section')}</span><span>{t('membersTable.col.progress')}</span><span>{t('membersTable.col.lastActivity')}</span><span style={{ textAlign: 'right' as const }}>{t('membersTable.col.score')}</span>
         </div>
         {MEMBERS.map((m, i) => (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.4fr 2fr 1fr 0.8fr', gap: 12, padding: '11px 18px', alignItems: 'center', borderBottom: i === MEMBERS.length - 1 ? 'none' : `1px solid ${ink(0.05)}` }}>

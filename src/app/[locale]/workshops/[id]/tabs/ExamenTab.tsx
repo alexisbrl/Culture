@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, ArrowRight, X } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
@@ -22,7 +23,6 @@ import GeneratorContent from './examen/GeneratorContent';
 export type { ExamConfig } from './examen/examShared';
 
 // ---- PANEL TITLES ----
-const META: Record<string, string> = { history: 'Examen généré', bank: 'Banque de questions', generator: "Éditeur d'examen" };
 const IDS = ['history', 'bank', 'generator'] as const;
 type PanelId = typeof IDS[number];
 
@@ -31,6 +31,8 @@ function newExamId() { return 'e' + Date.now(); }
 
 // ---- MAIN EXAMEN TAB ----
 export default function ExamenTab({ workshopId }: { workshopId: string }) {
+  const t = useTranslations('examen');
+  const panelTitle = (id: PanelId): string => id === 'history' ? t('tab.panelHistory') : id === 'bank' ? t('tab.panelBank') : t('tab.panelGenerator');
   const stageRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const prevRects = useRef<Record<string, { l: number; t: number; w: number; h: number }>>({});
@@ -354,12 +356,12 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 <>
                   <div onClick={() => focus(id)} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 34, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', cursor: 'pointer', background: 'linear-gradient(180deg, rgba(252,249,242,0.96), rgba(252,249,242,0.0))' }}>
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: palette.amber, display: 'inline-block' }} />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: palette.ink }}>{META[id]}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: palette.ink }}>{panelTitle(id)}</span>
                   </div>
                   <div onClick={() => focus(id)} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: ink(0.0), transition: 'background 180ms ease', cursor: 'pointer' }}>
                     <button onClick={e => { e.stopPropagation(); focus(id); }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 999, border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: withAlpha(palette.paper, 0.96), color: palette.ink, fontSize: 12.5, fontWeight: 500, boxShadow: `0 6px 18px ${ink(0.20)}`, opacity: 0, pointerEvents: 'none' }}>
                       <svg width="14" height="14" viewBox="0 0 14 14"><path d="M5.5 1.5H1.5V5.5M8.5 12.5h4V8.5M1.5 8.5v4h4M12.5 5.5v-4h-4" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      agrandir
+                      {t('expand')}
                     </button>
                   </div>
                 </>
@@ -373,14 +375,14 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
           <div onClick={() => setPendingDeleteExam(null)} style={{ position: 'absolute', inset: 0, background: ink(0.42), backdropFilter: 'blur(2px)' }} />
           <div style={{ position: 'relative', zIndex: 1, background: palette.cream, borderRadius: 20, padding: '32px 28px 24px', maxWidth: 380, width: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
             <div style={{ width: 44, height: 44, borderRadius: '50%', background: withAlpha(palette.danger, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>!</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>Supprimer l&apos;examen ?</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>{t('tab.deleteExamTitle')}</div>
             <div style={{ fontSize: 13, color: palette.inkMuted, lineHeight: 1.5 }}>
               <strong style={{ color: palette.ink }}>{pendingDeleteExam.title}</strong>
-              <br />Cette action est irréversible.
+              <br />{t('irreversible')}
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 8, width: '100%' }}>
-              <button onClick={() => setPendingDeleteExam(null)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: `1px solid ${ink(0.15)}`, background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: palette.inkMuted, cursor: 'pointer' }}>Annuler</button>
-              <button onClick={() => pendingDeleteExam && handleDeleteExam(pendingDeleteExam)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: palette.danger, fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: palette.paper, cursor: 'pointer' }}>Supprimer</button>
+              <button onClick={() => setPendingDeleteExam(null)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: `1px solid ${ink(0.15)}`, background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: palette.inkMuted, cursor: 'pointer' }}>{t('cancel')}</button>
+              <button onClick={() => pendingDeleteExam && handleDeleteExam(pendingDeleteExam)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: palette.danger, fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: palette.paper, cursor: 'pointer' }}>{t('delete')}</button>
             </div>
           </div>
         </div>,
@@ -391,13 +393,13 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
           <div onClick={() => setPendingEditExam(null)} style={{ position: 'absolute', inset: 0, background: ink(0.42), backdropFilter: 'blur(2px)' }} />
           <div style={{ position: 'relative', zIndex: 1, background: palette.cream, borderRadius: 20, padding: '32px 28px 24px', maxWidth: 380, width: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
             <div style={{ width: 44, height: 44, borderRadius: '50%', background: withAlpha(palette.danger, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>!</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>Éditeur déjà en cours d&apos;utilisation</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>{t('tab.editorBusyTitle')}</div>
             <div style={{ fontSize: 13, color: palette.inkMuted, lineHeight: 1.5 }}>
-              L&apos;éditeur d&apos;examen contient déjà des modifications en cours{editing ? <> pour <strong style={{ color: palette.ink }}>{editing.title}</strong></> : ''}. Termine ou efface l&apos;éditeur avant de modifier <strong style={{ color: palette.ink }}>{pendingEditExam.title}</strong>.
+              {t('tab.editorBusyDesc', { target: pendingEditExam.title })}
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 8, width: '100%' }}>
-              <button onClick={() => setPendingEditExam(null)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: `1px solid ${ink(0.15)}`, background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: palette.inkMuted, cursor: 'pointer' }}>Annuler</button>
-              <button onClick={() => { setPendingEditExam(null); focus('generator'); }} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: palette.green, fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: palette.paper, cursor: 'pointer' }}>Aller à l&apos;éditeur</button>
+              <button onClick={() => setPendingEditExam(null)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: `1px solid ${ink(0.15)}`, background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: palette.inkMuted, cursor: 'pointer' }}>{t('cancel')}</button>
+              <button onClick={() => { setPendingEditExam(null); focus('generator'); }} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: palette.green, fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: palette.paper, cursor: 'pointer' }}>{t('tab.editorBusyGo')}</button>
             </div>
           </div>
         </div>,
@@ -406,15 +408,15 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       {openQuestionBlocked && createPortal(
         <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', zIndex: 90, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 999, background: palette.ink, color: palette.parchment, fontFamily: "'Inter Tight', system-ui, sans-serif", fontSize: 12.5, boxShadow: `0 12px 32px ${ink(0.30)}` }}>
           <AlertTriangle size={14} strokeWidth={2} color={palette.amberGlow} />
-          question déjà en cours d&apos;édition
+          {t('tab.questionEditing')}
         </div>,
         document.body
       )}
       {introOpen && (() => {
         const steps = [
-          { title: 'Constituez votre banque de questions', text: 'Créez vos questions manuellement ou laissez l’IA s’en charger à partir des fichiers de l’atelier.', side: 'left' as const },
-          { title: 'Composez votre examen', text: 'Envoyez vos questions vers l’éditeur, glissez-les dans des sections, ajustez la pondération et la difficulté.', side: 'right' as const },
-          { title: 'Générez et diffusez', text: 'L’examen est prêt : export PDF, passage en ligne, projection, ou intégration au programme éducatif.', side: 'left' as const },
+          { title: t('tab.introStep1Title'), text: t('tab.introStep1Text'), side: 'left' as const },
+          { title: t('tab.introStep2Title'), text: t('tab.introStep2Text'), side: 'right' as const },
+          { title: t('tab.introStep3Title'), text: t('tab.introStep3Text'), side: 'left' as const },
         ];
         // bandes verticales (% de la hauteur totale de la popup) : en-tête, 3 lignes égales, pied de page
         const HEADER_PCT = 16;
@@ -426,13 +428,13 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             <div style={{ position: 'relative', height: '90vh', width: 'calc(90vh * 0.75)', maxWidth: '92vw' }}>
               {/* carte : fond, texte, bouton — clippée pour les coins arrondis */}
               <div style={{ position: 'absolute', inset: 0, borderRadius: 28, overflow: 'hidden', background: 'linear-gradient(160deg, #fdf9ef 0%, #f6ead2 100%)', boxShadow: `0 28px 70px ${ink(0.32)}` }}>
-                <button onClick={() => setIntroOpen(false)} title="fermer" style={{ position: 'absolute', top: 18, right: 18, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: '50%', border: `1px solid ${ink(0.12)}`, background: palette.paper, color: palette.ink, cursor: 'pointer' }}>
+                <button onClick={() => setIntroOpen(false)} title={t('tab.introClose')} style={{ position: 'absolute', top: 18, right: 18, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: '50%', border: `1px solid ${ink(0.12)}`, background: palette.paper, color: palette.ink, cursor: 'pointer' }}>
                   <X size={17} strokeWidth={2} />
                 </button>
 
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: `${HEADER_PCT}%`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 70px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 23, fontWeight: 600, color: palette.ink }}>Comment fonctionne le générateur d&apos;examen</div>
-                  <div style={{ fontSize: 13.5, color: '#8a7f64', marginTop: 8 }}>Trois étapes pour passer de votre banque de questions à un examen prêt à être donné.</div>
+                  <div style={{ fontSize: 23, fontWeight: 600, color: palette.ink }}>{t('tab.introTitle')}</div>
+                  <div style={{ fontSize: 13.5, color: '#8a7f64', marginTop: 8 }}>{t('tab.introSubtitle')}</div>
                 </div>
 
                 {steps.map((step, i) => (
@@ -459,7 +461,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                     onClick={() => { setIntroOpen(false); setEditing(null); setExamConfig(defaultExamConfig()); focus('bank'); }}
                     style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 10, border: 'none', background: palette.green, color: palette.paper, fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}
                   >
-                    Commencer
+                    {t('tab.introStart')}
                     <ArrowRight size={16} strokeWidth={2} />
                   </button>
                 </div>
@@ -499,7 +501,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                     color: 'rgba(122,77,32,0.55)',
                     textAlign: 'center',
                   }}>
-                    image {i + 1}
+                    {t('tab.introImage', { n: i + 1 })}
                   </div>
                 </div>
               ))}

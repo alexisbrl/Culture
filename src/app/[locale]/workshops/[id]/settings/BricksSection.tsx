@@ -1,20 +1,22 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { palette, ink } from '@/lib/theme';
 import { MOCK_BRICKS, DotRow, Row, SmallBtn, SectionCard } from './settingsShared';
 
 export default function BricksSection() {
+  const t = useTranslations('settings');
   return (
     <>
         {/* ── 4. Briques de connaissance ── */}
         <SectionCard
-          title="Briques de connaissance"
-          description="Les unités d'information extraites de vos fichiers sources par l'IA."
+          title={t('bricks.title')}
+          description={t('bricks.desc')}
         >
-          <Row label="Fichiers source" noBorder={false}>
+          <Row label={t('bricks.sourceFiles')} noBorder={false}>
             <div style={{ display: 'flex', gap: 8 }}>
-              <SmallBtn tone="ghost">gérer les fichiers</SmallBtn>
-              <SmallBtn tone="dark">✦ régénérer par IA</SmallBtn>
+              <SmallBtn tone="ghost">{t('bricks.manageFiles')}</SmallBtn>
+              <SmallBtn tone="dark">{t('bricks.regenAI')}</SmallBtn>
             </div>
           </Row>
 
@@ -58,11 +60,11 @@ export default function BricksSection() {
                     {brick.title}
                   </div>
                   <div style={{ display: 'flex', gap: 12 }}>
-                    <DotRow label="diff" value={brick.diff} max={10} />
-                    <DotRow label="imp" value={brick.imp} max={10} />
+                    <DotRow label={t('bricks.diff')} value={brick.diff} max={10} />
+                    <DotRow label={t('bricks.imp')} value={brick.imp} max={10} />
                   </div>
                 </div>
-                <SmallBtn tone="ghost">éditer</SmallBtn>
+                <SmallBtn tone="ghost">{t('bricks.edit')}</SmallBtn>
               </div>
             ))}
           </div>
@@ -78,8 +80,8 @@ export default function BricksSection() {
               marginTop: 4,
             }}
           >
-            <span style={{ fontSize: 12, color: palette.inkFaint }}>5 sur 142 affichées</span>
-            <SmallBtn tone="ghost">voir toutes les briques</SmallBtn>
+            <span style={{ fontSize: 12, color: palette.inkFaint }}>{t('bricks.shownCount', { shown: 5, total: 142 })}</span>
+            <SmallBtn tone="ghost">{t('bricks.viewAll')}</SmallBtn>
           </div>
         </SectionCard>
     </>

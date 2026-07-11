@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { Search, Settings, Copy, SendHorizontal } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { RESPONSE_TYPE_LABELS, type Question, type ResponseType } from '../QuestionEditor';
+import { type Question, type ResponseType } from '../QuestionEditor';
 import {
   type Pool, type Exam, type SortBy, type SortDir,
   DEFAULT_SORT_DIR, NEVER_EXAM_ID, NO_DIFFICULTY, NO_ANSWER_ID, LABEL_COLORS,
-  hasNoAnswer, answerSummary, DiffDots, TypePill, Diff, IconBtn, ActiveChip,
+  hasNoAnswer, DiffDots, TypePill, Diff, IconBtn, ActiveChip,
 } from './examShared';
 
 // ---- BANK ----
@@ -29,6 +30,23 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
   onDuplicateQuestion: (q: Question) => void;
   onDeleteQuestion: (q: Question) => void;
 }) {
+  const tr = useTranslations('examen');
+  function answerSummary(q: { responseType: ResponseType; answer: string; choices: string[]; correctChoices: number[]; answerOptional?: boolean }): string {
+    if (q.responseType === 'qcm' || q.responseType === 'qcs') {
+      const correct = q.correctChoices.map((i) => q.choices[i]).filter(Boolean);
+      return correct.length ? correct.join(' · ') : tr('answer.noCorrectChoice');
+    }
+    if (q.responseType === 'matching') return q.choices.map((c) => c.replace(' :: ', ' → ')).join(' · ') || tr('answer.noPairs');
+    if (q.responseType === 'ordre') return q.choices.join(' → ') || tr('answer.noOrder');
+    if (q.responseType === 'sans_reponse') return tr('answer.none');
+    if (q.responseType === 'sondage') {
+      const freeText = q.correctChoices.map((i) => q.choices[i]).filter(Boolean);
+      return freeText.length ? tr('answer.surveyFree', { choices: freeText.join(' · ') }) : tr('answer.surveyNoCorrection');
+    }
+    if (q.responseType === 'textuelle' && q.answerOptional) return tr('answer.freeNoCorrection');
+    return q.answer || tr('answer.notSet');
+  }
+  const qTypeLabel = (qt: string): string => qt === 'textuel' ? tr('questionType.textuel') : qt === 'visuel' ? tr('questionType.visuel') : qt === 'audio' ? tr('questionType.audio') : qt;
   const [filterQTypes, setFilterQTypes] = useState<string[]>([]);
   const [filterPools, setFilterPools] = useState<string[]>([]);
   const [filterTypes, setFilterTypes] = useState<ResponseType[]>([]);
@@ -199,7 +217,7 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
       case 'name':
         return dir * (a.title.trim() || a.content).localeCompare(b.title.trim() || b.content);
       case 'type':
-        return dir * (RESPONSE_TYPE_LABELS[a.responseType] ?? '').localeCompare(RESPONSE_TYPE_LABELS[b.responseType] ?? '');
+        return dir * tr(`responseType.${a.responseType}`).localeCompare(tr(`responseType.${b.responseType}`));
       case 'label': {
         const an = pools.find(p => p.id === a.pools[0])?.name ?? '';
         const bn = pools.find(p => p.id === b.pools[0])?.name ?? '';
@@ -219,10 +237,10 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.45, marginBottom: 8 }}>
-            {q.title.trim() || q.content || '(sans énoncé)'}
+            {q.title.trim() || q.content || tr('noStatement')}
             {hasParts && (
               <span style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: 8, fontSize: 10.5, padding: '2px 8px', borderRadius: 6, border: `1px solid ${withAlpha(palette.amber, 0.30)}`, background: withAlpha(palette.amberGlow, 0.12), color: '#7a4d20' }}>
-                {q.parts.length + 1} parties
+                {tr('bank.parts', { count: q.parts.length + 1 })}
               </span>
             )}
           </div>
@@ -233,58 +251,57 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
               if (!p) return null;
               return <span key={pid} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 999, background: ink(0.05), color: palette.inkMuted }}>#{p.name}</span>;
             })}
-            <button onClick={() => setOpenId(open ? null : q.id)} style={{ marginLeft: 'auto', fontSize: 11, color: palette.amber, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{open ? 'masquer le détail ▴' : 'voir le détail ▾'}</button>
-            <IconBtn title="modifier la question" onClick={() => onEditQuestion(q)}>
+            <button onClick={() => setOpenId(open ? null : q.id)} style={{ marginLeft: 'auto', fontSize: 11, color: palette.amber, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{open ? tr('bank.hideDetail') : tr('bank.showDetail')}</button>
+            <IconBtn title={tr('bank.editQuestion')} onClick={() => onEditQuestion(q)}>
               <Settings size={13} strokeWidth={1.75} />
             </IconBtn>
-            <IconBtn title="dupliquer la question" onClick={() => onDuplicateQuestion(q)}>
+            <IconBtn title={tr('bank.duplicateQuestion')} onClick={() => onDuplicateQuestion(q)}>
               <Copy size={13} strokeWidth={1.75} />
             </IconBtn>
-            <IconBtn title="supprimer la question" onClick={() => setPendingDeleteQuestion(q)}>
+            <IconBtn title={tr('bank.deleteQuestion')} onClick={() => setPendingDeleteQuestion(q)}>
               <svg width="13" height="13" viewBox="0 0 14 14"><path d="M2.5 3.5h9M5.5 3.5V2.2a.7.7 0 0 1 .7-.7h1.6a.7.7 0 0 1 .7.7v1.3M3.5 3.5l.5 8.3a.8.8 0 0 0 .8.7h4.4a.8.8 0 0 0 .8-.7l.5-8.3" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </IconBtn>
           </div>
           {open && (
             <div style={{ marginTop: 10, borderTop: `1px solid ${withAlpha(palette.amber, 0.18)}`, paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ padding: '8px 10px', borderRadius: 8, background: withAlpha(palette.amberGlow, 0.08), border: `1px solid ${withAlpha(palette.amber, 0.15)}` }}>
-                <div style={{ fontSize: 11, color: palette.amber, marginBottom: 4 }}>Partie 1</div>
-                <div style={{ fontSize: 12.5, color: '#3a352c', marginBottom: 6 }}>{q.content || '(sans énoncé)'}</div>
+                <div style={{ fontSize: 11, color: palette.amber, marginBottom: 4 }}>{tr('bank.part', { n: 1 })}</div>
+                <div style={{ fontSize: 12.5, color: '#3a352c', marginBottom: 6 }}>{q.content || tr('noStatement')}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
                   <TypePill type={q.responseType} />
                   {q.difficulty.enabled && <Diff n={q.difficulty.value} />}
                   {q.duration.enabled && <span style={{ fontSize: 10.5, color: palette.inkSoft }}>{q.duration.minutes}min {(q.duration.seconds ?? 0).toString().padStart(2, '0')}s</span>}
                 </div>
-                <div style={{ fontSize: 12, color: '#3a352c' }}><span style={{ fontWeight: 600, color: '#7a4d20' }}>réponse · </span>{answerSummary(q)}</div>
+                <div style={{ fontSize: 12, color: '#3a352c' }}><span style={{ fontWeight: 600, color: '#7a4d20' }}>{tr('answer.prefix')}</span>{answerSummary(q)}</div>
               </div>
               {q.parts.map((part, i) => (
                 <div key={i} style={{ padding: '8px 10px', borderRadius: 8, background: withAlpha(palette.amberGlow, 0.08), border: `1px solid ${withAlpha(palette.amber, 0.15)}` }}>
-                  <div style={{ fontSize: 11, color: palette.amber, marginBottom: 4 }}>Partie {i + 2}</div>
-                  <div style={{ fontSize: 12.5, color: '#3a352c', marginBottom: 6 }}>{part.content || '(sans énoncé)'}</div>
+                  <div style={{ fontSize: 11, color: palette.amber, marginBottom: 4 }}>{tr('bank.part', { n: i + 2 })}</div>
+                  <div style={{ fontSize: 12.5, color: '#3a352c', marginBottom: 6 }}>{part.content || tr('noStatement')}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
                     <TypePill type={part.responseType} />
                     {part.difficulty.enabled && <Diff n={part.difficulty.value} />}
                     {part.duration.enabled && <span style={{ fontSize: 10.5, color: palette.inkSoft }}>{part.duration.minutes}min {(part.duration.seconds ?? 0).toString().padStart(2, '0')}s</span>}
                   </div>
-                  <div style={{ fontSize: 12, color: '#3a352c' }}><span style={{ fontWeight: 600, color: '#7a4d20' }}>réponse · </span>{answerSummary(part)}</div>
+                  <div style={{ fontSize: 12, color: '#3a352c' }}><span style={{ fontWeight: 600, color: '#7a4d20' }}>{tr('answer.prefix')}</span>{answerSummary(part)}</div>
                 </div>
               ))}
             </div>
           )}
         </div>
-        <button onClick={(e) => { e.stopPropagation(); onSendOne(q.id); }} title="envoyer vers l'éditeur d'examen" style={{ alignSelf: 'stretch', flexShrink: 0, marginRight: -14, marginTop: -12, marginBottom: -12, paddingLeft: 28, paddingRight: 28, borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderLeft: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center' }}><SendHorizontal size={19} strokeWidth={2} /></button>
+        <button onClick={(e) => { e.stopPropagation(); onSendOne(q.id); }} title={tr('bank.sendToEditor')} style={{ alignSelf: 'stretch', flexShrink: 0, marginRight: -14, marginTop: -12, marginBottom: -12, paddingLeft: 28, paddingRight: 28, borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderLeft: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center' }}><SendHorizontal size={19} strokeWidth={2} /></button>
       </div>
     );
   }
 
-  const QTYPE_LABELS: Record<string, string> = { textuel: 'Textuel', visuel: 'Visuel', audio: 'Audio' };
   type ActiveFilter = { key: string; category: 'qtype' | 'pool' | 'type' | 'diff' | 'exam' | 'answer'; value: string | number; label: string; color?: string };
   const activeFilters: ActiveFilter[] = [
-    ...filterQTypes.map(qt => ({ key: `qtype:${qt}`, category: 'qtype' as const, value: qt, label: QTYPE_LABELS[qt] ?? qt })),
+    ...filterQTypes.map(qt => ({ key: `qtype:${qt}`, category: 'qtype' as const, value: qt, label: qTypeLabel(qt) })),
     ...filterPools.map(id => ({ key: `pool:${id}`, category: 'pool' as const, value: id, label: pools.find(p => p.id === id)?.name ?? id, color: pools.find(p => p.id === id)?.color })),
-    ...filterTypes.map(t => ({ key: `type:${t}`, category: 'type' as const, value: t, label: RESPONSE_TYPE_LABELS[t] ?? t })),
-    ...filterDiffs.map(d => ({ key: `diff:${d}`, category: 'diff' as const, value: d, label: d === NO_DIFFICULTY ? 'sans difficulté' : `difficulté ${d}/5` })),
-    ...filterExams.map(eid => ({ key: `exam:${eid}`, category: 'exam' as const, value: eid, label: eid === NEVER_EXAM_ID ? 'Nouveau' : (exams.find(ex => ex.id === eid)?.title ?? eid) })),
-    ...filterAnswer.map(aid => ({ key: `answer:${aid}`, category: 'answer' as const, value: aid, label: 'Incomplète' })),
+    ...filterTypes.map(ty => ({ key: `type:${ty}`, category: 'type' as const, value: ty, label: tr(`responseType.${ty}`) })),
+    ...filterDiffs.map(d => ({ key: `diff:${d}`, category: 'diff' as const, value: d, label: d === NO_DIFFICULTY ? tr('bank.filterNoDifficulty') : tr('bank.filterDifficulty', { n: d }) })),
+    ...filterExams.map(eid => ({ key: `exam:${eid}`, category: 'exam' as const, value: eid, label: eid === NEVER_EXAM_ID ? tr('bank.statusNew') : (exams.find(ex => ex.id === eid)?.title ?? eid) })),
+    ...filterAnswer.map(aid => ({ key: `answer:${aid}`, category: 'answer' as const, value: aid, label: tr('bank.statusIncomplete') })),
   ];
   const positiveFilters = activeFilters.filter(f => modeOf(f.key) === 'pos');
   const negativeFilters = activeFilters.filter(f => modeOf(f.key) === 'neg');
@@ -305,7 +322,7 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14, gap: 12 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>Banque de questions</div>
+            <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{tr('bank.title')}</div>
           </div>
           {activeFilterCount > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -316,11 +333,11 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
                 onDrop={e => handleDropOnZone(e, 'pos')}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '4px 6px', borderRadius: 8, border: dragOverZone === 'pos' ? '1px dashed rgba(122,153,104,0.6)' : '1px dashed transparent', background: dragOverZone === 'pos' ? withAlpha(palette.greenSoft, 0.10) : 'transparent' }}
               >
-                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint }}>inclure</span>
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint }}>{tr('bank.include')}</span>
                 {positiveFilters.map(f => (
                   <ActiveChip key={f.key} filterKey={f.key} label={f.label} color={f.color} negative={false} onRemove={() => removeFilter(f)} setDraggedKey={setDraggedKey} />
                 ))}
-                {positiveFilters.length === 0 && <span style={{ fontSize: 11, color: palette.inkGhost, fontStyle: 'italic' }}>glisse un filtre ici</span>}
+                {positiveFilters.length === 0 && <span style={{ fontSize: 11, color: palette.inkGhost, fontStyle: 'italic' }}>{tr('bank.dropFilterHere')}</span>}
               </div>
               <div
                 onDragEnter={e => e.preventDefault()}
@@ -329,78 +346,77 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
                 onDrop={e => handleDropOnZone(e, 'neg')}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '4px 6px', borderRadius: 8, border: dragOverZone === 'neg' ? '1px dashed rgba(184,90,74,0.6)' : '1px dashed transparent', background: dragOverZone === 'neg' ? withAlpha(palette.danger, 0.10) : 'transparent' }}
               >
-                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint }}>exclure</span>
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint }}>{tr('bank.exclude')}</span>
                 {negativeFilters.map(f => (
                   <ActiveChip key={f.key} filterKey={f.key} label={f.label} color={f.color} negative={true} onRemove={() => removeFilter(f)} setDraggedKey={setDraggedKey} />
                 ))}
-                {negativeFilters.length === 0 && <span style={{ fontSize: 11, color: palette.inkGhost, fontStyle: 'italic' }}>glisse un filtre ici</span>}
+                {negativeFilters.length === 0 && <span style={{ fontSize: 11, color: palette.inkGhost, fontStyle: 'italic' }}>{tr('bank.dropFilterHere')}</span>}
               </div>
             </div>
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <button onClick={onNewQuestion} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, background: palette.ink, color: palette.parchment, border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-            <span style={{ fontSize: 15 }}>+</span> nouvelle question
+            <span style={{ fontSize: 15 }}>+</span> {tr('bank.newQuestion')}
           </button>
           <button style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, background: palette.amber, color: palette.parchment, border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer', boxShadow: `0 6px 16px ${withAlpha(palette.amber, 0.28)}` }}>
-            <span style={{ fontSize: 14 }}>✦</span> générer par IA
+            <span style={{ fontSize: 14 }}>✦</span> {tr('bank.generateAI')}
           </button>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: withAlpha(palette.paper, 0.7), border: `1px solid ${ink(0.08)}`, borderRadius: 9 }}>
           <Search size={14} color={palette.inkSoft} strokeWidth={1.75} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="chercher une question…" style={{ flex: 1, fontSize: 12.5, color: '#3a352c', border: 'none', outline: 'none', background: 'transparent', fontFamily: 'inherit' }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={tr('bank.searchPlaceholder')} style={{ flex: 1, fontSize: 12.5, color: '#3a352c', border: 'none', outline: 'none', background: 'transparent', fontFamily: 'inherit' }} />
         </div>
         <div ref={filterRef} style={{ position: 'relative' }}>
           <button onClick={() => setFilterOpen(o => !o)} style={{ fontSize: 12, padding: '8px 14px', borderRadius: 9, border: activeFilterCount > 0 ? '1px solid rgba(168,122,58,0.45)' : `1px solid ${ink(0.10)}`, background: activeFilterCount > 0 ? withAlpha(palette.amberGlow, 0.18) : withAlpha(palette.paper, 0.7), color: activeFilterCount > 0 ? '#7a4d20' : palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>
-            filtres{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''} ▾
+            {tr('bank.filters')}{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''} ▾
           </button>
           {filterOpen && (
             <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 6, width: 300, background: palette.paper, border: `1px solid ${ink(0.10)}`, borderRadius: 12, boxShadow: `0 12px 32px ${ink(0.16)}`, zIndex: 20, display: 'flex', flexDirection: 'column', maxHeight: 'min(520px, calc(100vh - 200px))' }}>
             <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px 10px', flexShrink: 0 }}>
-                <span style={{ fontSize: 13, fontWeight: 500, color: palette.ink }}>filtres</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: palette.ink }}>{tr('bank.filtersTitle')}</span>
                 {activeFilterCount > 0 && (
-                  <button onClick={resetFilters} style={{ fontSize: 11.5, color: palette.amber, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>réinitialiser</button>
+                  <button onClick={resetFilters} style={{ fontSize: 11.5, color: palette.amber, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>{tr('bank.filtersReset')}</button>
                 )}
               </div>
               <div style={{ overflowY: 'auto', padding: '0 14px 14px', flex: 1, minHeight: 0 }}>
                 {/* Type de question — visible seulement si plusieurs types présents dans la banque */}
-                {allQTypes.length > 1 && <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>type de question</div>}
+                {allQTypes.length > 1 && <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.qTypeSection')}</div>}
                 {allQTypes.length > 1 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
                     {allQTypes.map(qt => {
                       const active = filterQTypes.includes(qt);
-                      const labels: Record<string, string> = { textuel: 'Textuel', visuel: 'Visuel', audio: 'Audio' };
                       return (
                         <button key={qt} onClick={() => toggleQTypeFilter(qt)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: active ? palette.ink : ink(0.04), color: active ? palette.parchment : '#3a352c' }}>
-                          {labels[qt] ?? qt}
+                          {qTypeLabel(qt)}
                         </button>
                       );
                     })}
                   </div>
                 )}
                 {/* Type de réponse */}
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>type de réponse</div>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.rTypeSection')}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-                  {allTypes.map(t => {
-                    const active = filterTypes.includes(t);
+                  {allTypes.map(ty => {
+                    const active = filterTypes.includes(ty);
                     return (
-                      <button key={t} onClick={() => toggleTypeFilter(t)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: active ? palette.ink : ink(0.04), color: active ? palette.parchment : '#3a352c' }}>
-                        {RESPONSE_TYPE_LABELS[t] ?? t}
+                      <button key={ty} onClick={() => toggleTypeFilter(ty)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: active ? palette.ink : ink(0.04), color: active ? palette.parchment : '#3a352c' }}>
+                        {tr(`responseType.${ty}`)}
                       </button>
                     );
                   })}
                 </div>
                 {/* Statut */}
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>statut</div>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.statusSection')}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
                   {(() => {
                     const active = filterExams.includes(NEVER_EXAM_ID);
                     return (
                       <button onClick={() => toggleExamFilter(NEVER_EXAM_ID)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: active ? palette.ink : ink(0.04), color: active ? palette.parchment : '#3a352c' }}>
-                        Nouveau
+                        {tr('bank.statusNew')}
                       </button>
                     );
                   })()}
@@ -408,13 +424,13 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
                     const active = filterAnswer.includes(NO_ANSWER_ID);
                     return (
                       <button onClick={() => toggleAnswerFilter(NO_ANSWER_ID)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: active ? palette.ink : ink(0.04), color: active ? palette.parchment : '#3a352c' }}>
-                        Incomplète
+                        {tr('bank.statusIncomplete')}
                       </button>
                     );
                   })()}
                 </div>
                 {/* Libellés */}
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>libellés</div>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.labelsSection')}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
                   {pools.map(l => {
                     const active = filterPools.includes(l.id);
@@ -424,7 +440,7 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
                         <button onClick={() => togglePoolFilter(l.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: active ? palette.ink : ink(0.04), color: active ? palette.parchment : '#3a352c' }}>
                           <span style={{ width: 7, height: 7, borderRadius: '50%', background: l.color, display: 'inline-block' }} />{displayName}
                         </button>
-                        <button onClick={() => editingLabel === l.id ? setEditingLabel(null) : openEditLabel(l)} title="modifier le libellé" style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', border: `1px solid ${ink(0.15)}`, background: palette.paper, color: palette.inkFaint, cursor: 'pointer', fontSize: 10, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <button onClick={() => editingLabel === l.id ? setEditingLabel(null) : openEditLabel(l)} title={tr('bank.editLabelTitle')} style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', border: `1px solid ${ink(0.15)}`, background: palette.paper, color: palette.inkFaint, cursor: 'pointer', fontSize: 10, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <svg width="7" height="7" viewBox="0 0 14 14"><path d="M9.8 1.6l2.6 2.6L4.8 11.8l-3 .6.6-3z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" strokeLinecap="round"/></svg>
                         </button>
                       </span>
@@ -432,16 +448,16 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
                   })}
                   {creatingLabel ? (
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <input autoFocus value={newLabelName} onChange={e => setNewLabelName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addLabel(); if (e.key === 'Escape') { setCreatingLabel(false); setNewLabelName(''); } }} placeholder="nom du libellé…" style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, border: `1px solid ${ink(0.18)}`, outline: 'none', fontFamily: 'inherit', width: 110 }} />
-                      <button onClick={addLabel} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: palette.ink, color: palette.parchment, cursor: 'pointer', fontFamily: 'inherit' }}>ajouter</button>
-                      <button onClick={() => { setCreatingLabel(false); setNewLabelName(''); }} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
+                      <input autoFocus value={newLabelName} onChange={e => setNewLabelName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addLabel(); if (e.key === 'Escape') { setCreatingLabel(false); setNewLabelName(''); } }} placeholder={tr('editor.labelNamePlaceholder')} style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, border: `1px solid ${ink(0.18)}`, outline: 'none', fontFamily: 'inherit', width: 110 }} />
+                      <button onClick={addLabel} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: palette.ink, color: palette.parchment, cursor: 'pointer', fontFamily: 'inherit' }}>{tr('add')}</button>
+                      <button onClick={() => { setCreatingLabel(false); setNewLabelName(''); }} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>{tr('cancelLower')}</button>
                     </span>
                   ) : (
-                    <button onClick={() => setCreatingLabel(true)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px dashed ${ink(0.20)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>+ libellé</button>
+                    <button onClick={() => setCreatingLabel(true)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px dashed ${ink(0.20)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>{tr('bank.newLabel')}</button>
                   )}
                 </div>
                 {/* Difficulté */}
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>difficulté</div>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.difficultySection')}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {[1, 2, 3, 4, 5].map(d => {
                     const active = filterDiffs.includes(d);
@@ -455,7 +471,7 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
                     const active = filterDiffs.includes(NO_DIFFICULTY);
                     return (
                       <button onClick={() => toggleDiffFilter(NO_DIFFICULTY)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`, background: active ? palette.ink : ink(0.04), color: active ? palette.parchment : '#3a352c' }}>
-                        <DiffDots level={0} />sans difficulté
+                        <DiffDots level={0} />{tr('bank.noDifficulty')}
                       </button>
                     );
                   })()}
@@ -475,10 +491,10 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
                       ))}
                     </div>
                     <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                      <button onClick={saveEditLabel} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: 'none', background: palette.ink, color: palette.parchment, cursor: 'pointer', fontFamily: 'inherit' }}>enregistrer</button>
-                      <button onClick={() => setEditingLabel(null)} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
+                      <button onClick={saveEditLabel} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: 'none', background: palette.ink, color: palette.parchment, cursor: 'pointer', fontFamily: 'inherit' }}>{tr('bank.saveLabel')}</button>
+                      <button onClick={() => setEditingLabel(null)} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>{tr('cancelLower')}</button>
                     </div>
-                    <button onClick={() => setPendingDeleteLabel(label.id)} style={{ width: '100%', fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${withAlpha(palette.danger, 0.30)}`, background: withAlpha(palette.danger, 0.08), color: palette.danger, cursor: 'pointer', fontFamily: 'inherit' }}>supprimer le libellé</button>
+                    <button onClick={() => setPendingDeleteLabel(label.id)} style={{ width: '100%', fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${withAlpha(palette.danger, 0.30)}`, background: withAlpha(palette.danger, 0.08), color: palette.danger, cursor: 'pointer', fontFamily: 'inherit' }}>{tr('bank.deleteLabel')}</button>
                   </div>
                   </>
                 );
@@ -488,7 +504,7 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.7), overflow: 'hidden' }}>
-          <button type="button" title={sortDir === 'asc' ? 'ordre croissant' : 'ordre décroissant'} onClick={() => setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')} style={{ width: 30, height: 30, border: 'none', borderRight: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
+          <button type="button" title={sortDir === 'asc' ? tr('bank.sortAsc') : tr('bank.sortDesc')} onClick={() => setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')} style={{ width: 30, height: 30, border: 'none', borderRight: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
             <svg width="13" height="13" viewBox="0 0 14 14">
               {sortDir === 'asc' ? (
                 <path d="M7 12V2M3 6l4-4 4 4" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -498,11 +514,11 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
             </svg>
           </button>
           <select value={sortBy} onChange={e => changeSortBy(e.target.value as SortBy)} style={{ fontSize: 12, padding: '8px 10px', border: 'none', background: 'transparent', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit', outline: 'none' }}>
-            <option value="recent">trier · date d&apos;ajout</option>
-            <option value="name">trier · nom</option>
-            <option value="type">trier · type</option>
-            <option value="difficulty">trier · difficulté</option>
-            <option value="label">trier · libellé</option>
+            <option value="recent">{tr('bank.sortRecent')}</option>
+            <option value="name">{tr('bank.sortName')}</option>
+            <option value="type">{tr('bank.sortType')}</option>
+            <option value="difficulty">{tr('bank.sortDifficulty')}</option>
+            <option value="label">{tr('bank.sortLabel')}</option>
           </select>
         </div>
       </div>
@@ -513,7 +529,7 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
           </div>
         ))}
         {filtered.length === 0 && (
-          <div style={{ fontFamily: "'Caveat', cursive", fontSize: 16, color: palette.amber, padding: '20px 0', textAlign: 'center' as const }}>« aucune question ne correspond à ces filtres »</div>
+          <div style={{ fontFamily: "'Caveat', cursive", fontSize: 16, color: palette.amber, padding: '20px 0', textAlign: 'center' as const }}>{tr('bank.noMatch')}</div>
         )}
       </div>
       {pendingDeleteQuestion && (() => {
@@ -523,15 +539,15 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
           <ConfirmDialog
             portal
             width={420}
-            title="Supprimer cette question ?"
-            description="Cette action est irréversible."
-            confirmLabel="Supprimer"
+            title={tr('bank.deleteQuestionTitle')}
+            description={tr('irreversible')}
+            confirmLabel={tr('delete')}
             onCancel={() => setPendingDeleteQuestion(null)}
             onConfirm={() => { onDeleteQuestion(q); setPendingDeleteQuestion(null); }}
           >
             {affectedExams.length > 0 && (
               <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 9, background: withAlpha(palette.danger, 0.08), textAlign: 'left' as const }}>
-                <div style={{ fontSize: 11.5, color: palette.danger, marginBottom: 6 }}>Elle sera retirée des examens suivants :</div>
+                <div style={{ fontSize: 11.5, color: palette.danger, marginBottom: 6 }}>{tr('bank.deleteQuestionInExams')}</div>
                 <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: palette.inkMuted }}>
                   {affectedExams.map(e => <li key={e.id}>{e.title}</li>)}
                 </ul>
@@ -548,9 +564,9 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
           <ConfirmDialog
             portal
             width={380}
-            title={`Supprimer le libellé « ${label.name} » ?`}
-            description={`${count > 0 ? `Il sera retiré de ${count} question${count > 1 ? 's' : ''}. ` : ''}Cette action est irréversible.`}
-            confirmLabel="Supprimer"
+            title={tr('bank.deleteLabelTitle', { name: label.name })}
+            description={`${count > 0 ? tr('bank.deleteLabelCount', { count }) : ''}${tr('irreversible')}`}
+            confirmLabel={tr('delete')}
             onCancel={() => setPendingDeleteLabel(null)}
             onConfirm={confirmDeleteLabel}
           />

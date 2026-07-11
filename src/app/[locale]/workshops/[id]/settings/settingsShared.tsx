@@ -38,10 +38,11 @@ export function FileCategoryIcon({ category }: { category: FileCategory }) {
   return <FileIcon {...props} />;
 }
 
-export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} o`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+// les unités sont passées par l'appelant (traduites via next-intl) ; défaut FR pour compat.
+export function formatFileSize(bytes: number, units: { b: string; kb: string; mb: string } = { b: 'o', kb: 'Ko', mb: 'Mo' }): string {
+  if (bytes < 1024) return `${bytes} ${units.b}`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} ${units.kb}`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} ${units.mb}`;
 }
 
 export const MOCK_BRICKS = [

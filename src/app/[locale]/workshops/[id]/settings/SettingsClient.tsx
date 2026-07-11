@@ -5,6 +5,7 @@ import { palette, ink, withAlpha } from '@/lib/theme';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { AlertTriangle, Check, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, Trash2, X } from 'lucide-react';
 import Modal from '@/components/Modal';
 import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover } from '@/app/actions/workshops';
@@ -37,6 +38,7 @@ type Props = {
 
 export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, isPremium, showProgramme: showProgrammeProp, members, files: initialFiles }: Props) {
   const router = useRouter();
+  const t = useTranslations('settings');
 
   // Propriétaire vs gestionnaire : seul le propriétaire touche à l'argent (Premium)
   // et à la suppression de l'atelier ; le reste est accessible aux deux.
@@ -70,7 +72,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
       setCoverImage(result.url);
       setUseCustomCover(true);
     } else {
-      setUploadError(result.error ?? 'Erreur lors du téléchargement');
+      setUploadError(result.error ?? t('err.upload'));
     }
     e.target.value = '';
   }
@@ -201,7 +203,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
     const result = await requestDeletionCode(workshopId);
     if (result.success) setDeleteStep('enter_code');
     else {
-      setDeleteError(result.error ?? 'Erreur');
+      setDeleteError(result.error ?? t('err.generic'));
       setDeleteStep('confirm');
     }
   }
@@ -213,7 +215,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
     const result = await confirmDeletion(workshopId, deleteCode);
     if (result.success) router.push(`/${locale}/dashboard`);
     else {
-      setDeleteError(result.error ?? 'Erreur');
+      setDeleteError(result.error ?? t('err.generic'));
       setDeleteStep('enter_code');
     }
   }
@@ -281,7 +283,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             paddingLeft: 10,
           }}
         >
-          Paramètres
+          {t('sidebarLabel')}
         </div>
 
         {/* Nav items — « Atelier Premium » réservé au propriétaire */}
@@ -306,7 +308,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   transition: 'all 0.12s',
                 }}
               >
-                {item.label}
+                {t(`nav.${item.id}`)}
               </button>
             );
           })}
@@ -326,10 +328,10 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         <>
         {/* ── 1. Général ── */}
         <SectionCard
-          title="Général"
-          description="Informations de base de l'atelier."
+          title={t('general.title')}
+          description={t('general.desc')}
         >
-          <Row label="Nom de l'atelier">
+          <Row label={t('general.nameLabel')}>
             <div
               style={{
                 display: 'flex',
@@ -373,11 +375,11 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             </div>
           </Row>
 
-          <Row label="Description" hint="affichée dans la preview de l'atelier">
+          <Row label={t('general.descLabel')} hint={t('general.previewHint')}>
             <textarea
               value={descriptionInput}
               onChange={(e) => setDescriptionInput(e.target.value)}
-              placeholder="décrivez votre atelier en quelques mots…"
+              placeholder={t('general.descPlaceholder')}
               rows={3}
               style={{
                 fontSize: 13,
@@ -394,7 +396,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             />
           </Row>
 
-          <Row label="Image de couverture" hint="affichée dans la preview de l'atelier">
+          <Row label={t('general.coverLabel')} hint={t('general.previewHint')}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
               <div style={{ display: 'flex', gap: 8 }}>
                 {COVER_GRADIENT_KEYS.map((key) => (
@@ -425,7 +427,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                         coverFileInputRef.current?.click();
                       }
                     }}
-                    aria-label="uploader votre image"
+                    aria-label={t('general.uploadAria')}
                     disabled={uploadingCover}
                     style={{
                       width: 32,
@@ -450,7 +452,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   {coverImage && !uploadingCover && (
                     <button
                       onClick={handleRemoveCoverImage}
-                      aria-label="supprimer l'image de couverture"
+                      aria-label={t('general.removeCoverAria')}
                       style={{
                         position: 'absolute',
                         top: -6,
@@ -485,7 +487,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             </div>
           </Row>
 
-          <Row label="Emoji" hint="affiché dans la preview de l'atelier">
+          <Row label={t('general.emojiLabel')} hint={t('general.previewHint')}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {COVER_EMOJIS.map((e) => (
                 <button
@@ -512,7 +514,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             </div>
           </Row>
 
-          <Row label="Date de création" noBorder>
+          <Row label={t('general.createdLabel')} noBorder>
             <span style={{ fontSize: 13, color: palette.inkSoft }}>
               {new Date(createdAt).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', {
                 day: 'numeric',
@@ -525,20 +527,20 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
         {/* ── 2. Accès & limites ── */}
         <SectionCard
-          title="Accès & limites"
-          description="Tous les ateliers sont privés : on les rejoint via une demande validée par un gestionnaire ou sur invitation."
+          title={t('access.title')}
+          description={t('access.desc')}
         >
-          <Row label="Afficher le programme éducatif">
+          <Row label={t('access.showProgramme')}>
             <Switch value={showProgramme} onChange={setShowProgramme} />
           </Row>
 
-          <Row label="QR code" hint="redirige directement vers l'atelier" noBorder>
+          <Row label={t('access.qr')} hint={t('access.qrHint')} noBorder>
             <button
               onClick={() => setShareOpen(true)}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
             >
               <QrCode size={13} />
-              partager · QR
+              {t('access.shareQr')}
             </button>
           </Row>
         </SectionCard>
@@ -546,16 +548,16 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         {/* ── Zone de danger (suppression) — propriétaire uniquement ── */}
         {isOwner && (
         <SectionCard
-          title="Zone de danger"
-          description="Actions irréversibles — procédez avec prudence."
+          title={t('danger.title')}
+          description={t('danger.desc')}
         >
           <Row
-            label="Supprimer l'atelier"
-            hint="toutes les briques, examens et progressions seront perdus"
+            label={t('danger.deleteLabel')}
+            hint={t('danger.deleteHint')}
             noBorder
           >
             <SmallBtn tone="danger" onClick={() => setDeleteStep('confirm')}>
-              supprimer l&apos;atelier
+              {t('danger.deleteBtn')}
             </SmallBtn>
           </Row>
         </SectionCard>
@@ -602,16 +604,16 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         >
           {isDirty && !detailsSaved && (
             <span style={{ fontSize: 12.5, color: !canSave ? palette.danger : palette.inkSoft }}>
-              {!canSave ? "le nom de l'atelier ne peut pas être vide" : 'modifications non enregistrées'}
+              {!canSave ? t('saveBar.emptyName') : t('saveBar.unsaved')}
             </span>
           )}
           <SmallBtn tone={detailsSaved ? 'ghost' : 'dark'} onClick={handleSaveDetails} disabled={!canSave}>
             {savingDetails ? (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Loader2 size={12} className="animate-spin" />enregistrement…</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Loader2 size={12} className="animate-spin" />{t('saveBar.saving')}</span>
             ) : detailsSaved ? (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Check size={12} />enregistré</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Check size={12} />{t('saveBar.saved')}</span>
             ) : (
-              'enregistrer'
+              t('saveBar.save')
             )}
           </SmallBtn>
         </div>
@@ -626,7 +628,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   <Trash2 size={17} />
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6 }}>
-                  Mettre en corbeille ?
+                  {t('deleteModal.trashTitle')}
                 </div>
                 <p
                   style={{
@@ -636,7 +638,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     margin: '0 0 6px',
                   }}
                 >
-                  &quot;{workshopName}&quot; sera mis en corbeille. Vous aurez 7 jours pour annuler.
+                  {t('deleteModal.trashDesc', { name: workshopName })}
                 </p>
                 <p
                   style={{
@@ -646,7 +648,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     margin: '0 0 20px',
                   }}
                 >
-                  Un code de confirmation sera envoyé par email.
+                  {t('deleteModal.codeByEmail')}
                 </p>
                 {deleteError && (
                   <p
@@ -678,7 +680,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       fontFamily: 'inherit',
                     }}
                   >
-                    Annuler
+                    {t('cancel')}
                   </button>
                   <button
                     onClick={handleSendCode}
@@ -704,12 +706,12 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     {deleteStep === 'sending' ? (
                       <>
                         <Loader2 size={14} className="animate-spin" />
-                        Envoi…
+                        {t('deleteModal.sending')}
                       </>
                     ) : (
                       <>
                         <Mail size={14} />
-                        Envoyer le code
+                        {t('deleteModal.sendCode')}
                       </>
                     )}
                   </button>
@@ -723,7 +725,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   <Mail size={17} />
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6 }}>
-                  Code envoyé !
+                  {t('deleteModal.codeSentTitle')}
                 </div>
                 <p
                   style={{
@@ -733,7 +735,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     margin: '0 0 20px',
                   }}
                 >
-                  Saisissez le code à 6 chiffres reçu par email. Il expire dans 15 minutes.
+                  {t('deleteModal.enterCode')}
                 </p>
                 <input
                   type="text"
@@ -797,7 +799,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     }}
                   >
                     <RotateCcw size={13} />
-                    Renvoyer
+                    {t('deleteModal.resend')}
                   </button>
                   <button
                     onClick={handleConfirmDeletion}
@@ -824,10 +826,10 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     {deleteStep === 'verifying' ? (
                       <>
                         <Loader2 size={14} className="animate-spin" />
-                        Vérification…
+                        {t('deleteModal.verifying')}
                       </>
                     ) : (
-                      'Confirmer'
+                      t('deleteModal.confirm')
                     )}
                   </button>
                 </div>
@@ -845,13 +847,13 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           <div style={{ width: 38, height: 38, borderRadius: '50%', background: withAlpha(palette.amberGlow, 0.18), color: palette.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
             <AlertTriangle size={18} strokeWidth={2} />
           </div>
-          <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6 }}>Modifications non enregistrées</div>
+          <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6 }}>{t('leave.title')}</div>
           <div style={{ fontSize: 12.5, color: palette.inkSoft, marginBottom: canSave ? 20 : 10 }}>
-            Si vous quittez maintenant, les modifications apportées seront perdues.
+            {t('leave.desc')}
           </div>
           {!canSave && (
             <div style={{ fontSize: 12, color: palette.danger, marginBottom: 16 }}>
-              le nom de l&apos;atelier ne peut pas être vide
+              {t('leave.emptyName')}
             </div>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -875,20 +877,20 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 fontFamily: 'inherit',
               }}
             >
-              Enregistrer et quitter
+              {t('leave.saveAndLeave')}
             </button>
             <div style={{ display: 'flex', gap: 10 }}>
               <button
                 onClick={() => { setShowLeaveConfirm(false); setPendingHref(null); }}
                 style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: `1px solid ${ink(0.14)}`, background: 'transparent', color: palette.inkMuted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
               >
-                Annuler
+                {t('cancel')}
               </button>
               <button
                 onClick={() => { setShowLeaveConfirm(false); router.push(leaveTargetHref()); setPendingHref(null); }}
                 style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: palette.danger, color: palette.paper, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
               >
-                Quitter sans enregistrer
+                {t('leave.leaveWithout')}
               </button>
             </div>
           </div>

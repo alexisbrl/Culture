@@ -3,6 +3,7 @@
 import { palette, ink, withAlpha } from '@/lib/theme';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { SubscriptionTier } from '@/lib/subscription';
 
 const AMBER       = palette.amber;
@@ -77,6 +78,7 @@ function TierCTA({ tier, current, annual, dark }: {
   annual: boolean;
   dark?: boolean;
 }) {
+  const t = useTranslations('accountPricing');
   const isCurrent = tier === current;
 
   if (isCurrent) {
@@ -86,15 +88,15 @@ function TierCTA({ tier, current, annual, dark }: {
         background: 'transparent', color: dark ? 'rgba(244,240,230,0.6)' : TEXT_MUTED,
         fontSize: 14, fontWeight: 500, fontFamily: "'Inter Tight', sans-serif", cursor: 'default',
       }}>
-        ton offre actuelle
+        {t('currentPlan')}
       </button>
     );
   }
 
   const labels: Record<SubscriptionTier, string> = {
-    free:         'passer au gratuit',
-    premium:      'passer Premium →',
-    premium_plus: 'passer Premium+ →',
+    free:         t('switchTo.free'),
+    premium:      t('switchTo.premium'),
+    premium_plus: t('switchTo.premiumPlus'),
   };
 
   const bg = tier === 'premium_plus' ? AMBER_PALE : tier === 'premium' ? AMBER_LIGHT : DARK;
@@ -102,14 +104,14 @@ function TierCTA({ tier, current, annual, dark }: {
 
   return (
     <button
-      onClick={() => alert('Paiement disponible prochainement.')}
+      onClick={() => alert(t('alerts.paymentSoon'))}
       style={{
         width: '100%', padding: '11px 0', borderRadius: 10, border: 'none',
         background: bg, color,
         fontSize: 14, fontWeight: 600, fontFamily: "'Inter Tight', sans-serif", cursor: 'pointer',
       }}
     >
-      {labels[tier]}{annual && tier !== 'free' ? ' (annuel)' : ''}
+      {labels[tier]}{annual && tier !== 'free' ? ` (${t('annualSuffix')})` : ''}
     </button>
   );
 }
@@ -117,6 +119,7 @@ function TierCTA({ tier, current, annual, dark }: {
 // ---- Main component ----
 
 export default function PricingClient({ currentTier }: { currentTier: SubscriptionTier }) {
+  const t = useTranslations('accountPricing');
   const [annual, setAnnual] = useState(false);
 
   const cardBase: React.CSSProperties = {
@@ -135,13 +138,13 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div style={{ fontFamily: "'Caveat', cursive", fontSize: 22, color: AMBER, marginBottom: 8 }}>
-            de la graine à l&apos;arbre —
+            {t('tagline')}
           </div>
           <h2 style={{ fontSize: 32, fontWeight: 500, color: DARK, margin: '0 0 10px', lineHeight: 1.2 }}>
-            choisis ton niveau de jardinage.
+            {t('title')}
           </h2>
           <p style={{ fontSize: 13, color: TEXT_MUTED, marginBottom: 24 }}>
-            Tout commence gratuitement. Grandis à ton rythme.
+            {t('subtitle')}
           </p>
           <div style={{ display: 'inline-flex', background: ink(0.06), borderRadius: 100, padding: 4, gap: 2 }}>
             {(['mensuel', 'annuel'] as const).map((opt) => (
@@ -153,7 +156,7 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
                 boxShadow: (annual ? opt === 'annuel' : opt === 'mensuel') ? '0 1px 4px rgba(0,0,0,0.10)' : 'none',
                 transition: 'all 0.15s',
               }}>
-                {opt}{opt === 'annuel' && <span style={{ marginLeft: 6, fontSize: 11, color: '#5a8a4a', fontWeight: 600 }}>-20%</span>}
+                {t(`billing.${opt}`)}{opt === 'annuel' && <span style={{ marginLeft: 6, fontSize: 11, color: '#5a8a4a', fontWeight: 600 }}>-20%</span>}
               </button>
             ))}
           </div>
@@ -164,21 +167,21 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
 
           {/* Gratuit */}
           <div style={{ ...cardBase, outline: currentTier === 'free' ? `2px solid ${DARK}` : 'none' }}>
-            {currentTier === 'free' && <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: DARK, marginBottom: 12 }}>● ton offre actuelle</div>}
+            {currentTier === 'free' && <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: DARK, marginBottom: 12 }}>{t('currentBadge')}</div>}
             <div style={{ marginBottom: 16 }}><SeedGlyph /></div>
-            <div style={{ fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: TEXT_MUTED, marginBottom: 4 }}>graine</div>
-            <div style={{ fontSize: 22, fontWeight: 600, color: DARK, marginBottom: 8 }}>Gratuit</div>
-            <div style={{ fontSize: 20, fontWeight: 500, color: DARK, marginBottom: 4 }}>0 € <span style={{ fontSize: 14, color: TEXT_MUTED }}>— pour toujours</span></div>
-            <p style={{ fontSize: 13, color: TEXT_MUTED, marginBottom: 20 }}>L&apos;essentiel pour planter ta première parcelle.</p>
+            <div style={{ fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: TEXT_MUTED, marginBottom: 4 }}>{t('tierKicker.free')}</div>
+            <div style={{ fontSize: 22, fontWeight: 600, color: DARK, marginBottom: 8 }}>{t('tierName.free')}</div>
+            <div style={{ fontSize: 20, fontWeight: 500, color: DARK, marginBottom: 4 }}>0 € <span style={{ fontSize: 14, color: TEXT_MUTED }}>{t('forever')}</span></div>
+            <p style={{ fontSize: 13, color: TEXT_MUTED, marginBottom: 20 }}>{t('tierTagline.free')}</p>
             <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', flex: 1 }}>
-              <FeatureItem included label="énergie limitée" />
-              <FeatureItem included label="5 ateliers loisir" />
-              <FeatureItem included label="apprentissage QCM" />
-              <FeatureItem included={false} label="sans publicité" />
-              <FeatureItem included={false} label="générateur examen" />
-              <FeatureItem included={false} label="échange IA" />
-              <FeatureItem included={false} label="plantes exclusives" />
-              <FeatureItem included={false} label="sécurité renforcée" />
+              <FeatureItem included label={t('feature.energyLimited')} />
+              <FeatureItem included label={t('feature.workshops5')} />
+              <FeatureItem included label={t('feature.qcmLearning')} />
+              <FeatureItem included={false} label={t('feature.noAds')} />
+              <FeatureItem included={false} label={t('feature.examGenerator')} />
+              <FeatureItem included={false} label={t('feature.aiExchange')} />
+              <FeatureItem included={false} label={t('feature.exclusivePlants')} />
+              <FeatureItem included={false} label={t('feature.enhancedSecurity')} />
             </ul>
             <TierCTA tier="free" current={currentTier} annual={annual} />
           </div>
@@ -193,62 +196,62 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
           }}>
             {currentTier === 'premium' ? (
               <div style={{ position: 'absolute', top: -16, left: '50%', transform: 'translateX(-50%)', background: AMBER_LIGHT, color: palette.paper, fontSize: 12, fontWeight: 700, padding: '4px 14px', borderRadius: 100, whiteSpace: 'nowrap' }}>
-                ★ ton offre actuelle
+                {t('ribbonCurrentBadge')}
               </div>
             ) : (
               <div style={{ position: 'absolute', top: -16, left: '50%', transform: 'translateX(-50%)', background: ink(0.12), color: DARK, fontSize: 12, fontWeight: 700, padding: '4px 14px', borderRadius: 100, whiteSpace: 'nowrap' }}>
-                ★ recommandé
+                {t('recommendedBadge')}
               </div>
             )}
             <div style={{ marginBottom: 16 }}><BushGlyph /></div>
-            <div style={{ fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: TEXT_MUTED, marginBottom: 4 }}>buisson</div>
+            <div style={{ fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: TEXT_MUTED, marginBottom: 4 }}>{t('tierKicker.premium')}</div>
             <div style={{ fontSize: 22, fontWeight: 600, color: DARK, marginBottom: 8 }}>Premium</div>
             <div style={{ fontSize: 20, fontWeight: 500, color: DARK, marginBottom: 2 }}>
-              {annual ? '8 €' : '10 €'} <span style={{ fontSize: 14, color: TEXT_MUTED }}>/ mois</span>
+              {annual ? '8 €' : '10 €'} <span style={{ fontSize: 14, color: TEXT_MUTED }}>{t('perMonth')}</span>
             </div>
             <div style={{ fontFamily: "'Caveat', cursive", fontSize: 16, color: AMBER, marginBottom: 4 }}>
-              {annual ? '« économise 24 €/an »' : '« 8 €/mois si annuel »'}
+              {annual ? t('tierTagline.saveAnnual', { amount: '24 €' }) : t('tierTagline.monthlyIfAnnual', { amount: '8 €' })}
             </div>
-            <p style={{ fontSize: 13, color: TEXT_MUTED, marginBottom: 20 }}>Pour un apprentissage sans limites.</p>
+            <p style={{ fontSize: 13, color: TEXT_MUTED, marginBottom: 20 }}>{t('tierTagline.premium')}</p>
             <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', flex: 1 }}>
-              <FeatureItem included label="énergie illimitée" />
-              <FeatureItem included label="sans publicité" />
-              <FeatureItem included label="10 ateliers loisir" />
-              <FeatureItem included label="générateur examen" />
-              <FeatureItem included label="échange IA" />
-              <FeatureItem included label="plantes exclusives" />
-              <FeatureItem included label="1 joker/jour" />
-              <FeatureItem included label="partage abonnement +2" />
-              <FeatureItem included={false} label="sécurité renforcée" />
-              <FeatureItem included={false} label="génération de cours" />
+              <FeatureItem included label={t('feature.energyUnlimited')} />
+              <FeatureItem included label={t('feature.noAds')} />
+              <FeatureItem included label={t('feature.workshops10')} />
+              <FeatureItem included label={t('feature.examGenerator')} />
+              <FeatureItem included label={t('feature.aiExchange')} />
+              <FeatureItem included label={t('feature.exclusivePlants')} />
+              <FeatureItem included label={t('feature.joker1')} />
+              <FeatureItem included label={t('feature.shareSub2')} />
+              <FeatureItem included={false} label={t('feature.enhancedSecurity')} />
+              <FeatureItem included={false} label={t('feature.courseGeneration')} />
             </ul>
             <TierCTA tier="premium" current={currentTier} annual={annual} />
           </div>
 
           {/* Premium+ */}
           <div style={{ ...cardBase, background: DARK, border: currentTier === 'premium_plus' ? `2px solid ${AMBER_LIGHT}` : '1.5px solid rgba(232,216,168,0.2)' }}>
-            {currentTier === 'premium_plus' && <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: AMBER_PALE, marginBottom: 12 }}>● ton offre actuelle</div>}
+            {currentTier === 'premium_plus' && <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: AMBER_PALE, marginBottom: 12 }}>{t('currentBadge')}</div>}
             <div style={{ marginBottom: 16 }}><TreeGlyph /></div>
-            <div style={{ fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: 'rgba(244,240,230,0.45)', marginBottom: 4 }}>arbre</div>
+            <div style={{ fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: 'rgba(244,240,230,0.45)', marginBottom: 4 }}>{t('tierKicker.premiumPlus')}</div>
             <div style={{ fontSize: 22, fontWeight: 600, color: palette.parchment, marginBottom: 8 }}>Premium+</div>
             <div style={{ fontSize: 20, fontWeight: 500, color: palette.parchment, marginBottom: 2 }}>
-              {annual ? '20 €' : '25 €'} <span style={{ fontSize: 14, color: 'rgba(244,240,230,0.55)' }}>/ mois</span>
+              {annual ? '20 €' : '25 €'} <span style={{ fontSize: 14, color: 'rgba(244,240,230,0.55)' }}>{t('perMonth')}</span>
             </div>
             <div style={{ fontFamily: "'Caveat', cursive", fontSize: 16, color: AMBER_PALE, marginBottom: 4 }}>
-              {annual ? '« économise 60 €/an »' : '« 20 €/mois si annuel »'}
+              {annual ? t('tierTagline.saveAnnual', { amount: '60 €' }) : t('tierTagline.monthlyIfAnnual', { amount: '20 €' })}
             </div>
-            <p style={{ fontSize: 13, color: 'rgba(244,240,230,0.6)', marginBottom: 20 }}>Tout ce dont tu as besoin, sans compromis.</p>
+            <p style={{ fontSize: 13, color: 'rgba(244,240,230,0.6)', marginBottom: 20 }}>{t('tierTagline.premiumPlus')}</p>
             <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', flex: 1 }}>
-              <FeatureItem included dark label="tout Premium" />
-              <FeatureItem included dark label="sécurité renforcée examens" />
-              <FeatureItem included dark label="caméra secondaire" />
-              <FeatureItem included dark label="génération de cours" />
-              <FeatureItem included dark label="intros auto (IA)" />
-              <FeatureItem included dark label="examen final auto (IA)" />
-              <FeatureItem included dark label="validation manuelle sections" />
-              <FeatureItem included dark label="15 ateliers loisir" />
-              <FeatureItem included dark label="1 joker/jour au choix" />
-              <FeatureItem included dark label="partage abonnement +3" />
+              <FeatureItem included dark label={t('feature.allPremium')} />
+              <FeatureItem included dark label={t('feature.enhancedSecurityExams')} />
+              <FeatureItem included dark label={t('feature.secondaryCamera')} />
+              <FeatureItem included dark label={t('feature.courseGeneration')} />
+              <FeatureItem included dark label={t('feature.autoIntros')} />
+              <FeatureItem included dark label={t('feature.autoFinalExam')} />
+              <FeatureItem included dark label={t('feature.manualSectionValidation')} />
+              <FeatureItem included dark label={t('feature.workshops15')} />
+              <FeatureItem included dark label={t('feature.jokerChoice')} />
+              <FeatureItem included dark label={t('feature.shareSub3')} />
             </ul>
             <TierCTA tier="premium_plus" current={currentTier} annual={annual} dark />
           </div>
@@ -263,17 +266,17 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
         }}>
           <div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', background: AMBER_LIGHT, color: palette.paper, padding: '3px 10px', borderRadius: 100 }}>atelier premium</span>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', background: '#e05c3a', color: palette.paper, padding: '3px 10px', borderRadius: 100 }}>irréversible</span>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', background: AMBER_LIGHT, color: palette.paper, padding: '3px 10px', borderRadius: 100 }}>{t('workshopPremium.badge')}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', background: '#e05c3a', color: palette.paper, padding: '3px 10px', borderRadius: 100 }}>{t('workshopPremium.irreversible')}</span>
             </div>
-            <h3 style={{ fontSize: 18, fontWeight: 500, color: DARK, margin: '0 0 8px' }}>débloque ton atelier pour tous tes membres, à vie.</h3>
+            <h3 style={{ fontSize: 18, fontWeight: 500, color: DARK, margin: '0 0 8px' }}>{t('workshopPremium.title')}</h3>
             <p style={{ fontSize: 13, color: TEXT_MUTED, margin: '0 0 4px' }}>
-              Une activation unique qui offre l&apos;accès Premium à tous les membres actuels et futurs de ton atelier — sans abonnement personnel requis.
+              {t('workshopPremium.description')}
             </p>
-            <div style={{ fontFamily: "'Caveat', cursive", fontSize: 17, color: AMBER }}>« écoles, formations, équipes — c&apos;est pour vous. »</div>
+            <div style={{ fontFamily: "'Caveat', cursive", fontSize: 17, color: AMBER }}>{t('workshopPremium.tagline')}</div>
           </div>
-          <button onClick={() => alert('Disponible prochainement.')} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: AMBER_LIGHT, color: palette.paper, fontSize: 14, fontWeight: 600, fontFamily: "'Inter Tight', sans-serif", cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            activer pour un atelier →
+          <button onClick={() => alert(t('alerts.soon'))} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: AMBER_LIGHT, color: palette.paper, fontSize: 14, fontWeight: 600, fontFamily: "'Inter Tight', sans-serif", cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            {t('workshopPremium.cta')}
           </button>
         </div>
 

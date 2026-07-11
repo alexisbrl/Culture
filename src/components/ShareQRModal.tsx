@@ -3,6 +3,7 @@
 import { palette, ink } from '@/lib/theme';
 
 import { useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Check, Copy, Download, X } from 'lucide-react';
 
@@ -14,6 +15,7 @@ type Props = {
 };
 
 export default function ShareQRModal({ open, onClose, title, url }: Props) {
+  const t = useTranslations('shareQr');
   const [copied, setCopied] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -42,8 +44,8 @@ export default function ShareQRModal({ open, onClose, title, url }: Props) {
           <X size={16} />
         </button>
 
-        <h3 style={{ fontSize: 17, fontWeight: 500, color: palette.ink, textAlign: 'center', margin: '0 0 4px' }}>Rejoindre &quot;{title}&quot;</h3>
-        <p style={{ fontSize: 12.5, color: palette.inkSoft, textAlign: 'center', margin: '0 0 20px' }}>Scannez ce QR code ou partagez le lien ci-dessous.</p>
+        <h3 style={{ fontSize: 17, fontWeight: 500, color: palette.ink, textAlign: 'center', margin: '0 0 4px' }}>{t('title', { title })}</h3>
+        <p style={{ fontSize: 12.5, color: palette.inkSoft, textAlign: 'center', margin: '0 0 20px' }}>{t('desc')}</p>
 
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
           <div style={{ padding: 14, background: palette.paper, borderRadius: 14, border: `1px solid ${ink(0.10)}` }}>
@@ -54,9 +56,9 @@ export default function ShareQRModal({ open, onClose, title, url }: Props) {
         <div style={{ display: 'flex', gap: 8 }}>
           <input readOnly value={url} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 0, fontSize: 12, fontFamily: 'ui-monospace, monospace', padding: '10px 12px', border: `1px solid ${ink(0.14)}`, borderRadius: 10, outline: 'none', background: ink(0.03), color: palette.inkMuted }} />
           <button onClick={handleCopyLink} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 10, background: copied ? palette.greenSoft : palette.ink, color: palette.paper, border: 'none', fontSize: 12.5, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-            {copied ? <><Check size={13} />copié</> : <><Copy size={13} />copier</>}
+            {copied ? <><Check size={13} />{t('copied')}</> : <><Copy size={13} />{t('copy')}</>}
           </button>
-          <button onClick={handleDownload} aria-label="télécharger le QR code" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px 12px', borderRadius: 10, background: 'transparent', color: palette.inkMuted, border: `1px solid ${ink(0.14)}`, cursor: 'pointer', fontFamily: 'inherit' }}>
+          <button onClick={handleDownload} aria-label={t('downloadLabel')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px 12px', borderRadius: 10, background: 'transparent', color: palette.inkMuted, border: `1px solid ${ink(0.14)}`, cursor: 'pointer', fontFamily: 'inherit' }}>
             <Download size={14} />
           </button>
         </div>

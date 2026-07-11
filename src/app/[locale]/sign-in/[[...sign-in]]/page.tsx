@@ -1,5 +1,5 @@
 import { SignIn } from '@clerk/nextjs';
-import { getLocale } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 
 export default async function SignInPage({
   searchParams,
@@ -7,6 +7,7 @@ export default async function SignInPage({
   searchParams: Promise<{ reason?: string }>;
 }) {
   const locale = await getLocale();
+  const t = await getTranslations('auth.signIn');
   const { reason } = await searchParams;
 
   return (
@@ -15,21 +16,17 @@ export default async function SignInPage({
         {/* Bannière : déconnexion car le compte a été utilisé ailleurs */}
         {reason === 'session_revoked' && (
           <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            {locale === 'fr'
-              ? 'Vous avez été déconnecté car votre compte a été utilisé sur un autre appareil.'
-              : 'You were signed out because your account was used on another device.'}
+            {t('sessionRevoked')}
           </div>
         )}
 
         {/* Header au-dessus du formulaire Clerk */}
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">
-            {locale === 'fr' ? 'Bon retour 👋' : 'Welcome back 👋'}
+            {t('title')}
           </h1>
           <p className="text-gray-500 text-sm mt-1">
-            {locale === 'fr'
-              ? 'Connectez-vous pour accéder à vos ateliers'
-              : 'Sign in to access your workshops'}
+            {t('subtitle')}
           </p>
         </div>
 

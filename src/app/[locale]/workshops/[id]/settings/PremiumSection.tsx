@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
 import Modal from '@/components/Modal';
@@ -10,6 +11,7 @@ import { Row, SmallBtn, SectionCard } from './settingsShared';
 
 export default function PremiumSection({ workshopId, isPremium }: { workshopId: string; isPremium: boolean }) {
   const router = useRouter();
+  const t = useTranslations('settings');
   const [premiumPassword, setPremiumPassword] = useState('');
   const [premiumError, setPremiumError] = useState('');
   const [activatingPremium, setActivatingPremium] = useState(false);
@@ -24,7 +26,7 @@ export default function PremiumSection({ workshopId, isPremium }: { workshopId: 
       setShowPremiumConfirm(false);
       router.refresh();
     } else {
-      setPremiumError(result.error ?? 'Erreur');
+      setPremiumError(result.error ?? t('err.generic'));
     }
   }
 
@@ -32,13 +34,13 @@ export default function PremiumSection({ workshopId, isPremium }: { workshopId: 
     <>
         {/* ── 5. Atelier Premium (propriétaire uniquement) ── */}
         <SectionCard
-          title="Atelier Premium"
-          description="Activez le statut Premium pour débloquer des fonctionnalités avancées pour tous les membres."
+          title={t('premium.title')}
+          description={t('premium.desc')}
         >
           {isPremium ? (
             <Row
-              label="Statut de l'atelier"
-              hint="passage Premium définitif"
+              label={t('premium.statusLabel')}
+              hint={t('premium.statusHint')}
               noBorder
             >
               <span
@@ -53,14 +55,14 @@ export default function PremiumSection({ workshopId, isPremium }: { workshopId: 
                   letterSpacing: '0.02em',
                 }}
               >
-                ✓ atelier premium
+                {t('premium.statusBadge')}
               </span>
             </Row>
           ) : (
             <>
             <Row
-              label="Passer l'atelier Premium"
-              hint="badge visible · engagement irréversible"
+              label={t('premium.goPremiumLabel')}
+              hint={t('premium.goPremiumHint')}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span
@@ -75,22 +77,22 @@ export default function PremiumSection({ workshopId, isPremium }: { workshopId: 
                     letterSpacing: '0.02em',
                   }}
                 >
-                  badge premium
+                  {t('premium.badgePremium')}
                 </span>
-                <SmallBtn tone="amber" onClick={() => setShowPremiumConfirm(true)}>activer →</SmallBtn>
+                <SmallBtn tone="amber" onClick={() => setShowPremiumConfirm(true)}>{t('premium.activate')}</SmallBtn>
               </div>
             </Row>
             {/* [TEST TEMPORAIRE — 13/06/2026] Activation par mot de passe en attendant Stripe. À retirer une fois le paiement réel branché. */}
             <Row
-              label="Mot de passe d'activation (test)"
-              hint="mode de test — sera retiré avec l'intégration du paiement"
+              label={t('premium.testPwLabel')}
+              hint={t('premium.testPwHint')}
               noBorder
             >
               <input
                 type="password"
                 value={premiumPassword}
                 onChange={(e) => { setPremiumPassword(e.target.value); setPremiumError(''); }}
-                placeholder="mot de passe…"
+                placeholder={t('premium.pwPlaceholder')}
                 style={{
                   fontSize: 13,
                   padding: '7px 12px',
@@ -128,9 +130,9 @@ export default function PremiumSection({ workshopId, isPremium }: { workshopId: 
           <div style={{ width: 38, height: 38, borderRadius: '50%', background: withAlpha(palette.amberGlow, 0.18), color: palette.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
             <AlertTriangle size={18} strokeWidth={2} />
           </div>
-          <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6 }}>Passer l&apos;atelier Premium</div>
+          <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6 }}>{t('premium.confirmTitle')}</div>
           <div style={{ fontSize: 12.5, color: palette.inkSoft, marginBottom: 20 }}>
-            Cette action est définitive et irréversible : l&apos;atelier deviendra privé pour toujours et tous ses membres (actuels et futurs) auront un accès Premium à vie.
+            {t('premium.confirmDesc')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button
@@ -153,13 +155,13 @@ export default function PremiumSection({ workshopId, isPremium }: { workshopId: 
               }}
             >
               {activatingPremium ? <Loader2 size={14} className="animate-spin" /> : null}
-              Confirmer l&apos;activation
+              {t('premium.confirmBtn')}
             </button>
             <button
               onClick={() => { setShowPremiumConfirm(false); setPremiumError(''); }}
               style={{ padding: '11px 14px', borderRadius: 10, border: `1px solid ${ink(0.14)}`, background: 'transparent', color: palette.inkMuted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
             >
-              Annuler
+              {t('cancel')}
             </button>
           </div>
         </Modal>

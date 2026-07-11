@@ -3,6 +3,7 @@
 import { palette, ink, withAlpha } from '@/lib/theme';
 
 import { useState, useRef, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 
 const COL_W = 300;
 const POT_ZONE = 168;
@@ -86,6 +87,7 @@ function CoiledVine({ status }: { status: string }) {
 }
 
 function ExerciseNode({ ex, x }: { ex: ExItem; x: number }) {
+  const t = useTranslations('programme');
   const isDone = ex.state === 'done';
   const isCur = ex.state === 'current';
   const isExam = ex.exam;
@@ -106,7 +108,7 @@ function ExerciseNode({ ex, x }: { ex: ExItem; x: number }) {
     return (
       <a href="#" style={style}>
         {isExam ? '◆' : '💧'}
-        <span style={{ position: 'absolute', top: -30, left: '50%', transform: 'translateX(-50%)', background: palette.ink, color: palette.parchment, fontFamily: 'inherit', fontSize: 11, padding: '4px 9px', borderRadius: 8, whiteSpace: 'nowrap', boxShadow: `0 6px 14px ${ink(0.22)}` }}>prochain</span>
+        <span style={{ position: 'absolute', top: -30, left: '50%', transform: 'translateX(-50%)', background: palette.ink, color: palette.parchment, fontFamily: 'inherit', fontSize: 11, padding: '4px 9px', borderRadius: 8, whiteSpace: 'nowrap', boxShadow: `0 6px 14px ${ink(0.22)}` }}>{t('next')}</span>
       </a>
     );
   }
@@ -118,6 +120,7 @@ function ExerciseNode({ ex, x }: { ex: ExItem; x: number }) {
 }
 
 function ChapterColumn({ ch, expanded, onToggle }: { ch: Chapter; expanded: boolean; onToggle: () => void }) {
+  const t = useTranslations('programme');
   const scroller = useRef<HTMLDivElement>(null);
   const isDone = ch.status === 'done';
   const isLocked = ch.status === 'locked';
@@ -171,7 +174,7 @@ function ChapterColumn({ ch, expanded, onToggle }: { ch: Chapter; expanded: bool
                 <ellipse cx="96" cy="34" rx="62" ry="26" fill="#fff" opacity="0.92" />
                 <ellipse cx="186" cy="44" rx="48" ry="22" fill="#fff" opacity="0.88" />
               </svg>
-              <div style={{ position: 'absolute', top: 30, left: 0, right: 0, textAlign: 'center', fontFamily: "'Caveat', cursive", fontSize: 15, color: '#8a8678' }}>« à venir »</div>
+              <div style={{ position: 'absolute', top: 30, left: 0, right: 0, textAlign: 'center', fontFamily: "'Caveat', cursive", fontSize: 15, color: '#8a8678' }}>{t('comingSoon')}</div>
             </div>
           </>
         ) : (
@@ -179,7 +182,7 @@ function ChapterColumn({ ch, expanded, onToggle }: { ch: Chapter; expanded: bool
             {ch.status === 'current' && (
               <a href="#" style={{ display: 'flex', alignItems: 'center', gap: 7, textDecoration: 'none', background: palette.amber, color: palette.parchment, fontFamily: 'inherit', fontSize: 12, padding: '7px 12px', borderRadius: 999, marginBottom: 6, boxShadow: `0 8px 18px ${withAlpha(palette.amber, 0.34)}` }}>
                 <span style={{ width: 20, height: 20, borderRadius: '50%', background: withAlpha(palette.paper, 0.22), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 }}>▶</span>
-                lancer le prochain
+                {t('launchNext')}
               </a>
             )}
             {isDone && <div style={{ marginBottom: 6, fontSize: 26, filter: 'drop-shadow(0 4px 8px rgba(200,152,96,0.4))' }}>🏅</div>}
@@ -197,9 +200,9 @@ function ChapterColumn({ ch, expanded, onToggle }: { ch: Chapter; expanded: bool
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
           <div style={{ textAlign: 'left' as const }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: isLocked ? palette.inkFaint : palette.ink }}>{ch.label}</div>
-            <div style={{ fontSize: 11, color: palette.inkSoft }}>{ch.done} / {ch.total} exercices</div>
+            <div style={{ fontSize: 11, color: palette.inkSoft }}>{t('exercisesCount', { done: ch.done, total: ch.total })}</div>
           </div>
-          <button onClick={onToggle} title={expanded ? 'enrouler' : 'dérouler'} style={{ width: 26, height: 26, borderRadius: '50%', cursor: 'pointer', border: `1px solid ${ink(0.16)}`, background: withAlpha(palette.paper, 0.8), color: palette.inkMuted, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}>{expanded ? '⌃' : '⌄'}</button>
+          <button onClick={onToggle} title={expanded ? t('collapse') : t('expand')} style={{ width: 26, height: 26, borderRadius: '50%', cursor: 'pointer', border: `1px solid ${ink(0.16)}`, background: withAlpha(palette.paper, 0.8), color: palette.inkMuted, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}>{expanded ? '⌃' : '⌄'}</button>
         </div>
         <div style={{ width: 150, height: 5, borderRadius: 3, background: ink(0.10), overflow: 'hidden', marginTop: 7 }}>
           <div style={{ width: (ch.done / ch.total * 100) + '%', height: '100%', background: isDone ? palette.amberLight : P.plantAccent }} />
@@ -210,6 +213,7 @@ function ChapterColumn({ ch, expanded, onToggle }: { ch: Chapter; expanded: bool
 }
 
 function SideCard() {
+  const t = useTranslations('programme');
   return (
     <div style={{ width: 264, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ background: withAlpha(palette.paper, 0.78), border: `1px solid ${ink(0.08)}`, borderRadius: 16, padding: '18px 18px 16px', textAlign: 'center', boxShadow: `0 8px 26px ${ink(0.06)}` }}>
@@ -225,28 +229,29 @@ function SideCard() {
           </svg>
         </div>
         <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginTop: 4 }}>Biologie cellulaire</div>
-        <div style={{ fontFamily: "'Caveat', cursive", fontSize: 16, color: palette.amber, marginTop: 1 }}>« paulownia · niveau 2 »</div>
+        <div style={{ fontFamily: "'Caveat', cursive", fontSize: 16, color: palette.amber, marginTop: 1 }}>{t('sideCard.tagline', { level: 2 })}</div>
         <div style={{ marginTop: 12, height: 6, borderRadius: 3, background: ink(0.07), overflow: 'hidden' }}>
           <div style={{ width: '58%', height: '100%', background: P.plantAccent }} />
         </div>
-        <div style={{ fontSize: 11, color: palette.inkSoft, marginTop: 6 }}>58 % du parcours · 6 briques pour niv. 3</div>
+        <div style={{ fontSize: 11, color: palette.inkSoft, marginTop: 6 }}>{t('sideCard.progress', { percent: 58, count: 6, nextLevel: 3 })}</div>
       </div>
       <div style={{ background: withAlpha(palette.paper, 0.78), border: `1px solid ${ink(0.08)}`, borderRadius: 16, padding: '14px 16px' }}>
-        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft, marginBottom: 10 }}>l&apos;atelier</div>
-        {([['membres', '38 jardiniers'], ['propriétaire', 'Pr. C. Vaisse'], ['briques', '142 · 5 chapitres'], ['ta série', '12 jours 🔥']] as [string, string][]).map(([k, v]) => (
+        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft, marginBottom: 10 }}>{t('workshopInfo.title')}</div>
+        {([[t('workshopInfo.members'), '38 jardiniers'], [t('workshopInfo.owner'), 'Pr. C. Vaisse'], [t('workshopInfo.bricks'), '142 · 5 chapitres'], [t('workshopInfo.streak'), '12 jours 🔥']] as [string, string][]).map(([k, v]) => (
           <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${ink(0.05)}`, fontSize: 12.5 }}>
             <span style={{ color: palette.inkSoft }}>{k}</span>
             <span style={{ color: palette.ink, fontWeight: 500 }}>{v}</span>
           </div>
         ))}
-        <a href="#" style={{ display: 'block', textAlign: 'center', marginTop: 14, padding: '11px 14px', borderRadius: 10, background: P.plantDeep, color: palette.parchment, textDecoration: 'none', fontSize: 13, fontWeight: 500, boxShadow: `0 6px 16px ${withAlpha(palette.green, 0.28)}` }}>continuer le parcours →</a>
+        <a href="#" style={{ display: 'block', textAlign: 'center', marginTop: 14, padding: '11px 14px', borderRadius: 10, background: P.plantDeep, color: palette.parchment, textDecoration: 'none', fontSize: 13, fontWeight: 500, boxShadow: `0 6px 16px ${withAlpha(palette.green, 0.28)}` }}>{t('continueLink')}</a>
       </div>
     </div>
   );
 }
 
 function Legend() {
-  const items: [string, string][] = [['terminé', P.plantDeep], ['en cours', palette.amber], ['à venir', ink(0.18)]];
+  const t = useTranslations('programme');
+  const items: [string, string][] = [[t('legend.done'), P.plantDeep], [t('legend.current'), palette.amber], [t('legend.upcoming'), ink(0.18)]];
   return (
     <div style={{ display: 'flex', gap: 14, alignItems: 'center', background: withAlpha(palette.paper, 0.72), border: `1px solid ${ink(0.08)}`, borderRadius: 999, padding: '6px 14px', fontSize: 11.5, color: palette.inkMuted }}>
       {items.map(([l, c]) => (
@@ -259,6 +264,7 @@ function Legend() {
 }
 
 export default function ProgrammeTab() {
+  const t = useTranslations('programme');
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(['c3']));
   const [page, setPage] = useState(2);
   const VISIBLE = 3;
@@ -330,7 +336,7 @@ export default function ProgrammeTab() {
               <span key={c.id} style={{ width: i >= left && i < left + VISIBLE ? 16 : 7, height: 7, borderRadius: 999, background: i >= left && i < left + VISIBLE ? palette.amber : ink(0.2), transition: 'all .3s', display: 'inline-block' }} />
             ))}
           </div>
-          <span style={{ fontFamily: "'Caveat', cursive", fontSize: 15, color: '#7a4d20' }}>chapitre {left + 1}–{Math.min(CHAPTERS.length, left + VISIBLE)} / {CHAPTERS.length}</span>
+          <span style={{ fontFamily: "'Caveat', cursive", fontSize: 15, color: '#7a4d20' }}>{t('chapterIndicator', { from: left + 1, to: Math.min(CHAPTERS.length, left + VISIBLE), total: CHAPTERS.length })}</span>
         </div>
       </div>
     </div>

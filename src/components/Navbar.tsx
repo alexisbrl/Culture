@@ -112,7 +112,7 @@ export default function Navbar() {
                       className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-violet-50 hover:text-violet-700"
                     >
                       <UserCircle className="w-4 h-4" />
-                      {locale === 'fr' ? 'Mon profil' : 'My profile'}
+                      {t('profile')}
                     </Link>
                     <Link
                       href={`/${locale}/create`}
@@ -129,7 +129,7 @@ export default function Navbar() {
                         className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600"
                       >
                         <LogOut className="w-4 h-4" />
-                        {locale === 'fr' ? 'Se déconnecter' : 'Sign out'}
+                        {t('signOut')}
                       </button>
                     </SignOutButton>
                   </div>
@@ -198,7 +198,7 @@ export default function Navbar() {
               href={`/${otherLocale}${pathWithoutLocale}`}
               className="block text-sm font-medium text-gray-500 px-3 py-2"
             >
-              Passer en {otherLocale.toUpperCase()}
+              {t('switchTo', { locale: otherLocale.toUpperCase() })}
             </Link>
 
             {isSignedIn ? (
@@ -208,7 +208,7 @@ export default function Navbar() {
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg"
                 >
                   <LogOut className="w-4 h-4" />
-                  {locale === 'fr' ? 'Se déconnecter' : 'Sign out'}
+                  {t('signOut')}
                 </button>
               </SignOutButton>
             ) : (

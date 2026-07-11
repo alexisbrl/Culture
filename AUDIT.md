@@ -198,12 +198,46 @@ dans `getUserWorkshops` ont été retirés — le chemin de lecture chaud ne dé
 
 ## 🔵 5. DURABILITÉ / ÉVOLUTIONS FUTURES
 
-### 5.1 — i18n : ~90 % de l'app n'est pas traduisible
-next-intl est configuré, mais seuls **7 fichiers sur 68** utilisent `useTranslations`. Tout l'app connecté
-(dashboard, atelier, profil, paramètres, éditeur d'examen — ~10 000 lignes) est en **français codé en dur**.
-Les fichiers `messages/fr.json` / `en.json` (208 lignes) ne couvrent que le site vitrine. Traduire le produit
-aujourd'hui = réécrire des milliers de chaînes. → À traiter **au fur et à mesure** des refactors, jamais en
-big-bang.
+### 5.1 — i18n : ~90 % de l'app n'est pas traduisible ✅ RÉSOLU (11/07/2026)
+next-intl est configuré, mais seuls **7 fichiers sur 68** utilisaient `useTranslations` au moment de l'audit.
+Tout l'app connecté (dashboard, atelier, profil, paramètres, éditeur d'examen — ~10 000 lignes) était en
+**français codé en dur**. Traduire le produit en big-bang aurait voulu dire réécrire des milliers de chaînes
+d'un coup → choix retenu : migration **au fur et à mesure**, jamais en big-bang, avec une routine documentée
+pour ne pas aggraver la dette entre-temps (détail ci-dessous).
+
+**Statut final** : la totalité de l'app connectée (module 1 — atelier/dashboard/profil/paramètres/examen/jardin)
+ainsi que les pages d'authentification et les témoignages de la homepage sont désormais migrés vers next-intl.
+Il ne reste **aucune chaîne d'UI non centralisée** dans le périmètre de l'audit — les seuls `locale === 'fr'`
+restants dans le code sont des usages techniques légitimes et non traduisibles (sélection de la locale Clerk,
+format de date `toLocaleDateString`, calcul de la locale alternative pour le sélecteur de langue) ou le rendu
+volontairement en deux blocs JSX du texte juridique long de `legal/page.tsx` (déjà sous `useTranslations('legal')`
+pour son titre/sa date, contenu RGPD trop long pour un découpage clé par clé).
+
+**Fait (26/06) — fondations + routine, pas de big-bang :**
+- **Typage des clés** : `src/i18n/types.ts` augmente next-intl (`Messages = typeof fr.json`) → `t('clé')`
+  vérifié au build, autocomplétion IDE. Plus de typo silencieuse.
+- **Page exemple migrée de bout en bout** = `profile` (`page.tsx` pattern serveur `getTranslations` +
+  `ProfileClient.tsx` pattern client `useTranslations` + namespace `profile` dans `fr.json`/`en.json`). Sert de
+  modèle à copier.
+- **Routine documentée très clairement dans CLAUDE.md §17** (entrée « ROUTINE i18n ») : où vivent les messages,
+  convention de namespaces, 3 patterns d'usage, **la règle** (toute nouvelle chaîne en i18n dès l'écriture +
+  migration opportuniste quand on touche un fichier), checklist. Discipline manuelle (pas de lint, qui crierait
+  des milliers de faux positifs sur l'app non migrée).
+- Nettoyage annexe : email obsolète `contact@evalia.app` → `contact@scellow.com` (6 emplacements).
+
+**Avancement migration (page par page, suivi détaillé dans CLAUDE.md §17) :**
+- ✅ 26/06 — page **Profil** (namespace `profile`).
+- ✅ 27/06 — **Dashboard** (namespace `dashboard`) : ~40 ternaires `locale === 'fr' ? …` convertis en `t('clé')`, + 2 chaînes restées en FR pur corrigées (`gestionnaire`, aria-label `agrandir`).
+- ✅ 27/06 — **Génération d'examen** (namespace `examen`, ~200 chaînes) : les 6 fichiers `ExamenTab` + `tabs/examen/{HistoryContent,BankContent,GeneratorContent,examShared}` + `QuestionEditor`, en français pur, entièrement migrés. Patterns notables documentés dans CLAUDE.md §17 (helpers purs reçoivent `t` en paramètre, clés dynamiques type-safe `t(\`responseType.${type}\`)`, valeurs de données `status`/`date` traduites à l'affichage seulement).
+- ✅ 27/06 — **Éditeur d'avatar** (`profile/avatar/page.tsx`, namespace `avatar`) : libellés/hints de catégories traduits à l'affichage, `CATS` (avatarConfig) reste la source des clés/parties.
+- ✅ 27/06 — **Paramètres d'atelier** (namespace `settings`, ~110 chaînes) : `SettingsClient` + `settingsShared` + 4 sections (`MembersSection`/`FilesSection`/`PremiumSection`/`BricksSection`). `formatFileSize` paramétré (unités), `NAV_ITEMS`/`ROLE_LABEL` traduits à l'affichage via clé dynamique.
+- ✅ 11/07 — **Page atelier** (`WorkshopClient.tsx`, namespace `workshop`) + **`ShareQRModal.tsx`** (namespace `shareQr`) + composants partagés **`DashboardHeader`/`Navbar`** (5 derniers ternaires → namespace `nav`).
+- ✅ 11/07 — **Jardin** (`garden/GardenClient.tsx`, le plus gros fichier restant, 1003 l., namespace `garden`) : sous-composants module-level (`ItemCard`/`Panel`) migrés au même pattern que `WorkshopCard`/`InvitationCard` du Dashboard ; maps de libellés (espèce d'arbre/nature de tuile/déco) remplacées par des clés dynamiques sur les unions déjà exposées par `gardenEngine.ts`.
+- ✅ 11/07 — **Derniers onglets atelier + pages de flux** : `ProgrammeTab` (namespace `programme`), `AnalyseTab` (namespace `analyse`), `CoursTab` (namespace `cours`), `session/page.tsx` (namespace `session`), `workshops/new/WorkshopNewClient.tsx` (namespace `workshopNew`), `create/page.tsx` (namespace `createWorkshop`, conversion des ternaires `fr ? … : …`). `pricing/PricingClient.tsx` (page compte connecté) migré sous **`accountPricing`** — pas `pricing`, déjà pris par la section marketing publique ; même logique pour `createWorkshop` vs `create`. `search/page.tsx` ignoré (redirection pure, aucune chaîne).
+- ✅ 11/07 — **Pages d'authentification + témoignages homepage** (hors périmètre initialement suivi, mais même dette) : `sign-in`/`sign-up` (namespace `auth.signIn`/`auth.signUp`, pattern serveur `getTranslations`) et les 3 témoignages de `[locale]/page.tsx` (namespace `testimonials.{marie,thomas,sophie}`, clés `role`/`content` — nom/avatar/couleur restent des données non traduisibles).
+- ⬜ Reste : rien — périmètre i18n de l'audit entièrement traité.
+
+Note : beaucoup de pages connectées sont **déjà bilingues via ternaires inline** (elles changent déjà FR/EN) — la migration les **centralise** dans next-intl, elle n'ajoute pas une couverture absente.
 
 ### 5.2 — API publique (objectif « ajouter un étudiant via API »)
 Bonne nouvelle : si on factorise l'autorisation (§2.2) et la logique métier hors des server actions (un module

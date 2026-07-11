@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useLocale } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, PencilLine } from 'lucide-react';
@@ -25,7 +25,7 @@ const QUESTION = {
 
 export default function SessionPage() {
   const locale = useLocale();
-  const fr = locale === 'fr';
+  const t = useTranslations('session');
   const { id } = useParams<{ id: string }>();
   const [selected, setSelected] = useState<string | null>('b');
   const [status, setStatus] = useState<'idle' | 'submitted'>('idle');
@@ -36,7 +36,7 @@ export default function SessionPage() {
       {/* top bar */}
       <div className="flex items-center justify-between px-6 py-3.5 border-b border-ink/[0.07] bg-white/70 backdrop-blur shrink-0">
         <Link href={`/${locale}/workshops/${id}`} className="text-[12.5px] text-ink-muted flex items-center gap-1.5 hover:text-ink">
-          <ArrowLeft className="w-3.5 h-3.5" /> {fr ? 'quitter la session' : 'leave session'}
+          <ArrowLeft className="w-3.5 h-3.5" /> {t('leaveSession')}
         </Link>
         <span className="text-[12.5px] text-ink-soft hidden sm:block">{QUESTION.workshop} · {QUESTION.section}</span>
         <div className="flex items-center gap-2.5">
@@ -54,23 +54,23 @@ export default function SessionPage() {
         {/* plant rail */}
         <div className="relative overflow-hidden hidden md:flex flex-col items-center px-[22px] py-7 bg-gradient-to-b from-[#eef0dd] via-[#e3ead7] to-[#d8e6cf]">
           <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-44 h-44 rounded-full" style={{ background: 'radial-gradient(circle, rgba(246,201,112,0.3), rgba(246,201,112,0) 70%)' }} />
-          <div className="text-[10px] font-semibold tracking-[0.14em] uppercase text-ink-soft mb-1">{fr ? 'tu arroses' : 'you water'}</div>
+          <div className="text-[10px] font-semibold tracking-[0.14em] uppercase text-ink-soft mb-1">{t('youWater')}</div>
           <div className="text-[15px] font-medium text-ink text-center">Biologie cellulaire</div>
-          <div className="font-script text-base text-amber mb-2">{fr ? '« buisson · niv. 2 »' : '“shrub · lvl. 2”'}</div>
+          <div className="font-script text-base text-amber mb-2">{t('plantTagline', { level: 2 })}</div>
           <div className="relative w-[170px] h-[150px] mt-1.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/assets/trees/paulownia-3.png" alt="" className="absolute inset-0 w-full h-full object-contain" />
           </div>
           <div className="w-full max-w-[200px] mt-auto">
             <div className="flex justify-between text-[11px] text-ink-soft mb-1.5">
-              <span>{fr ? 'niveau 2' : 'level 2'}</span>
-              <span className="text-[#3f5630]">{fr ? '+8 % si ≥ 9/12' : '+8% if ≥ 9/12'}</span>
+              <span>{t('level', { level: 2 })}</span>
+              <span className="text-[#3f5630]">{t('bonusIfScore', { threshold: '9/12' })}</span>
             </div>
             <div className="h-2 rounded-full bg-ink/[0.08] overflow-hidden relative">
               <div className="h-full bg-green-soft" style={{ width: `${pct}%` }} />
               <div className="absolute top-0 bottom-0 w-[2px] bg-[#3f5630]" style={{ left: `${pct}%` }} />
             </div>
-            <div className="text-[11px] text-ink-soft mt-1.5 text-center">{pct} % · {fr ? 'chaque bonne réponse = 1 goutte' : 'each correct answer = 1 drop'}</div>
+            <div className="text-[11px] text-ink-soft mt-1.5 text-center">{t('dropRule', { pct })}</div>
           </div>
         </div>
 
@@ -79,8 +79,8 @@ export default function SessionPage() {
           <div className="flex-1 overflow-auto px-6 md:px-[52px] py-8">
             <div className="max-w-[720px] mx-auto">
               <div className="flex items-center gap-2 mb-[18px] flex-wrap">
-                <span className="text-[11.5px] px-2.5 py-1 rounded-full bg-ink/[0.05] text-ink-muted tabular-nums">question {QUESTION.n} / {QUESTION.total}</span>
-                <span className="text-[11.5px] px-2.5 py-1 rounded-full bg-ink/[0.05] text-ink-muted">{fr ? 'difficulté' : 'difficulty'} {QUESTION.difficulty}/10</span>
+                <span className="text-[11.5px] px-2.5 py-1 rounded-full bg-ink/[0.05] text-ink-muted tabular-nums">{t('questionCounter', { n: QUESTION.n, total: QUESTION.total })}</span>
+                <span className="text-[11.5px] px-2.5 py-1 rounded-full bg-ink/[0.05] text-ink-muted">{t('difficulty')} {QUESTION.difficulty}/10</span>
                 <span className="text-[11.5px] px-2.5 py-1 rounded-full bg-ink/[0.05] text-ink-muted">Bloom · {QUESTION.bloom}</span>
               </div>
 
@@ -115,7 +115,7 @@ export default function SessionPage() {
               <div className="mt-5 px-4 py-3 border border-dashed border-ink/[0.18] rounded-[10px] flex items-center gap-2.5 bg-white/50">
                 <PencilLine className="w-4 h-4 text-amber" />
                 <div className="flex-1 text-[13px] text-ink-soft">
-                  <span className="font-script text-[15px] text-amber">{fr ? '« demande un indice à l’IA »' : '“ask the AI for a hint”'}</span> · {fr ? 'échange premium' : 'premium feature'}
+                  <span className="font-script text-[15px] text-amber">{t('hintPrompt')}</span> · {t('premiumFeature')}
                 </div>
               </div>
             </div>
@@ -124,13 +124,13 @@ export default function SessionPage() {
           {/* footer CTA */}
           <div className="px-6 md:px-[52px] py-4 border-t border-ink/[0.07] bg-white/60 shrink-0">
             <div className="max-w-[720px] mx-auto flex gap-2.5">
-              <button className="px-[18px] py-3.5 rounded-xl bg-transparent border border-ink/[0.16] text-ink-muted text-sm">{fr ? 'passer' : 'skip'}</button>
+              <button className="px-[18px] py-3.5 rounded-xl bg-transparent border border-ink/[0.16] text-ink-muted text-sm">{t('skip')}</button>
               <button
                 onClick={() => setStatus(status === 'idle' ? 'submitted' : 'idle')}
                 className="flex-1 px-[18px] py-3.5 rounded-xl text-parchment text-[15px] font-medium shadow-[0_8px_20px_rgba(79,107,64,0.28)] transition"
                 style={{ background: status === 'submitted' ? palette.green : palette.greenSoft }}
               >
-                {status === 'submitted' ? (fr ? 'question suivante →' : 'next question →') : (fr ? 'valider et arroser →' : 'submit and water →')}
+                {status === 'submitted' ? t('nextQuestion') : t('submitAndWater')}
               </button>
             </div>
           </div>

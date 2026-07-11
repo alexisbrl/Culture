@@ -6,7 +6,12 @@
     "about": "About",
     "contact": "Contact",
     "login": "Log in",
-    "cta": "Join the beta"
+    "cta": "Join the beta",
+    "myWorkshops": "My workshops",
+    "profile": "My profile",
+    "goPremium": "Go Premium ✨",
+    "signOut": "Sign out",
+    "switchTo": "Switch to {locale}"
   },
   "hero": {
     "badge": "Beta launching · Join the pioneers",
@@ -53,7 +58,19 @@
   },
   "testimonials": {
     "badge": "Trusted by",
-    "title": "What our beta testers say"
+    "title": "What our beta testers say",
+    "marie": {
+      "role": "Independent HR Trainer",
+      "content": "I uploaded my 80-slide Excel course. In 10 minutes, I had a complete path with quizzes and badges. My learners are 3x more engaged."
+    },
+    "thomas": {
+      "role": "L&D Manager, 200-person SME",
+      "content": "We cut onboarding training time from 3 days to 1.5 days. New hires arrive better prepared and more motivated. Clear ROI."
+    },
+    "sophie": {
+      "role": "Industrial Safety Trainer",
+      "content": "Auto-generating exams saves me 4 hours a week. And certification pass rates improved by 22%."
+    }
   },
   "cta": {
     "title": "Ready to reinvent your training?",
@@ -185,7 +202,7 @@
     "button": "Send message",
     "sending": "Sending...",
     "success": "Message received! We'll reply within 24h.",
-    "error": "Error sending. Try contact@evalia.app"
+    "error": "Error sending. Try contact@culture.com"
   },
   "footer": {
     "tagline": "Learning, reinvented.",
@@ -204,5 +221,839 @@
   "legal": {
     "title": "Legal Notice & Terms",
     "lastUpdated": "Last updated: May 2025"
+  },
+  "profile": {
+    "metaTitle": "Profile — Culture",
+    "breadcrumbGarden": "garden",
+    "breadcrumbCurrent": "profile",
+    "greeting": "hi {name},",
+    "defaultName": "gardener",
+    "defaultNameFull": "Gardener",
+    "premiumBadge": "★ Premium",
+    "memberSince": "gardener since March 2026",
+    "editProfile": "edit profile",
+    "editAvatar": "edit avatar",
+    "shareGarden": "share my garden",
+    "stats": {
+      "streak": "day streak",
+      "activeWorkshops": "active workshops",
+      "livingPlants": "living plants",
+      "questionsAnswered": "questions answered"
+    },
+    "subscription": {
+      "label": "subscription",
+      "plan": "★ Premium · €10/month",
+      "features": "Unlimited energy · Ad-free · Exam generator included · AI chat during learning · Share with 2 people",
+      "manage": "manage subscription →",
+      "share": "share (2 seats)"
+    },
+    "energy": {
+      "label": "today's watering can",
+      "sessions": "{count} sessions today",
+      "nextJoker": "next joker in {hours}h"
+    },
+    "exam": {
+      "label": "official exam",
+      "title": "Public certification page",
+      "desc": "Summarizes all your official standardized exams. Publicly shareable via link or QR code. Available from version 3."
+    },
+    "friends": {
+      "label": "garden friends",
+      "desc": "Add friends via their tag and follow their progress. Available in version 2."
+    }
+  },
+  "dashboard": {
+    "greetingLabel": "hello",
+    "greeting": "{name}, here are your workshops.",
+    "newWorkshop": "new workshop",
+    "searchPlaceholder": "search by name, subject or tag…",
+    "results": "results",
+    "searching": "searching…",
+    "noResults": "no workshop found",
+    "members": "members",
+    "cultureModules": "offered by Culture",
+    "emptyTitle": "no workshops yet",
+    "emptyDesc": "create your first workshop or join one via search.",
+    "createWorkshop": "create a workshop",
+    "ownedTitle": "my workshops",
+    "joinedTitle": "joined workshops",
+    "trashTitle": "trash",
+    "trashCountdown": "permanently deleted in {days} day(s)",
+    "trashImminent": "deletion imminent",
+    "restoring": "restoring…",
+    "restore": "restore",
+    "createdBy": "created by",
+    "invitedBy": "invited by",
+    "invitation": "invitation",
+    "expand": "expand",
+    "acceptInvitation": "accept invitation",
+    "accepting": "accepting…",
+    "declining": "declining…",
+    "decline": "decline",
+    "joinMock": "join the workshop",
+    "enterWorkshop": "enter the workshop",
+    "requestSent": "request sent",
+    "requestPending": "waiting for a workshop manager to approve.",
+    "requestToJoin": "request to join",
+    "sending": "sending…",
+    "role": {
+      "owner": "owner",
+      "manager": "manager",
+      "member": "member"
+    }
+  },
+  "examen": {
+    "noStatement": "(no statement)",
+    "irreversible": "This action is irreversible.",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "add": "add",
+    "cancelLower": "cancel",
+    "expand": "expand",
+    "responseType": {
+      "sans_reponse": "No answer",
+      "qcs": "SCQ",
+      "qcm": "MCQ",
+      "textuelle": "Text",
+      "dessin": "Drawing",
+      "audio": "Audio",
+      "sondage": "Poll",
+      "fill_blank": "Fill in the blank",
+      "matching": "Matching",
+      "ordre": "Reorder"
+    },
+    "questionType": {
+      "textuel": "Text",
+      "visuel": "Visual",
+      "audio": "Audio"
+    },
+    "identity": {
+      "nom": "Last name",
+      "prenom": "First name",
+      "tag": "Tag - Culture",
+      "classe": "Class",
+      "date": "Date"
+    },
+    "status": {
+      "publié": "published",
+      "brouillon": "draft",
+      "archivé": "archived"
+    },
+    "answer": {
+      "noCorrectChoice": "(correct answer not set)",
+      "noPairs": "(pairs not set)",
+      "noOrder": "(order not set)",
+      "none": "no answer attached",
+      "surveyFree": "poll · free response ({choices})",
+      "surveyNoCorrection": "poll without correction",
+      "freeNoCorrection": "free response · no correction",
+      "notSet": "(answer not set)",
+      "prefix": "answer · "
+    },
+    "answerSpace": { "audio": "🎙 audio response space" },
+    "weight": {
+      "points": "points",
+      "negative": "negative points",
+      "negativeValue": "negative point value",
+      "eliminatory": "eliminatory question"
+    },
+    "diff": "diff",
+    "editQuestion": "edit question",
+    "editor": {
+      "new": "New question",
+      "edit": "Edit question",
+      "subtitle": "created manually or reworked with AI",
+      "titleLabel": "Title",
+      "titleHint": "optional — if filled, replaces the statement as the title shown in the question bank",
+      "titlePlaceholder": "Short title (optional)…",
+      "qTypeLabel": "Question type",
+      "qTypeHint": "Text by default · Visual (image, chart) and Audio available",
+      "visualAttach": "📎 attach an image or chart",
+      "visualEdit": "edit image — basic tool coming soon",
+      "audioComing": "🎙️ audio recording / import — tool coming soon",
+      "contentLabel": "Question statement",
+      "contentHintFill": "use « ___ » to mark each blank to fill",
+      "contentPlaceholder": "Write or paste the question statement…",
+      "rTypeLabel": "Response type",
+      "rTypeHint": "No answer by default",
+      "choicesPairs": "Pairs to match",
+      "choicesOrder": "Items to order",
+      "choicesOptions": "Answer options",
+      "hintQcs": "a single correct answer",
+      "hintQcm": "one or more correct answers",
+      "hintSurveyA": "poll without correction · « free response » option available",
+      "hintSurveyB": "enable the ✎ icon on an option to allow a free response",
+      "hintMatching": "match each item to its counterpart",
+      "hintOrder": "the order of the list below is the correct order",
+      "shuffleLabel": "Random order",
+      "shuffleHint": "shuffles the option order for each student",
+      "answerHintFill": "expected answers for each blank, comma-separated, in order",
+      "answerHintDessin": "description or reference image for grading (drawing tool coming soon)",
+      "answerHintAudio": "transcript or expected elements in the audio answer",
+      "answerHintDefault": "used for AI-assisted grading",
+      "answerLabelFill": "Expected answers",
+      "answerLabelDefault": "Attached answer",
+      "answerPlaceholder": "Reference answer…",
+      "freeAnswerLabel": "Free response",
+      "freeAnswerHint": "no reference answer is expected (e.g. essay)",
+      "freeAnswerHintShort": "no reference answer is expected",
+      "linesLabel": "Number of lines",
+      "linesHint": "lines shown in the preview",
+      "linesHintShort": "lines in the preview",
+      "noAnswerNote": "this question has no attached answer — no grading will be offered.",
+      "difficulty": "Difficulty",
+      "difficultyHint": "off by default — annotates the question difficulty",
+      "duration": "Duration",
+      "durationHint": "off by default — allotted time, only for projected exams",
+      "minutes": "minutes",
+      "seconds": "seconds",
+      "partsDivider": "Additional parts",
+      "partsIntro": "A question can have several independent parts (distinct statements and response types).",
+      "part": "Part {n}",
+      "partStatement": "Statement",
+      "partStatementPlaceholder": "Statement for this part…",
+      "addPart": "+ add a part",
+      "optionsDivider": "Per-question options",
+      "labelsLabel": "Labels",
+      "labelsHint": "off by default — groups questions to generate exams",
+      "labelNamePlaceholder": "label name…",
+      "addLabelOption": "+ add a label…",
+      "newLabelOption": "+ new label…",
+      "addQuestion": "Add question",
+      "saveChanges": "Save changes"
+    },
+    "choices": {
+      "prompt": "« add {what} »",
+      "promptPairs": "pairs",
+      "promptOptions": "answer options",
+      "dragReorder": "drag to reorder",
+      "correctUnique": "correct answer (single)",
+      "correct": "correct answer",
+      "freeTextMarker": "free response — the student writes whatever they want",
+      "pairLeft": "item {n}",
+      "pairRight": "counterpart",
+      "freeInput": "free input",
+      "option": "option {n}",
+      "addPair": "+ pair",
+      "addOption": "+ option",
+      "needCorrect": "mark at least one correct answer by checking the matching option"
+    },
+    "history": {
+      "title": "Generated exams",
+      "subtitle": "{count} exams · workshop history",
+      "newExam": "new exam",
+      "colExam": "exam",
+      "colDate": "date",
+      "colQuestions": "questions",
+      "colTakenBy": "taken by",
+      "colAvg": "avg. score",
+      "colActions": "actions",
+      "takenMembers": "{count} members",
+      "edit": "edit",
+      "duplicate": "duplicate",
+      "export": "export",
+      "deleteAction": "delete"
+    },
+    "bank": {
+      "title": "Question bank",
+      "include": "include",
+      "exclude": "exclude",
+      "dropFilterHere": "drop a filter here",
+      "newQuestion": "new question",
+      "generateAI": "generate with AI",
+      "searchPlaceholder": "search for a question…",
+      "filters": "filters",
+      "filtersReset": "reset",
+      "filtersTitle": "filters",
+      "qTypeSection": "question type",
+      "rTypeSection": "response type",
+      "statusSection": "status",
+      "statusNew": "New",
+      "statusIncomplete": "Incomplete",
+      "labelsSection": "labels",
+      "newLabel": "+ label",
+      "difficultySection": "difficulty",
+      "noDifficulty": "no difficulty",
+      "diffLevel": "{n}/5",
+      "filterNoDifficulty": "no difficulty",
+      "filterDifficulty": "difficulty {n}/5",
+      "editLabelTitle": "edit label",
+      "saveLabel": "save",
+      "deleteLabel": "delete label",
+      "parts": "{count} parts",
+      "part": "Part {n}",
+      "showDetail": "view detail ▾",
+      "hideDetail": "hide detail ▴",
+      "editQuestion": "edit question",
+      "duplicateQuestion": "duplicate question",
+      "deleteQuestion": "delete question",
+      "sendToEditor": "send to the exam editor",
+      "noMatch": "« no question matches these filters »",
+      "sortAsc": "ascending order",
+      "sortDesc": "descending order",
+      "sortRecent": "sort · date added",
+      "sortName": "sort · name",
+      "sortType": "sort · type",
+      "sortDifficulty": "sort · difficulty",
+      "sortLabel": "sort · label",
+      "deleteQuestionTitle": "Delete this question?",
+      "deleteQuestionInExams": "It will be removed from the following exams:",
+      "deleteLabelTitle": "Delete the label « {name} »?",
+      "deleteLabelCount": "It will be removed from {count} question(s). "
+    },
+    "generator": {
+      "title": "Exam editor",
+      "subtitle": "questions follow in this order — drag to reorder",
+      "cancelEdits": "cancel changes",
+      "resetEditor": "reset the editor",
+      "editingPrefix": "Editing",
+      "cancelEdit": "cancel ✕",
+      "sentQuestions": "sent questions",
+      "checkToAdd": "check to add to the exam",
+      "sendFromBank": "« send questions from the bank »",
+      "incompleteTooltip": "incomplete question - click to complete",
+      "removeFromList": "remove from list",
+      "settings": "settings",
+      "label": "title",
+      "show": "show",
+      "presentation": "presentation",
+      "applyFavorite": "apply favorite presentation",
+      "favorite": "favorite",
+      "replaceFavorite": "replace favorite with the current presentation",
+      "left": "left",
+      "right": "right",
+      "notShown": "not shown",
+      "customFieldPlaceholder": "pill name…",
+      "addCustomField": "+ custom pill",
+      "sections": "sections",
+      "addSection": "+ section",
+      "questions": "questions",
+      "addPageBreak": "+ page break",
+      "addPageBreakTooltip": "add a page break",
+      "scale": "scale",
+      "points": "{count} pt{plural}",
+      "duration": "duration",
+      "durationMin": "min · {duration}",
+      "flow": "exam flow",
+      "emptySection": "empty section — drag a question here",
+      "pageBreak": "page break",
+      "removeSection": "delete section",
+      "removePageBreak": "remove page break",
+      "partWeightTooltip": "weighting of part {n}",
+      "partShort": "part {n}",
+      "removeFromExam": "remove from exam",
+      "dragReorder": "drag to reorder",
+      "saveChanges": "save changes",
+      "saveExam": "save the exam",
+      "page": "page {n} / {total}",
+      "parts": "{count} parts",
+      "removeSectionTitle": "Delete section « {title} »?",
+      "removeSectionDesc": "The {count} question(s) in this section will no longer be in the exam and will return to the sent questions list.",
+      "cancelEditsTitle": "Cancel changes?",
+      "clearTitle": "Clear the exam editor?",
+      "clearDescEditing": "Your current changes will be discarded. The already saved exam is not affected.",
+      "clearDesc": "The title, sections, weighting and sent questions will be reset.",
+      "saveAnywayTitle": "Save anyway?",
+      "saveAnywayDesc": "{count} question(s) in this exam {plural} (no attached answer or no statement).",
+      "saveAnywayPluralOne": "is incomplete",
+      "saveAnywayPluralMany": "are incomplete",
+      "applyFavoriteTitle": "Apply favorite presentation?",
+      "applyFavoriteDesc": "The presentation section will be replaced by your favorite.",
+      "apply": "Apply",
+      "replaceFavoriteTitle": "Replace favorite?",
+      "replaceFavoriteDesc": "Saves the current presentation as favorite. It will replace the previous favorite.",
+      "save": "Save",
+      "removeQuestionTitle": "Remove this question?",
+      "removeQuestionDesc": "It is checked in the current exam — removing it from the sent questions list will also remove it from the preview.",
+      "remove": "Remove"
+    },
+    "tab": {
+      "panelHistory": "Generated exam",
+      "panelBank": "Question bank",
+      "panelGenerator": "Exam editor",
+      "deleteExamTitle": "Delete the exam?",
+      "editorBusyTitle": "Editor already in use",
+      "editorBusyDesc": "The exam editor already has changes in progress. Finish or clear the editor before editing {target}.",
+      "editorBusyGo": "Go to the editor",
+      "questionEditing": "question already being edited",
+      "introTitle": "How the exam generator works",
+      "introSubtitle": "Three steps to go from your question bank to a ready-to-give exam.",
+      "introStep1Title": "Build your question bank",
+      "introStep1Text": "Create your questions manually or let the AI handle it from the workshop files.",
+      "introStep2Title": "Compose your exam",
+      "introStep2Text": "Send your questions to the editor, drag them into sections, adjust weighting and difficulty.",
+      "introStep3Title": "Generate and share",
+      "introStep3Text": "The exam is ready: PDF export, online sitting, projection, or integration into the learning program.",
+      "introImage": "image {n}",
+      "introClose": "close",
+      "introStart": "Start"
+    }
+  },
+  "avatar": {
+    "breadcrumbProfile": "profile",
+    "breadcrumbCurrent": "edit avatar",
+    "title": "customize your gardener",
+    "titleScript": "« assemble your character »",
+    "subtitle": "each element mixes freely with the others. your choice previews live.",
+    "livePreview": "« live preview »",
+    "saving": "saving…",
+    "validate": "save avatar →",
+    "cancel": "cancel",
+    "cat": {
+      "face": "Face",
+      "hair": "Hair",
+      "brow": "Eyebrows",
+      "eyes": "Eyes",
+      "nose": "Nose",
+      "mouth": "Mouth",
+      "top": "Outfit"
+    },
+    "hint": {
+      "face": "the face shape and skin tone.",
+      "hair": "the cut — every style mixes with everything else.",
+      "brow": "expression starts here.",
+      "eyes": "your gardener's gaze.",
+      "nose": "a subtle touch.",
+      "mouth": "smile, neutral, or big grin.",
+      "top": "the top your character wears."
+    }
+  },
+  "settings": {
+    "sidebarLabel": "Settings",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "nav": {
+      "general": "General",
+      "members": "Members & roles",
+      "files": "Files",
+      "bricks": "Knowledge blocks",
+      "premium": "Premium workshop"
+    },
+    "role": {
+      "owner": "owner",
+      "manager": "manager",
+      "member": "member"
+    },
+    "fileUnit": { "b": "B", "kb": "KB", "mb": "MB" },
+    "err": {
+      "upload": "Upload error",
+      "generic": "Error",
+      "send": "Send error",
+      "prepare": "Error preparing the upload",
+      "uploadNamed": "Error uploading « {name} »",
+      "save": "Save error",
+      "delete": "Delete error",
+      "emptyName": "The name cannot be empty",
+      "rename": "Rename error"
+    },
+    "general": {
+      "title": "General",
+      "desc": "Basic workshop information.",
+      "nameLabel": "Workshop name",
+      "descLabel": "Description",
+      "previewHint": "shown in the workshop preview",
+      "descPlaceholder": "describe your workshop in a few words…",
+      "coverLabel": "Cover image",
+      "uploadAria": "upload your image",
+      "removeCoverAria": "remove cover image",
+      "emojiLabel": "Emoji",
+      "createdLabel": "Creation date"
+    },
+    "access": {
+      "title": "Access & limits",
+      "desc": "All workshops are private: you join via a request approved by a manager or by invitation.",
+      "showProgramme": "Show the learning program",
+      "qr": "QR code",
+      "qrHint": "redirects straight to the workshop",
+      "shareQr": "share · QR"
+    },
+    "danger": {
+      "title": "Danger zone",
+      "desc": "Irreversible actions — proceed with caution.",
+      "deleteLabel": "Delete the workshop",
+      "deleteHint": "all blocks, exams and progress will be lost",
+      "deleteBtn": "delete the workshop"
+    },
+    "saveBar": {
+      "unsaved": "unsaved changes",
+      "emptyName": "the workshop name cannot be empty",
+      "saving": "saving…",
+      "saved": "saved",
+      "save": "save"
+    },
+    "deleteModal": {
+      "trashTitle": "Move to trash?",
+      "trashDesc": "\"{name}\" will be moved to trash. You'll have 7 days to undo.",
+      "codeByEmail": "A confirmation code will be sent by email.",
+      "sending": "Sending…",
+      "sendCode": "Send the code",
+      "codeSentTitle": "Code sent!",
+      "enterCode": "Enter the 6-digit code received by email. It expires in 15 minutes.",
+      "resend": "Resend",
+      "verifying": "Verifying…",
+      "confirm": "Confirm"
+    },
+    "leave": {
+      "title": "Unsaved changes",
+      "desc": "If you leave now, your changes will be lost.",
+      "emptyName": "the workshop name cannot be empty",
+      "saveAndLeave": "Save and leave",
+      "leaveWithout": "Leave without saving"
+    },
+    "members": {
+      "title": "Members & roles",
+      "desc": "Manage access and permissions for workshop members.",
+      "inviteLabel": "Invite a user",
+      "inviteHint": "by tag",
+      "inviting": "sending…",
+      "invite": "invite",
+      "inviteSent": "Invitation sent to {name}.",
+      "premiumOnly": "available for Premium workshops",
+      "pendingInvites": "Pending invitations ({count})",
+      "waiting": "pending",
+      "canceling": "canceling…",
+      "cancel": "cancel",
+      "joinRequests": "Join requests ({count})",
+      "request": "request",
+      "approve": "approve",
+      "reject": "reject",
+      "promote": "promote",
+      "demote": "demote",
+      "exclude": "remove"
+    },
+    "files": {
+      "title": "Files",
+      "desc": "All files uploaded to this workshop, sorted by name.",
+      "addFile": "Add a file",
+      "addFileHint": "drag-and-drop or browse · max size 50 MB",
+      "uploading": "uploading… {percent}%",
+      "addFileBtn": "add a file",
+      "noFiles": "no file uploaded yet.",
+      "saveTitle": "save",
+      "cancelTitle": "cancel",
+      "downloadTitle": "download",
+      "renameTitle": "rename",
+      "deleteTitle": "delete",
+      "deleteFileTitle": "Delete this file?",
+      "deleteFileDesc": "\"{name}\" will be permanently deleted. This action is irreversible."
+    },
+    "premium": {
+      "title": "Premium workshop",
+      "desc": "Activate Premium status to unlock advanced features for all members.",
+      "statusLabel": "Workshop status",
+      "statusHint": "permanent Premium switch",
+      "statusBadge": "✓ premium workshop",
+      "goPremiumLabel": "Make the workshop Premium",
+      "goPremiumHint": "visible badge · irreversible commitment",
+      "badgePremium": "premium badge",
+      "activate": "activate →",
+      "testPwLabel": "Activation password (test)",
+      "testPwHint": "test mode — will be removed with payment integration",
+      "pwPlaceholder": "password…",
+      "confirmTitle": "Make the workshop Premium",
+      "confirmDesc": "This action is permanent and irreversible: the workshop will become private forever and all its members (current and future) will get lifetime Premium access.",
+      "confirmBtn": "Confirm activation"
+    },
+    "bricks": {
+      "title": "Knowledge blocks",
+      "desc": "The information units extracted from your source files by the AI.",
+      "sourceFiles": "Source files",
+      "manageFiles": "manage files",
+      "regenAI": "✦ regenerate with AI",
+      "edit": "edit",
+      "diff": "diff",
+      "imp": "imp",
+      "shownCount": "{shown} of {total} shown",
+      "viewAll": "view all blocks"
+    }
+  },
+  "workshop": {
+    "breadcrumbGarden": "garden",
+    "tabs": {
+      "programme": "Learning programme",
+      "examen": "Exam generation",
+      "analyse": "Analytics",
+      "cours": "Course generation"
+    },
+    "shareBtn": "share · QR",
+    "settingsLink": "settings",
+    "role": {
+      "owner": "owner",
+      "manager": "manager",
+      "member": "member"
+    },
+    "premiumBadge": "premium",
+    "memberCount": "{count} member{plural}"
+  },
+  "shareQr": {
+    "title": "Join \"{title}\"",
+    "desc": "Scan this QR code or share the link below.",
+    "copy": "copy",
+    "copied": "copied",
+    "downloadLabel": "download the QR code"
+  },
+  "garden": {
+    "title": "{name}'s garden",
+    "edit": {
+      "move": "Move",
+      "store": "Store",
+      "done": "Done",
+      "edit": "Edit",
+      "recenter": "Recenter"
+    },
+    "hint": {
+      "placeStructure": "Pick a spot for the structure",
+      "moveTree": "Click a land cell to drop the tree",
+      "placeDeco": "Click a tile for the decoration",
+      "plantTree": "Click a land cell to plant the tree",
+      "digWater": "Click a cell to carve water",
+      "paint": "Click cells to paint",
+      "idle": "Pick a surface or object · click a tree/structure to move it"
+    },
+    "panel": {
+      "blocks": "Blocks",
+      "deco": "Deco",
+      "surfaces": "Surfaces",
+      "resetGrass": "Grass (reset)",
+      "objects": "Objects",
+      "noObjects": "No objects",
+      "decorations": "Decorations",
+      "erase": "Erase"
+    },
+    "species": {
+      "chene": "Oak",
+      "paulownia": "Paulownia",
+      "pin": "Pine",
+      "pommier": "Apple tree"
+    },
+    "kind": {
+      "grass": "Grass",
+      "path": "Path",
+      "tallgrass": "Tall grass",
+      "earth": "Earth",
+      "water": "Water",
+      "bridge": "Bridge",
+      "house": "House",
+      "mountain": "Mountain",
+      "tree": "Tree"
+    },
+    "cosmetic": {
+      "rock": "Rock",
+      "flowers": "Flowers",
+      "mushroom": "Mushroom",
+      "lantern": "Lantern",
+      "basket": "Basket",
+      "stump": "Stump",
+      "bush": "Bush"
+    }
+  },
+  "programme": {
+    "legend": {
+      "done": "done",
+      "current": "in progress",
+      "upcoming": "upcoming"
+    },
+    "comingSoon": "“upcoming”",
+    "launchNext": "launch next",
+    "next": "next",
+    "expand": "expand",
+    "collapse": "collapse",
+    "exercisesCount": "{done} / {total} exercises",
+    "chapterIndicator": "chapter {from}–{to} / {total}",
+    "sideCard": {
+      "tagline": "“paulownia · level {level}”",
+      "progress": "{percent}% through · {count} bricks for lvl. {nextLevel}"
+    },
+    "workshopInfo": {
+      "title": "the workshop",
+      "members": "members",
+      "owner": "owner",
+      "bricks": "bricks",
+      "streak": "your streak"
+    },
+    "continueLink": "continue the programme →"
+  },
+  "accountPricing": {
+    "tagline": "from seed to tree —",
+    "title": "choose your gardening level.",
+    "subtitle": "Everything starts free. Grow at your own pace.",
+    "billing": {
+      "mensuel": "monthly",
+      "annuel": "annual"
+    },
+    "currentPlan": "your current plan",
+    "currentBadge": "● your current plan",
+    "ribbonCurrentBadge": "★ your current plan",
+    "recommendedBadge": "★ recommended",
+    "switchTo": {
+      "free": "switch to free",
+      "premium": "switch to Premium →",
+      "premiumPlus": "switch to Premium+ →"
+    },
+    "annualSuffix": "annual",
+    "perMonth": "/ month",
+    "forever": "— forever",
+    "tierKicker": {
+      "free": "seed",
+      "premium": "bush",
+      "premiumPlus": "tree"
+    },
+    "tierName": {
+      "free": "Free"
+    },
+    "tierTagline": {
+      "free": "The essentials to plant your first plot.",
+      "premium": "For limitless learning.",
+      "premiumPlus": "Everything you need, no compromise.",
+      "saveAnnual": "“save {amount}/yr”",
+      "monthlyIfAnnual": "“{amount}/mo if annual”"
+    },
+    "feature": {
+      "energyLimited": "limited energy",
+      "workshops5": "5 leisure workshops",
+      "qcmLearning": "MCQ learning",
+      "noAds": "ad-free",
+      "examGenerator": "exam generator",
+      "aiExchange": "AI chat",
+      "exclusivePlants": "exclusive plants",
+      "enhancedSecurity": "enhanced security",
+      "energyUnlimited": "unlimited energy",
+      "workshops10": "10 leisure workshops",
+      "joker1": "1 joker/day",
+      "shareSub2": "share plan +2",
+      "courseGeneration": "course generation",
+      "allPremium": "everything in Premium",
+      "enhancedSecurityExams": "enhanced exam security",
+      "secondaryCamera": "secondary camera",
+      "autoIntros": "auto intros (AI)",
+      "autoFinalExam": "auto final exam (AI)",
+      "manualSectionValidation": "manual section validation",
+      "workshops15": "15 leisure workshops",
+      "jokerChoice": "1 chosen joker/day",
+      "shareSub3": "share plan +3"
+    },
+    "workshopPremium": {
+      "badge": "premium workshop",
+      "irreversible": "irreversible",
+      "title": "unlock your workshop for all your members, for life.",
+      "description": "A one-time activation that grants Premium access to all current and future members of your workshop — no personal subscription required.",
+      "tagline": "“schools, training centers, teams — this is for you.”",
+      "cta": "activate for a workshop →"
+    },
+    "alerts": {
+      "paymentSoon": "Payment coming soon.",
+      "soon": "Coming soon."
+    }
+  },
+  "analyse": {
+    "header": {
+      "title": "Dashboard",
+      "subtitle": "manager view · {count} members · updated {minutes} min ago"
+    },
+    "period": {
+      "d7": "7 days",
+      "d30": "30 days",
+      "all": "all"
+    },
+    "exportCsv": "export CSV",
+    "kpi": {
+      "members": "members",
+      "avgProgress": "average progress",
+      "masteredBricks": "mastered bricks (avg.)",
+      "avgExamScore": "average exam score"
+    },
+    "masteryHeatmap": {
+      "kicker": "mastery by section (group average)"
+    },
+    "distribution": {
+      "kicker": "distribution · current section",
+      "insight": "“most of the group is on mitochondria”"
+    },
+    "membersTable": {
+      "title": "Progress by member",
+      "count": "{shown} of {total} · sort by progress ▾",
+      "col": {
+        "member": "member",
+        "section": "current section",
+        "progress": "progress",
+        "lastActivity": "last activity",
+        "score": "score"
+      }
+    }
+  },
+  "session": {
+    "leaveSession": "leave session",
+    "youWater": "you water",
+    "plantTagline": "“shrub · lvl. {level}”",
+    "level": "level {level}",
+    "bonusIfScore": "+8% if ≥ {threshold}",
+    "dropRule": "{pct}% · each correct answer = 1 drop",
+    "questionCounter": "question {n} / {total}",
+    "difficulty": "difficulty",
+    "hintPrompt": "“ask the AI for a hint”",
+    "premiumFeature": "premium feature",
+    "skip": "skip",
+    "nextQuestion": "next question →",
+    "submitAndWater": "submit and water →"
+  },
+  "workshopNew": {
+    "backToDashboard": "Back to dashboard",
+    "badge": "New workshop",
+    "title": "Create a workshop",
+    "subtitle": "Give your workshop a name. You can then invite members and add documents.",
+    "nameLabel": "Workshop name",
+    "namePlaceholder": "E.g: Advanced Excel Training, Onboarding 2024...",
+    "cancel": "Cancel",
+    "creating": "Creating...",
+    "create": "Create workshop",
+    "err": {
+      "create": "Error creating workshop"
+    }
+  },
+  "createWorkshop": {
+    "breadcrumb": {
+      "garden": "garden",
+      "newPlot": "new plot"
+    },
+    "title": "plant a new subject.",
+    "subtitle": "“drop your courses — the AI grows the knowledge bricks for you.”",
+    "source": {
+      "kicker": "① source · the heart of your workshop",
+      "dropHere": "drop your files here",
+      "dropTagline": "“drag & drop, or paste a Drive link”",
+      "browseFiles": "browse my files",
+      "formatPrefix": "V1 format — ",
+      "formatSuffix": " · 25 MB max / file",
+      "futureFormats": "Word, PowerPoint, audio, video coming in V2",
+      "filesAdded": "{count} files added",
+      "extractAfterCreation": "the AI will extract bricks after creation"
+    },
+    "identity": {
+      "kicker": "② identity",
+      "changeCover": "change cover",
+      "nameLabel": "name",
+      "namePlaceholder": "e.g. Cell biology — L2",
+      "descriptionLabel": "short description",
+      "descriptionPlaceholder": "one line to set the scene…"
+    },
+    "createCta": "create the workshop",
+    "extractHint": "the AI then extracts the bricks · you can adjust everything"
+  },
+  "cours": {
+    "comingV2": "coming in V2",
+    "title": "Animated course generation",
+    "description": "From the workshop's source files, the AI will assemble animated slides, narrated section by section — to introduce a concept before watering it.",
+    "tagline": "“the greenhouse is getting ready…”"
+  },
+  "auth": {
+    "signIn": {
+      "sessionRevoked": "You were signed out because your account was used on another device.",
+      "title": "Welcome back 👋",
+      "subtitle": "Sign in to access your workshops"
+    },
+    "signUp": {
+      "title": "Create your account 🚀",
+      "subtitle": "Join Culture and create your first workshop"
+    }
   }
 }
