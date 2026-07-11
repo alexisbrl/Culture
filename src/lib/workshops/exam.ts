@@ -40,6 +40,7 @@ function normalizePart(part: Partial<QuestionPart>): QuestionPart {
     answer: part.answer ?? '',
     choices: part.choices ?? [],
     correctChoices: part.correctChoices ?? [],
+    shuffleChoices: part.shuffleChoices ?? false,
     textLines: part.textLines ?? 4,
     answerOptional: part.answerOptional ?? false,
     difficulty: part.difficulty ?? { enabled: false, value: 3 },

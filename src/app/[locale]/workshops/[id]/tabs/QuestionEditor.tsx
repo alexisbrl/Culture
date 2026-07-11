@@ -438,7 +438,7 @@ export default function QuestionEditor({
   }
 
   function emptyPart(): QuestionPart {
-    return { content: '', responseType: 'sans_reponse', answer: '', choices: [], correctChoices: [], textLines: 4, answerOptional: false, difficulty: { enabled: false, value: 3 }, duration: { enabled: false, minutes: 2, seconds: 0 } };
+    return { content: '', responseType: 'sans_reponse', answer: '', choices: [], correctChoices: [], shuffleChoices: false, textLines: 4, answerOptional: false, difficulty: { enabled: false, value: 3 }, duration: { enabled: false, minutes: 2, seconds: 0 } };
   }
 
   function patchPart(idx: number, p: Partial<QuestionPart>) {
@@ -614,6 +614,12 @@ export default function QuestionEditor({
                   <div style={{ marginTop: 12 }}>
                     <FieldLabel>{part.responseType === 'matching' ? t('editor.choicesPairs') : part.responseType === 'ordre' ? t('editor.choicesOrder') : t('editor.choicesOptions')}</FieldLabel>
                     <ChoiceListEditor responseType={part.responseType} choices={part.choices} correctChoices={part.correctChoices} onChange={(choices, correctChoices) => patchPart(idx, { choices, correctChoices })} />
+                    {(part.responseType === 'qcs' || part.responseType === 'qcm' || part.responseType === 'sondage') && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
+                        <FieldLabel hint={t('editor.shuffleHint')}>{t('editor.shuffleLabel')}</FieldLabel>
+                        <MiniSwitch value={part.shuffleChoices} onChange={(v) => patchPart(idx, { shuffleChoices: v })} />
+                      </div>
+                    )}
                   </div>
                 )}
                 {partHasAnswer && (
