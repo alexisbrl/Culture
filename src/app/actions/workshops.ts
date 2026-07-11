@@ -1,45 +1,31 @@
 'use server';
 
 import { auth, clerkClient } from '@clerk/nextjs/server';
-import { randomInt } from 'node:crypto';
 import { getSupabaseServerClient } from '@/lib/supabase';
-import { requireMember, requireManager, requireOwner, ROLE_RANK } from '@/lib/authz';
-import { generateTag } from '@/lib/tag';
-import { EMAIL_FROM, deletionCodeEmail, workshopTrashedEmail } from '@/lib/emails';
+import { requireMember, requireManager, requireOwner } from '@/lib/authz';
+import * as membersLib from '@/lib/workshops/members';
+import * as coreLib from '@/lib/workshops/core';
+import * as lifecycleLib from '@/lib/workshops/lifecycle';
 import { revalidateWorkshop, revalidateDashboard } from '@/lib/revalidate';
-import { Resend } from 'resend';
 
-// Rangs d'atelier : la valeur ROLE_RANK vient de la source unique `@/lib/authz`.
-// Le type est redéclaré ici en union littérale (un fichier `'use server'` ne peut
-// pas réexporter un type), identique à celui d'authz.
+// Logique métier (règles, requêtes Supabase) des fonctions ci-dessous : voir
+// @/lib/workshops/members, core et lifecycle (audit §5.2). Les wrappers
+// `'use server'` ici ne portent plus que l'authz Clerk et la revalidation Next.js.
+//
+// Types redéclarés ici (un fichier `'use server'` ne peut ni réexporter ni
+// importer-puis-réexporter un type — Turbopack traite `export type { X }`
+// comme un export de valeur et échoue au build), identiques à ceux d'
+// `@/lib/workshops/members` / `@/lib/authz`.
+export type PendingInvite = {
+  userId: string;
+  displayName: string;
+  uniqueTag: string;
+  createdAt: string;
+};
+
+export type JoinRequestStatus = 'requested' | 'already_member';
+
 export type WorkshopRole = 'owner' | 'manager' | 'member';
-
-function getResend() {
-  if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY manquante');
-  return new Resend(process.env.RESEND_API_KEY);
-}
-
-// Code à 6 chiffres généré avec un générateur cryptographiquement sûr
-// (randomInt — pas de biais de modulo, non prédictible, contrairement à Math.random).
-function generateCode(): string {
-  return randomInt(100000, 1000000).toString();
-}
-
-// Génère un tag d'atelier garanti unique (max 10 tentatives).
-// Le générateur de base est partagé avec les tags utilisateur (cf. @/lib/tag).
-async function generateUniqueWorkshopTag(): Promise<string> {
-  const supabase = getSupabaseServerClient();
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const candidate = generateTag();
-    const { data } = await supabase
-      .from('workshops')
-      .select('id')
-      .eq('unique_tag', candidate)
-      .maybeSingle();
-    if (!data) return candidate;
-  }
-  throw new Error('Impossible de générer un tag unique après 10 tentatives');
-}
 
 // ─── Sync user profile to Supabase ───────────────────────────────────────────
 
@@ -80,28 +66,9 @@ export async function createWorkshop(
     const profile = await syncUserProfile();
     if (!profile) return { success: false, error: 'Non authentifié' };
 
-    const supabase = getSupabaseServerClient();
-    const uniqueTag = await generateUniqueWorkshopTag();
-
-    const { data: workshop, error } = await supabase
-      .from('workshops')
-      .insert({ name: name.trim(), created_by: profile.userId, unique_tag: uniqueTag })
-      .select('id')
-      .single();
-
-    if (error || !workshop) {
-      console.error('createWorkshop error:', error);
-      return { success: false, error: 'Erreur lors de la création' };
-    }
-
-    await supabase.from('workshop_members').insert({
-      workshop_id: workshop.id,
-      user_id: profile.userId,
-      role: 'owner',
-    });
-
-    revalidateDashboard();
-    return { success: true, id: workshop.id };
+    const result = await lifecycleLib.createWorkshop(name, profile.userId);
+    if (result.success) revalidateDashboard();
+    return result;
   } catch (err) {
     console.error(err);
     return { success: false, error: 'Erreur serveur' };
@@ -140,86 +107,7 @@ export async function getUserWorkshops(): Promise<{
   try {
     const profile = await syncUserProfile();
     if (!profile) return { owned: [], joined: [] };
-
-    const supabase = getSupabaseServerClient();
-
-    const { data: memberships } = await supabase
-      .from('workshop_members')
-      .select('role, workshop_id, last_visited_at')
-      .eq('user_id', profile.userId);
-
-    if (!memberships || memberships.length === 0) return { owned: [], joined: [] };
-
-    const workshopIds = memberships.map((m) => m.workshop_id);
-
-    // Ateliers (hors corbeille) + nombre de membres : requêtes indépendantes →
-    // lancées en parallèle (audit 4.2, chemin chaud appelé à chaque dashboard).
-    const [{ data: workshops }, { data: counts }] = await Promise.all([
-      supabase
-        .from('workshops')
-        .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium')
-        .in('id', workshopIds)
-        .is('deleted_at', null),
-      supabase
-        .from('workshop_members')
-        .select('workshop_id')
-        .in('workshop_id', workshopIds),
-    ]);
-
-    const countMap: Record<string, number> = {};
-    for (const c of counts ?? []) {
-      countMap[c.workshop_id] = (countMap[c.workshop_id] ?? 0) + 1;
-    }
-
-    const roleMap: Record<string, WorkshopRole> = {};
-    const lastVisitedMap: Record<string, string> = {};
-    for (const m of memberships) {
-      roleMap[m.workshop_id] = m.role;
-      lastVisitedMap[m.workshop_id] = m.last_visited_at;
-    }
-
-    // Profils des propriétaires (pour le nom affiché dans la Preview)
-    const ownerIds = [...new Set((workshops ?? []).map((w) => w.created_by))];
-    let ownerProfiles: Array<{ user_id: string; display_name: string }> = [];
-    if (ownerIds.length > 0) {
-      const { data: profiles } = await supabase
-        .from('user_profiles')
-        .select('user_id, display_name')
-        .in('user_id', ownerIds);
-      ownerProfiles = profiles ?? [];
-    }
-    const ownerNameMap = Object.fromEntries(ownerProfiles.map((p) => [p.user_id, p.display_name]));
-
-    const owned: WorkshopCardData[] = [];
-    const joined: WorkshopCardData[] = [];
-
-    for (const w of workshops ?? []) {
-      const item: WorkshopCardData = {
-        id: w.id,
-        name: w.name,
-        created_at: w.created_at,
-        member_count: countMap[w.id] ?? 1,
-        description: w.description,
-        cover_gradient: w.cover_gradient,
-        cover_image_url: w.cover_image_url,
-        cover_image_active: w.cover_image_active,
-        emoji: w.emoji,
-        unique_tag: w.unique_tag,
-        owner_name: ownerNameMap[w.created_by] ?? 'Utilisateur',
-        is_premium: w.is_premium,
-        role: roleMap[w.id],
-      };
-      if (roleMap[w.id] === 'owner') owned.push(item);
-      else joined.push(item);
-    }
-
-    const byLastVisited = (a: WorkshopCardData, b: WorkshopCardData) =>
-      new Date(lastVisitedMap[b.id]).getTime() - new Date(lastVisitedMap[a.id]).getTime();
-
-    owned.sort(byLastVisited);
-    joined.sort(byLastVisited);
-
-    return { owned, joined };
+    return await coreLib.getUserWorkshops(profile.userId);
   } catch (err) {
     console.error('getUserWorkshops error:', err);
     return { owned: [], joined: [] };
@@ -234,21 +122,7 @@ export async function getTrashWorkshops(): Promise<
   try {
     const { userId } = await auth();
     if (!userId) return [];
-
-    const supabase = getSupabaseServerClient();
-
-    const { data: workshops } = await supabase
-      .from('workshops')
-      .select('id, name, deleted_at')
-      .eq('created_by', userId)
-      .not('deleted_at', 'is', null);
-
-    return (workshops ?? []).map((w) => {
-      const deletedAt = new Date(w.deleted_at).getTime();
-      const expiresAt = deletedAt + 7 * 24 * 60 * 60 * 1000;
-      const daysRemaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000)));
-      return { id: w.id, name: w.name, deleted_at: w.deleted_at, days_remaining: daysRemaining };
-    });
+    return await coreLib.getTrashWorkshops(userId);
   } catch (err) {
     console.error('getTrashWorkshops error:', err);
     return [];
@@ -261,65 +135,7 @@ export async function getWorkshop(workshopId: string) {
   try {
     const { userId } = await auth();
     if (!userId) return null;
-
-    const supabase = getSupabaseServerClient();
-
-    // 1. Vérifier que l'utilisateur est membre
-    const { data: membership } = await supabase
-      .from('workshop_members')
-      .select('role')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId)
-      .single();
-
-    if (!membership) return null;
-
-    // Enregistrer la visite pour le tri du Dashboard (dernier atelier visité en premier)
-    await supabase
-      .from('workshop_members')
-      .update({ last_visited_at: new Date().toISOString() })
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId);
-
-    // 2. Récupérer l'atelier
-    const { data: workshop } = await supabase
-      .from('workshops')
-      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium, show_programme')
-      .eq('id', workshopId)
-      .single();
-
-    if (!workshop) return null;
-
-    // 3. Récupérer les membres
-    const { data: workshopMembers } = await supabase
-      .from('workshop_members')
-      .select('id, user_id, role, joined_at')
-      .eq('workshop_id', workshopId);
-
-    // 4. Récupérer les profils des membres
-    const memberUserIds = (workshopMembers ?? []).map((m) => m.user_id);
-    let userProfiles: Array<{ user_id: string; unique_tag: string; display_name: string }> = [];
-
-    if (memberUserIds.length > 0) {
-      const { data: profiles } = await supabase
-        .from('user_profiles')
-        .select('user_id, unique_tag, display_name')
-        .in('user_id', memberUserIds);
-      userProfiles = profiles ?? [];
-    }
-
-    const profileMap = Object.fromEntries(userProfiles.map((p) => [p.user_id, p]));
-
-    const membersWithProfiles = (workshopMembers ?? []).map((m) => ({
-      ...m,
-      user_profiles: profileMap[m.user_id] ?? null,
-    }));
-
-    return {
-      ...workshop,
-      workshop_members: membersWithProfiles,
-      currentUserRole: membership.role as WorkshopRole,
-    };
+    return await coreLib.getWorkshop(workshopId, userId);
   } catch (err) {
     console.error('getWorkshop error:', err);
     return null;
@@ -346,64 +162,7 @@ export async function getWorkshopPreview(workshopId: string): Promise<{
   try {
     const { userId } = await auth();
     if (!userId) return null;
-
-    const supabase = getSupabaseServerClient();
-
-    const { data: workshop } = await supabase
-      .from('workshops')
-      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, is_premium')
-      .eq('id', workshopId)
-      .is('deleted_at', null)
-      .single();
-
-    if (!workshop) return null;
-
-    const { data: workshopMembers } = await supabase
-      .from('workshop_members')
-      .select('user_id, role')
-      .eq('workshop_id', workshopId);
-
-    const members = workshopMembers ?? [];
-    const owner = members.find((m) => m.role === 'owner');
-    const isMember = members.some((m) => m.user_id === userId);
-
-    // Demande d'adhésion déjà en attente pour l'utilisateur courant (non-membre) ?
-    let hasRequested = false;
-    if (!isMember) {
-      const { data: request } = await supabase
-        .from('workshop_join_requests')
-        .select('id')
-        .eq('workshop_id', workshopId)
-        .eq('user_id', userId)
-        .maybeSingle();
-      hasRequested = !!request;
-    }
-
-    let ownerName = 'Utilisateur';
-    if (owner) {
-      const { data: ownerProfile } = await supabase
-        .from('user_profiles')
-        .select('display_name')
-        .eq('user_id', owner.user_id)
-        .single();
-      ownerName = ownerProfile?.display_name ?? ownerName;
-    }
-
-    return {
-      id: workshop.id,
-      name: workshop.name,
-      createdAt: workshop.created_at,
-      description: workshop.description,
-      coverGradient: workshop.cover_gradient,
-      coverImageUrl: workshop.cover_image_url,
-      coverImageActive: workshop.cover_image_active,
-      emoji: workshop.emoji,
-      ownerName,
-      memberCount: members.length,
-      isMember,
-      hasRequested,
-      isPremium: workshop.is_premium,
-    };
+    return await coreLib.getWorkshopPreview(workshopId, userId);
   } catch (err) {
     console.error('getWorkshopPreview error:', err);
     return null;
@@ -428,23 +187,13 @@ export async function updateWorkshopDetails(
     // Réglages généraux : propriétaire ou gestionnaire.
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
-    const supabase = getSupabaseServerClient();
-
-    const update: Record<string, string | boolean | number | null> = {};
-    if (details.name !== undefined) update.name = details.name;
-    if (details.description !== undefined) update.description = details.description;
-    if (details.coverGradient !== undefined) update.cover_gradient = details.coverGradient;
-    if (details.coverImageUrl !== undefined) update.cover_image_url = details.coverImageUrl;
-    if (details.coverImageActive !== undefined) update.cover_image_active = details.coverImageActive;
-    if (details.emoji !== undefined) update.emoji = details.emoji;
-    if (details.showProgramme !== undefined) update.show_programme = details.showProgramme;
-
-    await supabase.from('workshops').update(update).eq('id', workshopId);
-
+    const result = await coreLib.updateDetails(workshopId, details);
     // Détails affichés à la fois sur la page atelier et sur la carte du dashboard.
-    revalidateWorkshop();
-    revalidateDashboard();
-    return { success: true };
+    if (result.success) {
+      revalidateWorkshop();
+      revalidateDashboard();
+    }
+    return result;
   } catch (err) {
     console.error('updateWorkshopDetails error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -498,29 +247,13 @@ export async function activateWorkshopPremium(
       return { success: false, error: 'Droits insuffisants' };
     }
 
-    const supabase = getSupabaseServerClient();
-
-    const { data: workshop } = await supabase
-      .from('workshops')
-      .select('is_premium')
-      .eq('id', workshopId)
-      .single();
-
-    if (!workshop) return { success: false, error: 'Atelier introuvable' };
-
-    if (workshop.is_premium) {
-      return { success: true };
+    const result = await coreLib.activatePremium(workshopId);
+    if (result.success) {
+      // Badge Premium visible sur la page atelier ET sur la carte du dashboard.
+      revalidateWorkshop();
+      revalidateDashboard();
     }
-
-    await supabase
-      .from('workshops')
-      .update({ is_premium: true, premium_activated_at: new Date().toISOString() })
-      .eq('id', workshopId);
-
-    // Badge Premium visible sur la page atelier ET sur la carte du dashboard.
-    revalidateWorkshop();
-    revalidateDashboard();
-    return { success: true };
+    return result;
   } catch (err) {
     console.error('activateWorkshopPremium error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -537,40 +270,16 @@ export async function uploadWorkshopCover(
     // Couverture personnalisée : propriétaire uniquement.
     if (!(await requireOwner(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
-    const supabase = getSupabaseServerClient();
-
     const file = formData.get('file');
     if (!(file instanceof File)) return { success: false, error: 'Fichier manquant' };
 
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) {
-      return { success: false, error: 'Format non supporté (jpg, png ou webp uniquement)' };
+    const result = await coreLib.uploadCover(workshopId, file);
+    if (result.success) {
+      // Couverture visible sur la page atelier ET sur la carte du dashboard.
+      revalidateWorkshop();
+      revalidateDashboard();
     }
-    if (file.size > 5 * 1024 * 1024) {
-      return { success: false, error: 'Image trop lourde (5 Mo maximum)' };
-    }
-
-    const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
-    const path = `${workshopId}/cover-${Date.now()}.${ext}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('workshop-covers')
-      .upload(path, file, { contentType: file.type, upsert: true });
-
-    if (uploadError) {
-      console.error('uploadWorkshopCover upload error:', uploadError);
-      return { success: false, error: 'Erreur lors du téléchargement' };
-    }
-
-    const { data: publicUrlData } = supabase.storage.from('workshop-covers').getPublicUrl(path);
-    const url = publicUrlData.publicUrl;
-
-    await supabase.from('workshops').update({ cover_image_url: url, cover_image_active: true }).eq('id', workshopId);
-
-    // Couverture visible sur la page atelier ET sur la carte du dashboard.
-    revalidateWorkshop();
-    revalidateDashboard();
-    return { success: true, url };
+    return result;
   } catch (err) {
     console.error('uploadWorkshopCover error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -584,43 +293,8 @@ export async function searchWorkshops(query: string): Promise<
 > {
   try {
     const { userId } = await auth();
-    if (!userId || !query.trim()) return [];
-
-    const supabase = getSupabaseServerClient();
-
-    const { data: memberships } = await supabase
-      .from('workshop_members')
-      .select('workshop_id')
-      .eq('user_id', userId);
-
-    const ownedIds = memberships?.map((m) => m.workshop_id) ?? [];
-
-    // Échappe les caractères qui ont un sens dans la syntaxe .or() de PostgREST
-    const safeQuery = query.replace(/[,()%*]/g, '');
-
-    let q = supabase
-      .from('workshops')
-      .select('id, name, created_at, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium')
-      .or(`name.ilike.%${safeQuery}%,unique_tag.ilike.${safeQuery}`)
-      .is('deleted_at', null)
-      .limit(8);
-
-    if (ownedIds.length > 0) {
-      q = q.not('id', 'in', `(${ownedIds.join(',')})`);
-    }
-
-    const { data: workshops } = await q;
-    if (!workshops || workshops.length === 0) return [];
-
-    const { data: counts } = await supabase
-      .from('workshop_members')
-      .select('workshop_id')
-      .in('workshop_id', workshops.map((w) => w.id));
-
-    const countMap: Record<string, number> = {};
-    for (const c of counts ?? []) countMap[c.workshop_id] = (countMap[c.workshop_id] ?? 0) + 1;
-
-    return workshops.map((w) => ({ ...w, member_count: countMap[w.id] ?? 0 }));
+    if (!userId) return [];
+    return await coreLib.search(userId, query);
   } catch (err) {
     console.error('searchWorkshops error:', err);
     return [];
@@ -634,8 +308,6 @@ export async function searchWorkshops(query: string): Promise<
 // doit valider (`approveJoinRequest`). C'est le miroir des invitations. À terme,
 // une API publique pourra approuver automatiquement (équivalent d'un atelier public).
 
-export type JoinRequestStatus = 'requested' | 'already_member';
-
 export async function requestToJoinWorkshop(
   workshopId: string
 ): Promise<{ success: boolean; status?: JoinRequestStatus; error?: string }> {
@@ -643,51 +315,10 @@ export async function requestToJoinWorkshop(
     const profile = await syncUserProfile();
     if (!profile) return { success: false, error: 'Non authentifié' };
 
-    const supabase = getSupabaseServerClient();
-
-    // L'atelier doit exister et ne pas être en corbeille.
-    const { data: workshop } = await supabase
-      .from('workshops')
-      .select('id')
-      .eq('id', workshopId)
-      .is('deleted_at', null)
-      .maybeSingle();
-
-    if (!workshop) return { success: false, error: 'Atelier introuvable' };
-
-    // Déjà membre → rien à faire.
-    const { data: existingMember } = await supabase
-      .from('workshop_members')
-      .select('id')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', profile.userId)
-      .maybeSingle();
-
-    if (existingMember) return { success: true, status: 'already_member' };
-
-    // Demande déjà en attente → idempotent.
-    const { data: existingRequest } = await supabase
-      .from('workshop_join_requests')
-      .select('id')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', profile.userId)
-      .maybeSingle();
-
-    if (existingRequest) return { success: true, status: 'requested' };
-
-    const { error: insertError } = await supabase.from('workshop_join_requests').insert({
-      workshop_id: workshopId,
-      user_id: profile.userId,
-    });
-
-    if (insertError) {
-      console.error('requestToJoinWorkshop insert error:', insertError);
-      return { success: false, error: 'Erreur lors de l\'envoi de la demande' };
-    }
-
+    const result = await membersLib.requestToJoin(workshopId, profile.userId);
     // L'état « demande envoyée » s'affiche sur le dashboard du demandeur.
-    revalidateDashboard();
-    return { success: true, status: 'requested' };
+    if (result.success) revalidateDashboard();
+    return result;
   } catch (err) {
     console.error('requestToJoinWorkshop error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -699,30 +330,7 @@ export async function requestToJoinWorkshop(
 export async function getJoinRequests(workshopId: string): Promise<PendingInvite[]> {
   try {
     if (!(await requireManager(workshopId))) return [];
-
-    const supabase = getSupabaseServerClient();
-
-    const { data: requests } = await supabase
-      .from('workshop_join_requests')
-      .select('user_id, created_at')
-      .eq('workshop_id', workshopId)
-      .order('created_at', { ascending: false });
-
-    if (!requests || requests.length === 0) return [];
-
-    const requesterIds = requests.map((r) => r.user_id);
-    const { data: profiles } = await supabase
-      .from('user_profiles')
-      .select('user_id, display_name, unique_tag')
-      .in('user_id', requesterIds);
-    const profMap = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p]));
-
-    return requests.map((r) => ({
-      userId: r.user_id,
-      displayName: profMap[r.user_id]?.display_name ?? 'Utilisateur',
-      uniqueTag: profMap[r.user_id]?.unique_tag ?? '',
-      createdAt: r.created_at,
-    }));
+    return await membersLib.listJoinRequests(workshopId);
   } catch (err) {
     console.error('getJoinRequests error:', err);
     return [];
@@ -737,44 +345,13 @@ export async function approveJoinRequest(
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
-    const supabase = getSupabaseServerClient();
-
-    const { data: request } = await supabase
-      .from('workshop_join_requests')
-      .select('id')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', targetUserId)
-      .maybeSingle();
-
-    if (!request) return { success: false, error: 'Demande introuvable' };
-
-    // TODO (§12) : facturer le propriétaire si l'atelier est Premium (~3,5 €/membre).
-
-    const { data: existing } = await supabase
-      .from('workshop_members')
-      .select('id')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', targetUserId)
-      .maybeSingle();
-
-    if (!existing) {
-      await supabase.from('workshop_members').insert({
-        workshop_id: workshopId,
-        user_id: targetUserId,
-        role: 'member',
-      });
+    const result = await membersLib.approveJoinRequest(workshopId, targetUserId);
+    if (result.success) {
+      // Nouveau membre : liste des membres (paramètres) + nombre de membres (cartes dashboard).
+      revalidateWorkshop();
+      revalidateDashboard();
     }
-
-    await supabase
-      .from('workshop_join_requests')
-      .delete()
-      .eq('workshop_id', workshopId)
-      .eq('user_id', targetUserId);
-
-    // Nouveau membre : liste des membres (paramètres) + nombre de membres (cartes dashboard).
-    revalidateWorkshop();
-    revalidateDashboard();
-    return { success: true };
+    return result;
   } catch (err) {
     console.error('approveJoinRequest error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -789,16 +366,10 @@ export async function rejectJoinRequest(
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
-    const supabase = getSupabaseServerClient();
-    await supabase
-      .from('workshop_join_requests')
-      .delete()
-      .eq('workshop_id', workshopId)
-      .eq('user_id', targetUserId);
-
+    const result = await membersLib.rejectJoinRequest(workshopId, targetUserId);
     // Liste des demandes d'adhésion (page Paramètres → Membres & rôles).
-    revalidateWorkshop();
-    return { success: true };
+    if (result.success) revalidateWorkshop();
+    return result;
   } catch (err) {
     console.error('rejectJoinRequest error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -813,16 +384,10 @@ export async function cancelJoinRequest(
     const { userId } = await auth();
     if (!userId) return { success: false, error: 'Non authentifié' };
 
-    const supabase = getSupabaseServerClient();
-    await supabase
-      .from('workshop_join_requests')
-      .delete()
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId);
-
+    const result = await membersLib.cancelJoinRequest(workshopId, userId);
     // L'état « demande envoyée » disparaît du dashboard du demandeur.
-    revalidateDashboard();
-    return { success: true };
+    if (result.success) revalidateDashboard();
+    return result;
   } catch (err) {
     console.error('cancelJoinRequest error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -830,13 +395,6 @@ export async function cancelJoinRequest(
 }
 
 // ─── Invitations d'atelier ────────────────────────────────────────────────────
-
-export type PendingInvite = {
-  userId: string;
-  displayName: string;
-  uniqueTag: string;
-  createdAt: string;
-};
 
 // Inviter un utilisateur par tag (propriétaire d'un atelier Premium uniquement).
 // Crée une invitation en attente plutôt que d'ajouter directement le membre :
@@ -849,71 +407,11 @@ export async function inviteMemberByTag(
     // Inviter : propriétaire ou gestionnaire.
     const ctx = await requireManager(workshopId);
     if (!ctx) return { success: false, error: 'Droits insuffisants' };
-    const userId = ctx.userId;
 
-    const supabase = getSupabaseServerClient();
-
-    // L'invitation est réservée aux ateliers Premium — vérification côté serveur
-    // (ne jamais se fier au gating UI, cf. CLAUDE.md « Atelier Premium »).
-    const { data: workshop } = await supabase
-      .from('workshops')
-      .select('is_premium')
-      .eq('id', workshopId)
-      .single();
-
-    if (!workshop?.is_premium) {
-      return { success: false, error: 'L\'invitation est réservée aux ateliers Premium' };
-    }
-
-    const { data: targetUser } = await supabase
-      .from('user_profiles')
-      .select('user_id, display_name')
-      .eq('unique_tag', uniqueTag.toUpperCase())
-      .single();
-
-    if (!targetUser) {
-      return {
-        success: false,
-        error: 'Utilisateur introuvable. Vérifiez le tag et assurez-vous que l\'utilisateur s\'est connecté à Culture.',
-      };
-    }
-
-    if (targetUser.user_id === userId) {
-      return { success: false, error: 'Vous ne pouvez pas vous inviter vous-même' };
-    }
-
-    const { data: existingMember } = await supabase
-      .from('workshop_members')
-      .select('id')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', targetUser.user_id)
-      .single();
-
-    if (existingMember) return { success: false, error: 'Cet utilisateur est déjà membre de l\'atelier' };
-
-    const { data: existingInvite } = await supabase
-      .from('workshop_invitations')
-      .select('id')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', targetUser.user_id)
-      .single();
-
-    if (existingInvite) return { success: false, error: 'Cet utilisateur a déjà été invité' };
-
-    const { error: insertError } = await supabase.from('workshop_invitations').insert({
-      workshop_id: workshopId,
-      user_id: targetUser.user_id,
-      invited_by: userId,
-    });
-
-    if (insertError) {
-      console.error('inviteMemberByTag insert error:', insertError);
-      return { success: false, error: 'Erreur lors de l\'envoi de l\'invitation' };
-    }
-
+    const result = await membersLib.inviteByTag(workshopId, ctx.userId, uniqueTag);
     // Liste des invitations en attente (page Paramètres → Membres & rôles).
-    revalidateWorkshop();
-    return { success: true, displayName: targetUser.display_name };
+    if (result.success) revalidateWorkshop();
+    return result;
   } catch (err) {
     console.error('inviteMemberByTag error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -926,64 +424,7 @@ export async function getPendingInvitations(): Promise<WorkshopCardData[]> {
   try {
     const profile = await syncUserProfile();
     if (!profile) return [];
-
-    const supabase = getSupabaseServerClient();
-
-    const { data: invitations } = await supabase
-      .from('workshop_invitations')
-      .select('workshop_id, created_at')
-      .eq('user_id', profile.userId)
-      .order('created_at', { ascending: false });
-
-    if (!invitations || invitations.length === 0) return [];
-
-    const workshopIds = invitations.map((i) => i.workshop_id);
-
-    const { data: workshops } = await supabase
-      .from('workshops')
-      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium')
-      .in('id', workshopIds)
-      .is('deleted_at', null);
-
-    if (!workshops || workshops.length === 0) return [];
-
-    const { data: counts } = await supabase
-      .from('workshop_members')
-      .select('workshop_id')
-      .in('workshop_id', workshopIds);
-
-    const countMap: Record<string, number> = {};
-    for (const c of counts ?? []) countMap[c.workshop_id] = (countMap[c.workshop_id] ?? 0) + 1;
-
-    const ownerIds = [...new Set(workshops.map((w) => w.created_by))];
-    const { data: profiles } = await supabase
-      .from('user_profiles')
-      .select('user_id, display_name')
-      .in('user_id', ownerIds);
-    const ownerNameMap = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p.display_name]));
-
-    const workshopMap = Object.fromEntries(workshops.map((w) => [w.id, w]));
-
-    // Conserver l'ordre des invitations (les plus récentes en premier).
-    return workshopIds
-      .filter((id) => workshopMap[id])
-      .map((id) => {
-        const w = workshopMap[id];
-        return {
-          id: w.id,
-          name: w.name,
-          created_at: w.created_at,
-          member_count: countMap[w.id] ?? 1,
-          description: w.description,
-          cover_gradient: w.cover_gradient,
-          cover_image_url: w.cover_image_url,
-          cover_image_active: w.cover_image_active,
-          emoji: w.emoji,
-          unique_tag: w.unique_tag,
-          owner_name: ownerNameMap[w.created_by] ?? 'Utilisateur',
-          is_premium: w.is_premium,
-        };
-      });
+    return await membersLib.listPendingInvitationsForUser(profile.userId);
   } catch (err) {
     console.error('getPendingInvitations error:', err);
     return [];
@@ -998,42 +439,13 @@ export async function acceptInvitation(
     const profile = await syncUserProfile();
     if (!profile) return { success: false, error: 'Non authentifié' };
 
-    const supabase = getSupabaseServerClient();
-
-    const { data: invite } = await supabase
-      .from('workshop_invitations')
-      .select('id')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', profile.userId)
-      .single();
-
-    if (!invite) return { success: false, error: 'Invitation introuvable' };
-
-    const { data: existing } = await supabase
-      .from('workshop_members')
-      .select('id')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', profile.userId)
-      .single();
-
-    if (!existing) {
-      await supabase.from('workshop_members').insert({
-        workshop_id: workshopId,
-        user_id: profile.userId,
-        role: 'member',
-      });
+    const result = await membersLib.acceptInvitation(workshopId, profile.userId);
+    if (result.success) {
+      // Le demandeur devient membre : nouvel atelier dans sa liste + accès à sa page.
+      revalidateDashboard();
+      revalidateWorkshop();
     }
-
-    await supabase
-      .from('workshop_invitations')
-      .delete()
-      .eq('workshop_id', workshopId)
-      .eq('user_id', profile.userId);
-
-    // Le demandeur devient membre : nouvel atelier dans sa liste + accès à sa page.
-    revalidateDashboard();
-    revalidateWorkshop();
-    return { success: true };
+    return result;
   } catch (err) {
     console.error('acceptInvitation error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -1048,16 +460,10 @@ export async function declineInvitation(
     const { userId } = await auth();
     if (!userId) return { success: false, error: 'Non authentifié' };
 
-    const supabase = getSupabaseServerClient();
-    await supabase
-      .from('workshop_invitations')
-      .delete()
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId);
-
+    const result = await membersLib.declineInvitation(workshopId, userId);
     // L'invitation disparaît de la liste des invitations reçues (dashboard de l'invité).
-    revalidateDashboard();
-    return { success: true };
+    if (result.success) revalidateDashboard();
+    return result;
   } catch (err) {
     console.error('declineInvitation error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -1068,30 +474,7 @@ export async function declineInvitation(
 export async function getWorkshopInvitations(workshopId: string): Promise<PendingInvite[]> {
   try {
     if (!(await requireManager(workshopId))) return [];
-
-    const supabase = getSupabaseServerClient();
-
-    const { data: invitations } = await supabase
-      .from('workshop_invitations')
-      .select('user_id, created_at')
-      .eq('workshop_id', workshopId)
-      .order('created_at', { ascending: false });
-
-    if (!invitations || invitations.length === 0) return [];
-
-    const invitedIds = invitations.map((i) => i.user_id);
-    const { data: profiles } = await supabase
-      .from('user_profiles')
-      .select('user_id, display_name, unique_tag')
-      .in('user_id', invitedIds);
-    const profMap = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p]));
-
-    return invitations.map((i) => ({
-      userId: i.user_id,
-      displayName: profMap[i.user_id]?.display_name ?? 'Utilisateur',
-      uniqueTag: profMap[i.user_id]?.unique_tag ?? '',
-      createdAt: i.created_at,
-    }));
+    return await membersLib.listWorkshopInvitations(workshopId);
   } catch (err) {
     console.error('getWorkshopInvitations error:', err);
     return [];
@@ -1106,17 +489,10 @@ export async function cancelInvitation(
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
-    const supabase = getSupabaseServerClient();
-
-    await supabase
-      .from('workshop_invitations')
-      .delete()
-      .eq('workshop_id', workshopId)
-      .eq('user_id', targetUserId);
-
+    const result = await membersLib.cancelInvitation(workshopId, targetUserId);
     // Liste des invitations en attente (page Paramètres → Membres & rôles).
-    revalidateWorkshop();
-    return { success: true };
+    if (result.success) revalidateWorkshop();
+    return result;
   } catch (err) {
     console.error('cancelInvitation error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -1138,40 +514,11 @@ export async function setMemberRole(
   try {
     const actor = await requireMember(workshopId);
     if (!actor) return { success: false, error: 'Droits insuffisants' };
-    if (targetUserId === actor.userId) return { success: false, error: 'Vous ne pouvez pas changer votre propre rôle' };
 
-    const supabase = getSupabaseServerClient();
-
-    const { data: target } = await supabase
-      .from('workshop_members')
-      .select('role')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', targetUserId)
-      .single();
-
-    if (!target) return { success: false, error: 'Membre introuvable' };
-
-    const actorRank = ROLE_RANK[actor.role] ?? 0;
-    const targetRank = ROLE_RANK[target.role as WorkshopRole] ?? 0;
-
-    // Jamais le propriétaire ; uniquement un rang strictement inférieur au sien.
-    if (target.role === 'owner' || actorRank <= targetRank) {
-      return { success: false, error: 'Droits insuffisants' };
-    }
-    // On ne peut pas promouvoir au-dessus de son propre rang.
-    if (ROLE_RANK[newRole] > actorRank) {
-      return { success: false, error: 'Droits insuffisants' };
-    }
-
-    await supabase
-      .from('workshop_members')
-      .update({ role: newRole })
-      .eq('workshop_id', workshopId)
-      .eq('user_id', targetUserId);
-
+    const result = await membersLib.setMemberRole(workshopId, actor, targetUserId, newRole);
     // Rôle affiché dans la liste des membres + pastilles de rôle (page atelier / paramètres).
-    revalidateWorkshop();
-    return { success: true };
+    if (result.success) revalidateWorkshop();
+    return result;
   } catch (err) {
     console.error('setMemberRole error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -1187,37 +534,14 @@ export async function removeMember(
   try {
     const actor = await requireMember(workshopId);
     if (!actor) return { success: false, error: 'Droits insuffisants' };
-    if (targetUserId === actor.userId) return { success: false, error: 'Vous ne pouvez pas vous retirer vous-même' };
 
-    const supabase = getSupabaseServerClient();
-
-    const { data: target } = await supabase
-      .from('workshop_members')
-      .select('role')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', targetUserId)
-      .single();
-
-    if (!target) return { success: false, error: 'Membre introuvable' };
-
-    const actorRank = ROLE_RANK[actor.role] ?? 0;
-    const targetRank = ROLE_RANK[target.role as WorkshopRole] ?? 0;
-
-    // Jamais le propriétaire ; uniquement un rang strictement inférieur au sien.
-    if (target.role === 'owner' || actorRank <= targetRank) {
-      return { success: false, error: 'Droits insuffisants' };
+    const result = await membersLib.removeMember(workshopId, actor, targetUserId);
+    if (result.success) {
+      // Membre retiré : liste des membres (paramètres) + nombre de membres (cartes dashboard).
+      revalidateWorkshop();
+      revalidateDashboard();
     }
-
-    await supabase
-      .from('workshop_members')
-      .delete()
-      .eq('workshop_id', workshopId)
-      .eq('user_id', targetUserId);
-
-    // Membre retiré : liste des membres (paramètres) + nombre de membres (cartes dashboard).
-    revalidateWorkshop();
-    revalidateDashboard();
-    return { success: true };
+    return result;
   } catch (err) {
     console.error('removeMember error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -1234,50 +558,8 @@ export async function requestDeletionCode(
     // transfert de propriété).
     const ctx = await requireOwner(workshopId);
     if (!ctx) return { success: false, error: 'Droits insuffisants' };
-    const userId = ctx.userId;
 
-    const supabase = getSupabaseServerClient();
-
-    const { data: workshop } = await supabase
-      .from('workshops')
-      .select('name')
-      .eq('id', workshopId)
-      .single();
-
-    if (!workshop) return { success: false, error: 'Atelier introuvable' };
-
-    // Supprimer les anciens codes pour cet atelier (compteur d'essais remis à zéro)
-    await supabase
-      .from('deletion_codes')
-      .delete()
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId);
-
-    // Générer et stocker le nouveau code (valable 15 min)
-    const code = generateCode();
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-
-    await supabase.from('deletion_codes').insert({
-      workshop_id: workshopId,
-      user_id: userId,
-      code,
-      expires_at: expiresAt,
-    });
-
-    // Récupérer l'email du propriétaire via Clerk
-    const client = await clerkClient();
-    const user = await client.users.getUser(userId);
-    const ownerEmail = user.emailAddresses[0]?.emailAddress;
-    if (!ownerEmail) return { success: false, error: 'Email introuvable' };
-
-    const ownerName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || ownerEmail;
-
-    // Envoyer le code par email
-    const resend = getResend();
-    const mail = deletionCodeEmail({ ownerName, workshopName: workshop.name, code });
-    await resend.emails.send({ from: EMAIL_FROM, to: ownerEmail, subject: mail.subject, html: mail.html });
-
-    return { success: true };
+    return await lifecycleLib.requestDeletionCode(workshopId, ctx.userId);
   } catch (err) {
     console.error('requestDeletionCode error:', err);
     return { success: false, error: 'Erreur lors de l\'envoi de l\'email' };
@@ -1295,98 +577,11 @@ export async function confirmDeletion(
     // transfert de propriété).
     const ctx = await requireOwner(workshopId);
     if (!ctx) return { success: false, error: 'Droits insuffisants' };
-    const userId = ctx.userId;
 
-    const supabase = getSupabaseServerClient();
-
-    // Charger le code et son suivi anti-brute-force.
-    const { data: codeRecord } = await supabase
-      .from('deletion_codes')
-      .select('code, expires_at, attempts, last_attempt_at')
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId)
-      .single();
-
-    if (!codeRecord) return { success: false, error: 'Code introuvable. Renvoyez un nouveau code.' };
-    if (new Date(codeRecord.expires_at) < new Date()) return { success: false, error: 'Code expiré. Renvoyez un nouveau code.' };
-
-    // Plafond de 25 essais : au-delà, le code est invalidé et l'utilisateur doit
-    // renvoyer un nouveau code (jamais bloqué durablement).
-    if (codeRecord.attempts >= 25) {
-      await supabase.from('deletion_codes').delete().eq('workshop_id', workshopId).eq('user_id', userId);
-      return { success: false, error: 'Trop de tentatives. Renvoyez un nouveau code.' };
-    }
-
-    // Délai minimal de 5 s entre deux essais (anti-brute-force).
-    if (codeRecord.last_attempt_at && Date.now() - new Date(codeRecord.last_attempt_at).getTime() < 5000) {
-      return { success: false, error: 'Veuillez patienter quelques secondes avant de réessayer.' };
-    }
-
-    // Enregistrer l'essai (compteur + horodatage) AVANT de comparer le code.
-    await supabase
-      .from('deletion_codes')
-      .update({ attempts: codeRecord.attempts + 1, last_attempt_at: new Date().toISOString() })
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId);
-
-    if (codeRecord.code !== code) return { success: false, error: 'Code incorrect.' };
-
-    // Nom de l'atelier (pour l'email) + liste des propriétaires : requêtes
-    // indépendantes → lancées en parallèle (audit 4.2).
-    const [{ data: workshop }, { data: owners }] = await Promise.all([
-      supabase.from('workshops').select('name').eq('id', workshopId).single(),
-      supabase.from('workshop_members').select('user_id').eq('workshop_id', workshopId).eq('role', 'owner'),
-    ]);
-
-    if (!workshop) return { success: false, error: 'Atelier introuvable' };
-
-    // Soft delete
-    await supabase
-      .from('workshops')
-      .update({ deleted_at: new Date().toISOString(), deleted_by: userId })
-      .eq('id', workshopId);
-
-    // Supprimer le code utilisé
-    await supabase
-      .from('deletion_codes')
-      .delete()
-      .eq('workshop_id', workshopId)
-      .eq('user_id', userId);
-
-    // Envoyer un email de notification à tous les propriétaires.
-    // Audit 4.2 : on évite le N+1 (un `getUser` Clerk par propriétaire) — un seul
-    // `getUserList` batch pour tous les propriétaires, et envois Resend en parallèle.
-    try {
-      const resend = getResend();
-      const client = await clerkClient();
-
-      const ownerIds = (owners ?? []).map((o) => o.user_id);
-      const [currentUser, ownerList] = await Promise.all([
-        client.users.getUser(userId),
-        ownerIds.length > 0
-          ? client.users.getUserList({ userId: ownerIds, limit: ownerIds.length })
-          : Promise.resolve({ data: [] as Awaited<ReturnType<typeof client.users.getUser>>[] }),
-      ]);
-
-      const actionBy = `${currentUser.firstName ?? ''} ${currentUser.lastName ?? ''}`.trim() ||
-        currentUser.emailAddresses[0]?.emailAddress || 'Un propriétaire';
-
-      await Promise.all(
-        ownerList.data.flatMap((ownerUser) => {
-          const ownerEmail = ownerUser.emailAddresses[0]?.emailAddress;
-          if (!ownerEmail) return [];
-          const ownerName = `${ownerUser.firstName ?? ''} ${ownerUser.lastName ?? ''}`.trim() || ownerEmail;
-          const mail = workshopTrashedEmail({ ownerName, workshopName: workshop.name, actionBy });
-          return [resend.emails.send({ from: EMAIL_FROM, to: ownerEmail, subject: mail.subject, html: mail.html })];
-        })
-      );
-    } catch (emailErr) {
-      console.error('Email notification error (non-blocking):', emailErr);
-    }
-
+    const result = await lifecycleLib.confirmDeletion(workshopId, ctx.userId, code);
     // L'atelier quitte « mes ateliers » et apparaît dans la corbeille (dashboard).
-    revalidateDashboard();
-    return { success: true };
+    if (result.success) revalidateDashboard();
+    return result;
   } catch (err) {
     console.error('confirmDeletion error:', err);
     return { success: false, error: 'Erreur serveur' };
@@ -1402,16 +597,10 @@ export async function restoreWorkshop(
     // Restauration = propriétaire uniquement (rôle, cohérent avec la suppression).
     if (!(await requireOwner(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
-    const supabase = getSupabaseServerClient();
-
-    await supabase
-      .from('workshops')
-      .update({ deleted_at: null, deleted_by: null })
-      .eq('id', workshopId);
-
+    const result = await lifecycleLib.restoreWorkshop(workshopId);
     // L'atelier réapparaît dans « mes ateliers » et quitte la corbeille (dashboard).
-    revalidateDashboard();
-    return { success: true };
+    if (result.success) revalidateDashboard();
+    return result;
   } catch (err) {
     console.error('restoreWorkshop error:', err);
     return { success: false, error: 'Erreur serveur' };
