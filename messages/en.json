@@ -708,6 +708,7 @@
       "inviting": "sending…",
       "invite": "invite",
       "inviteSent": "Invitation sent to {name}.",
+      "memberAdded": "{name} had already requested to join this workshop: added directly.",
       "premiumOnly": "available for Premium workshops",
       "pendingInvites": "Pending invitations ({count})",
       "waiting": "pending",

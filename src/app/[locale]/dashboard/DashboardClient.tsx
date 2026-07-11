@@ -242,9 +242,10 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
     const result = await requestToJoinWorkshop(workshopId);
     setJoiningId(null);
     if (!result.success) return;
-    // Déjà membre (cas limite) → on ouvre l'atelier. Sinon la demande est en attente
-    // d'une validation : on reflète l'état « demande envoyée » dans la preview.
-    if (result.status === 'already_member') {
+    // Déjà membre (cas limite), ou ajout direct car une invitation était déjà en
+    // attente pour cet atelier → on ouvre l'atelier. Sinon la demande est en
+    // attente d'une validation : on reflète l'état « demande envoyée » dans la preview.
+    if (result.status === 'already_member' || result.status === 'joined') {
       router.push(`/${locale}/workshops/${workshopId}`);
       return;
     }
