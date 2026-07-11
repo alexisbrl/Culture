@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { QrCode, Settings } from 'lucide-react';
+import { QrCode, Settings, LogOut } from 'lucide-react';
 import ShareQRModal from '@/components/ShareQRModal';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { leaveWorkshop } from '@/app/actions/workshops';
 import ProgrammeTab from './tabs/ProgrammeTab';
 import ExamenTab from './tabs/ExamenTab';
 import AnalyseTab from './tabs/AnalyseTab';
@@ -47,6 +50,7 @@ function Chip({ children, tone = 'default' }: { children: React.ReactNode; tone?
 
 export default function WorkshopClient({ locale, workshopId, workshopName, currentUserRole, isPremium, members }: Props) {
   const t = useTranslations('workshop');
+  const router = useRouter();
   // Propriétaire ou gestionnaire : accès aux onglets de gestion + paramètres.
   const canManage = currentUserRole === 'owner' || currentUserRole === 'manager';
   const visibleTabs = canManage ? TABS : TABS.filter((t) => t.id === 'programme');
@@ -54,6 +58,23 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
 
   const [shareOpen, setShareOpen] = useState(false);
   const [joinUrl, setJoinUrl] = useState('');
+
+  // Quitter l'atelier — jamais pour le propriétaire (doit d'abord transférer/supprimer).
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [leaveError, setLeaveError] = useState('');
+
+  async function handleLeave() {
+    setLeaving(true);
+    setLeaveError('');
+    const result = await leaveWorkshop(workshopId);
+    if (result.success) {
+      router.push(`/${locale}/dashboard`);
+      return;
+    }
+    setLeaving(false);
+    setLeaveError(result.error ?? t('leaveConfirm.error'));
+  }
 
   useEffect(() => {
     setJoinUrl(`${window.location.origin}/${locale}/dashboard?preview=${workshopId}`);
@@ -95,6 +116,12 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
                   {t('settingsLink')}
                 </Link>
               )}
+              {currentUserRole !== 'owner' && (
+                <button onClick={() => setLeaveOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.danger, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <LogOut size={13} strokeWidth={1.75} />
+                  {t('leaveBtn')}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -120,6 +147,24 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
 
       {/* Share / QR modal */}
       <ShareQRModal open={shareOpen} onClose={() => setShareOpen(false)} title={workshopName} url={joinUrl} />
+
+      {/* Quitter l'atelier — confirmation */}
+      {leaveOpen && (
+        <ConfirmDialog
+          width={420}
+          title={t('leaveConfirm.title')}
+          description={
+            <>
+              {t('leaveConfirm.desc', { name: workshopName })}
+              {leaveError && <div style={{ color: palette.danger, marginTop: 8 }}>{leaveError}</div>}
+            </>
+          }
+          confirmLabel={leaving ? '…' : t('leaveConfirm.confirm')}
+          cancelLabel={t('leaveConfirm.cancel')}
+          onCancel={() => { if (!leaving) setLeaveOpen(false); }}
+          onConfirm={handleLeave}
+        />
+      )}
     </div>
   );
 }

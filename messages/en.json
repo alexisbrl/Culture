@@ -783,7 +783,15 @@
       "member": "member"
     },
     "premiumBadge": "premium",
-    "memberCount": "{count} member{plural}"
+    "memberCount": "{count} member{plural}",
+    "leaveBtn": "leave workshop",
+    "leaveConfirm": {
+      "title": "Leave this workshop?",
+      "desc": "You'll lose access to \"{name}\" and your progress. You can request to join again later.",
+      "confirm": "leave",
+      "cancel": "cancel",
+      "error": "Couldn't leave the workshop right now."
+    }
   },
   "shareQr": {
     "title": "Join \"{title}\"",

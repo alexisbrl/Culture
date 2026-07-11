@@ -32,6 +32,7 @@ export type QuestionPart = {
   answer: string;
   choices: string[];
   correctChoices: number[];
+  shuffleChoices: boolean;
   textLines: number;
   answerOptional: boolean;
   difficulty: { enabled: boolean; value: number };

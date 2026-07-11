@@ -783,7 +783,15 @@
       "member": "membre"
     },
     "premiumBadge": "premium",
-    "memberCount": "{count} membre{plural}"
+    "memberCount": "{count} membre{plural}",
+    "leaveBtn": "quitter l'atelier",
+    "leaveConfirm": {
+      "title": "Quitter l'atelier ?",
+      "desc": "Vous perdrez l'accès à « {name} » et à votre progression. Vous pourrez redemander à le rejoindre plus tard.",
+      "confirm": "quitter",
+      "cancel": "annuler",
+      "error": "Impossible de quitter l'atelier pour le moment."
+    }
   },
   "shareQr": {
     "title": "Rejoindre \"{title}\"",

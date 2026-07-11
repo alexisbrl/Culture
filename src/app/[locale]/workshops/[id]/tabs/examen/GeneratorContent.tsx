@@ -639,7 +639,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                                   {renderAnswerSpace(q, t('answerSpace.audio'))}
                                 </div>
                                 {q.parts.map((part, pi) => (
-                                  <div key={pi} ref={el => { qRefs.current[partWeightKey(q.id, pi)] = el; }} style={{ marginTop: 40, paddingLeft: 28 }}>
+                                  <div key={pi} ref={el => { qRefs.current[partWeightKey(q.id, pi)] = el; }} style={{ marginTop: 40 }}>
                                     <div style={{ fontSize: 14, color: palette.ink, lineHeight: 1.6 }}>
                                       <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{subStart + pi + 1}.</span>
                                       {part.content || t('noStatement')}
@@ -680,10 +680,14 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                           );
                         }
                         const { gi, q } = row;
+                        const mainHeadKey = `${q.id}::head`;
                         return (
                           <div key={row.key} {...dragOverPropsFor(gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 20, boxSizing: 'border-box' as const }}>
-                            <span style={{ fontSize: 11, color: palette.inkFaint, fontVariantNumeric: 'tabular-nums' }}>{String(gi + 1).padStart(2, '0')}</span>
-                            <WeightControls weight={config.weighting[q.id] ?? defaultWeight()} onChange={patch => updateWeight(q.id, patch)} />
+                            {/* réserve la hauteur réelle de l'énoncé principal (mesurée sur `${q.id}::head`) quand la question a des parties, sinon les pondérations des parties suivantes remontent dès que l'énoncé principal grandit (QCM à plusieurs choix, question ouverte avec beaucoup de lignes) */}
+                            <div style={q.parts.length > 0 ? { height: rowHeights[mainHeadKey] ?? A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, boxSizing: 'border-box' as const } : { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 11, color: palette.inkFaint, fontVariantNumeric: 'tabular-nums' }}>{String(gi + 1).padStart(2, '0')}</span>
+                              <WeightControls weight={config.weighting[q.id] ?? defaultWeight()} onChange={patch => updateWeight(q.id, patch)} />
+                            </div>
                             {q.parts.map((_part, pi) => {
                               const key = partWeightKey(q.id, pi);
                               return (

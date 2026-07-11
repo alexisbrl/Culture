@@ -637,14 +637,6 @@ function WorkshopCard({ workshop, locale, onExpand }: { workshop: WorkshopCardDa
               <Crown className="w-2.5 h-2.5" /> Premium
             </span>
           )}
-          {workshop.role === 'manager' && (
-            <span
-              className="inline-flex items-center text-[10.5px] px-2 py-0.5 rounded-full font-semibold shadow-sm"
-              style={{ background: withAlpha(palette.greenSoft, 0.92), color: '#27331c' }}
-            >
-              {t('role.manager')}
-            </span>
-          )}
         </div>
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onExpand(); }}
