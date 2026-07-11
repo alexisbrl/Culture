@@ -4,9 +4,10 @@
 // constantes (pagination A4, couleurs), fonctions utilitaires pures et petits composants
 // présentationnels réutilisés par HistoryContent / BankContent / GeneratorContent / ExamenTab.
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Settings2 } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
-import { RESPONSE_TYPE_LABELS, type Question, type ResponseType } from '../QuestionEditor';
+import { type Question, type ResponseType } from '../QuestionEditor';
 
 // ---- shared data ----
 export type Pool = { id: string; name: string; color: string };
@@ -88,56 +89,35 @@ export function DiffDots({ level }: { level: number }) {
 }
 
 export function TypePill({ type }: { type: ResponseType }) {
+  const t = useTranslations('examen');
   const c = RESPONSE_TYPE_COLORS[type] || palette.inkSoft;
-  return <span style={{ fontSize: 10, fontWeight: 500, padding: '3px 8px', borderRadius: 999, background: `${c}28`, color: '#3a352c', letterSpacing: '0.02em' }}>{RESPONSE_TYPE_LABELS[type] ?? type}</span>;
+  return <span style={{ fontSize: 10, fontWeight: 500, padding: '3px 8px', borderRadius: 999, background: `${c}28`, color: '#3a352c', letterSpacing: '0.02em' }}>{t(`responseType.${type}`)}</span>;
 }
 
 export function WeightControls({ weight, onChange }: { weight: QuestionWeight; onChange: (patch: Partial<QuestionWeight>) => void }) {
+  const t = useTranslations('examen');
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-      <input type="number" min={0} step={0.5} value={weight.points} onChange={e => onChange({ points: Number(e.target.value) || 0 })} title="points" style={{ width: 42, fontSize: 11, padding: '4px 5px', borderRadius: 6, border: `1px solid ${ink(0.14)}`, background: palette.paper, fontFamily: 'inherit', textAlign: 'center' as const }} />
+      <input type="number" min={0} step={0.5} value={weight.points} onChange={e => onChange({ points: Number(e.target.value) || 0 })} title={t('weight.points')} style={{ width: 42, fontSize: 11, padding: '4px 5px', borderRadius: 6, border: `1px solid ${ink(0.14)}`, background: palette.paper, fontFamily: 'inherit', textAlign: 'center' as const }} />
       {!weight.eliminatory && (
-        <button type="button" onClick={() => onChange({ negative: { ...weight.negative, enabled: !weight.negative.enabled } })} title="points négatifs" style={{ fontSize: 11, padding: '4px 7px', borderRadius: 6, border: weight.negative.enabled ? '1px solid rgba(184,90,74,0.4)' : `1px solid ${ink(0.12)}`, background: weight.negative.enabled ? withAlpha(palette.danger, 0.12) : withAlpha(palette.paper, 0.7), color: weight.negative.enabled ? palette.danger : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>−</button>
+        <button type="button" onClick={() => onChange({ negative: { ...weight.negative, enabled: !weight.negative.enabled } })} title={t('weight.negative')} style={{ fontSize: 11, padding: '4px 7px', borderRadius: 6, border: weight.negative.enabled ? '1px solid rgba(184,90,74,0.4)' : `1px solid ${ink(0.12)}`, background: weight.negative.enabled ? withAlpha(palette.danger, 0.12) : withAlpha(palette.paper, 0.7), color: weight.negative.enabled ? palette.danger : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>−</button>
       )}
       {!weight.eliminatory && weight.negative.enabled && (
-        <input type="number" min={0} step={0.5} value={weight.negative.value} onChange={e => onChange({ negative: { ...weight.negative, value: Number(e.target.value) || 0 } })} title="valeur du point négatif" style={{ width: 42, fontSize: 11, padding: '4px 5px', borderRadius: 6, border: `1px solid ${withAlpha(palette.danger, 0.3)}`, background: palette.paper, fontFamily: 'inherit', textAlign: 'center' as const, color: palette.danger }} />
+        <input type="number" min={0} step={0.5} value={weight.negative.value} onChange={e => onChange({ negative: { ...weight.negative, value: Number(e.target.value) || 0 } })} title={t('weight.negativeValue')} style={{ width: 42, fontSize: 11, padding: '4px 5px', borderRadius: 6, border: `1px solid ${withAlpha(palette.danger, 0.3)}`, background: palette.paper, fontFamily: 'inherit', textAlign: 'center' as const, color: palette.danger }} />
       )}
-      <button type="button" onClick={() => onChange({ eliminatory: !weight.eliminatory, negative: weight.eliminatory ? weight.negative : { ...weight.negative, enabled: false } })} title="question éliminatoire" style={{ fontSize: 11, padding: '4px 7px', borderRadius: 6, border: weight.eliminatory ? '1px solid rgba(184,90,74,0.4)' : `1px solid ${ink(0.12)}`, background: weight.eliminatory ? palette.danger : withAlpha(palette.paper, 0.7), color: weight.eliminatory ? palette.paper : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>⚑</button>
+      <button type="button" onClick={() => onChange({ eliminatory: !weight.eliminatory, negative: weight.eliminatory ? weight.negative : { ...weight.negative, enabled: false } })} title={t('weight.eliminatory')} style={{ fontSize: 11, padding: '4px 7px', borderRadius: 6, border: weight.eliminatory ? '1px solid rgba(184,90,74,0.4)' : `1px solid ${ink(0.12)}`, background: weight.eliminatory ? palette.danger : withAlpha(palette.paper, 0.7), color: weight.eliminatory ? palette.paper : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>⚑</button>
     </div>
   );
 }
 
 export function Diff({ n }: { n: number }) {
+  const t = useTranslations('examen');
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-      <span style={{ fontSize: 9, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>diff</span>
+      <span style={{ fontSize: 9, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('diff')}</span>
       {Array.from({ length: 5 }, (_, i) => <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: i < n ? palette.amber : ink(0.12), display: 'inline-block' }} />)}
     </span>
   );
-}
-
-export function answerSummary(q: { responseType: ResponseType; answer: string; choices: string[]; correctChoices: number[]; answerOptional?: boolean }): string {
-  if (q.responseType === 'qcm' || q.responseType === 'qcs') {
-    const correct = q.correctChoices.map((i) => q.choices[i]).filter(Boolean);
-    return correct.length ? correct.join(' · ') : '(bonne réponse non définie)';
-  }
-  if (q.responseType === 'matching') {
-    return q.choices.map((c) => c.replace(' :: ', ' → ')).join(' · ') || '(paires non définies)';
-  }
-  if (q.responseType === 'ordre') {
-    return q.choices.join(' → ') || '(ordre non défini)';
-  }
-  if (q.responseType === 'sans_reponse') {
-    return 'aucune réponse associée';
-  }
-  if (q.responseType === 'sondage') {
-    const freeText = q.correctChoices.map((i) => q.choices[i]).filter(Boolean);
-    return freeText.length ? `sondage · réponse libre (${freeText.join(' · ')})` : 'sondage sans correction';
-  }
-  if (q.responseType === 'textuelle' && q.answerOptional) {
-    return 'réponse libre · sans correction';
-  }
-  return q.answer || '(réponse non définie)';
 }
 
 export function answerMissing(p: { responseType: ResponseType; answer: string; choices: string[]; correctChoices: number[]; answerOptional?: boolean }): boolean {
@@ -223,8 +203,9 @@ export function clearWeightingFor(weighting: Record<string, QuestionWeight>, id:
   return next;
 }
 
-// espace de réponse générique affiché dans l'aperçu A4 — proportionné/structuré selon le type de réponse
-export function renderAnswerSpace(q: Question) {
+// espace de réponse générique affiché dans l'aperçu A4 — proportionné/structuré selon le type de réponse.
+// `audioLabel` est passé par l'appelant (la traduction next-intl ne peut pas être lue dans une fonction pure).
+export function renderAnswerSpace(q: Question, audioLabel: string) {
   const blankLines = (n: number) => (
     <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: 22 }}>
       {Array.from({ length: n }, (_, i) => <div key={i} style={{ borderBottom: `1px solid ${ink(0.18)}` }} />)}
@@ -279,7 +260,7 @@ export function renderAnswerSpace(q: Question) {
     case 'dessin':
       return <div style={{ marginTop: 14, height: 180, border: `1px dashed ${ink(0.22)}`, borderRadius: 6 }} />;
     case 'audio':
-      return <div style={{ marginTop: 14, height: 60, border: `1px dashed ${ink(0.22)}`, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, color: palette.inkFaint }}>🎙 espace de réponse audio</div>;
+      return <div style={{ marginTop: 14, height: 60, border: `1px dashed ${ink(0.22)}`, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, color: palette.inkFaint }}>{audioLabel}</div>;
     case 'fill_blank':
       return blankLines(3);
     case 'textuelle':
@@ -436,13 +417,14 @@ export function IconBtn({ children, title, onClick }: { children: React.ReactNod
 
 // bouton « modifier la question » dans l'aperçu de l'éditeur d'examen — le cercle n'apparaît qu'au survol, pour indiquer que le bouton est cliquable
 export function EditQuestionButton({ id, onOpenQuestion }: { id: string; onOpenQuestion: (id: string) => void }) {
+  const t = useTranslations('examen');
   const [hovered, setHovered] = useState(false);
   return (
     <button
       onClick={() => onOpenQuestion(id)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      title="modifier la question"
+      title={t('editQuestion')}
       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: hovered ? '1px solid rgba(45,42,36,0.14)' : '1px solid transparent', background: hovered ? ink(0.045) : 'transparent', color: hovered ? palette.inkSoft : palette.inkFaint, cursor: 'pointer', padding: 0, flexShrink: 0, transition: 'background 0.12s, border-color 0.12s' }}
     >
       <Settings2 size={14} strokeWidth={1.85} />

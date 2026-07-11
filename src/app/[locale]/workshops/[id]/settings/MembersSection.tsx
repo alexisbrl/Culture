@@ -1,15 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { Mail, UserPlus } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
 import {
   inviteMemberByTag, getWorkshopInvitations, cancelInvitation, setMemberRole, removeMember,
   getJoinRequests, approveJoinRequest, rejectJoinRequest, type PendingInvite,
 } from '@/app/actions/workshops';
-import { ROLE_RANK, ROLE_LABEL, avatarGradient, Row, SmallBtn, SectionCard, type Member, type WorkshopRole } from './settingsShared';
+import { ROLE_RANK, avatarGradient, Row, SmallBtn, SectionCard, type Member, type WorkshopRole } from './settingsShared';
 
 export default function MembersSection({ workshopId, isPremium, currentUserRole, members }: { workshopId: string; isPremium: boolean; currentUserRole: WorkshopRole; members: Member[] }) {
+  const t = useTranslations('settings');
   const actorRank = ROLE_RANK[currentUserRole];
   const [tagInput, setTagInput] = useState('');
   const [localMembers, setLocalMembers] = useState<Member[]>(members);
@@ -70,11 +72,11 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
     const result = await inviteMemberByTag(workshopId, tag);
     setInviting(false);
     if (result.success) {
-      setInviteMsg({ type: 'success', text: `Invitation envoyée à ${result.displayName ?? tag}.` });
+      setInviteMsg({ type: 'success', text: t('members.inviteSent', { name: result.displayName ?? tag }) });
       setTagInput('');
       getWorkshopInvitations(workshopId).then(setPendingInvites).catch(console.error);
     } else {
-      setInviteMsg({ type: 'error', text: result.error ?? 'Erreur lors de l’envoi' });
+      setInviteMsg({ type: 'error', text: result.error ?? t('err.send') });
     }
   }
 
@@ -112,12 +114,12 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
     <>
         {/* ── 3. Membres & rôles ── */}
         <SectionCard
-          title="Membres & rôles"
-          description="Gérez les accès et les permissions des membres de l'atelier."
+          title={t('members.title')}
+          description={t('members.desc')}
         >
           {isPremium ? (
             <>
-            <Row label="Inviter un utilisateur" hint="par tag">
+            <Row label={t('members.inviteLabel')} hint={t('members.inviteHint')}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
@@ -140,7 +142,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                     }}
                   />
                   <SmallBtn tone="dark" onClick={handleInvite} disabled={inviting || !tagInput.trim()}>
-                    {inviting ? 'envoi…' : 'inviter'}
+                    {inviting ? t('members.inviting') : t('members.invite')}
                   </SmallBtn>
                 </div>
                 {inviteMsg && (
@@ -154,7 +156,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
             {pendingInvites.length > 0 && (
               <div style={{ marginTop: 4, marginBottom: 8 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: palette.inkFaint, marginBottom: 8 }}>
-                  Invitations en attente ({pendingInvites.length})
+                  {t('members.pendingInvites', { count: pendingInvites.length })}
                 </div>
                 {pendingInvites.map((inv) => (
                   <div
@@ -176,7 +178,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                         {inv.displayName}
                       </div>
                       <div style={{ fontSize: 11, color: palette.amber }}>
-                        en attente · {inv.uniqueTag}
+                        {t('members.waiting')} · {inv.uniqueTag}
                       </div>
                     </div>
                     <SmallBtn
@@ -184,7 +186,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                       onClick={() => handleCancelInvite(inv.userId)}
                       disabled={cancelingInvite === inv.userId}
                     >
-                      {cancelingInvite === inv.userId ? 'annulation…' : 'annuler'}
+                      {cancelingInvite === inv.userId ? t('members.canceling') : t('members.cancel')}
                     </SmallBtn>
                   </div>
                 ))}
@@ -192,7 +194,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
             )}
             </>
           ) : (
-            <Row label="Inviter un utilisateur" hint="par tag">
+            <Row label={t('members.inviteLabel')} hint={t('members.inviteHint')}>
               <span
                 style={{
                   fontSize: 12,
@@ -203,7 +205,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                   padding: '7px 12px',
                 }}
               >
-                disponible pour les ateliers Premium
+                {t('members.premiumOnly')}
               </span>
             </Row>
           )}
@@ -212,7 +214,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
           {joinRequests.length > 0 && (
             <div style={{ marginTop: 4, marginBottom: 8 }}>
               <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: palette.inkFaint, marginBottom: 8 }}>
-                Demandes d&apos;adhésion ({joinRequests.length})
+                {t('members.joinRequests', { count: joinRequests.length })}
               </div>
               {joinRequests.map((req) => (
                 <div
@@ -234,15 +236,15 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                       {req.displayName}
                     </div>
                     <div style={{ fontSize: 11, color: palette.inkSoft }}>
-                      demande · {req.uniqueTag}
+                      {t('members.request')} · {req.uniqueTag}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                     <SmallBtn tone="dark" onClick={() => handleApproveJoinRequest(req.userId)} disabled={joinReqActionId === req.userId}>
-                      {joinReqActionId === req.userId ? '…' : 'accepter'}
+                      {joinReqActionId === req.userId ? '…' : t('members.approve')}
                     </SmallBtn>
                     <SmallBtn tone="danger" onClick={() => handleRejectJoinRequest(req.userId)} disabled={joinReqActionId === req.userId}>
-                      refuser
+                      {t('members.reject')}
                     </SmallBtn>
                   </div>
                 </div>
@@ -297,7 +299,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                   {member.displayName}
                 </div>
                 <div style={{ fontSize: 11, color: palette.inkFaint }}>
-                  {ROLE_LABEL[member.role]} · {member.uniqueTag}
+                  {t(`role.${member.role}`)} · {member.uniqueTag}
                 </div>
               </div>
 
@@ -306,16 +308,16 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   {member.role === 'member' && (
                     <SmallBtn tone="ghost" disabled={memberActionId === member.id} onClick={() => handleSetRole(member, 'manager')}>
-                      promouvoir
+                      {t('members.promote')}
                     </SmallBtn>
                   )}
                   {member.role === 'manager' && (
                     <SmallBtn tone="ghost" disabled={memberActionId === member.id} onClick={() => handleSetRole(member, 'member')}>
-                      rétrograder
+                      {t('members.demote')}
                     </SmallBtn>
                   )}
                   <SmallBtn tone="danger" disabled={memberActionId === member.id} onClick={() => handleExcludeMember(member)}>
-                    exclure
+                    {t('members.exclude')}
                   </SmallBtn>
                 </div>
               )}

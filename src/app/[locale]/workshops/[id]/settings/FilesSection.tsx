@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import { Check, Download, Loader2, Pencil, Trash2, Upload, X } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -12,6 +13,8 @@ import type { UploadTicket } from '@/lib/storage';
 import { FileCategoryIcon, formatFileSize, Row, SmallBtn, SectionCard } from './settingsShared';
 
 export default function FilesSection({ workshopId, initialFiles }: { workshopId: string; initialFiles: WorkshopFile[] }) {
+  const t = useTranslations('settings');
+  const fileUnits = { b: t('fileUnit.b'), kb: t('fileUnit.kb'), mb: t('fileUnit.mb') };
   const [files, setFiles] = useState<WorkshopFile[]>(initialFiles);
   const [uploadProgress, setUploadProgress] = useState<{ name: string; percent: number } | null>(null);
   const [fileError, setFileError] = useState('');
@@ -29,7 +32,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
     const result = await getFileDownloadUrl(workshopId, fileId);
     setDownloadingFileId(null);
     if (!result.success || !result.url) {
-      setFileError(result.error ?? 'Erreur lors du téléchargement');
+      setFileError(result.error ?? t('err.upload'));
       return;
     }
     const a = document.createElement('a');
@@ -72,13 +75,13 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
 
       const ticket = await createFileUploadTicket(workshopId, file.name, file.size, mimeType);
       if (!ticket.success || !ticket.ticket || !ticket.path) {
-        setFileError(ticket.error ?? 'Erreur lors de la préparation du téléchargement');
+        setFileError(ticket.error ?? t('err.prepare'));
         continue;
       }
 
       const uploaded = await uploadFileDirect(file, ticket.ticket);
       if (!uploaded) {
-        setFileError(`Erreur lors du téléchargement de « ${file.name} »`);
+        setFileError(t('err.uploadNamed', { name: file.name }));
         continue;
       }
 
@@ -86,7 +89,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
       if (result.success && result.file) {
         setFiles((prev) => [result.file!, ...prev]);
       } else {
-        setFileError(result.error ?? 'Erreur lors de l’enregistrement');
+        setFileError(result.error ?? t('err.save'));
       }
     }
 
@@ -109,7 +112,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
     setFiles((prev) => prev.filter((f) => f.id !== fileId));
     const result = await deleteWorkshopFile(workshopId, fileId);
     if (!result.success) {
-      setFileError(result.error ?? 'Erreur lors de la suppression');
+      setFileError(result.error ?? t('err.delete'));
     }
   }
 
@@ -138,7 +141,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
   async function handleRenameFile(fileId: string) {
     const trimmed = editingFileName.trim();
     if (!trimmed) {
-      setFileError('Le nom ne peut pas être vide');
+      setFileError(t('err.emptyName'));
       return;
     }
     setFileError('');
@@ -147,7 +150,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
       setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, name: result.name! } : f)));
       cancelEditingFile();
     } else {
-      setFileError(result.error ?? 'Erreur lors du renommage');
+      setFileError(result.error ?? t('err.rename'));
     }
   }
 
@@ -155,8 +158,8 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
     <>
         {/* ── Fichiers ── */}
         <SectionCard
-          title="Fichiers"
-          description="Tous les fichiers déposés dans cet atelier, triés par nom."
+          title={t('files.title')}
+          description={t('files.desc')}
         >
           <div
             onDragOver={(e) => { e.preventDefault(); setFileDragOver(true); }}
@@ -171,7 +174,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
               transition: 'all 0.12s',
             }}
           >
-            <Row label="Ajouter un fichier" hint="glisser-déposer ou parcourir · taille max. 50 Mo" noBorder>
+            <Row label={t('files.addFile')} hint={t('files.addFileHint')} noBorder>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -182,11 +185,11 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
               <SmallBtn tone="dark" onClick={() => fileInputRef.current?.click()} disabled={uploadProgress !== null}>
                 {uploadProgress !== null ? (
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> téléchargement… {uploadProgress.percent}%
+                    <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> {t('files.uploading', { percent: uploadProgress.percent })}
                   </span>
                 ) : (
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Upload size={13} /> ajouter un fichier
+                    <Upload size={13} /> {t('files.addFileBtn')}
                   </span>
                 )}
               </SmallBtn>
@@ -218,7 +221,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
 
           {files.length === 0 ? (
             <div style={{ fontSize: 12.5, color: palette.inkFaint, padding: '14px 0' }}>
-              aucun fichier déposé pour l’instant.
+              {t('files.noFiles')}
             </div>
           ) : (
             <div style={{ marginTop: 12 }}>
@@ -268,14 +271,14 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                           )}
                           <button
                             onClick={() => handleRenameFile(file.id)}
-                            title="enregistrer"
+                            title={t('files.saveTitle')}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.greenSoft, display: 'flex', alignItems: 'center', padding: 4, flexShrink: 0 }}
                           >
                             <Check size={15} />
                           </button>
                           <button
                             onClick={cancelEditingFile}
-                            title="annuler"
+                            title={t('files.cancelTitle')}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.inkGhost, display: 'flex', alignItems: 'center', padding: 4, flexShrink: 0 }}
                           >
                             <X size={15} />
@@ -296,7 +299,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                         </div>
                       )}
                       <div style={{ fontSize: 11, color: palette.inkFaint, marginTop: 2 }}>
-                        {formatFileSize(file.size)}
+                        {formatFileSize(file.size, fileUnits)}
                       </div>
                     </div>
                     {!isEditing && (
@@ -304,7 +307,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                         <button
                           onClick={() => handleDownloadFile(file.id)}
                           disabled={downloadingFileId === file.id}
-                          title="télécharger"
+                          title={t('files.downloadTitle')}
                           style={{
                             background: 'none',
                             border: 'none',
@@ -319,7 +322,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                         </button>
                         <button
                           onClick={() => startEditingFile(file)}
-                          title="renommer"
+                          title={t('files.renameTitle')}
                           style={{
                             background: 'none',
                             border: 'none',
@@ -334,7 +337,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                         </button>
                         <button
                           onClick={() => setPendingDeleteFile(file)}
-                          title="supprimer"
+                          title={t('files.deleteTitle')}
                           style={{
                             background: 'none',
                             border: 'none',
@@ -360,9 +363,9 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
         <ConfirmDialog
           width={400}
           icon={<Trash2 size={17} />}
-          title="Supprimer ce fichier ?"
-          description={<>&quot;{pendingDeleteFile.name}&quot; sera définitivement supprimé. Cette action est irréversible.</>}
-          confirmLabel="Supprimer"
+          title={t('files.deleteFileTitle')}
+          description={t('files.deleteFileDesc', { name: pendingDeleteFile.name })}
+          confirmLabel={t('delete')}
           onCancel={() => setPendingDeleteFile(null)}
           onConfirm={confirmDeleteFile}
         />

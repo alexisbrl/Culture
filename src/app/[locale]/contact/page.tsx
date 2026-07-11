@@ -117,7 +117,7 @@ export default function ContactPage() {
 
           <div className="mt-8 flex items-center justify-center gap-2 text-gray-500 text-sm">
             <Mail className="w-4 h-4" />
-            <span>contact@evalia.app</span>
+            <span>contact@culture.com</span>
           </div>
         </div>
       </section>

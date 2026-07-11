@@ -1,8 +1,10 @@
 'use client';
 
 import { palette } from '@/lib/theme';
+import { useTranslations } from 'next-intl';
 
 export default function CoursTab() {
+  const t = useTranslations('cours');
   return (
     <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
       <div style={{ textAlign: 'center', maxWidth: 460 }}>
@@ -16,12 +18,12 @@ export default function CoursTab() {
           <polygon points="72,32 88,42 72,52" fill="#a87a3a" opacity="0.7" />
           <rect x="40" y="70" width="40" height="6" rx="3" fill="rgba(45,42,36,0.10)" />
         </svg>
-        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase' as const, color: palette.amber, marginBottom: 8 }}>arrive en V2</div>
-        <h3 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 500, color: palette.ink, letterSpacing: '-0.015em' }}>Génération de cours animés</h3>
+        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase' as const, color: palette.amber, marginBottom: 8 }}>{t('comingV2')}</div>
+        <h3 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 500, color: palette.ink, letterSpacing: '-0.015em' }}>{t('title')}</h3>
         <p style={{ margin: 0, fontSize: 13.5, color: palette.inkMuted, lineHeight: 1.6 }}>
-          À partir des fichiers source de l&apos;atelier, l&apos;IA assemblera des slides animées, narrées section par section — pour introduire une notion avant de l&apos;arroser.
+          {t('description')}
         </p>
-        <div style={{ fontFamily: "'Caveat', cursive", fontSize: 17, color: palette.amber, marginTop: 14 }}>« on prépare la serre… »</div>
+        <div style={{ fontFamily: "'Caveat', cursive", fontSize: 17, color: palette.amber, marginTop: 14 }}>{t('tagline')}</div>
       </div>
     </div>
   );

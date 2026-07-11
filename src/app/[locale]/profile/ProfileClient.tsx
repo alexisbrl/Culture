@@ -4,6 +4,7 @@ import { palette, withAlpha } from '@/lib/theme';
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { useUser } from '@clerk/nextjs';
 import AvatarComposer from '@/components/avatar/AvatarComposer';
 import { AvatarConfig, loadAvatarConfig } from '@/components/avatar/avatarConfig';
@@ -42,7 +43,8 @@ function StatCard({ value, label }: { value: string | number; label: string }) {
 }
 
 export default function ProfileClient({ locale, uniqueId, firstName, lastName }: Props) {
-  const fullName = [firstName, lastName].filter(Boolean).join(' ') || 'Jardinier';
+  const t = useTranslations('profile');
+  const fullName = [firstName, lastName].filter(Boolean).join(' ') || t('defaultNameFull');
   const { user } = useUser();
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
   // Avatar synchronisé au compte (publicMetadata.avatarParts), repli localStorage.
@@ -89,10 +91,10 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
           }}
         >
           <Link href={`/${locale}/dashboard`} style={{ color: '#a89880', textDecoration: 'none' }}>
-            jardin
+            {t('breadcrumbGarden')}
           </Link>
           <span>›</span>
-          <span style={{ color: '#5a4838' }}>profil</span>
+          <span style={{ color: '#5a4838' }}>{t('breadcrumbCurrent')}</span>
         </div>
 
         {/* Hero Card */}
@@ -139,7 +141,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
                 marginBottom: 2,
               }}
             >
-              bonjour {firstName || 'jardinier'},
+              {t('greeting', { name: firstName || t('defaultName') })}
             </div>
             <div style={{ fontSize: 28, fontWeight: 500, color: palette.ink, marginBottom: 10 }}>
               {fullName}
@@ -170,21 +172,21 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
                   fontWeight: 500,
                 }}
               >
-                ★ Premium
+                {t('premiumBadge')}
               </span>
             </div>
 
             <div style={{ fontSize: 13, color: '#8a7f72', marginBottom: 16 }}>
-              jardinier depuis mars 2026
+              {t('memberSince')}
             </div>
 
             {/* Buttons */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button className="profile-btn-dark">éditer le profil</button>
+              <button className="profile-btn-dark">{t('editProfile')}</button>
               <Link href={`/${locale}/profile/avatar`} className="profile-btn-ghost">
-                éditer l&apos;avatar
+                {t('editAvatar')}
               </Link>
-              <button className="profile-btn-ghost">partager mon jardin</button>
+              <button className="profile-btn-ghost">{t('shareGarden')}</button>
             </div>
           </div>
 
@@ -197,10 +199,10 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
               flexShrink: 0,
             }}
           >
-            <StatCard value={12} label="jours de série" />
-            <StatCard value={5} label="ateliers actifs" />
-            <StatCard value={5} label="plantes vivantes" />
-            <StatCard value="2 480" label="questions répondues" />
+            <StatCard value={12} label={t('stats.streak')} />
+            <StatCard value={5} label={t('stats.activeWorkshops')} />
+            <StatCard value={5} label={t('stats.livingPlants')} />
+            <StatCard value="2 480" label={t('stats.questionsAnswered')} />
           </div>
         </div>
 
@@ -232,20 +234,19 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
                 marginBottom: 6,
               }}
             >
-              abonnement
+              {t('subscription.label')}
             </div>
             <div style={{ fontSize: 20, fontWeight: 600, color: palette.ink, marginBottom: 10 }}>
-              ★ Premium · 10 €/mois
+              {t('subscription.plan')}
             </div>
             <div style={{ fontSize: 13, color: '#5a4838', lineHeight: 1.6, marginBottom: 16 }}>
-              Énergie illimitée · Sans publicités · Générateur d&apos;examen inclus · Échange IA en
-              cours d&apos;apprentissage · Partage avec 2 personnes
+              {t('subscription.features')}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <Link href={`/${locale}/pricing`} className="profile-btn-dark">
-                gérer l&apos;abonnement →
+                {t('subscription.manage')}
               </Link>
-              <button className="profile-btn-ghost">partager (2 places)</button>
+              <button className="profile-btn-ghost">{t('subscription.share')}</button>
             </div>
           </div>
 
@@ -268,7 +269,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
                 marginBottom: 12,
               }}
             >
-              arrosoir du jour
+              {t('energy.label')}
             </div>
             {/* 10 vertical bars, 8 filled */}
             <div style={{ display: 'flex', gap: 5, alignItems: 'flex-end', marginBottom: 12 }}>
@@ -285,9 +286,9 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
               ))}
             </div>
             <div style={{ fontSize: 13, color: '#5a4838', fontWeight: 500, marginBottom: 4 }}>
-              8 sessions aujourd&apos;hui
+              {t('energy.sessions', { count: 8 })}
             </div>
-            <div style={{ fontSize: 12, color: '#a89880' }}>prochain joker dans 4 h</div>
+            <div style={{ fontSize: 12, color: '#a89880' }}>{t('energy.nextJoker', { hours: 4 })}</div>
           </div>
 
           {/* Official exam card — span 2 */}
@@ -310,7 +311,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
                   color: 'rgba(244,240,230,0.5)',
                 }}
               >
-                examen officiel
+                {t('exam.label')}
               </div>
               <span
                 style={{
@@ -327,11 +328,10 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
               </span>
             </div>
             <div style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>
-              Page publique de certification
+              {t('exam.title')}
             </div>
             <div style={{ fontSize: 13, color: 'rgba(244,240,230,0.65)', lineHeight: 1.6 }}>
-              Récapitule tous vos examens standardisés officiels. Partageable publiquement via lien
-              ou QR code. Disponible à partir de la version 3.
+              {t('exam.desc')}
             </div>
           </div>
 
@@ -357,7 +357,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
                   letterSpacing: '0.1em',
                 }}
               >
-                jardiniers amis
+                {t('friends.label')}
               </div>
               <span
                 style={{
@@ -374,7 +374,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
               </span>
             </div>
             <div style={{ fontSize: 13, color: '#a89880', lineHeight: 1.6 }}>
-              Ajoutez des amis via leur tag et suivez leur progression. Disponible en version 2.
+              {t('friends.desc')}
             </div>
           </div>
         </div>

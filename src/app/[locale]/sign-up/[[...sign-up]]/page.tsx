@@ -1,8 +1,9 @@
 import { SignUp } from '@clerk/nextjs';
-import { getLocale } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 
 export default async function SignUpPage() {
   const locale = await getLocale();
+  const t = await getTranslations('auth.signUp');
 
   return (
     <section className="min-h-[80vh] flex items-center justify-center bg-gray-50 py-16 px-4">
@@ -10,12 +11,10 @@ export default async function SignUpPage() {
         {/* Header */}
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">
-            {locale === 'fr' ? 'Créez votre compte 🚀' : 'Create your account 🚀'}
+            {t('title')}
           </h1>
           <p className="text-gray-500 text-sm mt-1">
-            {locale === 'fr'
-              ? 'Rejoignez Culture et créez votre premier atelier'
-              : 'Join Culture and create your first workshop'}
+            {t('subtitle')}
           </p>
         </div>
 

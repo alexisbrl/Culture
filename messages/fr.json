@@ -6,7 +6,12 @@
     "about": "À propos",
     "contact": "Contact",
     "login": "Connexion",
-    "cta": "Rejoindre la beta"
+    "cta": "Rejoindre la beta",
+    "myWorkshops": "Mes ateliers",
+    "profile": "Mon profil",
+    "goPremium": "Passer Premium ✨",
+    "signOut": "Se déconnecter",
+    "switchTo": "Passer en {locale}"
   },
   "hero": {
     "badge": "Bêta en cours · Rejoignez les pionniers",
@@ -53,7 +58,19 @@
   },
   "testimonials": {
     "badge": "Ils nous font confiance",
-    "title": "Ce que disent nos bêta-testeurs"
+    "title": "Ce que disent nos bêta-testeurs",
+    "marie": {
+      "role": "Formatrice RH indépendante",
+      "content": "J'ai uploadé mon cours Excel de 80 slides. En 10 minutes, j'avais un parcours complet avec quiz et badges. Mes apprenants sont 3x plus engagés."
+    },
+    "thomas": {
+      "role": "Responsable formation, PME 200p",
+      "content": "On a réduit le temps de formation onboarding de 3 jours à 1,5 jour. Les nouveaux arrivent mieux préparés, plus motivés. ROI évident."
+    },
+    "sophie": {
+      "role": "Formatrice sécurité industrielle",
+      "content": "La génération automatique des examens m'économise 4 heures par semaine. Et les résultats aux certifications ont progressé de 22%."
+    }
   },
   "cta": {
     "title": "Prêt à révolutionner vos formations ?",
@@ -185,7 +202,7 @@
     "button": "Envoyer le message",
     "sending": "Envoi en cours...",
     "success": "Message reçu ! On vous répond sous 24h.",
-    "error": "Erreur lors de l'envoi. Essayez contact@evalia.app"
+    "error": "Erreur lors de l'envoi. Essayez contact@culture.com"
   },
   "footer": {
     "tagline": "L'apprentissage, réinventé.",
@@ -204,5 +221,839 @@
   "legal": {
     "title": "Mentions légales & CGU",
     "lastUpdated": "Dernière mise à jour : mai 2025"
+  },
+  "profile": {
+    "metaTitle": "Profil — Culture",
+    "breadcrumbGarden": "jardin",
+    "breadcrumbCurrent": "profil",
+    "greeting": "bonjour {name},",
+    "defaultName": "jardinier",
+    "defaultNameFull": "Jardinier",
+    "premiumBadge": "★ Premium",
+    "memberSince": "jardinier depuis mars 2026",
+    "editProfile": "éditer le profil",
+    "editAvatar": "éditer l'avatar",
+    "shareGarden": "partager mon jardin",
+    "stats": {
+      "streak": "jours de série",
+      "activeWorkshops": "ateliers actifs",
+      "livingPlants": "plantes vivantes",
+      "questionsAnswered": "questions répondues"
+    },
+    "subscription": {
+      "label": "abonnement",
+      "plan": "★ Premium · 10 €/mois",
+      "features": "Énergie illimitée · Sans publicités · Générateur d'examen inclus · Échange IA en cours d'apprentissage · Partage avec 2 personnes",
+      "manage": "gérer l'abonnement →",
+      "share": "partager (2 places)"
+    },
+    "energy": {
+      "label": "arrosoir du jour",
+      "sessions": "{count} sessions aujourd'hui",
+      "nextJoker": "prochain joker dans {hours} h"
+    },
+    "exam": {
+      "label": "examen officiel",
+      "title": "Page publique de certification",
+      "desc": "Récapitule tous vos examens standardisés officiels. Partageable publiquement via lien ou QR code. Disponible à partir de la version 3."
+    },
+    "friends": {
+      "label": "jardiniers amis",
+      "desc": "Ajoutez des amis via leur tag et suivez leur progression. Disponible en version 2."
+    }
+  },
+  "dashboard": {
+    "greetingLabel": "bonjour",
+    "greeting": "{name}, voici tes ateliers.",
+    "newWorkshop": "nouvel atelier",
+    "searchPlaceholder": "rechercher par nom, matière ou tag…",
+    "results": "résultats",
+    "searching": "recherche…",
+    "noResults": "aucun atelier trouvé",
+    "members": "membres",
+    "cultureModules": "proposés par Culture",
+    "emptyTitle": "aucun atelier pour le moment",
+    "emptyDesc": "créez votre premier atelier ou rejoignez-en un existant via la recherche.",
+    "createWorkshop": "créer un atelier",
+    "ownedTitle": "mes ateliers",
+    "joinedTitle": "ateliers rejoints",
+    "trashTitle": "corbeille",
+    "trashCountdown": "suppression définitive dans {days} jour(s)",
+    "trashImminent": "suppression imminente",
+    "restoring": "restauration…",
+    "restore": "restaurer",
+    "createdBy": "créé par",
+    "invitedBy": "invité par",
+    "invitation": "invitation",
+    "expand": "agrandir",
+    "acceptInvitation": "accepter l'invitation",
+    "accepting": "acceptation…",
+    "declining": "refus…",
+    "decline": "refuser",
+    "joinMock": "rejoindre l'atelier",
+    "enterWorkshop": "entrer dans l'atelier",
+    "requestSent": "demande envoyée",
+    "requestPending": "en attente de validation par un gestionnaire de l'atelier.",
+    "requestToJoin": "demander à rejoindre",
+    "sending": "envoi…",
+    "role": {
+      "owner": "propriétaire",
+      "manager": "gestionnaire",
+      "member": "membre"
+    }
+  },
+  "examen": {
+    "noStatement": "(sans énoncé)",
+    "irreversible": "Cette action est irréversible.",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "add": "ajouter",
+    "cancelLower": "annuler",
+    "expand": "agrandir",
+    "responseType": {
+      "sans_reponse": "Sans réponse",
+      "qcs": "QCS",
+      "qcm": "QCM",
+      "textuelle": "Textuelle",
+      "dessin": "Dessin",
+      "audio": "Audio",
+      "sondage": "Sondage",
+      "fill_blank": "Texte à trous",
+      "matching": "Matching",
+      "ordre": "Trier dans l'ordre"
+    },
+    "questionType": {
+      "textuel": "Textuel",
+      "visuel": "Visuel",
+      "audio": "Audio"
+    },
+    "identity": {
+      "nom": "Nom",
+      "prenom": "Prénom",
+      "tag": "Tag - Culture",
+      "classe": "Classe",
+      "date": "Date"
+    },
+    "status": {
+      "publié": "publié",
+      "brouillon": "brouillon",
+      "archivé": "archivé"
+    },
+    "answer": {
+      "noCorrectChoice": "(bonne réponse non définie)",
+      "noPairs": "(paires non définies)",
+      "noOrder": "(ordre non défini)",
+      "none": "aucune réponse associée",
+      "surveyFree": "sondage · réponse libre ({choices})",
+      "surveyNoCorrection": "sondage sans correction",
+      "freeNoCorrection": "réponse libre · sans correction",
+      "notSet": "(réponse non définie)",
+      "prefix": "réponse · "
+    },
+    "answerSpace": { "audio": "🎙 espace de réponse audio" },
+    "weight": {
+      "points": "points",
+      "negative": "points négatifs",
+      "negativeValue": "valeur du point négatif",
+      "eliminatory": "question éliminatoire"
+    },
+    "diff": "diff",
+    "editQuestion": "modifier la question",
+    "editor": {
+      "new": "Nouvelle question",
+      "edit": "Modifier la question",
+      "subtitle": "générée manuellement ou retravaillée avec l'IA",
+      "titleLabel": "Titre",
+      "titleHint": "optionnel — s'il est rempli, remplace l'énoncé comme titre affiché dans la banque de questions",
+      "titlePlaceholder": "Titre court (optionnel)…",
+      "qTypeLabel": "Type de question",
+      "qTypeHint": "Textuel par défaut · Visuel (image, graphique) et Audio disponibles",
+      "visualAttach": "📎 joindre une image ou un graphique",
+      "visualEdit": "éditer l'image — outil basique à venir",
+      "audioComing": "🎙️ enregistrement / import audio — outil à venir",
+      "contentLabel": "Énoncé de la question",
+      "contentHintFill": "utilise « ___ » pour marquer chaque trou à compléter",
+      "contentPlaceholder": "Écris ou colle l'énoncé de la question…",
+      "rTypeLabel": "Type de réponse",
+      "rTypeHint": "Sans réponse par défaut",
+      "choicesPairs": "Paires à associer",
+      "choicesOrder": "Éléments à ordonner",
+      "choicesOptions": "Options de réponse",
+      "hintQcs": "une seule bonne réponse",
+      "hintQcm": "une ou plusieurs bonnes réponses",
+      "hintSurveyA": "sondage sans correction · option « réponse libre » disponible",
+      "hintSurveyB": "active l'icône ✎ sur une option pour permettre une réponse libre",
+      "hintMatching": "associe chaque élément à sa correspondance",
+      "hintOrder": "l'ordre de la liste ci-dessous est l'ordre correct",
+      "shuffleLabel": "Ordre aléatoire",
+      "shuffleHint": "mélange l'ordre des options pour chaque étudiant",
+      "answerHintFill": "réponses attendues pour chaque trou, séparées par une virgule, dans l'ordre",
+      "answerHintDessin": "description ou image de référence pour la correction (outil dessin à venir)",
+      "answerHintAudio": "transcription ou éléments attendus dans la réponse audio",
+      "answerHintDefault": "utilisée pour la correction assistée par IA",
+      "answerLabelFill": "Réponses attendues",
+      "answerLabelDefault": "Réponse associée",
+      "answerPlaceholder": "Réponse de référence…",
+      "freeAnswerLabel": "Réponse libre",
+      "freeAnswerHint": "aucune réponse de référence n'est attendue (ex. dissertation)",
+      "freeAnswerHintShort": "aucune réponse de référence n'est attendue",
+      "linesLabel": "Nombre de lignes",
+      "linesHint": "lignes affichées dans l'aperçu",
+      "linesHintShort": "lignes dans l'aperçu",
+      "noAnswerNote": "cette question n'a pas de réponse associée — aucune correction ne sera proposée.",
+      "difficulty": "Difficulté",
+      "difficultyHint": "off par défaut — annote la difficulté de la question",
+      "duration": "Durée",
+      "durationHint": "off par défaut — durée allouée, uniquement pour les examens projetés",
+      "minutes": "minutes",
+      "seconds": "secondes",
+      "partsDivider": "Parties supplémentaires",
+      "partsIntro": "Une question peut avoir plusieurs parties indépendantes (énoncés et types de réponse distincts).",
+      "part": "Partie {n}",
+      "partStatement": "Énoncé",
+      "partStatementPlaceholder": "Énoncé de cette partie…",
+      "addPart": "+ ajouter une partie",
+      "optionsDivider": "Options par question",
+      "labelsLabel": "Libellés",
+      "labelsHint": "off par défaut — regroupe les questions pour générer des examens",
+      "labelNamePlaceholder": "nom du libellé…",
+      "addLabelOption": "+ ajouter un libellé…",
+      "newLabelOption": "+ nouveau libellé…",
+      "addQuestion": "Ajouter la question",
+      "saveChanges": "Enregistrer les modifications"
+    },
+    "choices": {
+      "prompt": "« ajoute {what} »",
+      "promptPairs": "des paires",
+      "promptOptions": "des options de réponse",
+      "dragReorder": "glisser pour réorganiser",
+      "correctUnique": "bonne réponse (unique)",
+      "correct": "bonne réponse",
+      "freeTextMarker": "réponse libre — l'étudiant écrit ce qu'il veut",
+      "pairLeft": "élément {n}",
+      "pairRight": "correspondance",
+      "freeInput": "saisie libre",
+      "option": "option {n}",
+      "addPair": "+ paire",
+      "addOption": "+ option",
+      "needCorrect": "indique au moins une bonne réponse en cochant l'option correspondante"
+    },
+    "history": {
+      "title": "Examens générés",
+      "subtitle": "{count} examens · historique de l'atelier",
+      "newExam": "nouvel examen",
+      "colExam": "examen",
+      "colDate": "date",
+      "colQuestions": "questions",
+      "colTakenBy": "passé par",
+      "colAvg": "note moy.",
+      "colActions": "actions",
+      "takenMembers": "{count} membres",
+      "edit": "modifier",
+      "duplicate": "dupliquer",
+      "export": "exporter",
+      "deleteAction": "supprimer"
+    },
+    "bank": {
+      "title": "Banque de questions",
+      "include": "inclure",
+      "exclude": "exclure",
+      "dropFilterHere": "glisse un filtre ici",
+      "newQuestion": "nouvelle question",
+      "generateAI": "générer par IA",
+      "searchPlaceholder": "chercher une question…",
+      "filters": "filtres",
+      "filtersReset": "réinitialiser",
+      "filtersTitle": "filtres",
+      "qTypeSection": "type de question",
+      "rTypeSection": "type de réponse",
+      "statusSection": "statut",
+      "statusNew": "Nouveau",
+      "statusIncomplete": "Incomplète",
+      "labelsSection": "libellés",
+      "newLabel": "+ libellé",
+      "difficultySection": "difficulté",
+      "noDifficulty": "sans difficulté",
+      "diffLevel": "{n}/5",
+      "filterNoDifficulty": "sans difficulté",
+      "filterDifficulty": "difficulté {n}/5",
+      "editLabelTitle": "modifier le libellé",
+      "saveLabel": "enregistrer",
+      "deleteLabel": "supprimer le libellé",
+      "parts": "{count} parties",
+      "part": "Partie {n}",
+      "showDetail": "voir le détail ▾",
+      "hideDetail": "masquer le détail ▴",
+      "editQuestion": "modifier la question",
+      "duplicateQuestion": "dupliquer la question",
+      "deleteQuestion": "supprimer la question",
+      "sendToEditor": "envoyer vers l'éditeur d'examen",
+      "noMatch": "« aucune question ne correspond à ces filtres »",
+      "sortAsc": "ordre croissant",
+      "sortDesc": "ordre décroissant",
+      "sortRecent": "trier · date d'ajout",
+      "sortName": "trier · nom",
+      "sortType": "trier · type",
+      "sortDifficulty": "trier · difficulté",
+      "sortLabel": "trier · libellé",
+      "deleteQuestionTitle": "Supprimer cette question ?",
+      "deleteQuestionInExams": "Elle sera retirée des examens suivants :",
+      "deleteLabelTitle": "Supprimer le libellé « {name} » ?",
+      "deleteLabelCount": "Il sera retiré de {count} question(s). "
+    },
+    "generator": {
+      "title": "Éditeur d'examen",
+      "subtitle": "les questions s'enchaînent dans cet ordre — glisse pour réorganiser",
+      "cancelEdits": "annuler les modifications",
+      "resetEditor": "réinitialiser l'éditeur",
+      "editingPrefix": "Modification de",
+      "cancelEdit": "annuler ✕",
+      "sentQuestions": "questions envoyées",
+      "checkToAdd": "coche pour ajouter à l'examen",
+      "sendFromBank": "« envoie des questions depuis la banque »",
+      "incompleteTooltip": "question incomplète - cliquer pour compléter",
+      "removeFromList": "retirer de la liste",
+      "settings": "paramètres",
+      "label": "intitulé",
+      "show": "afficher",
+      "presentation": "présentation",
+      "applyFavorite": "appliquer la présentation favorite",
+      "favorite": "favori",
+      "replaceFavorite": "remplacer le favori par la présentation actuelle",
+      "left": "à gauche",
+      "right": "à droite",
+      "notShown": "non affiché",
+      "customFieldPlaceholder": "nom de la pilule…",
+      "addCustomField": "+ pilule personnalisée",
+      "sections": "parties",
+      "addSection": "+ partie",
+      "questions": "questions",
+      "addPageBreak": "+ saut de page",
+      "addPageBreakTooltip": "ajouter un saut de page",
+      "scale": "barème",
+      "points": "{count} pt{plural}",
+      "duration": "durée",
+      "durationMin": "min · {duration}",
+      "flow": "déroulé de l'examen",
+      "emptySection": "partie vide — glisse une question ici",
+      "pageBreak": "saut de page",
+      "removeSection": "supprimer la partie",
+      "removePageBreak": "retirer le saut de page",
+      "partWeightTooltip": "pondération de la partie {n}",
+      "partShort": "part. {n}",
+      "removeFromExam": "retirer de l'examen",
+      "dragReorder": "glisser pour réorganiser",
+      "saveChanges": "enregistrer les modifications",
+      "saveExam": "enregistrer l'examen",
+      "page": "page {n} / {total}",
+      "parts": "{count} parties",
+      "removeSectionTitle": "Supprimer la partie « {title} » ?",
+      "removeSectionDesc": "Les {count} question(s) de cette partie ne seront plus dans l'examen et retourneront dans la liste des questions envoyées.",
+      "cancelEditsTitle": "Annuler les modifications ?",
+      "clearTitle": "Effacer l'éditeur d'examen ?",
+      "clearDescEditing": "Les modifications en cours seront abandonnées. L'examen déjà enregistré n'est pas affecté.",
+      "clearDesc": "L'intitulé, les parties, la pondération et les questions envoyées seront réinitialisés.",
+      "saveAnywayTitle": "Enregistrer malgré tout ?",
+      "saveAnywayDesc": "{count} question(s) de cet examen {plural} (sans réponse associée ou sans énoncé).",
+      "saveAnywayPluralOne": "est incomplète",
+      "saveAnywayPluralMany": "sont incomplètes",
+      "applyFavoriteTitle": "Appliquer la présentation favorite ?",
+      "applyFavoriteDesc": "La section présentation va être remplacée par votre favori.",
+      "apply": "Appliquer",
+      "replaceFavoriteTitle": "Remplacer le favori ?",
+      "replaceFavoriteDesc": "Enregistre la présentation actuelle comme favorite. Elle remplacera l'ancienne favorite.",
+      "save": "Enregistrer",
+      "removeQuestionTitle": "Retirer cette question ?",
+      "removeQuestionDesc": "Elle est cochée dans l'examen en cours — la retirer de la liste des questions envoyées la retirera aussi de l'aperçu.",
+      "remove": "Retirer"
+    },
+    "tab": {
+      "panelHistory": "Examen généré",
+      "panelBank": "Banque de questions",
+      "panelGenerator": "Éditeur d'examen",
+      "deleteExamTitle": "Supprimer l'examen ?",
+      "editorBusyTitle": "Éditeur déjà en cours d'utilisation",
+      "editorBusyDesc": "L'éditeur d'examen contient déjà des modifications en cours. Termine ou efface l'éditeur avant de modifier {target}.",
+      "editorBusyGo": "Aller à l'éditeur",
+      "questionEditing": "question déjà en cours d'édition",
+      "introTitle": "Comment fonctionne le générateur d'examen",
+      "introSubtitle": "Trois étapes pour passer de votre banque de questions à un examen prêt à être donné.",
+      "introStep1Title": "Constituez votre banque de questions",
+      "introStep1Text": "Créez vos questions manuellement ou laissez l'IA s'en charger à partir des fichiers de l'atelier.",
+      "introStep2Title": "Composez votre examen",
+      "introStep2Text": "Envoyez vos questions vers l'éditeur, glissez-les dans des sections, ajustez la pondération et la difficulté.",
+      "introStep3Title": "Générez et diffusez",
+      "introStep3Text": "L'examen est prêt : export PDF, passage en ligne, projection, ou intégration au programme éducatif.",
+      "introImage": "image {n}",
+      "introClose": "fermer",
+      "introStart": "Commencer"
+    }
+  },
+  "avatar": {
+    "breadcrumbProfile": "profil",
+    "breadcrumbCurrent": "éditer l'avatar",
+    "title": "personnalise ton jardinier",
+    "titleScript": "« assemble ton personnage »",
+    "subtitle": "chaque élément se combine librement aux autres. ton choix s'aperçoit en direct.",
+    "livePreview": "« aperçu en direct »",
+    "saving": "enregistrement…",
+    "validate": "valider l'avatar →",
+    "cancel": "annuler",
+    "cat": {
+      "face": "Visage",
+      "hair": "Cheveux",
+      "brow": "Sourcils",
+      "eyes": "Yeux",
+      "nose": "Nez",
+      "mouth": "Bouche",
+      "top": "Vêtement"
+    },
+    "hint": {
+      "face": "la forme du visage et la carnation.",
+      "hair": "la coupe — chaque style se combine à tout le reste.",
+      "brow": "l'expression commence ici.",
+      "eyes": "le regard de ton jardinier.",
+      "nose": "une touche discrète.",
+      "mouth": "sourire, neutre, ou grand sourire.",
+      "top": "le haut que porte ton personnage."
+    }
+  },
+  "settings": {
+    "sidebarLabel": "Paramètres",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "nav": {
+      "general": "Général",
+      "members": "Membres & rôles",
+      "files": "Fichiers",
+      "bricks": "Briques de connaissance",
+      "premium": "Atelier Premium"
+    },
+    "role": {
+      "owner": "propriétaire",
+      "manager": "gestionnaire",
+      "member": "membre"
+    },
+    "fileUnit": { "b": "o", "kb": "Ko", "mb": "Mo" },
+    "err": {
+      "upload": "Erreur lors du téléchargement",
+      "generic": "Erreur",
+      "send": "Erreur lors de l'envoi",
+      "prepare": "Erreur lors de la préparation du téléchargement",
+      "uploadNamed": "Erreur lors du téléchargement de « {name} »",
+      "save": "Erreur lors de l'enregistrement",
+      "delete": "Erreur lors de la suppression",
+      "emptyName": "Le nom ne peut pas être vide",
+      "rename": "Erreur lors du renommage"
+    },
+    "general": {
+      "title": "Général",
+      "desc": "Informations de base de l'atelier.",
+      "nameLabel": "Nom de l'atelier",
+      "descLabel": "Description",
+      "previewHint": "affichée dans la preview de l'atelier",
+      "descPlaceholder": "décrivez votre atelier en quelques mots…",
+      "coverLabel": "Image de couverture",
+      "uploadAria": "uploader votre image",
+      "removeCoverAria": "supprimer l'image de couverture",
+      "emojiLabel": "Emoji",
+      "createdLabel": "Date de création"
+    },
+    "access": {
+      "title": "Accès & limites",
+      "desc": "Tous les ateliers sont privés : on les rejoint via une demande validée par un gestionnaire ou sur invitation.",
+      "showProgramme": "Afficher le programme éducatif",
+      "qr": "QR code",
+      "qrHint": "redirige directement vers l'atelier",
+      "shareQr": "partager · QR"
+    },
+    "danger": {
+      "title": "Zone de danger",
+      "desc": "Actions irréversibles — procédez avec prudence.",
+      "deleteLabel": "Supprimer l'atelier",
+      "deleteHint": "toutes les briques, examens et progressions seront perdus",
+      "deleteBtn": "supprimer l'atelier"
+    },
+    "saveBar": {
+      "unsaved": "modifications non enregistrées",
+      "emptyName": "le nom de l'atelier ne peut pas être vide",
+      "saving": "enregistrement…",
+      "saved": "enregistré",
+      "save": "enregistrer"
+    },
+    "deleteModal": {
+      "trashTitle": "Mettre en corbeille ?",
+      "trashDesc": "\"{name}\" sera mis en corbeille. Vous aurez 7 jours pour annuler.",
+      "codeByEmail": "Un code de confirmation sera envoyé par email.",
+      "sending": "Envoi…",
+      "sendCode": "Envoyer le code",
+      "codeSentTitle": "Code envoyé !",
+      "enterCode": "Saisissez le code à 6 chiffres reçu par email. Il expire dans 15 minutes.",
+      "resend": "Renvoyer",
+      "verifying": "Vérification…",
+      "confirm": "Confirmer"
+    },
+    "leave": {
+      "title": "Modifications non enregistrées",
+      "desc": "Si vous quittez maintenant, les modifications apportées seront perdues.",
+      "emptyName": "le nom de l'atelier ne peut pas être vide",
+      "saveAndLeave": "Enregistrer et quitter",
+      "leaveWithout": "Quitter sans enregistrer"
+    },
+    "members": {
+      "title": "Membres & rôles",
+      "desc": "Gérez les accès et les permissions des membres de l'atelier.",
+      "inviteLabel": "Inviter un utilisateur",
+      "inviteHint": "par tag",
+      "inviting": "envoi…",
+      "invite": "inviter",
+      "inviteSent": "Invitation envoyée à {name}.",
+      "premiumOnly": "disponible pour les ateliers Premium",
+      "pendingInvites": "Invitations en attente ({count})",
+      "waiting": "en attente",
+      "canceling": "annulation…",
+      "cancel": "annuler",
+      "joinRequests": "Demandes d'adhésion ({count})",
+      "request": "demande",
+      "approve": "accepter",
+      "reject": "refuser",
+      "promote": "promouvoir",
+      "demote": "rétrograder",
+      "exclude": "exclure"
+    },
+    "files": {
+      "title": "Fichiers",
+      "desc": "Tous les fichiers déposés dans cet atelier, triés par nom.",
+      "addFile": "Ajouter un fichier",
+      "addFileHint": "glisser-déposer ou parcourir · taille max. 50 Mo",
+      "uploading": "téléchargement… {percent}%",
+      "addFileBtn": "ajouter un fichier",
+      "noFiles": "aucun fichier déposé pour l'instant.",
+      "saveTitle": "enregistrer",
+      "cancelTitle": "annuler",
+      "downloadTitle": "télécharger",
+      "renameTitle": "renommer",
+      "deleteTitle": "supprimer",
+      "deleteFileTitle": "Supprimer ce fichier ?",
+      "deleteFileDesc": "\"{name}\" sera définitivement supprimé. Cette action est irréversible."
+    },
+    "premium": {
+      "title": "Atelier Premium",
+      "desc": "Activez le statut Premium pour débloquer des fonctionnalités avancées pour tous les membres.",
+      "statusLabel": "Statut de l'atelier",
+      "statusHint": "passage Premium définitif",
+      "statusBadge": "✓ atelier premium",
+      "goPremiumLabel": "Passer l'atelier Premium",
+      "goPremiumHint": "badge visible · engagement irréversible",
+      "badgePremium": "badge premium",
+      "activate": "activer →",
+      "testPwLabel": "Mot de passe d'activation (test)",
+      "testPwHint": "mode de test — sera retiré avec l'intégration du paiement",
+      "pwPlaceholder": "mot de passe…",
+      "confirmTitle": "Passer l'atelier Premium",
+      "confirmDesc": "Cette action est définitive et irréversible : l'atelier deviendra privé pour toujours et tous ses membres (actuels et futurs) auront un accès Premium à vie.",
+      "confirmBtn": "Confirmer l'activation"
+    },
+    "bricks": {
+      "title": "Briques de connaissance",
+      "desc": "Les unités d'information extraites de vos fichiers sources par l'IA.",
+      "sourceFiles": "Fichiers source",
+      "manageFiles": "gérer les fichiers",
+      "regenAI": "✦ régénérer par IA",
+      "edit": "éditer",
+      "diff": "diff",
+      "imp": "imp",
+      "shownCount": "{shown} sur {total} affichées",
+      "viewAll": "voir toutes les briques"
+    }
+  },
+  "workshop": {
+    "breadcrumbGarden": "jardin",
+    "tabs": {
+      "programme": "Programme éducatif",
+      "examen": "Génération d'examen",
+      "analyse": "Analyse",
+      "cours": "Génération de cours"
+    },
+    "shareBtn": "partager · QR",
+    "settingsLink": "paramètres",
+    "role": {
+      "owner": "propriétaire",
+      "manager": "gestionnaire",
+      "member": "membre"
+    },
+    "premiumBadge": "premium",
+    "memberCount": "{count} membre{plural}"
+  },
+  "shareQr": {
+    "title": "Rejoindre \"{title}\"",
+    "desc": "Scannez ce QR code ou partagez le lien ci-dessous.",
+    "copy": "copier",
+    "copied": "copié",
+    "downloadLabel": "télécharger le QR code"
+  },
+  "garden": {
+    "title": "Le jardin de {name}",
+    "edit": {
+      "move": "Déplacer",
+      "store": "Ranger",
+      "done": "Terminer",
+      "edit": "Modifier",
+      "recenter": "Recentrer"
+    },
+    "hint": {
+      "placeStructure": "Choisis un emplacement pour la structure",
+      "moveTree": "Clique une case de terre pour reposer l’arbre",
+      "placeDeco": "Clique une tuile pour la déco (coin bas-droite)",
+      "plantTree": "Clique une case de terre pour planter l’arbre",
+      "digWater": "Clique une case pour creuser de l’eau",
+      "paint": "Clique les cases à peindre",
+      "idle": "Choisis une surface ou un objet · clique un arbre/structure pour le déplacer"
+    },
+    "panel": {
+      "blocks": "Blocs",
+      "deco": "Déco",
+      "surfaces": "Surfaces",
+      "resetGrass": "Herbe (réinitialiser)",
+      "objects": "Objets",
+      "noObjects": "Aucun objet",
+      "decorations": "Décorations",
+      "erase": "Gomme"
+    },
+    "species": {
+      "chene": "Chêne",
+      "paulownia": "Paulownia",
+      "pin": "Pin",
+      "pommier": "Pommier"
+    },
+    "kind": {
+      "grass": "Herbe",
+      "path": "Chemin",
+      "tallgrass": "Herbe haute",
+      "earth": "Terre",
+      "water": "Eau",
+      "bridge": "Pont",
+      "house": "Maison",
+      "mountain": "Montagne",
+      "tree": "Arbre"
+    },
+    "cosmetic": {
+      "rock": "Rocher",
+      "flowers": "Fleurs",
+      "mushroom": "Champignon",
+      "lantern": "Lanterne",
+      "basket": "Panier",
+      "stump": "Souche",
+      "bush": "Buisson"
+    }
+  },
+  "programme": {
+    "legend": {
+      "done": "terminé",
+      "current": "en cours",
+      "upcoming": "à venir"
+    },
+    "comingSoon": "« à venir »",
+    "launchNext": "lancer le prochain",
+    "next": "prochain",
+    "expand": "dérouler",
+    "collapse": "enrouler",
+    "exercisesCount": "{done} / {total} exercices",
+    "chapterIndicator": "chapitre {from}–{to} / {total}",
+    "sideCard": {
+      "tagline": "« paulownia · niveau {level} »",
+      "progress": "{percent} % du parcours · {count} briques pour niv. {nextLevel}"
+    },
+    "workshopInfo": {
+      "title": "l'atelier",
+      "members": "membres",
+      "owner": "propriétaire",
+      "bricks": "briques",
+      "streak": "ta série"
+    },
+    "continueLink": "continuer le parcours →"
+  },
+  "accountPricing": {
+    "tagline": "de la graine à l'arbre —",
+    "title": "choisis ton niveau de jardinage.",
+    "subtitle": "Tout commence gratuitement. Grandis à ton rythme.",
+    "billing": {
+      "mensuel": "mensuel",
+      "annuel": "annuel"
+    },
+    "currentPlan": "ton offre actuelle",
+    "currentBadge": "● ton offre actuelle",
+    "ribbonCurrentBadge": "★ ton offre actuelle",
+    "recommendedBadge": "★ recommandé",
+    "switchTo": {
+      "free": "passer au gratuit",
+      "premium": "passer Premium →",
+      "premiumPlus": "passer Premium+ →"
+    },
+    "annualSuffix": "annuel",
+    "perMonth": "/ mois",
+    "forever": "— pour toujours",
+    "tierKicker": {
+      "free": "graine",
+      "premium": "buisson",
+      "premiumPlus": "arbre"
+    },
+    "tierName": {
+      "free": "Gratuit"
+    },
+    "tierTagline": {
+      "free": "L'essentiel pour planter ta première parcelle.",
+      "premium": "Pour un apprentissage sans limites.",
+      "premiumPlus": "Tout ce dont tu as besoin, sans compromis.",
+      "saveAnnual": "« économise {amount}/an »",
+      "monthlyIfAnnual": "« {amount}/mois si annuel »"
+    },
+    "feature": {
+      "energyLimited": "énergie limitée",
+      "workshops5": "5 ateliers loisir",
+      "qcmLearning": "apprentissage QCM",
+      "noAds": "sans publicité",
+      "examGenerator": "générateur examen",
+      "aiExchange": "échange IA",
+      "exclusivePlants": "plantes exclusives",
+      "enhancedSecurity": "sécurité renforcée",
+      "energyUnlimited": "énergie illimitée",
+      "workshops10": "10 ateliers loisir",
+      "joker1": "1 joker/jour",
+      "shareSub2": "partage abonnement +2",
+      "courseGeneration": "génération de cours",
+      "allPremium": "tout Premium",
+      "enhancedSecurityExams": "sécurité renforcée examens",
+      "secondaryCamera": "caméra secondaire",
+      "autoIntros": "intros auto (IA)",
+      "autoFinalExam": "examen final auto (IA)",
+      "manualSectionValidation": "validation manuelle sections",
+      "workshops15": "15 ateliers loisir",
+      "jokerChoice": "1 joker/jour au choix",
+      "shareSub3": "partage abonnement +3"
+    },
+    "workshopPremium": {
+      "badge": "atelier premium",
+      "irreversible": "irréversible",
+      "title": "débloque ton atelier pour tous tes membres, à vie.",
+      "description": "Une activation unique qui offre l'accès Premium à tous les membres actuels et futurs de ton atelier — sans abonnement personnel requis.",
+      "tagline": "« écoles, formations, équipes — c'est pour vous. »",
+      "cta": "activer pour un atelier →"
+    },
+    "alerts": {
+      "paymentSoon": "Paiement disponible prochainement.",
+      "soon": "Disponible prochainement."
+    }
+  },
+  "analyse": {
+    "header": {
+      "title": "Tableau de bord",
+      "subtitle": "vue gestionnaire · {count} membres · mis à jour il y a {minutes} min"
+    },
+    "period": {
+      "d7": "7 jours",
+      "d30": "30 jours",
+      "all": "tout"
+    },
+    "exportCsv": "exporter CSV",
+    "kpi": {
+      "members": "membres",
+      "avgProgress": "progression moyenne",
+      "masteredBricks": "briques maîtrisées (moy.)",
+      "avgExamScore": "note moyenne examens"
+    },
+    "masteryHeatmap": {
+      "kicker": "maîtrise par section (moyenne du groupe)"
+    },
+    "distribution": {
+      "kicker": "répartition · section en cours",
+      "insight": "« le gros du groupe est sur la mitochondrie »"
+    },
+    "membersTable": {
+      "title": "Progression par membre",
+      "count": "{shown} sur {total} · trier par progression ▾",
+      "col": {
+        "member": "membre",
+        "section": "section en cours",
+        "progress": "progression",
+        "lastActivity": "dernière activité",
+        "score": "note"
+      }
+    }
+  },
+  "session": {
+    "leaveSession": "quitter la session",
+    "youWater": "tu arroses",
+    "plantTagline": "« buisson · niv. {level} »",
+    "level": "niveau {level}",
+    "bonusIfScore": "+8 % si ≥ {threshold}",
+    "dropRule": "{pct} % · chaque bonne réponse = 1 goutte",
+    "questionCounter": "question {n} / {total}",
+    "difficulty": "difficulté",
+    "hintPrompt": "« demande un indice à l'IA »",
+    "premiumFeature": "échange premium",
+    "skip": "passer",
+    "nextQuestion": "question suivante →",
+    "submitAndWater": "valider et arroser →"
+  },
+  "workshopNew": {
+    "backToDashboard": "Retour au tableau de bord",
+    "badge": "Nouvel atelier",
+    "title": "Créer un atelier",
+    "subtitle": "Donnez un nom à votre atelier. Vous pourrez ensuite inviter des membres et ajouter des documents.",
+    "nameLabel": "Nom de l'atelier",
+    "namePlaceholder": "Ex: Formation Excel avancé, Onboarding 2024...",
+    "cancel": "Annuler",
+    "creating": "Création...",
+    "create": "Créer l'atelier",
+    "err": {
+      "create": "Erreur lors de la création"
+    }
+  },
+  "createWorkshop": {
+    "breadcrumb": {
+      "garden": "jardin",
+      "newPlot": "nouvelle parcelle"
+    },
+    "title": "plante une nouvelle matière.",
+    "subtitle": "« dépose tes cours — l'IA fera pousser les briques toute seule. »",
+    "source": {
+      "kicker": "① source · le cœur de ton atelier",
+      "dropHere": "dépose tes fichiers ici",
+      "dropTagline": "« glisse-dépose, ou colle un lien Drive »",
+      "browseFiles": "parcourir mes fichiers",
+      "formatPrefix": "format V1 — ",
+      "formatSuffix": " · 25 Mo max / fichier",
+      "futureFormats": "Word, PowerPoint, audio, vidéo arrivent en V2",
+      "filesAdded": "{count} fichiers déposés",
+      "extractAfterCreation": "l'IA extraira les briques après la création"
+    },
+    "identity": {
+      "kicker": "② identité",
+      "changeCover": "changer la couverture",
+      "nameLabel": "nom",
+      "namePlaceholder": "ex. Biologie cellulaire — L2",
+      "descriptionLabel": "description courte",
+      "descriptionPlaceholder": "une phrase pour situer la matière…"
+    },
+    "createCta": "créer l'atelier",
+    "extractHint": "l'IA extraira ensuite les briques · tu pourras tout ajuster"
+  },
+  "cours": {
+    "comingV2": "arrive en V2",
+    "title": "Génération de cours animés",
+    "description": "À partir des fichiers source de l'atelier, l'IA assemblera des slides animées, narrées section par section — pour introduire une notion avant de l'arroser.",
+    "tagline": "« on prépare la serre… »"
+  },
+  "auth": {
+    "signIn": {
+      "sessionRevoked": "Vous avez été déconnecté car votre compte a été utilisé sur un autre appareil.",
+      "title": "Bon retour 👋",
+      "subtitle": "Connectez-vous pour accéder à vos ateliers"
+    },
+    "signUp": {
+      "title": "Créez votre compte 🚀",
+      "subtitle": "Rejoignez Culture et créez votre premier atelier"
+    }
   }
 }

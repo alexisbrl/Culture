@@ -4,6 +4,7 @@ import { palette, ink, withAlpha } from '@/lib/theme';
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useUser } from '@clerk/nextjs';
 import AvatarComposer from '@/components/avatar/AvatarComposer';
 import { AvatarConfig, CATS, DEFAULT_CONFIG, loadAvatarConfig, saveAvatarConfig } from '@/components/avatar/avatarConfig';
@@ -13,6 +14,7 @@ export default function AvatarEditorPage() {
   const router = useRouter();
   const params = useParams();
   const locale = (params?.locale as string) ?? 'fr';
+  const t = useTranslations('avatar');
   const { user, isLoaded } = useUser();
 
   const [config, setConfig] = useState<AvatarConfig>(DEFAULT_CONFIG);
@@ -51,15 +53,15 @@ export default function AvatarEditorPage() {
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         {/* Breadcrumb */}
         <div style={{ fontSize: 12, color: palette.inkFaint, marginBottom: 10 }}>
-          <a href={`/${locale}/profile`} style={{ color: palette.inkSoft, textDecoration: 'none' }}>profil</a>
+          <a href={`/${locale}/profile`} style={{ color: palette.inkSoft, textDecoration: 'none' }}>{t('breadcrumbProfile')}</a>
           <span style={{ margin: '0 7px', color: '#c2bba8' }}>›</span>
-          <span style={{ color: palette.inkMuted }}>éditer l&apos;avatar</span>
+          <span style={{ color: palette.inkMuted }}>{t('breadcrumbCurrent')}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 4 }}>
-          <h2 style={{ margin: 0, fontSize: 26, fontWeight: 500, letterSpacing: '-0.015em' }}>personnalise ton jardinier</h2>
-          <span style={{ fontFamily: "'Caveat', cursive", fontSize: 18, color: palette.amber }}>« assemble ton personnage »</span>
+          <h2 style={{ margin: 0, fontSize: 26, fontWeight: 500, letterSpacing: '-0.015em' }}>{t('title')}</h2>
+          <span style={{ fontFamily: "'Caveat', cursive", fontSize: 18, color: palette.amber }}>{t('titleScript')}</span>
         </div>
-        <div style={{ fontSize: 13, color: palette.inkSoft, marginBottom: 22 }}>chaque élément se combine librement aux autres. ton choix s&apos;aperçoit en direct.</div>
+        <div style={{ fontSize: 13, color: palette.inkSoft, marginBottom: 22 }}>{t('subtitle')}</div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 24, alignItems: 'start' }}>
 
@@ -84,15 +86,15 @@ export default function AvatarEditorPage() {
             </div>
 
             <div style={{ textAlign: 'center', marginTop: 14 }}>
-              <div style={{ fontFamily: "'Caveat', cursive", fontSize: 17, color: palette.amber }}>« aperçu en direct »</div>
+              <div style={{ fontFamily: "'Caveat', cursive", fontSize: 17, color: palette.amber }}>{t('livePreview')}</div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18 }}>
               <button onClick={validate} disabled={saving} style={{ padding: '12px 18px', borderRadius: 11, background: palette.green, color: palette.parchment, border: 'none', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 500, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: `0 8px 20px ${withAlpha(palette.green, 0.30)}` }}>
-                {saving ? 'enregistrement…' : 'valider l\'avatar →'}
+                {saving ? t('saving') : t('validate')}
               </button>
               <a href={`/${locale}/profile`} style={{ padding: '12px 18px', borderRadius: 11, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontFamily: 'inherit', fontSize: 13.5, fontWeight: 500, textAlign: 'center', textDecoration: 'none', display: 'block' }}>
-                annuler
+                {t('cancel')}
               </a>
             </div>
           </div>
@@ -102,7 +104,7 @@ export default function AvatarEditorPage() {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
               {CATS.map(c => (
                 <button key={c.key} onClick={() => setActiveCat(c.key)} style={{ padding: '7px 14px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: activeCat === c.key ? 500 : 400, border: activeCat === c.key ? '1px solid transparent' : `1px solid ${ink(0.12)}`, background: activeCat === c.key ? palette.green : withAlpha(palette.paper, 0.6), color: activeCat === c.key ? palette.parchment : palette.inkMuted, boxShadow: activeCat === c.key ? '0 4px 12px rgba(79,107,64,0.26)' : 'none', transition: 'all .15s ease' }}>
-                  {c.label}
+                  {t(`cat.${c.key}`)}
                 </button>
               ))}
             </div>
@@ -110,8 +112,8 @@ export default function AvatarEditorPage() {
             <div style={{ borderTop: `1px solid ${ink(0.07)}`, margin: '14px 0 16px' }} />
 
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
-              <div style={{ fontSize: 14, fontWeight: 500 }}>{catDef.label}</div>
-              <div style={{ fontSize: 12, color: palette.inkFaint, fontStyle: 'italic' }}>{catDef.hint}</div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>{t(`cat.${activeCat}`)}</div>
+              <div style={{ fontSize: 12, color: palette.inkFaint, fontStyle: 'italic' }}>{t(`hint.${activeCat}`)}</div>
             </div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>

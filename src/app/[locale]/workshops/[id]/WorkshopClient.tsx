@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { QrCode, Settings } from 'lucide-react';
 import ShareQRModal from '@/components/ShareQRModal';
 import ProgrammeTab from './tabs/ProgrammeTab';
@@ -23,17 +24,11 @@ type Props = {
 
 type TabId = 'programme' | 'examen' | 'analyse' | 'cours';
 
-const ROLE_LABEL: Record<'owner' | 'manager' | 'member', string> = {
-  owner: 'propriétaire',
-  manager: 'gestionnaire',
-  member: 'membre',
-};
-
-const TABS: { id: TabId; label: string; soon?: string }[] = [
-  { id: 'programme', label: 'Programme éducatif' },
-  { id: 'examen', label: "Génération d'examen" },
-  { id: 'analyse', label: 'Analyse', soon: 'V2' },
-  { id: 'cours', label: 'Génération de cours', soon: 'V2' },
+const TABS: { id: TabId; soon?: string }[] = [
+  { id: 'programme' },
+  { id: 'examen' },
+  { id: 'analyse', soon: 'V2' },
+  { id: 'cours', soon: 'V2' },
 ];
 
 function Chip({ children, tone = 'default' }: { children: React.ReactNode; tone?: 'default' | 'amber' | 'sage' | 'dim' }) {
@@ -51,6 +46,7 @@ function Chip({ children, tone = 'default' }: { children: React.ReactNode; tone?
 }
 
 export default function WorkshopClient({ locale, workshopId, workshopName, currentUserRole, isPremium, members }: Props) {
+  const t = useTranslations('workshop');
   // Propriétaire ou gestionnaire : accès aux onglets de gestion + paramètres.
   const canManage = currentUserRole === 'owner' || currentUserRole === 'manager';
   const visibleTabs = canManage ? TABS : TABS.filter((t) => t.id === 'programme');
@@ -73,7 +69,7 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
         <div style={{ padding: '14px 24px 0' }}>
           {/* Breadcrumb */}
           <div style={{ fontSize: 11, color: palette.inkSoft, marginBottom: 10 }}>
-            <Link href={`/${locale}/dashboard`} style={{ color: palette.inkSoft, textDecoration: 'none' }}>jardin</Link>
+            <Link href={`/${locale}/dashboard`} style={{ color: palette.inkSoft, textDecoration: 'none' }}>{t('breadcrumbGarden')}</Link>
             <span style={{ margin: '0 6px' }}>›</span>
             <span style={{ color: palette.ink }}>{workshopName.toLowerCase()}</span>
           </div>
@@ -82,21 +78,21 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <h1 style={{ margin: 0, fontSize: 22, fontWeight: 500, color: palette.ink, letterSpacing: '-0.015em' }}>{workshopName}</h1>
-              {isPremium && <Chip tone="amber">premium</Chip>}
-              <Chip tone="dim">{ROLE_LABEL[currentUserRole]}</Chip>
+              {isPremium && <Chip tone="amber">{t('premiumBadge')}</Chip>}
+              <Chip tone="dim">{t(`role.${currentUserRole}`)}</Chip>
               <span style={{ fontSize: 12, color: palette.inkSoft }}>
-                {members.length} membre{members.length > 1 ? 's' : ''}
+                {t('memberCount', { count: members.length, plural: members.length > 1 ? 's' : '' })}
               </span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setShareOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
                 <QrCode size={13} />
-                partager · QR
+                {t('shareBtn')}
               </button>
               {canManage && (
                 <Link href={`/${locale}/workshops/${workshopId}/settings`} style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Settings size={13} color="#5a564c" strokeWidth={1.75} />
-                  paramètres
+                  {t('settingsLink')}
                 </Link>
               )}
             </div>
@@ -105,10 +101,10 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 26, padding: '14px 24px 0', borderBottom: `1px solid ${ink(0.08)}` }}>
-          {visibleTabs.map(t => (
-            <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 0 12px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5, color: activeTab === t.id ? palette.ink : palette.inkSoft, fontWeight: activeTab === t.id ? 500 : 400, borderBottom: activeTab === t.id ? '2px solid #a87a3a' : '2px solid transparent', marginBottom: -1 }}>
-              {t.label}
-              {t.soon && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 999, background: withAlpha(palette.amber, 0.18), color: '#7a4d20', fontWeight: 600, letterSpacing: '0.04em' }}>{t.soon}</span>}
+          {visibleTabs.map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 0 12px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5, color: activeTab === tab.id ? palette.ink : palette.inkSoft, fontWeight: activeTab === tab.id ? 500 : 400, borderBottom: activeTab === tab.id ? '2px solid #a87a3a' : '2px solid transparent', marginBottom: -1 }}>
+              {t(`tabs.${tab.id}`)}
+              {tab.soon && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 999, background: withAlpha(palette.amber, 0.18), color: '#7a4d20', fontWeight: 600, letterSpacing: '0.04em' }}>{tab.soon}</span>}
             </button>
           ))}
         </div>

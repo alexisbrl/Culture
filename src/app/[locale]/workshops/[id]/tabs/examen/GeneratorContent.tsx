@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { Check, Star, RefreshCw, SeparatorHorizontal, AlertTriangle } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -8,7 +9,7 @@ import { type Question } from '../QuestionEditor';
 import {
   type Exam, type ExamConfig, type ExamPresentation, type ExamSection, type QuestionWeight,
   type IdentitySide, type CandidateIdentity,
-  IDENTITY_KEY_SET, IDENTITY_LABELS,
+  IDENTITY_KEY_SET,
   A4_TITLE_BLOCK_HEIGHT, A4_IDENTITY_ROW_HEIGHT, A4_MARGIN_PX, A4_PAGE_HEIGHT,
   A4_PAGE_BREAK_HEIGHT, A4_ROW_FALLBACK_HEIGHT, A4_SECTION_HEADER_HEIGHT, A4_BLOCK_WIDTH,
   PAGE_BREAK_PREFIX,
@@ -31,6 +32,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
   onRemoveFromDraft: (ids: string[]) => void;
   onClearEditor: () => void;
 }) {
+  const t = useTranslations('examen');
   const [dragFlatIdx, setDragFlatIdx] = useState<number | null>(null);
   const [hoveredRowKey, setHoveredRowKey] = useState<string | null>(null);
   const [draggingIdentityKey, setDraggingIdentityKey] = useState<string | null>(null);
@@ -120,7 +122,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
     return config.presentation.customFields.find(f => f.id === id)?.side ?? 'hidden';
   }
   function labelOfItem(id: string): string {
-    if (IDENTITY_KEY_SET.has(id)) return IDENTITY_LABELS[id as keyof CandidateIdentity];
+    if (IDENTITY_KEY_SET.has(id)) return t(`identity.${id as keyof CandidateIdentity}`);
     return config.presentation.customFields.find(f => f.id === id)?.label ?? '';
   }
   const identityLeftKeys = identityOrder.filter(id => sideOfItem(id) === 'left');
@@ -243,13 +245,13 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
 
   // repères visuels de pagination A4 — un bloc de question n'est jamais coupé entre 2 pages
   function pageLabel(n: number) {
-    return <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase' as const, color: palette.inkGhost, marginBottom: 10 }}>page {n} / {pageCount}</div>;
+    return <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase' as const, color: palette.inkGhost, marginBottom: 10 }}>{t('generator.page', { n, total: pageCount })}</div>;
   }
   function pageBreakSeparator(gi: number) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 20px' }}>
         <div style={{ flex: 1, borderTop: `1px dashed ${ink(0.15)}` }} />
-        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase' as const, color: palette.inkGhost, whiteSpace: 'nowrap' as const }}>page {pageNumberOf(gi)} / {pageCount}</span>
+        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase' as const, color: palette.inkGhost, whiteSpace: 'nowrap' as const }}>{t('generator.page', { n: pageNumberOf(gi), total: pageCount })}</span>
         <div style={{ flex: 1, borderTop: `1px dashed ${ink(0.15)}` }} />
       </div>
     );
@@ -259,25 +261,25 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
     <div style={{ padding: '20px 12px 24px 24px', height: '100%', boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column', background: palette.creamAlt }}>
       <div style={{ marginBottom: 14, flexShrink: 0, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div>
-          <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>Éditeur d&apos;examen</div>
-          <div style={{ fontSize: 12.5, color: palette.inkSoft }}>les questions s&apos;enchaînent dans cet ordre — glisse pour réorganiser</div>
+          <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{t('generator.title')}</div>
+          <div style={{ fontSize: 12.5, color: palette.inkSoft }}>{t('generator.subtitle')}</div>
         </div>
         <button onClick={() => setConfirmClearOpen(true)} style={{ flexShrink: 0, fontSize: 12, padding: '8px 14px', borderRadius: 9, border: `1px solid ${withAlpha(palette.danger, 0.28)}`, background: withAlpha(palette.danger, 0.08), color: palette.danger, cursor: 'pointer', fontFamily: 'inherit' }}>
-          {editing ? 'annuler les modifications' : "réinitialiser l'éditeur"}
+          {editing ? t('generator.cancelEdits') : t('generator.resetEditor')}
         </button>
       </div>
       {editing && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: withAlpha(palette.amberGlow, 0.18), border: `1px solid ${withAlpha(palette.amber, 0.35)}`, marginBottom: 14, flexShrink: 0 }}>
           <span style={{ fontSize: 14, color: palette.amber }}>✎</span>
-          <div style={{ flex: 1, fontSize: 12.5, color: '#3a352c' }}>Modification de <b style={{ fontWeight: 600 }}>{editing.title}</b></div>
-          <button onClick={onCancelEdit} style={{ fontSize: 11.5, color: '#7a4d20', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>annuler ✕</button>
+          <div style={{ flex: 1, fontSize: 12.5, color: '#3a352c' }}>{t('generator.editingPrefix')} <b style={{ fontWeight: 600 }}>{editing.title}</b></div>
+          <button onClick={onCancelEdit} style={{ fontSize: 11.5, color: '#7a4d20', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{t('generator.cancelEdit')}</button>
         </div>
       )}
       <div style={{ display: 'flex', gap: 16, alignItems: 'stretch', flex: 1, minHeight: 0 }}>
         <div style={{ width: 230, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, borderRight: `1px solid ${ink(0.08)}`, paddingRight: 16, overflowY: 'auto', minHeight: 0 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft }}>questions envoyées</div>
-          <div style={{ fontSize: 11, color: palette.inkFaint, marginBottom: 4 }}>coche pour ajouter à l&apos;examen</div>
-          {available.length === 0 && <div style={{ fontFamily: "'Caveat', cursive", fontSize: 15, color: palette.amber }}>« envoie des questions depuis la banque »</div>}
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft }}>{t('generator.sentQuestions')}</div>
+          <div style={{ fontSize: 11, color: palette.inkFaint, marginBottom: 4 }}>{t('generator.checkToAdd')}</div>
+          {available.length === 0 && <div style={{ fontFamily: "'Caveat', cursive", fontSize: 15, color: palette.amber }}>{t('generator.sendFromBank')}</div>}
           {available.map(q => {
             const included = includedIds.includes(q.id);
             const incomplete = hasNoAnswer(q) || !q.content.trim();
@@ -285,13 +287,13 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
               <div key={q.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 9px', borderRadius: 8, background: included ? withAlpha(palette.green, 0.08) : withAlpha(palette.paper, 0.7), border: `1px solid ${ink(0.06)}` }}>
                 <input type="checkbox" checked={included} onChange={() => toggleAvailable(q.id)} style={{ marginTop: 2, flexShrink: 0, accentColor: palette.green }} />
                 {incomplete && (
-                  <button onClick={() => onOpenQuestion(q.id)} title="question incomplète - cliquer pour compléter" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 17, height: 17, borderRadius: '50%', border: `1px solid ${withAlpha(palette.danger, 0.35)}`, background: withAlpha(palette.danger, 0.10), color: palette.danger, cursor: 'pointer', padding: 0, flexShrink: 0, alignSelf: 'flex-start' }}><AlertTriangle size={10} strokeWidth={2} /></button>
+                  <button onClick={() => onOpenQuestion(q.id)} title={t('generator.incompleteTooltip')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 17, height: 17, borderRadius: '50%', border: `1px solid ${withAlpha(palette.danger, 0.35)}`, background: withAlpha(palette.danger, 0.10), color: palette.danger, cursor: 'pointer', padding: 0, flexShrink: 0, alignSelf: 'flex-start' }}><AlertTriangle size={10} strokeWidth={2} /></button>
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, color: '#3a352c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.title.trim() || q.content || '(sans énoncé)'}</div>
-                  {q.parts.length > 0 && <span style={{ fontSize: 10.5, color: '#7a4d20' }}>{q.parts.length + 1} parties</span>}
+                  <div style={{ fontSize: 12, color: '#3a352c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.title.trim() || q.content || t('noStatement')}</div>
+                  {q.parts.length > 0 && <span style={{ fontSize: 10.5, color: '#7a4d20' }}>{t('generator.parts', { count: q.parts.length + 1 })}</span>}
                 </div>
-                <span onClick={() => requestRemoveFromDraft(q.id)} title="retirer de la liste" style={{ fontSize: 14, color: palette.danger, cursor: 'pointer', flexShrink: 0 }}>×</span>
+                <span onClick={() => requestRemoveFromDraft(q.id)} title={t('generator.removeFromList')} style={{ fontSize: 14, color: palette.danger, cursor: 'pointer', flexShrink: 0 }}>×</span>
               </div>
             );
           })}
@@ -299,9 +301,9 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
 
         <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', minHeight: 0, paddingRight: 24, boxSizing: 'border-box' as const }}>
           <div style={{ background: ink(0.03), borderRadius: 10, padding: 12, marginBottom: 16 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft, marginBottom: 8 }}>paramètres</div>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft, marginBottom: 8 }}>{t('generator.settings')}</div>
 
-            <div style={{ fontSize: 11, color: palette.inkMuted, marginBottom: 6 }}>intitulé</div>
+            <div style={{ fontSize: 11, color: palette.inkMuted, marginBottom: 6 }}>{t('generator.label')}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
               <input value={config.title} onChange={e => patchConfig({ title: e.target.value })} style={{ flex: 1, fontSize: 15, fontWeight: 500, color: palette.ink, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '10px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
               <button
@@ -310,26 +312,26 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                 style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '9px 14px', borderRadius: 999, border: config.titleIncluded ? '1px solid rgba(79,107,64,0.35)' : `1px solid ${ink(0.14)}`, background: config.titleIncluded ? withAlpha(palette.green, 0.14) : 'transparent', color: config.titleIncluded ? palette.green : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' as const }}
               >
                 {config.titleIncluded && <Check size={13} strokeWidth={2.5} />}
-                afficher
+                {t('generator.show')}
               </button>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <div style={{ fontSize: 11, color: palette.inkMuted }}>présentation</div>
+              <div style={{ fontSize: 11, color: palette.inkMuted }}>{t('generator.presentation')}</div>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button
                   type="button"
                   onClick={() => setConfirmApplyFavoriteOpen(true)}
-                  title="appliquer la présentation favorite"
+                  title={t('generator.applyFavorite')}
                   style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '5px 10px', borderRadius: 999, border: `1px solid ${withAlpha(palette.amber, 0.30)}`, background: withAlpha(palette.amberGlow, 0.14), color: '#7a4d20', cursor: 'pointer', fontFamily: 'inherit' }}
                 >
                   <Star size={11.5} strokeWidth={2} fill={palette.amber} color={palette.amber} />
-                  favori
+                  {t('generator.favorite')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmSaveFavoriteOpen(true)}
-                  title="remplacer le favori par la présentation actuelle"
+                  title={t('generator.replaceFavorite')}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: `1px solid ${ink(0.12)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', padding: 0 }}
                 >
                   <RefreshCw size={12} strokeWidth={2} />
@@ -344,7 +346,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                   onDrop={e => { e.preventDefault(); if (draggingIdentityKey) moveIdentity(draggingIdentityKey, side); }}
                   style={{ flex: 1, minHeight: 44, border: `1px dashed ${ink(0.18)}`, borderRadius: 9, padding: 8, display: 'flex', flexWrap: 'wrap' as const, alignContent: 'flex-start' as const, gap: 6 }}
                 >
-                  <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em', width: '100%' }}>{side === 'left' ? 'à gauche' : 'à droite'}</div>
+                  <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em', width: '100%' }}>{side === 'left' ? t('generator.left') : t('generator.right')}</div>
                   {identityOrder.filter(id => sideOfItem(id) === side).map(id => {
                     const removable = !IDENTITY_KEY_SET.has(id);
                     return (
@@ -373,7 +375,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
               onDrop={e => { e.preventDefault(); if (draggingIdentityKey) moveIdentity(draggingIdentityKey, 'hidden'); }}
               style={{ minHeight: 36, border: `1px dashed ${ink(0.14)}`, borderRadius: 9, padding: 8, display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 6, marginBottom: 14 }}
             >
-              <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em', width: '100%' }}>non affiché</div>
+              <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em', width: '100%' }}>{t('generator.notShown')}</div>
               {identityOrder.filter(id => sideOfItem(id) === 'hidden').map(id => {
                 const removable = !IDENTITY_KEY_SET.has(id);
                 return (
@@ -401,48 +403,48 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                     value={newFieldName}
                     onChange={e => setNewFieldName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomField(); } if (e.key === 'Escape') { setCreatingCustomField(false); setNewFieldName(''); } }}
-                    placeholder="nom de la pilule…"
+                    placeholder={t('generator.customFieldPlaceholder')}
                     style={{ fontSize: 11.5, padding: '5px 9px', borderRadius: 999, border: `1px solid ${ink(0.18)}`, background: palette.paper, fontFamily: 'inherit', outline: 'none', width: 140 }}
                   />
-                  <button type="button" onClick={addCustomField} style={{ fontSize: 11.5, padding: '5px 10px', borderRadius: 999, border: 'none', background: palette.green, color: palette.paper, cursor: 'pointer', fontFamily: 'inherit' }}>ajouter</button>
-                  <button type="button" onClick={() => { setCreatingCustomField(false); setNewFieldName(''); }} style={{ fontSize: 11.5, padding: '5px 8px', borderRadius: 999, border: 'none', background: 'none', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
+                  <button type="button" onClick={addCustomField} style={{ fontSize: 11.5, padding: '5px 10px', borderRadius: 999, border: 'none', background: palette.green, color: palette.paper, cursor: 'pointer', fontFamily: 'inherit' }}>{t('add')}</button>
+                  <button type="button" onClick={() => { setCreatingCustomField(false); setNewFieldName(''); }} style={{ fontSize: 11.5, padding: '5px 8px', borderRadius: 999, border: 'none', background: 'none', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>{t('cancelLower')}</button>
                 </span>
               ) : (
-                <button type="button" onClick={() => setCreatingCustomField(true)} style={{ fontSize: 11.5, padding: '5px 11px', borderRadius: 999, border: `1px dashed ${ink(0.25)}`, background: 'transparent', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>+ pilule personnalisée</button>
+                <button type="button" onClick={() => setCreatingCustomField(true)} style={{ fontSize: 11.5, padding: '5px 11px', borderRadius: 999, border: `1px dashed ${ink(0.25)}`, background: 'transparent', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>{t('generator.addCustomField')}</button>
               )}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
               <div style={{ background: ink(0.04), borderRadius: 9, padding: '10px 12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>parties</div>
-                  <button type="button" onClick={addSection} style={{ fontSize: 13, fontWeight: 500, color: palette.green, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>+ partie</button>
+                  <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('generator.sections')}</div>
+                  <button type="button" onClick={addSection} style={{ fontSize: 13, fontWeight: 500, color: palette.green, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>{t('generator.addSection')}</button>
                 </div>
                 <div style={{ fontSize: 14, color: palette.ink, fontWeight: 500, marginTop: 1 }}>{config.sections.length}</div>
               </div>
               <div style={{ background: ink(0.04), borderRadius: 9, padding: '10px 12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>questions</div>
-                  <button type="button" onClick={addPageBreak} title="ajouter un saut de page" style={{ fontSize: 13, fontWeight: 500, color: palette.green, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>+ saut de page</button>
+                  <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('generator.questions')}</div>
+                  <button type="button" onClick={addPageBreak} title={t('generator.addPageBreakTooltip')} style={{ fontSize: 13, fontWeight: 500, color: palette.green, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>{t('generator.addPageBreak')}</button>
                 </div>
                 <div style={{ fontSize: 14, color: palette.ink, fontWeight: 500, marginTop: 1 }}>{includedIds.length}</div>
               </div>
               <div style={{ background: ink(0.04), borderRadius: 9, padding: '10px 12px' }}>
-                <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>barème</div>
-                <div style={{ fontSize: 14, color: palette.ink, fontWeight: 500, marginTop: 1 }}>{totalPoints} pt{totalPoints === 1 ? '' : 's'}</div>
+                <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('generator.scale')}</div>
+                <div style={{ fontSize: 14, color: palette.ink, fontWeight: 500, marginTop: 1 }}>{t('generator.points', { count: totalPoints, plural: totalPoints === 1 ? '' : 's' })}</div>
               </div>
               <div style={{ background: ink(0.04), borderRadius: 9, padding: '10px 12px' }}>
-                <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>durée</div>
+                <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('generator.duration')}</div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 1 }}>
                   <input type="number" min={5} step={5} value={config.durationMinutes} onChange={e => patchConfig({ durationMinutes: Math.max(0, Number(e.target.value) || 0) })} style={{ width: 50, fontSize: 14, color: palette.ink, fontWeight: 500, border: 'none', background: 'transparent', fontFamily: 'inherit', padding: 0, outline: 'none' }} />
-                  <span style={{ fontSize: 11, color: palette.inkFaint }}>min · {formatDuration(config.durationMinutes)}</span>
+                  <span style={{ fontSize: 11, color: palette.inkFaint }}>{t('generator.durationMin', { duration: formatDuration(config.durationMinutes) })}</span>
                 </div>
               </div>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft }}>déroulé de l&apos;examen</div>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft }}>{t('generator.flow')}</div>
           </div>
 
           {(() => {
@@ -491,7 +493,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
             chunks.push(current);
 
             const incompleteIcon = (id: string) => (
-              <button onClick={() => onOpenQuestion(id)} title="question incomplète - cliquer pour compléter" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: `1px solid ${withAlpha(palette.danger, 0.35)}`, background: withAlpha(palette.danger, 0.10), color: palette.danger, cursor: 'pointer', padding: 0, flexShrink: 0 }}><AlertTriangle size={13} strokeWidth={2} /></button>
+              <button onClick={() => onOpenQuestion(id)} title={t('generator.incompleteTooltip')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: `1px solid ${withAlpha(palette.danger, 0.35)}`, background: withAlpha(palette.danger, 0.10), color: palette.danger, cursor: 'pointer', padding: 0, flexShrink: 0 }}><AlertTriangle size={13} strokeWidth={2} /></button>
             );
 
             const COLUMN_GAP = 10; // espace entre les 3 colonnes (gauche/feuille/droite), distinct de A4_ROW_GAP
@@ -533,14 +535,14 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                         if (row.kind === 'pagebreak') {
                           return (
                             <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_PAGE_BREAK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' as const, opacity: dragFlatIdx === row.gi ? 0.4 : 1 }}>
-                              <span draggable onDragStart={() => setDragFlatIdx(row.gi)} onDragEnd={() => { setDragFlatIdx(null); setDropIndicator(null); }} title="glisser pour réorganiser" style={{ cursor: 'grab', color: '#c8c2b6', fontSize: 13, lineHeight: 1, userSelect: 'none' as const }}>⠿</span>
+                              <span draggable onDragStart={() => setDragFlatIdx(row.gi)} onDragEnd={() => { setDragFlatIdx(null); setDropIndicator(null); }} title={t('generator.dragReorder')} style={{ cursor: 'grab', color: '#c8c2b6', fontSize: 13, lineHeight: 1, userSelect: 'none' as const }}>⠿</span>
                             </div>
                           );
                         }
                         const incomplete = hasNoAnswer(row.q);
                         return (
                           <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, paddingTop: 20, boxSizing: 'border-box' as const, opacity: dragFlatIdx === row.gi ? 0.4 : 1 }}>
-                            <span draggable onDragStart={() => setDragFlatIdx(row.gi)} onDragEnd={() => { setDragFlatIdx(null); setDropIndicator(null); }} onMouseEnter={() => setHoveredRowKey(row.key)} onMouseLeave={() => setHoveredRowKey(null)} title="glisser pour réorganiser" style={{ cursor: 'grab', color: '#c8c2b6', fontSize: 13, lineHeight: 1, userSelect: 'none' as const }}>⠿</span>
+                            <span draggable onDragStart={() => setDragFlatIdx(row.gi)} onDragEnd={() => { setDragFlatIdx(null); setDropIndicator(null); }} onMouseEnter={() => setHoveredRowKey(row.key)} onMouseLeave={() => setHoveredRowKey(null)} title={t('generator.dragReorder')} style={{ cursor: 'grab', color: '#c8c2b6', fontSize: 13, lineHeight: 1, userSelect: 'none' as const }}>⠿</span>
                             {incomplete ? incompleteIcon(row.q.id) : <EditQuestionButton id={row.q.id} onOpenQuestion={onOpenQuestion} />}
                           </div>
                         );
@@ -604,7 +606,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                               {...emptyDropPropsFor(start, row.sectionIdx)}
                               style={{ margin: '0 34px 14px', fontSize: 11.5, color: palette.inkGhost, padding: '14px', textAlign: 'center' as const, border: `1px dashed ${ink(0.12)}`, borderRadius: 9, background: dropIndicator === start && dragFlatIdx !== null ? withAlpha(palette.amber, 0.08) : 'transparent' }}
                             >
-                              partie vide — glisse une question ici
+                              {t('generator.emptySection')}
                             </div>
                           );
                         }
@@ -616,7 +618,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                               <div style={{ height: showLineBefore ? 3 : 0, background: palette.amber, transition: 'all 0.1s' }} />
                               <div style={{ margin: '10px 34px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: `1px dashed ${ink(0.20)}`, borderRadius: 8, background: ink(0.045), color: palette.inkFaint, fontSize: 11.5 }}>
                                 <SeparatorHorizontal size={14} strokeWidth={1.75} />
-                                saut de page
+                                {t('generator.pageBreak')}
                               </div>
                             </div>
                           );
@@ -632,17 +634,17 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                                 <div ref={el => { qRefs.current[`${q.id}::head`] = el; }}>
                                   <div style={{ fontSize: 14, color: palette.ink, lineHeight: 1.6 }}>
                                     <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{subStart}.</span>
-                                    {q.content || '(sans énoncé)'}
+                                    {q.content || t('noStatement')}
                                   </div>
-                                  {renderAnswerSpace(q)}
+                                  {renderAnswerSpace(q, t('answerSpace.audio'))}
                                 </div>
                                 {q.parts.map((part, pi) => (
                                   <div key={pi} ref={el => { qRefs.current[partWeightKey(q.id, pi)] = el; }} style={{ marginTop: 40, paddingLeft: 28 }}>
                                     <div style={{ fontSize: 14, color: palette.ink, lineHeight: 1.6 }}>
                                       <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{subStart + pi + 1}.</span>
-                                      {part.content || '(sans énoncé)'}
+                                      {part.content || t('noStatement')}
                                     </div>
-                                    {renderAnswerSpace({ ...q, responseType: part.responseType, answer: part.answer, choices: part.choices, correctChoices: part.correctChoices, textLines: part.textLines })}
+                                    {renderAnswerSpace({ ...q, responseType: part.responseType, answer: part.answer, choices: part.choices, correctChoices: part.correctChoices, textLines: part.textLines }, t('answerSpace.audio'))}
                                   </div>
                                 ))}
                               </div>
@@ -662,7 +664,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                           return (
                             <div key={row.key} style={{ height: rh, minHeight: rh ? undefined : A4_SECTION_HEADER_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               {config.sections.length > 1 && (
-                                <button type="button" onClick={() => removeSection(row.sectionIdx)} title="supprimer la partie" style={{ fontSize: 15, color: palette.danger, background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>×</button>
+                                <button type="button" onClick={() => removeSection(row.sectionIdx)} title={t('generator.removeSection')} style={{ fontSize: 15, color: palette.danger, background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>×</button>
                               )}
                             </div>
                           );
@@ -673,7 +675,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                         if (row.kind === 'pagebreak') {
                           return (
                             <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_PAGE_BREAK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <span onClick={() => removePageBreak(row.id)} title="retirer le saut de page" style={{ fontSize: 15, color: palette.danger, cursor: 'pointer' }}>×</span>
+                              <span onClick={() => removePageBreak(row.id)} title={t('generator.removePageBreak')} style={{ fontSize: 15, color: palette.danger, cursor: 'pointer' }}>×</span>
                             </div>
                           );
                         }
@@ -686,12 +688,12 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                               const key = partWeightKey(q.id, pi);
                               return (
                                 <div key={pi} style={{ height: rowHeights[key] ?? A4_ROW_FALLBACK_HEIGHT, marginTop: 40, paddingTop: 14, boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                                  <span style={{ fontSize: 9.5, color: palette.inkGhost }} title={`pondération de la partie ${pi + 2}`}>part. {pi + 2}</span>
+                                  <span style={{ fontSize: 9.5, color: palette.inkGhost }} title={t('generator.partWeightTooltip', { n: pi + 2 })}>{t('generator.partShort', { n: pi + 2 })}</span>
                                   <WeightControls weight={config.weighting[key] ?? defaultWeight()} onChange={patch => updateWeight(key, patch)} />
                                 </div>
                               );
                             })}
-                            <span onClick={() => toggleAvailable(q.id)} title="retirer de l'examen" style={{ fontSize: 15, color: palette.danger, cursor: 'pointer' }}>×</span>
+                            <span onClick={() => toggleAvailable(q.id)} title={t('generator.removeFromExam')} style={{ fontSize: 15, color: palette.danger, cursor: 'pointer' }}>×</span>
                           </div>
                         );
                       })}
@@ -711,7 +713,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
           )}
 
           <button onClick={handleGenerateClick} style={{ width: '100%', padding: '9px', borderRadius: 9, background: palette.green, border: 'none', color: palette.parchment, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', boxSizing: 'border-box' as const }}>
-            {editing ? 'enregistrer les modifications' : "enregistrer l'examen"}
+            {editing ? t('generator.saveChanges') : t('generator.saveExam')}
           </button>
         </div>
       </div>
@@ -722,9 +724,9 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
         return (
           <ConfirmDialog
             width={420}
-            title={`Supprimer la partie « ${section.title} » ?`}
-            description={<>Les {count} question{count > 1 ? 's' : ''} de cette partie ne seront plus dans l&apos;examen et retourneront dans la liste des questions envoyées.</>}
-            confirmLabel="Supprimer"
+            title={t('generator.removeSectionTitle', { title: section.title })}
+            description={t('generator.removeSectionDesc', { count })}
+            confirmLabel={t('delete')}
             onCancel={() => setPendingRemoveSectionIdx(null)}
             onConfirm={confirmRemoveSection}
           />
@@ -733,11 +735,9 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
       {confirmClearOpen && (
         <ConfirmDialog
           width={420}
-          title={editing ? 'Annuler les modifications ?' : "Effacer l'éditeur d'examen ?"}
-          description={editing
-            ? <>Les modifications en cours sur <strong style={{ color: palette.ink }}>{editing.title}</strong> seront abandonnées. L&apos;examen déjà enregistré n&apos;est pas affecté.</>
-            : "L'intitulé, les parties, la pondération et les questions envoyées seront réinitialisés."}
-          confirmLabel={editing ? 'Annuler les modifications' : 'Effacer'}
+          title={editing ? t('generator.cancelEditsTitle') : t('generator.clearTitle')}
+          description={editing ? t('generator.clearDescEditing') : t('generator.clearDesc')}
+          confirmLabel={editing ? t('generator.cancelEdits') : t('delete')}
           onCancel={() => setConfirmClearOpen(false)}
           onConfirm={() => { setConfirmClearOpen(false); onClearEditor(); }}
         />
@@ -746,9 +746,9 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
         <ConfirmDialog
           width={420}
           confirmTone="confirm"
-          title="Enregistrer malgré tout ?"
-          description={<>{incompleteCount} question{incompleteCount > 1 ? 's' : ''} de cet examen {incompleteCount > 1 ? 'sont incomplètes' : 'est incomplète'} (sans réponse associée ou sans énoncé).</>}
-          confirmLabel="Enregistrer"
+          title={t('generator.saveAnywayTitle')}
+          description={t('generator.saveAnywayDesc', { count: incompleteCount, plural: incompleteCount > 1 ? t('generator.saveAnywayPluralMany') : t('generator.saveAnywayPluralOne') })}
+          confirmLabel={t('generator.save')}
           onCancel={() => setConfirmGenerateOpen(false)}
           onConfirm={() => { setConfirmGenerateOpen(false); onGenerate(); }}
         />
@@ -759,9 +759,9 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
           iconTone="accent"
           confirmTone="confirm"
           icon={<Star size={18} strokeWidth={2} fill={palette.amber} color={palette.amber} />}
-          title="Appliquer la présentation favorite ?"
-          description="La section présentation va être remplacée par votre favori."
-          confirmLabel="Appliquer"
+          title={t('generator.applyFavoriteTitle')}
+          description={t('generator.applyFavoriteDesc')}
+          confirmLabel={t('generator.apply')}
           onCancel={() => setConfirmApplyFavoriteOpen(false)}
           onConfirm={applyFavoritePresentation}
         />
@@ -772,9 +772,9 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
           iconTone="accent"
           confirmTone="confirm"
           icon={<RefreshCw size={17} strokeWidth={2} />}
-          title="Remplacer le favori ?"
-          description={<>Enregistre la présentation actuelle comme favorite. Elle remplacera l&apos;ancienne favorite.</>}
-          confirmLabel="Enregistrer"
+          title={t('generator.replaceFavoriteTitle')}
+          description={t('generator.replaceFavoriteDesc')}
+          confirmLabel={t('generator.save')}
           onCancel={() => setConfirmSaveFavoriteOpen(false)}
           onConfirm={saveFavoriteFromCurrent}
         />
@@ -782,9 +782,9 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
       {pendingRemoveFromDraftId && (
         <ConfirmDialog
           width={420}
-          title="Retirer cette question ?"
-          description={<>Elle est cochée dans l&apos;examen en cours — la retirer de la liste des questions envoyées la retirera aussi de l&apos;aperçu.</>}
-          confirmLabel="Retirer"
+          title={t('generator.removeQuestionTitle')}
+          description={t('generator.removeQuestionDesc')}
+          confirmLabel={t('generator.remove')}
           onCancel={() => setPendingRemoveFromDraftId(null)}
           onConfirm={confirmRemoveFromDraft}
         />

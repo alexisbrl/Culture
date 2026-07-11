@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { ArrowLeft, BookOpen, Loader2 } from 'lucide-react';
 import { createWorkshop } from '@/app/actions/workshops';
 
 export default function WorkshopNewClient({ locale }: { locale: string }) {
+  const t = useTranslations('workshopNew');
   const router = useRouter();
   const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -24,7 +26,7 @@ export default function WorkshopNewClient({ locale }: { locale: string }) {
     if (result.success && result.id) {
       router.push(`/${locale}/workshops/${result.id}`);
     } else {
-      setError(result.error ?? (locale === 'fr' ? 'Erreur lors de la création' : 'Error creating workshop'));
+      setError(result.error ?? t('err.create'));
       setIsLoading(false);
     }
   }
@@ -39,7 +41,7 @@ export default function WorkshopNewClient({ locale }: { locale: string }) {
             className="inline-flex items-center gap-2 text-violet-300 hover:text-white text-sm mb-8 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            {locale === 'fr' ? 'Retour au tableau de bord' : 'Back to dashboard'}
+            {t('backToDashboard')}
           </Link>
 
           <div className="flex items-center gap-3 mb-3">
@@ -47,17 +49,15 @@ export default function WorkshopNewClient({ locale }: { locale: string }) {
               <BookOpen className="w-6 h-6 text-violet-300" />
             </div>
             <span className="text-sm font-medium text-violet-300 bg-violet-500/20 px-3 py-1 rounded-full border border-violet-400/20">
-              {locale === 'fr' ? 'Nouvel atelier' : 'New workshop'}
+              {t('badge')}
             </span>
           </div>
 
           <h1 className="text-3xl sm:text-4xl font-bold mb-3">
-            {locale === 'fr' ? 'Créer un atelier' : 'Create a workshop'}
+            {t('title')}
           </h1>
           <p className="text-slate-300 text-base max-w-lg">
-            {locale === 'fr'
-              ? 'Donnez un nom à votre atelier. Vous pourrez ensuite inviter des membres et ajouter des documents.'
-              : 'Give your workshop a name. You can then invite members and add documents.'}
+            {t('subtitle')}
           </p>
         </div>
       </div>
@@ -68,7 +68,7 @@ export default function WorkshopNewClient({ locale }: { locale: string }) {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                {locale === 'fr' ? "Nom de l'atelier" : 'Workshop name'}
+                {t('nameLabel')}
                 <span className="text-red-500 ml-1">*</span>
               </label>
               <input
@@ -76,11 +76,7 @@ export default function WorkshopNewClient({ locale }: { locale: string }) {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={
-                  locale === 'fr'
-                    ? 'Ex: Formation Excel avancé, Onboarding 2024...'
-                    : 'E.g: Advanced Excel Training, Onboarding 2024...'
-                }
+                placeholder={t('namePlaceholder')}
                 maxLength={100}
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-300 transition-all"
                 autoFocus
@@ -100,7 +96,7 @@ export default function WorkshopNewClient({ locale }: { locale: string }) {
                 href={`/${locale}/dashboard`}
                 className="flex-1 flex items-center justify-center px-5 py-3 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
               >
-                {locale === 'fr' ? 'Annuler' : 'Cancel'}
+                {t('cancel')}
               </Link>
               <button
                 type="submit"
@@ -110,10 +106,10 @@ export default function WorkshopNewClient({ locale }: { locale: string }) {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    {locale === 'fr' ? 'Création...' : 'Creating...'}
+                    {t('creating')}
                   </>
                 ) : (
-                  locale === 'fr' ? 'Créer l\'atelier' : 'Create workshop'
+                  t('create')
                 )}
               </button>
             </div>

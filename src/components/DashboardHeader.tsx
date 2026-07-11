@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useLocale } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import { useUser, SignOutButton } from '@clerk/nextjs';
 import { UserCircle, LogOut, ChevronDown, Crown } from 'lucide-react';
@@ -12,6 +12,7 @@ import { loadAvatarConfig, type AvatarConfig } from '@/components/avatar/avatarC
 import { markIntentionalSignOut } from '@/lib/signOutIntent';
 
 export default function DashboardHeader() {
+  const t = useTranslations('nav');
   const locale = useLocale();
   const pathname = usePathname();
   const { user } = useUser();
@@ -42,7 +43,7 @@ export default function DashboardHeader() {
             href={`/${locale}/dashboard`}
             className="hidden sm:inline text-sm font-medium text-gray-500 hover:text-violet-600 transition-colors"
           >
-            {locale === 'fr' ? 'Mes ateliers' : 'My workshops'}
+            {t('myWorkshops')}
           </Link>
         </div>
 
@@ -84,7 +85,7 @@ export default function DashboardHeader() {
                     className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-violet-50 hover:text-violet-700"
                   >
                     <UserCircle className="w-4 h-4" />
-                    {locale === 'fr' ? 'Mon profil' : 'My profile'}
+                    {t('profile')}
                   </Link>
 
                   <Link
@@ -93,7 +94,7 @@ export default function DashboardHeader() {
                     className="flex items-center gap-2 w-full px-4 py-2 text-sm text-amber-600 hover:bg-amber-50"
                   >
                     <Crown className="w-4 h-4" />
-                    {locale === 'fr' ? 'Passer Premium ✨' : 'Go Premium ✨'}
+                    {t('goPremium')}
                   </Link>
 
                   <div className="border-t border-gray-100 my-1" />
@@ -104,7 +105,7 @@ export default function DashboardHeader() {
                       className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600"
                     >
                       <LogOut className="w-4 h-4" />
-                      {locale === 'fr' ? 'Se déconnecter' : 'Sign out'}
+                      {t('signOut')}
                     </button>
                   </SignOutButton>
                 </div>

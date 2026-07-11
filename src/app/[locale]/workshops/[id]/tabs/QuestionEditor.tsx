@@ -3,6 +3,7 @@
 import { palette, ink, withAlpha } from '@/lib/theme';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -183,10 +184,11 @@ function DifficultyDurationFields({
   onDifficultyChange: (v: { enabled: boolean; value: number }) => void;
   onDurationChange: (v: { enabled: boolean; minutes: number; seconds: number }) => void;
 }) {
+  const t = useTranslations('examen');
   return (
     <>
       <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <FieldLabel hint="off par défaut — annote la difficulté de la question">Difficulté</FieldLabel>
+        <FieldLabel hint={t('editor.difficultyHint')}>{t('editor.difficulty')}</FieldLabel>
         <MiniSwitch value={difficulty.enabled} onChange={(v) => onDifficultyChange({ ...difficulty, enabled: v })} />
       </div>
       {difficulty.enabled && (
@@ -196,7 +198,7 @@ function DifficultyDurationFields({
         </div>
       )}
       <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <FieldLabel hint="off par défaut — durée allouée, uniquement pour les examens projetés">Durée</FieldLabel>
+        <FieldLabel hint={t('editor.durationHint')}>{t('editor.duration')}</FieldLabel>
         <MiniSwitch value={duration.enabled} onChange={(v) => onDurationChange({ ...duration, enabled: v })} />
       </div>
       {duration.enabled && (
@@ -204,11 +206,11 @@ function DifficultyDurationFields({
           <div style={{ width: 90 }}>
             <input type="number" min={0} value={duration.minutes} onChange={(e) => onDurationChange({ ...duration, minutes: Math.max(0, Number(e.target.value) || 0) })} style={{ width: '100%', fontSize: 13, color: palette.ink, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
           </div>
-          <span style={{ fontSize: 12.5, color: palette.inkSoft }}>minutes</span>
+          <span style={{ fontSize: 12.5, color: palette.inkSoft }}>{t('editor.minutes')}</span>
           <div style={{ width: 90 }}>
             <input type="number" min={0} max={59} value={duration.seconds} onChange={(e) => onDurationChange({ ...duration, seconds: Math.min(59, Math.max(0, Number(e.target.value) || 0)) })} style={{ width: '100%', fontSize: 13, color: palette.ink, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
           </div>
-          <span style={{ fontSize: 12.5, color: palette.inkSoft }}>secondes</span>
+          <span style={{ fontSize: 12.5, color: palette.inkSoft }}>{t('editor.seconds')}</span>
         </div>
       )}
     </>
@@ -237,6 +239,7 @@ function ChoiceListEditor({
   correctChoices: number[];
   onChange: (choices: string[], correctChoices: number[]) => void;
 }) {
+  const t = useTranslations('examen');
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndicator, setDropIndicator] = useState<number | null>(null);
 
@@ -297,7 +300,7 @@ function ChoiceListEditor({
     <div>
       {choices.length === 0 && (
         <div style={{ fontFamily: "'Caveat', cursive", fontSize: 15, color: palette.amber, padding: '4px 0 10px' }}>
-          « ajoute {showPairs ? 'des paires' : 'des options de réponse'} »
+          {t('choices.prompt', { what: showPairs ? t('choices.promptPairs') : t('choices.promptOptions') })}
         </div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -337,7 +340,7 @@ function ChoiceListEditor({
               draggable
               onDragStart={() => setDragIndex(i)}
               onDragEnd={() => { setDragIndex(null); setDropIndicator(null); }}
-              title="glisser pour réorganiser"
+              title={t('choices.dragReorder')}
               style={{ cursor: 'grab', color: '#c8c2b6', fontSize: 13, lineHeight: 1, padding: '0 2px', flexShrink: 0, userSelect: 'none' as const }}
             >
               ⠿
@@ -348,7 +351,7 @@ function ChoiceListEditor({
             {showCorrectMarker && (
               <button
                 onClick={() => toggleCorrect(i)}
-                title={responseType === 'qcs' ? 'bonne réponse (unique)' : 'bonne réponse'}
+                title={responseType === 'qcs' ? t('choices.correctUnique') : t('choices.correct')}
                 style={{
                   width: 20, height: 20, borderRadius: responseType === 'qcs' ? '50%' : 6, flexShrink: 0,
                   border: correctChoices.includes(i) ? 'none' : `1.5px solid ${ink(0.18)}`,
@@ -363,7 +366,7 @@ function ChoiceListEditor({
             {showFreeTextMarker && (
               <button
                 onClick={() => toggleCorrect(i)}
-                title="réponse libre — l'étudiant écrit ce qu'il veut"
+                title={t('choices.freeTextMarker')}
                 style={{
                   width: 20, height: 20, borderRadius: 6, flexShrink: 0,
                   border: correctChoices.includes(i) ? 'none' : `1.5px solid ${ink(0.18)}`,
@@ -378,9 +381,9 @@ function ChoiceListEditor({
             )}
             {showPairs ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
-                <TextField value={c.split(' :: ')[0] ?? ''} onChange={(v) => updateChoice(i, `${v} :: ${c.split(' :: ')[1] ?? ''}`)} placeholder={`élément ${i + 1}`} />
+                <TextField value={c.split(' :: ')[0] ?? ''} onChange={(v) => updateChoice(i, `${v} :: ${c.split(' :: ')[1] ?? ''}`)} placeholder={t('choices.pairLeft', { n: i + 1 })} />
                 <span style={{ fontSize: 12, color: palette.inkFaint }}>→</span>
-                <TextField value={c.split(' :: ')[1] ?? ''} onChange={(v) => updateChoice(i, `${c.split(' :: ')[0] ?? ''} :: ${v}`)} placeholder="correspondance" />
+                <TextField value={c.split(' :: ')[1] ?? ''} onChange={(v) => updateChoice(i, `${c.split(' :: ')[0] ?? ''} :: ${v}`)} placeholder={t('choices.pairRight')} />
               </div>
             ) : showFreeTextMarker && correctChoices.includes(i) ? (
               <div style={{
@@ -388,11 +391,11 @@ function ChoiceListEditor({
                 borderRadius: 9, padding: '9px 12px', background: ink(0.03),
                 fontFamily: 'inherit', boxSizing: 'border-box' as const, fontStyle: 'italic',
               }}>
-                saisie libre
+                {t('choices.freeInput')}
               </div>
             ) : (
               <div style={{ flex: 1 }}>
-                <TextField value={c} onChange={(v) => updateChoice(i, v)} placeholder={`option ${i + 1}`} />
+                <TextField value={c} onChange={(v) => updateChoice(i, v)} placeholder={t('choices.option', { n: i + 1 })} />
               </div>
             )}
             {showOrder && (
@@ -420,10 +423,10 @@ function ChoiceListEditor({
         })()}
       </div>
       <button onClick={addChoice} style={{ marginTop: 10, fontSize: 12, padding: '7px 12px', borderRadius: 8, border: `1px dashed ${ink(0.20)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>
-        + {showPairs ? 'paire' : 'option'}
+        {showPairs ? t('choices.addPair') : t('choices.addOption')}
       </button>
       {(responseType === 'qcs' || responseType === 'qcm') && choices.length > 0 && correctChoices.length === 0 && (
-        <div style={{ fontSize: 11.5, color: palette.danger, marginTop: 8 }}>indique au moins une bonne réponse en cochant l&apos;option correspondante</div>
+        <div style={{ fontSize: 11.5, color: palette.danger, marginTop: 8 }}>{t('choices.needCorrect')}</div>
       )}
     </div>
   );
@@ -446,6 +449,7 @@ export default function QuestionEditor({
   onSave: (q: Question) => void;
   onCancel: () => void;
 }) {
+  const t = useTranslations('examen');
   const [draft, setDraft] = useState<Question>(question);
   const [newPoolName, setNewPoolName] = useState('');
   const [creatingPool, setCreatingPool] = useState(false);
@@ -495,8 +499,8 @@ export default function QuestionEditor({
         {/* header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: `1px solid ${ink(0.08)}`, flexShrink: 0 }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 500, color: palette.ink }}>{isNew ? 'Nouvelle question' : 'Modifier la question'}</div>
-            <div style={{ fontSize: 12, color: palette.inkSoft }}>générée manuellement ou retravaillée avec l&apos;IA</div>
+            <div style={{ fontSize: 16, fontWeight: 500, color: palette.ink }}>{isNew ? t('editor.new') : t('editor.edit')}</div>
+            <div style={{ fontSize: 12, color: palette.inkSoft }}>{t('editor.subtitle')}</div>
           </div>
           <button onClick={onCancel} style={{ width: 30, height: 30, borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.7), color: palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontFamily: 'inherit' }}>×</button>
         </div>
@@ -505,41 +509,41 @@ export default function QuestionEditor({
         <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px 24px' }}>
           {/* titre */}
           <div style={{ marginBottom: 18 }}>
-            <FieldLabel hint="optionnel — s'il est rempli, remplace l'énoncé comme titre affiché dans la banque de questions">Titre</FieldLabel>
-            <TextField value={draft.title} onChange={(v) => patch({ title: v })} placeholder="Titre court (optionnel)…" />
+            <FieldLabel hint={t('editor.titleHint')}>{t('editor.titleLabel')}</FieldLabel>
+            <TextField value={draft.title} onChange={(v) => patch({ title: v })} placeholder={t('editor.titlePlaceholder')} />
           </div>
 
           {/* type de question */}
-          <FieldLabel hint="Textuel par défaut · Visuel (image, graphique) et Audio disponibles">Type de question</FieldLabel>
-          <Segmented value={draft.questionType} onChange={(v) => patch({ questionType: v })} options={(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((k) => ({ value: k, label: QUESTION_TYPE_LABELS[k], soon: QUESTION_TYPE_V2.includes(k) }))} />
+          <FieldLabel hint={t('editor.qTypeHint')}>{t('editor.qTypeLabel')}</FieldLabel>
+          <Segmented value={draft.questionType} onChange={(v) => patch({ questionType: v })} options={(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((k) => ({ value: k, label: t(`questionType.${k}`), soon: QUESTION_TYPE_V2.includes(k) }))} />
 
           {draft.questionType === 'visuel' && (
             <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 10, border: `1px dashed ${ink(0.18)}`, background: withAlpha(palette.paper, 0.6), fontSize: 12, color: palette.inkSoft }}>
-              <div style={{ marginBottom: 6 }}>📎 joindre une image ou un graphique</div>
+              <div style={{ marginBottom: 6 }}>{t('editor.visualAttach')}</div>
               <button disabled style={{ fontSize: 11.5, padding: '6px 11px', borderRadius: 7, border: `1px solid ${ink(0.10)}`, background: ink(0.04), color: palette.inkFaint, cursor: 'not-allowed', fontFamily: 'inherit' }}>
-                éditer l&apos;image — outil basique à venir
+                {t('editor.visualEdit')}
               </button>
             </div>
           )}
           {draft.questionType === 'audio' && (
             <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 10, border: `1px dashed ${ink(0.18)}`, background: withAlpha(palette.paper, 0.6), fontSize: 12, color: palette.inkSoft }}>
-              🎙️ enregistrement / import audio — outil à venir
+              {t('editor.audioComing')}
             </div>
           )}
 
           {/* contenu */}
           <div style={{ marginTop: 18 }}>
-            <FieldLabel hint={draft.responseType === 'fill_blank' ? 'utilise « ___ » pour marquer chaque trou à compléter' : undefined}>Énoncé de la question</FieldLabel>
-            <TextField value={draft.content} onChange={(v) => patch({ content: v })} placeholder="Écris ou colle l'énoncé de la question…" multiline rows={4} />
+            <FieldLabel hint={draft.responseType === 'fill_blank' ? t('editor.contentHintFill') : undefined}>{t('editor.contentLabel')}</FieldLabel>
+            <TextField value={draft.content} onChange={(v) => patch({ content: v })} placeholder={t('editor.contentPlaceholder')} multiline rows={4} />
           </div>
 
           {/* type de réponse */}
           <div style={{ marginTop: 18 }}>
-            <FieldLabel hint="Sans réponse par défaut">Type de réponse</FieldLabel>
+            <FieldLabel hint={t('editor.rTypeHint')}>{t('editor.rTypeLabel')}</FieldLabel>
             <Segmented
               value={draft.responseType}
               onChange={(v) => patch({ responseType: v, choices: CHOICE_BASED.includes(v) ? (draft.choices.length ? draft.choices : ['', '']) : draft.choices, correctChoices: [] })}
-              options={RESPONSE_TYPE_ORDER.map((k) => ({ value: k, label: RESPONSE_TYPE_LABELS[k], soon: RESPONSE_TYPE_V2.includes(k) }))}
+              options={RESPONSE_TYPE_ORDER.map((k) => ({ value: k, label: t(`responseType.${k}`), soon: RESPONSE_TYPE_V2.includes(k) }))}
             />
           </div>
 
@@ -547,18 +551,18 @@ export default function QuestionEditor({
           {isChoiceBased && (
             <div style={{ marginTop: 14 }}>
               <FieldLabel hint={
-                draft.responseType === 'qcs' ? 'une seule bonne réponse' :
-                draft.responseType === 'qcm' ? 'une ou plusieurs bonnes réponses' :
+                draft.responseType === 'qcs' ? t('editor.hintQcs') :
+                draft.responseType === 'qcm' ? t('editor.hintQcm') :
                 draft.responseType === 'sondage' ? (
                   <>
-                    sondage sans correction · option « réponse libre » disponible
-                    {draft.choices.length > 0 && <><br />active l&apos;icône ✎ sur une option pour permettre une réponse libre</>}
+                    {t('editor.hintSurveyA')}
+                    {draft.choices.length > 0 && <><br />{t('editor.hintSurveyB')}</>}
                   </>
                 ) :
-                draft.responseType === 'matching' ? 'associe chaque élément à sa correspondance' :
-                "l'ordre de la liste ci-dessous est l'ordre correct"
+                draft.responseType === 'matching' ? t('editor.hintMatching') :
+                t('editor.hintOrder')
               }>
-                {draft.responseType === 'matching' ? 'Paires à associer' : draft.responseType === 'ordre' ? 'Éléments à ordonner' : 'Options de réponse'}
+                {draft.responseType === 'matching' ? t('editor.choicesPairs') : draft.responseType === 'ordre' ? t('editor.choicesOrder') : t('editor.choicesOptions')}
               </FieldLabel>
               <ChoiceListEditor
                 responseType={draft.responseType}
@@ -568,7 +572,7 @@ export default function QuestionEditor({
               />
               {(draft.responseType === 'qcs' || draft.responseType === 'qcm' || draft.responseType === 'sondage') && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
-                  <FieldLabel hint="mélange l'ordre des options pour chaque étudiant">Ordre aléatoire</FieldLabel>
+                  <FieldLabel hint={t('editor.shuffleHint')}>{t('editor.shuffleLabel')}</FieldLabel>
                   <MiniSwitch value={draft.shuffleChoices} onChange={(v) => patch({ shuffleChoices: v })} />
                 </div>
               )}
@@ -580,24 +584,24 @@ export default function QuestionEditor({
               {!(draft.responseType === 'textuelle' && draft.answerOptional) && (
                 <>
                   <FieldLabel hint={
-                    draft.responseType === 'fill_blank' ? 'réponses attendues pour chaque trou, séparées par une virgule, dans l\'ordre' :
-                    draft.responseType === 'dessin' ? 'description ou image de référence pour la correction (outil dessin à venir)' :
-                    draft.responseType === 'audio' ? 'transcription ou éléments attendus dans la réponse audio' :
-                    'utilisée pour la correction assistée par IA'
+                    draft.responseType === 'fill_blank' ? t('editor.answerHintFill') :
+                    draft.responseType === 'dessin' ? t('editor.answerHintDessin') :
+                    draft.responseType === 'audio' ? t('editor.answerHintAudio') :
+                    t('editor.answerHintDefault')
                   }>
-                    {draft.responseType === 'fill_blank' ? 'Réponses attendues' : 'Réponse associée'}
+                    {draft.responseType === 'fill_blank' ? t('editor.answerLabelFill') : t('editor.answerLabelDefault')}
                   </FieldLabel>
-                  <TextField value={draft.answer} onChange={(v) => patch({ answer: v })} placeholder="Réponse de référence…" multiline rows={3} />
+                  <TextField value={draft.answer} onChange={(v) => patch({ answer: v })} placeholder={t('editor.answerPlaceholder')} multiline rows={3} />
                 </>
               )}
               {draft.responseType === 'textuelle' && (
                 <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <FieldLabel hint="aucune réponse de référence n'est attendue (ex. dissertation)">Réponse libre</FieldLabel>
+                    <FieldLabel hint={t('editor.freeAnswerHint')}>{t('editor.freeAnswerLabel')}</FieldLabel>
                     <MiniSwitch value={draft.answerOptional} onChange={(v) => patch({ answerOptional: v })} />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <FieldLabel hint="lignes affichées dans l'aperçu">Nombre de lignes</FieldLabel>
+                    <FieldLabel hint={t('editor.linesHint')}>{t('editor.linesLabel')}</FieldLabel>
                     <input
                       type="number"
                       min={1}
@@ -611,7 +615,7 @@ export default function QuestionEditor({
             </div>
           )}
           {draft.responseType === 'sans_reponse' && (
-            <div style={{ marginTop: 14, fontSize: 12, color: palette.inkFaint }}>cette question n&apos;a pas de réponse associée — aucune correction ne sera proposée.</div>
+            <div style={{ marginTop: 14, fontSize: 12, color: palette.inkFaint }}>{t('editor.noAnswerNote')}</div>
           )}
 
           <DifficultyDurationFields
@@ -622,9 +626,9 @@ export default function QuestionEditor({
           />
 
           {/* parties supplémentaires */}
-          <SectionDivider title="Parties supplémentaires" />
+          <SectionDivider title={t('editor.partsDivider')} />
           <div style={{ fontSize: 12, color: palette.inkSoft, marginBottom: 10 }}>
-            Une question peut avoir plusieurs parties indépendantes (énoncés et types de réponse distincts).
+            {t('editor.partsIntro')}
           </div>
           {draft.parts.map((part, idx) => {
             const partChoiceBased = CHOICE_BASED.includes(part.responseType);
@@ -632,22 +636,22 @@ export default function QuestionEditor({
             return (
               <div key={idx} style={{ marginBottom: 14, padding: '14px 16px', borderRadius: 12, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.55) }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 500, color: palette.inkMuted }}>Partie {idx + 2}</span>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: palette.inkMuted }}>{t('editor.part', { n: idx + 2 })}</span>
                   <button onClick={() => removePart(idx)} style={{ border: 'none', background: 'none', color: palette.danger, cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 2px' }}>×</button>
                 </div>
-                <FieldLabel>Énoncé</FieldLabel>
-                <TextField value={part.content} onChange={(v) => patchPart(idx, { content: v })} placeholder="Énoncé de cette partie…" multiline rows={3} />
+                <FieldLabel>{t('editor.partStatement')}</FieldLabel>
+                <TextField value={part.content} onChange={(v) => patchPart(idx, { content: v })} placeholder={t('editor.partStatementPlaceholder')} multiline rows={3} />
                 <div style={{ marginTop: 12 }}>
-                  <FieldLabel>Type de réponse</FieldLabel>
+                  <FieldLabel>{t('editor.rTypeLabel')}</FieldLabel>
                   <Segmented
                     value={part.responseType}
                     onChange={(v) => patchPart(idx, { responseType: v, choices: CHOICE_BASED.includes(v) ? (part.choices.length ? part.choices : ['', '']) : part.choices, correctChoices: [] })}
-                    options={RESPONSE_TYPE_ORDER.map((k) => ({ value: k, label: RESPONSE_TYPE_LABELS[k], soon: RESPONSE_TYPE_V2.includes(k) }))}
+                    options={RESPONSE_TYPE_ORDER.map((k) => ({ value: k, label: t(`responseType.${k}`), soon: RESPONSE_TYPE_V2.includes(k) }))}
                   />
                 </div>
                 {partChoiceBased && (
                   <div style={{ marginTop: 12 }}>
-                    <FieldLabel>{part.responseType === 'matching' ? 'Paires à associer' : part.responseType === 'ordre' ? 'Éléments à ordonner' : 'Options de réponse'}</FieldLabel>
+                    <FieldLabel>{part.responseType === 'matching' ? t('editor.choicesPairs') : part.responseType === 'ordre' ? t('editor.choicesOrder') : t('editor.choicesOptions')}</FieldLabel>
                     <ChoiceListEditor responseType={part.responseType} choices={part.choices} correctChoices={part.correctChoices} onChange={(choices, correctChoices) => patchPart(idx, { choices, correctChoices })} />
                   </div>
                 )}
@@ -655,18 +659,18 @@ export default function QuestionEditor({
                   <div style={{ marginTop: 12 }}>
                     {!(part.responseType === 'textuelle' && part.answerOptional) && (
                       <>
-                        <FieldLabel>Réponse associée</FieldLabel>
-                        <TextField value={part.answer} onChange={(v) => patchPart(idx, { answer: v })} placeholder="Réponse de référence…" multiline rows={2} />
+                        <FieldLabel>{t('editor.answerLabelDefault')}</FieldLabel>
+                        <TextField value={part.answer} onChange={(v) => patchPart(idx, { answer: v })} placeholder={t('editor.answerPlaceholder')} multiline rows={2} />
                       </>
                     )}
                     {part.responseType === 'textuelle' && (
                       <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <FieldLabel hint="aucune réponse de référence n'est attendue">Réponse libre</FieldLabel>
+                          <FieldLabel hint={t('editor.freeAnswerHintShort')}>{t('editor.freeAnswerLabel')}</FieldLabel>
                           <MiniSwitch value={part.answerOptional} onChange={(v) => patchPart(idx, { answerOptional: v })} />
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                          <FieldLabel hint="lignes dans l'aperçu">Nombre de lignes</FieldLabel>
+                          <FieldLabel hint={t('editor.linesHintShort')}>{t('editor.linesLabel')}</FieldLabel>
                           <input type="number" min={1} value={part.textLines} onChange={(e) => patchPart(idx, { textLines: Math.max(1, Number(e.target.value) || 1) })} style={{ width: 70, flexShrink: 0, fontSize: 13, color: palette.ink, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
                         </div>
                       </div>
@@ -686,15 +690,15 @@ export default function QuestionEditor({
             onClick={() => patch({ parts: [...draft.parts, emptyPart()] })}
             style={{ width: '100%', padding: '9px 14px', borderRadius: 10, border: `1px dashed ${ink(0.18)}`, background: 'transparent', color: palette.inkSoft, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 4 }}
           >
-            + ajouter une partie
+            {t('editor.addPart')}
           </button>
 
           {/* options avancées */}
-          <SectionDivider title="Options par question" />
+          <SectionDivider title={t('editor.optionsDivider')} />
 
           {/* libellés */}
           <div>
-            <FieldLabel hint="off par défaut — regroupe les questions pour générer des examens">Libellés</FieldLabel>
+            <FieldLabel hint={t('editor.labelsHint')}>{t('editor.labelsLabel')}</FieldLabel>
             {draft.pools.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
                 {draft.pools.map((pid) => {
@@ -713,10 +717,10 @@ export default function QuestionEditor({
             {creatingPool ? (
               <div style={{ display: 'flex', gap: 6 }}>
                 <div style={{ flex: 1 }}>
-                  <TextField value={newPoolName} onChange={setNewPoolName} placeholder="nom du libellé…" />
+                  <TextField value={newPoolName} onChange={setNewPoolName} placeholder={t('editor.labelNamePlaceholder')} />
                 </div>
-                <button onClick={addPool} style={{ fontSize: 12, padding: '0 14px', borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.7), color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>ajouter</button>
-                <button onClick={() => { setCreatingPool(false); setNewPoolName(''); }} style={{ fontSize: 12, padding: '0 14px', borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>annuler</button>
+                <button onClick={addPool} style={{ fontSize: 12, padding: '0 14px', borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.7), color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>{t('add')}</button>
+                <button onClick={() => { setCreatingPool(false); setNewPoolName(''); }} style={{ fontSize: 12, padding: '0 14px', borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>{t('cancelLower')}</button>
               </div>
             ) : (
               <select
@@ -727,11 +731,11 @@ export default function QuestionEditor({
                 }}
                 style={{ width: '100%', fontSize: 13, color: palette.inkMuted, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', cursor: 'pointer' }}
               >
-                <option value="">+ ajouter un libellé…</option>
+                <option value="">{t('editor.addLabelOption')}</option>
                 {pools.filter((p) => !draft.pools.includes(p.id)).map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
-                <option value="__new__">+ nouveau libellé…</option>
+                <option value="__new__">{t('editor.newLabelOption')}</option>
               </select>
             )}
           </div>
@@ -741,14 +745,14 @@ export default function QuestionEditor({
         {/* footer */}
         <div style={{ display: 'flex', gap: 10, padding: '14px 22px', borderTop: `1px solid ${ink(0.08)}`, flexShrink: 0, background: palette.cream }}>
           <button onClick={onCancel} style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: `1px solid ${ink(0.14)}`, background: 'transparent', color: palette.inkMuted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-            Annuler
+            {t('cancel')}
           </button>
           <button
             disabled={!canSave}
             onClick={() => onSave(draft)}
             style={{ flex: 2, padding: '11px 14px', borderRadius: 10, border: 'none', background: canSave ? palette.ink : ink(0.12), color: canSave ? palette.paper : palette.inkFaint, fontSize: 13, fontWeight: 500, cursor: canSave ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}
           >
-            {isNew ? 'Ajouter la question' : 'Enregistrer les modifications'}
+            {isNew ? t('editor.addQuestion') : t('editor.saveChanges')}
           </button>
         </div>
       </div>

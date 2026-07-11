@@ -56,31 +56,25 @@ function HomePageClient({ locale }: { locale: string }) {
   const testimonials = [
     {
       name: 'Marie Laurent',
-      role: locale === 'fr' ? 'Formatrice RH indépendante' : 'Independent HR Trainer',
+      role: t('testimonials.marie.role'),
       avatar: 'ML',
-      content: locale === 'fr'
-        ? "J'ai uploadé mon cours Excel de 80 slides. En 10 minutes, j'avais un parcours complet avec quiz et badges. Mes apprenants sont 3x plus engagés."
-        : "I uploaded my 80-slide Excel course. In 10 minutes, I had a complete path with quizzes and badges. My learners are 3x more engaged.",
+      content: t('testimonials.marie.content'),
       stars: 5,
       color: 'bg-violet-100 text-violet-700',
     },
     {
       name: 'Thomas Girard',
-      role: locale === 'fr' ? 'Responsable formation, PME 200p' : 'L&D Manager, 200-person SME',
+      role: t('testimonials.thomas.role'),
       avatar: 'TG',
-      content: locale === 'fr'
-        ? "On a réduit le temps de formation onboarding de 3 jours à 1,5 jour. Les nouveaux arrivent mieux préparés, plus motivés. ROI évident."
-        : "We cut onboarding training time from 3 days to 1.5 days. New hires arrive better prepared and more motivated. Clear ROI.",
+      content: t('testimonials.thomas.content'),
       stars: 5,
       color: 'bg-orange-100 text-orange-700',
     },
     {
       name: 'Sophie Mercier',
-      role: locale === 'fr' ? 'Formatrice sécurité industrielle' : 'Industrial Safety Trainer',
+      role: t('testimonials.sophie.role'),
       avatar: 'SM',
-      content: locale === 'fr'
-        ? "La génération automatique des examens m'économise 4 heures par semaine. Et les résultats aux certifications ont progressé de 22%."
-        : "Auto-generating exams saves me 4 hours a week. And certification pass rates improved by 22%.",
+      content: t('testimonials.sophie.content'),
       stars: 5,
       color: 'bg-emerald-100 text-emerald-700',
     },

@@ -3,6 +3,7 @@
 import { palette } from '@/lib/theme';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Sprout, Check, Hammer, Maximize2, Move, Package, ArrowLeftRight, X, Sparkles, Blocks, Eraser, Droplets } from 'lucide-react';
 import {
   PAL,
@@ -40,11 +41,6 @@ import {
 
 const STORAGE_KEY = 'culture.garden.v2';
 const SURFACE_ORDER: TileKind[] = ['grass', 'path', 'tallgrass', 'earth', 'water', 'bridge'];
-const SPECIES_LABEL: Record<string, string> = { chene: 'Chêne', paulownia: 'Paulownia', pin: 'Pin', pommier: 'Pommier' };
-const KIND_LABEL: Record<string, string> = {
-  grass: 'Herbe', path: 'Chemin', tallgrass: 'Herbe haute', earth: 'Terre', water: 'Eau', bridge: 'Pont', house: 'Maison', mountain: 'Montagne', tree: 'Arbre',
-};
-const COS_LABEL: Record<Cosmetic, string> = { rock: 'Rocher', flowers: 'Fleurs', mushroom: 'Champignon', lantern: 'Lanterne', basket: 'Panier', stump: 'Souche', bush: 'Buisson' };
 
 function items(kind: AnyKind, n: number, plant: Plant | null = null): InventoryItem[] {
   return Array.from({ length: n }, () => ({ id: uid(), kind, plant }));
@@ -84,11 +80,10 @@ function loadState(): GardenState {
 
 // ===========================================================================
 
-type Props = { locale: string; firstName: string };
+type Props = { firstName: string };
 
-export default function GardenClient({ locale, firstName }: Props) {
-  const fr = locale === 'fr';
-  const t = (f: string, e: string) => (fr ? f : e);
+export default function GardenClient({ firstName }: Props) {
+  const t = useTranslations('garden');
 
   const [state, setState] = useState<GardenState>(defaultState);
   const [editMode, setEditMode] = useState(false);
@@ -499,13 +494,13 @@ export default function GardenClient({ locale, firstName }: Props) {
               onClick={() => { if (menuKind === 'struct' && menuStruct) setMovingStruct(menuStruct.id); else setMovingTree(menuFor); setMenuFor(null); }}
               className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[#3a4a2a] hover:bg-[#eef3e2]"
             >
-              <Move className="w-3.5 h-3.5" /> {t('Déplacer', 'Move')}
+              <Move className="w-3.5 h-3.5" /> {t('edit.move')}
             </button>
             <button
               onClick={() => { if (menuKind === 'struct' && menuStruct) storeStruct(menuStruct.id); else storeTree(menuFor); setMenuFor(null); }}
               className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[#3a4a2a] hover:bg-[#eef3e2]"
             >
-              <Package className="w-3.5 h-3.5" /> {t('Ranger', 'Store')}
+              <Package className="w-3.5 h-3.5" /> {t('edit.store')}
             </button>
           </div>
           <div className="w-2.5 h-2.5 bg-white border-r border-b border-black/5 rotate-45 mx-auto -mt-1.5" />
@@ -514,7 +509,7 @@ export default function GardenClient({ locale, firstName }: Props) {
 
       {/* title */}
       <div className="absolute top-5 left-1/2 -translate-x-1/2 pointer-events-none text-center">
-        <h1 className="text-[15px] font-medium text-[#2f4632] tracking-tight drop-shadow-sm">{t(`Le jardin de ${firstName}`, `${firstName}'s garden`)}</h1>
+        <h1 className="text-[15px] font-medium text-[#2f4632] tracking-tight drop-shadow-sm">{t('title', { name: firstName })}</h1>
       </div>
 
       <div className="absolute top-5 left-5 flex items-center gap-2 rounded-full bg-white/85 backdrop-blur px-3.5 py-2 shadow-sm border border-black/5">
@@ -529,9 +524,9 @@ export default function GardenClient({ locale, firstName }: Props) {
           className={`flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium shadow-sm border transition-colors ${editMode ? 'bg-green-brand text-white border-green-brand' : 'bg-white/85 backdrop-blur text-[#3a4a2a] border-black/5 hover:bg-white'}`}
         >
           {editMode ? <Check className="w-4 h-4" /> : <Hammer className="w-4 h-4" />}
-          {editMode ? t('Terminer', 'Done') : t('Modifier', 'Edit')}
+          {editMode ? t('edit.done') : t('edit.edit')}
         </button>
-        <button onClick={recenter} className="p-2.5 rounded-xl bg-white/85 backdrop-blur border border-black/5 shadow-sm hover:bg-white text-[#3a4a2a]" aria-label={t('Recentrer', 'Recenter')}>
+        <button onClick={recenter} className="p-2.5 rounded-xl bg-white/85 backdrop-blur border border-black/5 shadow-sm hover:bg-white text-[#3a4a2a]" aria-label={t('edit.recenter')}>
           <Maximize2 className="w-4 h-4" />
         </button>
       </div>
@@ -548,26 +543,25 @@ export default function GardenClient({ locale, firstName }: Props) {
           armedCos={armedCos}
           onArmItem={(sig) => { cancelEdit(); setArmedCos(null); setArmedSig((s) => (s === sig ? null : sig)); }}
           onArmCos={(cos) => { cancelEdit(); setArmedSig(null); setArmedCos((s) => (s === cos ? null : cos)); }}
-          t={t}
         />
       )}
 
       {editMode && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full bg-[#2f4632]/90 text-white text-xs px-4 py-2.5 shadow-lg">
           {moving ? (
-            <><ArrowLeftRight className="w-4 h-4" /> {movingStruct ? t('Choisis un emplacement pour la structure', 'Pick a spot for the structure') : t('Clique une case de terre pour reposer l’arbre', 'Click a land cell to drop the tree')}</>
+            <><ArrowLeftRight className="w-4 h-4" /> {movingStruct ? t('hint.placeStructure') : t('hint.moveTree')}</>
           ) : armedCos ? (
-            <><Sparkles className="w-4 h-4" /> {t('Clique une tuile pour la déco (coin bas-droite)', 'Click a tile for the decoration')}</>
+            <><Sparkles className="w-4 h-4" /> {t('hint.placeDeco')}</>
           ) : armedIsStruct ? (
-            <><Sprout className="w-4 h-4" /> {t('Choisis un emplacement pour la structure', 'Pick a spot for the structure')}</>
+            <><Sprout className="w-4 h-4" /> {t('hint.placeStructure')}</>
           ) : armedIsTree ? (
-            <><Sprout className="w-4 h-4" /> {t('Clique une case de terre pour planter l’arbre', 'Click a land cell to plant the tree')}</>
+            <><Sprout className="w-4 h-4" /> {t('hint.plantTree')}</>
           ) : armed?.kind === 'water' ? (
-            <><Droplets className="w-4 h-4" /> {t('Clique une case pour creuser de l’eau', 'Click a cell to carve water')}</>
+            <><Droplets className="w-4 h-4" /> {t('hint.digWater')}</>
           ) : armedIsSurface ? (
-            <><Sprout className="w-4 h-4" /> {t('Clique les cases à peindre', 'Click cells to paint')}</>
+            <><Sprout className="w-4 h-4" /> {t('hint.paint')}</>
           ) : (
-            <><Package className="w-4 h-4" /> {t('Choisis une surface ou un objet · clique un arbre/structure pour le déplacer', 'Pick a surface or object · click a tree/structure to move it')}</>
+            <><Package className="w-4 h-4" /> {t('hint.idle')}</>
           )}
         </div>
       )}
@@ -861,10 +855,11 @@ type ItemGroup = { sig: string; kind: AnyKind; plant: Plant | null; count: numbe
 // Carte d'item de l'inventaire — au niveau module (et non définie dans le render de Panel,
 // ce qui la recréait à chaque rendu et remontait les boutons). cf. audit §3.2.
 function ItemCard({ g, armed, onArm }: { g: ItemGroup; armed: boolean; onArm: (sig: string) => void }) {
+  const t = useTranslations('garden');
   return (
     <button
       onClick={() => onArm(g.sig)}
-      title={g.plant ? SPECIES_LABEL[g.plant.species] : KIND_LABEL[g.kind]}
+      title={g.plant ? t(`species.${g.plant.species}`) : t(`kind.${g.kind}`)}
       className={`relative aspect-square rounded-xl border flex items-center justify-center transition-colors ${armed ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
     >
       <ItemThumb kind={g.kind} plant={g.plant} />
@@ -874,7 +869,7 @@ function ItemCard({ g, armed, onArm }: { g: ItemGroup; armed: boolean; onArm: (s
 }
 
 function Panel({
-  open, onToggle, tab, setTab, surfaceGroups, objectGroups, armedSig, armedCos, onArmItem, onArmCos, t,
+  open, onToggle, tab, setTab, surfaceGroups, objectGroups, armedSig, armedCos, onArmItem, onArmCos,
 }: {
   open: boolean;
   onToggle: () => void;
@@ -886,28 +881,28 @@ function Panel({
   armedCos: Cosmetic | 'erase' | null;
   onArmItem: (sig: string) => void;
   onArmCos: (cos: Cosmetic | 'erase') => void;
-  t: (f: string, e: string) => string;
 }) {
+  const t = useTranslations('garden');
   return (
     <div className="absolute top-1/2 left-5 -translate-y-1/2 z-20 flex items-start gap-2">
       <div className={`overflow-hidden transition-all duration-300 ${open ? 'w-64 opacity-100' : 'w-0 opacity-0'}`} style={{ pointerEvents: open ? 'auto' : 'none' }}>
         <div className="rounded-2xl bg-white/92 backdrop-blur border border-black/5 shadow-lg p-3 w-64">
           <div className="flex items-center gap-1 mb-3 p-0.5 rounded-lg bg-[#f1f4ea]">
             <button onClick={() => setTab('blocks')} className={`flex-1 flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-medium ${tab === 'blocks' ? 'bg-white shadow-sm text-[#3a4a2a]' : 'text-[#5d6b4a]'}`}>
-              <Blocks className="w-3.5 h-3.5" /> {t('Blocs', 'Blocks')}
+              <Blocks className="w-3.5 h-3.5" /> {t('panel.blocks')}
             </button>
             <button onClick={() => setTab('deco')} className={`flex-1 flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-medium ${tab === 'deco' ? 'bg-white shadow-sm text-[#3a4a2a]' : 'text-[#5d6b4a]'}`}>
-              <Sparkles className="w-3.5 h-3.5" /> {t('Déco', 'Deco')}
+              <Sparkles className="w-3.5 h-3.5" /> {t('panel.deco')}
             </button>
           </div>
 
           {tab === 'blocks' ? (
             <div className="max-h-[56vh] overflow-y-auto overflow-x-hidden pr-2 pt-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5d6b4a]/70 mb-1.5 px-0.5">{t('Surfaces', 'Surfaces')}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5d6b4a]/70 mb-1.5 px-0.5">{t('panel.surfaces')}</p>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => onArmItem('grass')}
-                  title={t('Herbe (réinitialiser)', 'Grass (reset)')}
+                  title={t('panel.resetGrass')}
                   className={`relative aspect-square rounded-xl border flex items-center justify-center ${armedSig === 'grass' ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
                 >
                   <ItemThumb kind="grass" plant={null} />
@@ -915,23 +910,23 @@ function Panel({
                 </button>
                 {surfaceGroups.map((g) => <ItemCard key={g.sig} g={g} armed={armedSig === g.sig} onArm={onArmItem} />)}
               </div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5d6b4a]/70 mt-3 mb-1.5 px-0.5">{t('Objets', 'Objects')}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5d6b4a]/70 mt-3 mb-1.5 px-0.5">{t('panel.objects')}</p>
               <div className="grid grid-cols-3 gap-2">
                 {objectGroups.map((g) => <ItemCard key={g.sig} g={g} armed={armedSig === g.sig} onArm={onArmItem} />)}
-                {objectGroups.length === 0 && <p className="col-span-3 text-xs text-ink-faint py-2 text-center">{t('Aucun objet', 'No objects')}</p>}
+                {objectGroups.length === 0 && <p className="col-span-3 text-xs text-ink-faint py-2 text-center">{t('panel.noObjects')}</p>}
               </div>
             </div>
           ) : (
             <>
               <div className="flex items-center justify-between mb-2 px-1">
-                <span className="text-xs font-semibold text-[#3a4a2a]">{t('Décorations', 'Decorations')}</span>
+                <span className="text-xs font-semibold text-[#3a4a2a]">{t('panel.decorations')}</span>
                 <button onClick={() => onArmCos('erase')} className={`flex items-center gap-1 text-xs rounded-md px-1.5 py-0.5 ${armedCos === 'erase' ? 'bg-[#f0d6d6] text-[#b05555]' : 'text-[#5d6b4a] hover:bg-[#f1f4ea]'}`}>
-                  <Eraser className="w-3 h-3" /> {t('Gomme', 'Erase')}
+                  <Eraser className="w-3 h-3" /> {t('panel.erase')}
                 </button>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 {COSMETICS.map((cos) => (
-                  <button key={cos} onClick={() => onArmCos(cos)} title={COS_LABEL[cos]} className={`aspect-square rounded-xl border flex items-center justify-center ${armedCos === cos ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}>
+                  <button key={cos} onClick={() => onArmCos(cos)} title={t(`cosmetic.${cos}`)} className={`aspect-square rounded-xl border flex items-center justify-center ${armedCos === cos ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}>
                     <svg width="34" height="34" viewBox="-17 -22 34 30"><CosmeticGlyph cos={cos} /></svg>
                   </button>
                 ))}

@@ -12,5 +12,5 @@ export default async function GardenPage() {
   const firstName =
     user.firstName ?? user.emailAddresses[0]?.emailAddress.split('@')[0] ?? '';
 
-  return <GardenClient locale={locale} firstName={firstName} />;
+  return <GardenClient firstName={firstName} />;
 }

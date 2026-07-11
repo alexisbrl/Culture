@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     // Option 1: Send via Resend (uncomment when RESEND_API_KEY is set)
     // const resend = new Resend(process.env.RESEND_API_KEY);
     // await resend.emails.send({
-    //   from: 'Culture <noreply@evalia.app>',
+    //   from: 'Culture <noreply@culture.com>',
     //   to: 'votre@email.com',
     //   subject: `Nouveau message contact — ${name}`,
     //   html: `<p><b>De :</b> ${name} (${email})</p><p><b>Message :</b></p><p>${message}</p>`,

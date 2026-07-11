@@ -1,6 +1,6 @@
 'use client';
 
-import { useLocale } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { Upload, FileText, X, ChevronRight } from 'lucide-react';
 
@@ -12,24 +12,22 @@ const FILES = [
 
 export default function CreatePage() {
   const locale = useLocale();
-  const fr = locale === 'fr';
+  const t = useTranslations('createWorkshop');
 
   return (
     <div className="min-h-[calc(100vh-65px)] bg-cream font-sans">
       <div className="max-w-5xl mx-auto px-6 py-8">
         {/* breadcrumb + header */}
         <div className="text-[11px] text-ink-soft mb-1">
-          {fr ? 'jardin' : 'garden'} ›{' '}
-          <span className="text-ink">{fr ? 'nouvelle parcelle' : 'new plot'}</span>
+          {t('breadcrumb.garden')} ›{' '}
+          <span className="text-ink">{t('breadcrumb.newPlot')}</span>
         </div>
         <div className="mb-6">
           <h1 className="text-[27px] font-medium text-ink tracking-tight">
-            {fr ? 'plante une nouvelle matière.' : 'plant a new subject.'}
+            {t('title')}
           </h1>
           <p className="font-script text-[19px] text-amber mt-1">
-            {fr
-              ? '« dépose tes cours — l’IA fera pousser les briques toute seule. »'
-              : '“drop your courses — the AI grows the knowledge bricks for you.”'}
+            {t('subtitle')}
           </p>
         </div>
 
@@ -37,7 +35,7 @@ export default function CreatePage() {
           {/* MAIN — source */}
           <div>
             <div className="text-[10px] font-semibold tracking-[0.16em] uppercase text-ink-soft mb-2.5">
-              {fr ? '① source · le cœur de ton atelier' : '① source · the heart of your workshop'}
+              {t('source.kicker')}
             </div>
 
             <div className="rounded-[18px] border-2 border-dashed border-amber/45 bg-gradient-to-b from-[#e8d8a8]/20 to-cream/60 px-8 py-10 text-center mb-3.5">
@@ -45,29 +43,29 @@ export default function CreatePage() {
                 <Upload className="w-7 h-7 text-amber" />
               </div>
               <div className="text-lg text-ink font-medium">
-                {fr ? 'dépose tes fichiers ici' : 'drop your files here'}
+                {t('source.dropHere')}
               </div>
               <div className="font-script text-base text-amber mt-1">
-                {fr ? '« glisse-dépose, ou colle un lien Drive »' : '“drag & drop, or paste a Drive link”'}
+                {t('source.dropTagline')}
               </div>
               <button className="mt-4 px-5 py-2.5 rounded-[10px] bg-amber text-parchment text-[13.5px] font-medium shadow-[0_6px_16px_rgba(168,122,58,0.28)] hover:brightness-105 transition">
-                {fr ? 'parcourir mes fichiers' : 'browse my files'}
+                {t('source.browseFiles')}
               </button>
               <div className="mt-4 text-[11.5px] text-ink-soft">
-                {fr ? 'format V1 — ' : 'V1 format — '}
+                {t('source.formatPrefix')}
                 <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-ink/[0.06]">.pdf</span>
-                {fr ? ' · 25 Mo max / fichier' : ' · 25 MB max / file'}
+                {t('source.formatSuffix')}
                 <span className="mx-1.5 text-[#cbc6bb]">·</span>
                 <span className="text-ink-faint">
-                  {fr ? 'Word, PowerPoint, audio, vidéo arrivent en V2' : 'Word, PowerPoint, audio, video coming in V2'}
+                  {t('source.futureFormats')}
                 </span>
               </div>
             </div>
 
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-ink-soft">{FILES.length} {fr ? 'fichiers déposés' : 'files added'}</span>
+              <span className="text-xs text-ink-soft">{t('source.filesAdded', { count: FILES.length })}</span>
               <span className="text-[11.5px] text-ink-faint">
-                {fr ? 'l’IA extraira les briques après la création' : 'the AI will extract bricks after creation'}
+                {t('source.extractAfterCreation')}
               </span>
             </div>
             <div className="flex flex-col gap-2">
@@ -88,21 +86,21 @@ export default function CreatePage() {
           <div className="flex flex-col gap-3.5 lg:sticky lg:top-4">
             <div className="bg-white/85 border border-ink/[0.08] rounded-[14px] px-[18px] py-4">
               <div className="text-[10px] font-semibold tracking-[0.16em] uppercase text-ink-soft mb-3">
-                {fr ? '② identité' : '② identity'}
+                {t('identity.kicker')}
               </div>
               <div className="w-full h-[92px] rounded-[10px] overflow-hidden relative mb-3 bg-gradient-to-br from-[#cfd9c0] to-[#a8b896]">
                 <div className="absolute bottom-2 right-2 text-[10px] text-white bg-ink/50 px-2 py-[3px] rounded-md cursor-pointer">
-                  {fr ? 'changer la couverture' : 'change cover'}
+                  {t('identity.changeCover')}
                 </div>
               </div>
-              <div className="text-[10.5px] text-ink-soft mb-1">{fr ? 'nom' : 'name'}</div>
+              <div className="text-[10.5px] text-ink-soft mb-1">{t('identity.nameLabel')}</div>
               <input
-                placeholder={fr ? 'ex. Biologie cellulaire — L2' : 'e.g. Cell biology — L2'}
+                placeholder={t('identity.namePlaceholder')}
                 className="w-full px-3 py-2.5 border border-ink/[0.14] rounded-lg text-[13px] bg-white text-ink mb-3 outline-none focus:border-amber/50"
               />
-              <div className="text-[10.5px] text-ink-soft mb-1">{fr ? 'description courte' : 'short description'}</div>
+              <div className="text-[10.5px] text-ink-soft mb-1">{t('identity.descriptionLabel')}</div>
               <textarea
-                placeholder={fr ? 'une phrase pour situer la matière…' : 'one line to set the scene…'}
+                placeholder={t('identity.descriptionPlaceholder')}
                 className="w-full px-3 py-2.5 border border-ink/[0.14] rounded-lg text-[12.5px] bg-white text-ink h-14 resize-none leading-snug outline-none focus:border-amber/50"
               />
             </div>
@@ -111,10 +109,10 @@ export default function CreatePage() {
               href={`/${locale}/dashboard`}
               className="px-[18px] py-3.5 rounded-xl bg-green text-parchment text-center text-[14.5px] font-medium shadow-[0_8px_22px_rgba(79,107,64,0.30)] hover:brightness-105 transition inline-flex items-center justify-center gap-1.5"
             >
-              {fr ? 'créer l’atelier' : 'create the workshop'} <ChevronRight className="w-4 h-4" />
+              {t('createCta')} <ChevronRight className="w-4 h-4" />
             </Link>
             <div className="text-[11px] text-ink-faint text-center">
-              {fr ? 'l’IA extraira ensuite les briques · tu pourras tout ajuster' : 'the AI then extracts the bricks · you can adjust everything'}
+              {t('extractHint')}
             </div>
           </div>
         </div>
