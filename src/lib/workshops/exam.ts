@@ -191,9 +191,9 @@ export async function saveGeneratedExam(workshopId: string, exam: GeneratedExam)
   if (error) throw new Error(error.message);
 }
 
-export async function getExamDraft(workshopId: string): Promise<ExamDraft | null> {
+export async function getExamDraft(workshopId: string, userId: string): Promise<ExamDraft | null> {
   const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase.from('exam_draft').select('draft_ids, config, editing_id').eq('workshop_id', workshopId).maybeSingle();
+  const { data, error } = await supabase.from('exam_draft').select('draft_ids, config, editing_id').eq('workshop_id', workshopId).eq('user_id', userId).maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return null;
   return { draftIds: data.draft_ids ?? [], config: data.config as ExamConfig, editingId: data.editing_id ?? null };
@@ -205,14 +205,15 @@ export async function deleteGeneratedExam(workshopId: string, examId: string): P
   if (error) throw new Error(error.message);
 }
 
-export async function saveExamDraft(workshopId: string, draft: ExamDraft): Promise<void> {
+export async function saveExamDraft(workshopId: string, userId: string, draft: ExamDraft): Promise<void> {
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_draft').upsert({
     workshop_id: workshopId,
+    user_id: userId,
     draft_ids: draft.draftIds,
     config: draft.config,
     editing_id: draft.editingId,
     updated_at: new Date().toISOString(),
-  });
+  }, { onConflict: 'workshop_id,user_id' });
   if (error) throw new Error(error.message);
 }

@@ -77,8 +77,9 @@ export async function saveGeneratedExam(workshopId: string, exam: GeneratedExam)
 }
 
 export async function getExamDraft(workshopId: string): Promise<ExamDraft | null> {
-  if (!(await requireManager(workshopId))) return null;
-  return await examLib.getExamDraft(workshopId);
+  const ctx = await requireManager(workshopId);
+  if (!ctx) return null;
+  return await examLib.getExamDraft(workshopId, ctx.userId);
 }
 
 export async function deleteGeneratedExam(workshopId: string, examId: string): Promise<void> {
@@ -88,6 +89,6 @@ export async function deleteGeneratedExam(workshopId: string, examId: string): P
 }
 
 export async function saveExamDraft(workshopId: string, draft: ExamDraft): Promise<void> {
-  await assertManager(workshopId);
-  await examLib.saveExamDraft(workshopId, draft);
+  const ctx = await assertManager(workshopId);
+  await examLib.saveExamDraft(workshopId, ctx.userId, draft);
 }
