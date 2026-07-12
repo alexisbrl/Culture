@@ -62,6 +62,7 @@ export type Database = {
           draft_ids: Json
           editing_id: string | null
           updated_at: string
+          user_id: string
           workshop_id: string
         }
         Insert: {
@@ -69,6 +70,7 @@ export type Database = {
           draft_ids?: Json
           editing_id?: string | null
           updated_at?: string
+          user_id?: string
           workshop_id: string
         }
         Update: {
@@ -76,13 +78,14 @@ export type Database = {
           draft_ids?: Json
           editing_id?: string | null
           updated_at?: string
+          user_id?: string
           workshop_id?: string
         }
         Relationships: [
           {
             foreignKeyName: "exam_draft_workshop_id_fkey"
             columns: ["workshop_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "workshops"
             referencedColumns: ["id"]
           },
