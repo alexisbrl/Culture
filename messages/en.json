@@ -295,6 +295,7 @@
     "requestSent": "request sent",
     "requestPending": "waiting for a workshop manager to approve.",
     "requestToJoin": "request to join",
+    "requestJoinError": "something went wrong, please try again in a moment.",
     "sending": "sending…",
     "myRequestsTitle": "requests sent",
     "cancelRequest": "cancel request",

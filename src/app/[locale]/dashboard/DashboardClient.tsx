@@ -146,6 +146,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
   const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; description: string | null; cover_gradient: string | null; cover_image_url: string | null; cover_image_active: boolean; emoji: string | null; unique_tag: string | null; member_count: number }>>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
+  const [joinErrorId, setJoinErrorId] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [decliningId, setDecliningId] = useState<string | null>(null);
   const [cancelingRequestId, setCancelingRequestId] = useState<string | null>(null);
@@ -262,9 +263,13 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
 
   async function handleRequestJoin(workshopId: string) {
     setJoiningId(workshopId);
+    setJoinErrorId(null);
     const result = await requestToJoinWorkshop(workshopId);
     setJoiningId(null);
-    if (!result.success) return;
+    if (!result.success) {
+      setJoinErrorId(workshopId);
+      return;
+    }
     // Déjà membre (cas limite), ou ajout direct car une invitation était déjà en
     // attente pour cet atelier → on ouvre l'atelier. Sinon la demande est en
     // attente d'une validation : on reflète l'état « demande envoyée » dans la preview.
@@ -660,15 +665,20 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => handleRequestJoin(preview.id)}
-                      disabled={joiningId === preview.id}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-green text-parchment text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)] disabled:opacity-60"
-                    >
-                      {joiningId === preview.id
-                        ? <><Loader2 className="w-4 h-4 animate-spin" />{t('sending')}</>
-                        : <>{t('requestToJoin')} <ArrowRight className="w-4 h-4" /></>}
-                    </button>
+                    <div className="flex flex-col gap-2 items-start">
+                      <button
+                        onClick={() => handleRequestJoin(preview.id)}
+                        disabled={joiningId === preview.id}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-green text-parchment text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)] disabled:opacity-60"
+                      >
+                        {joiningId === preview.id
+                          ? <><Loader2 className="w-4 h-4 animate-spin" />{t('sending')}</>
+                          : <>{t('requestToJoin')} <ArrowRight className="w-4 h-4" /></>}
+                      </button>
+                      {joinErrorId === preview.id && (
+                        <span className="text-[12px] text-danger">{t('requestJoinError')}</span>
+                      )}
+                    </div>
                   )}
                 </div>
               </>
