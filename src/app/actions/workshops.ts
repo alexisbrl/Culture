@@ -429,6 +429,19 @@ export async function inviteMemberByTag(
   }
 }
 
+// Demandes d'adhésion envoyées par l'utilisateur courant, encore en attente
+// (pour son dashboard — miroir de getPendingInvitations).
+export async function getMyJoinRequests(): Promise<WorkshopCardData[]> {
+  try {
+    const profile = await syncUserProfile();
+    if (!profile) return [];
+    return await membersLib.listJoinRequestsForUser(profile.userId);
+  } catch (err) {
+    console.error('getMyJoinRequests error:', err);
+    return [];
+  }
+}
+
 // Invitations en attente reçues par l'utilisateur courant (pour son dashboard).
 // Réutilise le format WorkshopCardData pour s'afficher comme une carte d'atelier.
 export async function getPendingInvitations(): Promise<WorkshopCardData[]> {
