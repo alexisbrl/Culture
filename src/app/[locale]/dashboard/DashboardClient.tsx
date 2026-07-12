@@ -8,9 +8,9 @@ import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import {
   Plus, Search, Users, Crown, BookMarked, X, ArrowRight,
-  Trash2, RotateCcw, Maximize2, Loader2, Sprout, Mail, Check,
+  Trash2, RotateCcw, Maximize2, Loader2, Sprout, Mail, Check, Clock,
 } from 'lucide-react';
-import { searchWorkshops, requestToJoinWorkshop, restoreWorkshop, getWorkshopPreview, acceptInvitation, declineInvitation, WorkshopCardData } from '@/app/actions/workshops';
+import { searchWorkshops, requestToJoinWorkshop, restoreWorkshop, getWorkshopPreview, acceptInvitation, declineInvitation, cancelJoinRequest, WorkshopCardData } from '@/app/actions/workshops';
 import { coverStyleFor, emojiFor } from '@/lib/workshopCover';
 
 type TrashedWorkshop = { id: string; name: string; deleted_at: string; days_remaining: number };
@@ -22,6 +22,7 @@ type Props = {
   ownedWorkshops: WorkshopCardData[];
   joinedWorkshops: WorkshopCardData[];
   invitations: WorkshopCardData[];
+  myJoinRequests: WorkshopCardData[];
   trashedWorkshops: TrashedWorkshop[];
 };
 
@@ -98,6 +99,21 @@ function invitationToPreview(w: WorkshopCardData): PreviewData {
   };
 }
 
+function requestToPreview(w: WorkshopCardData): PreviewData {
+  return {
+    id: w.id,
+    name: w.name,
+    description: w.description,
+    coverStyle: coverStyleFor(w.id, w.cover_gradient, w.cover_image_url, w.cover_image_active),
+    emoji: emojiFor(w.id, w.emoji),
+    ownerName: w.owner_name,
+    memberCount: w.member_count,
+    isMember: false,
+    isPremium: w.is_premium,
+    hasRequested: true,
+  };
+}
+
 function moduleToPreview(m: typeof CULTURE_MODULES[number]): PreviewData {
   return {
     id: `culture-${m.id}`,
@@ -120,7 +136,7 @@ export default function DashboardClient(props: Props) {
   );
 }
 
-function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joinedWorkshops, invitations, trashedWorkshops }: Props) {
+function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joinedWorkshops, invitations, myJoinRequests, trashedWorkshops }: Props) {
   const t = useTranslations('dashboard');
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -132,6 +148,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [decliningId, setDecliningId] = useState<string | null>(null);
+  const [cancelingRequestId, setCancelingRequestId] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -166,7 +183,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
     };
   }, [searchOpen, preview, previewLoading]);
 
-  const hasWorkshops = ownedWorkshops.length > 0 || joinedWorkshops.length > 0 || invitations.length > 0;
+  const hasWorkshops = ownedWorkshops.length > 0 || joinedWorkshops.length > 0 || invitations.length > 0 || myJoinRequests.length > 0;
 
   // ── Deep link ?preview=ID ───────────────────────────────────────────────
   useEffect(() => {
@@ -182,6 +199,12 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
     const inviteMatch = invitations.find((w) => w.id === previewId);
     if (inviteMatch) {
       setPreview(invitationToPreview(inviteMatch));
+      return;
+    }
+
+    const requestMatch = myJoinRequests.find((w) => w.id === previewId);
+    if (requestMatch) {
+      setPreview(requestToPreview(requestMatch));
       return;
     }
 
@@ -265,6 +288,16 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
     setDecliningId(workshopId);
     const result = await declineInvitation(workshopId);
     setDecliningId(null);
+    if (result.success) {
+      setPreview(null);
+      router.refresh();
+    }
+  }
+
+  async function handleCancelMyRequest(workshopId: string) {
+    setCancelingRequestId(workshopId);
+    const result = await cancelJoinRequest(workshopId);
+    setCancelingRequestId(null);
     if (result.success) {
       setPreview(null);
       router.refresh();
@@ -474,6 +507,22 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                 </section>
               )}
 
+              {/* mes demandes d'adhésion envoyées, en attente */}
+              {myJoinRequests.length > 0 && (
+                <section>
+                  <div className="flex items-center gap-2 mb-3.5">
+                    <Clock className="w-4 h-4 text-green-soft" />
+                    <h2 className="text-[13px] font-medium text-ink">{t('myRequestsTitle')}</h2>
+                    <span className="text-[12px] text-ink-faint">({myJoinRequests.length})</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                    {myJoinRequests.map((w) => (
+                      <JoinRequestCard key={`req-${w.id}`} workshop={w} locale={locale} onOpen={() => setPreview(requestToPreview(w))} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
               {/* trash */}
               {trashedWorkshops.length > 0 && (
                 <section>
@@ -593,13 +642,22 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                       {t('enterWorkshop')} <ArrowRight className="w-4 h-4" />
                     </Link>
                   ) : preview.hasRequested ? (
-                    <div className="flex flex-col gap-1.5">
+                    <div className="flex flex-col gap-2.5 items-start">
                       <span className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-amber/[0.12] text-amber text-[13.5px] font-medium">
                         <Check className="w-4 h-4" />{t('requestSent')}
                       </span>
                       <span className="text-[12px] text-ink-soft">
                         {t('requestPending')}
                       </span>
+                      <button
+                        onClick={() => handleCancelMyRequest(preview.id)}
+                        disabled={cancelingRequestId === preview.id}
+                        className="inline-flex items-center gap-2 text-[12.5px] font-medium text-danger hover:opacity-80 disabled:opacity-60"
+                      >
+                        {cancelingRequestId === preview.id
+                          ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />{t('cancelingRequest')}</>
+                          : <>{t('cancelRequest')}</>}
+                      </button>
                     </div>
                   ) : (
                     <button
@@ -679,6 +737,34 @@ function InvitationCard({ workshop, locale, onOpen }: { workshop: WorkshopCardDa
         <div className="font-medium text-ink text-sm mb-1 line-clamp-2">{workshop.name}</div>
         <div className="text-[11.5px] text-amber font-medium truncate">
           {t('invitedBy')} {workshop.owner_name}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function JoinRequestCard({ workshop, locale, onOpen }: { workshop: WorkshopCardData; locale: string; onOpen: () => void }) {
+  const t = useTranslations('dashboard');
+  const coverStyle = coverStyleFor(workshop.id, workshop.cover_gradient, workshop.cover_image_url, workshop.cover_image_active);
+  return (
+    <button
+      onClick={onOpen}
+      className="group text-left rounded-2xl overflow-hidden bg-white/90 border-2 border-green-soft/45 shadow-[0_4px_16px_rgba(79,107,64,0.10)] hover:shadow-[0_10px_28px_rgba(79,107,64,0.16)] hover:-translate-y-0.5 transition flex flex-col"
+    >
+      <div className="relative h-[90px]" style={coverStyle}>
+        <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{emojiFor(workshop.id, workshop.emoji)}</div>
+        <span
+          className="absolute top-2.5 left-2.5 text-[10.5px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1"
+          style={{ background: withAlpha(palette.green, 0.9), color: palette.paper }}
+        >
+          <Clock className="w-2.5 h-2.5" /> {t('requestSent')}
+        </span>
+      </div>
+      <div className="px-3.5 pt-3 pb-3.5">
+        <div className="font-medium text-ink text-sm mb-1 line-clamp-2">{workshop.name}</div>
+        <div className="text-[11.5px] text-ink-soft flex items-center gap-1.5">
+          <Users className="w-3 h-3" />
+          {workshop.member_count} {t('members')}
         </div>
       </div>
     </button>

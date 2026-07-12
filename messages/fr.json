@@ -296,6 +296,9 @@
     "requestPending": "en attente de validation par un gestionnaire de l'atelier.",
     "requestToJoin": "demander à rejoindre",
     "sending": "envoi…",
+    "myRequestsTitle": "demandes envoyées",
+    "cancelRequest": "annuler la demande",
+    "cancelingRequest": "annulation…",
     "role": {
       "owner": "propriétaire",
       "manager": "gestionnaire",

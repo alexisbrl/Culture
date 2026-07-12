@@ -296,6 +296,9 @@
     "requestPending": "waiting for a workshop manager to approve.",
     "requestToJoin": "request to join",
     "sending": "sending…",
+    "myRequestsTitle": "requests sent",
+    "cancelRequest": "cancel request",
+    "cancelingRequest": "canceling…",
     "role": {
       "owner": "owner",
       "manager": "manager",

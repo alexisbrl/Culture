@@ -292,19 +292,13 @@ export async function inviteByTag(
   return { success: true, displayName: targetUser.display_name, userId: targetUser.user_id };
 }
 
-export async function listPendingInvitationsForUser(userId: string): Promise<WorkshopCardData[]> {
-  const supabase = getSupabaseServerClient();
-
-  const { data: invitations } = await supabase
-    .from('workshop_invitations')
-    .select('workshop_id, created_at')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-
-  if (!invitations || invitations.length === 0) return [];
-
-  const workshopIds = invitations.map((i) => i.workshop_id);
-
+// Construit les cartes WorkshopCardData pour une liste de workshopIds (déjà
+// triés par pertinence par l'appelant) — factorisé entre listPendingInvitationsForUser
+// et listJoinRequestsForUser, qui ne diffèrent que par la table d'origine des ids.
+async function buildWorkshopCards(
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  workshopIds: string[]
+): Promise<WorkshopCardData[]> {
   const { data: workshops } = await supabase
     .from('workshops')
     .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium')
@@ -330,7 +324,7 @@ export async function listPendingInvitationsForUser(userId: string): Promise<Wor
 
   const workshopMap = Object.fromEntries(workshops.map((w) => [w.id, w]));
 
-  // Conserver l'ordre des invitations (les plus récentes en premier).
+  // Conserver l'ordre d'entrée (déjà trié par le plus récent par l'appelant).
   return workshopIds
     .filter((id) => workshopMap[id])
     .map((id) => {
@@ -350,6 +344,37 @@ export async function listPendingInvitationsForUser(userId: string): Promise<Wor
         is_premium: w.is_premium,
       };
     });
+}
+
+export async function listPendingInvitationsForUser(userId: string): Promise<WorkshopCardData[]> {
+  const supabase = getSupabaseServerClient();
+
+  const { data: invitations } = await supabase
+    .from('workshop_invitations')
+    .select('workshop_id, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (!invitations || invitations.length === 0) return [];
+
+  return buildWorkshopCards(supabase, invitations.map((i) => i.workshop_id));
+}
+
+// Demandes d'adhésion envoyées par l'utilisateur courant, encore en attente
+// (pour l'affichage/annulation depuis son dashboard — miroir de
+// listPendingInvitationsForUser).
+export async function listJoinRequestsForUser(userId: string): Promise<WorkshopCardData[]> {
+  const supabase = getSupabaseServerClient();
+
+  const { data: requests } = await supabase
+    .from('workshop_join_requests')
+    .select('workshop_id, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (!requests || requests.length === 0) return [];
+
+  return buildWorkshopCards(supabase, requests.map((r) => r.workshop_id));
 }
 
 export async function acceptInvitation(
