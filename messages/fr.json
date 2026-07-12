@@ -295,6 +295,7 @@
     "requestSent": "demande envoyée",
     "requestPending": "en attente de validation par un gestionnaire de l'atelier.",
     "requestToJoin": "demander à rejoindre",
+    "requestJoinError": "une erreur est survenue, réessaie dans un instant.",
     "sending": "envoi…",
     "myRequestsTitle": "demandes envoyées",
     "cancelRequest": "annuler la demande",

@@ -1,29 +1,15 @@
 'use server';
 
 import { auth, clerkClient } from '@clerk/nextjs/server';
-import { getSupabaseServerClient } from '@/lib/supabase';
 import type { AvatarConfig } from '@/components/avatar/types';
 // Config de l'avatar « composer » (PNG : face/hair/brow/eyes/nose/mouth/top),
 // distincte du type legacy ci-dessus (numérique, AvatarSVG / Navbar visiteur).
 import type { AvatarConfig as AvatarParts } from '@/components/avatar/avatarConfig';
-import { generateTag } from '@/lib/tag';
+import { generateUniqueUserTag } from '@/lib/tag';
 
-// Vérifie dans Supabase qu'un tag n'est pas déjà utilisé
-async function isTagAvailable(tag: string): Promise<boolean> {
-  try {
-    const supabase = getSupabaseServerClient();
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('user_id')
-      .eq('unique_tag', tag)
-      .maybeSingle();
-    return !data; // disponible si aucun résultat
-  } catch {
-    return true; // en cas d'erreur Supabase, on laisse passer (collision très improbable)
-  }
-}
-
-// Garantit qu'un uniqueId existe pour l'utilisateur (appelé au premier chargement du profil)
+// Garantit qu'un uniqueId existe pour l'utilisateur (appelé au premier chargement du profil).
+// Fallback équivalent, pour les actions qui ne passent pas par /profile : `syncUserProfile`
+// (`@/app/actions/workshops.ts`).
 export async function ensureUniqueId(): Promise<string> {
   const { userId } = await auth();
   if (!userId) throw new Error('Non authentifié');
@@ -36,16 +22,7 @@ export async function ensureUniqueId(): Promise<string> {
     return user.publicMetadata.uniqueId as string;
   }
 
-  // Générer un ID véritablement unique (max 10 tentatives)
-  let uniqueId = '';
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const candidate = generateTag();
-    if (await isTagAvailable(candidate)) {
-      uniqueId = candidate;
-      break;
-    }
-  }
-  if (!uniqueId) throw new Error('Impossible de générer un ID unique après 10 tentatives');
+  const uniqueId = await generateUniqueUserTag();
 
   await client.users.updateUserMetadata(userId, {
     publicMetadata: {

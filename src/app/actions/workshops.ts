@@ -7,6 +7,7 @@ import * as membersLib from '@/lib/workshops/members';
 import * as coreLib from '@/lib/workshops/core';
 import * as lifecycleLib from '@/lib/workshops/lifecycle';
 import { revalidateWorkshop, revalidateDashboard } from '@/lib/revalidate';
+import { generateUniqueUserTag } from '@/lib/tag';
 
 // Logique métier (règles, requêtes Supabase) des fonctions ci-dessous : voir
 // @/lib/workshops/members, core et lifecycle (audit §5.2). Les wrappers
@@ -29,6 +30,14 @@ export type WorkshopRole = 'owner' | 'manager' | 'member';
 
 // ─── Sync user profile to Supabase ───────────────────────────────────────────
 
+// Assure qu'un profil Supabase à jour existe pour l'utilisateur courant, appelée
+// en tête de toute action dépendant d'un profil (créer un atelier, rejoindre,
+// invitations…). Si le compte vient d'être créé et n'a jamais visité /profile,
+// il n'a pas encore de `uniqueId` Clerk : on le génère ici (au lieu de renvoyer
+// null en silence comme avant) pour que le compte soit utilisable dès sa première
+// action, quel que soit le chemin emprunté. Coût négligeable : ce bloc ne
+// s'exécute qu'une seule fois dans la vie du compte, les appels suivants
+// trouvent déjà `uniqueId` posé et sautent directement dessus.
 export async function syncUserProfile(): Promise<{
   userId: string;
   uniqueTag: string;
@@ -40,8 +49,13 @@ export async function syncUserProfile(): Promise<{
   const client = await clerkClient();
   const user = await client.users.getUser(userId);
 
-  const uniqueTag = user.publicMetadata?.uniqueId as string | undefined;
-  if (!uniqueTag) return null;
+  let uniqueTag = user.publicMetadata?.uniqueId as string | undefined;
+  if (!uniqueTag) {
+    uniqueTag = await generateUniqueUserTag();
+    await client.users.updateUserMetadata(userId, {
+      publicMetadata: { ...user.publicMetadata, uniqueId: uniqueTag },
+    });
+  }
 
   const displayName =
     `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() ||
