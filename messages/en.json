@@ -726,6 +726,25 @@
       "demote": "demote",
       "exclude": "remove"
     },
+    "groups": {
+      "title": "Groups",
+      "desc": "Tag your members (class, catch-up group…) and filter the list by clicking a group.",
+      "viewTitle": "view this group",
+      "editTitle": "edit group",
+      "save": "save",
+      "cancel": "cancel",
+      "add": "add",
+      "delete": "delete",
+      "namePlaceholder": "group name…",
+      "newGroup": "new group",
+      "filterAll": "all members",
+      "inGroupCount": "In group ({count})",
+      "otherMembersCount": "Other members ({count})",
+      "emptyGroup": "no member in this group yet",
+      "allInGroup": "all members are already in this group",
+      "deleteConfirmTitle": "Delete this group?",
+      "deleteConfirmDesc": "It will be removed from all affected members. This action is irreversible."
+    },
     "files": {
       "title": "Files",
       "desc": "All files uploaded to this workshop, sorted by name.",
