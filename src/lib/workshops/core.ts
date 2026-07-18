@@ -147,7 +147,7 @@ export async function getWorkshop(workshopId: string, userId: string) {
   // 3. Récupérer les membres
   const { data: workshopMembers } = await supabase
     .from('workshop_members')
-    .select('id, user_id, role, joined_at')
+    .select('id, user_id, role, joined_at, groups')
     .eq('workshop_id', workshopId);
 
   // 4. Récupérer les profils des membres

@@ -1,7 +1,7 @@
 import { currentUser } from '@clerk/nextjs/server';
 import { redirect, notFound } from 'next/navigation';
 import { getLocale } from 'next-intl/server';
-import { getWorkshop } from '@/app/actions/workshops';
+import { getWorkshop, getMemberGroups } from '@/app/actions/workshops';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import SettingsClient from './SettingsClient';
 
@@ -23,6 +23,7 @@ export default async function SettingsPage({ params }: Props) {
   if (workshop.currentUserRole === 'member') redirect(`/${locale}/workshops/${id}`);
 
   const files = await getWorkshopFiles(id);
+  const groups = await getMemberGroups(id);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const members = (workshop.workshop_members as any[]).map((m) => ({
@@ -32,6 +33,7 @@ export default async function SettingsPage({ params }: Props) {
     joinedAt: m.joined_at,
     displayName: m.user_profiles?.display_name ?? 'Utilisateur',
     uniqueTag: m.user_profiles?.unique_tag ?? '',
+    groupIds: m.groups ?? [],
   }));
 
   return (
@@ -50,6 +52,7 @@ export default async function SettingsPage({ params }: Props) {
       isPremium={workshop.is_premium}
       showProgramme={workshop.show_programme}
       members={members}
+      groups={groups}
       files={files}
     />
   );

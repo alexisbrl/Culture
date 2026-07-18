@@ -608,6 +608,83 @@ export async function leaveWorkshop(
   }
 }
 
+// ─── Groupes de membres (gestionnaire uniquement) ──────────────────────────────
+//
+// Redéclaré en alias local (un fichier `'use server'` ne peut pas réexporter un
+// type importé, cf. @/lib/workshops/members pour le détail du piège Turbopack).
+export type MemberGroup = { id: string; name: string; color: string };
+
+export async function getMemberGroups(workshopId: string): Promise<MemberGroup[]> {
+  try {
+    if (!(await requireManager(workshopId))) return [];
+    return await membersLib.listMemberGroups(workshopId);
+  } catch (err) {
+    console.error('getMemberGroups error:', err);
+    return [];
+  }
+}
+
+export async function createMemberGroup(
+  workshopId: string,
+  group: MemberGroup
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+    await membersLib.createGroup(workshopId, group);
+    revalidateWorkshop();
+    return { success: true };
+  } catch (err) {
+    console.error('createMemberGroup error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
+export async function updateMemberGroup(
+  workshopId: string,
+  group: MemberGroup
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+    await membersLib.updateGroup(workshopId, group);
+    revalidateWorkshop();
+    return { success: true };
+  } catch (err) {
+    console.error('updateMemberGroup error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
+export async function deleteMemberGroup(
+  workshopId: string,
+  groupId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+    await membersLib.deleteGroup(workshopId, groupId);
+    revalidateWorkshop();
+    return { success: true };
+  } catch (err) {
+    console.error('deleteMemberGroup error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
+export async function setMemberGroups(
+  workshopId: string,
+  targetUserId: string,
+  groupIds: string[]
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+    const result = await membersLib.setMemberGroups(workshopId, targetUserId, groupIds);
+    if (result.success) revalidateWorkshop();
+    return result;
+  } catch (err) {
+    console.error('setMemberGroups error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
 // ─── Request deletion code (send email) ──────────────────────────────────────
 
 export async function requestDeletionCode(

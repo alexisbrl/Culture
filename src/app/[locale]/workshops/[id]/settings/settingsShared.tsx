@@ -16,6 +16,7 @@ export type Member = {
   joinedAt: string;
   displayName: string;
   uniqueTag: string;
+  groupIds: string[];
 };
 
 export type NavSection = 'general' | 'members' | 'bricks' | 'files' | 'premium';

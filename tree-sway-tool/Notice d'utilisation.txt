@@ -1,0 +1,5 @@
+1 - ouvrir PowerShell
+2 - lancer la commande [cd "C:\Users\alexb\Downloads\tree-sway-tool"] (ce qu'il y a après le C: est l'arborescence du dossier a copier dans la barre en haut de l'explorateur de fichier
+3 - lancer la commande [mkdir mes-arbres] si le dossier "mes-arbres" n'est pas encore créé
+4 - Mettre tous les PNG d'arbre à animer dans le dossier "mes-arbres"
+5 - lancer la commande [py detect_tree_origins.py mes-arbres resultat] pour créer l'animation

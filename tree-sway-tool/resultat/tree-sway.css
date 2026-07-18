@@ -1,0 +1,26 @@
+/* tree-sway.css — animation "vent léger" pour décor PNG statique.
+   Coût zéro à l'exécution : un seul PNG par arbre, pas de sprite sheet,
+   pas de JS de rendu — juste une rotation CSS autour du pied.
+
+   --sway-amp   multiplie l'amplitude de rotation (1 = angles de base)
+   --sway-delay décale la phase du cycle (désynchronise les arbres entre eux)
+   --sway-drift multiplie la durée du cycle (vitesses légèrement différentes) */
+
+@keyframes tree-sway {
+  0%, 100% { transform: rotate(calc(var(--sway-amp, 1) * -1.6deg)); }
+  50%      { transform: rotate(calc(var(--sway-amp, 1) * 1.8deg)); }
+}
+
+.tree-sway {
+  animation-name: tree-sway;
+  animation-duration: calc(4.5s * var(--sway-drift, 1));
+  animation-delay: var(--sway-delay, 0s);
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
+/* Respecte les préférences d'accessibilité : coupe l'animation si demandé. */
+@media (prefers-reduced-motion: reduce) {
+  .tree-sway { animation: none; }
+}

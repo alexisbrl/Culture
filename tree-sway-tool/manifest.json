@@ -1,0 +1,38 @@
+[
+  {
+    "file": "chene-2.png",
+    "width": 420,
+    "height": 550,
+    "originXPercent": 48.4,
+    "originYPercent": 99.3,
+    "sizeBeforeKB": 188.1,
+    "sizeAfterKB": 133.3
+  },
+  {
+    "file": "paulownia-2.png",
+    "width": 476,
+    "height": 576,
+    "originXPercent": 49.4,
+    "originYPercent": 99.3,
+    "sizeBeforeKB": 374.5,
+    "sizeAfterKB": 268.3
+  },
+  {
+    "file": "pin-3.png",
+    "width": 398,
+    "height": 560,
+    "originXPercent": 51.1,
+    "originYPercent": 99.3,
+    "sizeBeforeKB": 210.7,
+    "sizeAfterKB": 153.9
+  },
+  {
+    "file": "pommier-1.png",
+    "width": 386,
+    "height": 494,
+    "originXPercent": 52.4,
+    "originYPercent": 99.2,
+    "sizeBeforeKB": 155.5,
+    "sizeAfterKB": 109.4
+  }
+]

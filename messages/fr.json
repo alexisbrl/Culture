@@ -726,6 +726,25 @@
       "demote": "rétrograder",
       "exclude": "exclure"
     },
+    "groups": {
+      "title": "Groupes",
+      "desc": "Étiquetez vos membres (classe, groupe de rattrapage…) et filtrez la liste en cliquant sur un groupe.",
+      "viewTitle": "voir ce groupe",
+      "editTitle": "modifier le groupe",
+      "save": "enregistrer",
+      "cancel": "annuler",
+      "add": "ajouter",
+      "delete": "supprimer",
+      "namePlaceholder": "nom du groupe…",
+      "newGroup": "nouveau groupe",
+      "filterAll": "tous les membres",
+      "inGroupCount": "Dans le groupe ({count})",
+      "otherMembersCount": "Autres membres ({count})",
+      "emptyGroup": "aucun membre dans ce groupe pour l'instant",
+      "allInGroup": "tous les membres sont déjà dans ce groupe",
+      "deleteConfirmTitle": "Supprimer ce groupe ?",
+      "deleteConfirmDesc": "Il sera retiré de tous les membres concernés. Cette action est irréversible."
+    },
     "files": {
       "title": "Fichiers",
       "desc": "Tous les fichiers déposés dans cet atelier, triés par nom.",

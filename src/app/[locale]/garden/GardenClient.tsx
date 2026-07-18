@@ -37,6 +37,7 @@ import {
   type TileKind,
   type StructureKind,
   type Cosmetic,
+  type Species,
 } from './gardenEngine';
 
 const STORAGE_KEY = 'culture.garden.v2';
@@ -710,7 +711,7 @@ function TileVisual({ cell, col, row, originX, originY, tiles, editMode, isMovin
         )}
 
       {isMovingTree && <polygon points={`${T.x},${T.y} ${R.x},${R.y} ${B.x},${B.y} ${L.x},${L.y}`} fill="none" stroke="#5f8a3f" strokeWidth={2.5} strokeLinejoin="round" />}
-      {!covered && tile.plant && <PlantArt cx={cx} cy={cy} plant={tile.plant} />}
+      {!covered && tile.plant && <PlantArt cx={cx} cy={cy} plant={tile.plant} col={col} row={row} />}
       {!covered && tile.cosmetic && <CosmeticOnTile cx={cx} cy={cy} cos={tile.cosmetic} />}
     </g>
   );
@@ -764,11 +765,38 @@ function EarthSpecks({ cx, cy, col, row }: { cx: number; cy: number; col: number
   );
 }
 
-function PlantArt({ cx, cy, plant }: { cx: number; cy: number; plant: Plant }) {
+// Origine du balancement (pied du tronc, en % de l'image) — voir tree-sway-tool/resultat/manifest.json.
+// Seules chêne/paulownia/pin ont un lot d'images complet (3 stades) ; pommier garde son ancien rendu statique.
+const SWAY_ORIGIN: Partial<Record<Species, Record<1 | 2 | 3, { x: number; y: number }>>> = {
+  chene: { 1: { x: 50.1, y: 99.2 }, 2: { x: 48.4, y: 99.3 }, 3: { x: 49.4, y: 99.3 } },
+  paulownia: { 1: { x: 48.4, y: 99.3 }, 2: { x: 49.4, y: 99.3 }, 3: { x: 48.2, y: 99.3 } },
+  pin: { 1: { x: 49.9, y: 99.2 }, 2: { x: 50.7, y: 99.2 }, 3: { x: 51.1, y: 99.3 } },
+};
+
+function PlantArt({ cx, cy, plant, col, row }: { cx: number; cy: number; plant: Plant; col: number; row: number }) {
   const w = plant.stage === 1 ? 92 : plant.stage === 2 ? 116 : 140;
+  const origin = SWAY_ORIGIN[plant.species]?.[plant.stage];
+  const sway = useMemo<(React.CSSProperties & { [key: `--${string}`]: string }) | null>(() => {
+    if (!origin) return null;
+    const rng = cellRng(col * 11 + 5, row * 17 + 3);
+    return {
+      transformOrigin: `${origin.x}% ${origin.y}%`,
+      '--sway-delay': `${(-rng() * 4.5).toFixed(2)}s`,
+      '--sway-drift': (0.85 + rng() * 0.3).toFixed(2),
+    };
+  }, [origin, col, row]);
   return (
     <g style={{ pointerEvents: 'none' }}>
-      <image href={`/assets/trees/${plant.species}-${plant.stage}.png`} x={cx - w / 2} y={cy - w * 0.8} width={w} height={w} preserveAspectRatio="xMidYMax meet" />
+      <image
+        href={`/assets/trees/${plant.species}-${plant.stage}.png`}
+        x={cx - w / 2}
+        y={cy - w * 0.8}
+        width={w}
+        height={w}
+        preserveAspectRatio="xMidYMax meet"
+        className={sway ? 'tree-sway' : undefined}
+        style={sway ?? undefined}
+      />
     </g>
   );
 }

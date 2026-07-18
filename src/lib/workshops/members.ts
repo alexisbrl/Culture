@@ -596,3 +596,90 @@ export async function removeMember(
 
   return { success: true };
 }
+
+// ─── Groupes de membres ─────────────────────────────────────────────────────
+//
+// Étiquettes multi-valuées sur les membres d'un atelier (ex. « Terminale A »),
+// même modèle que les libellés (pools) de questions d'examen (`exam_pools` +
+// colonne `pools` sur `exam_questions`, voir src/lib/workshops/exam.ts) : une
+// table de définition par atelier, et un tableau d'ids sur la ligne membre.
+
+export type MemberGroup = { id: string; name: string; color: string };
+
+export async function listMemberGroups(workshopId: string): Promise<MemberGroup[]> {
+  const supabase = getSupabaseServerClient();
+  const { data } = await supabase
+    .from('member_groups')
+    .select('id, name, color')
+    .eq('workshop_id', workshopId)
+    .order('created_at', { ascending: true });
+
+  return (data ?? []) as MemberGroup[];
+}
+
+export async function createGroup(workshopId: string, group: MemberGroup): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase
+    .from('member_groups')
+    .insert({ id: group.id, workshop_id: workshopId, name: group.name, color: group.color });
+  if (error) throw new Error(error.message);
+}
+
+export async function updateGroup(workshopId: string, group: MemberGroup): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase
+    .from('member_groups')
+    .update({ name: group.name, color: group.color })
+    .eq('workshop_id', workshopId)
+    .eq('id', group.id);
+  if (error) throw new Error(error.message);
+}
+
+// Retire l'id du groupe des membres concernés (recherchés côté serveur via
+// `.contains`, plutôt qu'une liste fournie par l'appelant — évite de dépendre
+// d'un état client potentiellement périmé) avant de supprimer le groupe.
+export async function deleteGroup(workshopId: string, groupId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+
+  const { data: affected } = await supabase
+    .from('workshop_members')
+    .select('id, groups')
+    .eq('workshop_id', workshopId)
+    .contains('groups', [groupId]);
+
+  for (const member of affected ?? []) {
+    const groups = ((member.groups as string[] | null) ?? []).filter((g) => g !== groupId);
+    const { error: updateError } = await supabase
+      .from('workshop_members')
+      .update({ groups })
+      .eq('id', member.id);
+    if (updateError) throw new Error(updateError.message);
+  }
+
+  const { error } = await supabase
+    .from('member_groups')
+    .delete()
+    .eq('workshop_id', workshopId)
+    .eq('id', groupId);
+  if (error) throw new Error(error.message);
+}
+
+export async function setMemberGroups(
+  workshopId: string,
+  targetUserId: string,
+  groupIds: string[]
+): Promise<MemberActionResult> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase
+    .from('workshop_members')
+    .update({ groups: groupIds })
+    .eq('workshop_id', workshopId)
+    .eq('user_id', targetUserId);
+
+  if (error) {
+    console.error('setMemberGroups update error:', error);
+    return { success: false, error: "Erreur lors de la mise à jour des groupes" };
+  }
+
+  return { success: true };
+}

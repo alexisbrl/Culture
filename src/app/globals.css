@@ -141,3 +141,20 @@
     font-family: var(--font-script), 'Caveat', cursive;
   }
 }
+
+/* Balancement léger des arbres du Jardin (voir tree-sway-tool/resultat) */
+@keyframes tree-sway {
+  0%, 100% { transform: rotate(-1.6deg); }
+  50%      { transform: rotate(1.8deg); }
+}
+.tree-sway {
+  transform-box: fill-box; /* transform-origin en % relatif à l'image SVG, pas au viewport */
+  animation-name: tree-sway;
+  animation-duration: calc(4.5s * var(--sway-drift, 1));
+  animation-delay: var(--sway-delay, 0s);
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tree-sway { animation: none; }
+}

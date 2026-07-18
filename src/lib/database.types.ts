@@ -250,6 +250,38 @@ export type Database = {
           },
         ]
       }
+      member_groups: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          name: string
+          workshop_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id: string
+          name: string
+          workshop_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          workshop_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_groups_workshop_id_fkey"
+            columns: ["workshop_id"]
+            isOneToOne: false
+            referencedRelation: "workshops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_profiles: {
         Row: {
           display_name: string
@@ -378,6 +410,7 @@ export type Database = {
       }
       workshop_members: {
         Row: {
+          groups: Json
           id: string
           joined_at: string | null
           last_visited_at: string
@@ -386,6 +419,7 @@ export type Database = {
           workshop_id: string
         }
         Insert: {
+          groups?: Json
           id?: string
           joined_at?: string | null
           last_visited_at?: string
@@ -394,6 +428,7 @@ export type Database = {
           workshop_id: string
         }
         Update: {
+          groups?: Json
           id?: string
           joined_at?: string | null
           last_visited_at?: string
