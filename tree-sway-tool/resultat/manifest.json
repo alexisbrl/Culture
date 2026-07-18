@@ -1,0 +1,110 @@
+[
+  {
+    "file": "cerisier-2.png",
+    "width": 411,
+    "height": 546,
+    "originXPercent": 49.4,
+    "originYPercent": 99.3,
+    "sizeBeforeKB": 239.4,
+    "sizeAfterKB": 167.7
+  },
+  {
+    "file": "cerisier-3.png",
+    "width": 357,
+    "height": 510,
+    "originXPercent": 49.9,
+    "originYPercent": 99.2,
+    "sizeBeforeKB": 190.2,
+    "sizeAfterKB": 129.6
+  },
+  {
+    "file": "chene-1.png",
+    "width": 351,
+    "height": 478,
+    "originXPercent": 50.1,
+    "originYPercent": 99.2,
+    "sizeBeforeKB": 142.9,
+    "sizeAfterKB": 98.5
+  },
+  {
+    "file": "chene-2.png",
+    "width": 420,
+    "height": 550,
+    "originXPercent": 48.4,
+    "originYPercent": 99.3,
+    "sizeBeforeKB": 188.1,
+    "sizeAfterKB": 132.4
+  },
+  {
+    "file": "chene-3.png",
+    "width": 449,
+    "height": 544,
+    "originXPercent": 49.4,
+    "originYPercent": 99.3,
+    "sizeBeforeKB": 236.3,
+    "sizeAfterKB": 165.2
+  },
+  {
+    "file": "paulownia-1.png",
+    "width": 391,
+    "height": 537,
+    "originXPercent": 48.4,
+    "originYPercent": 99.3,
+    "sizeBeforeKB": 253.7,
+    "sizeAfterKB": 189.5
+  },
+  {
+    "file": "paulownia-2.png",
+    "width": 476,
+    "height": 576,
+    "originXPercent": 49.4,
+    "originYPercent": 99.3,
+    "sizeBeforeKB": 374.5,
+    "sizeAfterKB": 267.9
+  },
+  {
+    "file": "paulownia-3.png",
+    "width": 542,
+    "height": 598,
+    "originXPercent": 48.2,
+    "originYPercent": 99.3,
+    "sizeBeforeKB": 473.4,
+    "sizeAfterKB": 343.9
+  },
+  {
+    "file": "pin-1.png",
+    "width": 276,
+    "height": 475,
+    "originXPercent": 49.9,
+    "originYPercent": 99.2,
+    "sizeBeforeKB": 87.3,
+    "sizeAfterKB": 62.2
+  },
+  {
+    "file": "pin-2.png",
+    "width": 353,
+    "height": 528,
+    "originXPercent": 50.7,
+    "originYPercent": 99.2,
+    "sizeBeforeKB": 155.6,
+    "sizeAfterKB": 109.2
+  },
+  {
+    "file": "pin-3.png",
+    "width": 398,
+    "height": 560,
+    "originXPercent": 51.1,
+    "originYPercent": 99.3,
+    "sizeBeforeKB": 210.7,
+    "sizeAfterKB": 153.0
+  },
+  {
+    "file": "pommier-1.png",
+    "width": 386,
+    "height": 494,
+    "originXPercent": 52.4,
+    "originYPercent": 99.2,
+    "sizeBeforeKB": 155.5,
+    "sizeAfterKB": 108.9
+  }
+]
