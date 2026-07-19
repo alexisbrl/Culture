@@ -14,6 +14,7 @@ import { useTranslations } from 'next-intl';
 import { ArrowLeft, Loader2, Plus } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import type { Chapter } from '@/app/actions/workshopChapters';
 import QuestionEditor, { type Question, emptyQuestion } from '../QuestionEditor';
 import {
   getParcoursQuestions,
@@ -24,14 +25,20 @@ import {
 
 type Pool = { id: string; name: string; color: string };
 
-export default function ParcoursQuestions({ workshopId, onBack }: { workshopId: string; onBack: () => void }) {
+export default function ParcoursQuestions({ workshopId, chapters, onBack }: { workshopId: string; chapters: Chapter[]; onBack: () => void }) {
   const t = useTranslations('programme');
   const tExam = useTranslations('examen');
 
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [pools, setPools] = useState<Pool[]>([]);
+  const [bricks, setBricks] = useState<{ id: string; title: string }[]>([]);
   const [editing, setEditing] = useState<Question | null>(null);
+  // Le chapitre s'affecte depuis la liste, pas depuis l'éditeur (partagé avec
+  // la banque d'examen, qui ignore les chapitres). Cet état ne pilote donc
+  // aucun champ : il mémorise le chapitre de la question en cours d'édition
+  // pour le réinjecter à la sauvegarde, que QuestionEditor perdrait sinon.
+  const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Question | null>(null);
@@ -43,6 +50,7 @@ export default function ParcoursQuestions({ workshopId, onBack }: { workshopId: 
         if (cancelled) return;
         setQuestions(data.questions);
         setPools(data.pools);
+        setBricks(data.bricks);
         setLoading(false);
       })
       .catch(() => {
@@ -55,20 +63,44 @@ export default function ParcoursQuestions({ workshopId, onBack }: { workshopId: 
     };
   }, [workshopId, t]);
 
+  function openEditor(q: Question) {
+    setEditing(q);
+    setEditingChapterId(q.chapterId ?? null);
+    setError('');
+  }
+
   async function handleSave(q: Question) {
+    // QuestionEditor ne connaît pas le chapitre : on le réinjecte à la sortie.
+    const question: Question = { ...q, chapterId: editingChapterId };
     setSaving(true);
     setError('');
-    const result = await saveParcoursQuestion(workshopId, q);
+    const result = await saveParcoursQuestion(workshopId, question);
     setSaving(false);
     if (!result.success) {
       setError(result.error ?? t('questions.saveError'));
       return;
     }
     setQuestions((prev) => {
-      const exists = prev.some((x) => x.id === q.id);
-      return exists ? prev.map((x) => (x.id === q.id ? q : x)) : [...prev, q];
+      const exists = prev.some((x) => x.id === question.id);
+      return exists ? prev.map((x) => (x.id === question.id ? question : x)) : [...prev, question];
     });
     setEditing(null);
+  }
+
+  // Affectation à un chapitre depuis la liste : mise à jour optimiste puis
+  // enregistrement, avec retour à l'état précédent si ça échoue. Pas de bouton
+  // « enregistrer » — c'est un champ unique, l'aller-retour serveur est court.
+  async function handleChapterChange(question: Question, chapterId: string | null) {
+    const previous = question.chapterId ?? null;
+    const updated: Question = { ...question, chapterId };
+    setQuestions((prev) => prev.map((x) => (x.id === question.id ? updated : x)));
+    setError('');
+
+    const result = await saveParcoursQuestion(workshopId, updated);
+    if (!result.success) {
+      setQuestions((prev) => prev.map((x) => (x.id === question.id ? { ...x, chapterId: previous } : x)));
+      setError(result.error ?? t('questions.saveError'));
+    }
   }
 
   async function handleDelete() {
@@ -107,6 +139,7 @@ export default function ParcoursQuestions({ workshopId, onBack }: { workshopId: 
           question={editing}
           allQuestions={questions}
           pools={pools}
+          bricks={bricks}
           onCreatePool={handleCreatePool}
           onSave={handleSave}
           onCancel={() => setEditing(null)}
@@ -130,7 +163,7 @@ export default function ParcoursQuestions({ workshopId, onBack }: { workshopId: 
           <ArrowLeft size={14} /> {t('questions.back')}
         </button>
         <button
-          onClick={() => { setEditing(emptyQuestion()); setError(''); }}
+          onClick={() => openEditor(emptyQuestion())}
           style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: palette.ink, border: '1px solid #2d2a24', color: palette.paper, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
         >
           <Plus size={13} /> {t('questions.new')}
@@ -138,7 +171,8 @@ export default function ParcoursQuestions({ workshopId, onBack }: { workshopId: 
       </div>
 
       <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{t('questions.title')}</div>
-      <div style={{ fontSize: 12.5, color: palette.inkFaint, marginBottom: 12 }}>{t('questions.desc')}</div>
+      <div style={{ fontSize: 12.5, color: palette.inkFaint, marginBottom: 4 }}>{t('questions.desc')}</div>
+      <div style={{ fontSize: 12.5, color: palette.inkFaint, marginBottom: 12 }}>{t('questions.noChapterHint')}</div>
 
       {error && <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 10 }}>{error}</div>}
 
@@ -166,8 +200,21 @@ export default function ParcoursQuestions({ workshopId, onBack }: { workshopId: 
                   {tExam(`responseType.${q.responseType}`)}
                 </div>
               </div>
+              {/* Chapitre de rattachement : c'est lui qui détermine dans quel
+                  pot la question peut être tirée. Sans chapitre, jamais tirée. */}
+              <select
+                value={q.chapterId ?? ''}
+                onChange={(e) => handleChapterChange(q, e.target.value || null)}
+                title={t('questions.chapter')}
+                style={{ flexShrink: 0, maxWidth: 190, padding: '7px 10px', borderRadius: 9, border: `1px solid ${q.chapterId ? ink(0.16) : withAlpha(palette.danger, 0.35)}`, background: palette.paper, color: q.chapterId ? palette.ink : palette.inkFaint, fontSize: 12.5, fontFamily: 'inherit', cursor: 'pointer' }}
+              >
+                <option value="">{t('questions.noChapter')}</option>
+                {chapters.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
               <button
-                onClick={() => { setEditing(q); setError(''); }}
+                onClick={() => openEditor(q)}
                 style={{ padding: '7px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 {t('questions.edit')}

@@ -31,6 +31,23 @@ export type ResponseType =
   | 'matching'
   | 'ordre';
 
+// Taxonomie de Bloom — niveau cognitif VISÉ par la question (1 mémoriser,
+// 2 comprendre, 3 appliquer, 4 analyser, 5 évaluer, 6 créer). À ne pas confondre
+// avec `brick_mastery.bloom_level`, qui mesure le niveau ATTEINT par un candidat
+// sur une brique. Obligatoire : jamais nul, jamais absent, 1 par défaut — la
+// contrainte `exam_questions_bloom_level_check` le garantit jusqu'en base.
+export type BloomLevel = 1 | 2 | 3 | 4 | 5 | 6;
+
+export const BLOOM_LEVELS: BloomLevel[] = [1, 2, 3, 4, 5, 6];
+
+export const DEFAULT_BLOOM_LEVEL: BloomLevel = 1;
+
+/** Ramène n'importe quelle entrée (null, undefined, valeur hors bornes) sur un niveau valide. */
+export function toBloomLevel(value: unknown): BloomLevel {
+  const n = Number(value);
+  return BLOOM_LEVELS.includes(n as BloomLevel) ? (n as BloomLevel) : DEFAULT_BLOOM_LEVEL;
+}
+
 export type QuestionPart = {
   content: string;
   responseType: ResponseType;
@@ -62,6 +79,49 @@ export type Question = {
   examIds: string[];
   createdAt?: string;
   textLines?: number;
+  // Chapitre de rattachement — utilisé uniquement par les questions du parcours
+  // (`context = 'parcours'`), où il détermine dans quel pot la question peut
+  // être tirée. Toujours `null` côté banque d'examen.
+  chapterId?: string | null;
+  // Niveau de Bloom visé. Non optionnel : toute construction d'une Question doit
+  // le fournir (emptyQuestion() met 1), pour qu'il soit impossible d'aboutir en
+  // base sans valeur.
+  bloomLevel: BloomLevel;
+  // Briques de connaissance couvertes par la question (table de jonction
+  // `exam_question_bricks`, N-N, sans restriction de chapitre).
+  brickIds: string[];
+};
+
+// ─── Exercice du parcours ────────────────────────────────────────────────────
+//
+// ⚠️ Ce qu'un candidat reçoit quand il lance un exercice : volontairement PAS un
+// `Question`. Ni `answer` ni `correctChoices` n'en font partie — la correction
+// est calculée côté serveur (`gradeParcoursAnswer`) et la réponse attendue n'est
+// renvoyée qu'après validation.
+export type ExerciseChoice = {
+  // Index de l'option dans la question d'origine : c'est lui que le client
+  // renvoie à la validation, ce qui permet de mélanger l'ordre d'affichage sans
+  // que le serveur ait à mémoriser la permutation. Ne révèle rien.
+  index: number;
+  text: string;
+};
+
+export type ExercisePrompt = {
+  id: string;
+  title: string;
+  content: string;
+  questionType: QuestionType;
+  responseType: ResponseType;
+  choices: ExerciseChoice[];
+  textLines: number;
+};
+
+export type ExerciseResult = {
+  // `null` quand la correction automatique ne s'applique pas (réponse libre,
+  // dessin, audio…) : on se contente alors d'afficher la réponse attendue.
+  correct: boolean | null;
+  answer: string;
+  correctChoices: number[];
 };
 
 export type IdentitySide = 'left' | 'right' | 'hidden';

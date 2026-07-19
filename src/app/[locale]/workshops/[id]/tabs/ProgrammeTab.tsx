@@ -3,7 +3,8 @@
 import { palette, ink, withAlpha } from '@/lib/theme';
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
+import Link from 'next/link';
+import { useTranslations, useLocale } from 'next-intl';
 import { ListChecks } from 'lucide-react';
 import type { Chapter } from '@/app/actions/workshopChapters';
 import ParcoursQuestions from './programme/ParcoursQuestions';
@@ -70,17 +71,22 @@ function CoiledVine() {
   );
 }
 
-function ChapterColumn({ chapter, index }: { chapter: Chapter; index: number }) {
+function ChapterColumn({ chapter, index, workshopId, locale }: { chapter: Chapter; index: number; workshopId: string; locale: string }) {
   const t = useTranslations('programme');
 
   return (
     <div style={{ width: COL_W, flexShrink: 0, height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <a href="#" style={{ display: 'flex', alignItems: 'center', gap: 7, textDecoration: 'none', background: palette.amber, color: palette.parchment, fontFamily: 'inherit', fontSize: 12, padding: '7px 12px', borderRadius: 999, marginBottom: 6, boxShadow: `0 8px 18px ${withAlpha(palette.amber, 0.34)}` }}>
+          {/* Une page dédiée plutôt qu'une modale : l'exercice tire sa question
+              au chargement et enchaîne, il a besoin de toute la surface. */}
+          <Link
+            href={`/${locale}/workshops/${workshopId}/exercise/${chapter.id}`}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, textDecoration: 'none', background: palette.amber, color: palette.parchment, fontFamily: 'inherit', fontSize: 12, padding: '7px 12px', borderRadius: 999, marginBottom: 6, boxShadow: `0 8px 18px ${withAlpha(palette.amber, 0.34)}` }}
+          >
             <span style={{ width: 20, height: 20, borderRadius: '50%', background: withAlpha(palette.paper, 0.22), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 }}>▶</span>
             {t('startExercise')}
-          </a>
+          </Link>
           <CoiledVine />
         </div>
       </div>
@@ -103,6 +109,7 @@ function ChapterColumn({ chapter, index }: { chapter: Chapter; index: number }) 
 
 export default function ProgrammeTab({ chapters, workshopId, canManage }: { chapters: Chapter[]; workshopId: string; canManage: boolean }) {
   const t = useTranslations('programme');
+  const locale = useLocale();
   const [page, setPage] = useState(0);
   // Gestion des questions du parcours : réservée aux gestionnaires, ouverte à
   // la place du décor des pots plutôt que dans une modale (l'éditeur de
@@ -125,7 +132,7 @@ export default function ProgrammeTab({ chapters, workshopId, canManage }: { chap
   }
 
   if (showQuestions) {
-    return <ParcoursQuestions workshopId={workshopId} onBack={() => setShowQuestions(false)} />;
+    return <ParcoursQuestions workshopId={workshopId} chapters={chapters} onBack={() => setShowQuestions(false)} />;
   }
 
   return (
@@ -176,7 +183,7 @@ export default function ProgrammeTab({ chapters, workshopId, canManage }: { chap
             <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
               <div style={{ position: 'absolute', inset: 0, display: 'flex', transform: `translateX(${offset}px)`, transition: 'transform .45s cubic-bezier(.4,0,.2,1)', paddingLeft: 22 }}>
                 {chapters.map((chapter, i) => (
-                  <ChapterColumn key={chapter.id} chapter={chapter} index={i} />
+                  <ChapterColumn key={chapter.id} chapter={chapter} index={i} workshopId={workshopId} locale={locale} />
                 ))}
               </div>
             </div>

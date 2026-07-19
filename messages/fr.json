@@ -309,6 +309,14 @@
   "examen": {
     "noStatement": "(sans énoncé)",
     "irreversible": "Cette action est irréversible.",
+    "bloom": {
+      "1": "Mémoriser",
+      "2": "Comprendre",
+      "3": "Appliquer",
+      "4": "Analyser",
+      "5": "Évaluer",
+      "6": "Créer"
+    },
     "cancel": "Annuler",
     "delete": "Supprimer",
     "add": "ajouter",
@@ -418,6 +426,12 @@
       "partStatementPlaceholder": "Énoncé de cette partie…",
       "addPart": "+ ajouter une partie",
       "optionsDivider": "Options par question",
+      "bloomLabel": "Niveau de Bloom visé",
+      "bloomHint": "obligatoire — niveau cognitif que la question fait travailler",
+      "bricksLabel": "Briques de connaissance",
+      "bricksHint": "facultatif — les briques que la question mobilise, toutes chapitres confondus",
+      "addBrickOption": "associer une brique…",
+      "noBricks": "Aucune brique dans cet atelier. Elles se créent dans Paramètres → Briques de connaissance.",
       "labelsLabel": "Libellés",
       "labelsHint": "off par défaut — regroupe les questions pour générer des examens",
       "labelNamePlaceholder": "nom du libellé…",
@@ -920,8 +934,27 @@
       "loadError": "Erreur lors du chargement des questions",
       "saveError": "Erreur lors de l'enregistrement",
       "deleteError": "Erreur lors de la suppression",
-      "deleteTitle": "Supprimer cette question ?"
+      "deleteTitle": "Supprimer cette question ?",
+      "chapter": "Chapitre de rattachement",
+      "noChapter": "sans chapitre",
+      "noChapterHint": "Chaque question doit être rattachée à un chapitre : sans chapitre, elle n'est jamais tirée par le bouton « lancer un exercice » d'un pot."
     }
+  },
+  "exercise": {
+    "back": "retour à {workshop}",
+    "chapterLabel": "exercice",
+    "drawing": "tirage d'une question…",
+    "emptyTitle": "Aucune question dans ce chapitre",
+    "emptyDesc": "Un gestionnaire doit d'abord créer des questions de parcours et les rattacher à ce chapitre.",
+    "answerPlaceholder": "ta réponse…",
+    "validate": "valider",
+    "revealAnswer": "afficher la réponse",
+    "next": "question suivante",
+    "verdictCorrect": "Bonne réponse !",
+    "verdictWrong": "Mauvaise réponse",
+    "verdictNeutral": "Pas de correction automatique pour ce type de réponse.",
+    "expectedAnswer": "Réponse attendue :",
+    "gradeError": "Erreur lors de la correction"
   },
   "accountPricing": {
     "tagline": "de la graine à l'arbre —",

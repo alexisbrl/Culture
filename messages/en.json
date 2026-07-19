@@ -309,6 +309,14 @@
   "examen": {
     "noStatement": "(no statement)",
     "irreversible": "This action is irreversible.",
+    "bloom": {
+      "1": "Remember",
+      "2": "Understand",
+      "3": "Apply",
+      "4": "Analyse",
+      "5": "Evaluate",
+      "6": "Create"
+    },
     "cancel": "Cancel",
     "delete": "Delete",
     "add": "add",
@@ -418,6 +426,12 @@
       "partStatementPlaceholder": "Statement for this part…",
       "addPart": "+ add a part",
       "optionsDivider": "Per-question options",
+      "bloomLabel": "Target Bloom level",
+      "bloomHint": "required — the cognitive level the question exercises",
+      "bricksLabel": "Knowledge blocks",
+      "bricksHint": "optional — the blocks the question draws on, across all chapters",
+      "addBrickOption": "link a block…",
+      "noBricks": "No block in this workshop. They are created in Settings → Knowledge blocks.",
       "labelsLabel": "Labels",
       "labelsHint": "off by default — groups questions to generate exams",
       "labelNamePlaceholder": "label name…",
@@ -920,8 +934,27 @@
       "loadError": "Error while loading the questions",
       "saveError": "Error while saving",
       "deleteError": "Error while deleting",
-      "deleteTitle": "Delete this question?"
+      "deleteTitle": "Delete this question?",
+      "chapter": "Linked chapter",
+      "noChapter": "no chapter",
+      "noChapterHint": "Every question must be linked to a chapter: without one, it is never drawn by a pot's “start an exercise” button."
     }
+  },
+  "exercise": {
+    "back": "back to {workshop}",
+    "chapterLabel": "exercise",
+    "drawing": "drawing a question…",
+    "emptyTitle": "No question in this chapter",
+    "emptyDesc": "A manager must first create programme questions and link them to this chapter.",
+    "answerPlaceholder": "your answer…",
+    "validate": "validate",
+    "revealAnswer": "show the answer",
+    "next": "next question",
+    "verdictCorrect": "Correct!",
+    "verdictWrong": "Wrong answer",
+    "verdictNeutral": "No automatic grading for this response type.",
+    "expectedAnswer": "Expected answer:",
+    "gradeError": "Error while grading"
   },
   "accountPricing": {
     "tagline": "from seed to tree —",

@@ -10,11 +10,25 @@
 // (appels en fire-and-forget avec `.catch(console.error)`).
 
 import { getSupabaseServerClient } from '@/lib/supabase';
-import type { Question, QuestionContext, QuestionPart, ExamConfig, ExamPool, GeneratedExam, ExamDraft } from '@/lib/workshops/examTypes';
+import type {
+  Question,
+  QuestionContext,
+  QuestionPart,
+  ExamConfig,
+  ExamPool,
+  GeneratedExam,
+  ExamDraft,
+  ExercisePrompt,
+  ExerciseChoice,
+  ExerciseResult,
+} from '@/lib/workshops/examTypes';
+import { toBloomLevel } from '@/lib/workshops/examTypes';
 
 type QuestionRow = {
   id: string;
   workshop_id: string;
+  chapter_id: string | null;
+  bloom_level: number;
   title: string;
   question_type: string;
   response_type: string;
@@ -48,8 +62,14 @@ function normalizePart(part: Partial<QuestionPart>): QuestionPart {
   };
 }
 
-function rowToQuestion(row: QuestionRow): Question {
+// `brickIds` ne vient pas de la ligne (table de jonction séparée) : les
+// appelants qui en ont besoin passent la map pré-chargée par `loadBrickLinks`.
+// Par défaut la question est renvoyée sans briques, ce qui est correct pour les
+// chemins qui ne s'en servent pas (tirage d'exercice, correction).
+function rowToQuestion(row: QuestionRow, brickIds: string[] = []): Question {
   return {
+    bloomLevel: toBloomLevel(row.bloom_level),
+    brickIds,
     id: row.id,
     title: row.title ?? '',
     questionType: row.question_type as Question['questionType'],
@@ -67,6 +87,7 @@ function rowToQuestion(row: QuestionRow): Question {
     examIds: row.exam_ids ?? [],
     textLines: row.text_lines ?? 4,
     createdAt: row.created_at,
+    chapterId: row.chapter_id ?? null,
   };
 }
 
@@ -76,9 +97,19 @@ function rowToQuestion(row: QuestionRow): Question {
 // une colonne absente du payload garde sa valeur — c'est ce qui permet aux
 // ré-écritures de masse (nettoyage de pool, suppression) de ne pas requalifier
 // silencieusement une question de parcours en question d'examen.
+// `chapter_id` suit exactement la même règle, et n'est écrit que dans le
+// contexte « parcours » : la banque d'examen ne connaît pas les chapitres, et
+// une ré-écriture de masse ne doit pas détacher une question de son pot.
+// `bloom_level` est en revanche toujours écrit : contrairement à `context` et
+// `chapter_id`, il a une valeur dans tous les contextes et `rowToQuestion` la
+// restitue systématiquement — une ré-écriture de masse ne peut donc pas le
+// perdre. `brickIds` n'est pas ici : il vit dans `exam_question_bricks`, écrit
+// séparément par `syncQuestionBricks`.
 function questionToRow(workshopId: string, q: Question, context?: QuestionContext) {
   return {
     ...(context ? { context } : {}),
+    ...(context === 'parcours' ? { chapter_id: q.chapterId ?? null } : {}),
+    bloom_level: toBloomLevel(q.bloomLevel),
     id: q.id,
     workshop_id: workshopId,
     title: q.title ?? '',
@@ -100,6 +131,65 @@ function questionToRow(workshopId: string, q: Question, context?: QuestionContex
   };
 }
 
+// ─── Briques associées aux questions (exam_question_bricks) ──────────────────
+
+type BrickLinkMap = Record<string, string[]>;
+
+// Un seul aller-retour pour toutes les questions de la page (règle N+1) : on
+// charge les liens des ids fournis, puis on les distribue à `rowToQuestion`.
+async function loadBrickLinks(questionIds: string[]): Promise<BrickLinkMap> {
+  if (questionIds.length === 0) return {};
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('exam_question_bricks')
+    .select('question_id, brick_id')
+    .in('question_id', questionIds);
+
+  if (error) throw new Error(error.message);
+
+  const map: BrickLinkMap = {};
+  for (const row of data ?? []) {
+    (map[row.question_id] ??= []).push(row.brick_id);
+  }
+  return map;
+}
+
+// Remplace l'ensemble des liens d'une question par ceux fournis. On calcule le
+// différentiel plutôt que « tout supprimer puis tout réinsérer » : ça évite de
+// laisser la question sans brique si l'insertion échoue après la suppression.
+async function syncQuestionBricks(questionId: string, brickIds: string[]): Promise<void> {
+  const supabase = getSupabaseServerClient();
+
+  const { data: existingRows, error: readError } = await supabase
+    .from('exam_question_bricks')
+    .select('brick_id')
+    .eq('question_id', questionId);
+  if (readError) throw new Error(readError.message);
+
+  const existing = new Set((existingRows ?? []).map((r) => r.brick_id as string));
+  const wanted = new Set(brickIds);
+
+  const toAdd = [...wanted].filter((id) => !existing.has(id));
+  const toRemove = [...existing].filter((id) => !wanted.has(id));
+
+  if (toAdd.length > 0) {
+    const { error } = await supabase
+      .from('exam_question_bricks')
+      .insert(toAdd.map((brickId) => ({ question_id: questionId, brick_id: brickId })));
+    if (error) throw new Error(error.message);
+  }
+
+  if (toRemove.length > 0) {
+    const { error } = await supabase
+      .from('exam_question_bricks')
+      .delete()
+      .eq('question_id', questionId)
+      .in('brick_id', toRemove);
+    if (error) throw new Error(error.message);
+  }
+}
+
 export async function getExamBankData(workshopId: string): Promise<{
   questions: Question[];
   pools: ExamPool[];
@@ -110,12 +200,16 @@ export async function getExamBankData(workshopId: string): Promise<{
   const [questionsRes, poolsRes, examsRes] = await Promise.all([
     // Uniquement la banque d'examen : les questions du parcours pédagogique
     // vivent dans la même table, distinguées par `context`.
-    supabase.from('exam_questions').select('*').eq('workshop_id', workshopId).eq('context', 'exam').order('created_at', { ascending: true }),
+    // `.order('id')` en second critère : voir getParcoursData (ex æquo sur
+    // `created_at` → ordre arbitraire, la banque se réordonnait toute seule).
+    supabase.from('exam_questions').select('*').eq('workshop_id', workshopId).eq('context', 'exam').order('created_at', { ascending: true }).order('id', { ascending: true }),
     supabase.from('exam_pools').select('id, name, color').eq('workshop_id', workshopId).order('created_at', { ascending: true }),
     supabase.from('exam_generated').select('id, title, date, q, dur, avg, status, taken, question_ids, config').eq('workshop_id', workshopId).order('created_at', { ascending: false }),
   ]);
 
-  const questions = (questionsRes.data ?? []).map(rowToQuestion);
+  const bankRows = (questionsRes.data ?? []) as QuestionRow[];
+  const bankLinks = await loadBrickLinks(bankRows.map((r) => r.id));
+  const questions = bankRows.map((row) => rowToQuestion(row, bankLinks[row.id] ?? []));
   const pools = (poolsRes.data ?? []) as ExamPool[];
   const exams = (examsRes.data ?? []).map((e) => ({
     id: e.id,
@@ -137,6 +231,10 @@ export async function saveQuestion(workshopId: string, question: Question, conte
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_questions').upsert(questionToRow(workshopId, question, context));
   if (error) throw new Error(error.message);
+
+  // Après l'upsert seulement : la FK de `exam_question_bricks` exige que la
+  // question existe déjà pour une création.
+  await syncQuestionBricks(question.id, question.brickIds ?? []);
 }
 
 // ─── Parcours pédagogique ────────────────────────────────────────────────────
@@ -151,13 +249,126 @@ export async function getParcoursData(workshopId: string): Promise<{
   const supabase = getSupabaseServerClient();
 
   const [questionsRes, poolsRes] = await Promise.all([
-    supabase.from('exam_questions').select('*').eq('workshop_id', workshopId).eq('context', 'parcours').order('created_at', { ascending: true }),
+    // Départage sur `id` : les questions insérées en lot partagent le même
+    // `created_at` à la microseconde près, et sans second critère Postgres rend
+    // les ex æquo dans un ordre arbitraire — la liste se réordonnait sous les
+    // yeux de l'utilisateur à chaque enregistrement.
+    supabase.from('exam_questions').select('*').eq('workshop_id', workshopId).eq('context', 'parcours').order('created_at', { ascending: true }).order('id', { ascending: true }),
     supabase.from('exam_pools').select('id, name, color').eq('workshop_id', workshopId).order('created_at', { ascending: true }),
   ]);
 
+  const rows = (questionsRes.data ?? []) as QuestionRow[];
+  const links = await loadBrickLinks(rows.map((r) => r.id));
+
   return {
-    questions: (questionsRes.data ?? []).map(rowToQuestion),
+    questions: rows.map((row) => rowToQuestion(row, links[row.id] ?? [])),
     pools: (poolsRes.data ?? []) as ExamPool[],
+  };
+}
+
+// ─── Exercice : tirage et correction ─────────────────────────────────────────
+//
+// ⚠️ SÉCURITÉ — Ces deux fonctions sont les seules du module appelées pour le
+// compte d'un simple membre. Elles ne renvoient jamais un `Question` complet :
+// `drawParcoursQuestion` produit un `ExercisePrompt` sans réponse, et
+// `gradeParcoursAnswer` ne révèle la réponse attendue qu'en réponse à une
+// tentative. Un membre déterminé peut donc obtenir la réponse en soumettant
+// n'importe quoi — c'est assumé pour un parcours d'entraînement individuel,
+// contrairement à un examen noté.
+
+function shuffled<T>(items: T[]): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+function toPrompt(q: Question): ExercisePrompt {
+  const choices: ExerciseChoice[] = (q.choices ?? []).map((text, index) => ({ index, text }));
+  return {
+    id: q.id,
+    title: q.title,
+    content: q.content,
+    questionType: q.questionType,
+    responseType: q.responseType,
+    choices: q.shuffleChoices ? shuffled(choices) : choices,
+    textLines: q.textLines ?? 4,
+  };
+}
+
+// Tirage uniforme parmi les questions du chapitre. `excludeId` évite de
+// retomber sur la question qu'on vient de faire quand il y a de quoi varier —
+// avec une seule question dans le chapitre, on la retire logiquement.
+export async function drawParcoursQuestion(
+  workshopId: string,
+  chapterId: string,
+  excludeId?: string
+): Promise<ExercisePrompt | null> {
+  const supabase = getSupabaseServerClient();
+
+  const { data: ids, error } = await supabase
+    .from('exam_questions')
+    .select('id')
+    .eq('workshop_id', workshopId)
+    .eq('context', 'parcours')
+    .eq('chapter_id', chapterId);
+
+  if (error) throw new Error(error.message);
+
+  let pool = (ids ?? []).map((r) => r.id as string);
+  if (pool.length === 0) return null;
+  if (excludeId && pool.length > 1) pool = pool.filter((id) => id !== excludeId);
+
+  const picked = pool[Math.floor(Math.random() * pool.length)];
+
+  const { data: row, error: rowError } = await supabase
+    .from('exam_questions')
+    .select('*')
+    .eq('workshop_id', workshopId)
+    .eq('id', picked)
+    .maybeSingle();
+
+  if (rowError) throw new Error(rowError.message);
+  if (!row) return null;
+
+  return toPrompt(rowToQuestion(row as QuestionRow));
+}
+
+function sameChoiceSet(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  const setB = new Set(b);
+  return a.every((x) => setB.has(x));
+}
+
+export async function gradeParcoursAnswer(
+  workshopId: string,
+  questionId: string,
+  selectedChoices: number[]
+): Promise<ExerciseResult | null> {
+  const supabase = getSupabaseServerClient();
+
+  const { data: row, error } = await supabase
+    .from('exam_questions')
+    .select('*')
+    .eq('workshop_id', workshopId)
+    .eq('context', 'parcours')
+    .eq('id', questionId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!row) return null;
+
+  const q = rowToQuestion(row as QuestionRow);
+  const autoGradable = q.responseType === 'qcs' || q.responseType === 'qcm';
+
+  return {
+    // Réponse libre, dessin, audio… : pas de correction automatique possible,
+    // on affiche seulement la réponse attendue (`correct: null`).
+    correct: autoGradable ? sameChoiceSet(selectedChoices, q.correctChoices ?? []) : null,
+    answer: q.answer ?? '',
+    correctChoices: q.correctChoices ?? [],
   };
 }
 
