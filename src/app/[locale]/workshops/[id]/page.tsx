@@ -2,6 +2,7 @@ import { currentUser } from '@clerk/nextjs/server';
 import { redirect, notFound } from 'next/navigation';
 import { getLocale } from 'next-intl/server';
 import { getWorkshop } from '@/app/actions/workshops';
+import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import WorkshopClient from './WorkshopClient';
 
 type Props = {
@@ -17,6 +18,9 @@ export default async function WorkshopPage({ params }: Props) {
 
   const workshop = await getWorkshop(id);
   if (!workshop) notFound();
+
+  // Les chapitres pilotent les pots de l'onglet Programme.
+  const chapters = await getWorkshopChapters(id);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const members = (workshop.workshop_members as any[]).map((m) => ({
@@ -38,6 +42,7 @@ export default async function WorkshopPage({ params }: Props) {
       currentUserRole={workshop.currentUserRole}
       isPremium={workshop.is_premium}
       members={members}
+      chapters={chapters}
     />
   );
 }

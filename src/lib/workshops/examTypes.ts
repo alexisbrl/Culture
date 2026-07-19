@@ -14,6 +14,11 @@
 
 export type QuestionType = 'textuel' | 'visuel' | 'audio';
 
+// Une question vit soit dans la banque d'examen, soit dans le parcours
+// pédagogique (colonne `exam_questions.context`). Même table, même éditeur,
+// deux surfaces de gestion distinctes.
+export type QuestionContext = 'exam' | 'parcours';
+
 export type ResponseType =
   | 'sans_reponse'
   | 'qcs'

@@ -10,7 +10,7 @@
 // (appels en fire-and-forget avec `.catch(console.error)`).
 
 import { getSupabaseServerClient } from '@/lib/supabase';
-import type { Question, QuestionPart, ExamConfig, ExamPool, GeneratedExam, ExamDraft } from '@/lib/workshops/examTypes';
+import type { Question, QuestionContext, QuestionPart, ExamConfig, ExamPool, GeneratedExam, ExamDraft } from '@/lib/workshops/examTypes';
 
 type QuestionRow = {
   id: string;
@@ -70,8 +70,15 @@ function rowToQuestion(row: QuestionRow): Question {
   };
 }
 
-function questionToRow(workshopId: string, q: Question) {
+// `context` distingue les questions de la banque d'examen de celles du parcours
+// pédagogique (colonne `exam_questions.context`, 'exam' | 'parcours'). Il n'est
+// inclus dans la ligne QUE s'il est fourni : sur un `upsert` de mise à jour,
+// une colonne absente du payload garde sa valeur — c'est ce qui permet aux
+// ré-écritures de masse (nettoyage de pool, suppression) de ne pas requalifier
+// silencieusement une question de parcours en question d'examen.
+function questionToRow(workshopId: string, q: Question, context?: QuestionContext) {
   return {
+    ...(context ? { context } : {}),
     id: q.id,
     workshop_id: workshopId,
     title: q.title ?? '',
@@ -101,7 +108,9 @@ export async function getExamBankData(workshopId: string): Promise<{
   const supabase = getSupabaseServerClient();
 
   const [questionsRes, poolsRes, examsRes] = await Promise.all([
-    supabase.from('exam_questions').select('*').eq('workshop_id', workshopId).order('created_at', { ascending: true }),
+    // Uniquement la banque d'examen : les questions du parcours pédagogique
+    // vivent dans la même table, distinguées par `context`.
+    supabase.from('exam_questions').select('*').eq('workshop_id', workshopId).eq('context', 'exam').order('created_at', { ascending: true }),
     supabase.from('exam_pools').select('id, name, color').eq('workshop_id', workshopId).order('created_at', { ascending: true }),
     supabase.from('exam_generated').select('id, title, date, q, dur, avg, status, taken, question_ids, config').eq('workshop_id', workshopId).order('created_at', { ascending: false }),
   ]);
@@ -124,10 +133,32 @@ export async function getExamBankData(workshopId: string): Promise<{
   return { questions, pools, exams };
 }
 
-export async function saveQuestion(workshopId: string, question: Question): Promise<void> {
+export async function saveQuestion(workshopId: string, question: Question, context?: QuestionContext): Promise<void> {
   const supabase = getSupabaseServerClient();
-  const { error } = await supabase.from('exam_questions').upsert(questionToRow(workshopId, question));
+  const { error } = await supabase.from('exam_questions').upsert(questionToRow(workshopId, question, context));
   if (error) throw new Error(error.message);
+}
+
+// ─── Parcours pédagogique ────────────────────────────────────────────────────
+//
+// Même table que la banque d'examen, filtrée sur `context = 'parcours'`. Les
+// pools sont partagés entre les deux contextes (ce sont les étiquettes de
+// l'atelier), d'où leur présence ici.
+export async function getParcoursData(workshopId: string): Promise<{
+  questions: Question[];
+  pools: ExamPool[];
+}> {
+  const supabase = getSupabaseServerClient();
+
+  const [questionsRes, poolsRes] = await Promise.all([
+    supabase.from('exam_questions').select('*').eq('workshop_id', workshopId).eq('context', 'parcours').order('created_at', { ascending: true }),
+    supabase.from('exam_pools').select('id, name, color').eq('workshop_id', workshopId).order('created_at', { ascending: true }),
+  ]);
+
+  return {
+    questions: (questionsRes.data ?? []).map(rowToQuestion),
+    pools: (poolsRes.data ?? []) as ExamPool[],
+  };
 }
 
 export async function saveQuestions(workshopId: string, questions: Question[]): Promise<void> {

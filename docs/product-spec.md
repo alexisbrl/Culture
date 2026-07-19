@@ -220,16 +220,35 @@ Un propriétaire peut activer le statut Premium sur son atelier. C'est une opér
 
 ### Briques de connaissance
 
-- Générées par l'IA à partir des fichiers sources de l'atelier
-- Chaque brique possède : un **niveau de difficulté**, un **niveau d'importance**, une **position chronologique**
-- Accessibles et modifiables manuellement par les gestionnaires, et via échange avec l'IA
+- Générées par l'IA à partir des fichiers sources de l'atelier, ou ajoutées à la main
+- Chaque brique possède : un **titre** (l'idée en une phrase) et un **contenu détaillé** optionnel
+- Une brique peut être rattachée à un **chapitre** — le rattachement est optionnel, les briques non rangées apparaissent sous « sans chapitre »
+- Pas de niveau de difficulté ni d'importance (décision du 19/07/2026, remplace la spécification initiale)
+- CRUD manuel réservé au propriétaire et aux gestionnaires, dans Paramètres → Briques de connaissance
 - La qualité des briques dépend de la qualité des fichiers déposés — pas de filtrage côté application.
+
+**Maîtrise d'une brique — Taxonomie de Bloom**
+
+Le niveau de maîtrise d'une brique par un utilisateur se mesure sur les 6 niveaux de Bloom (1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser, 5 évaluer, 6 créer) : on veut pouvoir distinguer un candidat qui a seulement mémorisé une brique de celui qui sait la critiquer. La table `brick_mastery` (utilisateur × brique × `bloom_level`) est **créée mais pas encore alimentée** — c'est la fondation posée pour le module Analyse.
+
+### Chapitres
+
+- Un chapitre appartient à un atelier et regroupe des briques de connaissance
+- Ordre d'affichage **réorganisable à la main** (colonne `position`), qui détermine l'ordre des pots dans le programme éducatif
+- Gérés depuis Paramètres → Briques de connaissance (création, renommage, réorganisation, suppression), réservés au propriétaire et aux gestionnaires
+- Supprimer un chapitre **ne supprime pas ses briques** : elles retombent dans « sans chapitre »
+- Un chapitre = un pot dans l'onglet Programme éducatif. Le nombre de pots suit donc directement le nombre de chapitres, et un atelier sans chapitre affiche un programme vide.
 
 ### Programme éducatif
 
 **Structure**
-- Personnalisé pour chaque candidat, organisé en **sections** (groupes de briques)
-- Organisation automatique par l'IA, modifiable manuellement par un gestionnaire
+- Personnalisé pour chaque candidat, organisé en **chapitres** (groupes de briques)
+- Un pot par chapitre, dans l'ordre défini par le gestionnaire
+- La plante de chaque pot reste enroulée sur elle-même : le « chemin » d'exercices dépliable a été retiré le 19/07/2026 (il reposait sur des exercices factices). On lance un exercice par le bouton du pot — action non encore branchée, le module d'exercices n'existe pas.
+
+**Questions du parcours**
+
+Un bouton « questions du parcours », en haut de l'onglet (gestionnaires uniquement), ouvre la vue de gestion de ces questions. Elles sont stockées dans la **même table que la banque du générateur d'examen** (`exam_questions`), distinguées par la colonne `context` (`'exam'` / `'parcours'`), et éditées avec le même éditeur de question. Les deux surfaces restent étanches : la banque d'examen ne montre que `context = 'exam'`, la vue parcours que `context = 'parcours'`. Les pools (étiquettes) sont en revanche partagés entre les deux.
 
 **Options par section**
 

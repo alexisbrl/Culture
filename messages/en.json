@@ -780,15 +780,36 @@
     },
     "bricks": {
       "title": "Knowledge blocks",
-      "desc": "The information units extracted from your source files by the AI.",
+      "desc": "The workshop's information units — extracted from your source files by the AI, or added by hand.",
       "sourceFiles": "Source files",
       "manageFiles": "manage files",
       "regenAI": "✦ regenerate with AI",
       "edit": "edit",
-      "diff": "diff",
-      "imp": "imp",
-      "shownCount": "{shown} of {total} shown",
-      "viewAll": "view all blocks"
+      "add": "+ add a block",
+      "save": "save",
+      "cancel": "cancel",
+      "delete": "delete",
+      "titlePlaceholder": "Block title (the idea in one sentence)",
+      "contentPlaceholder": "Detailed content (optional)",
+      "empty": "No blocks yet — add them by hand or upload source files.",
+      "emptyChapter": "No blocks in this chapter.",
+      "noChapter": "No chapter",
+      "count": "{count, plural, =0 {no blocks} one {# block} other {# blocks}}",
+      "deleteTitle": "Delete this block?",
+      "deleteDesc": "“{title}” will be permanently deleted, along with its mastery data."
+    },
+    "chapters": {
+      "title": "Chapters",
+      "desc": "Chapters group the knowledge blocks. Each chapter grows a pot in the educational programme.",
+      "add": "+ add a chapter",
+      "rename": "rename",
+      "namePlaceholder": "Chapter name",
+      "moveUp": "move up",
+      "moveDown": "move down",
+      "empty": "No chapters yet — the educational programme stays empty until you add one.",
+      "count": "{count, plural, =0 {no chapters} one {# chapter} other {# chapters}}",
+      "deleteTitle": "Delete this chapter?",
+      "deleteDesc": "“{name}” will be deleted and its pot will disappear from the programme. Its blocks are not deleted: they move back to “no chapter”."
     }
   },
   "workshop": {
@@ -880,30 +901,27 @@
     }
   },
   "programme": {
-    "legend": {
-      "done": "done",
-      "current": "in progress",
-      "upcoming": "upcoming"
-    },
-    "comingSoon": "“upcoming”",
-    "launchNext": "launch next",
-    "next": "next",
-    "expand": "expand",
-    "collapse": "collapse",
-    "exercisesCount": "{done} / {total} exercises",
+    "startExercise": "start an exercise",
+    "brickCount": "{count, plural, =0 {no blocks} one {# block} other {# blocks}}",
     "chapterIndicator": "chapter {from}–{to} / {total}",
-    "sideCard": {
-      "tagline": "“paulownia · level {level}”",
-      "progress": "{percent}% through · {count} bricks for lvl. {nextLevel}"
-    },
-    "workshopInfo": {
-      "title": "the workshop",
-      "members": "members",
-      "owner": "owner",
-      "bricks": "bricks",
-      "streak": "your streak"
-    },
-    "continueLink": "continue the programme →"
+    "emptyTitle": "no chapters yet",
+    "emptyDesc": "Chapters are created in Settings → Knowledge blocks. Each chapter grows a pot here.",
+    "questions": {
+      "open": "programme questions",
+      "back": "back to the programme",
+      "title": "Educational programme questions",
+      "desc": "The questions asked to candidates during their programme. Separate from the exam generator's bank.",
+      "new": "new question",
+      "edit": "edit",
+      "delete": "delete",
+      "empty": "No programme questions yet.",
+      "loading": "loading questions…",
+      "saving": "saving…",
+      "loadError": "Error while loading the questions",
+      "saveError": "Error while saving",
+      "deleteError": "Error while deleting",
+      "deleteTitle": "Delete this question?"
+    }
   },
   "accountPricing": {
     "tagline": "from seed to tree —",

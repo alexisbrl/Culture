@@ -9,6 +9,7 @@ import ShareQRModal from '@/components/ShareQRModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { leaveWorkshop } from '@/app/actions/workshops';
 import ProgrammeTab from './tabs/ProgrammeTab';
+import type { Chapter } from '@/app/actions/workshopChapters';
 import ExamenTab from './tabs/ExamenTab';
 import AnalyseTab from './tabs/AnalyseTab';
 import CoursTab from './tabs/CoursTab';
@@ -23,6 +24,7 @@ type Props = {
   currentUserRole: 'owner' | 'manager' | 'member';
   isPremium: boolean;
   members: { id: string; userId: string; role: 'owner' | 'manager' | 'member'; joinedAt: string; displayName: string; uniqueTag: string }[];
+  chapters: Chapter[];
 };
 
 type TabId = 'programme' | 'examen' | 'analyse' | 'cours';
@@ -48,7 +50,7 @@ function Chip({ children, tone = 'default' }: { children: React.ReactNode; tone?
   );
 }
 
-export default function WorkshopClient({ locale, workshopId, workshopName, currentUserRole, isPremium, members }: Props) {
+export default function WorkshopClient({ locale, workshopId, workshopName, currentUserRole, isPremium, members, chapters }: Props) {
   const t = useTranslations('workshop');
   const router = useRouter();
   // Propriétaire ou gestionnaire : accès aux onglets de gestion + paramètres.
@@ -139,7 +141,7 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
 
       {/* Tab content — fills remaining height */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {activeTab === 'programme' && <ProgrammeTab />}
+        {activeTab === 'programme' && <ProgrammeTab chapters={chapters} workshopId={workshopId} canManage={canManage} />}
         {canManage && activeTab === 'examen' && <ExamenTab workshopId={workshopId} />}
         {canManage && activeTab === 'analyse' && <AnalyseTab />}
         {canManage && activeTab === 'cours' && <CoursTab />}
