@@ -4,7 +4,9 @@ import { palette, ink, withAlpha } from '@/lib/theme';
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { ListChecks } from 'lucide-react';
 import type { Chapter } from '@/app/actions/workshopChapters';
+import ParcoursQuestions from './programme/ParcoursQuestions';
 
 // Un pot par chapitre de l'atelier. La plante reste enroulée sur elle-même : le
 // « chemin » d'exercices dépliable a été retiré (19/07/2026) — il reposait sur
@@ -99,9 +101,13 @@ function ChapterColumn({ chapter, index }: { chapter: Chapter; index: number }) 
   );
 }
 
-export default function ProgrammeTab({ chapters }: { chapters: Chapter[] }) {
+export default function ProgrammeTab({ chapters, workshopId, canManage }: { chapters: Chapter[]; workshopId: string; canManage: boolean }) {
   const t = useTranslations('programme');
   const [page, setPage] = useState(0);
+  // Gestion des questions du parcours : réservée aux gestionnaires, ouverte à
+  // la place du décor des pots plutôt que dans une modale (l'éditeur de
+  // question est haut et a besoin de toute la surface).
+  const [showQuestions, setShowQuestions] = useState(false);
   const VISIBLE = 3;
   const maxPage = Math.max(0, chapters.length - VISIBLE);
 
@@ -118,14 +124,30 @@ export default function ProgrammeTab({ chapters }: { chapters: Chapter[] }) {
     };
   }
 
+  if (showQuestions) {
+    return <ParcoursQuestions workshopId={workshopId} onBack={() => setShowQuestions(false)} />;
+  }
+
   return (
     // minHeight requis : le panneau n'a que des enfants en position absolute (hauteur intrinsèque nulle) et le parent est en minHeight/auto — sans lui, la rangée s'effondre à 0 (page blanche)
-    <div style={{ display: 'flex', gap: 18, padding: '18px 22px 22px', height: '100%', minHeight: 560, boxSizing: 'border-box' as const }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 22px 22px', height: '100%', minHeight: 560, boxSizing: 'border-box' as const }}>
       <style>{`
         @keyframes cv_cloud { 0% { transform: translateX(0); } 100% { transform: translateX(24px); } }
       `}</style>
 
-      <div style={{ flex: 1, position: 'relative', borderRadius: 18, overflow: 'hidden', border: `1px solid ${ink(0.07)}`, background: 'linear-gradient(180deg, #eef0dd 0%, #e6ecdc 46%, #dce7d2 100%)' }}>
+      {canManage && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <button
+            onClick={() => setShowQuestions(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            <ListChecks size={13} strokeWidth={1.75} />
+            {t('questions.open')}
+          </button>
+        </div>
+      )}
+
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', borderRadius: 18, overflow: 'hidden', border: `1px solid ${ink(0.07)}`, background: 'linear-gradient(180deg, #eef0dd 0%, #e6ecdc 46%, #dce7d2 100%)' }}>
         {/* sky / sun glow */}
         <div style={{ position: 'absolute', top: -70, right: -50, width: 240, height: 240, borderRadius: '50%', background: 'radial-gradient(circle, rgba(246,201,112,0.34), rgba(246,201,112,0) 70%)', pointerEvents: 'none' }} />
         <svg width="100%" height="120" style={{ position: 'absolute', top: 10, left: 0, pointerEvents: 'none' }}>

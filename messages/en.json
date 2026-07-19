@@ -905,7 +905,23 @@
     "brickCount": "{count, plural, =0 {no blocks} one {# block} other {# blocks}}",
     "chapterIndicator": "chapter {from}–{to} / {total}",
     "emptyTitle": "no chapters yet",
-    "emptyDesc": "Chapters are created in Settings → Knowledge blocks. Each chapter grows a pot here."
+    "emptyDesc": "Chapters are created in Settings → Knowledge blocks. Each chapter grows a pot here.",
+    "questions": {
+      "open": "programme questions",
+      "back": "back to the programme",
+      "title": "Educational programme questions",
+      "desc": "The questions asked to candidates during their programme. Separate from the exam generator's bank.",
+      "new": "new question",
+      "edit": "edit",
+      "delete": "delete",
+      "empty": "No programme questions yet.",
+      "loading": "loading questions…",
+      "saving": "saving…",
+      "loadError": "Error while loading the questions",
+      "saveError": "Error while saving",
+      "deleteError": "Error while deleting",
+      "deleteTitle": "Delete this question?"
+    }
   },
   "accountPricing": {
     "tagline": "from seed to tree —",

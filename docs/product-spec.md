@@ -246,6 +246,10 @@ Le niveau de maîtrise d'une brique par un utilisateur se mesure sur les 6 nivea
 - Un pot par chapitre, dans l'ordre défini par le gestionnaire
 - La plante de chaque pot reste enroulée sur elle-même : le « chemin » d'exercices dépliable a été retiré le 19/07/2026 (il reposait sur des exercices factices). On lance un exercice par le bouton du pot — action non encore branchée, le module d'exercices n'existe pas.
 
+**Questions du parcours**
+
+Un bouton « questions du parcours », en haut de l'onglet (gestionnaires uniquement), ouvre la vue de gestion de ces questions. Elles sont stockées dans la **même table que la banque du générateur d'examen** (`exam_questions`), distinguées par la colonne `context` (`'exam'` / `'parcours'`), et éditées avec le même éditeur de question. Les deux surfaces restent étanches : la banque d'examen ne montre que `context = 'exam'`, la vue parcours que `context = 'parcours'`. Les pools (étiquettes) sont en revanche partagés entre les deux.
+
 **Options par section**
 
 | Option | Valeurs possibles |

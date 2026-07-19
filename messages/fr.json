@@ -905,7 +905,23 @@
     "brickCount": "{count, plural, =0 {aucune brique} one {# brique} other {# briques}}",
     "chapterIndicator": "chapitre {from}–{to} / {total}",
     "emptyTitle": "aucun chapitre pour l'instant",
-    "emptyDesc": "Les chapitres se créent dans Paramètres → Briques de connaissance. Chaque chapitre fait pousser un pot ici."
+    "emptyDesc": "Les chapitres se créent dans Paramètres → Briques de connaissance. Chaque chapitre fait pousser un pot ici.",
+    "questions": {
+      "open": "questions du parcours",
+      "back": "retour au programme",
+      "title": "Questions du parcours pédagogique",
+      "desc": "Les questions posées aux candidats pendant leur parcours. Distinctes de la banque du générateur d'examen.",
+      "new": "nouvelle question",
+      "edit": "éditer",
+      "delete": "supprimer",
+      "empty": "Aucune question de parcours pour l'instant.",
+      "loading": "chargement des questions…",
+      "saving": "enregistrement…",
+      "loadError": "Erreur lors du chargement des questions",
+      "saveError": "Erreur lors de l'enregistrement",
+      "deleteError": "Erreur lors de la suppression",
+      "deleteTitle": "Supprimer cette question ?"
+    }
   },
   "accountPricing": {
     "tagline": "de la graine à l'arbre —",
