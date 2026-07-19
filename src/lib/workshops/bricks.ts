@@ -52,14 +52,32 @@ export async function listBricks(workshopId: string): Promise<Brick[]> {
   }));
 }
 
+// Vérifie qu'un chapitre appartient bien à cet atelier avant de l'associer —
+// sinon on rattacherait une brique au chapitre d'un autre atelier.
+async function chapterBelongsToWorkshop(workshopId: string, chapterId: string): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  const { data } = await supabase
+    .from('workshop_chapters')
+    .select('id')
+    .eq('id', chapterId)
+    .eq('workshop_id', workshopId)
+    .maybeSingle();
+  return !!data;
+}
+
 export async function createBrick(
   workshopId: string,
   userId: string,
   title: string,
-  content: string | null
+  content: string | null,
+  chapterId: string | null = null
 ): Promise<{ success: boolean; brick?: Brick; error?: string }> {
   const invalid = validate(title, content);
   if (invalid) return { success: false, error: invalid };
+
+  if (chapterId && !(await chapterBelongsToWorkshop(workshopId, chapterId))) {
+    return { success: false, error: 'Chapitre introuvable' };
+  }
 
   const supabase = getSupabaseServerClient();
 
@@ -70,6 +88,7 @@ export async function createBrick(
       created_by: userId,
       title: title.trim(),
       content: content?.trim() || null,
+      chapter_id: chapterId,
     })
     .select('id, title, content, chapter_id, created_at')
     .single();
@@ -89,10 +108,15 @@ export async function updateBrick(
   workshopId: string,
   brickId: string,
   title: string,
-  content: string | null
+  content: string | null,
+  chapterId: string | null = null
 ): Promise<{ success: boolean; error?: string }> {
   const invalid = validate(title, content);
   if (invalid) return { success: false, error: invalid };
+
+  if (chapterId && !(await chapterBelongsToWorkshop(workshopId, chapterId))) {
+    return { success: false, error: 'Chapitre introuvable' };
+  }
 
   const supabase = getSupabaseServerClient();
 
@@ -100,7 +124,7 @@ export async function updateBrick(
   // autre atelier avec un brickId volé (l'authz du wrapper porte sur workshopId).
   const { data, error } = await supabase
     .from('workshop_bricks')
-    .update({ title: title.trim(), content: content?.trim() || null, updated_at: new Date().toISOString() })
+    .update({ title: title.trim(), content: content?.trim() || null, chapter_id: chapterId, updated_at: new Date().toISOString() })
     .eq('id', brickId)
     .eq('workshop_id', workshopId)
     .select('id');

@@ -27,13 +27,14 @@ export async function getWorkshopBricks(workshopId: string): Promise<Brick[]> {
 export async function createWorkshopBrick(
   workshopId: string,
   title: string,
-  content: string | null
+  content: string | null,
+  chapterId: string | null = null
 ): Promise<{ success: boolean; brick?: Brick; error?: string }> {
   try {
     const ctx = await requireManager(workshopId);
     if (!ctx) return { success: false, error: 'Droits insuffisants' };
 
-    const result = await bricksLib.createBrick(workshopId, ctx.userId, title, content);
+    const result = await bricksLib.createBrick(workshopId, ctx.userId, title, content, chapterId);
     if (result.success) revalidateWorkshop();
     return result;
   } catch (err) {
@@ -46,12 +47,13 @@ export async function updateWorkshopBrick(
   workshopId: string,
   brickId: string,
   title: string,
-  content: string | null
+  content: string | null,
+  chapterId: string | null = null
 ): Promise<{ success: boolean; error?: string }> {
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
-    const result = await bricksLib.updateBrick(workshopId, brickId, title, content);
+    const result = await bricksLib.updateBrick(workshopId, brickId, title, content, chapterId);
     if (result.success) revalidateWorkshop();
     return result;
   } catch (err) {

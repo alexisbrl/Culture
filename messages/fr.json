@@ -792,9 +792,24 @@
       "titlePlaceholder": "Titre de la brique (l'idée en une phrase)",
       "contentPlaceholder": "Contenu détaillé (optionnel)",
       "empty": "Aucune brique pour l'instant — ajoutez-les à la main ou déposez des fichiers sources.",
+      "emptyChapter": "Aucune brique dans ce chapitre.",
+      "noChapter": "Sans chapitre",
       "count": "{count, plural, =0 {aucune brique} one {# brique} other {# briques}}",
       "deleteTitle": "Supprimer cette brique ?",
       "deleteDesc": "« {title} » sera définitivement supprimée, ainsi que les données de maîtrise associées."
+    },
+    "chapters": {
+      "title": "Chapitres",
+      "desc": "Les chapitres regroupent les briques. Chaque chapitre fait pousser un pot dans le programme éducatif.",
+      "add": "+ ajouter un chapitre",
+      "rename": "renommer",
+      "namePlaceholder": "Nom du chapitre",
+      "moveUp": "monter",
+      "moveDown": "descendre",
+      "empty": "Aucun chapitre pour l'instant — le programme éducatif est vide tant qu'il n'y en a pas.",
+      "count": "{count, plural, =0 {aucun chapitre} one {# chapitre} other {# chapitres}}",
+      "deleteTitle": "Supprimer ce chapitre ?",
+      "deleteDesc": "« {name} » sera supprimé et son pot disparaîtra du programme. Ses briques ne sont pas supprimées : elles repassent dans « sans chapitre »."
     }
   },
   "workshop": {
@@ -886,13 +901,11 @@
     }
   },
   "programme": {
-    "comingSoon": "« à venir »",
-    "launchNext": "lancer le prochain",
-    "next": "prochain",
-    "expand": "dérouler",
-    "collapse": "enrouler",
-    "exercisesCount": "{done} / {total} exercices",
-    "chapterIndicator": "chapitre {from}–{to} / {total}"
+    "startExercise": "lancer un exercice",
+    "brickCount": "{count, plural, =0 {aucune brique} one {# brique} other {# briques}}",
+    "chapterIndicator": "chapitre {from}–{to} / {total}",
+    "emptyTitle": "aucun chapitre pour l'instant",
+    "emptyDesc": "Les chapitres se créent dans Paramètres → Briques de connaissance. Chaque chapitre fait pousser un pot ici."
   },
   "accountPricing": {
     "tagline": "de la graine à l'arbre —",

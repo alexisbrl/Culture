@@ -4,6 +4,7 @@ import { getLocale } from 'next-intl/server';
 import { getWorkshop, getMemberGroups } from '@/app/actions/workshops';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import { getWorkshopBricks } from '@/app/actions/workshopBricks';
+import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import SettingsClient from './SettingsClient';
 
 type Props = {
@@ -24,10 +25,11 @@ export default async function SettingsPage({ params }: Props) {
   if (workshop.currentUserRole === 'member') redirect(`/${locale}/workshops/${id}`);
 
   // Requêtes indépendantes → parallèle (règle N+1, cf. server-architecture.md)
-  const [files, groups, bricks] = await Promise.all([
+  const [files, groups, bricks, chapters] = await Promise.all([
     getWorkshopFiles(id),
     getMemberGroups(id),
     getWorkshopBricks(id),
+    getWorkshopChapters(id),
   ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -60,6 +62,7 @@ export default async function SettingsPage({ params }: Props) {
       groups={groups}
       files={files}
       bricks={bricks}
+      chapters={chapters}
     />
   );
 }
