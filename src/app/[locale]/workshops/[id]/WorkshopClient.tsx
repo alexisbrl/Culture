@@ -108,10 +108,14 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
               </span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setShareOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
-                <QrCode size={13} />
-                {t('shareBtn')}
-              </button>
+              {/* Partage/QR réservé aux gestionnaires : c'est une invitation à
+                  rejoindre l'atelier, pas une action de candidat. */}
+              {canManage && (
+                <button onClick={() => setShareOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <QrCode size={13} />
+                  {t('shareBtn')}
+                </button>
+              )}
               {canManage && (
                 <Link href={`/${locale}/workshops/${workshopId}/settings`} style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Settings size={13} color="#5a564c" strokeWidth={1.75} />
@@ -148,7 +152,7 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
       </div>
 
       {/* Share / QR modal */}
-      <ShareQRModal open={shareOpen} onClose={() => setShareOpen(false)} title={workshopName} url={joinUrl} />
+      <ShareQRModal open={canManage && shareOpen} onClose={() => setShareOpen(false)} title={workshopName} url={joinUrl} />
 
       {/* Quitter l'atelier — confirmation */}
       {leaveOpen && (
