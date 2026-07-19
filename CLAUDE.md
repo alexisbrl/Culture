@@ -230,6 +230,7 @@ Ces fichiers ne sont **pas** chargés automatiquement à chaque session — vas-
 | `docs/product-spec.md` | Cahier des charges complet : périmètre MVP, lexique, abonnements, pages & navigation, modules 1 & 2, gamification | Question de périmètre produit, comportement attendu d'une page/fonctionnalité |
 | `docs/changelog.md` | Repères chronologiques des décisions structurantes | Comprendre le contexte historique avant de modifier une zone en profondeur |
 | `docs/backlog.md` | Dette technique et TODO connus | Planification, avant de toucher une zone qui a un item ouvert |
+| `docs/ai-ingestion-plan.md` | Conception arrêtée de la génération du programme par IA (contrat, fournisseurs, annulation, ordre de chantier) | Avant tout travail sur l'ingestion IA — le document fixe les décisions et les prérequis |
 
 Ces fichiers se chargent automatiquement, seulement quand tu touches un fichier dont le chemin matche leur `paths:` — pas besoin de les lire à la main dans ce cas :
 
