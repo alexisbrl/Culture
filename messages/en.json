@@ -880,30 +880,13 @@
     }
   },
   "programme": {
-    "legend": {
-      "done": "done",
-      "current": "in progress",
-      "upcoming": "upcoming"
-    },
     "comingSoon": "“upcoming”",
     "launchNext": "launch next",
     "next": "next",
     "expand": "expand",
     "collapse": "collapse",
     "exercisesCount": "{done} / {total} exercises",
-    "chapterIndicator": "chapter {from}–{to} / {total}",
-    "sideCard": {
-      "tagline": "“paulownia · level {level}”",
-      "progress": "{percent}% through · {count} bricks for lvl. {nextLevel}"
-    },
-    "workshopInfo": {
-      "title": "the workshop",
-      "members": "members",
-      "owner": "owner",
-      "bricks": "bricks",
-      "streak": "your streak"
-    },
-    "continueLink": "continue the programme →"
+    "chapterIndicator": "chapter {from}–{to} / {total}"
   },
   "accountPricing": {
     "tagline": "from seed to tree —",

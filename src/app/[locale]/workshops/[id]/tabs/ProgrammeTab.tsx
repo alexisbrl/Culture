@@ -212,57 +212,6 @@ function ChapterColumn({ ch, expanded, onToggle }: { ch: Chapter; expanded: bool
   );
 }
 
-function SideCard() {
-  const t = useTranslations('programme');
-  return (
-    <div style={{ width: 264, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ background: withAlpha(palette.paper, 0.78), border: `1px solid ${ink(0.08)}`, borderRadius: 16, padding: '18px 18px 16px', textAlign: 'center', boxShadow: `0 8px 26px ${ink(0.06)}` }}>
-        <div style={{ position: 'relative', width: 150, height: 140, margin: '0 auto' }}>
-          <div style={{ position: 'absolute', left: '50%', bottom: 14, transform: 'translateX(-50%)', width: 92, height: 16, borderRadius: '50%', background: ink(0.12), filter: 'blur(4px)' }} />
-          {/* Tree placeholder (paulownia-style SVG) */}
-          <svg viewBox="0 0 100 130" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
-            <rect x="44" y="80" width="12" height="40" rx="3" fill="#9e7a55" />
-            <ellipse cx="50" cy="55" rx="32" ry="36" fill="#5a8040" />
-            <ellipse cx="35" cy="65" rx="20" ry="22" fill="#6a9050" />
-            <ellipse cx="65" cy="62" rx="22" ry="24" fill="#6a9050" />
-            <ellipse cx="50" cy="40" rx="24" ry="26" fill="#7aa868" />
-          </svg>
-        </div>
-        <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginTop: 4 }}>Biologie cellulaire</div>
-        <div style={{ fontFamily: "'Caveat', cursive", fontSize: 16, color: palette.amber, marginTop: 1 }}>{t('sideCard.tagline', { level: 2 })}</div>
-        <div style={{ marginTop: 12, height: 6, borderRadius: 3, background: ink(0.07), overflow: 'hidden' }}>
-          <div style={{ width: '58%', height: '100%', background: P.plantAccent }} />
-        </div>
-        <div style={{ fontSize: 11, color: palette.inkSoft, marginTop: 6 }}>{t('sideCard.progress', { percent: 58, count: 6, nextLevel: 3 })}</div>
-      </div>
-      <div style={{ background: withAlpha(palette.paper, 0.78), border: `1px solid ${ink(0.08)}`, borderRadius: 16, padding: '14px 16px' }}>
-        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft, marginBottom: 10 }}>{t('workshopInfo.title')}</div>
-        {([[t('workshopInfo.members'), '38 jardiniers'], [t('workshopInfo.owner'), 'Pr. C. Vaisse'], [t('workshopInfo.bricks'), '142 · 5 chapitres'], [t('workshopInfo.streak'), '12 jours 🔥']] as [string, string][]).map(([k, v]) => (
-          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${ink(0.05)}`, fontSize: 12.5 }}>
-            <span style={{ color: palette.inkSoft }}>{k}</span>
-            <span style={{ color: palette.ink, fontWeight: 500 }}>{v}</span>
-          </div>
-        ))}
-        <a href="#" style={{ display: 'block', textAlign: 'center', marginTop: 14, padding: '11px 14px', borderRadius: 10, background: P.plantDeep, color: palette.parchment, textDecoration: 'none', fontSize: 13, fontWeight: 500, boxShadow: `0 6px 16px ${withAlpha(palette.green, 0.28)}` }}>{t('continueLink')}</a>
-      </div>
-    </div>
-  );
-}
-
-function Legend() {
-  const t = useTranslations('programme');
-  const items: [string, string][] = [[t('legend.done'), P.plantDeep], [t('legend.current'), palette.amber], [t('legend.upcoming'), ink(0.18)]];
-  return (
-    <div style={{ display: 'flex', gap: 14, alignItems: 'center', background: withAlpha(palette.paper, 0.72), border: `1px solid ${ink(0.08)}`, borderRadius: 999, padding: '6px 14px', fontSize: 11.5, color: palette.inkMuted }}>
-      {items.map(([l, c]) => (
-        <span key={l} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 11, height: 11, borderRadius: '50%', background: c, display: 'inline-block' }} />{l}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 export default function ProgrammeTab() {
   const t = useTranslations('programme');
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(['c3']));
@@ -292,13 +241,12 @@ export default function ProgrammeTab() {
   }
 
   return (
-    <div style={{ display: 'flex', gap: 18, padding: '18px 22px 22px', height: '100%', boxSizing: 'border-box' as const }}>
+    // minHeight requis : le panneau n'a que des enfants en position absolute (hauteur intrinsèque nulle) et le parent est en minHeight/auto — sans lui, la rangée s'effondre à 0 (page blanche)
+    <div style={{ display: 'flex', gap: 18, padding: '18px 22px 22px', height: '100%', minHeight: 560, boxSizing: 'border-box' as const }}>
       <style>{`
         @keyframes cv_pulse { 0%,100% { transform: translate(-50%,-50%) scale(1); } 50% { transform: translate(-50%,-50%) scale(1.06); } }
         @keyframes cv_cloud { 0% { transform: translateX(0); } 100% { transform: translateX(24px); } }
       `}</style>
-      <SideCard />
-
       <div style={{ flex: 1, position: 'relative', borderRadius: 18, overflow: 'hidden', border: `1px solid ${ink(0.07)}`, background: 'linear-gradient(180deg, #eef0dd 0%, #e6ecdc 46%, #dce7d2 100%)' }}>
         {/* sky / sun glow */}
         <div style={{ position: 'absolute', top: -70, right: -50, width: 240, height: 240, borderRadius: '50%', background: 'radial-gradient(circle, rgba(246,201,112,0.34), rgba(246,201,112,0) 70%)', pointerEvents: 'none' }} />
@@ -308,8 +256,6 @@ export default function ProgrammeTab() {
             <ellipse cx="84%" cy="60" rx="46" ry="20" fill="#fff" />
           </g>
         </svg>
-
-        <div style={{ position: 'absolute', top: 14, left: 16, zIndex: 8 }}><Legend /></div>
 
         {/* shelf / floor */}
         <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: POT_ZONE - 18, background: 'linear-gradient(180deg, #d8c3a0 0%, #c9b08a 30%, #bea271 100%)', pointerEvents: 'none' }}>

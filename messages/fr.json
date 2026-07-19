@@ -880,30 +880,13 @@
     }
   },
   "programme": {
-    "legend": {
-      "done": "terminé",
-      "current": "en cours",
-      "upcoming": "à venir"
-    },
     "comingSoon": "« à venir »",
     "launchNext": "lancer le prochain",
     "next": "prochain",
     "expand": "dérouler",
     "collapse": "enrouler",
     "exercisesCount": "{done} / {total} exercices",
-    "chapterIndicator": "chapitre {from}–{to} / {total}",
-    "sideCard": {
-      "tagline": "« paulownia · niveau {level} »",
-      "progress": "{percent} % du parcours · {count} briques pour niv. {nextLevel}"
-    },
-    "workshopInfo": {
-      "title": "l'atelier",
-      "members": "membres",
-      "owner": "propriétaire",
-      "bricks": "briques",
-      "streak": "ta série"
-    },
-    "continueLink": "continuer le parcours →"
+    "chapterIndicator": "chapitre {from}–{to} / {total}"
   },
   "accountPricing": {
     "tagline": "de la graine à l'arbre —",
