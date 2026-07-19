@@ -62,6 +62,42 @@ export type Question = {
   examIds: string[];
   createdAt?: string;
   textLines?: number;
+  // Chapitre de rattachement — utilisé uniquement par les questions du parcours
+  // (`context = 'parcours'`), où il détermine dans quel pot la question peut
+  // être tirée. Toujours `null` côté banque d'examen.
+  chapterId?: string | null;
+};
+
+// ─── Exercice du parcours ────────────────────────────────────────────────────
+//
+// ⚠️ Ce qu'un candidat reçoit quand il lance un exercice : volontairement PAS un
+// `Question`. Ni `answer` ni `correctChoices` n'en font partie — la correction
+// est calculée côté serveur (`gradeParcoursAnswer`) et la réponse attendue n'est
+// renvoyée qu'après validation.
+export type ExerciseChoice = {
+  // Index de l'option dans la question d'origine : c'est lui que le client
+  // renvoie à la validation, ce qui permet de mélanger l'ordre d'affichage sans
+  // que le serveur ait à mémoriser la permutation. Ne révèle rien.
+  index: number;
+  text: string;
+};
+
+export type ExercisePrompt = {
+  id: string;
+  title: string;
+  content: string;
+  questionType: QuestionType;
+  responseType: ResponseType;
+  choices: ExerciseChoice[];
+  textLines: number;
+};
+
+export type ExerciseResult = {
+  // `null` quand la correction automatique ne s'applique pas (réponse libre,
+  // dessin, audio…) : on se contente alors d'afficher la réponse attendue.
+  correct: boolean | null;
+  answer: string;
+  correctChoices: number[];
 };
 
 export type IdentitySide = 'left' | 'right' | 'hidden';

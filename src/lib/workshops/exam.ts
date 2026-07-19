@@ -10,11 +10,23 @@
 // (appels en fire-and-forget avec `.catch(console.error)`).
 
 import { getSupabaseServerClient } from '@/lib/supabase';
-import type { Question, QuestionContext, QuestionPart, ExamConfig, ExamPool, GeneratedExam, ExamDraft } from '@/lib/workshops/examTypes';
+import type {
+  Question,
+  QuestionContext,
+  QuestionPart,
+  ExamConfig,
+  ExamPool,
+  GeneratedExam,
+  ExamDraft,
+  ExercisePrompt,
+  ExerciseChoice,
+  ExerciseResult,
+} from '@/lib/workshops/examTypes';
 
 type QuestionRow = {
   id: string;
   workshop_id: string;
+  chapter_id: string | null;
   title: string;
   question_type: string;
   response_type: string;
@@ -67,6 +79,7 @@ function rowToQuestion(row: QuestionRow): Question {
     examIds: row.exam_ids ?? [],
     textLines: row.text_lines ?? 4,
     createdAt: row.created_at,
+    chapterId: row.chapter_id ?? null,
   };
 }
 
@@ -76,9 +89,13 @@ function rowToQuestion(row: QuestionRow): Question {
 // une colonne absente du payload garde sa valeur — c'est ce qui permet aux
 // ré-écritures de masse (nettoyage de pool, suppression) de ne pas requalifier
 // silencieusement une question de parcours en question d'examen.
+// `chapter_id` suit exactement la même règle, et n'est écrit que dans le
+// contexte « parcours » : la banque d'examen ne connaît pas les chapitres, et
+// une ré-écriture de masse ne doit pas détacher une question de son pot.
 function questionToRow(workshopId: string, q: Question, context?: QuestionContext) {
   return {
     ...(context ? { context } : {}),
+    ...(context === 'parcours' ? { chapter_id: q.chapterId ?? null } : {}),
     id: q.id,
     workshop_id: workshopId,
     title: q.title ?? '',
@@ -158,6 +175,112 @@ export async function getParcoursData(workshopId: string): Promise<{
   return {
     questions: (questionsRes.data ?? []).map(rowToQuestion),
     pools: (poolsRes.data ?? []) as ExamPool[],
+  };
+}
+
+// ─── Exercice : tirage et correction ─────────────────────────────────────────
+//
+// ⚠️ SÉCURITÉ — Ces deux fonctions sont les seules du module appelées pour le
+// compte d'un simple membre. Elles ne renvoient jamais un `Question` complet :
+// `drawParcoursQuestion` produit un `ExercisePrompt` sans réponse, et
+// `gradeParcoursAnswer` ne révèle la réponse attendue qu'en réponse à une
+// tentative. Un membre déterminé peut donc obtenir la réponse en soumettant
+// n'importe quoi — c'est assumé pour un parcours d'entraînement individuel,
+// contrairement à un examen noté.
+
+function shuffled<T>(items: T[]): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+function toPrompt(q: Question): ExercisePrompt {
+  const choices: ExerciseChoice[] = (q.choices ?? []).map((text, index) => ({ index, text }));
+  return {
+    id: q.id,
+    title: q.title,
+    content: q.content,
+    questionType: q.questionType,
+    responseType: q.responseType,
+    choices: q.shuffleChoices ? shuffled(choices) : choices,
+    textLines: q.textLines ?? 4,
+  };
+}
+
+// Tirage uniforme parmi les questions du chapitre. `excludeId` évite de
+// retomber sur la question qu'on vient de faire quand il y a de quoi varier —
+// avec une seule question dans le chapitre, on la retire logiquement.
+export async function drawParcoursQuestion(
+  workshopId: string,
+  chapterId: string,
+  excludeId?: string
+): Promise<ExercisePrompt | null> {
+  const supabase = getSupabaseServerClient();
+
+  const { data: ids, error } = await supabase
+    .from('exam_questions')
+    .select('id')
+    .eq('workshop_id', workshopId)
+    .eq('context', 'parcours')
+    .eq('chapter_id', chapterId);
+
+  if (error) throw new Error(error.message);
+
+  let pool = (ids ?? []).map((r) => r.id as string);
+  if (pool.length === 0) return null;
+  if (excludeId && pool.length > 1) pool = pool.filter((id) => id !== excludeId);
+
+  const picked = pool[Math.floor(Math.random() * pool.length)];
+
+  const { data: row, error: rowError } = await supabase
+    .from('exam_questions')
+    .select('*')
+    .eq('workshop_id', workshopId)
+    .eq('id', picked)
+    .maybeSingle();
+
+  if (rowError) throw new Error(rowError.message);
+  if (!row) return null;
+
+  return toPrompt(rowToQuestion(row as QuestionRow));
+}
+
+function sameChoiceSet(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  const setB = new Set(b);
+  return a.every((x) => setB.has(x));
+}
+
+export async function gradeParcoursAnswer(
+  workshopId: string,
+  questionId: string,
+  selectedChoices: number[]
+): Promise<ExerciseResult | null> {
+  const supabase = getSupabaseServerClient();
+
+  const { data: row, error } = await supabase
+    .from('exam_questions')
+    .select('*')
+    .eq('workshop_id', workshopId)
+    .eq('context', 'parcours')
+    .eq('id', questionId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!row) return null;
+
+  const q = rowToQuestion(row as QuestionRow);
+  const autoGradable = q.responseType === 'qcs' || q.responseType === 'qcm';
+
+  return {
+    // Réponse libre, dessin, audio… : pas de correction automatique possible,
+    // on affiche seulement la réponse attendue (`correct: null`).
+    correct: autoGradable ? sameChoiceSet(selectedChoices, q.correctChoices ?? []) : null,
+    answer: q.answer ?? '',
+    correctChoices: q.correctChoices ?? [],
   };
 }
 

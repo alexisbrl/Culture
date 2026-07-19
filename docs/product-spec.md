@@ -244,11 +244,23 @@ Le niveau de maîtrise d'une brique par un utilisateur se mesure sur les 6 nivea
 **Structure**
 - Personnalisé pour chaque candidat, organisé en **chapitres** (groupes de briques)
 - Un pot par chapitre, dans l'ordre défini par le gestionnaire
-- La plante de chaque pot reste enroulée sur elle-même : le « chemin » d'exercices dépliable a été retiré le 19/07/2026 (il reposait sur des exercices factices). On lance un exercice par le bouton du pot — action non encore branchée, le module d'exercices n'existe pas.
+- La plante de chaque pot reste enroulée sur elle-même : le « chemin » d'exercices dépliable a été retiré le 19/07/2026 (il reposait sur des exercices factices). Le bouton « lancer un exercice » de chaque pot ouvre la page d'exercice du chapitre.
 
 **Questions du parcours**
 
 Un bouton « questions du parcours », en haut de l'onglet (gestionnaires uniquement), ouvre la vue de gestion de ces questions. Elles sont stockées dans la **même table que la banque du générateur d'examen** (`exam_questions`), distinguées par la colonne `context` (`'exam'` / `'parcours'`), et éditées avec le même éditeur de question. Les deux surfaces restent étanches : la banque d'examen ne montre que `context = 'exam'`, la vue parcours que `context = 'parcours'`. Les pools (étiquettes) sont en revanche partagés entre les deux.
+
+Chaque question de parcours se rattache à **un chapitre** (`exam_questions.chapter_id`, choisi dans un sélecteur au-dessus de l'éditeur — pas dans l'éditeur lui-même, qui est partagé avec la banque d'examen). Une question sans chapitre n'est jamais tirée. Supprimer un chapitre ne supprime pas ses questions : elles retombent dans « sans chapitre » (FK `on delete set null`, même choix que les briques).
+
+**Exercice (page candidat)**
+
+`/{locale}/workshops/{id}/exercise/{chapterId}`, ouverte par le bouton du pot et accessible à **tout membre**. Elle tire au hasard une question du chapitre, affiche l'énoncé et une zone de réponse, puis la correction après validation :
+
+- **QCS / QCM** → choix cliquables, correction automatique (bonne/mauvaise réponse, bonnes options mises en évidence).
+- **Autres types de réponse** (texte, dessin, audio…) → saisie libre, pas de verdict automatique : la validation affiche seulement la réponse attendue.
+- Après correction, « question suivante » retire du tirage celle qu'on vient de faire (sauf s'il n'en reste qu'une).
+
+Sécurité : le client ne reçoit **jamais** `answer` ni `correctChoices` au tirage — le serveur renvoie un `ExercisePrompt` épuré et calcule la correction (`gradeExercise`). Les options peuvent donc être mélangées côté serveur sans mémoriser de permutation, chaque option portant son index d'origine. Un membre qui soumet n'importe quoi peut obtenir la réponse : c'est assumé pour un parcours d'entraînement individuel, contrairement à un examen noté.
 
 **Options par section**
 

@@ -14,6 +14,7 @@ import { useTranslations } from 'next-intl';
 import { ArrowLeft, Loader2, Plus } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import type { Chapter } from '@/app/actions/workshopChapters';
 import QuestionEditor, { type Question, emptyQuestion } from '../QuestionEditor';
 import {
   getParcoursQuestions,
@@ -24,7 +25,7 @@ import {
 
 type Pool = { id: string; name: string; color: string };
 
-export default function ParcoursQuestions({ workshopId, onBack }: { workshopId: string; onBack: () => void }) {
+export default function ParcoursQuestions({ workshopId, chapters, onBack }: { workshopId: string; chapters: Chapter[]; onBack: () => void }) {
   const t = useTranslations('programme');
   const tExam = useTranslations('examen');
 
@@ -32,6 +33,9 @@ export default function ParcoursQuestions({ workshopId, onBack }: { workshopId: 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [pools, setPools] = useState<Pool[]>([]);
   const [editing, setEditing] = useState<Question | null>(null);
+  // Le chapitre est géré ici plutôt que dans QuestionEditor : cet éditeur est
+  // partagé avec la banque d'examen, qui n'a pas de notion de chapitre.
+  const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Question | null>(null);
@@ -55,18 +59,26 @@ export default function ParcoursQuestions({ workshopId, onBack }: { workshopId: 
     };
   }, [workshopId, t]);
 
+  function openEditor(q: Question) {
+    setEditing(q);
+    setEditingChapterId(q.chapterId ?? null);
+    setError('');
+  }
+
   async function handleSave(q: Question) {
+    // QuestionEditor ne connaît pas le chapitre : on le réinjecte à la sortie.
+    const question: Question = { ...q, chapterId: editingChapterId };
     setSaving(true);
     setError('');
-    const result = await saveParcoursQuestion(workshopId, q);
+    const result = await saveParcoursQuestion(workshopId, question);
     setSaving(false);
     if (!result.success) {
       setError(result.error ?? t('questions.saveError'));
       return;
     }
     setQuestions((prev) => {
-      const exists = prev.some((x) => x.id === q.id);
-      return exists ? prev.map((x) => (x.id === q.id ? q : x)) : [...prev, q];
+      const exists = prev.some((x) => x.id === question.id);
+      return exists ? prev.map((x) => (x.id === question.id ? question : x)) : [...prev, question];
     });
     setEditing(null);
   }
@@ -103,6 +115,29 @@ export default function ParcoursQuestions({ workshopId, onBack }: { workshopId: 
     return (
       <div style={{ padding: '18px 22px 22px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
         {error && <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 10 }}>{error}</div>}
+
+        {/* Chapitre de rattachement : c'est lui qui détermine dans quel pot la
+            question peut être tirée. Sans chapitre, elle n'est jamais tirée. */}
+        <div style={{ background: withAlpha(palette.paper, 0.85), borderRadius: 14, border: `1px solid ${ink(0.07)}`, padding: '14px 18px', marginBottom: 12 }}>
+          <label htmlFor="parcours-chapter" style={{ display: 'block', fontSize: 12.5, color: palette.inkMuted, marginBottom: 6 }}>
+            {t('questions.chapter')}
+          </label>
+          <select
+            id="parcours-chapter"
+            value={editingChapterId ?? ''}
+            onChange={(e) => setEditingChapterId(e.target.value || null)}
+            style={{ width: '100%', maxWidth: 340, padding: '8px 10px', borderRadius: 9, border: `1px solid ${ink(0.16)}`, background: palette.paper, color: palette.ink, fontSize: 13, fontFamily: 'inherit' }}
+          >
+            <option value="">{t('questions.noChapter')}</option>
+            {chapters.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          {!editingChapterId && (
+            <div style={{ fontSize: 11.5, color: palette.inkFaint, marginTop: 6 }}>{t('questions.noChapterHint')}</div>
+          )}
+        </div>
+
         <QuestionEditor
           question={editing}
           allQuestions={questions}
@@ -130,7 +165,7 @@ export default function ParcoursQuestions({ workshopId, onBack }: { workshopId: 
           <ArrowLeft size={14} /> {t('questions.back')}
         </button>
         <button
-          onClick={() => { setEditing(emptyQuestion()); setError(''); }}
+          onClick={() => openEditor(emptyQuestion())}
           style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: palette.ink, border: '1px solid #2d2a24', color: palette.paper, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
         >
           <Plus size={13} /> {t('questions.new')}
@@ -164,10 +199,12 @@ export default function ParcoursQuestions({ workshopId, onBack }: { workshopId: 
                 </div>
                 <div style={{ fontSize: 11, color: palette.inkFaint, marginTop: 2 }}>
                   {tExam(`responseType.${q.responseType}`)}
+                  {' · '}
+                  {chapters.find((c) => c.id === q.chapterId)?.name ?? t('questions.noChapter')}
                 </div>
               </div>
               <button
-                onClick={() => { setEditing(q); setError(''); }}
+                onClick={() => openEditor(q)}
                 style={{ padding: '7px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 {t('questions.edit')}

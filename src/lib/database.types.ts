@@ -212,6 +212,7 @@ export type Database = {
         Row: {
           answer: string
           answer_optional: boolean
+          chapter_id: string | null
           choices: Json
           content: string
           context: string
@@ -234,6 +235,7 @@ export type Database = {
         Insert: {
           answer?: string
           answer_optional?: boolean
+          chapter_id?: string | null
           choices?: Json
           content?: string
           context?: string
@@ -256,6 +258,7 @@ export type Database = {
         Update: {
           answer?: string
           answer_optional?: boolean
+          chapter_id?: string | null
           choices?: Json
           content?: string
           context?: string
@@ -276,6 +279,13 @@ export type Database = {
           workshop_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "exam_questions_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "workshop_chapters"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "exam_questions_workshop_id_fkey"
             columns: ["workshop_id"]

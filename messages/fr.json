@@ -920,8 +920,27 @@
       "loadError": "Erreur lors du chargement des questions",
       "saveError": "Erreur lors de l'enregistrement",
       "deleteError": "Erreur lors de la suppression",
-      "deleteTitle": "Supprimer cette question ?"
+      "deleteTitle": "Supprimer cette question ?",
+      "chapter": "Chapitre de rattachement",
+      "noChapter": "sans chapitre",
+      "noChapterHint": "Sans chapitre, cette question ne sera jamais tirée par le bouton « lancer un exercice » d'un pot."
     }
+  },
+  "exercise": {
+    "back": "retour à {workshop}",
+    "chapterLabel": "exercice",
+    "drawing": "tirage d'une question…",
+    "emptyTitle": "Aucune question dans ce chapitre",
+    "emptyDesc": "Un gestionnaire doit d'abord créer des questions de parcours et les rattacher à ce chapitre.",
+    "answerPlaceholder": "ta réponse…",
+    "validate": "valider",
+    "revealAnswer": "afficher la réponse",
+    "next": "question suivante",
+    "verdictCorrect": "Bonne réponse !",
+    "verdictWrong": "Mauvaise réponse",
+    "verdictNeutral": "Réponse attendue",
+    "expectedAnswer": "Réponse attendue :",
+    "gradeError": "Erreur lors de la correction"
   },
   "accountPricing": {
     "tagline": "de la graine à l'arbre —",

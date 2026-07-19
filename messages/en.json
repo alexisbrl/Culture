@@ -920,8 +920,27 @@
       "loadError": "Error while loading the questions",
       "saveError": "Error while saving",
       "deleteError": "Error while deleting",
-      "deleteTitle": "Delete this question?"
+      "deleteTitle": "Delete this question?",
+      "chapter": "Linked chapter",
+      "noChapter": "no chapter",
+      "noChapterHint": "Without a chapter, this question will never be drawn by a pot's “start an exercise” button."
     }
+  },
+  "exercise": {
+    "back": "back to {workshop}",
+    "chapterLabel": "exercise",
+    "drawing": "drawing a question…",
+    "emptyTitle": "No question in this chapter",
+    "emptyDesc": "A manager must first create programme questions and link them to this chapter.",
+    "answerPlaceholder": "your answer…",
+    "validate": "validate",
+    "revealAnswer": "show the answer",
+    "next": "next question",
+    "verdictCorrect": "Correct!",
+    "verdictWrong": "Wrong answer",
+    "verdictNeutral": "Expected answer",
+    "expectedAnswer": "Expected answer:",
+    "gradeError": "Error while grading"
   },
   "accountPricing": {
     "tagline": "from seed to tree —",
