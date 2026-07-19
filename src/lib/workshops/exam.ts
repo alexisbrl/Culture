@@ -127,7 +127,9 @@ export async function getExamBankData(workshopId: string): Promise<{
   const [questionsRes, poolsRes, examsRes] = await Promise.all([
     // Uniquement la banque d'examen : les questions du parcours pédagogique
     // vivent dans la même table, distinguées par `context`.
-    supabase.from('exam_questions').select('*').eq('workshop_id', workshopId).eq('context', 'exam').order('created_at', { ascending: true }),
+    // `.order('id')` en second critère : voir getParcoursData (ex æquo sur
+    // `created_at` → ordre arbitraire, la banque se réordonnait toute seule).
+    supabase.from('exam_questions').select('*').eq('workshop_id', workshopId).eq('context', 'exam').order('created_at', { ascending: true }).order('id', { ascending: true }),
     supabase.from('exam_pools').select('id, name, color').eq('workshop_id', workshopId).order('created_at', { ascending: true }),
     supabase.from('exam_generated').select('id, title, date, q, dur, avg, status, taken, question_ids, config').eq('workshop_id', workshopId).order('created_at', { ascending: false }),
   ]);
@@ -168,7 +170,11 @@ export async function getParcoursData(workshopId: string): Promise<{
   const supabase = getSupabaseServerClient();
 
   const [questionsRes, poolsRes] = await Promise.all([
-    supabase.from('exam_questions').select('*').eq('workshop_id', workshopId).eq('context', 'parcours').order('created_at', { ascending: true }),
+    // Départage sur `id` : les questions insérées en lot partagent le même
+    // `created_at` à la microseconde près, et sans second critère Postgres rend
+    // les ex æquo dans un ordre arbitraire — la liste se réordonnait sous les
+    // yeux de l'utilisateur à chaque enregistrement.
+    supabase.from('exam_questions').select('*').eq('workshop_id', workshopId).eq('context', 'parcours').order('created_at', { ascending: true }).order('id', { ascending: true }),
     supabase.from('exam_pools').select('id, name, color').eq('workshop_id', workshopId).order('created_at', { ascending: true }),
   ]);
 

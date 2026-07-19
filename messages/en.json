@@ -923,7 +923,7 @@
       "deleteTitle": "Delete this question?",
       "chapter": "Linked chapter",
       "noChapter": "no chapter",
-      "noChapterHint": "Without a chapter, this question will never be drawn by a pot's “start an exercise” button."
+      "noChapterHint": "Every question must be linked to a chapter: without one, it is never drawn by a pot's “start an exercise” button."
     }
   },
   "exercise": {
@@ -938,7 +938,7 @@
     "next": "next question",
     "verdictCorrect": "Correct!",
     "verdictWrong": "Wrong answer",
-    "verdictNeutral": "Expected answer",
+    "verdictNeutral": "No automatic grading for this response type.",
     "expectedAnswer": "Expected answer:",
     "gradeError": "Error while grading"
   },

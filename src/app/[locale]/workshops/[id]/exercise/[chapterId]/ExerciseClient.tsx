@@ -168,11 +168,16 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
 
               {result && (
                 <div style={{ marginTop: 18, padding: '14px 16px', borderRadius: 12, border: `1px solid ${withAlpha(verdictTone, 0.35)}`, background: withAlpha(verdictTone, 0.08) }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 500, color: verdictTone }}>
-                    {result.correct === true ? t('verdictCorrect') : result.correct === false ? t('verdictWrong') : t('verdictNeutral')}
-                  </div>
+                  {/* Verdict masqué quand il n'y a pas de correction
+                      automatique ET qu'une réponse attendue est affichée : les
+                      deux lignes diraient la même chose. */}
+                  {(result.correct !== null || !result.answer.trim()) && (
+                    <div style={{ fontSize: 13.5, fontWeight: 500, color: verdictTone }}>
+                      {result.correct === true ? t('verdictCorrect') : result.correct === false ? t('verdictWrong') : t('verdictNeutral')}
+                    </div>
+                  )}
                   {result.answer.trim() && (
-                    <div style={{ fontSize: 13.5, color: palette.ink, marginTop: 8, whiteSpace: 'pre-wrap' }}>
+                    <div style={{ fontSize: 13.5, color: palette.ink, whiteSpace: 'pre-wrap', marginTop: result.correct !== null ? 8 : 0 }}>
                       <span style={{ color: palette.inkFaint }}>{t('expectedAnswer')} </span>
                       {result.answer}
                     </div>

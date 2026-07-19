@@ -33,8 +33,10 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
   const [questions, setQuestions] = useState<Question[]>([]);
   const [pools, setPools] = useState<Pool[]>([]);
   const [editing, setEditing] = useState<Question | null>(null);
-  // Le chapitre est géré ici plutôt que dans QuestionEditor : cet éditeur est
-  // partagé avec la banque d'examen, qui n'a pas de notion de chapitre.
+  // Le chapitre s'affecte depuis la liste, pas depuis l'éditeur (partagé avec
+  // la banque d'examen, qui ignore les chapitres). Cet état ne pilote donc
+  // aucun champ : il mémorise le chapitre de la question en cours d'édition
+  // pour le réinjecter à la sauvegarde, que QuestionEditor perdrait sinon.
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -83,6 +85,22 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
     setEditing(null);
   }
 
+  // Affectation à un chapitre depuis la liste : mise à jour optimiste puis
+  // enregistrement, avec retour à l'état précédent si ça échoue. Pas de bouton
+  // « enregistrer » — c'est un champ unique, l'aller-retour serveur est court.
+  async function handleChapterChange(question: Question, chapterId: string | null) {
+    const previous = question.chapterId ?? null;
+    const updated: Question = { ...question, chapterId };
+    setQuestions((prev) => prev.map((x) => (x.id === question.id ? updated : x)));
+    setError('');
+
+    const result = await saveParcoursQuestion(workshopId, updated);
+    if (!result.success) {
+      setQuestions((prev) => prev.map((x) => (x.id === question.id ? { ...x, chapterId: previous } : x)));
+      setError(result.error ?? t('questions.saveError'));
+    }
+  }
+
   async function handleDelete() {
     if (!deleteTarget) return;
     const target = deleteTarget;
@@ -115,29 +133,6 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
     return (
       <div style={{ padding: '18px 22px 22px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
         {error && <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 10 }}>{error}</div>}
-
-        {/* Chapitre de rattachement : c'est lui qui détermine dans quel pot la
-            question peut être tirée. Sans chapitre, elle n'est jamais tirée. */}
-        <div style={{ background: withAlpha(palette.paper, 0.85), borderRadius: 14, border: `1px solid ${ink(0.07)}`, padding: '14px 18px', marginBottom: 12 }}>
-          <label htmlFor="parcours-chapter" style={{ display: 'block', fontSize: 12.5, color: palette.inkMuted, marginBottom: 6 }}>
-            {t('questions.chapter')}
-          </label>
-          <select
-            id="parcours-chapter"
-            value={editingChapterId ?? ''}
-            onChange={(e) => setEditingChapterId(e.target.value || null)}
-            style={{ width: '100%', maxWidth: 340, padding: '8px 10px', borderRadius: 9, border: `1px solid ${ink(0.16)}`, background: palette.paper, color: palette.ink, fontSize: 13, fontFamily: 'inherit' }}
-          >
-            <option value="">{t('questions.noChapter')}</option>
-            {chapters.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          {!editingChapterId && (
-            <div style={{ fontSize: 11.5, color: palette.inkFaint, marginTop: 6 }}>{t('questions.noChapterHint')}</div>
-          )}
-        </div>
-
         <QuestionEditor
           question={editing}
           allQuestions={questions}
@@ -173,7 +168,8 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
       </div>
 
       <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{t('questions.title')}</div>
-      <div style={{ fontSize: 12.5, color: palette.inkFaint, marginBottom: 12 }}>{t('questions.desc')}</div>
+      <div style={{ fontSize: 12.5, color: palette.inkFaint, marginBottom: 4 }}>{t('questions.desc')}</div>
+      <div style={{ fontSize: 12.5, color: palette.inkFaint, marginBottom: 12 }}>{t('questions.noChapterHint')}</div>
 
       {error && <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 10 }}>{error}</div>}
 
@@ -199,10 +195,21 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
                 </div>
                 <div style={{ fontSize: 11, color: palette.inkFaint, marginTop: 2 }}>
                   {tExam(`responseType.${q.responseType}`)}
-                  {' · '}
-                  {chapters.find((c) => c.id === q.chapterId)?.name ?? t('questions.noChapter')}
                 </div>
               </div>
+              {/* Chapitre de rattachement : c'est lui qui détermine dans quel
+                  pot la question peut être tirée. Sans chapitre, jamais tirée. */}
+              <select
+                value={q.chapterId ?? ''}
+                onChange={(e) => handleChapterChange(q, e.target.value || null)}
+                title={t('questions.chapter')}
+                style={{ flexShrink: 0, maxWidth: 190, padding: '7px 10px', borderRadius: 9, border: `1px solid ${q.chapterId ? ink(0.16) : withAlpha(palette.danger, 0.35)}`, background: palette.paper, color: q.chapterId ? palette.ink : palette.inkFaint, fontSize: 12.5, fontFamily: 'inherit', cursor: 'pointer' }}
+              >
+                <option value="">{t('questions.noChapter')}</option>
+                {chapters.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
               <button
                 onClick={() => openEditor(q)}
                 style={{ padding: '7px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}

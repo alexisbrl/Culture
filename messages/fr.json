@@ -923,7 +923,7 @@
       "deleteTitle": "Supprimer cette question ?",
       "chapter": "Chapitre de rattachement",
       "noChapter": "sans chapitre",
-      "noChapterHint": "Sans chapitre, cette question ne sera jamais tirée par le bouton « lancer un exercice » d'un pot."
+      "noChapterHint": "Chaque question doit être rattachée à un chapitre : sans chapitre, elle n'est jamais tirée par le bouton « lancer un exercice » d'un pot."
     }
   },
   "exercise": {
@@ -938,7 +938,7 @@
     "next": "question suivante",
     "verdictCorrect": "Bonne réponse !",
     "verdictWrong": "Mauvaise réponse",
-    "verdictNeutral": "Réponse attendue",
+    "verdictNeutral": "Pas de correction automatique pour ce type de réponse.",
     "expectedAnswer": "Réponse attendue :",
     "gradeError": "Erreur lors de la correction"
   },
