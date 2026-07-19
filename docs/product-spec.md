@@ -220,10 +220,16 @@ Un propriétaire peut activer le statut Premium sur son atelier. C'est une opér
 
 ### Briques de connaissance
 
-- Générées par l'IA à partir des fichiers sources de l'atelier
-- Chaque brique possède : un **niveau de difficulté**, un **niveau d'importance**, une **position chronologique**
-- Accessibles et modifiables manuellement par les gestionnaires, et via échange avec l'IA
+- Générées par l'IA à partir des fichiers sources de l'atelier, ou ajoutées à la main
+- Chaque brique possède : un **titre** (l'idée en une phrase) et un **contenu détaillé** optionnel
+- Une brique est rattachée à un **chapitre** (rattachement pas encore implémenté : la table des chapitres n'existe pas, la colonne `chapter_id` attend, vide)
+- Pas de niveau de difficulté ni d'importance (décision du 19/07/2026, remplace la spécification initiale)
+- CRUD manuel réservé au propriétaire et aux gestionnaires, dans Paramètres → Briques de connaissance
 - La qualité des briques dépend de la qualité des fichiers déposés — pas de filtrage côté application.
+
+**Maîtrise d'une brique — Taxonomie de Bloom**
+
+Le niveau de maîtrise d'une brique par un utilisateur se mesure sur les 6 niveaux de Bloom (1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser, 5 évaluer, 6 créer) : on veut pouvoir distinguer un candidat qui a seulement mémorisé une brique de celui qui sait la critiquer. La table `brick_mastery` (utilisateur × brique × `bloom_level`) est **créée mais pas encore alimentée** — c'est la fondation posée pour le module Analyse.
 
 ### Programme éducatif
 

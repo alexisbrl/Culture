@@ -3,6 +3,7 @@ import { redirect, notFound } from 'next/navigation';
 import { getLocale } from 'next-intl/server';
 import { getWorkshop, getMemberGroups } from '@/app/actions/workshops';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
+import { getWorkshopBricks } from '@/app/actions/workshopBricks';
 import SettingsClient from './SettingsClient';
 
 type Props = {
@@ -22,8 +23,12 @@ export default async function SettingsPage({ params }: Props) {
   // Paramètres accessibles au propriétaire et au gestionnaire ; un candidat est renvoyé.
   if (workshop.currentUserRole === 'member') redirect(`/${locale}/workshops/${id}`);
 
-  const files = await getWorkshopFiles(id);
-  const groups = await getMemberGroups(id);
+  // Requêtes indépendantes → parallèle (règle N+1, cf. server-architecture.md)
+  const [files, groups, bricks] = await Promise.all([
+    getWorkshopFiles(id),
+    getMemberGroups(id),
+    getWorkshopBricks(id),
+  ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const members = (workshop.workshop_members as any[]).map((m) => ({
@@ -54,6 +59,7 @@ export default async function SettingsPage({ params }: Props) {
       members={members}
       groups={groups}
       files={files}
+      bricks={bricks}
     />
   );
 }

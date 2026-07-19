@@ -780,15 +780,21 @@
     },
     "bricks": {
       "title": "Briques de connaissance",
-      "desc": "Les unités d'information extraites de vos fichiers sources par l'IA.",
+      "desc": "Les unités d'information de l'atelier — extraites des fichiers sources par l'IA, ou ajoutées à la main.",
       "sourceFiles": "Fichiers source",
       "manageFiles": "gérer les fichiers",
       "regenAI": "✦ régénérer par IA",
       "edit": "éditer",
-      "diff": "diff",
-      "imp": "imp",
-      "shownCount": "{shown} sur {total} affichées",
-      "viewAll": "voir toutes les briques"
+      "add": "+ ajouter une brique",
+      "save": "enregistrer",
+      "cancel": "annuler",
+      "delete": "supprimer",
+      "titlePlaceholder": "Titre de la brique (l'idée en une phrase)",
+      "contentPlaceholder": "Contenu détaillé (optionnel)",
+      "empty": "Aucune brique pour l'instant — ajoutez-les à la main ou déposez des fichiers sources.",
+      "count": "{count, plural, =0 {aucune brique} one {# brique} other {# briques}}",
+      "deleteTitle": "Supprimer cette brique ?",
+      "deleteDesc": "« {title} » sera définitivement supprimée, ainsi que les données de maîtrise associées."
     }
   },
   "workshop": {

@@ -780,15 +780,21 @@
     },
     "bricks": {
       "title": "Knowledge blocks",
-      "desc": "The information units extracted from your source files by the AI.",
+      "desc": "The workshop's information units — extracted from your source files by the AI, or added by hand.",
       "sourceFiles": "Source files",
       "manageFiles": "manage files",
       "regenAI": "✦ regenerate with AI",
       "edit": "edit",
-      "diff": "diff",
-      "imp": "imp",
-      "shownCount": "{shown} of {total} shown",
-      "viewAll": "view all blocks"
+      "add": "+ add a block",
+      "save": "save",
+      "cancel": "cancel",
+      "delete": "delete",
+      "titlePlaceholder": "Block title (the idea in one sentence)",
+      "contentPlaceholder": "Detailed content (optional)",
+      "empty": "No blocks yet — add them by hand or upload source files.",
+      "count": "{count, plural, =0 {no blocks} one {# block} other {# blocks}}",
+      "deleteTitle": "Delete this block?",
+      "deleteDesc": "“{title}” will be permanently deleted, along with its mastery data."
     }
   },
   "workshop": {

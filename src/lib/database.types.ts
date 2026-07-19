@@ -23,6 +23,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      brick_mastery: {
+        Row: {
+          bloom_level: number
+          brick_id: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bloom_level: number
+          brick_id: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bloom_level?: number
+          brick_id?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brick_mastery_brick_id_fkey"
+            columns: ["brick_id"]
+            isOneToOne: false
+            referencedRelation: "workshop_bricks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deletion_codes: {
         Row: {
           attempts: number
@@ -182,6 +214,7 @@ export type Database = {
           answer_optional: boolean
           choices: Json
           content: string
+          context: string
           correct_choices: Json
           created_at: string
           difficulty: Json
@@ -203,6 +236,7 @@ export type Database = {
           answer_optional?: boolean
           choices?: Json
           content?: string
+          context?: string
           correct_choices?: Json
           created_at?: string
           difficulty?: Json
@@ -224,6 +258,7 @@ export type Database = {
           answer_optional?: boolean
           choices?: Json
           content?: string
+          context?: string
           correct_choices?: Json
           created_at?: string
           difficulty?: Json
@@ -302,6 +337,47 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      workshop_bricks: {
+        Row: {
+          chapter_id: string | null
+          content: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          title: string
+          updated_at: string
+          workshop_id: string
+        }
+        Insert: {
+          chapter_id?: string | null
+          content?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          title: string
+          updated_at?: string
+          workshop_id: string
+        }
+        Update: {
+          chapter_id?: string | null
+          content?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          title?: string
+          updated_at?: string
+          workshop_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workshop_bricks_workshop_id_fkey"
+            columns: ["workshop_id"]
+            isOneToOne: false
+            referencedRelation: "workshops"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       workshop_files: {
         Row: {

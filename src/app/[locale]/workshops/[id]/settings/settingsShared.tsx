@@ -46,40 +46,11 @@ export function formatFileSize(bytes: number, units: { b: string; kb: string; mb
   return `${(bytes / (1024 * 1024)).toFixed(1)} ${units.mb}`;
 }
 
-export const MOCK_BRICKS = [
-  { section: '01', title: 'La membrane est une bicouche phospholipidique fluide', diff: 3, imp: 5 },
-  { section: '01', title: 'Les protéines membranaires permettent le transport sélectif', diff: 5, imp: 5 },
-  { section: '02', title: 'Le cytosquelette structure et déplace la cellule', diff: 4, imp: 4 },
-  { section: '03', title: "La mitochondrie produit l'ATP par phosphorylation oxydative", diff: 7, imp: 6 },
-  { section: '03', title: 'Le cycle de Krebs se déroule dans la matrice mitochondriale', diff: 8, imp: 6 },
-];
-
 export function avatarGradient(name: string) {
   const hues = [220, 160, 30, 270, 190, 340, 80, 130];
   const idx = name.charCodeAt(0) % hues.length;
   const h = hues[idx];
   return `linear-gradient(135deg, hsl(${h},55%,62%), hsl(${(h + 40) % 360},60%,52%))`;
-}
-
-export function DotRow({ label, value, max }: { label: string; value: number; max: number }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-      <span style={{ fontSize: 10, color: palette.inkFaint, width: 28 }}>{label}</span>
-      <div style={{ display: 'flex', gap: 3 }}>
-        {Array.from({ length: max }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
-              background: i < value ? palette.amber : ink(0.12),
-            }}
-          />
-        ))}
-      </div>
-    </div>
-  );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────
