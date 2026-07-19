@@ -32,6 +32,7 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [pools, setPools] = useState<Pool[]>([]);
+  const [bricks, setBricks] = useState<{ id: string; title: string }[]>([]);
   const [editing, setEditing] = useState<Question | null>(null);
   // Le chapitre s'affecte depuis la liste, pas depuis l'éditeur (partagé avec
   // la banque d'examen, qui ignore les chapitres). Cet état ne pilote donc
@@ -49,6 +50,7 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
         if (cancelled) return;
         setQuestions(data.questions);
         setPools(data.pools);
+        setBricks(data.bricks);
         setLoading(false);
       })
       .catch(() => {
@@ -137,6 +139,7 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
           question={editing}
           allQuestions={questions}
           pools={pools}
+          bricks={bricks}
           onCreatePool={handleCreatePool}
           onSave={handleSave}
           onCancel={() => setEditing(null)}

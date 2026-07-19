@@ -22,11 +22,13 @@ import type {
   ExerciseChoice,
   ExerciseResult,
 } from '@/lib/workshops/examTypes';
+import { toBloomLevel } from '@/lib/workshops/examTypes';
 
 type QuestionRow = {
   id: string;
   workshop_id: string;
   chapter_id: string | null;
+  bloom_level: number;
   title: string;
   question_type: string;
   response_type: string;
@@ -60,8 +62,14 @@ function normalizePart(part: Partial<QuestionPart>): QuestionPart {
   };
 }
 
-function rowToQuestion(row: QuestionRow): Question {
+// `brickIds` ne vient pas de la ligne (table de jonction séparée) : les
+// appelants qui en ont besoin passent la map pré-chargée par `loadBrickLinks`.
+// Par défaut la question est renvoyée sans briques, ce qui est correct pour les
+// chemins qui ne s'en servent pas (tirage d'exercice, correction).
+function rowToQuestion(row: QuestionRow, brickIds: string[] = []): Question {
   return {
+    bloomLevel: toBloomLevel(row.bloom_level),
+    brickIds,
     id: row.id,
     title: row.title ?? '',
     questionType: row.question_type as Question['questionType'],
@@ -92,10 +100,16 @@ function rowToQuestion(row: QuestionRow): Question {
 // `chapter_id` suit exactement la même règle, et n'est écrit que dans le
 // contexte « parcours » : la banque d'examen ne connaît pas les chapitres, et
 // une ré-écriture de masse ne doit pas détacher une question de son pot.
+// `bloom_level` est en revanche toujours écrit : contrairement à `context` et
+// `chapter_id`, il a une valeur dans tous les contextes et `rowToQuestion` la
+// restitue systématiquement — une ré-écriture de masse ne peut donc pas le
+// perdre. `brickIds` n'est pas ici : il vit dans `exam_question_bricks`, écrit
+// séparément par `syncQuestionBricks`.
 function questionToRow(workshopId: string, q: Question, context?: QuestionContext) {
   return {
     ...(context ? { context } : {}),
     ...(context === 'parcours' ? { chapter_id: q.chapterId ?? null } : {}),
+    bloom_level: toBloomLevel(q.bloomLevel),
     id: q.id,
     workshop_id: workshopId,
     title: q.title ?? '',
@@ -117,6 +131,65 @@ function questionToRow(workshopId: string, q: Question, context?: QuestionContex
   };
 }
 
+// ─── Briques associées aux questions (exam_question_bricks) ──────────────────
+
+type BrickLinkMap = Record<string, string[]>;
+
+// Un seul aller-retour pour toutes les questions de la page (règle N+1) : on
+// charge les liens des ids fournis, puis on les distribue à `rowToQuestion`.
+async function loadBrickLinks(questionIds: string[]): Promise<BrickLinkMap> {
+  if (questionIds.length === 0) return {};
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('exam_question_bricks')
+    .select('question_id, brick_id')
+    .in('question_id', questionIds);
+
+  if (error) throw new Error(error.message);
+
+  const map: BrickLinkMap = {};
+  for (const row of data ?? []) {
+    (map[row.question_id] ??= []).push(row.brick_id);
+  }
+  return map;
+}
+
+// Remplace l'ensemble des liens d'une question par ceux fournis. On calcule le
+// différentiel plutôt que « tout supprimer puis tout réinsérer » : ça évite de
+// laisser la question sans brique si l'insertion échoue après la suppression.
+async function syncQuestionBricks(questionId: string, brickIds: string[]): Promise<void> {
+  const supabase = getSupabaseServerClient();
+
+  const { data: existingRows, error: readError } = await supabase
+    .from('exam_question_bricks')
+    .select('brick_id')
+    .eq('question_id', questionId);
+  if (readError) throw new Error(readError.message);
+
+  const existing = new Set((existingRows ?? []).map((r) => r.brick_id as string));
+  const wanted = new Set(brickIds);
+
+  const toAdd = [...wanted].filter((id) => !existing.has(id));
+  const toRemove = [...existing].filter((id) => !wanted.has(id));
+
+  if (toAdd.length > 0) {
+    const { error } = await supabase
+      .from('exam_question_bricks')
+      .insert(toAdd.map((brickId) => ({ question_id: questionId, brick_id: brickId })));
+    if (error) throw new Error(error.message);
+  }
+
+  if (toRemove.length > 0) {
+    const { error } = await supabase
+      .from('exam_question_bricks')
+      .delete()
+      .eq('question_id', questionId)
+      .in('brick_id', toRemove);
+    if (error) throw new Error(error.message);
+  }
+}
+
 export async function getExamBankData(workshopId: string): Promise<{
   questions: Question[];
   pools: ExamPool[];
@@ -134,7 +207,9 @@ export async function getExamBankData(workshopId: string): Promise<{
     supabase.from('exam_generated').select('id, title, date, q, dur, avg, status, taken, question_ids, config').eq('workshop_id', workshopId).order('created_at', { ascending: false }),
   ]);
 
-  const questions = (questionsRes.data ?? []).map(rowToQuestion);
+  const bankRows = (questionsRes.data ?? []) as QuestionRow[];
+  const bankLinks = await loadBrickLinks(bankRows.map((r) => r.id));
+  const questions = bankRows.map((row) => rowToQuestion(row, bankLinks[row.id] ?? []));
   const pools = (poolsRes.data ?? []) as ExamPool[];
   const exams = (examsRes.data ?? []).map((e) => ({
     id: e.id,
@@ -156,6 +231,10 @@ export async function saveQuestion(workshopId: string, question: Question, conte
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_questions').upsert(questionToRow(workshopId, question, context));
   if (error) throw new Error(error.message);
+
+  // Après l'upsert seulement : la FK de `exam_question_bricks` exige que la
+  // question existe déjà pour une création.
+  await syncQuestionBricks(question.id, question.brickIds ?? []);
 }
 
 // ─── Parcours pédagogique ────────────────────────────────────────────────────
@@ -178,8 +257,11 @@ export async function getParcoursData(workshopId: string): Promise<{
     supabase.from('exam_pools').select('id, name, color').eq('workshop_id', workshopId).order('created_at', { ascending: true }),
   ]);
 
+  const rows = (questionsRes.data ?? []) as QuestionRow[];
+  const links = await loadBrickLinks(rows.map((r) => r.id));
+
   return {
-    questions: (questionsRes.data ?? []).map(rowToQuestion),
+    questions: rows.map((row) => rowToQuestion(row, links[row.id] ?? [])),
     pools: (poolsRes.data ?? []) as ExamPool[],
   };
 }

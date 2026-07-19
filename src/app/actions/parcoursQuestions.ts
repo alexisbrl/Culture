@@ -3,7 +3,12 @@
 import { assertManager, requireManager } from '@/lib/authz';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import * as examLib from '@/lib/workshops/exam';
+import * as bricksLib from '@/lib/workshops/bricks';
 import type { Question, ExamPool } from '@/lib/workshops/examTypes';
+
+// Briques proposées à l'association dans l'éditeur — toutes celles de l'atelier,
+// sans restriction de chapitre (une question peut mobiliser plusieurs chapitres).
+type QuestionBrick = { id: string; title: string };
 
 // ⚠️ SÉCURITÉ — Comme la banque d'examen, les questions du parcours contiennent
 // les RÉPONSES : la gestion est réservée aux gestionnaires. Les candidats n'y
@@ -16,9 +21,17 @@ import type { Question, ExamPool } from '@/lib/workshops/examTypes';
 export async function getParcoursQuestions(workshopId: string): Promise<{
   questions: Question[];
   pools: ExamPool[];
+  bricks: QuestionBrick[];
 }> {
-  if (!(await requireManager(workshopId))) return { questions: [], pools: [] };
-  return await examLib.getParcoursData(workshopId);
+  if (!(await requireManager(workshopId))) return { questions: [], pools: [], bricks: [] };
+
+  // Deux domaines indépendants → en parallèle (règle N+1).
+  const [data, bricks] = await Promise.all([
+    examLib.getParcoursData(workshopId),
+    bricksLib.listBricks(workshopId),
+  ]);
+
+  return { ...data, bricks: bricks.map((b) => ({ id: b.id, title: b.title })) };
 }
 
 export async function saveParcoursQuestion(workshopId: string, question: Question): Promise<{ success: boolean; error?: string }> {

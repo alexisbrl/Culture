@@ -250,7 +250,16 @@ Le niveau de maîtrise d'une brique par un utilisateur se mesure sur les 6 nivea
 
 Un bouton « questions du parcours », en haut de l'onglet (gestionnaires uniquement), ouvre la vue de gestion de ces questions. Elles sont stockées dans la **même table que la banque du générateur d'examen** (`exam_questions`), distinguées par la colonne `context` (`'exam'` / `'parcours'`), et éditées avec le même éditeur de question. Les deux surfaces restent étanches : la banque d'examen ne montre que `context = 'exam'`, la vue parcours que `context = 'parcours'`. Les pools (étiquettes) sont en revanche partagés entre les deux.
 
-Chaque question de parcours se rattache à **un chapitre** (`exam_questions.chapter_id`). L'affectation se fait par un sélecteur **sur chaque ligne de la liste** — enregistrement immédiat, sans passer par l'éditeur, qui est partagé avec la banque d'examen et ignore les chapitres. Une question sans chapitre n'est jamais tirée (son sélecteur est souligné en rouge). Supprimer un chapitre ne supprime pas ses questions : elles retombent dans « sans chapitre » (FK `on delete set null`, même choix que les briques).
+**Niveau de Bloom et briques couvertes (toutes les questions)**
+
+Toute question — parcours **et** banque d'examen — porte :
+
+- un **niveau de Bloom visé, obligatoire** (`exam_questions.bloom_level`, 1 mémoriser → 6 créer). Garanti à trois niveaux : `not null default 1` + contrainte `check between 1 and 6` en base, type non optionnel côté TypeScript, et sélecteur segmenté toujours à une valeur active côté UI — il n'existe aucun état « sans niveau ». À ne pas confondre avec `brick_mastery.bloom_level`, qui mesure le niveau *atteint* par un candidat ; celui-ci est le niveau *visé* par la question.
+- zéro à N **briques de connaissance** (table de jonction `exam_question_bricks`, `on delete cascade` des deux côtés : supprimer une brique détache les questions, supprimer une question retire ses liens). Aucune restriction de chapitre — une question peut mobiliser des briques de plusieurs chapitres.
+
+Les deux se saisissent dans l'éditeur de question, section « Options par question ».
+
+Chaque question de parcours se rattache en plus à **un chapitre** (`exam_questions.chapter_id`). L'affectation se fait par un sélecteur **sur chaque ligne de la liste** — enregistrement immédiat, sans passer par l'éditeur, qui est partagé avec la banque d'examen et ignore les chapitres. Une question sans chapitre n'est jamais tirée (son sélecteur est souligné en rouge). Supprimer un chapitre ne supprime pas ses questions : elles retombent dans « sans chapitre » (FK `on delete set null`, même choix que les briques).
 
 **Exercice (page candidat)**
 

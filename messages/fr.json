@@ -309,6 +309,14 @@
   "examen": {
     "noStatement": "(sans énoncé)",
     "irreversible": "Cette action est irréversible.",
+    "bloom": {
+      "1": "Mémoriser",
+      "2": "Comprendre",
+      "3": "Appliquer",
+      "4": "Analyser",
+      "5": "Évaluer",
+      "6": "Créer"
+    },
     "cancel": "Annuler",
     "delete": "Supprimer",
     "add": "ajouter",
@@ -418,6 +426,12 @@
       "partStatementPlaceholder": "Énoncé de cette partie…",
       "addPart": "+ ajouter une partie",
       "optionsDivider": "Options par question",
+      "bloomLabel": "Niveau de Bloom visé",
+      "bloomHint": "obligatoire — niveau cognitif que la question fait travailler",
+      "bricksLabel": "Briques de connaissance",
+      "bricksHint": "facultatif — les briques que la question mobilise, toutes chapitres confondus",
+      "addBrickOption": "associer une brique…",
+      "noBricks": "Aucune brique dans cet atelier. Elles se créent dans Paramètres → Briques de connaissance.",
       "labelsLabel": "Libellés",
       "labelsHint": "off par défaut — regroupe les questions pour générer des examens",
       "labelNamePlaceholder": "nom du libellé…",

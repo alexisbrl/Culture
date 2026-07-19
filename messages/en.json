@@ -309,6 +309,14 @@
   "examen": {
     "noStatement": "(no statement)",
     "irreversible": "This action is irreversible.",
+    "bloom": {
+      "1": "Remember",
+      "2": "Understand",
+      "3": "Apply",
+      "4": "Analyse",
+      "5": "Evaluate",
+      "6": "Create"
+    },
     "cancel": "Cancel",
     "delete": "Delete",
     "add": "add",
@@ -418,6 +426,12 @@
       "partStatementPlaceholder": "Statement for this part…",
       "addPart": "+ add a part",
       "optionsDivider": "Per-question options",
+      "bloomLabel": "Target Bloom level",
+      "bloomHint": "required — the cognitive level the question exercises",
+      "bricksLabel": "Knowledge blocks",
+      "bricksHint": "optional — the blocks the question draws on, across all chapters",
+      "addBrickOption": "link a block…",
+      "noBricks": "No block in this workshop. They are created in Settings → Knowledge blocks.",
       "labelsLabel": "Labels",
       "labelsHint": "off by default — groups questions to generate exams",
       "labelNamePlaceholder": "label name…",

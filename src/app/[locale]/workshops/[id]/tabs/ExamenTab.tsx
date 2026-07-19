@@ -38,6 +38,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const [exams, setExams] = useState<Exam[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [pools, setPools] = useState<Pool[]>([]);
+  const [bricks, setBricks] = useState<{ id: string; title: string }[]>([]);
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [editing, setEditing] = useState<Exam | null>(null);
   const [pendingDeleteExam, setPendingDeleteExam] = useState<Exam | null>(null);
@@ -73,10 +74,11 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    Promise.all([getExamBankData(workshopId), getExamDraft(workshopId)]).then(([{ questions, pools, exams }, draft]) => {
+    Promise.all([getExamBankData(workshopId), getExamDraft(workshopId)]).then(([{ questions, pools, exams, bricks }, draft]) => {
       const mappedExams = exams.map(e => ({ id: e.id, title: e.title, date: e.date, q: e.q, dur: e.dur, avg: e.avg, status: e.status, taken: e.taken, questionIds: e.questionIds, config: e.config }));
       setQuestions(questions);
       setPools(pools);
+      setBricks(bricks);
       setExams(mappedExams);
       if (draft) {
         setDraftIds(draft.draftIds);
@@ -340,6 +342,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                     question={editingQuestion}
                     allQuestions={questions}
                     pools={pools}
+                    bricks={bricks}
                     onCreatePool={handleCreatePool}
                     onSave={handleSaveQuestion}
                     onCancel={() => setEditingQuestion(null)}
