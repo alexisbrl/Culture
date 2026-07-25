@@ -884,14 +884,21 @@
       "resetGrass": "Grass (reset)",
       "objects": "Objects",
       "noObjects": "No objects",
+      "stage": "Stage",
       "decorations": "Decorations",
       "erase": "Erase"
     },
     "species": {
+      "araucaria": "Monkey puzzle",
+      "cerisier": "Cherry tree",
       "chene": "Oak",
+      "copalme": "Sweetgum",
       "paulownia": "Paulownia",
       "pin": "Pine",
-      "pommier": "Apple tree"
+      "platane": "Plane tree",
+      "poirier": "Pear tree",
+      "pommier": "Apple tree",
+      "saule": "Willow"
     },
     "kind": {
       "grass": "Grass",

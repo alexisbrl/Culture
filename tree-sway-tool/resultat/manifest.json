@@ -1,110 +1,452 @@
 [
   {
+    "file": "araucaria-1.png",
+    "width": 87,
+    "height": 92,
+    "originXPercent": 54.2,
+    "originYPercent": 95.7,
+    "sizeBeforeKB": 13.8,
+    "sizeAfterKB": 11.8
+  },
+  {
+    "file": "araucaria-2.png",
+    "width": 136,
+    "height": 149,
+    "originXPercent": 53.7,
+    "originYPercent": 97.3,
+    "sizeBeforeKB": 36.6,
+    "sizeAfterKB": 32.9
+  },
+  {
+    "file": "araucaria-3.png",
+    "width": 150,
+    "height": 194,
+    "originXPercent": 52.1,
+    "originYPercent": 97.9,
+    "sizeBeforeKB": 51.4,
+    "sizeAfterKB": 45.6
+  },
+  {
+    "file": "araucaria-4.png",
+    "width": 190,
+    "height": 247,
+    "originXPercent": 49.9,
+    "originYPercent": 98.4,
+    "sizeBeforeKB": 88.0,
+    "sizeAfterKB": 79.6
+  },
+  {
+    "file": "araucaria-5.png",
+    "width": 224,
+    "height": 296,
+    "originXPercent": 50.1,
+    "originYPercent": 99.7,
+    "sizeBeforeKB": 126.7,
+    "sizeAfterKB": 114.3
+  },
+  {
+    "file": "cerisier-1.png",
+    "width": 52,
+    "height": 52,
+    "originXPercent": 54.7,
+    "originYPercent": 94.2,
+    "sizeBeforeKB": 5.9,
+    "sizeAfterKB": 4.9
+  },
+  {
     "file": "cerisier-2.png",
-    "width": 411,
-    "height": 546,
-    "originXPercent": 49.4,
-    "originYPercent": 99.3,
-    "sizeBeforeKB": 239.4,
-    "sizeAfterKB": 167.7
+    "width": 98,
+    "height": 76,
+    "originXPercent": 51.7,
+    "originYPercent": 96.1,
+    "sizeBeforeKB": 13.7,
+    "sizeAfterKB": 11.6
   },
   {
     "file": "cerisier-3.png",
-    "width": 357,
-    "height": 510,
-    "originXPercent": 49.9,
-    "originYPercent": 99.2,
-    "sizeBeforeKB": 190.2,
-    "sizeAfterKB": 129.6
+    "width": 171,
+    "height": 125,
+    "originXPercent": 50.8,
+    "originYPercent": 97.6,
+    "sizeBeforeKB": 40.9,
+    "sizeAfterKB": 35.6
+  },
+  {
+    "file": "cerisier-4.png",
+    "width": 232,
+    "height": 172,
+    "originXPercent": 49.0,
+    "originYPercent": 97.7,
+    "sizeBeforeKB": 71.5,
+    "sizeAfterKB": 63.9
+  },
+  {
+    "file": "cerisier-5.png",
+    "width": 299,
+    "height": 217,
+    "originXPercent": 48.8,
+    "originYPercent": 98.6,
+    "sizeBeforeKB": 120.8,
+    "sizeAfterKB": 104.2
   },
   {
     "file": "chene-1.png",
-    "width": 351,
-    "height": 478,
-    "originXPercent": 50.1,
-    "originYPercent": 99.2,
-    "sizeBeforeKB": 142.9,
-    "sizeAfterKB": 98.5
+    "width": 63,
+    "height": 51,
+    "originXPercent": 44.3,
+    "originYPercent": 96.1,
+    "sizeBeforeKB": 7.0,
+    "sizeAfterKB": 5.6
   },
   {
     "file": "chene-2.png",
-    "width": 420,
-    "height": 550,
-    "originXPercent": 48.4,
-    "originYPercent": 99.3,
-    "sizeBeforeKB": 188.1,
-    "sizeAfterKB": 132.4
+    "width": 96,
+    "height": 71,
+    "originXPercent": 49.3,
+    "originYPercent": 97.2,
+    "sizeBeforeKB": 14.0,
+    "sizeAfterKB": 11.5
   },
   {
     "file": "chene-3.png",
-    "width": 449,
-    "height": 544,
-    "originXPercent": 49.4,
+    "width": 180,
+    "height": 137,
+    "originXPercent": 50.2,
+    "originYPercent": 97.1,
+    "sizeBeforeKB": 47.9,
+    "sizeAfterKB": 41.2
+  },
+  {
+    "file": "chene-4.png",
+    "width": 231,
+    "height": 186,
+    "originXPercent": 52.7,
+    "originYPercent": 97.8,
+    "sizeBeforeKB": 88.2,
+    "sizeAfterKB": 76.7
+  },
+  {
+    "file": "chene-5.png",
+    "width": 294,
+    "height": 241,
+    "originXPercent": 51.1,
+    "originYPercent": 98.3,
+    "sizeBeforeKB": 149.6,
+    "sizeAfterKB": 127.6
+  },
+  {
+    "file": "copalme-1.png",
+    "width": 90,
+    "height": 107,
+    "originXPercent": 51.6,
+    "originYPercent": 98.1,
+    "sizeBeforeKB": 15.7,
+    "sizeAfterKB": 14.0
+  },
+  {
+    "file": "copalme-2.png",
+    "width": 124,
+    "height": 157,
+    "originXPercent": 54.1,
+    "originYPercent": 97.5,
+    "sizeBeforeKB": 33.6,
+    "sizeAfterKB": 28.3
+  },
+  {
+    "file": "copalme-3.png",
+    "width": 173,
+    "height": 230,
+    "originXPercent": 49.0,
+    "originYPercent": 98.7,
+    "sizeBeforeKB": 70.4,
+    "sizeAfterKB": 59.1
+  },
+  {
+    "file": "copalme-4.png",
+    "width": 232,
+    "height": 278,
+    "originXPercent": 50.4,
     "originYPercent": 99.3,
-    "sizeBeforeKB": 236.3,
-    "sizeAfterKB": 165.2
+    "sizeBeforeKB": 117.7,
+    "sizeAfterKB": 98.9
+  },
+  {
+    "file": "copalme-5.png",
+    "width": 257,
+    "height": 301,
+    "originXPercent": 47.8,
+    "originYPercent": 99.3,
+    "sizeBeforeKB": 147.1,
+    "sizeAfterKB": 128.8
   },
   {
     "file": "paulownia-1.png",
-    "width": 391,
-    "height": 537,
-    "originXPercent": 48.4,
-    "originYPercent": 99.3,
-    "sizeBeforeKB": 253.7,
-    "sizeAfterKB": 189.5
+    "width": 52,
+    "height": 51,
+    "originXPercent": 53.5,
+    "originYPercent": 96.1,
+    "sizeBeforeKB": 5.8,
+    "sizeAfterKB": 4.6
   },
   {
     "file": "paulownia-2.png",
-    "width": 476,
-    "height": 576,
-    "originXPercent": 49.4,
-    "originYPercent": 99.3,
-    "sizeBeforeKB": 374.5,
-    "sizeAfterKB": 267.9
+    "width": 91,
+    "height": 77,
+    "originXPercent": 51.8,
+    "originYPercent": 96.1,
+    "sizeBeforeKB": 12.7,
+    "sizeAfterKB": 10.8
   },
   {
     "file": "paulownia-3.png",
-    "width": 542,
-    "height": 598,
-    "originXPercent": 48.2,
+    "width": 154,
+    "height": 138,
+    "originXPercent": 47.6,
     "originYPercent": 99.3,
-    "sizeBeforeKB": 473.4,
-    "sizeAfterKB": 343.9
+    "sizeBeforeKB": 36.7,
+    "sizeAfterKB": 32.5
+  },
+  {
+    "file": "paulownia-4.png",
+    "width": 223,
+    "height": 205,
+    "originXPercent": 51.0,
+    "originYPercent": 99.0,
+    "sizeBeforeKB": 80.4,
+    "sizeAfterKB": 72.3
+  },
+  {
+    "file": "paulownia-5.png",
+    "width": 281,
+    "height": 226,
+    "originXPercent": 48.9,
+    "originYPercent": 98.7,
+    "sizeBeforeKB": 117.7,
+    "sizeAfterKB": 101.9
   },
   {
     "file": "pin-1.png",
-    "width": 276,
-    "height": 475,
-    "originXPercent": 49.9,
-    "originYPercent": 99.2,
-    "sizeBeforeKB": 87.3,
-    "sizeAfterKB": 62.2
+    "width": 74,
+    "height": 99,
+    "originXPercent": 47.0,
+    "originYPercent": 97.0,
+    "sizeBeforeKB": 13.0,
+    "sizeAfterKB": 11.3
   },
   {
     "file": "pin-2.png",
-    "width": 353,
-    "height": 528,
-    "originXPercent": 50.7,
-    "originYPercent": 99.2,
-    "sizeBeforeKB": 155.6,
-    "sizeAfterKB": 109.2
+    "width": 116,
+    "height": 148,
+    "originXPercent": 51.0,
+    "originYPercent": 98.6,
+    "sizeBeforeKB": 29.3,
+    "sizeAfterKB": 25.8
   },
   {
     "file": "pin-3.png",
-    "width": 398,
-    "height": 560,
-    "originXPercent": 51.1,
+    "width": 152,
+    "height": 225,
+    "originXPercent": 51.2,
+    "originYPercent": 99.6,
+    "sizeBeforeKB": 57.5,
+    "sizeAfterKB": 50.1
+  },
+  {
+    "file": "pin-4.png",
+    "width": 189,
+    "height": 271,
+    "originXPercent": 49.2,
     "originYPercent": 99.3,
-    "sizeBeforeKB": 210.7,
-    "sizeAfterKB": 153.0
+    "sizeBeforeKB": 87.5,
+    "sizeAfterKB": 78.1
+  },
+  {
+    "file": "pin-5.png",
+    "width": 228,
+    "height": 296,
+    "originXPercent": 49.3,
+    "originYPercent": 99.3,
+    "sizeBeforeKB": 111.2,
+    "sizeAfterKB": 97.2
+  },
+  {
+    "file": "platane-1.png",
+    "width": 102,
+    "height": 100,
+    "originXPercent": 47.9,
+    "originYPercent": 97.0,
+    "sizeBeforeKB": 16.9,
+    "sizeAfterKB": 14.1
+  },
+  {
+    "file": "platane-2.png",
+    "width": 140,
+    "height": 133,
+    "originXPercent": 50.5,
+    "originYPercent": 97.7,
+    "sizeBeforeKB": 31.6,
+    "sizeAfterKB": 26.0
+  },
+  {
+    "file": "platane-3.png",
+    "width": 208,
+    "height": 212,
+    "originXPercent": 53.1,
+    "originYPercent": 99.1,
+    "sizeBeforeKB": 84.5,
+    "sizeAfterKB": 71.1
+  },
+  {
+    "file": "platane-4.png",
+    "width": 255,
+    "height": 275,
+    "originXPercent": 51.9,
+    "originYPercent": 98.5,
+    "sizeBeforeKB": 148.2,
+    "sizeAfterKB": 127.9
+  },
+  {
+    "file": "platane-5.png",
+    "width": 271,
+    "height": 301,
+    "originXPercent": 48.7,
+    "originYPercent": 99.7,
+    "sizeBeforeKB": 180.7,
+    "sizeAfterKB": 151.8
+  },
+  {
+    "file": "poirier-1.png",
+    "width": 94,
+    "height": 111,
+    "originXPercent": 50.6,
+    "originYPercent": 97.3,
+    "sizeBeforeKB": 16.6,
+    "sizeAfterKB": 14.0
+  },
+  {
+    "file": "poirier-2.png",
+    "width": 135,
+    "height": 147,
+    "originXPercent": 52.5,
+    "originYPercent": 98.6,
+    "sizeBeforeKB": 36.1,
+    "sizeAfterKB": 32.0
+  },
+  {
+    "file": "poirier-3.png",
+    "width": 188,
+    "height": 211,
+    "originXPercent": 51.1,
+    "originYPercent": 99.1,
+    "sizeBeforeKB": 73.4,
+    "sizeAfterKB": 61.9
+  },
+  {
+    "file": "poirier-4.png",
+    "width": 237,
+    "height": 267,
+    "originXPercent": 51.4,
+    "originYPercent": 99.3,
+    "sizeBeforeKB": 119.3,
+    "sizeAfterKB": 100.2
+  },
+  {
+    "file": "poirier-5.png",
+    "width": 258,
+    "height": 292,
+    "originXPercent": 48.5,
+    "originYPercent": 99.7,
+    "sizeBeforeKB": 145.8,
+    "sizeAfterKB": 123.2
   },
   {
     "file": "pommier-1.png",
-    "width": 386,
-    "height": 494,
-    "originXPercent": 52.4,
-    "originYPercent": 99.2,
-    "sizeBeforeKB": 155.5,
-    "sizeAfterKB": 108.9
+    "width": 66,
+    "height": 70,
+    "originXPercent": 51.8,
+    "originYPercent": 97.1,
+    "sizeBeforeKB": 9.6,
+    "sizeAfterKB": 8.1
+  },
+  {
+    "file": "pommier-2.png",
+    "width": 110,
+    "height": 96,
+    "originXPercent": 54.2,
+    "originYPercent": 96.9,
+    "sizeBeforeKB": 20.5,
+    "sizeAfterKB": 17.4
+  },
+  {
+    "file": "pommier-3.png",
+    "width": 176,
+    "height": 152,
+    "originXPercent": 51.2,
+    "originYPercent": 98.0,
+    "sizeBeforeKB": 50.3,
+    "sizeAfterKB": 43.0
+  },
+  {
+    "file": "pommier-4.png",
+    "width": 235,
+    "height": 191,
+    "originXPercent": 49.3,
+    "originYPercent": 99.0,
+    "sizeBeforeKB": 88.1,
+    "sizeAfterKB": 73.7
+  },
+  {
+    "file": "pommier-5.png",
+    "width": 264,
+    "height": 239,
+    "originXPercent": 47.1,
+    "originYPercent": 98.7,
+    "sizeBeforeKB": 135.5,
+    "sizeAfterKB": 114.8
+  },
+  {
+    "file": "saule-1.png",
+    "width": 60,
+    "height": 82,
+    "originXPercent": 50.9,
+    "originYPercent": 97.6,
+    "sizeBeforeKB": 7.9,
+    "sizeAfterKB": 6.6
+  },
+  {
+    "file": "saule-2.png",
+    "width": 95,
+    "height": 116,
+    "originXPercent": 52.2,
+    "originYPercent": 96.6,
+    "sizeBeforeKB": 20.3,
+    "sizeAfterKB": 16.9
+  },
+  {
+    "file": "saule-3.png",
+    "width": 159,
+    "height": 160,
+    "originXPercent": 51.8,
+    "originYPercent": 98.8,
+    "sizeBeforeKB": 52.1,
+    "sizeAfterKB": 45.0
+  },
+  {
+    "file": "saule-4.png",
+    "width": 198,
+    "height": 195,
+    "originXPercent": 53.9,
+    "originYPercent": 98.5,
+    "sizeBeforeKB": 86.0,
+    "sizeAfterKB": 73.6
+  },
+  {
+    "file": "saule-5.png",
+    "width": 243,
+    "height": 241,
+    "originXPercent": 49.1,
+    "originYPercent": 98.8,
+    "sizeBeforeKB": 138.0,
+    "sizeAfterKB": 119.9
   }
 ]
