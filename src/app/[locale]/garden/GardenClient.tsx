@@ -27,6 +27,7 @@ import {
   itemSig,
   uid,
   STRUCT_SIZE,
+  SPECIES,
   type CellKey,
   type GardenState,
   type Plant,
@@ -37,15 +38,41 @@ import {
   type TileKind,
   type StructureKind,
   type Cosmetic,
+  type Stage,
   type Species,
 } from './gardenEngine';
 
 const STORAGE_KEY = 'culture.garden.v2';
 const SURFACE_ORDER: TileKind[] = ['grass', 'path', 'tallgrass', 'earth', 'water', 'bridge'];
+const ALL_STAGES: Stage[] = [1, 2, 3, 4, 5];
+
+// Reconstruit un Plant depuis un sig `tree:<espèce>-<stade>` (les noms d'espèces n'ont pas de tiret).
+function parseTreeSig(sig: string): Plant | null {
+  const m = /^tree:(.+)-([1-5])$/.exec(sig);
+  if (!m) return null;
+  const species = m[1] as Species;
+  return (SPECIES as string[]).includes(species) ? { species, stage: Number(m[2]) as Stage } : null;
+}
 
 function items(kind: AnyKind, n: number, plant: Plant | null = null): InventoryItem[] {
   return Array.from({ length: n }, () => ({ id: uid(), kind, plant }));
 }
+
+// Tuiles d'herbe : blocs isométriques PNG (dessus herbe + côtés terre intégrés), une variante
+// pseudo-aléatoire par case (stable). Deux réglages fins :
+//   TILE_IMG_TARGET_W = largeur rendue du contenu (~TILE_W pour que les cases se raccordent) ;
+//   TILE_IMG_TOP_Y    = position verticale du sommet du bloc par rapport au centre de la case.
+const TILE_IMG_TARGET_W = 106;
+const TILE_IMG_TOP_Y = -34;
+// Par variante : dimensions natives du PNG + ancre mesurée (centre X du contenu, Y du sommet
+// opaque, largeur du contenu) — voir tuile/ + analyse de géométrie.
+const GRASS_TILES: { w: number; h: number; cx: number; ty: number; cw: number }[] = [
+  { w: 239, h: 720, cx: 131.5, ty: 246, cw: 194 }, // herbe-1
+  { w: 206, h: 720, cx: 103.5, ty: 250, cw: 184 }, // herbe-2
+  { w: 207, h: 720, cx: 103.5, ty: 246, cw: 190 }, // herbe-3
+  { w: 209, h: 720, cx: 105.5, ty: 248, cw: 188 }, // herbe-4
+  { w: 233, h: 720, cx: 101.5, ty: 248, cw: 190 }, // herbe-5
+];
 
 function defaultState(): GardenState {
   const tiles: Record<CellKey, Tile> = {};
@@ -56,10 +83,7 @@ function defaultState(): GardenState {
     ...items('earth', 8),
     ...items('water', 10),
     ...items('bridge', 6),
-    ...items('tree', 2, { species: 'chene', stage: 2 }),
-    ...items('tree', 2, { species: 'pommier', stage: 1 }),
-    ...items('tree', 2, { species: 'pin', stage: 2 }),
-    ...items('tree', 1, { species: 'paulownia', stage: 1 }),
+    // les arbres viennent du catalogue du palette (SPECIES × stades, illimité), pas de l'inventaire
     ...items('house', 2),
     ...items('mountain', 1),
   ];
@@ -94,6 +118,7 @@ export default function GardenClient({ firstName }: Props) {
   const [movingTree, setMovingTree] = useState<CellKey | null>(null);
   const [movingStruct, setMovingStruct] = useState<string | null>(null);
   const [armedSig, setArmedSig] = useState<string | null>(null); // a surface kind, 'tree:..' or structure kind
+  const [treeStage, setTreeStage] = useState<Stage>(3); // stade choisi pour les arbres du palette
   const [armedCos, setArmedCos] = useState<Cosmetic | 'erase' | null>(null);
   const [invOpen, setInvOpen] = useState(true);
   const [invTab, setInvTab] = useState<'blocks' | 'deco'>('blocks');
@@ -177,18 +202,37 @@ export default function GardenClient({ firstName }: Props) {
     () => SURFACE_ORDER.filter((k) => k !== 'grass').map((k) => invGroups.get(k)).filter(Boolean) as { sig: string; kind: AnyKind; plant: Plant | null; count: number }[],
     [invGroups]
   );
-  const objectGroups = useMemo(
-    () => [...invGroups.values()].filter((g) => g.kind === 'tree' || isStructureKind(g.kind)).sort((a) => (a.kind === 'tree' ? -1 : 1)),
+  // structures du palette (maison/montagne), depuis l'inventaire ; les arbres sont gérés à part
+  // (une vignette par espèce + sélecteur de stade), toujours disponibles en illimité.
+  const structureGroups = useMemo(
+    () => [...invGroups.values()].filter((g) => isStructureKind(g.kind)),
     [invGroups]
   );
 
-  const armed = armedSig === 'grass' ? { sig: 'grass', kind: 'grass' as AnyKind, plant: null, count: Infinity } : armedSig ? invGroups.get(armedSig) ?? null : null;
+  // change le stade courant, et ré-arme l'espèce déjà sélectionnée sur ce nouveau stade
+  const pickTreeStage = useCallback((st: Stage) => {
+    setTreeStage(st);
+    setArmedSig((cur) => {
+      const p = cur ? parseTreeSig(cur) : null;
+      return p ? `tree:${p.species}-${st}` : cur;
+    });
+  }, []);
+
+  const armed =
+    armedSig === 'grass'
+      ? { sig: 'grass', kind: 'grass' as AnyKind, plant: null, count: Infinity }
+      : armedSig?.startsWith('tree:')
+        ? (() => { const plant = parseTreeSig(armedSig); return plant ? { sig: armedSig, kind: 'tree' as AnyKind, plant, count: Infinity } : null; })()
+        : armedSig
+          ? invGroups.get(armedSig) ?? null
+          : null;
   const armedIsStruct = !!armed && isStructureKind(armed.kind);
   const armedIsSurface = !!armed && !armedIsStruct && armed.kind !== 'tree';
   const armedIsTree = !!armed && armed.kind === 'tree';
 
   useEffect(() => {
-    if (armedSig && armedSig !== 'grass' && !invGroups.has(armedSig)) setArmedSig(null);
+    // arbres (illimités) et herbe ne sont jamais dans invGroups → ne pas les désarmer
+    if (armedSig && armedSig !== 'grass' && !armedSig.startsWith('tree:') && !invGroups.has(armedSig)) setArmedSig(null);
   }, [armedSig, invGroups]);
 
   // ---- helpers ----
@@ -252,12 +296,13 @@ export default function GardenClient({ firstName }: Props) {
 
   const placeTree = useCallback(
     (cell: CellKey) => {
+      const plant = armedSig ? parseTreeSig(armedSig) : null;
+      if (!plant) return;
       setState((s) => {
         const tile = s.tiles[cell];
-        if (!tile || !isLandKind(tile.kind) || tile.structureId || tile.plant || !armedSig) return s;
-        const taken = takeFromInv(s.inventory, armedSig);
-        if (!taken || taken.item.kind !== 'tree') return s;
-        return { ...s, tiles: { ...s.tiles, [cell]: { ...tile, plant: taken.item.plant } }, inventory: taken.inv };
+        if (!tile || !isLandKind(tile.kind) || tile.structureId || tile.plant) return s;
+        // arbres illimités → aucune consommation d'inventaire
+        return { ...s, tiles: { ...s.tiles, [cell]: { ...tile, plant } } };
       });
     },
     [armedSig]
@@ -267,7 +312,8 @@ export default function GardenClient({ firstName }: Props) {
     setState((s) => {
       const tile = s.tiles[cell];
       if (!tile?.plant) return s;
-      return { ...s, tiles: { ...s.tiles, [cell]: { ...tile, plant: null } }, inventory: [...s.inventory, { id: uid(), kind: 'tree', plant: tile.plant }] };
+      // arbres illimités → on retire simplement l'arbre (rien à remettre en inventaire)
+      return { ...s, tiles: { ...s.tiles, [cell]: { ...tile, plant: null } } };
     });
   }, []);
 
@@ -539,7 +585,9 @@ export default function GardenClient({ firstName }: Props) {
           tab={invTab}
           setTab={setInvTab}
           surfaceGroups={surfaceGroups}
-          objectGroups={objectGroups}
+          structureGroups={structureGroups}
+          treeStage={treeStage}
+          onPickStage={pickTreeStage}
           armedSig={armedSig}
           armedCos={armedCos}
           onArmItem={(sig) => { cancelEdit(); setArmedCos(null); setArmedSig((s) => (s === sig ? null : sig)); }}
@@ -608,12 +656,6 @@ function TileVisual({ cell, col, row, originX, originY, tiles, editMode, isMovin
 
   const nLand = (dc: number, dr: number) => isLand(tiles[key(col + dc, row + dr)]);
 
-  const blades = useMemo(() => {
-    const rng = cellRng(col, row);
-    const n = 3 + Math.floor(rng() * 3);
-    return Array.from({ length: n }, () => ({ px: (rng() - 0.5) * TILE_W * 0.5, py: (rng() - 0.5) * TILE_H * 0.5, h: 3 + rng() * 3, flip: rng() > 0.5, flower: rng() > 0.85 }));
-  }, [col, row]);
-
   // ---- open water (lake) ----
   if (tile.kind === 'water') {
     const inset = 5;
@@ -645,6 +687,25 @@ function TileVisual({ cell, col, row, originX, originY, tiles, editMode, isMovin
             <line key={i} x1={L.x + (B.x - L.x) * tt} y1={L.y + (B.y - L.y) * tt} x2={T.x + (R.x - T.x) * tt} y2={T.y + (R.y - T.y) * tt} stroke={PAL.plankDark} strokeWidth="1" />
           )
         )}
+      </g>
+    );
+  }
+
+  // ---- grass: bloc PNG isométrique (dessus + côtés intégrés), variante pseudo-aléatoire par case ----
+  if (tile.kind === 'grass') {
+    const rng = cellRng(col * 2 + 7, row * 3 + 1);
+    const idx = Math.min(GRASS_TILES.length - 1, Math.floor(rng() * GRASS_TILES.length));
+    const v = GRASS_TILES[idx];
+    const scale = TILE_IMG_TARGET_W / v.cw;
+    const imgX = cx - v.cx * scale;
+    const imgY = cy + TILE_IMG_TOP_Y - v.ty * scale;
+    const lift = isMovingTree ? -5 : 0;
+    return (
+      <g transform={`translate(0 ${lift})`} style={{ pointerEvents: 'none', opacity: dimmed ? 0.55 : 1 }}>
+        <image href={`/assets/tiles/herbe-${idx + 1}.png`} x={imgX} y={imgY} width={v.w * scale} height={v.h * scale} preserveAspectRatio="none" />
+        {isMovingTree && <polygon points={`${T.x},${T.y} ${R.x},${R.y} ${B.x},${B.y} ${L.x},${L.y}`} fill="none" stroke="#5f8a3f" strokeWidth={2.5} strokeLinejoin="round" />}
+        {!covered && tile.plant && <PlantArt cx={cx} cy={cy} plant={tile.plant} col={col} row={row} />}
+        {!covered && tile.cosmetic && <CosmeticOnTile cx={cx} cy={cy} cos={tile.cosmetic} />}
       </g>
     );
   }
@@ -701,15 +762,6 @@ function TileVisual({ cell, col, row, originX, originY, tiles, editMode, isMovin
       {!covered && tile.kind === 'path' && <PathTop cx={cx} cy={cy} col={col} row={row} tiles={tiles} T={T} R={R} B={B} L={L} />}
       {!covered && tile.kind === 'tallgrass' && <TallGrassTop cx={cx} cy={cy} col={col} row={row} />}
       {!covered && tile.kind === 'earth' && <EarthSpecks cx={cx} cy={cy} col={col} row={row} />}
-      {!covered && tile.kind === 'grass' &&
-        blades.map((b, i) =>
-          b.flower ? (
-            <circle key={i} cx={cx + b.px} cy={cy + b.py} r={1.7} fill={i % 2 ? '#f4d9e3' : '#fbf0c4'} />
-          ) : (
-            <path key={i} d={`M ${cx + b.px} ${cy + b.py} q ${b.flip ? 1.6 : -1.6} ${-b.h * 0.6} ${b.flip ? 1 : -1} ${-b.h}`} stroke={i % 2 ? PAL.blade : PAL.bladeDeep} strokeWidth={1} strokeLinecap="round" fill="none" />
-          )
-        )}
-
       {isMovingTree && <polygon points={`${T.x},${T.y} ${R.x},${R.y} ${B.x},${B.y} ${L.x},${L.y}`} fill="none" stroke="#5f8a3f" strokeWidth={2.5} strokeLinejoin="round" />}
       {!covered && tile.plant && <PlantArt cx={cx} cy={cy} plant={tile.plant} col={col} row={row} />}
       {!covered && tile.cosmetic && <CosmeticOnTile cx={cx} cy={cy} cos={tile.cosmetic} />}
@@ -765,37 +817,49 @@ function EarthSpecks({ cx, cy, col, row }: { cx: number; cy: number; col: number
   );
 }
 
-// Origine du balancement (pied du tronc, en % de l'image) — voir tree-sway-tool/resultat/manifest.json.
-// Seules chêne/paulownia/pin ont un lot d'images complet (3 stades) ; pommier garde son ancien rendu statique.
-const SWAY_ORIGIN: Partial<Record<Species, Record<1 | 2 | 3, { x: number; y: number }>>> = {
-  chene: { 1: { x: 50.1, y: 99.2 }, 2: { x: 48.4, y: 99.3 }, 3: { x: 49.4, y: 99.3 } },
-  paulownia: { 1: { x: 48.4, y: 99.3 }, 2: { x: 49.4, y: 99.3 }, 3: { x: 48.2, y: 99.3 } },
-  pin: { 1: { x: 49.9, y: 99.2 }, 2: { x: 50.7, y: 99.2 }, 3: { x: 51.1, y: 99.3 } },
+// Taille des arbres. Le PNG a été rogné au plus juste par tree-sway (l'espace vide qui
+// encodait la proportion d'origine a disparu), donc on pilote la taille par des FACTEURS
+// fournis par le produit — une échelle commune à toutes les espèces et tous les stades.
+// Hauteur rendue (px) = facteur × TREE_BASE_UNIT. Une seule unité à régler pour tout mettre
+// à l'échelle. Calée pour que l'Araucaria stade 5 (facteur 7.9) garde sa taille actuelle
+// de 160px → 160 / 7.9 ≈ 20.25 px par unité.
+const TREE_BASE_UNIT = 160 / 7.9;
+const TREE_UNITS: Record<Species, Record<Stage, number>> = {
+  chene: { 1: 1.4, 2: 2.3, 3: 4.4, 4: 6.1, 5: 7.7 },
+  pommier: { 1: 1.2, 2: 2, 3: 3.8, 4: 5, 5: 6.5 },
+  cerisier: { 1: 1.5, 2: 2.3, 3: 3.3, 4: 4.6, 5: 5.8 },
+  saule: { 1: 1.5, 2: 2.5, 3: 3.6, 4: 5, 5: 6.5 },
+  paulownia: { 1: 1.3, 2: 2.1, 3: 3.6, 4: 5, 5: 6 },
+  pin: { 1: 2.2, 2: 3.8, 3: 5.4, 4: 6.9, 5: 8 },
+  copalme: { 1: 2, 2: 3.8, 3: 5.2, 4: 6.5, 5: 8 },
+  poirier: { 1: 2.2, 2: 3.7, 3: 5.1, 4: 6.4, 5: 7.8 },
+  platane: { 1: 2.6, 2: 3.6, 3: 5.6, 4: 7.2, 5: 8 },
+  araucaria: { 1: 2.5, 2: 4, 3: 5.15, 4: 6.6, 5: 7.9 },
 };
 
 function PlantArt({ cx, cy, plant, col, row }: { cx: number; cy: number; plant: Plant; col: number; row: number }) {
-  const w = plant.stage === 1 ? 92 : plant.stage === 2 ? 116 : 140;
-  const origin = SWAY_ORIGIN[plant.species]?.[plant.stage];
-  const sway = useMemo<(React.CSSProperties & { [key: `--${string}`]: string }) | null>(() => {
-    if (!origin) return null;
+  const h = TREE_UNITS[plant.species][plant.stage] * TREE_BASE_UNIT;
+  const boxW = h * 1.6; // large : l'image (rognée, ratio ≤ 1.4) reste limitée par la hauteur → hauteur rendue = h pour tous
+  const footY = cy + TILE_H * 0.15; // le pied du tronc s'ancre un peu sous le centre de la tuile
+  const sway = useMemo<React.CSSProperties & { [key: `--${string}`]: string }>(() => {
     const rng = cellRng(col * 11 + 5, row * 17 + 3);
     return {
-      transformOrigin: `${origin.x}% ${origin.y}%`,
+      transformOrigin: '50% 98%', // pivot au pied (bas-centre de la boîte), comme l'ancrage
       '--sway-delay': `${(-rng() * 4.5).toFixed(2)}s`,
       '--sway-drift': (0.85 + rng() * 0.3).toFixed(2),
     };
-  }, [origin, col, row]);
+  }, [col, row]);
   return (
     <g style={{ pointerEvents: 'none' }}>
       <image
         href={`/assets/trees/${plant.species}-${plant.stage}.png`}
-        x={cx - w / 2}
-        y={cy - w * 0.8}
-        width={w}
-        height={w}
+        x={cx - boxW / 2}
+        y={footY - h}
+        width={boxW}
+        height={h}
         preserveAspectRatio="xMidYMax meet"
-        className={sway ? 'tree-sway' : undefined}
-        style={sway ?? undefined}
+        className="tree-sway"
+        style={sway}
       />
     </g>
   );
@@ -891,20 +955,37 @@ function ItemCard({ g, armed, onArm }: { g: ItemGroup; armed: boolean; onArm: (s
       className={`relative aspect-square rounded-xl border flex items-center justify-center transition-colors ${armed ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
     >
       <ItemThumb kind={g.kind} plant={g.plant} />
-      <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#3a4a2a] text-white text-[10px] font-semibold flex items-center justify-center">{g.count}</span>
+      <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#3a4a2a] text-white text-[10px] font-semibold flex items-center justify-center">{g.count === Infinity ? '∞' : g.count}</span>
+    </button>
+  );
+}
+
+// Vignette d'une espèce d'arbre, affichée au stade courant ; stock illimité (badge ∞).
+function SpeciesCard({ species, stage, sig, armed, onArm }: { species: Species; stage: Stage; sig: string; armed: boolean; onArm: (sig: string) => void }) {
+  const t = useTranslations('garden');
+  return (
+    <button
+      onClick={() => onArm(sig)}
+      title={`${t(`species.${species}`)} · ${t('panel.stage')} ${stage}`}
+      className={`relative aspect-square rounded-xl border flex items-center justify-center transition-colors ${armed ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
+    >
+      <ItemThumb kind="tree" plant={{ species, stage }} />
+      <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#3a4a2a] text-white text-[10px] font-semibold flex items-center justify-center">∞</span>
     </button>
   );
 }
 
 function Panel({
-  open, onToggle, tab, setTab, surfaceGroups, objectGroups, armedSig, armedCos, onArmItem, onArmCos,
+  open, onToggle, tab, setTab, surfaceGroups, structureGroups, treeStage, onPickStage, armedSig, armedCos, onArmItem, onArmCos,
 }: {
   open: boolean;
   onToggle: () => void;
   tab: 'blocks' | 'deco';
   setTab: (v: 'blocks' | 'deco') => void;
   surfaceGroups: { sig: string; kind: AnyKind; plant: Plant | null; count: number }[];
-  objectGroups: { sig: string; kind: AnyKind; plant: Plant | null; count: number }[];
+  structureGroups: { sig: string; kind: AnyKind; plant: Plant | null; count: number }[];
+  treeStage: Stage;
+  onPickStage: (s: Stage) => void;
   armedSig: string | null;
   armedCos: Cosmetic | 'erase' | null;
   onArmItem: (sig: string) => void;
@@ -939,9 +1020,27 @@ function Panel({
                 {surfaceGroups.map((g) => <ItemCard key={g.sig} g={g} armed={armedSig === g.sig} onArm={onArmItem} />)}
               </div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5d6b4a]/70 mt-3 mb-1.5 px-0.5">{t('panel.objects')}</p>
+              {/* sélecteur de stade de croissance, appliqué à l'arbre posé ensuite */}
+              <div className="flex items-center gap-1.5 mb-2 px-0.5">
+                <span className="text-[11px] text-[#5d6b4a]/80">{t('panel.stage')}</span>
+                <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-[#f1f4ea]">
+                  {ALL_STAGES.map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => onPickStage(st)}
+                      className={`w-5 h-5 rounded-md text-[11px] font-semibold ${treeStage === st ? 'bg-green-brand text-white shadow-sm' : 'text-[#5d6b4a] hover:bg-white'}`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid grid-cols-3 gap-2">
-                {objectGroups.map((g) => <ItemCard key={g.sig} g={g} armed={armedSig === g.sig} onArm={onArmItem} />)}
-                {objectGroups.length === 0 && <p className="col-span-3 text-xs text-ink-faint py-2 text-center">{t('panel.noObjects')}</p>}
+                {SPECIES.map((sp) => {
+                  const sig = `tree:${sp}-${treeStage}`;
+                  return <SpeciesCard key={sp} species={sp} stage={treeStage} sig={sig} armed={armedSig === sig} onArm={onArmItem} />;
+                })}
+                {structureGroups.map((g) => <ItemCard key={g.sig} g={g} armed={armedSig === g.sig} onArm={onArmItem} />)}
               </div>
             </div>
           ) : (

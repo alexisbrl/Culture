@@ -884,14 +884,21 @@
       "resetGrass": "Herbe (réinitialiser)",
       "objects": "Objets",
       "noObjects": "Aucun objet",
+      "stage": "Stade",
       "decorations": "Décorations",
       "erase": "Gomme"
     },
     "species": {
+      "araucaria": "Araucaria",
+      "cerisier": "Cerisier",
       "chene": "Chêne",
+      "copalme": "Copalme",
       "paulownia": "Paulownia",
       "pin": "Pin",
-      "pommier": "Pommier"
+      "platane": "Platane",
+      "poirier": "Poirier",
+      "pommier": "Pommier",
+      "saule": "Saule"
     },
     "kind": {
       "grass": "Herbe",

@@ -6,8 +6,21 @@ import { palette } from '@/lib/theme';
 
 export type CellKey = string; // "col,row"
 
-export type Species = 'chene' | 'paulownia' | 'pin' | 'pommier';
-export type Plant = { species: Species; stage: 1 | 2 | 3 };
+export type Species =
+  | 'araucaria'
+  | 'cerisier'
+  | 'chene'
+  | 'copalme'
+  | 'paulownia'
+  | 'pin'
+  | 'platane'
+  | 'poirier'
+  | 'pommier'
+  | 'saule';
+export const SPECIES: Species[] = ['araucaria', 'cerisier', 'chene', 'copalme', 'paulownia', 'pin', 'platane', 'poirier', 'pommier', 'saule'];
+
+export type Stage = 1 | 2 | 3 | 4 | 5;
+export type Plant = { species: Species; stage: Stage };
 
 // surface of a cell
 export type TileKind = 'grass' | 'path' | 'tallgrass' | 'earth' | 'water' | 'bridge';
