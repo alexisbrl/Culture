@@ -47,9 +47,11 @@ next-env.d.ts
 /_handoff/
 /culture-design-system/
 
-# Claude Code local (worktrees, settings locaux) — .claude/rules/ reste versionné (conventions d'équipe)
+# Claude Code local (worktrees, settings locaux)
+# .claude/rules/ et .claude/skills/ restent versionnés (conventions d'équipe, outillage de chantier)
 /.claude/*
 !/.claude/rules/
+!/.claude/skills/
 
 # Lanceur local Windows
 Lancer Culture.bat
