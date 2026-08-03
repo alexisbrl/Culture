@@ -20,8 +20,9 @@ Ne lis pas `CLAUDE.md`, n'explore pas le code, ne lance aucune commande. Ce fich
 
 1. Lis la feuille de route en entier — objectif, décisions arrêtées, hors périmètre, zones interdites, sources de vérité, journal.
 2. Lis `CLAUDE.md`, et les `.claude/rules/*.md` correspondant à la zone que tu vas toucher.
-3. Place-toi sur la branche du chantier : `git checkout <branche> && git pull`.
-4. Vérifie que l'arbre est propre. S'il traîne des modifications non commitées d'une exécution précédente interrompue, **inspecte-les avant tout** : soit elles complètent une tâche et tu la finis, soit elles sont incohérentes et tu les jettes (`git checkout -- .`). Ne construis jamais par-dessus un état douteux.
+3. **Garde-fou anti-collision — avant tout `git checkout`.** Les routines tournent dans le répertoire de travail d'Alexis, qui peut très bien être en train d'y coder au moment où tu te réveilles. Donc : **si l'arbre contient des modifications non commitées alors que tu n'es pas déjà sur la branche du chantier, arrête-toi immédiatement** en expliquant pourquoi. Ce sont selon toute vraisemblance ses modifications en cours. Ne les jette jamais, ne stash rien, et ne change pas de branche sous ses pieds — la prochaine routine reprendra le travail.
+4. Sinon, place-toi sur la branche du chantier : `git checkout <branche> && git pull`.
+5. Si tu es **déjà** sur la branche du chantier avec des modifications non commitées, elles proviennent d'une exécution précédente interrompue : **inspecte-les avant tout**. Soit elles complètent la tâche en cours et tu la finis, soit elles sont incohérentes et tu les jettes (`git checkout -- .`). Ne construis jamais par-dessus un état douteux.
 
 ## Étape 2 — Enchaîner les tâches
 
