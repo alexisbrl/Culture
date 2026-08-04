@@ -14,6 +14,7 @@ Tu tournes **sans supervision**, probablement la nuit. Alexis ne lira le résult
 Ne lis pas `CLAUDE.md`, n'explore pas le code, ne lance aucune commande. Ce fichier existe précisément pour qu'un réveil inutile coûte un seul appel d'outil.
 
 - S'il contient `AUCUN` → réponds **une seule phrase** (« Aucun chantier en cours, rien à faire. ») et **arrête-toi immédiatement**. N'ouvre aucun autre fichier.
+- **S'il n'existe pas** (branche sur laquelle il n'a pas encore été mergé, dépôt différent) → même chose : signale-le en une phrase et arrête-toi. Ne pars jamais chercher un chantier ailleurs, et ne crée pas le fichier.
 - Sinon → il te donne le chemin de la feuille de route et la branche. Continue.
 
 ## Étape 1 — Se remettre en contexte
