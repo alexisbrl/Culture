@@ -67,7 +67,7 @@ export default async function LocaleLayout({ children, params }: Props) {
             ) : (
               <Navbar />
             )}
-            <main className="flex-1">{children}</main>
+            <main className={`flex-1 ${isLoggedIn ? 'pb-[78px] md:pb-0' : ''}`}>{children}</main>
             {!isLoggedIn && <Footer />}
           </NextIntlClientProvider>
         </body>

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { useUser, SignOutButton } from '@clerk/nextjs';
-import { Sprout, ChevronDown, Settings, UserCircle, LogOut, Crown } from 'lucide-react';
+import { Sprout, ChevronDown, Settings, UserCircle, LogOut, Crown, Route, FileText, BookOpen, User } from 'lucide-react';
 import AvatarComposer from '@/components/avatar/AvatarComposer';
 import { loadAvatarConfig, type AvatarConfig } from '@/components/avatar/avatarConfig';
 import { markIntentionalSignOut } from '@/lib/signOutIntent';
@@ -83,11 +83,51 @@ export default function DashboardHeader() {
       active ? 'font-extrabold text-[var(--green)]' : 'font-semibold text-[var(--ink-muted)] hover:text-[var(--ink)]'
     }`;
 
+  const isExercise = pathname.includes('/exercise/');
+  const mobileItemClass = (active: boolean) =>
+    `flex flex-1 flex-col items-center gap-[3px] py-1.5 text-[10.5px] leading-none font-semibold outline-none ${
+      active ? 'text-[var(--green)]' : 'text-[var(--ink-muted)]'
+    }`;
+
   return (
-    <header
-      className="hidden items-center gap-6 px-6 md:flex"
-      style={{ height: 60, borderBottom: '1px solid var(--line)', background: 'var(--surface-raised)' }}
-    >
+    <>
+      {!isExercise && (
+        <nav className="fixed inset-x-0 bottom-0 z-30 flex items-stretch gap-1 border-t border-[var(--line)] bg-[var(--surface-raised)] px-3 pt-2 pb-3.5 md:hidden">
+          <Link href={`/${locale}/garden`} className={mobileItemClass(isJardin)}>
+            <Sprout size={22} strokeWidth={1.75} />
+            {t('tabJardin')}
+          </Link>
+          {workshopId && (
+            <div className="flex flex-[3] items-stretch gap-1 rounded-2xl border border-[var(--line-strong)]">
+              <Link
+                href={`/${locale}/workshops/${workshopId}?tab=programme`}
+                className={mobileItemClass(!isJardin && !isProfil && activeTab === 'programme')}
+              >
+                <Route size={22} strokeWidth={1.75} />
+                {t('tabParcours')}
+              </Link>
+              {canManage && (
+                <Link href={`/${locale}/workshops/${workshopId}?tab=examen`} className={mobileItemClass(activeTab === 'examen')}>
+                  <FileText size={22} strokeWidth={1.75} />
+                  {t('tabExamens')}
+                </Link>
+              )}
+              <div aria-disabled="true" className={mobileItemClass(false)} style={{ pointerEvents: 'none' }}>
+                <BookOpen size={22} strokeWidth={1.75} />
+                {t('tabCours')}
+              </div>
+            </div>
+          )}
+          <Link href={`/${locale}/profile`} className={mobileItemClass(isProfil)}>
+            <User size={22} strokeWidth={1.75} />
+            {t('tabProfil')}
+          </Link>
+        </nav>
+      )}
+      <header
+        className="hidden items-center gap-6 px-6 md:flex"
+        style={{ height: 60, borderBottom: '1px solid var(--line)', background: 'var(--surface-raised)' }}
+      >
       <div className="flex min-w-0 flex-1 items-center gap-6">
         <Link href={`/${locale}/dashboard`} className="flex shrink-0 items-center gap-2">
           <Sprout size={20} strokeWidth={1.75} className="text-[var(--green)]" />
@@ -211,5 +251,6 @@ export default function DashboardHeader() {
         </div>
       </div>
     </header>
+    </>
   );
 }

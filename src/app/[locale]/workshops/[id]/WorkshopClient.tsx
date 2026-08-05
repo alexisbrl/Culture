@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { QrCode, Settings, LogOut } from 'lucide-react';
+import { QrCode, Settings, LogOut, ChevronDown } from 'lucide-react';
 import ShareQRModal from '@/components/ShareQRModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import WorkshopSwitcher from '@/components/WorkshopSwitcher';
 import { leaveWorkshop } from '@/app/actions/workshops';
 import ProgrammeTab from './tabs/ProgrammeTab';
 import type { Chapter } from '@/app/actions/workshopChapters';
@@ -55,6 +56,7 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
 
   const [shareOpen, setShareOpen] = useState(false);
   const [joinUrl, setJoinUrl] = useState('');
+  const [mobileSwitcherOpen, setMobileSwitcherOpen] = useState(false);
 
   // Quitter l'atelier — jamais pour le propriétaire (doit d'abord transférer/supprimer).
   const [leaveOpen, setLeaveOpen] = useState(false);
@@ -78,7 +80,35 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
   }, [locale, workshopId]);
 
   return (
-    <div style={{ fontFamily: 'var(--font-sans)', color: palette.ink, minHeight: 'calc(100vh - 65px)', background: palette.cream, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ fontFamily: 'var(--font-sans)', color: palette.ink, minHeight: 'calc(100vh - 60px)', background: palette.cream, display: 'flex', flexDirection: 'column' }}>
+      {/* Bandeau d'atelier (téléphone) — masqué au-dessus de 768px, où la barre
+          du haut (DashboardHeader, T12) porte déjà le nom + le sélecteur. */}
+      <div className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--surface-raised)] px-5 py-3.5 md:hidden">
+        <div className="relative flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setMobileSwitcherOpen((v) => !v)}
+            className="flex min-w-0 items-center gap-2 outline-none"
+          >
+            <span className="truncate text-[11px] font-bold tracking-[0.12em] text-[var(--ink-faint)] uppercase">
+              {workshopName}
+            </span>
+            <span className="flex size-[22px] flex-none items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface-page)] text-[var(--ink-muted)]">
+              <ChevronDown size={12} strokeWidth={2.25} />
+            </span>
+          </button>
+          <WorkshopSwitcher open={mobileSwitcherOpen} onClose={() => setMobileSwitcherOpen(false)} currentWorkshopId={workshopId} />
+        </div>
+        {canManage && (
+          <Link
+            href={`/${locale}/workshops/${workshopId}/settings`}
+            className="flex size-[30px] flex-none items-center justify-center rounded-full border border-[var(--line)] text-[var(--ink-body)]"
+          >
+            <Settings size={15} strokeWidth={1.75} />
+          </Link>
+        )}
+      </div>
+
       {/* Workshop header */}
       <div style={{ paddingTop: 16, flexShrink: 0 }}>
         <div style={{ padding: '14px 24px 0' }}>
