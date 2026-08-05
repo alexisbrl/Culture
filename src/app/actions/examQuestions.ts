@@ -3,7 +3,7 @@
 import { assertManager, requireManager } from '@/lib/authz';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import * as examLib from '@/lib/workshops/exam';
-import * as bricksLib from '@/lib/workshops/bricks';
+import * as notionsLib from '@/lib/workshops/notions';
 // Types de domaine (audit §5.3) : voir @/lib/workshops/examTypes — plus de
 // dépendance vers des composants UI (QuestionEditor.tsx/ExamenTab.tsx).
 // Redéclarés en alias locaux (un fichier `'use server'` ne peut pas réexporter
@@ -12,9 +12,9 @@ import type {
   Question, ExamPool as ExamPoolType, GeneratedExam as GeneratedExamType, ExamDraft as ExamDraftType,
 } from '@/lib/workshops/examTypes';
 
-// Briques proposées à l'association dans l'éditeur — toutes celles de l'atelier,
+// Notions proposées à l'association dans l'éditeur — toutes celles de l'atelier,
 // sans restriction de chapitre.
-export type QuestionBrick = { id: string; title: string };
+export type QuestionNotion = { id: string; title: string };
 
 export type ExamPool = ExamPoolType;
 export type GeneratedExam = GeneratedExamType;
@@ -30,20 +30,20 @@ export async function getExamBankData(workshopId: string): Promise<{
   questions: Question[];
   pools: ExamPool[];
   exams: GeneratedExam[];
-  bricks: QuestionBrick[];
+  notions: QuestionNotion[];
 }> {
   // Lecture réservée aux gestionnaires (la banque contient les réponses).
   if (!(await requireManager(workshopId))) {
-    return { questions: [], pools: [], exams: [], bricks: [] };
+    return { questions: [], pools: [], exams: [], notions: [] };
   }
 
   // Deux domaines indépendants → en parallèle (règle N+1).
-  const [data, bricks] = await Promise.all([
+  const [data, notions] = await Promise.all([
     examLib.getExamBankData(workshopId),
-    bricksLib.listBricks(workshopId),
+    notionsLib.listNotions(workshopId),
   ]);
 
-  return { ...data, bricks: bricks.map((b) => ({ id: b.id, title: b.title })) };
+  return { ...data, notions: notions.map((n) => ({ id: n.id, title: n.title })) };
 }
 
 export async function saveQuestion(workshopId: string, question: Question): Promise<void> {

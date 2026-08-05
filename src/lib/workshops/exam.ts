@@ -62,14 +62,14 @@ function normalizePart(part: Partial<QuestionPart>): QuestionPart {
   };
 }
 
-// `brickIds` ne vient pas de la ligne (table de jonction séparée) : les
-// appelants qui en ont besoin passent la map pré-chargée par `loadBrickLinks`.
-// Par défaut la question est renvoyée sans briques, ce qui est correct pour les
+// `notionIds` ne vient pas de la ligne (table de jonction séparée) : les
+// appelants qui en ont besoin passent la map pré-chargée par `loadNotionLinks`.
+// Par défaut la question est renvoyée sans notions, ce qui est correct pour les
 // chemins qui ne s'en servent pas (tirage d'exercice, correction).
-function rowToQuestion(row: QuestionRow, brickIds: string[] = []): Question {
+function rowToQuestion(row: QuestionRow, notionIds: string[] = []): Question {
   return {
     bloomLevel: toBloomLevel(row.bloom_level),
-    brickIds,
+    notionIds,
     id: row.id,
     title: row.title ?? '',
     questionType: row.question_type as Question['questionType'],
@@ -103,8 +103,9 @@ function rowToQuestion(row: QuestionRow, brickIds: string[] = []): Question {
 // `bloom_level` est en revanche toujours écrit : contrairement à `context` et
 // `chapter_id`, il a une valeur dans tous les contextes et `rowToQuestion` la
 // restitue systématiquement — une ré-écriture de masse ne peut donc pas le
-// perdre. `brickIds` n'est pas ici : il vit dans `exam_question_bricks`, écrit
-// séparément par `syncQuestionBricks`.
+// perdre. `notionIds` n'est pas ici : il vit dans `exam_question_bricks`
+// (encore nommée bricks en base, voir docs/backlog.md), écrit séparément par
+// `syncQuestionNotions`.
 function questionToRow(workshopId: string, q: Question, context?: QuestionContext) {
   return {
     ...(context ? { context } : {}),
@@ -131,13 +132,14 @@ function questionToRow(workshopId: string, q: Question, context?: QuestionContex
   };
 }
 
-// ─── Briques associées aux questions (exam_question_bricks) ──────────────────
+// ─── Notions associées aux questions (exam_question_bricks) ──────────────────
+// table encore nommée bricks en base — renommage différé, voir docs/backlog.md
 
-type BrickLinkMap = Record<string, string[]>;
+type NotionLinkMap = Record<string, string[]>;
 
 // Un seul aller-retour pour toutes les questions de la page (règle N+1) : on
 // charge les liens des ids fournis, puis on les distribue à `rowToQuestion`.
-async function loadBrickLinks(questionIds: string[]): Promise<BrickLinkMap> {
+async function loadNotionLinks(questionIds: string[]): Promise<NotionLinkMap> {
   if (questionIds.length === 0) return {};
 
   const supabase = getSupabaseServerClient();
@@ -148,7 +150,7 @@ async function loadBrickLinks(questionIds: string[]): Promise<BrickLinkMap> {
 
   if (error) throw new Error(error.message);
 
-  const map: BrickLinkMap = {};
+  const map: NotionLinkMap = {};
   for (const row of data ?? []) {
     (map[row.question_id] ??= []).push(row.brick_id);
   }
@@ -157,8 +159,8 @@ async function loadBrickLinks(questionIds: string[]): Promise<BrickLinkMap> {
 
 // Remplace l'ensemble des liens d'une question par ceux fournis. On calcule le
 // différentiel plutôt que « tout supprimer puis tout réinsérer » : ça évite de
-// laisser la question sans brique si l'insertion échoue après la suppression.
-async function syncQuestionBricks(questionId: string, brickIds: string[]): Promise<void> {
+// laisser la question sans notion si l'insertion échoue après la suppression.
+async function syncQuestionNotions(questionId: string, notionIds: string[]): Promise<void> {
   const supabase = getSupabaseServerClient();
 
   const { data: existingRows, error: readError } = await supabase
@@ -168,7 +170,7 @@ async function syncQuestionBricks(questionId: string, brickIds: string[]): Promi
   if (readError) throw new Error(readError.message);
 
   const existing = new Set((existingRows ?? []).map((r) => r.brick_id as string));
-  const wanted = new Set(brickIds);
+  const wanted = new Set(notionIds);
 
   const toAdd = [...wanted].filter((id) => !existing.has(id));
   const toRemove = [...existing].filter((id) => !wanted.has(id));
@@ -176,7 +178,7 @@ async function syncQuestionBricks(questionId: string, brickIds: string[]): Promi
   if (toAdd.length > 0) {
     const { error } = await supabase
       .from('exam_question_bricks')
-      .insert(toAdd.map((brickId) => ({ question_id: questionId, brick_id: brickId })));
+      .insert(toAdd.map((notionId) => ({ question_id: questionId, brick_id: notionId })));
     if (error) throw new Error(error.message);
   }
 
@@ -208,7 +210,7 @@ export async function getExamBankData(workshopId: string): Promise<{
   ]);
 
   const bankRows = (questionsRes.data ?? []) as QuestionRow[];
-  const bankLinks = await loadBrickLinks(bankRows.map((r) => r.id));
+  const bankLinks = await loadNotionLinks(bankRows.map((r) => r.id));
   const questions = bankRows.map((row) => rowToQuestion(row, bankLinks[row.id] ?? []));
   const pools = (poolsRes.data ?? []) as ExamPool[];
   const exams = (examsRes.data ?? []).map((e) => ({
@@ -234,7 +236,7 @@ export async function saveQuestion(workshopId: string, question: Question, conte
 
   // Après l'upsert seulement : la FK de `exam_question_bricks` exige que la
   // question existe déjà pour une création.
-  await syncQuestionBricks(question.id, question.brickIds ?? []);
+  await syncQuestionNotions(question.id, question.notionIds ?? []);
 }
 
 // ─── Parcours pédagogique ────────────────────────────────────────────────────
@@ -258,7 +260,7 @@ export async function getParcoursData(workshopId: string): Promise<{
   ]);
 
   const rows = (questionsRes.data ?? []) as QuestionRow[];
-  const links = await loadBrickLinks(rows.map((r) => r.id));
+  const links = await loadNotionLinks(rows.map((r) => r.id));
 
   return {
     questions: rows.map((row) => rowToQuestion(row, links[row.id] ?? [])),

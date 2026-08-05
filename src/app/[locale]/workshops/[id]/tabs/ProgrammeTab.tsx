@@ -100,7 +100,7 @@ function ChapterColumn({ chapter, index, workshopId, locale }: { chapter: Chapte
           <div style={{ fontSize: 13, fontWeight: 500, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {String(index + 1).padStart(2, '0')} · {chapter.name}
           </div>
-          <div style={{ fontSize: 11, color: palette.inkSoft, marginTop: 2 }}>{t('brickCount', { count: chapter.brickCount })}</div>
+          <div style={{ fontSize: 11, color: palette.inkSoft, marginTop: 2 }}>{t('notionCount', { count: chapter.notionCount })}</div>
         </div>
       </div>
     </div>

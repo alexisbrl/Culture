@@ -65,7 +65,7 @@ export function emptyQuestion(): Question {
     // Le niveau de Bloom est obligatoire : toute nouvelle question naît au
     // niveau 1, et l'UI ne permet pas de le dé-sélectionner.
     bloomLevel: DEFAULT_BLOOM_LEVEL,
-    brickIds: [],
+    notionIds: [],
   };
 }
 
@@ -404,7 +404,7 @@ export default function QuestionEditor({
   question,
   allQuestions,
   pools,
-  bricks,
+  notions,
   onCreatePool,
   onSave,
   onCancel,
@@ -412,7 +412,7 @@ export default function QuestionEditor({
   question: Question;
   allQuestions: Question[];
   pools: { id: string; name: string; color: string }[];
-  bricks: { id: string; title: string }[];
+  notions: { id: string; title: string }[];
   onCreatePool: (name: string) => string;
   onSave: (q: Question) => void;
   onCancel: () => void;
@@ -423,7 +423,7 @@ export default function QuestionEditor({
   const [draft, setDraft] = useState<Question>({
     ...question,
     bloomLevel: question.bloomLevel ?? DEFAULT_BLOOM_LEVEL,
-    brickIds: question.brickIds ?? [],
+    notionIds: question.notionIds ?? [],
   });
   const [newPoolName, setNewPoolName] = useState('');
   const [creatingPool, setCreatingPool] = useState(false);
@@ -437,8 +437,8 @@ export default function QuestionEditor({
     setDraft((d) => ({ ...d, ...p }));
   }
 
-  function toggleBrick(id: string) {
-    patch({ brickIds: draft.brickIds.includes(id) ? draft.brickIds.filter((b) => b !== id) : [...draft.brickIds, id] });
+  function toggleNotion(id: string) {
+    patch({ notionIds: draft.notionIds.includes(id) ? draft.notionIds.filter((n) => n !== id) : [...draft.notionIds, id] });
   }
 
   function togglePool(id: string) {
@@ -691,34 +691,34 @@ export default function QuestionEditor({
             />
           </div>
 
-          {/* briques de connaissance couvertes (toutes celles de l'atelier) */}
+          {/* notions couvertes (toutes celles de l'atelier) */}
           <div style={{ marginBottom: 18 }}>
-            <FieldLabel hint={t('editor.bricksHint')}>{t('editor.bricksLabel')}</FieldLabel>
-            {draft.brickIds.length > 0 && (
+            <FieldLabel hint={t('editor.notionsHint')}>{t('editor.notionsLabel')}</FieldLabel>
+            {draft.notionIds.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                {draft.brickIds.map((bid) => {
-                  const b = bricks.find((bb) => bb.id === bid);
-                  if (!b) return null;
+                {draft.notionIds.map((nid) => {
+                  const n = notions.find((nn) => nn.id === nid);
+                  if (!n) return null;
                   return (
-                    <span key={bid} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 10px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.green, 0.12), color: palette.ink }}>
-                      {b.title}
-                      <button onClick={() => toggleBrick(bid)} style={{ border: 'none', background: 'none', color: palette.inkMuted, cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: 0.7 }}>×</button>
+                    <span key={nid} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 10px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.green, 0.12), color: palette.ink }}>
+                      {n.title}
+                      <button onClick={() => toggleNotion(nid)} style={{ border: 'none', background: 'none', color: palette.inkMuted, cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: 0.7 }}>×</button>
                     </span>
                   );
                 })}
               </div>
             )}
-            {bricks.length === 0 ? (
-              <div style={{ fontSize: 11.5, color: palette.inkFaint }}>{t('editor.noBricks')}</div>
+            {notions.length === 0 ? (
+              <div style={{ fontSize: 11.5, color: palette.inkFaint }}>{t('editor.noNotions')}</div>
             ) : (
               <select
                 value=""
-                onChange={(e) => { if (e.target.value) toggleBrick(e.target.value); }}
+                onChange={(e) => { if (e.target.value) toggleNotion(e.target.value); }}
                 style={{ width: '100%', fontSize: 13, color: palette.inkMuted, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', cursor: 'pointer' }}
               >
-                <option value="">{t('editor.addBrickOption')}</option>
-                {bricks.filter((b) => !draft.brickIds.includes(b.id)).map((b) => (
-                  <option key={b.id} value={b.id}>{b.title}</option>
+                <option value="">{t('editor.addNotionOption')}</option>
+                {notions.filter((n) => !draft.notionIds.includes(n.id)).map((n) => (
+                  <option key={n.id} value={n.id}>{n.title}</option>
                 ))}
               </select>
             )}

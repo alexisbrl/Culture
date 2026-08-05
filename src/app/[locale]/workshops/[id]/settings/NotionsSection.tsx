@@ -6,11 +6,11 @@ import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { palette, ink } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import {
-  createWorkshopBrick,
-  updateWorkshopBrick,
-  deleteWorkshopBrick,
-  type Brick,
-} from '@/app/actions/workshopBricks';
+  createWorkshopNotion,
+  updateWorkshopNotion,
+  deleteWorkshopNotion,
+  type Notion,
+} from '@/app/actions/workshopNotions';
 import {
   createWorkshopChapter,
   renameWorkshopChapter,
@@ -22,9 +22,9 @@ import { Row, SmallBtn, SectionCard } from './settingsShared';
 
 type Props = {
   workshopId: string;
-  bricks: Brick[];
+  notions: Notion[];
   chapters: Chapter[];
-  /** Bascule vers la section Fichiers (les briques sont issues des fichiers sources). */
+  /** Bascule vers la section Fichiers (les notions sont issues des fichiers sources). */
   onManageFiles: () => void;
 };
 
@@ -40,9 +40,9 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
-// Formulaire partagé ajout/édition d'une brique : titre requis, contenu et
+// Formulaire partagé ajout/édition d'une notion : titre requis, contenu et
 // chapitre optionnels.
-function BrickForm({
+function NotionForm({
   initialTitle,
   initialContent,
   initialChapterId,
@@ -69,7 +69,7 @@ function BrickForm({
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder={t('bricks.titlePlaceholder')}
+        placeholder={t('notions.titlePlaceholder')}
         maxLength={200}
         autoFocus
         style={inputStyle}
@@ -77,37 +77,37 @@ function BrickForm({
       <textarea
         value={content}
         onChange={(e) => setContent(e.target.value)}
-        placeholder={t('bricks.contentPlaceholder')}
+        placeholder={t('notions.contentPlaceholder')}
         maxLength={2000}
         rows={3}
         style={{ ...inputStyle, resize: 'vertical' }}
       />
       <select value={chapterId} onChange={(e) => setChapterId(e.target.value)} style={inputStyle}>
-        <option value="">{t('bricks.noChapter')}</option>
+        <option value="">{t('notions.noChapter')}</option>
         {chapters.map((c) => (
           <option key={c.id} value={c.id}>{c.name}</option>
         ))}
       </select>
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <SmallBtn tone="ghost" onClick={onCancel} disabled={saving}>{t('bricks.cancel')}</SmallBtn>
+        <SmallBtn tone="ghost" onClick={onCancel} disabled={saving}>{t('notions.cancel')}</SmallBtn>
         <SmallBtn tone="dark" onClick={() => onSave(title, content, chapterId || null)} disabled={saving || !title.trim()}>
-          {saving ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : t('bricks.save')}
+          {saving ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : t('notions.save')}
         </SmallBtn>
       </div>
     </div>
   );
 }
 
-export default function BricksSection({ workshopId, bricks: initialBricks, chapters: initialChapters, onManageFiles }: Props) {
+export default function NotionsSection({ workshopId, notions: initialNotions, chapters: initialChapters, onManageFiles }: Props) {
   const t = useTranslations('settings');
-  const [bricks, setBricks] = useState<Brick[]>(initialBricks);
+  const [notions, setNotions] = useState<Notion[]>(initialNotions);
   const [chapters, setChapters] = useState<Chapter[]>(initialChapters);
 
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [deleteTarget, setDeleteTarget] = useState<Brick | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Notion | null>(null);
 
   // Chapitres
   const [addingChapter, setAddingChapter] = useState(false);
@@ -117,16 +117,16 @@ export default function BricksSection({ workshopId, bricks: initialBricks, chapt
   const [chapterSaving, setChapterSaving] = useState(false);
   const [chapterDeleteTarget, setChapterDeleteTarget] = useState<Chapter | null>(null);
 
-  // ─── Briques ──────────────────────────────────────────────────────────────
+  // ─── Notions ──────────────────────────────────────────────────────────────
 
   async function handleCreate(title: string, content: string, chapterId: string | null) {
     setSaving(true);
     setError('');
-    const result = await createWorkshopBrick(workshopId, title, content.trim() ? content : null, chapterId);
+    const result = await createWorkshopNotion(workshopId, title, content.trim() ? content : null, chapterId);
     setSaving(false);
-    if (result.success && result.brick) {
-      const brick = result.brick;
-      setBricks((prev) => [...prev, brick]);
+    if (result.success && result.notion) {
+      const notion = result.notion;
+      setNotions((prev) => [...prev, notion]);
       bumpChapterCount(chapterId, +1);
       setAdding(false);
     } else {
@@ -134,15 +134,15 @@ export default function BricksSection({ workshopId, bricks: initialBricks, chapt
     }
   }
 
-  async function handleUpdate(brickId: string, title: string, content: string, chapterId: string | null) {
-    const previous = bricks.find((b) => b.id === brickId);
+  async function handleUpdate(notionId: string, title: string, content: string, chapterId: string | null) {
+    const previous = notions.find((n) => n.id === notionId);
     setSaving(true);
     setError('');
     const cleanContent = content.trim() ? content : null;
-    const result = await updateWorkshopBrick(workshopId, brickId, title, cleanContent, chapterId);
+    const result = await updateWorkshopNotion(workshopId, notionId, title, cleanContent, chapterId);
     setSaving(false);
     if (result.success) {
-      setBricks((prev) => prev.map((b) => (b.id === brickId ? { ...b, title: title.trim(), content: cleanContent, chapterId } : b)));
+      setNotions((prev) => prev.map((n) => (n.id === notionId ? { ...n, title: title.trim(), content: cleanContent, chapterId } : n)));
       if (previous && previous.chapterId !== chapterId) {
         bumpChapterCount(previous.chapterId, -1);
         bumpChapterCount(chapterId, +1);
@@ -157,10 +157,10 @@ export default function BricksSection({ workshopId, bricks: initialBricks, chapt
     if (!deleteTarget) return;
     const target = deleteTarget;
     setError('');
-    const result = await deleteWorkshopBrick(workshopId, target.id);
+    const result = await deleteWorkshopNotion(workshopId, target.id);
     setDeleteTarget(null);
     if (result.success) {
-      setBricks((prev) => prev.filter((b) => b.id !== target.id));
+      setNotions((prev) => prev.filter((n) => n.id !== target.id));
       bumpChapterCount(target.chapterId, -1);
       if (editingId === target.id) setEditingId(null);
     } else {
@@ -170,7 +170,7 @@ export default function BricksSection({ workshopId, bricks: initialBricks, chapt
 
   function bumpChapterCount(chapterId: string | null, delta: number) {
     if (!chapterId) return;
-    setChapters((prev) => prev.map((c) => (c.id === chapterId ? { ...c, brickCount: Math.max(0, c.brickCount + delta) } : c)));
+    setChapters((prev) => prev.map((c) => (c.id === chapterId ? { ...c, notionCount: Math.max(0, c.notionCount + delta) } : c)));
   }
 
   // ─── Chapitres ────────────────────────────────────────────────────────────
@@ -214,9 +214,9 @@ export default function BricksSection({ workshopId, bricks: initialBricks, chapt
     setChapterDeleteTarget(null);
     if (result.success) {
       setChapters((prev) => prev.filter((c) => c.id !== target.id));
-      // Les briques du chapitre ne sont pas supprimées : elles retombent dans
+      // Les notions du chapitre ne sont pas supprimées : elles retombent dans
       // « sans chapitre » (FK en `on delete set null`).
-      setBricks((prev) => prev.map((b) => (b.chapterId === target.id ? { ...b, chapterId: null } : b)));
+      setNotions((prev) => prev.map((n) => (n.chapterId === target.id ? { ...n, chapterId: null } : n)));
     } else {
       setError(result.error ?? t('err.delete'));
     }
@@ -241,29 +241,29 @@ export default function BricksSection({ workshopId, bricks: initialBricks, chapt
 
   // ─── Rendu ────────────────────────────────────────────────────────────────
 
-  // Briques groupées par chapitre, dans l'ordre des chapitres ; les briques non
+  // Notions groupées par chapitre, dans l'ordre des chapitres ; les notions non
   // rangées ferment la liste.
-  const groups: Array<{ chapter: Chapter | null; items: Brick[] }> = [
-    ...chapters.map((chapter) => ({ chapter, items: bricks.filter((b) => b.chapterId === chapter.id) })),
-    { chapter: null, items: bricks.filter((b) => !b.chapterId || !chapters.some((c) => c.id === b.chapterId)) },
+  const groups: Array<{ chapter: Chapter | null; items: Notion[] }> = [
+    ...chapters.map((chapter) => ({ chapter, items: notions.filter((n) => n.chapterId === chapter.id) })),
+    { chapter: null, items: notions.filter((n) => !n.chapterId || !chapters.some((c) => c.id === n.chapterId)) },
   ];
 
-  function renderBrick(brick: Brick, index: number) {
-    if (editingId === brick.id) {
+  function renderNotion(notion: Notion, index: number) {
+    if (editingId === notion.id) {
       return (
-        <div key={brick.id} style={{ display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${ink(0.06)}` }}>
-          <BrickForm
-            initialTitle={brick.title}
-            initialContent={brick.content ?? ''}
-            initialChapterId={brick.chapterId}
+        <div key={notion.id} style={{ display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${ink(0.06)}` }}>
+          <NotionForm
+            initialTitle={notion.title}
+            initialContent={notion.content ?? ''}
+            initialChapterId={notion.chapterId}
             chapters={chapters}
             saving={saving}
-            onSave={(title, content, chapterId) => handleUpdate(brick.id, title, content, chapterId)}
+            onSave={(title, content, chapterId) => handleUpdate(notion.id, title, content, chapterId)}
             onCancel={() => setEditingId(null)}
           />
           <div style={{ display: 'flex', justifyContent: 'flex-start', paddingBottom: 12 }}>
-            <SmallBtn tone="danger" onClick={() => setDeleteTarget(brick)} disabled={saving}>
-              {t('bricks.delete')}
+            <SmallBtn tone="danger" onClick={() => setDeleteTarget(notion)} disabled={saving}>
+              {t('notions.delete')}
             </SmallBtn>
           </div>
         </div>
@@ -271,22 +271,22 @@ export default function BricksSection({ workshopId, bricks: initialBricks, chapt
     }
 
     return (
-      <div key={brick.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderBottom: `1px solid ${ink(0.06)}` }}>
+      <div key={notion.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderBottom: `1px solid ${ink(0.06)}` }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: '#b8b1a6', fontFamily: 'ui-monospace, monospace', width: 24, flexShrink: 0 }}>
           {String(index + 1).padStart(2, '0')}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {brick.title}
+            {notion.title}
           </div>
-          {brick.content && (
+          {notion.content && (
             <div style={{ fontSize: 11.5, color: palette.inkFaint, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {brick.content}
+              {notion.content}
             </div>
           )}
         </div>
-        <SmallBtn tone="ghost" onClick={() => { setEditingId(brick.id); setAdding(false); setError(''); }}>
-          {t('bricks.edit')}
+        <SmallBtn tone="ghost" onClick={() => { setEditingId(notion.id); setAdding(false); setError(''); }}>
+          {t('notions.edit')}
         </SmallBtn>
       </div>
     );
@@ -334,19 +334,19 @@ export default function BricksSection({ workshopId, bricks: initialBricks, chapt
                   autoFocus
                   style={{ ...inputStyle, flex: 1 }}
                 />
-                <SmallBtn tone="ghost" onClick={() => setEditingChapterId(null)} disabled={chapterSaving}>{t('bricks.cancel')}</SmallBtn>
-                <SmallBtn tone="dark" onClick={() => handleRenameChapter(chapter.id)} disabled={chapterSaving || !editingChapterName.trim()}>{t('bricks.save')}</SmallBtn>
+                <SmallBtn tone="ghost" onClick={() => setEditingChapterId(null)} disabled={chapterSaving}>{t('notions.cancel')}</SmallBtn>
+                <SmallBtn tone="dark" onClick={() => handleRenameChapter(chapter.id)} disabled={chapterSaving || !editingChapterName.trim()}>{t('notions.save')}</SmallBtn>
               </>
             ) : (
               <>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chapter.name}</div>
-                  <div style={{ fontSize: 11.5, color: palette.inkFaint, marginTop: 2 }}>{t('bricks.count', { count: chapter.brickCount })}</div>
+                  <div style={{ fontSize: 11.5, color: palette.inkFaint, marginTop: 2 }}>{t('notions.count', { count: chapter.notionCount })}</div>
                 </div>
                 <SmallBtn tone="ghost" onClick={() => { setEditingChapterId(chapter.id); setEditingChapterName(chapter.name); setError(''); }}>
                   {t('chapters.rename')}
                 </SmallBtn>
-                <SmallBtn tone="danger" onClick={() => setChapterDeleteTarget(chapter)}>{t('bricks.delete')}</SmallBtn>
+                <SmallBtn tone="danger" onClick={() => setChapterDeleteTarget(chapter)}>{t('notions.delete')}</SmallBtn>
               </>
             )}
           </div>
@@ -362,8 +362,8 @@ export default function BricksSection({ workshopId, bricks: initialBricks, chapt
               autoFocus
               style={{ ...inputStyle, flex: 1 }}
             />
-            <SmallBtn tone="ghost" onClick={() => { setAddingChapter(false); setChapterName(''); }} disabled={chapterSaving}>{t('bricks.cancel')}</SmallBtn>
-            <SmallBtn tone="dark" onClick={handleCreateChapter} disabled={chapterSaving || !chapterName.trim()}>{t('bricks.save')}</SmallBtn>
+            <SmallBtn tone="ghost" onClick={() => { setAddingChapter(false); setChapterName(''); }} disabled={chapterSaving}>{t('notions.cancel')}</SmallBtn>
+            <SmallBtn tone="dark" onClick={handleCreateChapter} disabled={chapterSaving || !chapterName.trim()}>{t('notions.save')}</SmallBtn>
           </div>
         )}
 
@@ -375,13 +375,13 @@ export default function BricksSection({ workshopId, bricks: initialBricks, chapt
         </div>
       </SectionCard>
 
-      {/* ── Briques ── */}
-      <SectionCard title={t('bricks.title')} description={t('bricks.desc')}>
-        <Row label={t('bricks.sourceFiles')} noBorder={false}>
+      {/* ── Notions ── */}
+      <SectionCard title={t('notions.title')} description={t('notions.desc')}>
+        <Row label={t('notions.sourceFiles')} noBorder={false}>
           <div style={{ display: 'flex', gap: 8 }}>
-            <SmallBtn tone="ghost" onClick={onManageFiles}>{t('bricks.manageFiles')}</SmallBtn>
+            <SmallBtn tone="ghost" onClick={onManageFiles}>{t('notions.manageFiles')}</SmallBtn>
             {/* Placeholder : la génération par IA arrive avec le module générateur */}
-            <SmallBtn tone="dark" disabled>{t('bricks.regenAI')}</SmallBtn>
+            <SmallBtn tone="dark" disabled>{t('notions.regenAI')}</SmallBtn>
           </div>
         </Row>
 
@@ -390,32 +390,32 @@ export default function BricksSection({ workshopId, bricks: initialBricks, chapt
         )}
 
         <div style={{ marginTop: 4 }}>
-          {bricks.length === 0 && !adding && (
+          {notions.length === 0 && !adding && (
             <div style={{ fontSize: 12.5, color: palette.inkFaint, padding: '16px 0', textAlign: 'center' }}>
-              {t('bricks.empty')}
+              {t('notions.empty')}
             </div>
           )}
 
-          {bricks.length > 0 && groups.map(({ chapter, items }) => {
+          {notions.length > 0 && groups.map(({ chapter, items }) => {
             // On masque le groupe « sans chapitre » quand il est vide, mais on
-            // garde un chapitre vide visible (il existe, il a juste 0 brique).
+            // garde un chapitre vide visible (il existe, il a juste 0 notion).
             if (!chapter && items.length === 0) return null;
             return (
               <div key={chapter?.id ?? 'unassigned'}>
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: palette.inkSoft, padding: '14px 0 6px' }}>
-                  {chapter ? chapter.name : t('bricks.noChapter')}
+                  {chapter ? chapter.name : t('notions.noChapter')}
                 </div>
                 {items.length === 0 ? (
-                  <div style={{ fontSize: 12, color: palette.inkFaint, padding: '6px 0 10px' }}>{t('bricks.emptyChapter')}</div>
+                  <div style={{ fontSize: 12, color: palette.inkFaint, padding: '6px 0 10px' }}>{t('notions.emptyChapter')}</div>
                 ) : (
-                  items.map((brick, i) => renderBrick(brick, i))
+                  items.map((notion, i) => renderNotion(notion, i))
                 )}
               </div>
             );
           })}
 
           {adding && (
-            <BrickForm
+            <NotionForm
               initialTitle=""
               initialContent=""
               initialChapterId={null}
@@ -428,10 +428,10 @@ export default function BricksSection({ workshopId, bricks: initialBricks, chapt
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, borderTop: `1px solid ${ink(0.06)}`, marginTop: 4, paddingBottom: 10 }}>
-          <span style={{ fontSize: 12, color: palette.inkFaint }}>{t('bricks.count', { count: bricks.length })}</span>
+          <span style={{ fontSize: 12, color: palette.inkFaint }}>{t('notions.count', { count: notions.length })}</span>
           {!adding && (
             <SmallBtn tone="ghost" onClick={() => { setAdding(true); setEditingId(null); setError(''); }}>
-              {t('bricks.add')}
+              {t('notions.add')}
             </SmallBtn>
           )}
         </div>
@@ -439,10 +439,10 @@ export default function BricksSection({ workshopId, bricks: initialBricks, chapt
 
       {deleteTarget && (
         <ConfirmDialog
-          title={t('bricks.deleteTitle')}
-          description={t('bricks.deleteDesc', { title: deleteTarget.title })}
-          confirmLabel={t('bricks.delete')}
-          cancelLabel={t('bricks.cancel')}
+          title={t('notions.deleteTitle')}
+          description={t('notions.deleteDesc', { title: deleteTarget.title })}
+          confirmLabel={t('notions.delete')}
+          cancelLabel={t('notions.cancel')}
           portal
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
@@ -453,8 +453,8 @@ export default function BricksSection({ workshopId, bricks: initialBricks, chapt
         <ConfirmDialog
           title={t('chapters.deleteTitle')}
           description={t('chapters.deleteDesc', { name: chapterDeleteTarget.name })}
-          confirmLabel={t('bricks.delete')}
-          cancelLabel={t('bricks.cancel')}
+          confirmLabel={t('notions.delete')}
+          cancelLabel={t('notions.cancel')}
           portal
           onConfirm={handleDeleteChapter}
           onCancel={() => setChapterDeleteTarget(null)}

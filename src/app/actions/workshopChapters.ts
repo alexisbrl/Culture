@@ -11,7 +11,7 @@ export type Chapter = {
   id: string;
   name: string;
   position: number;
-  brickCount: number;
+  notionCount: number;
 };
 
 // Lecture ouverte à tous les membres : les chapitres pilotent les pots de

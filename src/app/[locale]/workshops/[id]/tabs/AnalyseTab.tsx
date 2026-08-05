@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 const KPIS = [
   { v: '38', lKey: 'members', sub: '+5 ce mois', tone: palette.greenSoft },
   { v: '61 %', lKey: 'avgProgress', sub: '+4 pts / 7 j', tone: palette.amberLight },
-  { v: '118', lKey: 'masteredBricks', sub: 'sur 142', tone: '#9eb3b9' },
+  { v: '118', lKey: 'masteredNotions', sub: 'sur 142', tone: '#9eb3b9' },
   { v: '14,2/20', lKey: 'avgExamScore', sub: '3 examens passés', tone: '#a890b8' },
 ] as const;
 

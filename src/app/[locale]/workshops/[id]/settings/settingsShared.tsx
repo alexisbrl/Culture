@@ -2,7 +2,7 @@
 
 // Boîte à outils partagée des Paramètres d'atelier : types/constantes de rôle,
 // helpers de présentation (Row, Switch, SmallBtn, SectionCard…) réutilisés par
-// SettingsClient et ses sections (Général/Membres/Fichiers/Briques/Premium).
+// SettingsClient et ses sections (Général/Membres/Fichiers/Notions/Premium).
 import { palette, ink, withAlpha } from '@/lib/theme';
 import { FileText, Music, File as FileIcon } from 'lucide-react';
 import type { FileCategory } from '@/app/actions/workshopFiles';
@@ -19,13 +19,13 @@ export type Member = {
   groupIds: string[];
 };
 
-export type NavSection = 'general' | 'members' | 'bricks' | 'files' | 'premium';
+export type NavSection = 'general' | 'members' | 'notions' | 'files' | 'premium';
 
 export const NAV_ITEMS: { id: NavSection; label: string }[] = [
   { id: 'general', label: 'Général' },
   { id: 'members', label: 'Membres & rôles' },
   { id: 'files', label: 'Fichiers' },
-  { id: 'bricks', label: 'Briques de connaissance' },
+  { id: 'notions', label: 'Notions' },
   { id: 'premium', label: 'Atelier Premium' },
 ];
 

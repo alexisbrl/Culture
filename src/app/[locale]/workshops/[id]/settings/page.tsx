@@ -3,7 +3,7 @@ import { redirect, notFound } from 'next/navigation';
 import { getLocale } from 'next-intl/server';
 import { getWorkshop, getMemberGroups } from '@/app/actions/workshops';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
-import { getWorkshopBricks } from '@/app/actions/workshopBricks';
+import { getWorkshopNotions } from '@/app/actions/workshopNotions';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import SettingsClient from './SettingsClient';
 
@@ -25,10 +25,10 @@ export default async function SettingsPage({ params }: Props) {
   if (workshop.currentUserRole === 'member') redirect(`/${locale}/workshops/${id}`);
 
   // Requêtes indépendantes → parallèle (règle N+1, cf. server-architecture.md)
-  const [files, groups, bricks, chapters] = await Promise.all([
+  const [files, groups, notions, chapters] = await Promise.all([
     getWorkshopFiles(id),
     getMemberGroups(id),
-    getWorkshopBricks(id),
+    getWorkshopNotions(id),
     getWorkshopChapters(id),
   ]);
 
@@ -61,7 +61,7 @@ export default async function SettingsPage({ params }: Props) {
       members={members}
       groups={groups}
       files={files}
-      bricks={bricks}
+      notions={notions}
       chapters={chapters}
     />
   );

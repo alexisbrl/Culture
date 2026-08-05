@@ -34,7 +34,7 @@ export type ResponseType =
 // Taxonomie de Bloom — niveau cognitif VISÉ par la question (1 mémoriser,
 // 2 comprendre, 3 appliquer, 4 analyser, 5 évaluer, 6 créer). À ne pas confondre
 // avec `brick_mastery.bloom_level`, qui mesure le niveau ATTEINT par un candidat
-// sur une brique. Obligatoire : jamais nul, jamais absent, 1 par défaut — la
+// sur une notion. Obligatoire : jamais nul, jamais absent, 1 par défaut — la
 // contrainte `exam_questions_bloom_level_check` le garantit jusqu'en base.
 export type BloomLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -87,9 +87,10 @@ export type Question = {
   // le fournir (emptyQuestion() met 1), pour qu'il soit impossible d'aboutir en
   // base sans valeur.
   bloomLevel: BloomLevel;
-  // Briques de connaissance couvertes par la question (table de jonction
-  // `exam_question_bricks`, N-N, sans restriction de chapitre).
-  brickIds: string[];
+  // Notions couvertes par la question (table de jonction
+  // `exam_question_bricks` — encore nommée bricks en base, voir docs/backlog.md —
+  // N-N, sans restriction de chapitre).
+  notionIds: string[];
 };
 
 // ─── Exercice du parcours ────────────────────────────────────────────────────

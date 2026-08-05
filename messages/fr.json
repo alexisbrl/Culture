@@ -428,10 +428,10 @@
       "optionsDivider": "Options par question",
       "bloomLabel": "Niveau de Bloom visé",
       "bloomHint": "obligatoire — niveau cognitif que la question fait travailler",
-      "bricksLabel": "Notions",
-      "bricksHint": "facultatif — les notions que la question mobilise, toutes chapitres confondus",
-      "addBrickOption": "associer une notion…",
-      "noBricks": "Aucune notion dans cet atelier. Elles se créent dans Paramètres → Notions.",
+      "notionsLabel": "Notions",
+      "notionsHint": "facultatif — les notions que la question mobilise, toutes chapitres confondus",
+      "addNotionOption": "associer une notion…",
+      "noNotions": "Aucune notion dans cet atelier. Elles se créent dans Paramètres → Notions.",
       "labelsLabel": "Libellés",
       "labelsHint": "off par défaut — regroupe les questions pour générer des examens",
       "labelNamePlaceholder": "nom du libellé…",
@@ -644,7 +644,7 @@
       "general": "Général",
       "members": "Membres & rôles",
       "files": "Fichiers",
-      "bricks": "Notions",
+      "notions": "Notions",
       "premium": "Atelier Premium"
     },
     "role": {
@@ -792,7 +792,7 @@
       "confirmDesc": "Cette action est définitive et irréversible : l'atelier deviendra privé pour toujours et tous ses membres (actuels et futurs) auront un accès Premium à vie.",
       "confirmBtn": "Confirmer l'activation"
     },
-    "bricks": {
+    "notions": {
       "title": "Notions",
       "desc": "Les unités d'information de l'atelier — extraites des fichiers sources par l'IA, ou ajoutées à la main.",
       "sourceFiles": "Fichiers source",
@@ -923,7 +923,7 @@
   },
   "programme": {
     "startExercise": "lancer un exercice",
-    "brickCount": "{count, plural, =0 {aucune notion} one {# notion} other {# notions}}",
+    "notionCount": "{count, plural, =0 {aucune notion} one {# notion} other {# notions}}",
     "chapterIndicator": "chapitre {from}–{to} / {total}",
     "emptyTitle": "aucun chapitre pour l'instant",
     "emptyDesc": "Les chapitres se créent dans Paramètres → Notions. Chaque chapitre fait pousser un pot ici.",
@@ -1049,7 +1049,7 @@
     "kpi": {
       "members": "membres",
       "avgProgress": "progression moyenne",
-      "masteredBricks": "notions maîtrisées (moy.)",
+      "masteredNotions": "notions maîtrisées (moy.)",
       "avgExamScore": "note moyenne examens"
     },
     "masteryHeatmap": {

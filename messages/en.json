@@ -428,10 +428,10 @@
       "optionsDivider": "Per-question options",
       "bloomLabel": "Target Bloom level",
       "bloomHint": "required — the cognitive level the question exercises",
-      "bricksLabel": "Notions",
-      "bricksHint": "optional — the notions the question draws on, across all chapters",
-      "addBrickOption": "link a notion…",
-      "noBricks": "No notion in this workshop. They are created in Settings → Notions.",
+      "notionsLabel": "Notions",
+      "notionsHint": "optional — the notions the question draws on, across all chapters",
+      "addNotionOption": "link a notion…",
+      "noNotions": "No notion in this workshop. They are created in Settings → Notions.",
       "labelsLabel": "Labels",
       "labelsHint": "off by default — groups questions to generate exams",
       "labelNamePlaceholder": "label name…",
@@ -644,7 +644,7 @@
       "general": "General",
       "members": "Members & roles",
       "files": "Files",
-      "bricks": "Notions",
+      "notions": "Notions",
       "premium": "Premium workshop"
     },
     "role": {
@@ -792,7 +792,7 @@
       "confirmDesc": "This action is permanent and irreversible: the workshop will become private forever and all its members (current and future) will get lifetime Premium access.",
       "confirmBtn": "Confirm activation"
     },
-    "bricks": {
+    "notions": {
       "title": "Notions",
       "desc": "The workshop's information units — extracted from your source files by the AI, or added by hand.",
       "sourceFiles": "Source files",
@@ -923,7 +923,7 @@
   },
   "programme": {
     "startExercise": "start an exercise",
-    "brickCount": "{count, plural, =0 {no notions} one {# notion} other {# notions}}",
+    "notionCount": "{count, plural, =0 {no notions} one {# notion} other {# notions}}",
     "chapterIndicator": "chapter {from}–{to} / {total}",
     "emptyTitle": "no chapters yet",
     "emptyDesc": "Chapters are created in Settings → Notions. Each chapter grows a pot here.",
@@ -1049,7 +1049,7 @@
     "kpi": {
       "members": "members",
       "avgProgress": "average progress",
-      "masteredBricks": "mastered notions (avg.)",
+      "masteredNotions": "mastered notions (avg.)",
       "avgExamScore": "average exam score"
     },
     "masteryHeatmap": {

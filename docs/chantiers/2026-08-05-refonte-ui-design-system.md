@@ -236,7 +236,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
   - Fichiers : `messages/fr.json`, `messages/en.json`
   - Dépend de : rien
 
-- [ ] **T2 — Renommer « brick » en « notion » dans les identifiants de code**
+- [x] **T2 — Renommer « brick » en « notion » dans les identifiants de code**
   - Renommer les clés i18n (`bricks` → `notions`, `brickCount` → `notionCount`,
     `bricksHint`, `bricksLabel`, `masteredBricks`, `noBricks`, `addBrickOption`…) et
     toutes leurs références ; renommer les variables, types, composants et fichiers
@@ -771,12 +771,14 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     mi-chemin). `src/lib/database.types.ts` et les noms de tables Supabase sont
     intacts, comme prévu.
   - Terminer T2, faire **un seul commit**, cocher la case. T1 est déjà cochée.
-- 2026-08-05 — T1 — (commit à suivre) — Valeurs renommées dans `messages/fr.json` et `messages/en.json` ; `grep -ci "brique" messages/fr.json` = 0. `build`/`lint` OK, pas d'écran à vérifier.
+- 2026-08-05 — T1 — 91c6773 — Valeurs renommées dans `messages/fr.json` et `messages/en.json` ; `grep -ci "brique" messages/fr.json` = 0. `build`/`lint` OK, pas d'écran à vérifier.
+- 2026-08-05 — T2 — (commit à suivre) — Renommage des identifiants de code et des clés i18n (bricks→notions, brickCount→notionCount, bricksLabel/bricksHint/addBrickOption/noBricks/masteredBricks→équivalents notions). `git mv` sur `lib/workshops/bricks.ts`→`notions.ts`, `app/actions/workshopBricks.ts`→`workshopNotions.ts`, `settings/BricksSection.tsx`→`NotionsSection.tsx`. Noms de table/colonnes Supabase (`workshop_bricks`, `brick_mastery`, `exam_question_bricks`, `brick_id`) laissés strictement inchangés, chacun commenté. `CLAUDE.md` §1 et `docs/backlog.md` mis à jour. `grep -ri "brick" src/ --include=*.ts --include=*.tsx -l` ne renvoie que `database.types.ts` + les fichiers portant les littéraux Supabase ; `grep -ri "brick" messages/` ne renvoie rien. `build`/`lint` OK, pas d'écran à vérifier.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
 - 2026-08-05 — T1 — Le critère d'acceptation `grep -ci "brick" messages/en.json` = 0 est structurellement impossible tant que T2 n'a pas renommé les clés (`bricksLabel`, `addBrickOption`, `noBricks`, `bricks`, `brickCount`, `masteredBricks` contiennent toutes "brick" dans leur nom de clé anglais, que T1 n'a pas le droit de toucher). Vérifié après coup : les seules occurrences restantes dans `messages/en.json` sont bien dans des clés, aucune dans une valeur. Le critère se vérifie donc au niveau du couple T1+T2, pas de T1 seul — poursuite immédiate vers T2 dans la même session pour refermer ce point.
 - 2026-08-05 — T1 — Les textes anglais employaient un mélange incohérent "brick(s)"/"block(s)" pour désigner le même concept (ex. `bricksLabel: "Knowledge blocks"`, `masteredBricks: "mastered bricks"`). La consigne ne mentionnait explicitement que "brick"→"notion", mais laisser "block(s)" en l'état aurait produit un lexique anglais incohérent avec le FR ("notion" partout). Décision : les deux formes ("brick(s)" et "block(s)") ont été renommées en "notion(s)" en anglais, à l'exception de `garden.panel.blocks` (« Blocks » du Jardin Terra Nil — zone interdite, concept différent, non touché).
+- 2026-08-05 — T2 — En reprenant T2, trouvé dans `git log`/le journal ci-dessus la trace d'une exécution antérieure (commits `94cb430`/`98c5387`, déjà poussés) interrompue en cours de tâche sur une demande d'autorisation, n'ayant fait que le `git mv` de `bricks.ts`→`notions.ts`, `workshopBricks.ts`→`workshopNotions.ts` et `BricksSection.tsx`→`NotionsSection.tsx` sans toucher au contenu. Vérifié qu'aucun contenu n'avait divergé (diffs à 0 insertion sur ces renommages) avant de construire dessus. T2 a été menée à terme dans cette session — réécriture complète des fichiers renommés + tous les autres fichiers listés dans la tâche, `messages/{fr,en}.json` (clés), `CLAUDE.md` §1, `docs/backlog.md` — et validée par `build`/`lint`, ce qui referme le travail laissé en suspens par l'exécution précédente.
 
 ## Tâches bloquées
 <!-- Tâches abandonnées après 2 échecs, avec le motif et ce qui a été tenté. -->

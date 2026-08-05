@@ -10,14 +10,14 @@ import { AlertTriangle, Check, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, Tr
 import Modal from '@/components/Modal';
 import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, type MemberGroup } from '@/app/actions/workshops';
 import type { WorkshopFile } from '@/app/actions/workshopFiles';
-import type { Brick } from '@/app/actions/workshopBricks';
+import type { Notion } from '@/app/actions/workshopNotions';
 import type { Chapter } from '@/app/actions/workshopChapters';
 import { COVER_GRADIENTS, COVER_GRADIENT_KEYS, COVER_EMOJIS, coverGradientFor, emojiFor } from '@/lib/workshopCover';
 import ShareQRModal from '@/components/ShareQRModal';
 import { NAV_ITEMS, Row, Switch, SmallBtn, SectionCard, type WorkshopRole, type Member, type NavSection } from './settingsShared';
 import MembersSection from './MembersSection';
 import FilesSection from './FilesSection';
-import BricksSection from './BricksSection';
+import NotionsSection from './NotionsSection';
 import PremiumSection from './PremiumSection';
 
 type Props = {
@@ -37,11 +37,11 @@ type Props = {
   members: Member[];
   groups: MemberGroup[];
   files: WorkshopFile[];
-  bricks: Brick[];
+  notions: Notion[];
   chapters: Chapter[];
 };
 
-export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, isPremium, showProgramme: showProgrammeProp, members, groups, files: initialFiles, bricks, chapters }: Props) {
+export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, isPremium, showProgramme: showProgrammeProp, members, groups, files: initialFiles, notions, chapters }: Props) {
   const router = useRouter();
   const t = useTranslations('settings');
 
@@ -578,8 +578,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           <FilesSection workshopId={workshopId} initialFiles={initialFiles} />
         </div>
 
-        <div style={{ display: activeSection === 'bricks' ? 'contents' : 'none' }}>
-          <BricksSection workshopId={workshopId} bricks={bricks} chapters={chapters} onManageFiles={() => setActiveSection('files')} />
+        <div style={{ display: activeSection === 'notions' ? 'contents' : 'none' }}>
+          <NotionsSection workshopId={workshopId} notions={notions} chapters={chapters} onManageFiles={() => setActiveSection('files')} />
         </div>
 
         {isOwner && (
