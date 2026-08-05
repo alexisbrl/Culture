@@ -139,6 +139,14 @@ connectée.
 
 ## Règles d'exécution
 
+**Autonomie totale.** Alexis ne répondra à aucune question pendant ce chantier.
+`AskUserQuestion` est interdit, et un tour ne se termine jamais sur une question.
+Face à un choix non tranché : décider selon les décisions ci-dessus et consigner
+dans « Décisions prises en autonomie » ; et seulement si le choix est structurant
+(modèle de données, périmètre, règle produit), inscrire la tâche dans « Tâches
+mises de côté » avec une recommandation, laisser la case décochée, passer à la
+suivante. Le détail de l'échelle est dans la compétence `chantier-run`.
+
 À respecter à chaque tâche, sans exception :
 
 1. **Une tâche = un commit**, message en Conventional Commits (`feat:`, `fix:`,
@@ -751,4 +759,10 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 - 2026-08-05 — T1 — Les textes anglais employaient un mélange incohérent "brick(s)"/"block(s)" pour désigner le même concept (ex. `bricksLabel: "Knowledge blocks"`, `masteredBricks: "mastered bricks"`). La consigne ne mentionnait explicitement que "brick"→"notion", mais laisser "block(s)" en l'état aurait produit un lexique anglais incohérent avec le FR ("notion" partout). Décision : les deux formes ("brick(s)" et "block(s)") ont été renommées en "notion(s)" en anglais, à l'exception de `garden.panel.blocks` (« Blocks » du Jardin Terra Nil — zone interdite, concept différent, non touché).
 
 ## Tâches bloquées
-<!-- Tâches abandonnées après 2 échecs, avec le motif. -->
+<!-- Tâches abandonnées après 2 échecs, avec le motif et ce qui a été tenté. -->
+
+## Tâches mises de côté
+<!-- Tâches non tentées parce que le choix à faire était trop structurant pour être
+     tranché en autonomie. Une entrée par tâche : les options envisagées, la
+     recommandation de l'agent, et pourquoi il n'a pas tranché. Alexis arbitre au
+     réveil. Ne pas confondre avec « Tâches bloquées » (échec technique). -->

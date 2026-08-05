@@ -7,6 +7,25 @@ description: Exécuter en autonomie le chantier en cours. Lit docs/chantiers/EN-
 
 Tu tournes **sans supervision**, probablement la nuit. Alexis ne lira le résultat que dans plusieurs heures. Deux conséquences : tu ne peux jamais lui poser de question, et tout ce que tu ne commites pas est perdu.
 
+## Autonomie totale — la règle qui prime sur toutes les autres
+
+**Personne ne répondra. Jamais.** Une exécution qui s'arrête pour demander quelque chose est une exécution perdue : elle attend dans le vide jusqu'au réveil d'Alexis, et le quota de la nuit part en fumée.
+
+- **N'utilise jamais `AskUserQuestion`.** Ni pour choisir entre deux options, ni pour confirmer, ni pour signaler. C'est l'outil interdit de ce mode.
+- **Ne termine jamais ton tour sur une question**, même rhétorique, même « je propose X, tu confirmes ? ». Si tu t'apprêtes à écrire un point d'interrogation à Alexis, c'est que tu dois prendre la décision toi-même.
+- **Ne t'arrête pas devant une action irréversible** prévue par la feuille de route (suppression de fichier, renommage, `git reset --hard` de récupération). Ce qui est cadré est autorisé. Ce qui ne l'est pas est hors périmètre, donc à ne pas faire — pas à faire valider.
+- **Tout ce que tu décides, tu l'écris.** Une décision non consignée dans la feuille de route n'existe pas : au réveil, Alexis ne dispose que de ce fichier et du `git log`.
+
+Face à un choix non tranché, applique cette échelle :
+
+| Nature du choix | Ce que tu fais |
+|---|---|
+| **Détail d'implémentation** (nom de variable, ordre de deux blocs, valeur d'espacement non précisée) | Tu tranches, tu continues. Inutile de le consigner. |
+| **Choix visible mais réversible** (libellé d'un bouton, icône Lucide retenue, structure d'un composant) | Tu prends l'option la plus cohérente avec les décisions déjà arrêtées, tu la consignes dans **« Décisions prises en autonomie »** avec ton raisonnement en une ou deux phrases, tu continues. |
+| **Choix structurant** (change le modèle de données, le périmètre, une règle produit, ou contredit une décision déjà arrêtée avec Alexis) | Tu **ne le tranches pas**. Tu inscris la tâche dans **« Tâches mises de côté »** avec les options envisagées et ta recommandation, tu laisses la case décochée, et tu **passes à la tâche suivante**. |
+
+Le réflexe par défaut est **décider et documenter**, pas mettre de côté : une tâche écartée est une tâche qui n'avance pas. Ne réserve la mise de côté qu'aux choix qu'Alexis regretterait de te voir trancher seul.
+
 ## Étape 0 — La sentinelle, avant TOUT le reste
 
 **Ta toute première action est de lire `docs/chantiers/EN-COURS.md`. Rien d'autre avant.**
@@ -45,14 +64,20 @@ Pour chaque tâche, dans cet ordre :
 
 ## Étape 3 — Quand tout est coché
 
+Tant qu'il reste une tâche décochée — y compris bloquée ou mise de côté — le chantier n'est **pas** terminé : la sentinelle reste en place et la prochaine routine réessaiera. Ne passe à cette étape que si toutes les cases sont cochées.
+
 1. Passe la PR de draft à *ready for review*.
-2. Écris un récapitulatif dans la description de la PR : ce qui a été fait, les décisions prises en autonomie, les tâches bloquées.
+2. Écris un récapitulatif dans la description de la PR : ce qui a été fait, les décisions prises en autonomie, les tâches bloquées, les tâches mises de côté.
 3. Remets `docs/chantiers/EN-COURS.md` à `AUCUN`, commit, push.
 4. Arrête-toi. **Ne merge jamais dans `main`.**
 
+Si tout ce qui reste est bloqué ou mis de côté et qu'aucune tâche ne peut plus avancer : **ne clos pas le chantier**. Pousse l'état à jour, écris une ligne de synthèse dans le journal, et arrête-toi. C'est à Alexis d'arbitrer.
+
 ## Face à un imprévu
 
-**Ambiguïté** → prends l'option la plus raisonnable au regard des décisions déjà arrêtées, **consigne-la dans « Décisions prises en autonomie »** avec ton raisonnement, et continue. Ne t'arrête jamais pour attendre une réponse : personne ne lira avant des heures.
+**Ambiguïté** → applique l'échelle de la section « Autonomie totale » ci-dessus : tranche et documente dans la quasi-totalité des cas, ne mets de côté que le choix vraiment structurant. Ne t'arrête jamais pour attendre une réponse : personne ne lira avant des heures.
+
+**Une autorisation te manque** → tu tournes en mode sans prompt ; si un outil est malgré tout refusé, c'est un `deny` délibéré (migration de base, `push --force`, `push` sur `main`, zone interdite). Ne cherche pas à le contourner par un autre chemin : c'est un garde-fou, pas un obstacle. Consigne le refus dans « Tâches mises de côté » et passe à la suite.
 
 **Tâche qui échoue** → deux tentatives sérieuses maximum. Après quoi, inscris-la dans « Tâches bloquées » avec le motif précis et ce que tu as essayé, laisse la case décochée, et **passe à la tâche suivante non bloquée**. Ne t'acharne pas : tu brûlerais le quota d'une nuit sur un seul point dur.
 
