@@ -839,7 +839,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     `src/app/[locale]/profile/ProfileClient.tsx`
   - Dépend de : T43 (touche le même fichier de header)
 
-- [ ] **T51 — Exercice : état désactivé du bouton « valider »**
+- [x] **T51 — Exercice : état désactivé du bouton « valider »**
   - Tant que la réponse est vide, « valider » est rendu dans un vert délavé qui se
     lit comme un primaire raté plutôt que comme un état désactivé. Reprendre l'état
     `disabled` du `Button` du design system (T6) au lieu d'une teinte ad hoc.
@@ -1000,6 +1000,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 - 2026-08-05 — T47 — [voir commit] — `LinkButton variant="ghost" size="sm"` vers `/profile/avatar`, clé `profile.edit` (FR+EN). La ligne « modifier l'avatar » de la liste reste en place : même cible, deux points d'entrée, comme la maquette.
 
 - 2026-08-05 — T49 — [voir commit] — Dégradé `from-[var(--green-tint)]` remplacé par `bg-[var(--surface-page)]`. `dashboard.members` passe en pluriel ICU (`{count, plural, …}`, FR+EN) et les cinq points d'appel arrêtent de concaténer le nombre à la main.
+
+- 2026-08-05 — T51 — [voir commit] — **Le constat de la revue était faux** : le vert délavé *est* l'état désactivé du design system (`cursor:not-allowed; opacity:.5; transform:none; box-shadow:none`, `_ds_bundle.js`), et `Button` l'appliquait déjà à l'exception du curseur. Seul correctif réel : `disabled:pointer-events-none` → `disabled:cursor-not-allowed`, avec les règles de survol repassées en `enabled:` (elles se seraient sinon déclenchées sur un bouton désactivé). Aucun changement dans `ExerciseClient`.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
