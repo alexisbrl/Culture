@@ -391,16 +391,16 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 alignItems: 'center',
                 gap: 8,
                 padding: '7px 12px',
-                border: `1px solid ${ink(0.14)}`,
-                borderRadius: 9,
-                background: withAlpha(palette.paper, 0.7),
+                border: `1px solid ${palette.line}`,
+                borderRadius: 12,
+                background: palette.surfaceInput,
                 width: 300,
               }}
             >
               <span
                 style={{
                   fontSize: 13,
-                  fontFamily: 'ui-monospace, monospace',
+                  fontFamily: 'var(--font-mono)',
                   letterSpacing: '0.04em',
                   color: palette.inkFaint,
                   flexShrink: 0,
@@ -408,7 +408,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
               >
                 {uniqueTag}
               </span>
-              <span style={{ fontSize: 13, color: '#c8c2b8', flexShrink: 0 }}>-</span>
+              <span style={{ fontSize: 13, color: palette.lineStrong, flexShrink: 0 }}>·</span>
               <input
                 type="text"
                 value={workshopNameInput}
@@ -438,10 +438,10 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 fontSize: 13,
                 fontFamily: 'inherit',
                 padding: '8px 12px',
-                border: `1px solid ${ink(0.14)}`,
-                borderRadius: 9,
+                border: `1px solid ${palette.line}`,
+                borderRadius: 12,
                 outline: 'none',
-                background: withAlpha(palette.paper, 0.7),
+                background: palette.surfaceInput,
                 color: palette.ink,
                 width: 260,
                 resize: 'vertical',
@@ -465,7 +465,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       height: 32,
                       borderRadius: 9,
                       background: COVER_GRADIENTS[key],
-                      border: !useCustomCover && selectedCover === key ? '2px solid #2d2a24' : '2px solid transparent',
+                      border: !useCustomCover && selectedCover === key ? `2px solid ${palette.ink}` : '2px solid transparent',
                       cursor: 'pointer',
                       padding: 0,
                     }}
@@ -486,11 +486,11 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       width: 32,
                       height: 32,
                       borderRadius: 9,
-                      backgroundColor: coverImage ? 'transparent' : ink(0.06),
+                      backgroundColor: coverImage ? 'transparent' : palette.surfaceSunken,
                       backgroundImage: coverImage ? `url(${coverImage})` : 'none',
                       backgroundSize: 'cover',
                       backgroundPosition: 'center',
-                      border: useCustomCover && coverImage ? '2px solid #2d2a24' : `2px dashed ${ink(0.22)}`,
+                      border: useCustomCover && coverImage ? `2px solid ${palette.ink}` : `2px dashed ${palette.lineStrong}`,
                       cursor: uploadingCover ? 'default' : 'pointer',
                       padding: 0,
                       display: 'flex',
@@ -514,7 +514,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                         height: 16,
                         borderRadius: '50%',
                         background: palette.danger,
-                        border: '1px solid #fcf9f2',
+                        border: `1px solid ${palette.surfaceRaised}`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -522,7 +522,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                         padding: 0,
                       }}
                     >
-                      <X size={10} color="#fff" />
+                      <X size={10} color={palette.onInk} />
                     </button>
                   )}
                 </div>
@@ -555,8 +555,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    background: withAlpha(palette.paper, 0.7),
-                    border: selectedEmoji === e ? '2px solid #2d2a24' : '2px solid transparent',
+                    background: palette.surfaceInput,
+                    border: selectedEmoji === e ? `2px solid ${palette.ink}` : '2px solid transparent',
                     cursor: 'pointer',
                     padding: 0,
                   }}
@@ -590,9 +590,9 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           <Row label={t('access.qr')} hint={t('access.qrHint')} noBorder>
             <button
               onClick={() => setShareOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: 'transparent', border: `1px solid ${palette.lineStrong}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
             >
-              <QrCode size={13} />
+              <QrCode size={13} strokeWidth={1.75} />
               {t('access.shareQr')}
             </button>
           </Row>

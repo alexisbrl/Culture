@@ -3,7 +3,7 @@
 // Boîte à outils partagée des Paramètres d'atelier : types/constantes de rôle,
 // helpers de présentation (Row, Switch, SmallBtn, SectionCard…) réutilisés par
 // SettingsClient et ses sections (Général/Membres/Fichiers/Notions/Premium).
-import { palette, ink, withAlpha } from '@/lib/theme';
+import { palette, withAlpha, shadow } from '@/lib/theme';
 import { FileText, LayoutGrid, Music, SlidersHorizontal, Star, Users, type LucideIcon, File as FileIcon } from 'lucide-react';
 import type { FileCategory } from '@/app/actions/workshopFiles';
 
@@ -74,12 +74,12 @@ export function Row({
         justifyContent: 'space-between',
         gap: 16,
         padding: '14px 0',
-        borderBottom: noBorder ? 'none' : `1px solid ${ink(0.06)}`,
+        borderBottom: noBorder ? 'none' : `1px solid ${palette.line}`,
         flexWrap: 'wrap',
       }}
     >
       <div>
-        <div style={{ fontSize: 13.5, fontWeight: 450, color: palette.ink }}>{label}</div>
+        <div style={{ fontSize: 13.5, fontWeight: 600, color: palette.ink }}>{label}</div>
         {hint && <div style={{ fontSize: 11.5, color: palette.inkFaint, marginTop: 2 }}>{hint}</div>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -98,7 +98,7 @@ export function Switch({ value, onChange }: { value: boolean; onChange: (v: bool
         height: 24,
         borderRadius: 999,
         border: 'none',
-        background: value ? palette.greenSoft : ink(0.14),
+        background: value ? palette.green : palette.lineStrong,
         cursor: 'pointer',
         padding: 3,
         display: 'flex',
@@ -115,8 +115,8 @@ export function Switch({ value, onChange }: { value: boolean; onChange: (v: bool
           width: 18,
           height: 18,
           borderRadius: '50%',
-          background: palette.paper,
-          boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
+          background: palette.surfaceInput,
+          boxShadow: shadow.sm,
         }}
       />
     </button>
@@ -137,7 +137,7 @@ export function SmallBtn({
   const styles = {
     ghost: {
       bg: 'transparent',
-      border: `1px solid ${ink(0.16)}`,
+      border: `1px solid ${palette.lineStrong}`,
       color: palette.inkMuted,
     },
     danger: {
@@ -147,13 +147,13 @@ export function SmallBtn({
     },
     dark: {
       bg: palette.ink,
-      border: '1px solid #2d2a24',
-      color: palette.paper,
+      border: `1px solid ${palette.ink}`,
+      color: palette.onInk,
     },
     amber: {
       bg: palette.amber,
-      border: '1px solid #a87a3a',
-      color: palette.paper,
+      border: `1px solid ${palette.amberLight}`,
+      color: palette.onInk,
     },
   }[tone];
 
@@ -164,8 +164,8 @@ export function SmallBtn({
       style={{
         padding: '7px 14px',
         borderRadius: 9,
-        background: disabled ? ink(0.12) : styles.bg,
-        border: disabled ? '1px solid rgba(45,42,36,0.12)' : styles.border,
+        background: disabled ? palette.surfaceSunken : styles.bg,
+        border: disabled ? `1px solid ${palette.line}` : styles.border,
         color: disabled ? palette.inkFaint : styles.color,
         fontSize: 12.5,
         cursor: disabled ? 'not-allowed' : 'pointer',
@@ -196,9 +196,9 @@ export function SectionCard({
       </div>
       <div
         style={{
-          background: withAlpha(palette.paper, 0.85),
+          background: palette.surfaceRaised,
           borderRadius: 14,
-          border: `1px solid ${ink(0.07)}`,
+          border: `1px solid ${palette.line}`,
           padding: '6px 18px',
         }}
       >
