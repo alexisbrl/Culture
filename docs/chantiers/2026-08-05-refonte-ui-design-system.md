@@ -163,17 +163,21 @@ suivante. Le détail de l'échelle est dans la compétence `chantier-run`.
      `build` + `lint` suffisent. Il n'y a pas d'écran à regarder — ne pas lancer le
      serveur de dev pour rien.
    - **T12 à T41** : lancer le serveur via `preview_start` (entrée `culture` de
-     `.claude/launch.json`), ouvrir la page concernée, la comparer à l'écran
-     correspondant de la maquette (table des lignes dans `docs/design/README.md`),
-     et vérifier que la console ne contient aucune erreur. **Une tâche d'écran n'est
-     pas terminée tant que le rendu n'a pas été vu.**
-   - **Repli si la page est inatteignable** — la plupart des écrans sont derrière
-     l'authentification Clerk et une session n'est pas garantie en autonomie. Si la
-     page ne peut pas être ouverte pour cette raison (ou si le serveur de dev refuse
-     de démarrer), **ne pas y consacrer deux tentatives** : se rabattre sur
-     `build` + `lint`, terminer la tâche, et le noter dans le journal (« rendu non
-     vérifié — page derrière l'authentification »). Alexis relira ces écrans-là sur
-     la PR.
+     `.claude/launch.json`), **puis ouvrir la page dans Claude in Chrome**
+     (`mcp__claude-in-chrome__navigate` vers `http://localhost:3000/fr/…`), la
+     comparer à l'écran correspondant de la maquette (table des lignes dans
+     `docs/design/README.md`), et vérifier la console.
+   - **Pourquoi Chrome et pas le navigateur intégré** — décidé le 05/08/2026 après
+     constat : toutes les pages de l'app connectée sont derrière l'authentification
+     Clerk, et le navigateur intégré n'a aucune session, donc il n'affichait que
+     l'écran de connexion. Résultat, T12 à T37 ont été livrées **sans que le rendu
+     soit vu une seule fois**. Chrome, lui, porte la session d'Alexis.
+   - **Repli, une seule tentative** — si Chrome ne répond pas
+     (`list_connected_browsers` vide) ou si la page redirige quand même vers la
+     connexion : se rabattre sur `build` + `lint`, **terminer la tâche**, et le noter
+     dans le journal (« rendu non vérifié — <motif> »). Ce repli n'est jamais un
+     motif d'arrêt de session : une tâche non vérifiée visuellement reste une tâche
+     livrée, qu'Alexis relira sur la PR.
 4. **i18n obligatoire** : toute chaîne visible passe par next-intl, ajoutée dans
    `messages/fr.json` **et** `messages/en.json`. Jamais de chaîne en dur.
    Routine détaillée : `.claude/rules/i18n.md`.
@@ -520,8 +524,20 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 - [ ] **T23 — Écran de fin d'exercice**
   - Ligne 676 : écran « belle récolte. » (en **sans**), score de la session, bouton
     de retour au parcours.
-  - Critère d'acceptation : l'écran s'affiche à la fin des questions du chapitre avec
-    le score réel ; `npm run build` et `npm run lint` passent.
+  - **Débloqué le 05/08/2026 — règle de fin arbitrée par Alexis.** Le tirage serveur
+    pioche indéfiniment et ne connaît aucune notion de session : détecter une fin
+    « naturelle » demanderait de toucher la couche serveur, qui est hors périmètre.
+    Décision : **la session d'exercice fait 10 questions**, comptées **côté client**
+    dans `ExerciseClient.tsx`. Après la 10ᵉ correction, le bouton « question
+    suivante » cède la place à l'écran de fin, avec le score réel de la session
+    (bonnes réponses sur questions à correction automatique). Aucune modification
+    serveur, aucune migration. La règle définitive viendra avec la mécanique de
+    progression — ajouter un TODO court dans `docs/backlog.md` renvoyant à ce point.
+  - **Constante nommée** (`EXERCISE_SESSION_LENGTH = 10`) en tête du fichier, pas un
+    `10` dispersé dans le code : c'est un choix produit provisoire, il doit se voir.
+  - Critère d'acceptation : après 10 questions corrigées, l'écran de fin s'affiche
+    avec le score réel et le bouton de retour au parcours ; avant la 10ᵉ, le
+    comportement actuel est inchangé ; `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/exercise/[chapterId]/ExerciseClient.tsx`,
     `messages/{fr,en}.json`
   - Dépend de : T22
@@ -893,6 +909,12 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
      tranché en autonomie. Une entrée par tâche : les options envisagées, la
      recommandation de l'agent, et pourquoi il n'a pas tranché. Alexis arbitre au
      réveil. Ne pas confondre avec « Tâches bloquées » (échec technique). -->
+
+- ✅ **ARBITRÉ le 05/08/2026 — T23 est débloquée, reprendre la tâche normalement.**
+  Alexis a tranché : session de **10 questions comptées côté client**, aucune
+  modification serveur. La règle complète est écrite dans la tâche T23 elle-même.
+  L'analyse ci-dessous est conservée pour mémoire — elle reste juste, elle n'est
+  simplement plus bloquante.
 
 - **T23 — Écran de fin d'exercice.** La maquette (ligne 671-680) montre un écran
   « belle récolte. » affiché « à la fin des questions du chapitre », avec un score
