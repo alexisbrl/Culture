@@ -1,6 +1,9 @@
 # Chantier en cours
 
-AUCUN
+**Feuille de route :** docs/chantiers/2026-08-05-refonte-ui-design-system.md
+**Branche :** feat/refonte-ui-design-system
+**PR :** (à renseigner)
+**Démarré le :** 2026-08-05
 
 ---
 

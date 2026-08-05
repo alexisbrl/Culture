@@ -1,0 +1,93 @@
+/* Culture — Color
+ * ────────────────────────────────────────────────────────────────────────
+ * The whole system in one screen. One hero (forest green = action & growth),
+ * one warm earth (tan = secondary & accent), a warm-grey ink ramp for text,
+ * a cream surface stack, and three functional colours. Nothing else.
+ * Low saturation, sun-warmed, botanical. All text pairings meet WCAG AA.
+ *
+ * Legacy ramp names (--green-500, --tan-300, …) are kept alive in
+ * tokens/_compat.css, every one routed back into the values below.
+ */
+
+:root {
+  /* ── Surfaces — warm cream stack (never white, never dark) ─────────── */
+  --surface-canvas: #E7E0D1; /* backdrop behind the app window           */
+  --surface-page:   #F4EFE6; /* default page background                  */
+  --surface-raised: #FCFAF4; /* cards & panels, lifted off the page      */
+  --surface-input:  #FEFCF7; /* inputs — the brightest warm surface      */
+  --surface-sunken: #ECE4D5; /* wells, tracks, hovered rows              */
+  --surface-ink:    #2A2620; /* dark feature cards & ink buttons         */
+
+  /* ── Green — the hero. Action, progression, growth ────────────────── */
+  --green-strong: #2D5029;  /* hover / press / dark green text           */
+  --green:        #3C6B39;  /* PRIMARY action, progress fill             */
+  --green-light:  #82A968;  /* secondary data, lighter progress          */
+  --green-tint:   #E7EEDB;  /* soft green surface, tags, track fill       */
+
+  /* ── Tan — warm earth. Secondary action, accroche ink, accents ────── */
+  --tan-strong: #6E5736;    /* strong brown text                         */
+  --tan:        #9C7C4D;    /* SECONDARY action, serif-italic accroche ink */
+  --tan-tint:   #ECE1CB;    /* tan info surfaces                         */
+
+  /* ── Ink — warm-grey text ramp ────────────────────────────────────── */
+  --ink:        #2A2620;    /* primary text + dark surface               */
+  --ink-body:   #4A4234;    /* body copy                                 */
+  --ink-muted:  #696253;    /* secondary / captions                      */
+  --ink-faint:  #9A917F;    /* placeholder / disabled                    */
+
+  /* ── Lines — warm hairlines ───────────────────────────────────────── */
+  --line-strong: #D6CBB5;
+  --line:        #E3DAC9;
+  --line-soft:   #EDE7D8;
+
+  /* ── Functional — garden-true, muted ──────────────────────────────── */
+  --success:        #5C8C4D;
+  --success-strong: #4A7340;
+  --success-tint:   #E5EFDA;
+  --danger:         #BC5439; /* warm clay, never neon                    */
+  --danger-strong:  #9C4328;
+  --danger-tint:    #F4E2DA;
+  --gold:           #C39A47; /* premium / certification                  */
+  --gold-strong:    #8C6C24;
+  --gold-tint:      #F3EBD2;
+
+  /* ── On-colours (text over filled surfaces) ───────────────────────── */
+  --on-green: #F5F8EF;
+  --on-ink:   #F2EDE3;
+  --on-tan:   #FBF7EE;
+
+  /* ═══════════════════════════════════════════════════════════════════ */
+  /* SEMANTIC ALIASES — reach for these in components                     */
+  /* ═══════════════════════════════════════════════════════════════════ */
+
+  --surface-card:  var(--surface-raised);
+  --surface-dark:  var(--surface-ink);
+
+  --text-strong: var(--ink);
+  --text-body:   var(--ink-body);
+  --text-muted:  var(--ink-muted);
+  --text-faint:  var(--ink-faint);
+  --text-on-dark:  var(--on-ink);
+  --text-on-green: var(--on-green);
+  --text-script: var(--tan);
+  --text-link:   var(--green);
+
+  --action-bg:        var(--green);
+  --action-bg-hover:  var(--green-strong);
+  --action-bg-press:  var(--green-strong);
+  --action-fg:        var(--on-green);
+
+  --action2-bg:       var(--tan);
+  --action2-bg-hover: var(--tan-strong);
+  --action2-fg:       var(--on-tan);
+
+  --actionink-bg:       var(--ink);
+  --actionink-bg-hover: #3C372F;
+  --actionink-fg:       var(--on-ink);
+
+  --border:        var(--line);
+  --border-strong: var(--line-strong);
+  --border-soft:   var(--line-soft);
+
+  --ring: color-mix(in oklab, var(--green) 50%, transparent);
+}
