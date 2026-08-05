@@ -132,6 +132,7 @@ export default function DashboardHeader() {
           </Link>
         </nav>
       )}
+      {!isExercise && (
       <header
         className="hidden items-center gap-6 px-6 md:flex"
         style={{ height: 60, borderBottom: '1px solid var(--line)', background: 'var(--surface-raised)' }}
@@ -260,6 +261,7 @@ export default function DashboardHeader() {
         </div>
       </div>
     </header>
+    )}
     </>
   );
 }

@@ -10,12 +10,19 @@
 // Les choix portent leur index d'origine (`choice.index`) : c'est lui qu'on
 // renvoie à la validation, ce qui permet au serveur de mélanger l'ordre
 // d'affichage sans mémoriser de permutation.
+//
+// Coquille plein écran (position fixed, au-dessus de la barre du haut/du bas —
+// masquées par ailleurs sur /exercise/ dans DashboardHeader.tsx) : aucune
+// notion de « session » ou de progression n'existe côté serveur (le tirage
+// pioche indéfiniment, sans fin de chapitre), donc pas de barre de progression
+// ici — voir docs/chantiers/2026-08-05-refonte-ui-design-system.md, T21.
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { ArrowLeft, Check, Loader2, RotateCw, X } from 'lucide-react';
-import { palette, ink, withAlpha } from '@/lib/theme';
+import { Check, Loader2, RotateCw, Sprout, X } from 'lucide-react';
+import { palette, withAlpha, shadow } from '@/lib/theme';
+import { Button } from '@/components/ui/button';
 import { drawExercise, gradeExercise } from '@/app/actions/parcoursExercise';
 import type { ExercisePrompt, ExerciseResult } from '@/lib/workshops/examTypes';
 
@@ -90,21 +97,22 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     const picked = selected.includes(index);
     const correct = result?.correctChoices.includes(index) ?? false;
 
-    let border: string = ink(0.14);
-    let background: string = palette.paper;
+    let border: string = palette.lineStrong;
+    let background: string = palette.surfaceInput;
     if (result) {
-      if (correct) { border = palette.green; background = withAlpha(palette.green, 0.10); }
-      else if (picked) { border = palette.danger; background = withAlpha(palette.danger, 0.10); }
+      if (correct) { border = palette.green; background = withAlpha(palette.green, 0.1); }
+      else if (picked) { border = palette.danger; background = withAlpha(palette.danger, 0.1); }
     } else if (picked) {
       border = palette.green;
       background = withAlpha(palette.green, 0.08);
     }
 
     return {
-      display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left' as const,
-      padding: '12px 14px', borderRadius: 11, border: `1.5px solid ${border}`, background,
-      color: palette.ink, fontSize: 14, fontFamily: 'inherit', cursor: result ? 'default' : 'pointer',
-      marginBottom: 8,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%',
+      textAlign: 'left' as const, padding: '15px 17px', borderRadius: 12, border: `1.5px solid ${border}`,
+      background, color: palette.ink, fontSize: 15, fontWeight: 600, fontFamily: 'inherit',
+      cursor: result ? 'default' : 'pointer', marginBottom: 9, boxShadow: shadow.sm,
+      transition: 'border-color 120ms ease, background 120ms ease',
     };
   }
 
@@ -112,100 +120,106 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     result?.correct === true ? palette.green : result?.correct === false ? palette.danger : palette.inkMuted;
 
   return (
-    <div style={{ minHeight: 'calc(100vh - 60px)', background: palette.cream, padding: '26px 22px 60px' }}>
-      <div style={{ maxWidth: 720, margin: '0 auto' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 40, display: 'flex', flexDirection: 'column', background: palette.cream }}>
+      <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 14, padding: '18px 20px' }}>
         <Link
           href={`/${locale}/workshops/${workshopId}`}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none', fontSize: 12.5, color: palette.inkMuted, marginBottom: 16 }}
+          title={t('back', { workshop: workshopName })}
+          style={{ width: 36, height: 36, borderRadius: 12, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, flexShrink: 0 }}
         >
-          <ArrowLeft size={14} /> {t('back', { workshop: workshopName })}
+          <X size={16} strokeWidth={1.75} />
         </Link>
-
-        <div style={{ fontSize: 11.5, color: palette.inkFaint, textTransform: 'uppercase', letterSpacing: 0.6 }}>
-          {t('chapterLabel')}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: palette.inkFaint, textTransform: 'uppercase' }}>
+            {t('chapterLabel')}
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {chapterName}
+          </div>
         </div>
-        <h1 style={{ fontSize: 22, fontWeight: 500, color: palette.ink, margin: '2px 0 18px' }}>{chapterName}</h1>
+      </div>
 
-        {error && <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 12 }}>{error}</div>}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 20px 40px' }}>
+        <div style={{ maxWidth: 680, margin: '0 auto' }}>
+          {error && <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 12 }}>{error}</div>}
 
-        <div style={{ background: withAlpha(palette.paper, 0.9), borderRadius: 16, border: `1px solid ${ink(0.07)}`, padding: '22px 24px' }}>
-          {loading ? (
-            <div style={{ padding: '30px 0', textAlign: 'center', fontSize: 13, color: palette.inkSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> {t('drawing')}
-            </div>
-          ) : !prompt ? (
-            <div style={{ padding: '30px 0', textAlign: 'center' }}>
-              <div style={{ fontSize: 14, color: palette.ink }}>{t('emptyTitle')}</div>
-              <div style={{ fontSize: 12.5, color: palette.inkFaint, marginTop: 6 }}>{t('emptyDesc')}</div>
-            </div>
-          ) : (
-            <>
-              {prompt.title.trim() && (
-                <div style={{ fontSize: 12, color: palette.inkFaint, marginBottom: 6 }}>{prompt.title}</div>
-              )}
-              <div style={{ fontSize: 16.5, color: palette.ink, lineHeight: 1.5, whiteSpace: 'pre-wrap', marginBottom: 18 }}>
-                {prompt.content.trim() || tExam('noStatement')}
+          <div style={{ background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 16, padding: '22px 24px', boxShadow: shadow.sm }}>
+            {loading ? (
+              <div style={{ padding: '30px 0', textAlign: 'center', fontSize: 13, color: palette.inkSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> {t('drawing')}
               </div>
+            ) : !prompt ? (
+              <div style={{ padding: '30px 0', textAlign: 'center' }}>
+                <div style={{ fontSize: 14, color: palette.ink }}>{t('emptyTitle')}</div>
+                <div style={{ fontSize: 12.5, color: palette.inkFaint, marginTop: 6 }}>{t('emptyDesc')}</div>
+              </div>
+            ) : (
+              <>
+                {prompt.title.trim() && (
+                  <div style={{ fontSize: 12, color: palette.inkFaint, marginBottom: 8 }}>{prompt.title}</div>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 22 }}>
+                  <span style={{ width: 44, height: 44, borderRadius: 12, background: withAlpha(palette.green, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.green, flexShrink: 0 }}>
+                    <Sprout size={20} strokeWidth={1.75} />
+                  </span>
+                  <span style={{ fontSize: 21, fontWeight: 700, color: palette.ink, lineHeight: 1.3, whiteSpace: 'pre-wrap' }}>
+                    {prompt.content.trim() || tExam('noStatement')}
+                  </span>
+                </div>
 
-              {isChoice && prompt.choices.map((choice) => (
-                <button key={choice.index} onClick={() => toggleChoice(choice.index)} style={choiceStyle(choice.index)} disabled={!!result}>
-                  <span style={{ flex: 1 }}>{choice.text}</span>
-                  {result?.correctChoices.includes(choice.index) && <Check size={15} color={palette.green} />}
-                  {result && selected.includes(choice.index) && !result.correctChoices.includes(choice.index) && <X size={15} color={palette.danger} />}
-                </button>
-              ))}
+                {isChoice && prompt.choices.map((choice) => (
+                  <button key={choice.index} onClick={() => toggleChoice(choice.index)} style={choiceStyle(choice.index)} disabled={!!result}>
+                    <span style={{ flex: 1 }}>{choice.text}</span>
+                    {result?.correctChoices.includes(choice.index) && <Check size={18} color={palette.green} />}
+                    {result && selected.includes(choice.index) && !result.correctChoices.includes(choice.index) && <X size={18} color={palette.danger} />}
+                  </button>
+                ))}
 
-              {isFreeText && (
-                <textarea
-                  value={freeText}
-                  onChange={(e) => setFreeText(e.target.value)}
-                  readOnly={!!result}
-                  rows={prompt.textLines}
-                  placeholder={t('answerPlaceholder')}
-                  style={{ width: '100%', padding: '12px 14px', borderRadius: 11, border: `1px solid ${ink(0.14)}`, background: palette.paper, color: palette.ink, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
-                />
-              )}
+                {isFreeText && (
+                  <textarea
+                    value={freeText}
+                    onChange={(e) => setFreeText(e.target.value)}
+                    readOnly={!!result}
+                    rows={prompt.textLines}
+                    placeholder={t('answerPlaceholder')}
+                    style={{ width: '100%', padding: '13px 15px', borderRadius: 12, border: `1px solid ${palette.lineStrong}`, background: palette.surfaceInput, color: palette.ink, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+                  />
+                )}
 
-              {result && (
-                <div style={{ marginTop: 18, padding: '14px 16px', borderRadius: 12, border: `1px solid ${withAlpha(verdictTone, 0.35)}`, background: withAlpha(verdictTone, 0.08) }}>
-                  {/* Verdict masqué quand il n'y a pas de correction
-                      automatique ET qu'une réponse attendue est affichée : les
-                      deux lignes diraient la même chose. */}
-                  {(result.correct !== null || !result.answer.trim()) && (
-                    <div style={{ fontSize: 13.5, fontWeight: 500, color: verdictTone }}>
-                      {result.correct === true ? t('verdictCorrect') : result.correct === false ? t('verdictWrong') : t('verdictNeutral')}
-                    </div>
-                  )}
-                  {result.answer.trim() && (
-                    <div style={{ fontSize: 13.5, color: palette.ink, whiteSpace: 'pre-wrap', marginTop: result.correct !== null ? 8 : 0 }}>
-                      <span style={{ color: palette.inkFaint }}>{t('expectedAnswer')} </span>
-                      {result.answer}
-                    </div>
+                {result && (
+                  <div style={{ marginTop: 18, padding: '14px 16px', borderRadius: 12, border: `1px solid ${withAlpha(verdictTone, 0.35)}`, background: withAlpha(verdictTone, 0.08) }}>
+                    {/* Verdict masqué quand il n'y a pas de correction
+                        automatique ET qu'une réponse attendue est affichée : les
+                        deux lignes diraient la même chose. */}
+                    {(result.correct !== null || !result.answer.trim()) && (
+                      <div style={{ fontSize: 13.5, fontWeight: 500, color: verdictTone }}>
+                        {result.correct === true ? t('verdictCorrect') : result.correct === false ? t('verdictWrong') : t('verdictNeutral')}
+                      </div>
+                    )}
+                    {result.answer.trim() && (
+                      <div style={{ fontSize: 13.5, color: palette.ink, whiteSpace: 'pre-wrap', marginTop: result.correct !== null ? 8 : 0 }}>
+                        <span style={{ color: palette.inkFaint }}>{t('expectedAnswer')} </span>
+                        {result.answer}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+                  {!result ? (
+                    <Button variant="primary" onClick={handleValidate} disabled={!canValidate}>
+                      {checking && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
+                      {prompt.responseType === 'sans_reponse' ? t('revealAnswer') : t('validate')}
+                    </Button>
+                  ) : (
+                    <Button variant="primary" onClick={() => draw(prompt.id)}>
+                      <RotateCw size={14} strokeWidth={1.75} /> {t('next')}
+                    </Button>
                   )}
                 </div>
-              )}
-
-              <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-                {!result ? (
-                  <button
-                    onClick={handleValidate}
-                    disabled={!canValidate}
-                    style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, background: canValidate ? palette.green : ink(0.12), border: 'none', color: canValidate ? palette.parchment : palette.inkFaint, fontSize: 13.5, cursor: canValidate ? 'pointer' : 'default', fontFamily: 'inherit' }}
-                  >
-                    {checking && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-                    {prompt.responseType === 'sans_reponse' ? t('revealAnswer') : t('validate')}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => draw(prompt.id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, background: palette.green, border: 'none', color: palette.parchment, fontSize: 13.5, cursor: 'pointer', fontFamily: 'inherit' }}
-                  >
-                    <RotateCw size={14} /> {t('next')}
-                  </button>
-                )}
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
