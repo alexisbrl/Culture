@@ -1,383 +1,195 @@
 'use client';
 
-import { palette, withAlpha } from '@/lib/theme';
+// Page profil : carte d'identité, bloc « suivi » (renvoie vers l'onglet Analyse
+// de l'atelier le plus récent — pas de vue cross-atelier), bloc forfait (tier
+// réel, Clerk publicMetadata) et liste de paramètres. Aucune notion de série
+// d'arrosage n'existe côté serveur : ce bloc est écrit puis masqué derrière
+// HAS_STREAK, même principe que HAS_NOTIFICATIONS/HAS_DROPLETS (T15). Voir
+// docs/chantiers/2026-08-05-refonte-ui-design-system.md, Lot 6.
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { useUser } from '@clerk/nextjs';
+import { useUser, SignOutButton } from '@clerk/nextjs';
+import { BarChart3, ChevronRight, Droplet, LogOut, Sprout } from 'lucide-react';
+import { palette, withAlpha, shadow } from '@/lib/theme';
+import { Button } from '@/components/ui/button';
 import AvatarComposer from '@/components/avatar/AvatarComposer';
 import { AvatarConfig, loadAvatarConfig } from '@/components/avatar/avatarConfig';
+import { markIntentionalSignOut } from '@/lib/signOutIntent';
+import { getUserWorkshops } from '@/app/actions/workshops';
+import NotificationBell from '@/components/NotificationBell';
+import type { SubscriptionTier } from '@/lib/subscription';
 
 type Props = {
   locale: string;
   uniqueId: string;
   firstName: string;
   lastName: string;
+  createdAt: string | null;
+  tier: SubscriptionTier;
 };
 
-const HERO_GRADIENT = 'linear-gradient(180deg, #f6f2eb, #ece6db)';
-const AVATAR_GRADIENT = 'linear-gradient(180deg, #efe9d8, #dbe6d6)';
-const SUB_CARD_GRADIENT = 'linear-gradient(180deg, rgba(232,184,108,0.20), rgba(232,184,108,0.06))';
-const DARK_BG = palette.ink;
-const DARK_TEXT = palette.parchment;
+const HAS_STREAK = false;
+const HAS_NOTIFICATIONS = false;
 
-function StatCard({ value, label }: { value: string | number; label: string }) {
-  return (
-    <div
-      style={{
-        background: withAlpha(palette.paper, 0.7),
-        borderRadius: 12,
-        padding: '12px 14px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 2,
-      }}
-    >
-      <span style={{ fontSize: 24, fontWeight: 500, color: palette.ink, lineHeight: 1.1 }}>
-        {value}
-      </span>
-      <span style={{ fontSize: 12, color: '#8a7f72' }}>{label}</span>
-    </div>
-  );
+function planKey(tier: SubscriptionTier): 'free' | 'premium' | 'premiumPlus' {
+  return tier === 'premium_plus' ? 'premiumPlus' : tier;
 }
 
-export default function ProfileClient({ locale, uniqueId, firstName, lastName }: Props) {
+export default function ProfileClient({ locale, uniqueId, firstName, lastName, createdAt, tier }: Props) {
   const t = useTranslations('profile');
   const fullName = [firstName, lastName].filter(Boolean).join(' ') || t('defaultNameFull');
   const { user } = useUser();
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
+  const [firstWorkshopId, setFirstWorkshopId] = useState<string | null>(null);
+
   // Avatar synchronisé au compte (publicMetadata.avatarParts), repli localStorage.
   useEffect(() => {
     const fromAccount = user?.publicMetadata?.avatarParts as AvatarConfig | undefined;
     setAvatarConfig(fromAccount ?? loadAvatarConfig());
   }, [user]);
 
+  // Le bloc « suivi » renvoie vers l'onglet Analyse — pas de vue cross-atelier
+  // dans l'app aujourd'hui, on prend l'atelier le plus récent (même ordre de
+  // priorité que l'entrée directe en atelier, T16). Masqué si aucun atelier.
+  useEffect(() => {
+    let cancelled = false;
+    getUserWorkshops().then(({ owned, joined }) => {
+      if (cancelled) return;
+      setFirstWorkshopId(owned[0]?.id ?? joined[0]?.id ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const memberSince = createdAt
+    ? new Date(createdAt).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'long', year: 'numeric' })
+    : null;
+
+  const cardStyle: React.CSSProperties = {
+    background: palette.surfaceRaised,
+    border: `1px solid ${palette.line}`,
+    borderRadius: 16,
+    boxShadow: shadow.sm,
+  };
+
+  const settingsRowStyle: React.CSSProperties = {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    padding: '14px 18px',
+    fontFamily: 'inherit',
+    fontSize: 14,
+    fontWeight: 600,
+    color: palette.ink,
+    textAlign: 'left',
+    textDecoration: 'none',
+    background: 'transparent',
+    border: 'none',
+  };
+
   return (
-    <>
-      <style>{`
-        .profile-root * { font-family: var(--font-sans); box-sizing: border-box; }
-        .profile-btn-dark {
-          background: #2d2a24; color: #f4f0e6; border: none;
-          border-radius: 10px; padding: 8px 16px; font-size: 13px; font-weight: 500;
-          cursor: pointer; font-family: var(--font-sans);
-          text-decoration: none; display: inline-block;
-        }
-        .profile-btn-dark:hover { background: #3d3a34; }
-        .profile-btn-ghost {
-          background: transparent; color: #5a4838;
-          border: 1.5px solid rgba(90,72,56,0.25); border-radius: 10px;
-          padding: 8px 16px; font-size: 13px; font-weight: 500;
-          cursor: pointer; font-family: var(--font-sans);
-          text-decoration: none; display: inline-block;
-        }
-        .profile-btn-ghost:hover { background: rgba(90,72,56,0.06); }
-      `}</style>
-
-      <div
-        className="profile-root"
-        style={{ background: palette.cream, minHeight: 'calc(100vh - 60px)', padding: '28px 24px 48px' }}
-      >
-        {/* Breadcrumb */}
-        <div
-          style={{
-            fontSize: 13,
-            color: '#a89880',
-            marginBottom: 20,
-            display: 'flex',
-            gap: 6,
-            alignItems: 'center',
-          }}
-        >
-          <Link href={`/${locale}/dashboard`} style={{ color: '#a89880', textDecoration: 'none' }}>
-            {t('breadcrumbGarden')}
-          </Link>
-          <span>›</span>
-          <span style={{ color: '#5a4838' }}>{t('breadcrumbCurrent')}</span>
-        </div>
-
-        {/* Hero Card */}
-        <div
-          style={{
-            background: HERO_GRADIENT,
-            borderRadius: 18,
-            padding: '24px 28px',
-            display: 'flex',
-            gap: 24,
-            alignItems: 'flex-start',
-            marginBottom: 14,
-            flexWrap: 'wrap',
-          }}
-        >
-          {/* Avatar column */}
-          <div
-            style={{
-              width: 160,
-              height: 160,
-              borderRadius: 18,
-              background: AVATAR_GRADIENT,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              overflow: 'hidden',
-            }}
-          >
-            {avatarConfig ? (
-              <AvatarComposer config={avatarConfig} size={160} frame="bust" />
-            ) : (
-              <div style={{ width: 160, height: 160 }} />
-            )}
+    <div style={{ background: palette.cream, minHeight: 'calc(100vh - 60px)', padding: '28px 24px 48px' }}>
+      <div style={{ maxWidth: 520, margin: '0 auto' }}>
+        {/* Identité */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ width: 72, height: 72, borderRadius: 999, overflow: 'hidden', flexShrink: 0, background: palette.surfaceSunken }}>
+            {avatarConfig && <AvatarComposer config={avatarConfig} size={72} frame="bust" />}
           </div>
-
-          {/* Info column */}
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <div
-              style={{
-                fontFamily: 'var(--font-serif)',
-                fontSize: 18,
-                color: palette.amber,
-                marginBottom: 2,
-              }}
-            >
-              {t('greeting', { name: firstName || t('defaultName') })}
-            </div>
-            <div style={{ fontSize: 28, fontWeight: 500, color: palette.ink, marginBottom: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 19, fontWeight: 700, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {fullName}
             </div>
-
-            {/* Chips */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-              <span
-                style={{
-                  fontFamily: 'monospace',
-                  fontSize: 12,
-                  background: 'rgba(90,72,56,0.10)',
-                  color: '#5a4838',
-                  padding: '3px 10px',
-                  borderRadius: 8,
-                  letterSpacing: '0.08em',
-                }}
-              >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+              {memberSince && (
+                <span style={{ fontSize: 13, color: palette.inkMuted }}>{t('memberSince', { date: memberSince })}</span>
+              )}
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: palette.inkFaint, background: palette.surfaceSunken, padding: '2px 8px', borderRadius: 999 }}>
                 #{uniqueId}
               </span>
-              <span
-                style={{
-                  fontSize: 12,
-                  background: withAlpha(palette.amberGlow, 0.25),
-                  color: palette.amber,
-                  padding: '3px 10px',
-                  borderRadius: 8,
-                  fontWeight: 500,
-                }}
-              >
-                {t('premiumBadge')}
-              </span>
-            </div>
-
-            <div style={{ fontSize: 13, color: '#8a7f72', marginBottom: 16 }}>
-              {t('memberSince')}
-            </div>
-
-            {/* Buttons */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button className="profile-btn-dark">{t('editProfile')}</button>
-              <Link href={`/${locale}/profile/avatar`} className="profile-btn-ghost">
-                {t('editAvatar')}
-              </Link>
-              <button className="profile-btn-ghost">{t('shareGarden')}</button>
             </div>
           </div>
-
-          {/* Stats column */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 8,
-              flexShrink: 0,
-            }}
-          >
-            <StatCard value={12} label={t('stats.streak')} />
-            <StatCard value={5} label={t('stats.activeWorkshops')} />
-            <StatCard value={5} label={t('stats.livingPlants')} />
-            <StatCard value="2 480" label={t('stats.questionsAnswered')} />
-          </div>
+          {HAS_NOTIFICATIONS && <NotificationBell />}
         </div>
 
-        {/* Bottom grid */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 14,
-          }}
-        >
-          {/* Subscription card — span 2 */}
-          <div
-            style={{
-              gridColumn: 'span 2',
-              background: SUB_CARD_GRADIENT,
-              border: `1.5px solid ${withAlpha(palette.amberGlow, 0.4)}`,
-              borderRadius: 18,
-              padding: '22px 24px',
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: palette.amber,
-                textTransform: 'uppercase',
-                letterSpacing: '0.1em',
-                marginBottom: 6,
-              }}
-            >
-              {t('subscription.label')}
+        {/* Série d'arrosage — aucune donnée n'existe, jamais monté */}
+        {HAS_STREAK && (
+          <div style={{ ...cardStyle, padding: '16px 18px', marginTop: 22 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: palette.inkFaint, textTransform: 'uppercase' }}>
+              {t('streak.label')}
             </div>
-            <div style={{ fontSize: 20, fontWeight: 600, color: palette.ink, marginBottom: 10 }}>
-              {t('subscription.plan')}
-            </div>
-            <div style={{ fontSize: 13, color: '#5a4838', lineHeight: 1.6, marginBottom: 16 }}>
-              {t('subscription.features')}
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Link href={`/${locale}/pricing`} className="profile-btn-dark">
-                {t('subscription.manage')}
-              </Link>
-              <button className="profile-btn-ghost">{t('subscription.share')}</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 13.5, fontWeight: 600, color: palette.amber }}>
+              <Droplet size={16} strokeWidth={1.75} />
+              {t('streak.days', { count: 0 })}
             </div>
           </div>
+        )}
 
-          {/* Watering can / energy card */}
-          <div
-            style={{
-              background: withAlpha(palette.paper, 0.6),
-              border: '1.5px solid rgba(90,72,56,0.12)',
-              borderRadius: 18,
-              padding: '22px 24px',
-            }}
+        {/* Suivi — vers l'onglet Analyse (état vide V2), masqué sans atelier */}
+        {firstWorkshopId && (
+          <Link
+            href={`/${locale}/workshops/${firstWorkshopId}?tab=analyse`}
+            style={{ ...cardStyle, padding: '18px 20px', marginTop: 14, display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none' }}
           >
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: palette.amber,
-                textTransform: 'uppercase',
-                letterSpacing: '0.1em',
-                marginBottom: 12,
-              }}
-            >
-              {t('energy.label')}
-            </div>
-            {/* 10 vertical bars, 8 filled */}
-            <div style={{ display: 'flex', gap: 5, alignItems: 'flex-end', marginBottom: 12 }}>
-              {Array.from({ length: 10 }).map((_, i) => (
-                <div
-                  key={i}
-                  style={{
-                    width: 14,
-                    height: 32,
-                    borderRadius: 4,
-                    background: i < 8 ? palette.greenSoft : withAlpha(palette.greenSoft, 0.18),
-                  }}
-                />
-              ))}
-            </div>
-            <div style={{ fontSize: 13, color: '#5a4838', fontWeight: 500, marginBottom: 4 }}>
-              {t('energy.sessions', { count: 8 })}
-            </div>
-            <div style={{ fontSize: 12, color: '#a89880' }}>{t('energy.nextJoker', { hours: 4 })}</div>
-          </div>
+            <span style={{ width: 44, height: 44, borderRadius: 12, background: withAlpha(palette.green, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.greenBrand, flexShrink: 0 }}>
+              <BarChart3 size={20} strokeWidth={1.75} />
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: palette.ink }}>{t('tracking.title')}</span>
+              <span style={{ display: 'block', fontSize: 12.5, color: palette.inkMuted, marginTop: 2 }}>{t('tracking.desc')}</span>
+            </span>
+            <ChevronRight size={18} strokeWidth={1.75} color={palette.inkMuted} />
+          </Link>
+        )}
 
-          {/* Official exam card — span 2 */}
-          <div
-            style={{
-              gridColumn: 'span 2',
-              background: DARK_BG,
-              color: DARK_TEXT,
-              borderRadius: 18,
-              padding: '22px 24px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.1em',
-                  color: 'rgba(244,240,230,0.5)',
-                }}
-              >
-                {t('exam.label')}
-              </div>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  background: 'rgba(244,240,230,0.12)',
-                  color: 'rgba(244,240,230,0.6)',
-                  padding: '2px 8px',
-                  borderRadius: 6,
-                  letterSpacing: '0.06em',
-                }}
-              >
-                V3
-              </span>
-            </div>
-            <div style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>
-              {t('exam.title')}
-            </div>
-            <div style={{ fontSize: 13, color: 'rgba(244,240,230,0.65)', lineHeight: 1.6 }}>
-              {t('exam.desc')}
-            </div>
-          </div>
+        {/* Forfait — tier réel du compte */}
+        <div style={{ ...cardStyle, padding: '16px 18px', marginTop: 14, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <span style={{ width: 40, height: 40, borderRadius: 12, background: withAlpha(palette.gold, 0.18), display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.amberLight, flexShrink: 0 }}>
+            <Sprout size={18} strokeWidth={1.75} />
+          </span>
+          <span style={{ flex: 1, minWidth: 160 }}>
+            <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: palette.ink }}>{t(`plan.${planKey(tier)}`)}</span>
+            <span style={{ display: 'block', fontSize: 12.5, color: palette.inkMuted, marginTop: 2 }}>{t(`plan.desc.${planKey(tier)}`)}</span>
+          </span>
+          <Link href={`/${locale}/pricing`}>
+            <Button variant="secondary" size="sm" trailingArrow>
+              {t('plan.manage')}
+            </Button>
+          </Link>
+        </div>
 
-          {/* Friends card */}
-          <div
-            style={{
-              background: 'transparent',
-              border: '1.5px dashed rgba(90,72,56,0.25)',
-              borderRadius: 18,
-              padding: '22px 24px',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'flex-start',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: '#a89880',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.1em',
-                }}
-              >
-                {t('friends.label')}
-              </div>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  background: 'rgba(168,152,128,0.15)',
-                  color: '#a89880',
-                  padding: '2px 8px',
-                  borderRadius: 6,
-                  letterSpacing: '0.06em',
-                }}
-              >
-                V2
-              </span>
-            </div>
-            <div style={{ fontSize: 13, color: '#a89880', lineHeight: 1.6 }}>
-              {t('friends.desc')}
-            </div>
+        {/* Paramètres */}
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', color: palette.inkMuted, margin: '26px 0 12px' }}>
+          {t('settings.title')}
+        </div>
+        <div style={{ ...cardStyle, overflow: 'hidden' }}>
+          <Link href={`/${locale}/profile/avatar`} style={{ ...settingsRowStyle, borderBottom: `1px solid ${palette.line}` }}>
+            <span style={{ flex: 1 }}>{t('settings.editAvatar')}</span>
+            <ChevronRight size={15} strokeWidth={1.75} color={palette.inkFaint} />
+          </Link>
+          <div style={{ ...settingsRowStyle, borderBottom: `1px solid ${palette.line}` }}>
+            <span style={{ flex: 1 }}>{t('settings.notifications')}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 500, color: palette.inkFaint }}>{t('settings.notificationsHint')}</span>
           </div>
+          <div style={{ ...settingsRowStyle, borderBottom: `1px solid ${palette.line}` }}>
+            <span style={{ flex: 1 }}>{t('settings.language')}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 500, color: palette.inkFaint }}>{t('settings.languageName')}</span>
+          </div>
+          <Link href={`/${locale}/contact`} style={{ ...settingsRowStyle, borderBottom: `1px solid ${palette.line}` }}>
+            <span style={{ flex: 1 }}>{t('settings.help')}</span>
+            <ChevronRight size={15} strokeWidth={1.75} color={palette.inkFaint} />
+          </Link>
+          <SignOutButton redirectUrl={`/${locale}`}>
+            <button onClick={markIntentionalSignOut} style={{ ...settingsRowStyle, color: palette.danger, cursor: 'pointer' }}>
+              <LogOut size={15} strokeWidth={1.75} />
+              <span style={{ flex: 1 }}>{t('settings.signOut')}</span>
+            </button>
+          </SignOutButton>
         </div>
       </div>
-    </>
+    </div>
   );
 }

@@ -243,42 +243,37 @@
   },
   "profile": {
     "metaTitle": "Profile — Culture",
-    "breadcrumbGarden": "garden",
-    "breadcrumbCurrent": "profile",
-    "greeting": "hi {name},",
     "defaultName": "gardener",
     "defaultNameFull": "Gardener",
-    "premiumBadge": "★ Premium",
-    "memberSince": "gardener since March 2026",
-    "editProfile": "edit profile",
-    "editAvatar": "edit avatar",
-    "shareGarden": "share my garden",
-    "stats": {
-      "streak": "day streak",
-      "activeWorkshops": "active workshops",
-      "livingPlants": "living plants",
-      "questionsAnswered": "questions answered"
+    "memberSince": "gardener since {date}",
+    "tracking": {
+      "title": "tracking",
+      "desc": "progress, mastery and detailed statistics"
     },
-    "subscription": {
-      "label": "subscription",
-      "plan": "★ Premium · €10/month",
-      "features": "Unlimited energy · Ad-free · Exam generator included · AI chat during learning · Share with 2 people",
-      "manage": "manage subscription →",
-      "share": "share (2 seats)"
-    },
-    "energy": {
+    "streak": {
       "label": "today's watering can",
-      "sessions": "{count} sessions today",
-      "nextJoker": "next joker in {hours}h"
+      "days": "{count} days of watering in a row"
     },
-    "exam": {
-      "label": "official exam",
-      "title": "Public certification page",
-      "desc": "Summarizes all your official standardized exams. Publicly shareable via link or QR code. Available from version 3."
+    "plan": {
+      "free": "Free plan",
+      "premium": "Premium plan",
+      "premiumPlus": "Premium+ plan",
+      "desc": {
+        "free": "5 hobby workshops · MCQ learning",
+        "premium": "10 hobby workshops · exam generator · AI chat",
+        "premiumPlus": "15 hobby workshops · everything in Premium"
+      },
+      "manage": "manage my plan"
     },
-    "friends": {
-      "label": "garden friends",
-      "desc": "Add friends via their tag and follow their progress. Available in version 2."
+    "settings": {
+      "title": "settings",
+      "editAvatar": "edit avatar",
+      "notifications": "notifications",
+      "notificationsHint": "enabled",
+      "language": "language",
+      "languageName": "English",
+      "help": "help & contact",
+      "signOut": "sign out"
     }
   },
   "dashboard": {

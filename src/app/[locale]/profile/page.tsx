@@ -3,6 +3,7 @@ import { currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { ensureUniqueId } from '@/app/actions/profile';
+import { getUserTier } from '@/lib/subscription';
 import ProfileClient from './ProfileClient';
 
 // Pattern composant SERVEUR : dans une fonction async (ici la génération de métadonnées),
@@ -19,6 +20,7 @@ export default async function ProfilePage() {
   if (!user) redirect(`/${locale}/sign-in`);
 
   const uniqueId = await ensureUniqueId();
+  const tier = await getUserTier(user.id);
 
   return (
     <ProfileClient
@@ -26,6 +28,8 @@ export default async function ProfilePage() {
       uniqueId={uniqueId}
       firstName={user.firstName ?? ''}
       lastName={user.lastName ?? ''}
+      createdAt={user.createdAt ? new Date(user.createdAt).toISOString() : null}
+      tier={tier}
     />
   );
 }

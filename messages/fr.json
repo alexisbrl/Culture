@@ -243,42 +243,37 @@
   },
   "profile": {
     "metaTitle": "Profil — Culture",
-    "breadcrumbGarden": "jardin",
-    "breadcrumbCurrent": "profil",
-    "greeting": "bonjour {name},",
     "defaultName": "jardinier",
     "defaultNameFull": "Jardinier",
-    "premiumBadge": "★ Premium",
-    "memberSince": "jardinier depuis mars 2026",
-    "editProfile": "éditer le profil",
-    "editAvatar": "éditer l'avatar",
-    "shareGarden": "partager mon jardin",
-    "stats": {
-      "streak": "jours de série",
-      "activeWorkshops": "ateliers actifs",
-      "livingPlants": "plantes vivantes",
-      "questionsAnswered": "questions répondues"
+    "memberSince": "jardinier depuis {date}",
+    "tracking": {
+      "title": "suivi",
+      "desc": "progression, maîtrise et statistiques détaillées"
     },
-    "subscription": {
-      "label": "abonnement",
-      "plan": "★ Premium · 10 €/mois",
-      "features": "Énergie illimitée · Sans publicités · Générateur d'examen inclus · Échange IA en cours d'apprentissage · Partage avec 2 personnes",
-      "manage": "gérer l'abonnement →",
-      "share": "partager (2 places)"
-    },
-    "energy": {
+    "streak": {
       "label": "arrosoir du jour",
-      "sessions": "{count} sessions aujourd'hui",
-      "nextJoker": "prochain joker dans {hours} h"
+      "days": "{count} jours d'arrosage d'affilée"
     },
-    "exam": {
-      "label": "examen officiel",
-      "title": "Page publique de certification",
-      "desc": "Récapitule tous vos examens standardisés officiels. Partageable publiquement via lien ou QR code. Disponible à partir de la version 3."
+    "plan": {
+      "free": "forfait Gratuit",
+      "premium": "forfait Premium",
+      "premiumPlus": "forfait Premium+",
+      "desc": {
+        "free": "5 ateliers loisir · apprentissage QCM",
+        "premium": "10 ateliers loisir · générateur d'examen · échange IA",
+        "premiumPlus": "15 ateliers loisir · tout Premium"
+      },
+      "manage": "gérer mon offre"
     },
-    "friends": {
-      "label": "jardiniers amis",
-      "desc": "Ajoutez des amis via leur tag et suivez leur progression. Disponible en version 2."
+    "settings": {
+      "title": "paramètres",
+      "editAvatar": "modifier l'avatar",
+      "notifications": "notifications",
+      "notificationsHint": "activées",
+      "language": "langue",
+      "languageName": "français",
+      "help": "aide & contact",
+      "signOut": "se déconnecter"
     }
   },
   "dashboard": {
