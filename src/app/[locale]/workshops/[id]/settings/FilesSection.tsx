@@ -1,16 +1,17 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Check, Download, Loader2, Pencil, Trash2, Upload, X } from 'lucide-react';
-import { palette, ink, withAlpha } from '@/lib/theme';
+import { palette, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { ProgressBar } from '@/components/ui/progress-bar';
 import {
   createFileUploadTicket, finalizeWorkshopFileUpload, deleteWorkshopFile, renameWorkshopFile,
   getFileDownloadUrl, type WorkshopFile,
 } from '@/app/actions/workshopFiles';
 import type { UploadTicket } from '@/lib/storage';
-import { FileCategoryIcon, formatFileSize, Row, SmallBtn, SectionCard } from './settingsShared';
+import { FileCategoryIcon, formatFileSize, SectionCard } from './settingsShared';
 
 export default function FilesSection({ workshopId, initialFiles }: { workshopId: string; initialFiles: WorkshopFile[] }) {
   const t = useTranslations('settings');
@@ -23,7 +24,6 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
   const [editingFileName, setEditingFileName] = useState('');
   const [pendingDeleteFile, setPendingDeleteFile] = useState<WorkshopFile | null>(null);
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Téléchargement : on demande au serveur une URL signée (gestionnaire requis),
   // puis on déclenche le téléchargement côté navigateur.
@@ -102,7 +102,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
     e.target.value = '';
   }
 
-  function handleFileDrop(e: React.DragEvent<HTMLDivElement>) {
+  function handleFileDrop(e: React.DragEvent<HTMLLabelElement>) {
     e.preventDefault();
     setFileDragOver(false);
     if (e.dataTransfer.files) handleFiles(e.dataTransfer.files);
@@ -161,57 +161,54 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
           title={t('files.title')}
           description={t('files.desc')}
         >
-          <div
-            onDragOver={(e) => { e.preventDefault(); setFileDragOver(true); }}
+          {/* Zone de dépôt — bordure pointillée `--line-strong`, vire au vert au
+              survol/glisser-déposer (getter réel de la maquette, lignes 1600-1607
+              de App-Culture.dc.html) plutôt qu'à l'ambre de l'ancien habillage. */}
+          <label
+            onDragOver={(e) => { e.preventDefault(); if (uploadProgress === null) setFileDragOver(true); }}
             onDragLeave={() => setFileDragOver(false)}
             onDrop={handleFileDrop}
             style={{
-              border: `1.5px dashed ${fileDragOver ? palette.amber : ink(0.14)}`,
-              borderRadius: 12,
-              background: fileDragOver ? withAlpha(palette.amber, 0.06) : 'transparent',
-              padding: '14px 16px',
-              marginBottom: files.length > 0 ? 8 : 0,
-              transition: 'all 0.12s',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              textAlign: 'center',
+              cursor: uploadProgress !== null ? 'default' : 'pointer',
+              padding: '26px 20px',
+              background: fileDragOver ? withAlpha(palette.green, 0.06) : 'transparent',
+              border: `1.5px dashed ${fileDragOver ? palette.green : palette.lineStrong}`,
+              borderRadius: 16,
+              marginBottom: files.length > 0 ? 16 : 0,
+              transition: 'border-color 160ms, background 160ms',
+              position: 'relative',
             }}
           >
-            <Row label={t('files.addFile')} hint={t('files.addFileHint')} noBorder>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                onChange={handleFileChange}
-                style={{ display: 'none' }}
-              />
-              <SmallBtn tone="dark" onClick={() => fileInputRef.current?.click()} disabled={uploadProgress !== null}>
-                {uploadProgress !== null ? (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> {t('files.uploading', { percent: uploadProgress.percent })}
-                  </span>
-                ) : (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Upload size={13} /> {t('files.addFileBtn')}
-                  </span>
-                )}
-              </SmallBtn>
-            </Row>
-          </div>
+            <input
+              type="file"
+              multiple
+              onChange={handleFileChange}
+              disabled={uploadProgress !== null}
+              style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
+            />
+            <span style={{ width: 44, height: 44, borderRadius: 12, background: withAlpha(palette.green, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.greenBrand, flexShrink: 0 }}>
+              {uploadProgress !== null ? <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} /> : <Upload size={20} strokeWidth={1.75} />}
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: palette.ink }}>
+              {uploadProgress !== null ? t('files.uploading', { percent: uploadProgress.percent }) : t('files.addFile')}
+            </span>
+            <span style={{ fontSize: 12.5, color: palette.inkFaint }}>{t('files.addFileHint')}</span>
+          </label>
 
           {uploadProgress !== null && (
-            <div style={{ padding: '2px 0 8px' }}>
-              <div style={{ fontSize: 11.5, color: palette.inkFaint, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {uploadProgress.name}
-              </div>
-              <div style={{ height: 4, borderRadius: 999, background: ink(0.08), overflow: 'hidden' }}>
-                <div
-                  style={{
-                    height: '100%',
-                    width: `${uploadProgress.percent}%`,
-                    background: palette.amber,
-                    borderRadius: 999,
-                    transition: 'width 0.15s',
-                  }}
-                />
-              </div>
+            <div style={{ padding: '10px 0 8px' }}>
+              <ProgressBar
+                value={uploadProgress.percent}
+                label={uploadProgress.name}
+                showValue
+                size="sm"
+              />
             </div>
           )}
 
@@ -237,11 +234,14 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                       display: 'flex',
                       alignItems: 'center',
                       gap: 12,
-                      padding: '11px 0',
-                      borderBottom: i < arr.length - 1 ? '1px solid rgba(45,42,36,0.06)' : 'none',
+                      minHeight: 48,
+                      padding: '8px 0',
+                      borderBottom: i < arr.length - 1 ? `1px solid ${palette.line}` : 'none',
                     }}
                   >
-                    <FileCategoryIcon category={file.category} />
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: withAlpha(palette.amber, 0.14), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <FileCategoryIcon category={file.category} />
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       {isEditing ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -259,11 +259,13 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                               minWidth: 0,
                               fontSize: 13,
                               color: palette.ink,
-                              border: `1px solid ${withAlpha(palette.amber, 0.40)}`,
-                              borderRadius: 6,
-                              padding: '3px 6px',
-                              background: palette.paper,
+                              border: `1px solid ${palette.lineStrong}`,
+                              borderRadius: 9,
+                              padding: '7px 9px',
+                              background: palette.surfaceInput,
                               outline: 'none',
+                              boxSizing: 'border-box',
+                              minHeight: 32,
                             }}
                           />
                           {extension && (
@@ -272,14 +274,14 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                           <button
                             onClick={() => handleRenameFile(file.id)}
                             title={t('files.saveTitle')}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.greenSoft, display: 'flex', alignItems: 'center', padding: 4, flexShrink: 0 }}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 9, background: withAlpha(palette.green, 0.10), border: `1px solid ${withAlpha(palette.green, 0.30)}`, color: palette.greenBrand, cursor: 'pointer', flexShrink: 0 }}
                           >
                             <Check size={15} />
                           </button>
                           <button
                             onClick={cancelEditingFile}
                             title={t('files.cancelTitle')}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.inkGhost, display: 'flex', alignItems: 'center', padding: 4, flexShrink: 0 }}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 9, background: 'transparent', border: `1px solid ${palette.lineStrong}`, color: palette.inkMuted, cursor: 'pointer', flexShrink: 0 }}
                           >
                             <X size={15} />
                           </button>
@@ -303,54 +305,45 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                       </div>
                     </div>
                     {!isEditing && (
-                      <>
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                         <button
                           onClick={() => handleDownloadFile(file.id)}
                           disabled={downloadingFileId === file.id}
                           title={t('files.downloadTitle')}
                           style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            color: palette.inkGhost,
-                            display: 'flex',
-                            alignItems: 'center',
-                            padding: 4,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: 32, height: 32, borderRadius: 9,
+                            background: 'transparent', border: `1px solid ${palette.lineStrong}`,
+                            color: palette.inkMuted, cursor: 'pointer',
                           }}
                         >
-                          {downloadingFileId === file.id ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+                          {downloadingFileId === file.id ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <Download size={14} strokeWidth={1.75} />}
                         </button>
                         <button
                           onClick={() => startEditingFile(file)}
                           title={t('files.renameTitle')}
                           style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            color: palette.inkGhost,
-                            display: 'flex',
-                            alignItems: 'center',
-                            padding: 4,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: 32, height: 32, borderRadius: 9,
+                            background: 'transparent', border: `1px solid ${palette.lineStrong}`,
+                            color: palette.inkMuted, cursor: 'pointer',
                           }}
                         >
-                          <Pencil size={15} />
+                          <Pencil size={14} strokeWidth={1.75} />
                         </button>
                         <button
                           onClick={() => setPendingDeleteFile(file)}
                           title={t('files.deleteTitle')}
                           style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            color: palette.inkGhost,
-                            display: 'flex',
-                            alignItems: 'center',
-                            padding: 4,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: 32, height: 32, borderRadius: 9,
+                            background: withAlpha(palette.danger, 0.10), border: `1px solid ${withAlpha(palette.danger, 0.30)}`,
+                            color: palette.danger, cursor: 'pointer',
                           }}
                         >
-                          <Trash2 size={15} />
+                          <Trash2 size={14} strokeWidth={1.75} />
                         </button>
-                      </>
+                      </div>
                     )}
                   </div>
                   );
