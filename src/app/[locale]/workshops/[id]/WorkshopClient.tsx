@@ -1,20 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useTranslations } from 'next-intl';
-import { QrCode, Settings, LogOut, ChevronDown } from 'lucide-react';
-import ShareQRModal from '@/components/ShareQRModal';
-import ConfirmDialog from '@/components/ConfirmDialog';
+import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { ChevronDown } from 'lucide-react';
 import WorkshopSwitcher from '@/components/WorkshopSwitcher';
-import { leaveWorkshop } from '@/app/actions/workshops';
+import WorkshopActionsMenu from '@/components/WorkshopActionsMenu';
 import ProgrammeTab from './tabs/ProgrammeTab';
 import type { Chapter } from '@/app/actions/workshopChapters';
 import ExamenTab from './tabs/ExamenTab';
 import AnalyseTab from './tabs/AnalyseTab';
 import CoursTab from './tabs/CoursTab';
-import { palette, ink, withAlpha } from '@/lib/theme';
+import { palette } from '@/lib/theme';
 
 type Props = {
   locale: string;
@@ -30,23 +26,7 @@ type Props = {
 
 type TabId = 'programme' | 'examen' | 'analyse' | 'cours';
 
-function Chip({ children, tone = 'default' }: { children: React.ReactNode; tone?: 'default' | 'amber' | 'sage' | 'dim' }) {
-  const styles = {
-    default: { bg: withAlpha(palette.paper, 0.7), border: ink(0.08), color: palette.ink },
-    amber: { bg: withAlpha(palette.amberGlow, 0.20), border: withAlpha(palette.amber, 0.30), color: '#7a4d20' },
-    sage: { bg: withAlpha(palette.greenSoft, 0.18), border: withAlpha(palette.green, 0.30), color: '#3f5630' },
-    dim: { bg: ink(0.06), border: ink(0.10), color: palette.inkMuted },
-  }[tone];
-  return (
-    <span style={{ fontSize: 11, fontWeight: 500, padding: '4px 10px', borderRadius: 999, background: styles.bg, border: `1px solid ${styles.border}`, color: styles.color, letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
-      {children}
-    </span>
-  );
-}
-
-export default function WorkshopClient({ locale, workshopId, workshopName, currentUserRole, isPremium, members, chapters }: Props) {
-  const t = useTranslations('workshop');
-  const router = useRouter();
+export default function WorkshopClient({ workshopId, workshopName, currentUserRole, chapters }: Props) {
   const searchParams = useSearchParams();
   // Propriétaire ou gestionnaire : accès aux onglets de gestion + paramètres.
   const canManage = currentUserRole === 'owner' || currentUserRole === 'manager';
@@ -54,30 +34,7 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
   // (DashboardHeader, T12) — cet onglet ne fait plus que lire l'URL (?tab=).
   const activeTab = (searchParams.get('tab') as TabId | null) ?? 'programme';
 
-  const [shareOpen, setShareOpen] = useState(false);
-  const [joinUrl, setJoinUrl] = useState('');
   const [mobileSwitcherOpen, setMobileSwitcherOpen] = useState(false);
-
-  // Quitter l'atelier — jamais pour le propriétaire (doit d'abord transférer/supprimer).
-  const [leaveOpen, setLeaveOpen] = useState(false);
-  const [leaving, setLeaving] = useState(false);
-  const [leaveError, setLeaveError] = useState('');
-
-  async function handleLeave() {
-    setLeaving(true);
-    setLeaveError('');
-    const result = await leaveWorkshop(workshopId);
-    if (result.success) {
-      router.push(`/${locale}/dashboard`);
-      return;
-    }
-    setLeaving(false);
-    setLeaveError(result.error ?? t('leaveConfirm.error'));
-  }
-
-  useEffect(() => {
-    setJoinUrl(`${window.location.origin}/${locale}/dashboard?preview=${workshopId}`);
-  }, [locale, workshopId]);
 
   return (
     <div style={{ fontFamily: 'var(--font-sans)', color: palette.ink, minHeight: 'calc(100vh - 60px)', background: palette.cream, display: 'flex', flexDirection: 'column' }}>
@@ -99,66 +56,13 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
           </button>
           <WorkshopSwitcher open={mobileSwitcherOpen} onClose={() => setMobileSwitcherOpen(false)} currentWorkshopId={workshopId} />
         </div>
-        {canManage && (
-          <Link
-            href={`/${locale}/workshops/${workshopId}/settings`}
-            className="flex size-[30px] flex-none items-center justify-center rounded-full border border-[var(--line)] text-[var(--ink-body)]"
-          >
-            <Settings size={15} strokeWidth={1.75} />
-          </Link>
-        )}
+        <WorkshopActionsMenu workshopId={workshopId} workshopName={workshopName} role={currentUserRole} size={30} />
       </div>
 
-      {/* Chrome hérité (nom + chips + actions) — le nom vit désormais aussi
-          dans la barre du haut globale (T12) ET dans l'en-tête propre de
-          Parcours (T18) ; sur cet onglet on ne garde donc que les actions
-          (partage/réglages/quitter), pas encore relogées ailleurs. */}
-      <div style={{ paddingTop: 16, flexShrink: 0 }}>
-        <div style={{ padding: '14px 24px 0' }}>
-          {activeTab !== 'programme' && (
-            <div style={{ fontSize: 11, color: palette.inkSoft, marginBottom: 10 }}>
-              <Link href={`/${locale}/dashboard`} style={{ color: palette.inkSoft, textDecoration: 'none' }}>{t('breadcrumbGarden')}</Link>
-              <span style={{ margin: '0 6px' }}>›</span>
-              <span style={{ color: palette.ink }}>{workshopName.toLowerCase()}</span>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: activeTab === 'programme' ? 'flex-end' : 'space-between', gap: 16, flexWrap: 'wrap' }}>
-            {activeTab !== 'programme' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 500, color: palette.ink, letterSpacing: '-0.015em' }}>{workshopName}</h1>
-                {isPremium && <Chip tone="amber">{t('premiumBadge')}</Chip>}
-                <Chip tone="dim">{t(`role.${currentUserRole}`)}</Chip>
-                <span style={{ fontSize: 12, color: palette.inkSoft }}>
-                  {t('memberCount', { count: members.length, plural: members.length > 1 ? 's' : '' })}
-                </span>
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 8 }}>
-              {/* Partage/QR réservé aux gestionnaires : c'est une invitation à
-                  rejoindre l'atelier, pas une action de candidat. */}
-              {canManage && (
-                <button onClick={() => setShareOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  <QrCode size={13} />
-                  {t('shareBtn')}
-                </button>
-              )}
-              {canManage && (
-                <Link href={`/${locale}/workshops/${workshopId}/settings`} style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Settings size={13} color="#5a564c" strokeWidth={1.75} />
-                  {t('settingsLink')}
-                </Link>
-              )}
-              {currentUserRole !== 'owner' && (
-                <button onClick={() => setLeaveOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.danger, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  <LogOut size={13} strokeWidth={1.75} />
-                  {t('leaveBtn')}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Aucun chrome au-dessus du contenu (T43) : la maquette ne répète ni le
+          nom de l'atelier ni ses actions ici — le nom vit dans la barre du haut
+          (T12) et dans le bandeau téléphone ci-dessus, les actions dans le menu
+          de l'engrenage (WorkshopActionsMenu). */}
 
       {/* Tab content — fills remaining height */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -170,26 +74,6 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
         {canManage && activeTab === 'cours' && <CoursTab />}
       </div>
 
-      {/* Share / QR modal */}
-      <ShareQRModal open={canManage && shareOpen} onClose={() => setShareOpen(false)} title={workshopName} url={joinUrl} />
-
-      {/* Quitter l'atelier — confirmation */}
-      {leaveOpen && (
-        <ConfirmDialog
-          width={420}
-          title={t('leaveConfirm.title')}
-          description={
-            <>
-              {t('leaveConfirm.desc', { name: workshopName })}
-              {leaveError && <div style={{ color: palette.danger, marginTop: 8 }}>{leaveError}</div>}
-            </>
-          }
-          confirmLabel={leaving ? '…' : t('leaveConfirm.confirm')}
-          cancelLabel={t('leaveConfirm.cancel')}
-          onCancel={() => { if (!leaving) setLeaveOpen(false); }}
-          onConfirm={handleLeave}
-        />
-      )}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { useUser, SignOutButton } from '@clerk/nextjs';
-import { Sprout, ChevronDown, Settings, UserCircle, LogOut, Crown, Route, FileText, BookOpen, User } from 'lucide-react';
+import { Sprout, ChevronDown, UserCircle, LogOut, Crown, Route, FileText, BookOpen, User } from 'lucide-react';
 import AvatarComposer from '@/components/avatar/AvatarComposer';
 import { loadAvatarConfig, type AvatarConfig } from '@/components/avatar/avatarConfig';
 import { markIntentionalSignOut } from '@/lib/signOutIntent';
@@ -13,6 +13,7 @@ import { setUserLocale } from '@/app/actions/profile';
 import { getWorkshop } from '@/app/actions/workshops';
 import { Badge } from '@/components/ui/badge';
 import WorkshopSwitcher from '@/components/WorkshopSwitcher';
+import WorkshopActionsMenu from '@/components/WorkshopActionsMenu';
 import NotificationBell from '@/components/NotificationBell';
 import DropletCounter from '@/components/DropletCounter';
 
@@ -192,14 +193,8 @@ export default function DashboardHeader() {
       </nav>
 
       <div className="flex flex-1 items-center justify-end gap-3">
-        {workshopId && (
-          <Link
-            href={`/${locale}/workshops/${workshopId}/settings`}
-            title={t('workshopSettings')}
-            className="flex size-[34px] items-center justify-center rounded-full border border-[var(--line)] text-[var(--ink-body)] outline-none transition-colors hover:text-[var(--green-strong)] focus-visible:shadow-[var(--shadow-focus)]"
-          >
-            <Settings size={16} strokeWidth={1.75} />
-          </Link>
+        {workshopId && workshop && (
+          <WorkshopActionsMenu workshopId={workshopId} workshopName={workshop.name} role={workshop.role} />
         )}
 
         {HAS_DROPLETS && <DropletCounter count={0} />}
