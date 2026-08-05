@@ -1,7 +1,7 @@
 # Chantier : refonte UI de l'app connectée sur le nouveau design system
 
 **Branche :** feat/refonte-ui-design-system
-**PR :** (à renseigner)
+**PR :** https://github.com/alexisbrl/Culture/pull/31
 **Cadré le :** 2026-08-05
 
 ## Objectif
