@@ -26,6 +26,12 @@
     "newWorkshop": "new workshop",
     "allWorkshops": "all my workshops"
   },
+  "notifications": {
+    "title": "notifications",
+    "join": "join",
+    "ignore": "ignore",
+    "cancel": "undo"
+  },
   "hero": {
     "badge": "Beta launching · Join the pioneers",
     "title": "Transform your training into",

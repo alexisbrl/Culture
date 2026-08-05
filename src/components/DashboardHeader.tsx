@@ -13,8 +13,16 @@ import { setUserLocale } from '@/app/actions/profile';
 import { getWorkshop } from '@/app/actions/workshops';
 import { Badge } from '@/components/ui/badge';
 import WorkshopSwitcher from '@/components/WorkshopSwitcher';
+import NotificationBell from '@/components/NotificationBell';
+import DropletCounter from '@/components/DropletCounter';
 
 type WorkshopHeaderInfo = { name: string; role: 'owner' | 'manager' | 'member' };
+
+// Aucune donnée de notification ni de gouttes n'existe encore côté serveur —
+// composants dessinés (T15) mais non montés tant que ces fonctions n'existent
+// pas. Voir docs/chantiers/2026-08-05-refonte-ui-design-system.md.
+const HAS_NOTIFICATIONS = false;
+const HAS_DROPLETS = false;
 
 export default function DashboardHeader() {
   const t = useTranslations('nav');
@@ -193,7 +201,8 @@ export default function DashboardHeader() {
           </Link>
         )}
 
-        {/* Cloche de notifications et compteur de gouttes : T15. */}
+        {HAS_DROPLETS && <DropletCounter count={0} />}
+        {HAS_NOTIFICATIONS && <NotificationBell />}
 
         <div className="relative">
           <button

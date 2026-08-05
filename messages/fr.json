@@ -26,6 +26,12 @@
     "newWorkshop": "nouvel atelier",
     "allWorkshops": "tous mes ateliers"
   },
+  "notifications": {
+    "title": "notifications",
+    "join": "rejoindre",
+    "ignore": "ignorer",
+    "cancel": "annuler"
+  },
   "hero": {
     "badge": "Bêta en cours · Rejoignez les pionniers",
     "title": "Transformez vos formations en",
