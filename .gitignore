@@ -47,6 +47,14 @@ next-env.d.ts
 /_handoff/
 /culture-design-system/
 
+# Maquette Claude Design — docs/design/ est versionné (le prototype doit être
+# lisible par un agent qui clone à froid), SAUF les images sources du projet :
+# 18 Mo de croquis et d'inspirations que le prototype ne référence jamais.
+# Seul le cahier de refonte y est conservé.
+/docs/design/uploads/*
+!/docs/design/uploads/refonte-ui-culture.md
+/docs/design/.thumbnail
+
 # Claude Code local (worktrees, settings locaux)
 # .claude/rules/ et .claude/skills/ restent versionnés (conventions d'équipe, outillage de chantier)
 /.claude/*

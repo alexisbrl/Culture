@@ -7,11 +7,12 @@
 ## Objectif
 
 Mettre en ligne le design produit avec Claude Design : porter toute l'**application
-connectée** (dashboard, parcours, exercice, générateur d'examen, profil, réglages
-d'atelier) sur le nouveau design system — palette crème/vert/tan, typographie
+connectée** (parcours, exercice, générateur d'examen, profil, réglages d'atelier,
+mes ateliers) sur le nouveau design system — palette crème/vert/tan, typographie
 Hanken Grotesk, échelle d'espacement 4 px, deux rayons, deux élévations — et sur
-la nouvelle navigation (barre du haut sur ordinateur, barre d'onglets en bas sur
-téléphone, mode « dans l'atelier »).
+la nouvelle navigation : barre du haut sur ordinateur, barre d'onglets en bas sur
+téléphone, et **entrée directe dans l'atelier courant** (variante « V2 · sans
+accueil »), le changement d'atelier passant par un sélecteur.
 
 C'est un chantier **d'interface uniquement**. Il ne change ni le modèle de données,
 ni les règles métier, ni le périmètre fonctionnel — à une exception près, décidée
@@ -28,21 +29,25 @@ connectée.
 
 ## Sources de vérité
 
-- **La maquette** : `docs/design/App-Culture.dc.html` — prototype des 9 écrans, tous
-  les styles inline. Chaque écran se repère par `data-screen-label="…"`.
+- **La maquette** : `docs/design/App-Culture.dc.html` — prototype complet des 9
+  écrans (3 750 lignes), tous les styles inline. Chaque écran se repère par
+  `data-screen-label="…"` ; les valeurs `{{…}}` et le contenu des `<sc-for>` sont
+  calculés dans le `<script>` final, à partir de la ligne 1934.
 - **Le mode d'emploi de la maquette** : `docs/design/README.md`. **À lire avant la
-  première tâche.** Il explique le format `.dc.html`, ce qui est tronqué dans le
-  fichier, et surtout **quelles variantes sont retenues** (plusieurs versions d'un
-  même écran cohabitent dans le fichier — se tromper de variante, c'est refaire
-  l'écran).
-- **Les tokens** : `docs/design/tokens/*.css` — valeurs exactes des couleurs,
-  typographie, espacements, rayons, ombres, motion.
-- **Les composants du design system** : `docs/design/_ds_bundle.js` — styles exacts
-  de Button, Card, Input, Pill, Badge, Tag, Avatar, ProgressBar, Tabs, StatCard,
-  Checkbox, Radio, SegmentedControl.
-- **Le projet Claude Design** (si un détail manque) : `DesignSync`, `method:
-  get_file`, `projectId: 5a4a1789-7b99-42ff-bcc8-8fd4d723c700`. Le dossier
-  `screenshots/` du projet contient des captures des écrans.
+  première tâche.** Il explique le format `.dc.html`, donne la table des lignes par
+  écran, et surtout **quelles variantes sont retenues** — plusieurs versions d'un
+  même écran cohabitent dans le fichier, et pour le générateur d'examen l'indice
+  `hint-placeholder-val` pointe vers une variante abandonnée. Se tromper de
+  variante, c'est refaire l'écran.
+- **Les tokens** : `docs/design/_ds/culture-design-system-9fd2c08f-6694-4ff2-a9da-5c9b435463bb/tokens/*.css`
+  — valeurs exactes des couleurs, typographie, espacements, rayons, ombres, motion.
+- **Les composants du design system** : `docs/design/_ds/culture-design-system-9fd2c08f-6694-4ff2-a9da-5c9b435463bb/_ds_bundle.js`
+  — styles exacts de Button, Card, Input, Pill, Badge, Tag, Avatar, ProgressBar,
+  Tabs, StatCard, Checkbox, Radio, SegmentedControl.
+- **La doctrine du design system** : `docs/design/_ds/culture-design-system-9fd2c08f-6694-4ff2-a9da-5c9b435463bb/readme.md`
+  — voix, casse, fondations visuelles, iconographie.
+- **Le cahier de refonte** : `docs/design/uploads/refonte-ui-culture.md` (12/07/2026).
+- **Les captures d'itérations** : `docs/design/screenshots/`.
 
 ## Décisions arrêtées avec Alexis
 
@@ -60,7 +65,7 @@ connectée.
   la maquette (qui écrit `font-family:var(--font-serif)` à 12 endroits) rende juste
   sans qu'on ait à traquer chaque occurrence.
 - **Typographie : Hanken Grotesk.** Inter Tight, Caveat et l'utilitaire
-  `.font-script` sont retirés. `CLAUDE.md` §3 est à mettre à jour (T44).
+  `.font-script` sont retirés. `CLAUDE.md` §3 est à mettre à jour (T42).
 - **Lexique : « brique de connaissance » → « notion »**, dans les textes visibles
   **et** dans les identifiants de code. **La base de données n'est pas renommée** :
   les tables restent `workshop_bricks`, `brick_mastery`, `exam_question_bricks` et
@@ -81,10 +86,21 @@ connectée.
   Membres), la **grille de paliers tarifaires** (Réglages › Premium). Ils doivent
   être visiblement non interactifs (`disabled`, `pointer-events: none`, `aria-disabled`),
   jamais des faux contrôles qui semblent fonctionner.
-- **Le Dashboard conserve ce que la maquette ne montre pas.** La maquette n'affiche
-  que salutation + carte « reprendre » + tiroir des ateliers. La recherche
-  d'atelier, la modale Preview et la corbeille **restent**, sous le cadre maquetté,
-  simplement repeintes.
+- **Pas de page d'accueil — l'app ouvre dans l'atelier.** C'est ce que fait
+  réellement la variante retenue « V2 · sans accueil » : le prototype force
+  `page = 'parcours'` dès que la page demandée est `dashboard` (ligne 2202) et
+  maintient `inAtelier = true` en permanence. L'écran Dashboard maquetté (lignes
+  179–265 : salutation, carte « reprendre », tiroir des ateliers) **n'est jamais
+  rendu dans ce mode** — il appartient à la variante V1, écartée. On ne l'implémente
+  donc pas.
+- **Le changement d'atelier passe par le sélecteur.** Panneau « CHANGER D'ATELIER »
+  (ligne 1859), ouvert par le chevron à côté du nom de l'atelier : liste des ateliers
+  + « nouvel atelier ». Il remplace le tiroir du Dashboard.
+- **`/dashboard` devient une page secondaire « mes ateliers ».** Elle n'est plus la
+  cible après connexion, mais elle survit et conserve ce que la maquette ne montre
+  nulle part : recherche d'atelier par tag, modale Preview, corbeille. Elle est
+  atteignable depuis le sélecteur d'atelier et sert aussi de repli pour un
+  utilisateur qui n'a encore aucun atelier.
 - **Analyse et Générateur de cours** deviennent des états vides « V2 » conformes à
   la maquette. Le contenu actuel d'`AnalyseTab.tsx` est retiré.
 - **Les écrans non maquettés de l'app connectée** (création d'atelier, éditeur
@@ -95,6 +111,8 @@ connectée.
 ## Hors périmètre
 
 - Toute la vitrine déconnectée : `src/app/[locale]/{page.tsx,pricing,about,contact,legal,sign-in,sign-up}`.
+  **Seule exception : T16**, qui touche à la redirection de `page.tsx` pour l'utilisateur
+  connecté — sans modifier le rendu de la landing pour un visiteur déconnecté.
 - Toute évolution fonctionnelle : nouvelles tables, nouvelles server actions,
   nouvelles règles métier, nouveaux droits.
 - Le renommage des tables et colonnes Supabase (voir Décisions).
@@ -223,7 +241,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 ### Lot 1 — Socle du design system
 
 - [ ] **T3 — Tokens de couleur**
-  - Porter `docs/design/tokens/colors.css` (+ `_compat.css`) dans
+  - Porter `tokens/colors.css` (+ `_compat.css`) du design system dans
     `src/app/globals.css` (bloc `@theme inline` et `:root`) et dans
     `src/lib/theme.ts` (`palette`). Garder les **anciens noms exportés** de
     `palette` comme alias vers les nouvelles valeurs (`ink` → `--ink`, `cream` →
@@ -250,7 +268,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
   - Dépend de : T3
 
 - [ ] **T5 — Tokens d'espacement, rayons, ombres, motion**
-  - Porter `docs/design/tokens/spacing.css` : grille 4 px, deux rayons (12 / 20) +
+  - Porter `tokens/spacing.css` du design system : grille 4 px, deux rayons (12 / 20) +
     pill, deux élévations + `--shadow-inset` + `--shadow-focus`, deux courbes et
     trois durées. Mettre à jour `radius` et `shadow` dans `src/lib/theme.ts`.
     Ajouter le style de focus global (`:focus-visible` → `--shadow-focus`).
@@ -260,7 +278,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
   - Dépend de : T4
 
 - [ ] **T6 — Composant Button**
-  - Refondre `src/components/ui/button.tsx` d'après `docs/design/_ds_bundle.js`
+  - Refondre `src/components/ui/button.tsx` d'après `_ds_bundle.js` (chemin complet
+    dans « Sources de vérité »)
     (composant `Button`) : variantes **primaire** (vert plein), **secondaire** (tan
     plein), **ink** (charbon plein), **ghost** (surface crème + filet), **danger** ;
     trois tailles ; option flèche finale ; états hover (vert plus sombre), press
@@ -323,27 +342,35 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 
 ### Lot 2 — Coquille de navigation
 
-- [ ] **T12 — Barre du haut ordinateur (hors atelier)**
+- [ ] **T12 — Barre du haut ordinateur**
   - Refondre l'en-tête de l'app connectée d'après les lignes 57–139 de la maquette :
-    hauteur 60 px, mot-marque « Culture » + logo germe à gauche, onglets centrés
-    `jardin` / `profil`, à droite cloche + gouttes + avatar. **Variante « V2 · sans
-    accueil » : pas de bouton « accueil ».** Le logo mène au dashboard.
-  - Critère d'acceptation : à ≥ 768 px la barre est rendue avec ces éléments, aucune
-    couleur hors tokens, icônes Lucide ; `npm run build` et `npm run lint` passent.
-  - Fichiers : `src/components/DashboardHeader.tsx`, `src/app/[locale]/layout.tsx`
+    hauteur 60 px ; à gauche le logo germe + mot-marque « Culture », puis le nom de
+    l'atelier courant suivi d'un chevron (ouvre le sélecteur, T13) ; au centre
+    l'onglet `jardin`, le groupe **encadré** `parcours` · `examens` · `cours` (badge
+    `V2`, désactivé) et l'onglet `profil` ; à droite l'accès aux réglages de
+    l'atelier, la cloche, les gouttes et l'avatar.
+  - **Pas d'onglet « accueil »** : c'est la variante « V2 · sans accueil ». Le groupe
+    d'onglets suit le style « encadré » (conteneur à filet, rayon pill, onglet actif
+    sur surface levée).
+  - Critère d'acceptation : à ≥ 768 px la barre est rendue avec ces éléments dans cet
+    ordre, l'onglet actif reflète la page courante, `cours` est désactivé avec son
+    badge, aucune couleur hors tokens, icônes Lucide ; `npm run build` et
+    `npm run lint` passent.
+  - Fichiers : `src/components/DashboardHeader.tsx`, `src/app/[locale]/layout.tsx`,
+    `src/app/[locale]/workshops/[id]/WorkshopClient.tsx`
   - Dépend de : T11
 
-- [ ] **T13 — Mode « dans l'atelier »**
-  - Quand l'utilisateur est dans un atelier, la barre du haut affiche en plus : le
-    nom de l'atelier à côté du mot-marque, le groupe d'onglets **encadré**
-    (`parcours` · `examens` · `cours` avec badge `V2`) au centre, et l'accès aux
-    réglages à droite. Le groupe suit le style « encadré » (variante retenue) :
-    conteneur à filet et rayon pill, onglet actif sur surface levée.
-  - Critère d'acceptation : le groupe encadré n'apparaît que dans un atelier, l'onglet
-    actif reflète l'onglet courant, `cours` est désactivé avec badge `V2` ;
-    `npm run build` et `npm run lint` passent.
-  - Fichiers : `src/components/DashboardHeader.tsx`,
-    `src/app/[locale]/workshops/[id]/WorkshopClient.tsx`
+- [ ] **T13 — Sélecteur d'atelier**
+  - Panneau « CHANGER D'ATELIER » (ligne 1859), ouvert par le chevron de la barre du
+    haut et par le bandeau d'atelier sur téléphone : eyebrow, une ligne par atelier
+    (icône feuille, nom, méta, pourcentage), puis une entrée « nouvel atelier ».
+    **Il remplace le tiroir du Dashboard**, qui n'existe pas dans la variante
+    retenue. Ajouter en bas une entrée vers `/dashboard` (« tous mes ateliers ») —
+    c'est le seul chemin vers la recherche, la Preview et la corbeille (T17).
+  - Critère d'acceptation : le panneau liste les ateliers réels avec leur pourcentage
+    réel, « nouvel atelier » mène à `/workshops/new`, l'entrée « tous mes ateliers »
+    mène à `/dashboard` ; `npm run build` et `npm run lint` passent.
+  - Fichiers : `src/components/WorkshopSwitcher.tsx`, `src/components/DashboardHeader.tsx`
   - Dépend de : T12
 
 - [ ] **T14 — Barre d'onglets téléphone et bandeau d'atelier**
@@ -370,77 +397,67 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     `src/components/DashboardHeader.tsx`
   - Dépend de : T14
 
-### Lot 3 — Dashboard
+### Lot 3 — Entrée dans l'app et « mes ateliers »
 
-- [ ] **T16 — En-tête de salutation**
-  - Salutation personnalisée (« bonsoir alexis. » — en **sans**, pas en sérif) et
-    sous-titre, d'après les lignes 179–208 de la maquette. Le moment de la journée
-    est calculé côté client. Chaînes dans `fr.json` et `en.json`.
-  - Critère d'acceptation : la salutation varie selon l'heure, les deux chaînes
-    existent dans les deux fichiers de messages ; `npm run build` et `npm run lint`
-    passent.
-  - Fichiers : `src/app/[locale]/dashboard/DashboardClient.tsx`, `messages/{fr,en}.json`
+- [ ] **T16 — Entrée directe dans l'atelier courant**
+  - Après connexion, l'app n'ouvre plus sur `/dashboard` mais sur le **parcours du
+    dernier atelier travaillé**. Le « dernier atelier travaillé » n'existe pas en
+    base : prendre le premier de la liste des ateliers de l'utilisateur triée par
+    `updated_at` décroissant, telle qu'elle est déjà chargée aujourd'hui. **Si
+    l'utilisateur n'a aucun atelier, rediriger vers `/dashboard`** (qui porte alors
+    l'état vide et la création d'atelier).
+  - Ne modifier que les redirections et le routage côté page ; aucune server action,
+    aucune requête nouvelle.
+  - Critère d'acceptation : un utilisateur avec au moins un atelier arrive sur
+    `/workshops/{id}` ; un utilisateur sans atelier arrive sur `/dashboard` ;
+    `npm run build` et `npm run lint` passent.
+  - Fichiers : `src/app/[locale]/page.tsx`, `src/app/[locale]/dashboard/page.tsx`
   - Dépend de : T15
 
-- [ ] **T17 — Carte « reprendre »**
-  - Carte héros du dashboard (lignes 209–228) : illustration Lucide, nom de
-    l'atelier, méta, barre de progression + pourcentage, bouton « reprendre » à
-    flèche. **Données réelles** : le dernier atelier travaillé n'existe pas en base —
-    utiliser le premier atelier de la liste triée par `updated_at` décroissant déjà
-    disponible côté client. **Si l'utilisateur n'a aucun atelier, la carte est
-    remplacée par l'état vide** (`EmptyState` + « créer un atelier »).
-  - Critère d'acceptation : la carte s'affiche avec des données réelles, l'état vide
-    s'affiche à zéro atelier, aucune valeur factice codée en dur ; `npm run build` et
-    `npm run lint` passent.
-  - Fichiers : `src/app/[locale]/dashboard/DashboardClient.tsx`, `messages/{fr,en}.json`
+- [ ] **T17 — `/dashboard` repeinte en page « mes ateliers »**
+  - `/dashboard` devient une page secondaire, atteignable depuis le sélecteur
+    d'atelier (T13). Elle **conserve intégralement** ce que la maquette ne montre
+    nulle part — liste des ateliers, recherche par tag, modale Preview (couverture,
+    nom, description, propriétaire, nombre de membres, bouton rejoindre/entrer),
+    corbeille — portée sur les tokens et les nouveaux composants. Mise en page
+    inchangée, habillage refait. Ajouter l'état vide « aucun atelier » avec l'action
+    « créer un atelier ».
+  - Critère d'acceptation : recherche par tag, ouverture de la Preview via
+    `?preview=`, restauration depuis la corbeille et création d'atelier fonctionnent
+    comme avant ; l'état vide s'affiche à zéro atelier ; aucun hex en dur ne subsiste
+    dans le fichier ; `npm run build` et `npm run lint` passent.
+  - Fichiers : `src/app/[locale]/dashboard/DashboardClient.tsx`,
+    `src/components/ShareQRModal.tsx`, `messages/{fr,en}.json`
   - Dépend de : T16
-
-- [ ] **T18 — Tiroir « tous mes ateliers »**
-  - Poignée en bas de page qui déploie un panneau par-dessus le contenu (lignes
-    229–265) : entrée « nouvel atelier » puis une ligne par atelier (icône feuille,
-    nom, méta, pourcentage, chevron). Poignée en haut quand le tiroir est ouvert.
-  - Critère d'acceptation : le tiroir s'ouvre et se ferme, liste les ateliers réels
-    avec leur pourcentage réel, et l'entrée « nouvel atelier » mène à
-    `/workshops/new` ; `npm run build` et `npm run lint` passent.
-  - Fichiers : `src/app/[locale]/dashboard/DashboardClient.tsx`, `messages/{fr,en}.json`
-  - Dépend de : T17
-
-- [ ] **T19 — Recherche, Preview et corbeille repeintes**
-  - La partie du dashboard **absente de la maquette** est conservée et portée sur les
-    tokens et les nouveaux composants : recherche d'atelier par tag, modale Preview
-    (couverture, nom, description, propriétaire, nombre de membres, bouton
-    rejoindre/entrer), corbeille. Mise en page inchangée, habillage refait.
-  - Critère d'acceptation : les trois fonctionnalités marchent comme avant (recherche
-    par tag, ouverture de la Preview via `?preview=`, restauration depuis la
-    corbeille), aucun hex en dur ne subsiste dans le fichier ; `npm run build` et
-    `npm run lint` passent.
-  - Fichiers : `src/app/[locale]/dashboard/DashboardClient.tsx`, `src/components/ShareQRModal.tsx`
-  - Dépend de : T18
 
 ### Lot 4 — Parcours
 
-- [ ] **T20 — En-tête d'atelier du parcours**
-  - Lignes 412–433 : nom de l'atelier, pourcentage, ligne « N notions acquises sur
-    M », et bouton « liste des questions du parcours » (gestionnaires uniquement).
-    La ligne des notions n'est affichée que si le compte est disponible.
+- [ ] **T18 — En-tête d'atelier du parcours**
+  - Lignes 412–433 : nom de l'atelier, pourcentage, et bouton « liste des questions
+    du parcours » (gestionnaires uniquement). **La ligne « N notions acquises sur M »
+    n'est pas affichée** : le getter `showBriquesLine` (ligne 2793) vaut `false` dès
+    lors que la vue parcours est `chapitres`, ce qui est le cas retenu.
   - Critère d'acceptation : l'en-tête affiche les valeurs réelles de l'atelier, le
-    bouton n'apparaît que pour `manager`/`owner` ; `npm run build` et `npm run lint`
-    passent.
+    bouton n'apparaît que pour `manager`/`owner`, aucune ligne de compte de notions
+    n'est rendue ; `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/tabs/ProgrammeTab.tsx`, `messages/{fr,en}.json`
-  - Dépend de : T19
+  - Dépend de : T17
 
-- [ ] **T21 — Vue « serre » : étagères de pots**
-  - Variante retenue : `vueSerre` (lignes 434–465). Un rayonnage par chapitre, un pot
-    par chapitre, avec nom, statut et bouton « continuer ». Les variantes
-    `vueParcelle` et `vueChapitres` du fichier sont **ignorées**. Le nombre de pots
-    suit le nombre de chapitres réels ; zéro chapitre → état vide.
-  - Critère d'acceptation : un pot par chapitre réel, le bouton mène à
-    `/workshops/{id}/exercise/{chapterId}`, état vide à zéro chapitre ;
-    `npm run build` et `npm run lint` passent.
+- [ ] **T19 — Vue « chapitres » : chapitre en cours en héros + liste**
+  - Variante retenue : **`vueChapitres`** (lignes 490–529). Le prototype fige
+    `parcoursPref = 'chapitres (liste + progression)'` (ligne 2203) — c'est la vue
+    réellement rendue. Un bloc héros « CHAPITRE EN COURS » avec le nom du chapitre et
+    un bouton « lancer un exercice », puis un eyebrow « TOUS LES CHAPITRES » et la
+    liste des autres chapitres avec leur progression. Les variantes `vueSerre`
+    (434–465) et `vueParcelle` (466–489) sont **ignorées**. La liste suit les
+    chapitres réels ; zéro chapitre → état vide.
+  - Critère d'acceptation : le chapitre en cours est en héros et les autres en liste,
+    le bouton mène à `/workshops/{id}/exercise/{chapterId}`, état vide à zéro
+    chapitre ; `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/tabs/ProgrammeTab.tsx`, `messages/{fr,en}.json`
-  - Dépend de : T20
+  - Dépend de : T18
 
-- [ ] **T22 — Vue « questions du parcours »**
+- [ ] **T20 — Vue « questions du parcours »**
   - Porter la vue de gestion des questions de parcours sur les nouveaux composants et
     le mode dense : lignes alignées en colonnes, sélecteur de chapitre par ligne
     (soulignement rouge si aucun chapitre), 3 icônes d'action maximum.
@@ -448,19 +465,19 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     (enregistrement immédiat), aucun hex en dur ; `npm run build` et `npm run lint`
     passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/tabs/programme/ParcoursQuestions.tsx`
-  - Dépend de : T21
+  - Dépend de : T19
 
 ### Lot 5 — Exercice
 
-- [ ] **T23 — Coquille plein écran et énoncé**
+- [ ] **T21 — Coquille plein écran et énoncé**
   - Lignes 530–620 : écran d'exercice plein cadre, en-tête avec progression et
     sortie, énoncé sur surface levée. La coquille masque la barre du haut/du bas.
   - Critère d'acceptation : l'écran s'affiche en plein cadre sur les deux tailles,
     l'énoncé réel est rendu ; `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/exercise/[chapterId]/ExerciseClient.tsx`
-  - Dépend de : T22
+  - Dépend de : T20
 
-- [ ] **T24 — Zone de réponse et correction**
+- [ ] **T22 — Zone de réponse et correction**
   - Choix cliquables pour QCS/QCM avec états sélectionné / bon / mauvais ; saisie
     libre pour les autres types. Bloc de correction après validation, puis bouton
     « question suivante ». **Ne rien changer au contrat serveur** : le client ne
@@ -469,69 +486,77 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     avant, les autres types affichent la réponse attendue sans verdict ;
     `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/exercise/[chapterId]/ExerciseClient.tsx`
-  - Dépend de : T23
+  - Dépend de : T21
 
-- [ ] **T25 — Écran de fin d'exercice**
+- [ ] **T23 — Écran de fin d'exercice**
   - Ligne 676 : écran « belle récolte. » (en **sans**), score de la session, bouton
     de retour au parcours.
   - Critère d'acceptation : l'écran s'affiche à la fin des questions du chapitre avec
     le score réel ; `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/exercise/[chapterId]/ExerciseClient.tsx`,
     `messages/{fr,en}.json`
-  - Dépend de : T24
+  - Dépend de : T22
 
 ### Lot 6 — Profil
 
-- [ ] **T26 — Carte d'identité**
+- [ ] **T24 — Carte d'identité**
   - Lignes 1325–1345 : avatar, nom, « jardinier depuis {mois année} », bouton
     « éditer ». L'avatar reste rendu par `AvatarComposer` existant.
   - Critère d'acceptation : le nom, la date d'inscription et l'avatar réels
     s'affichent ; `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/profile/ProfileClient.tsx`, `messages/{fr,en}.json`
-  - Dépend de : T25
+  - Dépend de : T23
 
-- [ ] **T27 — Bloc série et suivi**
+- [ ] **T25 — Bloc série et suivi**
   - Bloc « N jours d'arrosage d'affilée » et bloc « suivi ». **Aucune donnée de série
     n'existe** : le bloc série est écrit puis masqué derrière `const HAS_STREAK =
     false`, comme T15. Le bloc « suivi » renvoie vers l'état vide V2.
   - Critère d'acceptation : aucun compteur de série factice n'est visible ;
     `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/profile/ProfileClient.tsx`
-  - Dépend de : T26
+  - Dépend de : T24
 
-- [ ] **T28 — Bloc forfait**
+- [ ] **T26 — Bloc forfait**
   - Carte du forfait courant avec son résumé et le bouton d'évolution. **Lexique
     conservé** : « Gratuit », « Premium », « Premium+ » — pas Graine/Buisson/Arbre.
     Le niveau est lu depuis les données d'abonnement existantes.
   - Critère d'acceptation : le forfait réel de l'utilisateur s'affiche, le bouton
     mène à `/pricing` ; `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/profile/ProfileClient.tsx`, `messages/{fr,en}.json`
-  - Dépend de : T27
+  - Dépend de : T25
 
-- [ ] **T29 — Liste des paramètres du profil**
-  - Liste des entrées de réglages du compte (libellé + indice + chevron), en
-    conservant **toutes** les entrées existantes de la page profil actuelle. Les
-    libellés exacts de la maquette sont dans la partie tronquée du fichier : partir
-    des entrées réelles de l'application.
+- [ ] **T27 — Liste des paramètres du profil**
+  - Liste des entrées de réglages du compte (libellé à gauche, indice en
+    `--ink-faint` à droite, séparateur `--line-soft`, survol `--surface-sunken`).
+    Les quatre entrées de la maquette (`profilSettings`, ligne 2818) : `notifications`
+    → « activées », `langue` → « français », `aide & contact`, `se déconnecter` (en
+    `--danger-strong`). **Conserver en plus toutes les entrées existantes de la page
+    profil actuelle** qui ne figurent pas dans cette liste — aucune ne doit
+    disparaître.
   - Critère d'acceptation : aucune entrée de réglage présente avant la tâche n'a
     disparu ; `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/profile/ProfileClient.tsx`
-  - Dépend de : T28
+  - Dépend de : T26
 
 ### Lot 7 — Réglages d'atelier
 
-- [ ] **T30 — Coquille des réglages**
+- [ ] **T28 — Coquille des réglages**
   - Lignes 1408–1432 : panneau de navigation collant à gauche sur ordinateur
     (eyebrow « PARAMÈTRES » + entrées à icône), sélecteur de section en bandeau
-    collant sur téléphone. **Conserver le montage permanent des sections**
+    collant sur téléphone. Les cinq entrées exactes (`regNav`, ligne 2672) :
+    **Général** « informations de base », **Membres & rôles** « accès et
+    permissions », **Fichiers** « sources de l'atelier », **Chapitre & Notion**
+    « unités générées par l'IA », **Atelier Premium** « options avancées ».
+    Icônes Lucide correspondantes : `sliders-horizontal`, `users`, `file-text`,
+    `layout-grid`, `star`. **Conserver le montage permanent des sections**
     (`display: 'contents' | 'none'`) — le montage conditionnel réintroduirait des
     régressions documentées dans `.claude/rules/server-architecture.md`.
   - Critère d'acceptation : les sections restent montées en permanence, la navigation
     fonctionne sur les deux tailles ; `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/settings/{SettingsClient,settingsShared}.tsx`
-  - Dépend de : T29
+  - Dépend de : T27
 
-- [ ] **T31 — Section Général**
+- [ ] **T29 — Section Général**
   - Nom, tag, description, date de création, « afficher le programme éducatif »,
     QR code, zone de danger (suppression). Ajouter le sélecteur d'**emoji d'atelier**
     de la maquette **inerte** : rendu conforme, `disabled` + `aria-disabled`, avec un
@@ -540,40 +565,40 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     « modifications non enregistrées » intact), le sélecteur d'emoji ne déclenche
     aucun appel serveur ; `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/settings/SettingsClient.tsx`
-  - Dépend de : T30
+  - Dépend de : T28
 
-- [ ] **T32 — Section Membres & rôles**
+- [ ] **T30 — Section Membres & rôles**
   - Invitation par tag, liste des membres en mode dense (initiale, nom, rôle, tag,
     action, exclure), demandes d'adhésion. Ajouter le bloc **GROUPES** de la maquette
-    **inerte** (même règle que T31).
+    **inerte** (même règle que T29).
   - Critère d'acceptation : promotion, rétrogradation, exclusion, invitation et
     traitement des demandes fonctionnent comme avant ; le bloc groupes ne déclenche
     aucun appel serveur ; `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/settings/MembersSection.tsx`
-  - Dépend de : T31
+  - Dépend de : T29
 
-- [ ] **T33 — Section Fichiers**
+- [ ] **T31 — Section Fichiers**
   - Zone de dépôt à bordure pointillée tan (1,5 px), liste des fichiers en mode
     dense (nom, méta, actions). Conserver l'upload direct au stockage avec barre de
     progression.
   - Critère d'acceptation : l'upload et la suppression fonctionnent comme avant, la
     progression s'affiche ; `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/settings/FilesSection.tsx`
-  - Dépend de : T32
+  - Dépend de : T30
 
-- [ ] **T34 — Section Atelier Premium**
+- [ ] **T32 — Section Atelier Premium**
   - Lignes 1642–1716 : carte de passage / carte de statut actif, liste des avantages,
     détail des prix. La **grille de paliers dégressifs** est dessinée **inerte**
-    (même règle que T31) : la tarification réelle reste celle de
+    (même règle que T29) : la tarification réelle reste celle de
     `docs/product-spec.md`. **Ne toucher en aucun cas** à la logique
     d'irréversibilité ni au mécanisme de test d'activation.
   - Critère d'acceptation : le flux d'activation Premium existant est inchangé (mêmes
     appels, mêmes garde-fous), la grille de paliers n'est pas interactive ;
     `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/settings/PremiumSection.tsx`
-  - Dépend de : T33
+  - Dépend de : T31
 
-- [ ] **T35 — Section Chapitres & notions**
+- [ ] **T33 — Section Chapitres & notions**
   - Lignes 1717–1801 : deux colonnes (chapitres à gauche, notions du chapitre
     sélectionné à droite), ajout, renommage, réorganisation, suppression, états vides
     (« crée un chapitre pour y planter tes premières notions. »).
@@ -581,11 +606,11 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     avant, la réorganisation persiste, les états vides s'affichent ;
     `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/settings/NotionsSection.tsx` (renommé en T2)
-  - Dépend de : T34
+  - Dépend de : T32
 
 ### Lot 8 — Générateur d'examen
 
-- [ ] **T36 — Coquille côte à côte et onglets pleine largeur**
+- [ ] **T34 — Coquille côte à côte et onglets pleine largeur**
   - Disposition « banque et feuille côte à côte » : colonne gauche (liste) + colonne
     droite (feuille A4), lignes 688–695 et 797+. En tête de la colonne gauche, les
     **deux onglets pleine largeur** « mes examens » / « questions » (variante
@@ -596,9 +621,9 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     en dessous ; `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/tabs/ExamenTab.tsx`,
     `src/app/[locale]/workshops/[id]/tabs/examen/examShared.tsx`
-  - Dépend de : T35
+  - Dépend de : T33
 
-- [ ] **T37 — Liste « mes examens »**
+- [ ] **T35 — Liste « mes examens »**
   - Barre de recherche + tri + filtres **toujours visibles** (variante retenue) +
     bouton « + nouvel » vert. Une carte par examen : titre, date de création, trois
     icônes d'action. Mode dense.
@@ -606,9 +631,9 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     l'ouverture d'un examen charge son brouillon ; `npm run build` et `npm run lint`
     passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/tabs/examen/HistoryContent.tsx`
-  - Dépend de : T36
+  - Dépend de : T34
 
-- [ ] **T38 — Banque de questions**
+- [ ] **T36 — Banque de questions**
   - Même barre d'outils, lignes de questions en mode dense (colonnes fixes : intitulé,
     type, actions), sélection multiple, envoi vers la feuille. Le filtre par
     étiquettes (pools) reste fonctionnel, et la banque continue de ne montrer que
@@ -617,18 +642,18 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     sélection et l'envoi vers l'éditeur fonctionnent ; `npm run build` et
     `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/tabs/examen/BankContent.tsx`
-  - Dépend de : T37
+  - Dépend de : T35
 
-- [ ] **T39 — En-tête de la feuille et pilules d'identité**
+- [ ] **T37 — En-tête de la feuille et pilules d'identité**
   - Lignes 945–1010 : titre éditable de l'examen, sous-titre (atelier · durée ·
     consigne), pilules d'identité candidat réparties en trois zones (gauche / droite /
     hors feuille) par glisser-déposer, barème par partie.
   - Critère d'acceptation : le déplacement des pilules entre zones persiste dans le
     brouillon, le titre s'enregistre ; `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/tabs/examen/GeneratorContent.tsx`
-  - Dépend de : T38
+  - Dépend de : T36
 
-- [ ] **T40 — Feuille A4 et éditeur de question**
+- [ ] **T38 — Feuille A4 et éditeur de question**
   - Repeindre la feuille A4 et l'éditeur de question sur les tokens : surfaces,
     filets, rayons, boutons pointillés « + question » / « + partie », sélecteur de
     type, options de réponse. **Ne toucher ni à la logique de pagination A4 ni au
@@ -639,11 +664,11 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/tabs/examen/GeneratorContent.tsx`,
     `src/app/[locale]/workshops/[id]/tabs/QuestionEditor.tsx`
-  - Dépend de : T39
+  - Dépend de : T37
 
 ### Lot 9 — Clôture
 
-- [ ] **T41 — États vides « V2 » : Analyse et Générateur de cours**
+- [ ] **T39 — États vides « V2 » : Analyse et Générateur de cours**
   - Remplacer le contenu d'`AnalyseTab.tsx` par l'état vide de la maquette (lignes
     1400–1405 : titre « analyse. » en **sans**, phrase, badge `V2`) et créer le même
     état vide pour « Générateur de cours » (lignes 1319–1324). **Vérifier d'abord**
@@ -653,9 +678,9 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     `npm run build` et `npm run lint` passent.
   - Fichiers : `src/app/[locale]/workshops/[id]/tabs/AnalyseTab.tsx`,
     `src/app/[locale]/workshops/[id]/tabs/CoursTab.tsx`, `messages/{fr,en}.json`
-  - Dépend de : T40
+  - Dépend de : T38
 
-- [ ] **T42 — Écrans non maquettés repeints**
+- [ ] **T40 — Écrans non maquettés repeints**
   - Création d'atelier (`/workshops/new`, `/create`), éditeur d'avatar
     (`/profile/avatar`) et page `session` : appliquer les tokens (couleurs, typo,
     rayons, ombres) et les nouveaux composants, **sans changer la mise en page**.
@@ -667,9 +692,9 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     `src/app/[locale]/create/page.tsx`, `src/app/[locale]/profile/avatar/page.tsx`,
     `src/components/avatar/AvatarBuilder.tsx`,
     `src/app/[locale]/workshops/[id]/session/page.tsx`
-  - Dépend de : T41
+  - Dépend de : T39
 
-- [ ] **T43 — Passe finale : hex en dur, violet, emojis-icônes**
+- [ ] **T41 — Passe finale : hex en dur, violet, emojis-icônes**
   - Balayer **les fichiers de l'app connectée uniquement** (dashboard, workshops,
     profile, components partagés) : remplacer tout hex restant dans un `style={{}}`
     par un token, supprimer toute classe `violet-*`, remplacer tout emoji utilisé
@@ -678,9 +703,9 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     ne renvoie plus que des cas justifiés et commentés ; `grep -rn "violet-"` sur ces
     mêmes chemins ne renvoie rien ; `npm run build` et `npm run lint` passent.
   - Fichiers : app connectée + `src/components/**` (**pas** la vitrine, **pas** le jardin)
-  - Dépend de : T42
+  - Dépend de : T40
 
-- [ ] **T44 — Documentation**
+- [ ] **T42 — Documentation**
   - `CLAUDE.md` : typographie §3 (Hanken Grotesk, retrait Inter Tight × Caveat et
     `.font-script`), règle de lexique notion/brick si T2 ne l'a pas déjà posée.
     `docs/product-spec.md` : lexique « notion », navigation de l'app connectée
@@ -693,7 +718,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     Inter Tight, Caveat ni « brique de connaissance » ; `npm run build` passe.
   - Fichiers : `CLAUDE.md`, `docs/product-spec.md`, `docs/changelog.md`,
     `docs/backlog.md`, `.claude/rules/frontend-patterns.md`
-  - Dépend de : T43
+  - Dépend de : T41
 
 ## Journal
 <!-- Append-only. Une ligne par tâche terminée : date, tâche, commit, note. -->

@@ -2034,4 +2034,1717 @@ class Component extends DCLogic {
       { name: 'Interro surprise — drapeaux', meta: 'créé le 4 juillet · 6 questions · 15 min', badge: 'BROUILLON', pub: false },
       { name: 'Examen blanc — géographie générale', meta: 'créé le 28 juin · 20 questions · 1 h', badge: 'PUBLIÉ', pub: true },
       { name: 'Contrôle n°2 — fleuves et montagnes', meta: 'créé le 22 juin · 8 questions · 40 min', badge: 'BROUILLON', pub: false },
-      { name: 'Quiz express �
+      { name: 'Quiz express — drapeaux du monde', meta: 'créé le 15 juin · 10 questions · 12 min', badge: 'PUBLIÉ', pub: true },
+      { name: 'Devoir maison — Amérique du Sud', meta: 'créé le 9 juin · 12 questions · 1 h 30', badge: 'BROUILLON', pub: false },
+      { name: 'Évaluation — capitales d\u2019Asie', meta: 'créé le 2 juin · 15 questions · 45 min', badge: 'PUBLIÉ', pub: true },
+      { name: 'Test de rentrée — géographie physique', meta: 'créé le 28 mai · 18 questions · 50 min', badge: 'PUBLIÉ', pub: true },
+      { name: 'Contrôle surprise — océans et mers', meta: 'créé le 20 mai · 6 questions · 20 min', badge: 'BROUILLON', pub: false },
+      { name: 'Examen final — le monde entier', meta: 'créé le 12 mai · 30 questions · 2 h', badge: 'BROUILLON', pub: false },
+    ],
+    bank: [
+      { id: 'q1', q: 'Quelle est la capitale de la France ?', chap: "L'Europe", choices: ['Paris', 'Lyon', 'Marseille', 'Nice'] },
+      { id: 'q2', q: "Quelle est la capitale de l'Italie ?", chap: "L'Europe", choices: ['Milan', 'Rome', 'Naples', 'Turin'] },
+      { id: 'q3', q: "Quelle est la capitale de l'Espagne ?", chap: "L'Europe", choices: ['Séville', 'Barcelone', 'Madrid', 'Valence'] },
+      { id: 'q4', q: 'Quelle est la capitale du Canada ?', chap: 'Les Amériques', choices: ['Toronto', 'Ottawa', 'Montréal', 'Vancouver'] },
+      { id: 'q5', q: 'Quelle est la capitale du Brésil ?', chap: 'Les Amériques', choices: ['Rio de Janeiro', 'São Paulo', 'Brasília', 'Salvador'] },
+      { id: 'q6', q: 'Quelle est la capitale du Japon ?', chap: "L'Asie", choices: ['Osaka', 'Kyoto', 'Tokyo', 'Nagoya'] },
+      { id: 'q7', q: "Quelle est la capitale de l'Allemagne ?", chap: "L'Europe", choices: ['Munich', 'Berlin', 'Hambourg', 'Francfort'] },
+      { id: 'q8', q: 'Quelle est la capitale du Portugal ?', chap: "L'Europe", choices: ['Porto', 'Lisbonne', 'Braga', 'Faro'] },
+      { id: 'q9', q: 'Quelle est la capitale des États-Unis ?', chap: 'Les Amériques', choices: ['New York', 'Los Angeles', 'Washington', 'Chicago'] },
+      { id: 'q10', q: "Quelle est la capitale de l'Argentine ?", chap: 'Les Amériques', choices: ['Buenos Aires', 'Córdoba', 'Rosario', 'Mendoza'] },
+      { id: 'q11', q: 'Quelle est la capitale de la Chine ?', chap: "L'Asie", choices: ['Shanghai', 'Pékin', 'Canton', 'Shenzhen'] },
+      { id: 'q12', q: "Quelle est la capitale de l'Inde ?", chap: "L'Asie", choices: ['Bombay', 'New Delhi', 'Calcutta', 'Bangalore'] },
+      { id: 'q13', q: "Quelle est la capitale de l'Égypte ?", chap: "L'Afrique", choices: ['Alexandrie', 'Le Caire', 'Gizeh', 'Louxor'] },
+      { id: 'q14', q: 'Quelle est la capitale du Maroc ?', chap: "L'Afrique", choices: ['Casablanca', 'Rabat', 'Marrakech', 'Fès'] },
+      { id: 'q15', q: "Quelle est la capitale de l'Australie ?", chap: "L'Océanie", choices: ['Sydney', 'Melbourne', 'Canberra', 'Brisbane'] },
+      { id: 't_qcm', type: 'qcm', q: 'Quelles villes sont des capitales européennes ?', chap: 'Types de réponse', choices: ['Madrid', 'Lyon', 'Rome', 'Naples'] },
+      { id: 't_qcs', type: 'qcs', q: 'La Terre tourne autour du Soleil.', chap: 'Types de réponse', choices: ['vrai', 'faux'] },
+      { id: 't_texte', type: 'texte', q: "Explique en quelques phrases le cycle de l'eau.", chap: 'Types de réponse', choices: [] },
+      { id: 't_liste', type: 'liste', q: "Cite trois pays d'Europe de l'Ouest.", chap: 'Types de réponse', choices: [], listLines: 3 },
+      { id: 't_grille', type: 'grille', q: 'Associe chaque pays à son continent.', chap: 'Types de réponse', choices: [], gRows: ['France', 'Japon', 'Égypte'], gCols: ['Europe', 'Asie', 'Afrique'] },
+      { id: 't_match', type: 'match', q: 'Relie chaque pays à sa capitale.', chap: 'Types de réponse', choices: [], pairs: [['France', 'Paris'], ['Japon', 'Tokyo'], ['Égypte', 'Le Caire']] },
+      { id: 't_ordre', type: 'ordre', q: 'Range ces villes par population croissante.', chap: 'Types de réponse', choices: [], items: ['Ottawa', 'Paris', 'Tokyo'] },
+      { id: 't_dessin', type: 'dessin', q: 'Dessine le drapeau de la France.', chap: 'Types de réponse', choices: [] },
+      { id: 't_fichier', type: 'fichier', q: 'Dépose ta carte annotée au format PDF.', chap: 'Types de réponse', choices: [], fileTypes: ['pdf', 'image'] },
+      { id: 't_audio', type: 'audio', q: 'Prononce cette phrase à voix haute en anglais.', chap: 'Types de réponse', choices: [] },
+      { id: 't_sondage', type: 'sondage', q: 'Quel continent aimerais-tu visiter ?', chap: 'Types de réponse', choices: ['Europe', 'Asie', 'Afrique', 'Amérique'] },
+      { id: 't_sansrep', type: 'sansrep', q: 'Entoure la France sur la carte affichée au tableau.', chap: 'Types de réponse', choices: [] },
+    ],
+    questions: [
+      { q: 'Quelle est la capitale de la France ?', a: ['Paris', 'Lyon', 'Marseille', 'Nice'], correct: 0 },
+      { q: "Quelle est la capitale de l'Italie ?", a: ['Milan', 'Rome', 'Naples', 'Turin'], correct: 1 },
+      { q: 'Sur la carte, quel pays est mis en surbrillance ?', a: ['Espagne', 'France', 'Allemagne', 'Pologne'], correct: 1, group: 'g-carte', context: { kind: 'image', label: "carte d'Europe · pays en vert", note: 'observe la carte pour répondre aux 3 questions liées' } },
+      { q: 'Quelle est la capitale de ce pays ?', a: ['Lyon', 'Marseille', 'Paris', 'Bordeaux'], correct: 2, group: 'g-carte' },
+      { q: "Quel océan borde ce pays à l'ouest ?", a: ['Pacifique', 'Indien', 'Atlantique', 'Arctique'], correct: 2, group: 'g-carte' },
+      { q: 'Combien de continents compte la Terre ?', a: ['5', '6', '7', '8'], correct: 2, group: 'g-chaine', context: { kind: 'text', note: 'questions enchaînées — ta réponse à la première sert pour la suivante' } },
+      { q: 'Combien de ces continents sont habités en permanence ?', a: ['5', '6', '7', '4'], correct: 1, group: 'g-chaine' },
+    ],
+  };
+
+  atelier() {
+    return this.data.ateliers.find(a => a.id === this.state.atelierId) || this.data.ateliers[0];
+  }
+
+  componentDidMount() {
+    this._onRs = () => { this.setState({ winW: window.innerWidth }); requestAnimationFrame(() => this._measureEx()); };
+    window.addEventListener('resize', this._onRs);
+    requestAnimationFrame(() => this._measureEx());
+  }
+  _measureEx() {
+    const el = this._exEl, act = this._exActiveEl;
+    if (!el || !act) return;
+    const view = el.clientHeight;
+    if (!view) return;
+    const rawBandH = this._exBandEl ? this._exBandEl.offsetHeight : 0;
+    // use a stable band height (its collapsed/unchecked size) so expanding the
+    // feedback band doesn't re-center — the question must stay put
+    if (!(this.state.ex && this.state.ex.checked)) this._baseBandH = rawBandH;
+    const bandH = (this._baseBandH != null) ? this._baseBandH : rawBandH;
+    const visible = Math.max(120, view - bandH);
+    const aboveH = Math.max(0, act.offsetTop - (this.state.exPadT || 0));
+    const natural = aboveH + act.offsetHeight;
+    let padT, scrollable;
+    if (natural <= visible) {
+      padT = Math.max(16, Math.round((visible - natural) / 2)); scrollable = false;
+    } else {
+      padT = Math.max(16, Math.round((visible - act.offsetHeight) / 2)); scrollable = true;
+    }
+    const padB = padT + Math.max(bandH, rawBandH);
+    if (Math.abs((this.state.exPadT || 0) - padT) > 1 || Math.abs((this.state.exPadB || 0) - padB) > 1 || this.state.exScrollable !== scrollable) {
+      this.setState({ exPadT: padT, exPadB: padB, exScrollable: scrollable });
+    }
+  }
+  componentDidUpdate(pp, ps) {
+    if (this._chatEl && this.state.chatMsgs && (!ps.chatMsgs || ps.chatMsgs.length !== this.state.chatMsgs.length || ps.explainOpen !== this.state.explainOpen || ps.chatBusy !== this.state.chatBusy)) {
+      this._chatEl.scrollTop = this._chatEl.scrollHeight;
+    }
+    this._measureEx();
+    const curExI = this.state.ex ? this.state.ex.i : null;
+    if (this._exEl && curExI != null && this._prevExI != null && curExI > this._prevExI) {
+      this._revealTick = (this._revealTick || 0) + 1;
+      const myTick = this._revealTick;
+      let last = -1, stable = 0, tries = 0;
+      const run = () => {
+        if (myTick !== this._revealTick) return;
+        const el = this._exEl, act = this._exActiveEl;
+        if (!el || !act) return;
+        const sh = el.scrollHeight;
+        if (sh === last) stable++; else { stable = 0; last = sh; }
+        tries++;
+        if (stable < 2 && tries < 30) { requestAnimationFrame(run); return; }
+        const bandH = this._exBandEl ? this._exBandEl.offsetHeight : 0;
+        const visible = Math.max(120, el.clientHeight - bandH);
+        let target;
+        if (act.offsetHeight <= visible) target = act.offsetTop - Math.max(0, (visible - act.offsetHeight) / 2);
+        else target = act.offsetTop - 12;
+        target = Math.max(0, Math.min(target, el.scrollHeight - el.clientHeight));
+        try { el.scrollTo({ top: target, behavior: 'smooth' }); } catch (e) { el.scrollTop = target; }
+      };
+      requestAnimationFrame(run);
+    }
+    this._prevExI = curExI;
+  }
+  _sendChat() {
+    const st = this.state;
+    const text = (st.chatInput || '').trim();
+    if (!text || st.chatBusy) return;
+    const ctx = st.chatCtx || {};
+    const history = (st.chatMsgs || []).concat([{ role: 'user', text }]);
+    this.setState({ chatMsgs: history, chatInput: '', chatBusy: true });
+    const convo = history.map(m => (m.role === 'ai' ? 'Assistant' : 'Élève') + ' : ' + m.text).join('\n');
+    const prompt = 'Tu es un tuteur pédagogique de l\u2019app Culture. Tu aides un élève à comprendre une question de quiz. '
+      + 'Réponds en français, tutoiement, ton chaleureux et encourageant, phrases courtes et concrètes. '
+      + 'Ne dépasse pas 4 phrases. Reste sur le sujet de la question.\n\n'
+      + 'Question du quiz : « ' + (ctx.q || '') + ' »\n'
+      + 'Bonne réponse : « ' + (ctx.correct || '') + ' »\n\n'
+      + 'Conversation :\n' + convo + '\n\nAssistant :';
+    const done = (reply) => this.setState(s2 => ({ chatMsgs: (s2.chatMsgs || []).concat([{ role: 'ai', text: (reply || '').trim() || 'désolé, je n\u2019ai pas pu répondre. réessaie ?' }]), chatBusy: false }));
+    try {
+      const p = window.claude && window.claude.complete ? window.claude.complete(prompt) : Promise.reject(new Error('no api'));
+      Promise.resolve(p).then(done).catch(() => done('petit souci de connexion — reformule ta question et je réessaie.'));
+    } catch (e) { done('petit souci de connexion — reformule ta question et je réessaie.'); }
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._onRs); if (this._regBarRO) this._regBarRO.disconnect(); if (this._atBarRO) this._atBarRO.disconnect(); }
+
+  regBarRef = (el) => {
+    if (!el || el === this._regBarEl) return;
+    this._regBarEl = el;
+    if (this._regBarRO) this._regBarRO.disconnect();
+    const measure = () => this.setState({ regBarW: el.clientWidth, regBarH: el.clientHeight });
+    this._regBarRO = new ResizeObserver(measure);
+    this._regBarRO.observe(el);
+    requestAnimationFrame(measure);
+  };
+
+  atBarRef = (el) => {
+    if (!el || el === this._atBarEl) return;
+    this._atBarEl = el;
+    if (this._atBarRO) this._atBarRO.disconnect();
+    const measure = () => this.setState({ atBarW: el.clientWidth, atBarH: el.clientHeight });
+    this._atBarRO = new ResizeObserver(measure);
+    this._atBarRO.observe(el);
+    requestAnimationFrame(measure);
+  };
+
+  go(page, extra) {
+    this.setState({ page, sheetOpen: false, notifOpen: false, ateliersOpen: false, ...(extra || {}) });
+  }
+
+  startExercice() {
+    this.setState({
+      page: 'exercice', inAtelier: true, sheetOpen: false, notifOpen: false, ateliersOpen: false,
+      ex: { i: 0, sel: null, checked: false, correct: 0, done: false, ans: {} },
+    });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const desktopNavPref = this.props.navigationOrdinateur ?? 'latérale gauche';
+    const parcoursPref = 'chapitres (liste + progression)';
+    const isMobile = s.view === 'mobile';    const isDesktop = !isMobile;
+    const winW = s.winW || (typeof window !== 'undefined' ? window.innerWidth : 1400);
+    const isV2App = (this.props.versionApp ?? 'V1 · avec accueil').indexOf('V2') === 0;
+    const page = (isV2App && s.page === 'dashboard') ? 'parcours' : s.page;
+    const inAt = isV2App ? true : s.inAtelier;
+    const isEx = page === 'exercice';
+    const at = this.atelier();
+    const active = (p) => page === p;
+    const c = (p) => active(p) ? 'var(--green)' : 'var(--ink-muted)';
+    const bg = (p) => active(p) ? 'var(--green-tint)' : 'transparent';
+    const railMode = desktopNavPref.indexOf('latérale') !== -1;
+    const stTab = (p) => active(p)
+      ? 'background:transparent;color:var(--green);font-weight:800;'
+      : 'background:transparent;color:var(--ink-muted);font-weight:600;';
+
+    // exercice computed
+    const QS = this.data.questions;
+    const q = QS[s.ex.i];
+    const total = QS.length;
+    const grpKey = (idx) => { const qq = QS[idx]; return qq && qq.group ? qq.group : ('__solo' + idx); };
+    const curGrp = grpKey(s.ex.i);
+    let grpFirst = s.ex.i; while (grpFirst > 0 && grpKey(grpFirst - 1) === curGrp) grpFirst--;
+    let grpLast = s.ex.i; while (grpLast < total - 1 && grpKey(grpLast + 1) === curGrp) grpLast++;
+    const grpSize = grpLast - grpFirst + 1;
+    const isMultiGroup = grpSize > 1;
+    const isLastInGroup = s.ex.i === grpLast;
+    const grpCtx = QS[grpFirst].context || null;
+
+    const lockDisplay = (pq, selIdx) => pq.a.map((label, j) => {
+      const isCorrect = j === pq.correct;
+      let border = '1.5px solid var(--line-strong)', bgc = 'var(--surface-raised)', color = 'var(--ink)', showCheck = false, showX = false;
+      if (isCorrect) { border = '1.5px solid var(--success)'; bgc = 'var(--success-tint)'; color = 'var(--success-strong)'; showCheck = true; }
+      else if (selIdx === j) { border = '1.5px solid var(--danger)'; bgc = 'var(--danger-tint)'; color = 'var(--danger-strong)'; showX = true; }
+      return { label, style: 'border:' + border + ';background:' + bgc + ';color:' + color + ';border-radius:12px;padding:12px 15px;font-size:14px;font-weight:600;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:8px;', showCheck, showX };
+    });
+    const exStack = [];
+    for (let idx = grpFirst; idx < s.ex.i; idx++) {
+      const pq = QS[idx];
+      const a = (s.ex.ans && s.ex.ans[idx]) || {};
+      const pok = a.sel === pq.correct;
+      exStack.push({
+        key: 's' + idx, partLabel: 'partie ' + (idx - grpFirst + 1),
+        q: pq.q, answersList: lockDisplay(pq, a.sel),
+        fbText: pok ? 'correct' : ('réponse : « ' + pq.a[pq.correct] + ' »'),
+        fbStyle: 'font-size:12.5px;font-weight:700;margin-top:12px;color:' + (pok ? 'var(--success-strong)' : 'var(--danger-strong)') + ';',
+      });
+    }
+    const exHasStack = exStack.length > 0;
+
+    const answers = q.a.map((label, i) => {
+      const sel = s.ex.sel === i;
+      const isCorrect = i === q.correct;
+      let border = '1.5px solid var(--line-strong)', bgc = 'var(--surface-raised)', color = 'var(--ink)';
+      let showCheck = false, showX = false;
+      if (!s.ex.checked && sel) { border = '1.5px solid var(--green)'; bgc = 'var(--green-tint)'; color = 'var(--green-strong)'; }
+      if (s.ex.checked) {
+        if (isCorrect) { border = '1.5px solid var(--success)'; bgc = 'var(--success-tint)'; color = 'var(--success-strong)'; showCheck = true; }
+        else if (sel) { border = '1.5px solid var(--danger)'; bgc = 'var(--danger-tint)'; color = 'var(--danger-strong)'; showX = true; }
+      }
+      return {
+        label, border, bg: bgc, color, showCheck, showX,
+        onClick: () => { if (!s.ex.checked) this.setState({ ex: { ...s.ex, sel: i } }); },
+      };
+    });
+    const last = s.ex.i === total - 1;
+    const exWrong = s.ex.checked && s.ex.sel !== q.correct;
+    const exBtnLabel = !s.ex.checked ? 'vérifier' : (last ? 'voir la récolte' : (exWrong ? "c'est compris" : 'continuer'));
+    const exBtnAction = () => {
+      const ex = this.state.ex;
+      if (!ex.checked) {
+        if (ex.sel == null) return;
+        const ok = ex.sel === q.correct;
+        const xp = ok ? 10 : 3;
+        const nextAns = { ...(ex.ans || {}), [ex.i]: { sel: ex.sel } };
+        this.setState({ ex: { ...ex, checked: true, correct: ex.correct + (ok ? 1 : 0), ans: nextAns }, explainOpen: false, bandCollapsed: false, xpBurst: { n: xp, ok, key: Date.now() } });
+        setTimeout(() => this.setState(st => (st.xpBurst ? { xpBurst: null } : null)), 1450);
+      } else if (last) {
+        this.setState({ ex: { ...ex, done: true }, explainOpen: false, bandCollapsed: false, droplets: this.state.droplets + 1, arrosoir: Math.max(this.state.arrosoir - 1, 0) });
+      } else {
+        this.setState({ ex: { ...ex, i: ex.i + 1, sel: null, checked: false }, explainOpen: false, bandCollapsed: false });
+      }
+    };
+    const ok = s.ex.sel === q.correct;
+    const exFeedback = ok ? 'correct' : `pas tout à fait — la bonne réponse était « ${q.a[q.correct]} ».`;
+
+    const xb = s.xpBurst;
+    const xpBurstEl = xb ? React.createElement('div', {
+      key: xb.key,
+      style: {
+        position: 'absolute', right: '20px', top: '78px', zIndex: 55,
+        pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: '7px',
+        background: xb.ok ? 'var(--green-strong)' : 'var(--tan)', color: '#fff',
+        fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: '15px',
+        padding: '7px 14px', borderRadius: '999px',
+        boxShadow: '0 14px 30px -8px rgba(58,45,32,0.5)', whiteSpace: 'nowrap',
+        animation: 'cuXpBurst 1400ms cubic-bezier(0.22,1,0.36,1) forwards',
+      },
+    },
+      React.createElement('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round', strokeLinejoin: 'round' },
+        React.createElement('path', { d: 'M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7Z' })),
+      '+' + xb.n + ' XP'
+    ) : null;
+
+    // parcours computed
+    const sections = at.sections.map(sec => {
+      const locked = sec.pots.every(p => p === 'l');
+      return {
+        name: sec.name, status: sec.status,
+        nameColor: locked ? 'var(--ink-faint)' : 'var(--ink)',
+        statusColor: locked ? 'var(--ink-faint)' : 'var(--green-strong)',
+        pots: sec.pots.map(p => ({
+          isDone: p === 'd', isCurrent: p === 'c', isLocked: p === 'l',
+          bg: p === 'd' ? 'var(--green-tint)' : p === 'c' ? 'var(--surface-raised)' : 'transparent',
+          border: p === 'd' ? '1px solid var(--green-light)' : p === 'c' ? '2px solid var(--green)' : '1.5px dashed var(--line-strong)',
+          shadow: p === 'c' ? 'var(--shadow-sm)' : 'none',
+          cursor: p === 'l' ? 'default' : 'pointer',
+          title: p === 'l' ? 'verrouillé — termine la section précédente' : p === 'c' ? 'continuer cet exercice' : 'revoir cette brique',
+          onClick: () => { if (p !== 'l') this.startExercice(); },
+        })),
+      };
+    });
+    const beds = at.sections.map(sec => {
+      const locked = sec.pots.every(p => p === 'l');
+      return {
+        name: sec.name, status: sec.status, locked,
+        bg: locked ? 'transparent' : 'var(--tan-tint)',
+        border: locked ? '1.5px dashed var(--line-strong)' : '1px solid var(--line-strong)',
+        nameColor: locked ? 'var(--ink-faint)' : 'var(--tan-strong)',
+        statusColor: locked ? 'var(--ink-faint)' : 'var(--ink-muted)',
+        cursor: locked ? 'default' : 'pointer',
+        onClick: () => { if (!locked) this.startExercice(); },
+        tiles: sec.pots.map(p => ({
+          bg: p === 'd' ? 'var(--green-light)' : p === 'c' ? 'var(--green-tint)' : 'transparent',
+          border: p === 'c' ? '1px solid var(--green-light)' : p === 'l' ? '1px dashed var(--line-strong)' : '1px solid transparent',
+        })),
+      };
+    });
+
+    return {
+      // shell / chrome
+      isMobile, isDesktop,
+      shellWidth: isMobile ? '390px' : 'min(1240px, calc(100vw - 48px))',
+      shellHeight: isMobile ? '780px' : '800px',
+      shellRadius: isMobile ? '28px' : '20px',
+      segMobileBg: isMobile ? 'var(--surface-raised)' : 'transparent',
+      segMobileColor: isMobile ? 'var(--ink)' : 'var(--ink-muted)',
+      segMobileShadow: isMobile ? 'var(--shadow-sm)' : 'none',
+      segDesktopBg: isDesktop ? 'var(--surface-raised)' : 'transparent',
+      segDesktopColor: isDesktop ? 'var(--ink)' : 'var(--ink-muted)',
+      segDesktopShadow: isDesktop ? 'var(--shadow-sm)' : 'none',
+      setMobile: () => this.setState({ view: 'mobile' }),
+      setDesktop: () => this.setState({ view: 'desktop' }),
+      showTopnav: isDesktop && !railMode && !isEx,
+      ...(() => {
+        const key = (this.props.couleursApp ?? 'V1 · crème (actuelle)').slice(0, 2);
+        // accents par défaut (repris du design system)
+        const acc = { thGreen:'#3C6B39', thGreenStrong:'#2D5029', thGreenLight:'#82A968', thGreenTint:'#E7EEDB', thTan:'#9C7C4D', thTanStrong:'#6E5736', thInk:'#2A2620', thInkBody:'#4A4234', thInkMuted:'#696253', thInkFaint:'#9A917F', thOnGreen:'#F5F8EF', thSurfaceInk:'#2A2620', thOnInk:'#F2EDE3' };
+        const T = {
+          V1: { ...acc, thPage:'#F4EFE6', thRaised:'#FCFAF4', thInput:'#FEFCF7', thSunken:'#ECE4D5', thLine:'#E3DAC9', thLineStrong:'#D6CBB5', thLineSoft:'#EDE7D8', thTanTint:'#ECE1CB' },
+          V2: { ...acc, thPage:'#F6F5F1', thRaised:'#FFFFFF', thInput:'#FFFFFF', thSunken:'#ECEAE4', thLine:'#E6E3DC', thLineStrong:'#D9D5CC', thLineSoft:'#EFEDE8', thTanTint:'#F2EFE7' },
+          // V3 · sauge — surfaces vert-gris doux, vert pin profond, secondaire mousse
+          V3: { ...acc,
+            thPage:'#EDEFE3', thRaised:'#F7F8EF', thInput:'#FBFCF5', thSunken:'#E2E5D2', thLine:'#DBDEC7', thLineStrong:'#C7CCAF', thLineSoft:'#E6E9D8', thTanTint:'#E6E7CE',
+            thGreen:'#2F5D3A', thGreenStrong:'#224A2B', thGreenLight:'#7FA678', thGreenTint:'#DCE6D0',
+            thTan:'#7C7440', thTanStrong:'#57512B',
+            thInk:'#262922', thInkBody:'#434A3C', thInkMuted:'#666D5B', thInkFaint:'#949B86',
+            thOnGreen:'#F1F6EC', thSurfaceInk:'#242A22', thOnInk:'#EEF1E6' },
+          // V4 · terre cuite — sable chaud, héros argile, secondaire forêt
+          V4: { ...acc,
+            thPage:'#F7EFE3', thRaised:'#FDF8EF', thInput:'#FFFBF3', thSunken:'#EFE2CD', thLine:'#E8DAC3', thLineStrong:'#D9C6A6', thLineSoft:'#F0E7D5', thTanTint:'#F2E0CC',
+            thGreen:'#AC4E2C', thGreenStrong:'#8B3C20', thGreenLight:'#CE7F5C', thGreenTint:'#F4DFD1',
+            thTan:'#4A6B3F', thTanStrong:'#35512D',
+            thInk:'#2C231C', thInkBody:'#4C3E30', thInkMuted:'#6F6050', thInkFaint:'#A08D79',
+            thOnGreen:'#FBF2EC', thSurfaceInk:'#2C231C', thOnInk:'#F4EDE3' },
+          // V5 · eucalyptus — lin frais, vert-bleu botanique, ambre doux
+          V5: { ...acc,
+            thPage:'#EFF0EA', thRaised:'#F8F9F4', thInput:'#FCFDF8', thSunken:'#E3E6DC', thLine:'#DDE0D3', thLineStrong:'#C9CEBD', thLineSoft:'#E8EBE0', thTanTint:'#ECE4CB',
+            thGreen:'#2E6B5C', thGreenStrong:'#215043', thGreenLight:'#6FA090', thGreenTint:'#DBEAE1',
+            thTan:'#A6803F', thTanStrong:'#75592A',
+            thInk:'#242823', thInkBody:'#42493F', thInkMuted:'#647063', thInkFaint:'#93A094',
+            thOnGreen:'#EFF6F1', thSurfaceInk:'#22302B', thOnInk:'#ECF2EC' },
+          // V6 · nuit — serre de nuit : sombre chaud, mousse claire en action
+          V6: { ...acc,
+            thPage:'#26231C', thRaised:'#2F2B23', thInput:'#353128', thSunken:'#1E1B15', thLine:'#3D392E', thLineStrong:'#4B4537', thLineSoft:'#332F26', thTanTint:'#3E3627',
+            thGreen:'#7FA867', thGreenStrong:'#93BC7A', thGreenLight:'#5C7A48', thGreenTint:'#333F29',
+            thTan:'#C2A36B', thTanStrong:'#D9C193',
+            thInk:'#F0EADC', thInkBody:'#D5CDBB', thInkMuted:'#A89F8B', thInkFaint:'#7B7462',
+            thOnGreen:'#1C2414', thSurfaceInk:'#F0EADC', thOnInk:'#2A2620' },
+        };
+        return T[key] || T.V1;
+      })(),
+      ...(() => {
+        const key = (this.props.typographieApp ?? 'V1 · actuelle').slice(0, 2);
+        const F = {
+          // V1 · actuelle — Source Serif 4 + Hanken Grotesk
+          V1: { thFontSerif: "'Source Serif 4', Georgia, serif", thFontSans: "'Hanken Grotesk', system-ui, sans-serif" },
+          // V2 · ronde & amicale — Lora + Nunito Sans
+          V2: { thFontSerif: "'Lora', Georgia, serif", thFontSans: "'Nunito Sans', system-ui, sans-serif" },
+          // V3 · éditoriale — Newsreader + Karla
+          V3: { thFontSerif: "'Newsreader', Georgia, serif", thFontSans: "'Karla', system-ui, sans-serif" },
+          // V4 · robuste — Bitter + Work Sans
+          V4: { thFontSerif: "'Bitter', Georgia, serif", thFontSans: "'Work Sans', system-ui, sans-serif" },
+        };
+        return F[key] || F.V1;
+      })(),
+      grpBg: (() => { const g = this.props.styleGroupeAtelier ?? 'fond creusé (actuel)'; return g === 'fond creusé (actuel)' ? 'var(--surface-sunken)' : 'transparent'; })(),
+      grpBorderColor: (() => { const g = this.props.styleGroupeAtelier ?? 'fond creusé (actuel)'; return g === 'fond creusé (actuel)' ? 'var(--line-soft)' : (g === 'encadré' ? 'var(--line-strong)' : 'transparent'); })(),
+      grpSep: (this.props.styleGroupeAtelier ?? 'fond creusé (actuel)') === 'traits de séparation',
+      grpSepEnds: (this.props.styleGroupeAtelier ?? 'fond creusé (actuel)') === 'traits aux extrémités',
+      grpPadDesk: (() => { const g = this.props.styleGroupeAtelier ?? 'fond creusé (actuel)'; return (g === 'traits de séparation' || g === 'traits aux extrémités') ? '0' : '5px 6px'; })(),
+      grpPadMob: (() => { const g = this.props.styleGroupeAtelier ?? 'fond creusé (actuel)'; return (g === 'traits de séparation' || g === 'traits aux extrémités') ? '0' : '2px 4px'; })(),
+      grpMarginMob: (() => { const g = this.props.styleGroupeAtelier ?? 'fond creusé (actuel)'; return (g === 'traits de séparation' || g === 'traits aux extrémités') ? '0' : '-4px 2px'; })(),
+      showDashBell: !(isDesktop && !railMode && !isEx),
+      showRail: isDesktop && railMode && !isEx,
+      showBottomNav: isMobile && !isEx,
+      dashMaxW: isMobile ? '520px' : '760px',
+      showMobileAtelierBar: isMobile && inAt && !isEx && (active('parcours') || active('examen') || active('cours')),
+
+      // version de l'app (tweak)
+      isV1App: !isV2App, isV2App,
+      switcherOpen: isV2App && s.sheetOpen,
+      toggleSwitcher: () => this.setState({ sheetOpen: !s.sheetOpen, notifOpen: false }),
+      switcherTop: isMobile ? '72px' : (railMode ? '78px' : '66px'),
+      switcherLeft: isMobile ? '14px' : (railMode ? '102px' : '24px'),
+      showProfilBell: isV2App && !(isDesktop && !railMode),
+      showProfilAnalyse: isV2App,
+
+      // nav state
+      inAtelier: inAt, levelZero: !inAt,
+      sheetOpen: s.sheetOpen, notifOpen: s.notifOpen, ateliersOpen: s.ateliersOpen, handleVis: s.ateliersOpen ? 'hidden' : 'visible',
+      cJardin: c('jardin'), cDash: c('dashboard'), cProfil: c('profil'),
+      cParcours: c('parcours'), cExamen: c('examen'), cCours: c('cours'),
+      cAtelier: (active('parcours') || active('examen') || active('cours')) ? 'var(--green)' : 'var(--ink-muted)',
+      atelierBtnBg: (active('parcours') || active('examen') || active('cours') || s.sheetOpen) ? 'var(--green-tint)' : 'var(--surface-sunken)',
+      bgTabJardin: bg('jardin'), bgTabDash: bg('dashboard'), bgTabProfil: bg('profil'),
+      bgTabParcours: bg('parcours'), bgTabExamen: bg('examen'), bgTabCours: bg('cours'),
+      stJardin: stTab('jardin'), stParcours: stTab('parcours'), stExamen: stTab('examen'), stCours: stTab('cours'), stProfil: stTab('profil'),
+      stRegBtn: active('reglages')
+        ? 'background:transparent;color:var(--green);'
+        : 'background:var(--surface-page);color:var(--ink-body);',
+      goJardin: () => this.go('jardin', { inAtelier: false }),
+      goDashboard: () => isV2App ? this.go('parcours') : this.go('dashboard', { inAtelier: false }),
+      goProfil: () => this.go('profil', { inAtelier: false }),
+      goParcours: () => this.go('parcours'),
+      goExamen: () => this.go('examen'),
+      goParcoursQuestions: () => { this.setState({ leftExamPanel: 'banque' }); this.go('examen'); },
+      goCours: () => this.go('cours'),
+      goAnalyse: () => this.go('analyse'),
+      quitAtelier: () => isV2App ? this.setState({ sheetOpen: !s.sheetOpen, notifOpen: false }) : this.go('dashboard', { inAtelier: false }),
+      toggleSheet: () => this.setState({ sheetOpen: !s.sheetOpen }),
+      toggleNotif: () => this.setState({ notifOpen: !s.notifOpen }),
+      toggleAteliers: () => this.setState({ ateliersOpen: !s.ateliersOpen }),
+
+      // pages
+      pDash: active('dashboard'), pJardin: active('jardin'), pParcours: active('parcours'),
+      pExercice: active('exercice'), pExamen: active('examen'), pCours: active('cours'),
+      pProfil: active('profil'), pAnalyse: active('analyse'), pReglages: active('reglages'),
+      goReglages: () => this.go('reglages'),
+      closeReglages: () => this.go('parcours'),
+      bgRegBtn: active('reglages') ? 'var(--green-tint)' : 'var(--surface-page)',
+      cRegBtn: active('reglages') ? 'var(--green)' : 'var(--ink-body)',
+      atelierTag: 'ZF4XGH6',
+      regName: s.regName ?? at.name,
+      regNameChange: (e) => this.setState({ regName: e.target.value }),
+      regToggleProg: () => this.setState({ regProg: !(s.regProg ?? true) }),
+      regProgBg: (s.regProg ?? true) ? 'var(--green)' : 'var(--surface-sunken)',
+      regProgBorder: (s.regProg ?? true) ? 'var(--green)' : 'var(--line-strong)',
+      regProgKnob: (s.regProg ?? true) ? '21px' : '2px',
+      regDir: isDesktop ? 'row' : 'column',
+      regCardBg: isDesktop ? 'var(--surface-raised)' : 'transparent',
+      regCardBorder: isDesktop ? '1px solid var(--line)' : 'none',
+      regCardShadow: isDesktop ? 'var(--shadow-sm)' : 'none',
+      regRowPad: isDesktop ? '18px 22px' : '16px 2px',
+      regRowSep: isDesktop ? '1px solid var(--line-soft)' : 'none',
+      regSecDivMt: isDesktop ? '30px' : '0',
+      regSecDivBorder: isDesktop ? 'none' : '1px solid var(--line)',
+      regSecDivPt: isDesktop ? '0' : '26px',
+      regBarRef: this.regBarRef,
+      regBarSvgH: ((s.regBarH || 50) + 28) + 'px',
+      regBarVB: `0 0 ${s.regBarW || 388} ${(s.regBarH || 50) + 28}`,
+      regBarFill: (() => { const W = s.regBarW || 388, H = s.regBarH || 50, R = 28, T = H + R;
+        return `M0 0 L${W} 0 L${W} ${T} A${R} ${R} 0 0 0 ${W - R} ${H} L${R} ${H} A${R} ${R} 0 0 0 0 ${T} Z`; })(),
+      regBarStroke: (() => { const W = s.regBarW || 388, H = s.regBarH || 50, R = 28, T = H + R;
+        return `M0 ${T} A${R} ${R} 0 0 1 ${R} ${H} L${W - R} ${H} A${R} ${R} 0 0 1 ${W} ${T}`; })(),
+      atBarRef: this.atBarRef,
+      atBarSvgH: ((s.atBarH || 58) + 28) + 'px',
+      atBarVB: `0 0 ${s.atBarW || 388} ${(s.atBarH || 58) + 28}`,
+      atBarFill: (() => { const W = s.atBarW || 388, H = s.atBarH || 58, R = 28, T = H + R;
+        return `M0 0 L${W} 0 L${W} ${T} A${R} ${R} 0 0 0 ${W - R} ${H} L${R} ${H} A${R} ${R} 0 0 0 0 ${T} Z`; })(),
+      atBarStroke: (() => { const W = s.atBarW || 388, H = s.atBarH || 58, R = 28, T = H + R;
+        return `M0 ${T} A${R} ${R} 0 0 1 ${R} ${H} L${W - R} ${H} A${R} ${R} 0 0 1 ${W} ${T}`; })(),
+      regGrpPad: isDesktop ? '16px 22px 6px' : '14px 2px 4px',
+      regMbPad: isDesktop ? '15px 22px' : '13px 2px',
+      regMbCardRad: isDesktop ? '20px' : '0',
+      regMbCardOv: isDesktop ? 'hidden' : 'visible',
+      regBandMx: isDesktop ? '0' : '-24px',
+      regBandPad: isDesktop ? '14px 22px 8px' : '12px 24px 8px',
+      regGap: isDesktop ? '36px' : '20px',
+      regNavW: isDesktop ? '190px' : 'auto',
+      regPageMaxW: isDesktop ? '100%' : '1020px',
+      regContentMaxW: isDesktop ? (((s.regSec ?? 'general') === 'briques') ? '1080px' : '760px') : 'none',
+      regMembresDescDisp: isDesktop ? 'block' : 'none',
+      regCardMt: isDesktop ? '12px' : '6px',
+      regFieldRowDir: isDesktop ? 'row' : 'column',
+      regFieldRowAlign: isDesktop ? 'flex-start' : 'stretch',
+      regFieldMax: isDesktop ? '480px' : '100%',
+      regNavItemsDir: isDesktop ? 'column' : 'row',
+      regNavDisp: isDesktop ? 'flex' : 'none',
+      regSecGeneral: (s.regSec ?? 'general') === 'general',
+      regSecMembres: (s.regSec ?? 'general') === 'membres',
+      regSecFichiers: (s.regSec ?? 'general') === 'fichiers',
+      regSecPremium: (s.regSec ?? 'general') === 'premium',
+      regSecBriques: (s.regSec ?? 'general') === 'briques',
+      premInactive: !s.premiumActive,
+      premActive: !!s.premiumActive,
+      premEyebrow: s.premiumActive ? 'ABONNEMENT' : 'PASSAGE EN PREMIUM',
+      premHeroPad: isDesktop ? '22px 24px' : '20px',
+      premAdvCols: isDesktop ? '1fr 1fr' : '1fr',
+      ...(() => {
+        const tiersDef = [
+          { label: '1er membre', from: 1, to: 1, price: 1 },
+          { label: '2 à 4 membres', from: 2, to: 4, price: 0.85 },
+          { label: '5 à 9 membres', from: 5, to: 9, price: 0.75 },
+          { label: '10 à 19 membres', from: 10, to: 19, price: 0.68 },
+          { label: '20 à 49 membres', from: 20, to: 49, price: 0.63 },
+          { label: '50 à 99 membres', from: 50, to: 99, price: 0.6 },
+          { label: '100 membres et +', from: 100, to: Infinity, price: 0.575 },
+        ];
+        const n = 6;
+        const eur = (v) => v.toFixed(2).replace('.', ',').replace(',00', '');
+        let total = 0;
+        for (let i = 1; i <= n; i++) { const t = tiersDef.find((x) => i >= x.from && i <= x.to); total += t.price; }
+        return {
+          premMemberCount: n,
+          premTotalStr: total.toFixed(2).replace('.', ','),
+          premAvgStr: (total / n).toFixed(2).replace('.', ','),
+          premTiers: tiersDef.map((t) => {
+            const current = n >= t.from && n <= t.to;
+            return { label: t.label, priceStr: eur(t.price), current, rowBg: current ? 'var(--gold-tint)' : 'transparent' };
+          }),
+        };
+      })(),
+      premAdvantages: [
+        'Sans publicité',
+        'Utilisation illimitée',
+        'Échange avec l\'IA',
+        'Accès au générateur d\'examen',
+        'Ajout de membres depuis l\'atelier',
+        'Téléchargement jusqu\'à 5 Go de fichiers',
+        '1 joker aléatoire par jour + via quêtes',
+        'Plantes exclusives',
+      ],
+      togglePremium: () => this.setState({ premiumActive: !s.premiumActive }),
+      hasFiles: (s.files || []).length > 0,
+      onFilePick: (e) => {
+        const picked = [...(e.target.files || [])];
+        if (!picked.length) return;
+        const add = picked.map((f, i) => ({ id: 'f' + Date.now() + i, name: f.name, size: f.size, date: 'à l\'instant' }));
+        this.setState({ files: [...(s.files || []), ...add] });
+        e.target.value = '';
+      },
+      fileList: (s.files || []).map((f) => {
+        const kb = f.size / 1024;
+        const sizeStr = kb >= 1024 ? (kb / 1024).toFixed(1) + ' Mo' : Math.max(1, Math.round(kb)) + ' Ko';
+        const ext = (f.name.split('.').pop() || '').toLowerCase();
+        const isImg = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext);
+        const isPdf = ext === 'pdf';
+        return {
+          name: f.name.replace(/\.[^.]+$/, ''),
+          meta: (ext ? ext.toUpperCase() + ' · ' : '') + sizeStr,
+          iconBg: isPdf ? 'rgba(178,82,58,0.10)' : isImg ? 'var(--green-tint)' : 'var(--surface-sunken)',
+          iconColor: isPdf ? 'var(--danger)' : isImg ? 'var(--green-strong)' : 'var(--ink-muted)',
+          rename: () => { const nn = window.prompt('Renommer le fichier', f.name); if (nn && nn.trim()) this.setState({ files: (s.files || []).map((x) => x.id === f.id ? { ...x, name: nn.trim() } : x) }); },
+          download: () => {},
+          remove: () => this.setState({ files: (s.files || []).filter((x) => x.id !== f.id) }),
+        };
+      }),
+      regSecMT: '0',
+      regPhPad: isDesktop ? '80px 24px' : '34px 24px 10px',
+      regPlaceholders: [].filter((k) => k === (s.regSec ?? 'general'))
+        .map((k) => ({ title: ({})[k] })),
+      briqueCols: isDesktop ? 'minmax(0,0.85fr) minmax(0,1.45fr)' : '1fr',
+      briqueNotionsColStyle: isDesktop ? '' : 'margin-top:26px;',
+      briqueChapCount: (s.chapters || []).length,
+      briqueChapOver: (e) => e.preventDefault(),
+      briqueChapters: (() => {
+        const chaps = s.chapters || [];
+        const act = s.chapActive || (chaps[0] && chaps[0].id);
+        const selChap = isMobile ? 'bordure' : 'barre';
+        return chaps.map((c) => {
+          const isAct = c.id === act;
+          const n = c.notions.length;
+          return {
+            name: c.name,
+            countStr: n + (n > 1 ? ' notions' : ' notion'),
+            rowBg: 'transparent',
+            barBg: (selChap === 'barre' && isAct) ? 'var(--green)' : 'transparent',
+            rowBorderTop: (selChap === 'bordure' && isAct) ? '2px solid var(--green)' : '2px solid transparent',
+            rowBorderBottom: (selChap === 'bordure' && isAct) ? '2px solid var(--green)' : '1px solid var(--line-soft)',
+            nameColor: ((selChap === 'texte' || selChap === 'pastille') && isAct) ? 'var(--green-strong)' : 'var(--ink)',
+            nameWeight: (selChap === 'texte' && isAct) ? '800' : '600',
+            dotDisplay: (selChap === 'pastille' && isAct) ? 'block' : 'none',
+            select: () => this.setState({ chapActive: c.id }),
+            rename: (e) => { if (e && e.stopPropagation) e.stopPropagation(); const nn = window.prompt('Renommer le chapitre', c.name); if (nn && nn.trim()) this.setState({ chapters: chaps.map((x) => x.id === c.id ? { ...x, name: nn.trim() } : x) }); },
+            remove: (e) => { if (e && e.stopPropagation) e.stopPropagation(); const rest = chaps.filter((x) => x.id !== c.id); this.setState({ chapters: rest, chapActive: act === c.id ? (rest[0] && rest[0].id) : act }); },
+            dragStart: (e) => { if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'; this.setState({ chapDragId: c.id }); },
+            drop: (e) => {
+              e.preventDefault();
+              const from = s.chapDragId;
+              if (!from || from === c.id) { this.setState({ chapDragId: null }); return; }
+              const arr = [...chaps];
+              const fi = arr.findIndex((x) => x.id === from);
+              const ti = arr.findIndex((x) => x.id === c.id);
+              if (fi < 0 || ti < 0) return;
+              const [m] = arr.splice(fi, 1);
+              arr.splice(ti, 0, m);
+              this.setState({ chapters: arr, chapDragId: null });
+            },
+          };
+        });
+      })(),
+      addBriqueChapter: () => {
+        const chaps = s.chapters || [];
+        const id = 'ch' + Date.now();
+        this.setState({ chapters: [...chaps, { id, name: 'Nouveau chapitre', notions: [] }], chapActive: id });
+      },
+      briqueHasChap: (() => { const chaps = s.chapters || []; return chaps.length > 0; })(),
+      briqueNoChap: (s.chapters || []).length === 0,
+      briqueActiveChapName: (() => { const chaps = s.chapters || []; const act = chaps.find((c) => c.id === (s.chapActive || (chaps[0] && chaps[0].id))); return act ? act.name : '—'; })(),
+      briqueNoNotion: (() => { const chaps = s.chapters || []; const act = chaps.find((c) => c.id === (s.chapActive || (chaps[0] && chaps[0].id))); return !!act && act.notions.length === 0; })(),
+      briqueNotions: (() => {
+        const chaps = s.chapters || [];
+        const act = chaps.find((c) => c.id === (s.chapActive || (chaps[0] && chaps[0].id)));
+        if (!act) return [];
+        return act.notions.map((nt) => ({
+          name: nt.name,
+          dot: nt.acquired ? 'var(--green)' : 'var(--tan, #B08968)',
+          dotTitle: nt.acquired ? 'notion acquise' : 'notion à arroser',
+          tag: nt.acquired ? 'acquise' : 'à arroser',
+          tagColor: nt.acquired ? 'var(--green-strong)' : 'var(--tan-strong)',
+          tagBg: nt.acquired ? 'var(--green-tint)' : 'var(--tan-tint, #EFE4D3)',
+          rename: () => { const nn = window.prompt('Renommer la notion', nt.name); if (nn && nn.trim()) this.setState({ chapters: chaps.map((c) => c.id === act.id ? { ...c, notions: c.notions.map((x) => x.id === nt.id ? { ...x, name: nn.trim() } : x) } : c) }); },
+          remove: () => this.setState({ chapters: chaps.map((c) => c.id === act.id ? { ...c, notions: c.notions.filter((x) => x.id !== nt.id) } : c) }),
+        }));
+      })(),
+      addBriqueNotion: () => {
+        const chaps = s.chapters || [];
+        const act = chaps.find((c) => c.id === (s.chapActive || (chaps[0] && chaps[0].id)));
+        if (!act) return;
+        const id = 'no' + Date.now();
+        this.setState({ chapters: chaps.map((c) => c.id === act.id ? { ...c, notions: [...c.notions, { id, name: 'Nouvelle notion', acquired: false }] } : c) });
+      },
+      regMobileNav: !isDesktop,
+      regMenuOpen: !isDesktop && !!s.regMenuOpen,
+      grpAllColor: (s.grpActive ?? 'all') === 'all' ? 'var(--surface-page)' : 'var(--ink-muted)',
+      grpAllBg: (s.grpActive ?? 'all') === 'all' ? 'var(--ink)' : 'transparent',
+      grpAllBorder: (s.grpActive ?? 'all') === 'all' ? 'none' : '1px solid var(--line-strong)',
+      groupChips: (s.groups || []).map((g) => ({
+        name: g.name,
+        color: s.grpActive === g.id ? 'var(--surface-page)' : 'var(--ink-muted)',
+        bg: s.grpActive === g.id ? 'var(--ink)' : 'transparent',
+        border: s.grpActive === g.id ? 'none' : '1px solid var(--line-strong)',
+        pick: () => this.setState({ grpActive: g.id }),
+      })),
+      grpPickAll: () => this.setState({ grpActive: 'all' }),
+      addGroup: () => { const gs = s.groups || []; const id = 'g' + Date.now(); this.setState({ groups: [...gs, { id, name: 'groupe ' + (gs.length + 1), members: [] }], grpActive: id }); },
+      toggleRegMenu: () => this.setState({ regMenuOpen: !s.regMenuOpen }),
+      regCurLabel: ({ general: 'Général', membres: 'Membres & rôles', fichiers: 'Fichiers', briques: 'Chapitre & Notion', premium: 'Atelier Premium' })[s.regSec ?? 'general'],
+      regNav: (() => {
+        const P = (d) => React.createElement('path', { key: d.slice(0, 8), d });
+        const svg = (kids) => React.createElement('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round' }, kids);
+        const icons = {
+          general: svg([P('M20 7h-9'), P('M14 17H5'), React.createElement('circle', { key: 'c1', cx: 17, cy: 17, r: 3 }), React.createElement('circle', { key: 'c2', cx: 7, cy: 7, r: 3 })]),
+          membres: svg([P('M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'), React.createElement('circle', { key: 'c', cx: 9, cy: 7, r: 4 }), P('M22 21v-2a4 4 0 0 0-3-3.87'), P('M16 3.13a4 4 0 0 1 0 7.75')]),
+          fichiers: svg([P('M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z'), P('M14 2v4a2 2 0 0 0 2 2h4'), P('M10 9H8'), P('M16 13H8'), P('M16 17H8')]),
+          briques: svg([React.createElement('rect', { key: 'r1', width: 7, height: 7, x: 3, y: 3, rx: 1 }), React.createElement('rect', { key: 'r2', width: 7, height: 7, x: 14, y: 3, rx: 1 }), React.createElement('rect', { key: 'r3', width: 7, height: 7, x: 14, y: 14, rx: 1 }), React.createElement('rect', { key: 'r4', width: 7, height: 7, x: 3, y: 14, rx: 1 })]),
+          premium: svg([React.createElement('polygon', { key: 'p', points: '12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2' })]),
+        };
+        return [
+        { key: 'general', label: 'Général', meta: 'informations de base' },
+        { key: 'membres', label: 'Membres & rôles', meta: 'accès et permissions' },
+        { key: 'fichiers', label: 'Fichiers', meta: 'sources de l\'atelier' },
+        { key: 'briques', label: 'Chapitre & Notion', meta: 'unités générées par l\'IA' },
+        { key: 'premium', label: 'Atelier Premium', meta: 'options avancées' },
+      ].map((it) => ({
+        label: it.label,
+        meta: it.meta,
+        icon: icons[it.key],
+        pick: () => this.setState({ regSec: it.key, regMenuOpen: false }),
+        bg: (s.regSec ?? 'general') === it.key ? 'var(--tan-tint, #EFE4D3)' : 'transparent',
+        c: (s.regSec ?? 'general') === it.key ? 'var(--ink)' : 'var(--ink-muted)',
+        menuBg: (s.regSec ?? 'general') === it.key ? 'var(--surface-sunken)' : 'transparent',
+        barBg: (s.regSec ?? 'general') === it.key ? 'var(--green)' : 'transparent',
+      })); })(),
+      regMembers: (() => {
+        const raw = [
+          { name: 'Adrien Bourillon', role: 'gestionnaire', tag: 'TN4MHU', avBg: 'var(--blue, #7A9BB5)', action: 'rétrograder', hasActions: true },
+          { name: 'Scellow', role: 'membre', tag: 'J6FSQF5', avBg: '#9B7AB5', action: 'promouvoir', hasActions: true },
+          { name: 'Victor Tuloup', role: 'gestionnaire', tag: '692EG4AC', avBg: 'var(--green-light)', action: 'rétrograder', hasActions: true },
+          { name: 'Alexis Bourillon', role: 'membre', tag: '5PL7SV', avBg: 'var(--tan, #B08968)', action: 'promouvoir', hasActions: true },
+          { name: 'Alexis Bourillon', role: 'propriétaire', tag: 'AD8G45', avBg: 'var(--green)', hasActions: false },
+          { name: 'Anne COCAUD', role: 'gestionnaire', tag: 'K6RSE4YJ', avBg: 'var(--green-strong)', action: 'rétrograder', hasActions: true },
+        ].map((m) => ({ ...m, initial: m.name[0].toUpperCase() }));
+        const active = (s.groups || []).find((g) => g.id === s.grpActive);
+        if (!active) return raw.map((m) => ({ ...m, checkMode: false, showActions: m.hasActions, rowMt: '0', rowBg: 'transparent', divBefore: false }));
+        const toggle = (tag) => () => {
+          const inIt = active.members.includes(tag);
+          const nextMembers = inIt ? active.members.filter((t) => t !== tag) : [...active.members, tag];
+          this.setState({ groups: (s.groups || []).map((g) => g.id === active.id ? { ...g, members: nextMembers } : g) });
+        };
+        const inG = raw.filter((m) => active.members.includes(m.tag));
+        const out = raw.filter((m) => !active.members.includes(m.tag));
+        return [
+          ...inG.map((m) => ({ ...m, checkMode: true, checked: true, showActions: false, toggle: toggle(m.tag), rowMt: '0', rowBg: 'transparent', divBefore: false })),
+          ...out.map((m, i) => ({ ...m, checkMode: true, checked: false, showActions: false, toggle: toggle(m.tag), rowMt: '0', rowBg: 'transparent', divBefore: i === 0 })),
+        ];
+      })(),
+      regEmojis: ['📚','🌿','⚗️','🎨','💡','🎵','🧠','🔬','🌍','🧮','📐','🎭','⚖️','🏛️','💻','🩺','🎓','✏️','🗺️','🧪'].map((char) => ({
+        char,
+        pick: () => this.setState({ regEmoji: char }),
+        bg: (s.regEmoji ?? '💡') === char ? 'var(--green-tint)' : 'var(--surface-page)',
+        border: (s.regEmoji ?? '💡') === char ? '1.5px solid var(--green)' : '1px solid var(--line)',
+      })),
+
+      // dashboard
+      heroName: at.name, heroMeta: at.meta,
+      heroPct: at.pct, heroPctW: at.pct + '%',
+      atelierCount: this.data.ateliers.length,
+      ateliersList: this.data.ateliers.map(a => ({
+        name: a.name, meta: a.meta, pct: a.pct,
+        leafBorder: a.premium ? '1.5px solid var(--gold)' : '1.5px solid transparent',
+        leafTitle: a.premium ? 'atelier premium' : '',
+        bg: 'transparent',
+        barBg: a.id === s.atelierId ? 'var(--green)' : 'transparent',
+        open: () => this.setState({ atelierId: a.id, inAtelier: true, page: 'parcours', ateliersOpen: false, sheetOpen: false, notifOpen: false }),
+      })),
+      reprendre: () => this.setState({ atelierId: at.id, inAtelier: true, page: 'parcours', ateliersOpen: false, notifOpen: false }),
+
+      // jardin
+      droplets: s.droplets,
+      arrosoirVal: s.arrosoir, arrosoirTotal: 25,
+      arrosoirFoot: s.arrosoir + (s.arrosoir > 1 ? ' gouttes restantes' : ' goutte restante'),
+      parcelles: this.data.ateliers.map((a, i) => ({
+        name: a.name,
+        state: i === 0 ? 'arrosée hier · en pleine forme' : i === 1 ? 'a soif · 3 jours sans arrosage' : 'graine à planter',
+        stateColor: i === 1 ? 'var(--tan-strong)' : 'var(--ink-muted)',
+        arroser: () => { this.setState({ atelierId: a.id }); setTimeout(() => this.startExercice(), 0); },
+      })),
+
+      // jardin isométrique
+      jardinMaxW: isDesktop ? '680px' : '520px',
+      isoScale: isDesktop ? 1 : 0.61,
+      isoW: (isDesktop ? 560 : Math.round(560 * 0.61)) + 'px',
+      isoH: (isDesktop ? 445 : Math.round(445 * 0.61)) + 'px',
+      grassBg: 'linear-gradient(135deg,#ABC58D 0%,#9CBA7E 55%,#92B173 100%)',
+      fleurColor: '#E3B54F',
+      fruitColor: '#CE7B52',
+      c1: '#7CA163', c2: '#699053', c3: '#8DB176',
+      saisonLabel: 'printemps · saison 1',
+      parcJardin: this.data.ateliers.map((a, i) => {
+        const sel = s.jardinSel === i;
+        const pos = [{ x: 354, y: 258 }, { x: 188, y: 256 }, { x: 280, y: 330 }][i] || { x: 280, y: 300 };
+        return {
+          name: a.name,
+          shortName: a.name.split(' —')[0].split(' du ')[0],
+          x: pos.x + 'px', y: pos.y + 'px',
+          select: () => this.setState({ jardinSel: i }),
+          ringOpacity: sel ? 1 : 0,
+          isFleurie: i === 0, isSoif: i === 1, isGraine: i === 2,
+          c1: '#7CA163', c2: '#699053', c3: '#8DB176',
+          fruit: '#CE7B52',
+          chipBg: sel ? 'var(--green)' : 'var(--surface-raised)',
+          chipColor: sel ? 'var(--on-green)' : 'var(--ink-muted)',
+          chipBorder: sel ? 'var(--green-strong)' : 'var(--line)',
+        };
+      }),
+      jSelName: this.data.ateliers[s.jardinSel].name,
+      jSelState: s.jardinSel === 0 ? 'arrosée hier · en pleine forme' : s.jardinSel === 1 ? 'a soif · 3 jours sans arrosage' : 'graine à planter — commence une première session',
+      jSelStateColor: s.jardinSel === 1 ? 'var(--tan-strong)' : 'var(--ink-muted)',
+      jSelArroser: () => { this.setState({ atelierId: this.data.ateliers[s.jardinSel].id }); setTimeout(() => this.startExercice(), 0); },
+
+      // parcours
+      atelierName: at.name,
+
+      atelierNameCaps: at.name.toUpperCase(),
+      atelierBriques: at.briques,
+      vueSerre: parcoursPref.indexOf('serre') !== -1,
+      vueParcelle: parcoursPref.indexOf('parcelle') !== -1,
+      vueChapitres: parcoursPref.indexOf('chapitres') !== -1,
+      showBriquesLine: parcoursPref.indexOf('chapitres') === -1,
+      ...(() => {
+        const cur = at.sections.find(sec => sec.pots.indexOf('c') !== -1) || at.sections.find(sec => !sec.pots.every(p => p === 'l')) || at.sections[0];
+        const done = cur.pots.filter(p => p === 'd').length;
+        return {
+          chapHeroName: cur.name,
+          chapHeroPctW: Math.round((done / cur.pots.length) * 100) + '%',
+          chapHeroStart: () => this.startExercice(),
+          chapHeroRef: cur,
+        };
+      })(),
+      chapitres: at.sections.map(sec => {
+        const locked = sec.pots.every(p => p === 'l');
+        const done = sec.pots.filter(p => p === 'd').length;
+        return {
+          name: sec.name, locked, playable: !locked,
+          nameColor: locked ? 'var(--ink-faint)' : 'var(--ink)',
+          pctW: Math.round((done / sec.pots.length) * 100) + '%',
+          cursor: locked ? 'default' : 'pointer',
+          onClick: () => { if (!locked) this.startExercice(); },
+        };
+      }),
+      sections, beds,
+
+      // profil
+      profilSettings: [
+        { label: 'notifications', hint: 'activées', color: 'var(--ink)' },
+        { label: 'langue', hint: 'français', color: 'var(--ink)' },
+        { label: 'aide & contact', hint: '', color: 'var(--ink)' },
+        { label: 'se déconnecter', hint: '', color: 'var(--danger-strong)' },
+      ],
+
+      // générateur d'examen
+      examOptA: false, examOptB: true,
+      banqueMaxH: isMobile ? '238px' : 'none',
+      banqueScrollable: isMobile,
+      setOptA: () => this.setState({ examOpt: 'A' }),
+      setOptB: () => this.setState({ examOpt: 'B' }),
+      optABg: s.examOpt === 'A' ? 'var(--surface-raised)' : 'transparent',
+      optAColor: s.examOpt === 'A' ? 'var(--ink)' : 'var(--ink-muted)',
+      optAShadow: s.examOpt === 'A' ? 'var(--shadow-sm)' : 'none',
+      optBBg: s.examOpt === 'B' ? 'var(--surface-raised)' : 'transparent',
+      optBColor: s.examOpt === 'B' ? 'var(--ink)' : 'var(--ink-muted)',
+      optBShadow: s.examOpt === 'B' ? 'var(--shadow-sm)' : 'none',
+      examTabHisto: s.examTab === 'histo',
+      examTabBanque: s.examTab === 'banque',
+      examTabEditeur: s.examTab === 'editeur',
+      tabHisto: () => this.setState({ examTab: 'histo', creating: false }),
+      tabBanque: () => this.setState({ examTab: 'banque', creating: false }),
+      tabEditeur: () => this.setState({ examTab: 'editeur', creating: false }),
+      cTabHisto: s.examTab === 'histo' ? 'var(--green-strong)' : 'var(--ink-muted)',
+      bTabHisto: s.examTab === 'histo' ? 'var(--green)' : 'transparent',
+      cTabBanque: s.examTab === 'banque' ? 'var(--green-strong)' : 'var(--ink-muted)',
+      bTabBanque: s.examTab === 'banque' ? 'var(--green)' : 'transparent',
+      cTabEditeur: s.examTab === 'editeur' ? 'var(--green-strong)' : 'var(--ink-muted)',
+      bTabEditeur: s.examTab === 'editeur' ? 'var(--green)' : 'transparent',
+      isCreating: s.creating, notCreating: !s.creating,
+      startCreate: () => this.setState({ examEd: { ...this.state.examEd, draft: { q: '', choices: ['', '', '', ''], correct: 0, corrects: [0], type: 'qcm', gainMode: 'fixe', pts: 1, maxPts: 2, penMode: 'fixe', penPts: 0, penScope: 'mauvaise' } } }),
+      stopCreate: () => this.setState({ examEd: { ...this.state.examEd, draft: null } }),
+      editorDir: isDesktop ? 'row' : 'column',
+      mobileDetailOn: isMobile && !!s.mobileExamDetail,
+      leftColDisplay: (isMobile && s.mobileExamDetail) ? 'display:none;' : '',
+      examSheetDisplay: (isMobile && !s.mobileExamDetail) ? 'display:none;' : '',
+      closeMobileDetail: () => this.setState({ mobileExamDetail: false }),
+      sheetEmptyDisplay: isMobile ? 'display:none;' : '',
+      examPagePad: isDesktop ? '24px 40px 32px' : '12px 12px 24px',
+      examRowTop: isDesktop ? '8px' : '0px',
+      panelW: isDesktop ? '240px' : '100%',
+      banqueW: isDesktop ? '360px' : '100%',
+      examsList: (() => {
+        const base = this.data.exams.map((e, i) => ({ ...e, _id: 'e' + i }));
+        const all = base.concat(s.exExtra || []);
+        const dead = s.exDel || [];
+        const selId = s.selExamId || 'e0';
+        const exq = (s.exSearch || '').toLowerCase();
+        const exStatus = s.exStatus || [];
+        const exSort = s.exSort || 'recent';
+        let arr = all.filter(e => dead.indexOf(e._id) === -1).filter(e => !exq || (e.name || '').toLowerCase().indexOf(exq) !== -1).filter(e => exStatus.length === 0 || exStatus.indexOf(e.badge) !== -1);
+        if (exSort === 'az') arr = arr.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'fr'));
+        else if (exSort === 'ancien') arr = arr.slice().reverse();
+        return arr.map(e => ({
+          name: e.name, meta: (e.meta || '').split(' · ')[0], badge: e.badge,
+          badgeBg: e.pub ? 'var(--success-tint)' : 'var(--surface-sunken)',
+          badgeColor: e.pub ? 'var(--success-strong)' : 'var(--ink-muted)',
+          cardBorder: e._id === selId ? '2px solid var(--green)' : '1px solid var(--line)',
+          cardBg: e._id === selId ? 'var(--surface-page)' : 'var(--surface-page)',
+          open: () => this.setState({ selExamId: e._id }),
+          openMobile: () => this.setState({ selExamId: e._id, mobileExamDetail: true }),
+          edit: () => {}, export: () => {}, analyse: () => {},
+          duplicate: () => this.setState({ exExtra: (this.state.exExtra || []).concat([{ ...e, _id: 'x' + Date.now() + Math.random().toString(36).slice(2, 5), name: e.name + ' (copie)' }]) }),
+          remove: () => this.setState({ exDel: (this.state.exDel || []).concat([e._id]) }),
+        }));
+      })(),
+      leftBanqueOpen: (s.leftExamPanel || 'banque') === 'banque',
+      leftExamensOpen: (s.leftExamPanel || 'banque') === 'examens',
+      openBanque: () => this.setState({ leftExamPanel: 'banque' }),
+      bqSearch: s.bqSearch || '',
+      onBqSearch: (e) => this.setState({ bqSearch: e.target.value }),
+      exSearch: s.exSearch || '',
+      onExSearch: (e) => this.setState({ exSearch: e.target.value }),
+      newExam: () => this.setState({ exExtra: (this.state.exExtra || []).concat([{ _id: 'nx' + Date.now(), name: 'Nouvel examen', meta: 'créé aujourd\u2019hui', badge: 'BROUILLON', pub: false }]) }),
+      openExamens: () => this.setState({ leftExamPanel: 'examens' }),
+      examensCount: this.data.exams.length,
+      banqueCount: this.data.bank.length,
+      leftPanelMaxH: isDesktop ? '2000px' : 'none',
+      ongletsWrap: isDesktop ? 'flex:1 1 0;min-height:0;' : '',
+      ongletsScroll: isDesktop ? 'flex:1;min-height:0;' : 'flex:none;',
+      banqueOnglets: false,
+      banqueOngletsLarge: true,
+      banqueAccordeon: false,
+      tabExColor: ((s.leftExamPanel || 'banque') === 'examens') ? 'var(--green-strong)' : 'var(--ink-muted)',
+      tabExBg: ((s.leftExamPanel || 'banque') === 'examens') ? 'var(--green-tint)' : 'transparent',
+      tabExBorder: ((s.leftExamPanel || 'banque') === 'examens') ? 'var(--green)' : 'transparent',
+      tabBqColor: ((s.leftExamPanel || 'banque') === 'banque') ? 'var(--green-strong)' : 'var(--ink-muted)',
+      tabBqBg: ((s.leftExamPanel || 'banque') === 'banque') ? 'var(--green-tint)' : 'transparent',
+      tabBqBorder: ((s.leftExamPanel || 'banque') === 'banque') ? 'var(--green)' : 'transparent',
+      segExBg: ((s.leftExamPanel || 'banque') === 'examens') ? 'var(--surface-raised)' : 'transparent',
+      segExColor: ((s.leftExamPanel || 'banque') === 'examens') ? 'var(--green-strong)' : 'var(--ink-muted)',
+      segExShadow: ((s.leftExamPanel || 'banque') === 'examens') ? 'var(--shadow-sm)' : 'none',
+      segBqBg: ((s.leftExamPanel || 'banque') === 'banque') ? 'var(--surface-raised)' : 'transparent',
+      segBqColor: ((s.leftExamPanel || 'banque') === 'banque') ? 'var(--green-strong)' : 'var(--ink-muted)',
+      segBqShadow: ((s.leftExamPanel || 'banque') === 'banque') ? 'var(--shadow-sm)' : 'none',
+      examRowAlign: 'stretch',
+      examRowFlex: isDesktop ? 'flex:1;min-height:0;' : '',
+      examPageExtra: isDesktop ? 'height:100%;min-height:0;overflow:hidden;' : '',
+      sheetColScroll: isDesktop ? 'min-height:0;overflow-y:auto;padding:6px 24px;' : '',
+      leftColExtra: isDesktop ? 'min-height:0;' : '',
+      examBoxFlex: !isDesktop ? '0 0 auto' : (((s.leftExamPanel || 'banque') === 'examens') ? '1 1 0' : '0 0 auto'),
+      banqueBoxFlex: !isDesktop ? '0 0 auto' : (((s.leftExamPanel || 'banque') === 'banque') ? '1 1 0' : '0 0 auto'),
+      examensChevron: ((s.leftExamPanel || 'banque') === 'examens') ? '180' : '0',
+      banqueChevron: ((s.leftExamPanel || 'banque') === 'banque') ? '0' : '180',
+      leftExHdrBg: ((s.leftExamPanel || 'banque') === 'examens') ? 'var(--green-tint)' : 'var(--surface-raised)',
+      leftBqHdrBg: ((s.leftExamPanel || 'banque') === 'banque') ? 'var(--green-tint)' : 'var(--surface-raised)',
+      leftExHdrBorder: ((s.leftExamPanel || 'banque') === 'examens') ? 'var(--line)' : 'transparent',
+      leftBqHdrBorder: ((s.leftExamPanel || 'banque') === 'banque') ? 'var(--line)' : 'transparent',
+      chapterChips: ['toutes', "L'Europe", 'Les Amériques', "L'Asie"].map(ch => ({
+        label: ch,
+        pick: () => this.setState({ chapFilter: ch }),
+        bg: s.chapFilter === ch ? 'var(--green-tint)' : 'var(--surface-raised)',
+        color: s.chapFilter === ch ? 'var(--green-strong)' : 'var(--ink-muted)',
+        border: s.chapFilter === ch ? 'var(--green-light)' : 'var(--line-strong)',
+      })),
+      exFilterToggle: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ exFilterOpen: !this.state.exFilterOpen, exSortOpen: false, bqSortOpen: false, bqFilterOpen: false }); },      bqFilterToggle: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ bqFilterOpen: !this.state.bqFilterOpen, bqSortOpen: false, exSortOpen: false, exFilterOpen: false }); },
+      exFilterOpen: !!s.exFilterOpen,
+      bqFilterOpen: !!s.bqFilterOpen,
+      exFocusOn: () => this.setState({ exFocus: true }),
+      exFocusOff: () => this.setState({ exFocus: false, exFilterOpen: false, exSortOpen: false }),
+      bqFocusOn: () => this.setState({ bqFocus: true }),
+      bqFocusOff: () => this.setState({ bqFocus: false, bqFilterOpen: false, bqSortOpen: false }),
+      exFilterBtnShow: (this.props.emplacementFiltre ?? 'toujours visible') === 'toujours visible' || !!s.exFocus,
+      exNewShow: (this.props.emplacementFiltre ?? 'toujours visible') === 'toujours visible' || !s.exFocus,
+      bqFilterBtnShow: (this.props.emplacementFiltre ?? 'toujours visible') === 'toujours visible' || !!s.bqFocus,
+      bqNewShow: (this.props.emplacementFiltre ?? 'toujours visible') === 'toujours visible' || !s.bqFocus,
+      exFilterBtnBg: (s.exFilterOpen || (s.exStatus || []).length > 0) ? 'var(--green-tint)' : 'var(--surface-raised)',
+      exFilterBtnBorder: (s.exFilterOpen || (s.exStatus || []).length > 0) ? 'var(--green-light)' : 'var(--line-strong)',
+      exFilterBtnColor: (s.exFilterOpen || (s.exStatus || []).length > 0) ? 'var(--green-strong)' : 'var(--ink-muted)',
+      bqFilterBtnBg: (s.bqFilterOpen || (s.bqThemes || []).length > 0) ? 'var(--green-tint)' : 'var(--surface-raised)',
+      bqFilterBtnBorder: (s.bqFilterOpen || (s.bqThemes || []).length > 0) ? 'var(--green-light)' : 'var(--line-strong)',
+      bqFilterBtnColor: (s.bqFilterOpen || (s.bqThemes || []).length > 0) ? 'var(--green-strong)' : 'var(--ink-muted)',
+      exSortOpen: !!s.exSortOpen,
+      bqSortOpen: !!s.bqSortOpen,
+      exSortToggle: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ exSortOpen: !this.state.exSortOpen, bqSortOpen: false, exFilterOpen: false, bqFilterOpen: false }); },
+      bqSortToggle: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ bqSortOpen: !this.state.bqSortOpen, exSortOpen: false, exFilterOpen: false, bqFilterOpen: false }); },
+      exSortBtnBg: (s.exSortOpen || (s.exSort || 'recent') !== 'recent') ? 'var(--green-tint)' : 'var(--surface-raised)',
+      exSortBtnBorder: (s.exSortOpen || (s.exSort || 'recent') !== 'recent') ? 'var(--green-light)' : 'var(--line-strong)',
+      exSortBtnColor: (s.exSortOpen || (s.exSort || 'recent') !== 'recent') ? 'var(--green-strong)' : 'var(--ink-muted)',
+      bqSortBtnBg: (s.bqSortOpen || (s.bqSort || 'defaut') !== 'defaut') ? 'var(--green-tint)' : 'var(--surface-raised)',
+      bqSortBtnBorder: (s.bqSortOpen || (s.bqSort || 'defaut') !== 'defaut') ? 'var(--green-light)' : 'var(--line-strong)',
+      bqSortBtnColor: (s.bqSortOpen || (s.bqSort || 'defaut') !== 'defaut') ? 'var(--green-strong)' : 'var(--ink-muted)',
+      exSortOptions: [
+        { key: 'recent', label: 'plus récents' },
+        { key: 'ancien', label: 'plus anciens' },
+        { key: 'az', label: 'A → Z' },
+      ].map(o => ({ label: o.label, pick: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ exSort: o.key, exSortOpen: false }); }, bg: (s.exSort || 'recent') === o.key ? 'var(--green-tint)' : 'transparent', color: (s.exSort || 'recent') === o.key ? 'var(--green-strong)' : 'var(--ink-body)', check: (s.exSort || 'recent') === o.key ? '✓' : '' })),
+      bqSortOptions: [
+        { key: 'defaut', label: 'ordre d\u2019origine' },
+        { key: 'az', label: 'A → Z' },
+        { key: 'za', label: 'Z → A' },
+        { key: 'theme', label: 'par thème' },
+      ].map(o => ({ label: o.label, pick: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ bqSort: o.key, bqSortOpen: false }); }, bg: (s.bqSort || 'defaut') === o.key ? 'var(--green-tint)' : 'transparent', color: (s.bqSort || 'defaut') === o.key ? 'var(--green-strong)' : 'var(--ink-body)', check: (s.bqSort || 'defaut') === o.key ? '✓' : '' })),
+      exFilterChips: [
+        { key: 'PUBLIÉ', label: 'publiés' },
+        { key: 'BROUILLON', label: 'brouillons' },
+      ].map(f => { const on = (s.exStatus || []).indexOf(f.key) !== -1; return { label: f.label, check: on ? '✓' : '', rowBg: on ? 'var(--green-tint)' : 'transparent', rowColor: on ? 'var(--green-strong)' : 'var(--ink-body)', toggle: (e) => { if (e && e.preventDefault) e.preventDefault(); const cur = (this.state.exStatus || []).slice(); const i = cur.indexOf(f.key); if (i === -1) cur.push(f.key); else cur.splice(i, 1); this.setState({ exStatus: cur }); } }; }),
+      bqFilterChips: Array.from(new Set(this.data.bank.map(b => b.chap))).map(ch => { const on = (s.bqThemes || []).indexOf(ch) !== -1; return { label: ch, check: on ? '✓' : '', rowBg: on ? 'var(--green-tint)' : 'transparent', rowColor: on ? 'var(--green-strong)' : 'var(--ink-body)', toggle: (e) => { if (e && e.preventDefault) e.preventDefault(); const cur = (this.state.bqThemes || []).slice(); const i = cur.indexOf(ch); if (i === -1) cur.push(ch); else cur.splice(i, 1); this.setState({ bqThemes: cur }); } }; }),
+      exActiveFilters: (s.exStatus || []).map(k => ({ label: k === 'PUBLIÉ' ? 'publiés' : 'brouillons', remove: () => this.setState({ exStatus: (this.state.exStatus || []).filter(x => x !== k) }) })),
+      bqActiveFilters: (s.bqThemes || []).map(ch => ({ label: ch, remove: () => this.setState({ bqThemes: (this.state.bqThemes || []).filter(x => x !== ch) }) })),
+      exHasActiveFilters: (s.exStatus || []).length > 0,
+      bqHasActiveFilters: (s.bqThemes || []).length > 0,
+      ...(() => {
+        const ed = s.examEd;
+        const draft = ed.draft;
+        const setEd = (patch) => this.setState({ examEd: { ...this.state.examEd, ...patch } });
+        const dset = (patch) => setEd({ draft: { ...this.state.examEd.draft, ...patch } });
+        const dm = draft || {};
+        const gainMode = dm.gainMode || 'fixe';
+        const penMode = dm.penMode || 'fixe';
+        const qtype = dm.type || 'qcm';
+        const corrects = Array.isArray(dm.corrects) ? dm.corrects : (dm.correct != null ? [dm.correct] : [0]);
+        const penScope = dm.penScope || 'mauvaise';
+        const _segB = 'cursor:pointer;font-family:var(--font-sans);font-size:11.5px;font-weight:600;border:none;border-radius:8px;padding:6px 11px;white-space:nowrap;transition:background 140ms,color 140ms;';
+        const _segOn = _segB + 'background:var(--surface-raised);color:var(--green-strong);box-shadow:var(--shadow-sm);';
+        const _segOff = _segB + 'background:transparent;color:var(--ink-muted);';
+        const _segDanger = _segB + 'background:var(--danger-strong, #9A3B27);color:#fff;';
+        const _numI = 'width:44px;text-align:center;font-family:var(--font-sans);font-size:12px;font-weight:600;color:var(--ink-body);background:var(--surface-raised);border:1px solid var(--line-strong);border-radius:8px;padding:4px 2px;outline:none;';
+        const _typeIcon = (k, sz) => {
+          const S = (tag, p, key) => React.createElement(tag, Object.assign({ key }, p));
+          const paths = {
+            qcm: [S('rect',{x:3,y:3,width:18,height:18,rx:4},'a'), S('path',{d:'m8 12 3 3 5-6'},'b')],
+            qcs: [S('circle',{cx:12,cy:12,r:9},'a'), S('circle',{cx:12,cy:12,r:3.6,fill:'currentColor',stroke:'none'},'b')],
+            texte: [S('line',{x1:4,y1:7,x2:20,y2:7},'a'), S('line',{x1:4,y1:12,x2:20,y2:12},'b'), S('line',{x1:4,y1:17,x2:13,y2:17},'c')],
+            liste: [S('line',{x1:10,y1:6,x2:20,y2:6},'a'), S('line',{x1:10,y1:12,x2:20,y2:12},'b'), S('line',{x1:10,y1:18,x2:20,y2:18},'c'), S('path',{d:'M4 6h1v4'},'d'), S('path',{d:'M4 10h2'},'e'), S('path',{d:'M6 18H4c0-1 2-2 2-3s-1-1.5-2-1'},'f')],
+            grille: [S('rect',{x:3,y:3,width:18,height:18,rx:2},'a'), S('line',{x1:3,y1:9,x2:21,y2:9},'b'), S('line',{x1:3,y1:15,x2:21,y2:15},'c'), S('line',{x1:9,y1:3,x2:9,y2:21},'d'), S('line',{x1:15,y1:3,x2:15,y2:21},'e')],
+            match: [S('path',{d:'M9 17H7A5 5 0 0 1 7 7h2'},'a'), S('path',{d:'M15 7h2a5 5 0 0 1 0 10h-2'},'b'), S('line',{x1:8,y1:12,x2:16,y2:12},'c')],
+            ordre: [S('line',{x1:10,y1:6,x2:20,y2:6},'a'), S('line',{x1:10,y1:12,x2:20,y2:12},'b'), S('line',{x1:10,y1:18,x2:20,y2:18},'c'), S('path',{d:'M4 5h1.5v4.5'},'d'), S('path',{d:'M4 9.5h3'},'e'), S('path',{d:'M4.5 14.5h2.5l-2.5 3.5h2.5'},'f')],
+            dessin: [S('circle',{cx:13.5,cy:6.5,r:.9,fill:'currentColor',stroke:'none'},'a'), S('circle',{cx:17.5,cy:10.5,r:.9,fill:'currentColor',stroke:'none'},'b'), S('circle',{cx:8.5,cy:7.5,r:.9,fill:'currentColor',stroke:'none'},'c'), S('circle',{cx:6.5,cy:12.5,r:.9,fill:'currentColor',stroke:'none'},'d'), S('path',{d:'M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z'},'e')],
+            fichier: [S('path',{d:'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z'},'a'), S('path',{d:'M14 3v6h6'},'b'), S('line',{x1:9,y1:14,x2:15,y2:14},'c'), S('line',{x1:9,y1:17.5,x2:13,y2:17.5},'d')],
+            audio: [S('rect',{x:9,y:2,width:6,height:12,rx:3},'a'), S('path',{d:'M5 10v2a7 7 0 0 0 14 0v-2'},'b'), S('line',{x1:12,y1:19,x2:12,y2:22},'c')],
+            sondage: [S('line',{x1:6,y1:20,x2:6,y2:12},'a'), S('line',{x1:12,y1:20,x2:12,y2:5},'b'), S('line',{x1:18,y1:20,x2:18,y2:14},'c')],
+            sansrep: [S('path',{d:'M15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9z'},'a'), S('path',{d:'M15 3v6h6'},'b')],
+          };
+          return React.createElement('svg', { width:sz, height:sz, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:1.75, strokeLinecap:'round', strokeLinejoin:'round', style:{ flex:'none' } }, paths[k] || paths.texte);
+        };
+        const _typeDefs = [['qcm','QCM'],['texte','texte'],['liste','liste'],['grille','tableau'],['match','matching'],['dessin','dessin'],['fichier','fichier'],['audio','audio'],['sansrep','vide']];
+        const _typeLabelMap = {}; _typeDefs.forEach((t) => { _typeLabelMap[t[0]] = t[1]; });
+        const _mkAttendusBtn = () => {
+          const open = !!(draft && draft.attendusOpen);
+          const txt = draft ? (draft.attendus || '').trim() : '';
+          const label = open ? '− masquer les attendus' : (txt ? 'afficher les attendus' : '+ ajouter des attendus');
+          return React.createElement('button', {
+            onClick: () => { const d = this.state.examEd.draft; setEd({ draft: { ...d, attendusOpen: !d.attendusOpen } }); },
+            title: 'instructions de correction',
+            style: { display:'inline-flex', alignItems:'center', gap:'7px', cursor:'pointer', fontFamily:'var(--font-sans)', fontSize:'12px', fontWeight:600, color:'var(--tan-strong)', background:'transparent', border:'1px dashed var(--line-strong)', borderRadius:'8px', padding:'6px 11px', flex:'none' }
+          }, label);
+        };
+        const _mkPillToggle = (on, onClick, label, title) => React.createElement('button', {
+          onClick, title,
+          style: { display:'inline-flex', alignItems:'center', gap:'7px', cursor:'pointer', fontFamily:'var(--font-sans)', fontSize:'12px', fontWeight:600, padding:'6px 11px', borderRadius:'999px', border:'1px solid ' + (on ? 'var(--green)' : 'var(--line-strong)'), background: on ? 'var(--green-tint)' : 'var(--surface-raised)', color: on ? 'var(--green-strong)' : 'var(--ink-muted)', transition:'all 120ms var(--ease-out,ease)' }
+        }, [
+          React.createElement('span', { key:'d', style:{ width:'8px', height:'8px', borderRadius:'999px', flex:'none', background: on ? 'var(--green)' : 'var(--line-strong)' } }),
+          React.createElement('span', { key:'l' }, label) ]);
+        const _typeVisual = (() => {
+          const e = React.createElement;
+          const surf = 'var(--surface-raised)';
+          const cap = (txt) => e('div', { key:'cap', style:{ fontSize:'10px', fontWeight:700, letterSpacing:'0.1em', color:'var(--ink-faint)', textTransform:'uppercase' } }, txt);
+          const wrap = (kids) => e('div', { style:{ marginLeft: isMobile ? '0px' : '22px', display:'flex', flexDirection:'column', gap:'9px', animation:'cuFadeUp 220ms cubic-bezier(0.22,1,0.36,1)' } }, kids);
+          const cardStyle = { border:'1px solid var(--line-strong)', borderRadius:'8px', background:surf };
+          const choices = (dm.choices && dm.choices.length ? dm.choices : ['option A','option B','option C']);
+          if (qtype === 'texte') {
+            const libre = !!dm.txtLibre;
+            const setLibre = (v) => dset({ txtLibre: v });
+            const kids = [];
+            if (!libre) {
+              kids.push(e('textarea', { key:'b', value: dm.txtRef || '', placeholder:'réponse de référence…', rows:2,
+                onChange:(ev) => dset({ txtRef: ev.target.value }),
+                style:{ ...cardStyle, width:'100%', boxSizing:'border-box', resize:'none', fieldSizing:'content', minHeight:'62px', padding:'10px 14px', fontFamily:'var(--font-sans)', fontSize:'13px', lineHeight:1.7, color:'var(--ink-body)', outline:'none' } }));
+            }
+            const ctrl = [];
+            ctrl.push(e('div', { key:'ln', style:{ display:'flex', alignItems:'center', gap:'8px', marginLeft:'12px' } }, [
+              e('span', { key:'l', style:{ fontSize:'11.5px', color:'var(--ink-muted)' } }, 'nombre de lignes'),
+              e('input', { key:'i', value: dm.txtLignes != null ? String(dm.txtLignes) : '3', placeholder:'3', inputMode:'numeric', maxLength:3,
+                onChange:(ev) => { const d = ev.target.value.replace(/\D/g, '').slice(0, 3); dset({ txtLignes: d === '' ? null : Math.min(999, parseInt(d, 10)) }); },
+                style:{ width:'54px', textAlign:'center', fontFamily:'var(--font-sans)', fontSize:'13px', fontWeight:600, color:'var(--ink-body)', background:'var(--surface-raised)', border:'1px solid var(--line-strong)', borderRadius:'8px', padding:'6px 4px', outline:'none' } }) ]));
+            if (this.state.advancedOpen) ctrl.push(e('div', { key:'att', style:{ flex:'none', marginLeft:'auto' } }, _mkAttendusBtn()));
+            kids.push(e('div', { key:'ctrl', style:{ display:'flex', alignItems:'center', gap:'18px', flexWrap:'wrap' } }, ctrl));
+            return wrap(kids);
+          }
+          if (qtype === 'liste') {
+            if (this._listeItems == null) this._listeItems = ['', '', ''];
+            if (this._listeNums == null) this._listeNums = true;
+            const items = this._listeItems;
+            const showNums = this._listeNums;
+            const attCtrl = e('div', { key:'att-nb', style:{ display:'flex', alignItems:'center', gap:'8px' } }, [
+              e('span', { key:'l', style:{ fontSize:'11.5px', color:'var(--ink-muted)' } }, 'réponses attendues'),
+              e('input', { key:'i', value: this._listeAttendu != null ? String(this._listeAttendu) : '3', placeholder:'3', inputMode:'numeric', maxLength:3,
+                onChange:(ev) => { const d = ev.target.value.replace(/\D/g, '').slice(0, 3); this._listeAttendu = d === '' ? null : Math.min(999, parseInt(d, 10)); this.forceUpdate(); },
+                style:{ width:'54px', textAlign:'center', fontFamily:'var(--font-sans)', fontSize:'13px', fontWeight:600, color:'var(--ink-body)', background:'var(--surface-raised)', border:'1px solid var(--line-strong)', borderRadius:'8px', padding:'6px 4px', outline:'none' } }) ]);
+            const ordLabel = (n) => 'réponse de référence…';
+            const commit = (arr) => { this._listeItems = arr; this.forceUpdate(); };
+            const rowEls = items.map((val, i) => e('div', { key:i, style:{ display:'flex', alignItems:'center', gap:'10px' } }, [
+              (showNums ? e('span', { key:'n', style:{ width:'22px', color:'var(--green-strong)', fontSize:'12px', fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flex:'none' } }, String(i + 1)) : null),
+              e('input', { key:'i', value:val, placeholder:ordLabel(i + 1),
+                onChange:(ev) => { commit(items.map((x, j) => j === i ? ev.target.value : x)); },
+                style:{ ...cardStyle, flex:1, minWidth:0, padding:'9px 12px', fontFamily:'var(--font-sans)', fontSize:'13px', color:'var(--ink-body)', outline:'none', boxSizing:'border-box' } }),
+              items.length > 1
+                ? e('button', { key:'x', title:'retirer cette ligne', onClick:() => commit(items.filter((_, j) => j !== i)), style:{ flex:'none', border:'none', background:'transparent', color:'var(--ink-faint)', cursor:'pointer', fontSize:'13px', lineHeight:1, padding:'2px' } }, '\u2715')
+                : e('span', { key:'x', style:{ flex:'none', width:'19px' } }) ]));
+            const numToggle = _mkPillToggle(showNums, () => { this._listeNums = !this._listeNums; this.forceUpdate(); }, 'numéros', 'afficher ou masquer les numéros à gauche de chaque réponse');
+            const addRow = e('div', { key:'a', style:{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px', flexWrap:'wrap', marginTop:'4px' } }, [
+              e('div', { key:'lft', style:{ display:'flex', alignItems:'center', gap:'18px', flexWrap:'wrap' } }, [
+                e('button', { key:'add', onClick:() => commit(items.concat([''])), title:'ajouter une réponse à la liste', style:{ cursor:'pointer', fontFamily:'var(--font-sans)', fontSize:'12px', fontWeight:600, color:'var(--tan-strong)', background:'transparent', border:'none', padding:'2px 0' } }, '+ ajouter une ligne'),
+                numToggle, (this.state.advancedOpen ? attCtrl : null) ]),
+              (this.state.advancedOpen ? _mkAttendusBtn() : null) ]);
+            return wrap([ e('div', { key:'b', style:{ display:'flex', flexDirection:'column', gap:'7px' } }, rowEls), addRow ]);
+          }
+          if (qtype === 'grille') {
+            if (this._grilleRows == null) this._grilleRows = ['ligne 1', 'ligne 2'];
+            if (this._grilleCols == null) this._grilleCols = ['colonne 1', 'colonne 2', 'colonne 3'];
+            if (this._grilleChecked == null) this._grilleChecked = {};
+            if (this._grilleUnique == null) this._grilleUnique = false;
+            const rows = this._grilleRows, cols = this._grilleCols, checked = this._grilleChecked;
+            const gUnique = this._grilleUnique;
+            const up = () => this.forceUpdate();
+            const setRows = (a) => { this._grilleRows = a; up(); };
+            const setCols = (a) => { this._grilleCols = a; up(); };
+            const toggle = (r, c) => { const k = r + '-' + c; const nx = { ...checked }; if (nx[k]) { delete nx[k]; } else { if (this._grilleUnique) { Object.keys(nx).forEach((kk) => { if (kk.slice(0, kk.indexOf('-')) === String(r)) delete nx[kk]; }); } nx[k] = true; } this._grilleChecked = nx; up(); };
+            const setUnique = () => { const willBe = !this._grilleUnique; if (willBe) { const nx = {}; rows.forEach((_, r) => { for (let c = 0; c < cols.length; c++) { if (checked[r + '-' + c]) { nx[r + '-' + c] = true; break; } } }); this._grilleChecked = nx; } this._grilleUnique = willBe; up(); };
+            const uniqueToggle = _mkPillToggle(gUnique, setUnique, 'réponse unique', 'une seule bonne case peut être cochée par ligne');
+            const cellInput = (val, ph, onCh, extra) => e('textarea', { value:val, placeholder:ph, rows:1, onChange:onCh, style:{ ...cardStyle, width:'100%', boxSizing:'border-box', padding:'7px 10px', fontFamily:'var(--font-sans)', fontSize:'12.5px', lineHeight:1.35, color:'var(--ink-body)', outline:'none', resize:'none', fieldSizing: isMobile ? 'fixed' : 'content', overflow:'hidden', whiteSpace: isMobile ? 'nowrap' : 'pre-wrap', wordBreak: isMobile ? 'normal' : 'break-word', display:'block', minHeight:'32px', height: isMobile ? '32px' : 'auto', ...(extra || {}) } });
+            const gridShift = isMobile ? 0 : 22;
+            const labelW = (88 + gridShift) + 'px';
+            const headerCells = [ e('div', { key:'corner', style:{ flex:'0 0 ' + labelW } }) ];
+            cols.forEach((c, ci) => headerCells.push(e('div', { key:'c' + ci, style:{ flex:'1 1 0', minWidth:0, display:'flex', flexDirection:'column', alignItems:'center', gap:'4px' } },
+              cellInput(c, 'colonne…', (ev) => setCols(cols.map((x, j) => j === ci ? ev.target.value : x)), { textAlign:'center', fontWeight:600 }))));
+            headerCells.push(e('div', { key:'sp', style:{ flex:'0 0 24px' } }));
+            const headerRow = e('div', { key:'h', style:{ display:'flex', alignItems:'flex-start', gap:'8px' } }, headerCells);
+            const bodyRows = rows.map((rlabel, ri) => {
+              const cells = [ e('div', { key:'l', style:{ flex:'0 0 ' + labelW } }, cellInput(rlabel, 'ligne…', (ev) => setRows(rows.map((x, j) => j === ri ? ev.target.value : x)), { fontWeight:600 })) ];
+              cols.forEach((_, ci) => { const on = !!checked[ri + '-' + ci];
+                cells.push(e('div', { key:'c' + ci, style:{ flex:'1 1 0', minWidth:0, display:'flex', alignItems:'center', justifyContent:'center' } },
+                  e('button', { title:'coche la bonne case', onClick:() => toggle(ri, ci), style:{ width:'22px', height:'22px', flex:'none', boxSizing:'border-box', borderRadius: gUnique ? '999px' : '6px', cursor:'pointer', border: on ? 'none' : '1.5px solid var(--line-strong)', boxShadow: on ? ('inset 0 0 0 ' + (gUnique ? '7px' : '7px') + ' var(--green)') : 'none', background:'var(--surface-raised)', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 120ms var(--ease-out,ease)' } },
+                    null))); });
+              cells.push(rows.length > 1
+                ? e('button', { key:'x', title:'retirer la ligne', onClick:() => setRows(rows.filter((_, j) => j !== ri)), style:{ flex:'0 0 24px', border:'none', background:'transparent', color:'var(--ink-faint)', cursor:'pointer', fontSize:'13px', lineHeight:1, padding:'2px' } }, '\u2715')
+                : e('div', { key:'x', style:{ flex:'0 0 24px' } }));
+              return e('div', { key:ri, style:{ display:'flex', alignItems:'center', gap:'8px' } }, cells);
+            });
+            const footerCells = [ e('div', { key:'corner', style:{ flex:'0 0 ' + labelW } }) ];
+            cols.forEach((c, ci) => footerCells.push(e('div', { key:'c' + ci, style:{ flex:'1 1 0', minWidth:0, display:'flex', justifyContent:'center' } },
+              cols.length > 1 ? e('button', { key:'x', title:'retirer la colonne', onClick:() => setCols(cols.filter((_, j) => j !== ci)), style:{ border:'none', background:'transparent', color:'var(--ink-faint)', cursor:'pointer', fontSize:'13px', lineHeight:1, padding:'2px' } }, '\u2715') : null )));
+            footerCells.push(e('div', { key:'sp', style:{ flex:'0 0 24px' } }));
+            const footerRow = e('div', { key:'f', style:{ display:'flex', alignItems:'center', gap:'8px' } }, footerCells);
+            const addRow = e('div', { key:'a', style:{ display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap', marginTop:'4px' } }, [
+              e('button', { key:'ar', onClick:() => setRows(rows.concat([''])), style:{ cursor:'pointer', fontFamily:'var(--font-sans)', fontSize:'12px', fontWeight:600, color:'var(--tan-strong)', background:'transparent', border:'none', padding:'2px 0' } }, '+ ligne'),
+              cols.length < 5 ? e('button', { key:'ac', onClick:() => setCols(cols.concat([''])), style:{ cursor:'pointer', fontFamily:'var(--font-sans)', fontSize:'12px', fontWeight:600, color:'var(--tan-strong)', background:'transparent', border:'none', padding:'2px 0' } }, '+ colonne') : null,
+              ((isMobile && this.state.advancedOpen) ? null : uniqueToggle),
+              (this.state.advancedOpen ? e('div', { key:'att', style:{ marginLeft:'auto' } }, _mkAttendusBtn()) : null) ]);
+            const topToggle = null;
+            return wrap([ topToggle, e('div', { key:'g', style:{ marginLeft: (-gridShift) + 'px', display:'flex', flexDirection:'column', gap:'7px' } }, [headerRow].concat(bodyRows).concat([footerRow])), addRow ]);
+          }
+          if (qtype === 'match') {
+            const split = s.matchSplit != null ? s.matchSplit : 0.5;
+            const rows = s.matchRows || [{l:'noyau',r:'contrôle'},{l:'ADN',r:'information'},{l:'ribosome',r:'synthèse'}];
+            const setRows = (r) => this.setState({ matchRows: r });
+            const grow = (el) => { if(!el) return; const fit = () => requestAnimationFrame(()=>{ el.style.height='auto'; el.style.height=el.scrollHeight+'px'; }); fit(); if(!el._ro && typeof ResizeObserver!=='undefined'){ el._ro = new ResizeObserver(fit); el._ro.observe(el); } };
+            const cell = (val, side, i, align) => isMobile
+              ? e('input', { key:side, value:val, placeholder:side==='l'?'élément…':'correspondance…',
+                  onInput:(ev)=>{ setRows(rows.map((x,j)=> j===i ? { ...x, [side]:ev.target.value } : x)); },
+                  style:{ ...cardStyle, padding:'8px 11px', fontSize:'12.5px', color:'var(--ink-body)', textAlign:align, width:'100%', boxSizing:'border-box', fontFamily:'var(--font-sans)', outline:'none', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' } })
+              : e('textarea', { key:side, value:val, rows:1, placeholder:side==='l'?'élément…':'correspondance…',
+                ref:grow,
+                onInput:(ev)=>{ grow(ev.target); setRows(rows.map((x,j)=> j===i ? { ...x, [side]:ev.target.value } : x)); },
+                style:{ ...cardStyle, padding:'8px 11px', fontSize:'12.5px', color:'var(--ink-body)', textAlign:align, resize:'none', overflow:'hidden', width:'100%', boxSizing:'border-box', fontFamily:'var(--font-sans)', lineHeight:1.35, outline:'none' } });
+            const dragStart = (getX) => (ev) => { const row = ev.currentTarget.closest('[data-match-rows]'); const rect = row.getBoundingClientRect();
+                const move=(me)=>{ let r=(getX(me)-rect.left)/rect.width; r=Math.max(0.1,Math.min(0.9,r)); this.setState({ matchSplit:r }); };
+                const up=()=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); document.removeEventListener('touchmove',tm); document.removeEventListener('touchend',up); };
+                const mv=move; const tm=(me)=>move(me.touches[0]);
+                document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); document.addEventListener('touchmove',tm,{passive:true}); document.addEventListener('touchend',up); };
+            const rowEls = rows.map((x,i)=>e('div', { key:i, style:{ display:'flex', alignItems:'center', gap:'0' } }, [
+                e('div', { key:'l', style:{ flex:split+' 1 0', minWidth:0 } }, cell(x.l,'l',i,'left')),
+                e('div', { key:'h', style:{ flex:'none', width:'18px', alignSelf:'stretch', cursor:'col-resize', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', touchAction:'none' },
+                    onMouseDown:(ev)=>{ ev.preventDefault(); dragStart(m=>m.clientX)(ev); }, onTouchStart:(ev)=>{ dragStart(m=>m.clientX)(ev); } }, [
+                    e('div', { key:'bar', style:{ width:'0', alignSelf:'stretch', borderLeft:'1.5px dashed var(--tan)' } }),
+                    e('div', { key:'grip', style:{ position:'absolute', top:'50%', transform:'translateY(-50%)', width:'6px', height:'22px', borderRadius:'999px', background:'var(--tan-tint)', border:'1px solid var(--tan)' } }) ]),
+                e('div', { key:'r', style:{ flex:(1-split)+' 1 0', minWidth:0 } }, cell(x.r,'r',i,'right')),
+                rows.length>1 ? e('button', { key:'x', title:'retirer la ligne', onClick:()=>setRows(rows.filter((_,j)=>j!==i)), style:{ flex:'none', marginLeft:'6px', border:'none', background:'transparent', color:'var(--ink-faint)', cursor:'pointer', fontSize:'13px', lineHeight:1, padding:'2px' } }, '\u2715') : e('span', { key:'x', style:{ flex:'none', width:'19px' } }) ]));
+            const addBtn = e('button', { key:'add', onClick:()=>setRows(rows.concat([{l:'',r:''}])), style:{ cursor:'pointer', fontFamily:'var(--font-sans)', fontSize:'12px', fontWeight:600, color:'var(--tan-strong)', background:'transparent', border:'none', padding:'2px 0', alignSelf:'flex-start' } }, '+ ajouter une ligne');
+            return wrap([ e('div', { key:'b', 'data-match-rows':'1', style:{ display:'flex', flexDirection:'column', gap:'5px' } }, rowEls), addBtn ]);
+          }
+          if (qtype === 'ordre') {
+            const items = ['première étape','deuxième étape','troisième étape'];
+            return wrap([ e('div', { key:'b', style:{ display:'flex', flexDirection:'column', gap:'8px' } }, items.map((it,i)=>e('div', { key:i, style:{ ...cardStyle, display:'flex', alignItems:'center', gap:'10px', padding:'9px 12px' } }, [
+                e('span', { key:'g', style:{ color:'var(--ink-faint)', fontSize:'14px', cursor:'grab', lineHeight:1 } }, '\u2237'),
+                e('span', { key:'n', style:{ width:'20px', height:'20px', borderRadius:'999px', background:'var(--green-tint)', color:'var(--green-strong)', fontSize:'11px', fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flex:'none' } }, String(i+1)),
+                e('span', { key:'t', style:{ fontSize:'12.5px', color:'var(--ink-body)' } }, it) ]))) ]);
+          }
+          if (qtype === 'dessin') {
+            const drawCur = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%233C6B39' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'><path d='m12 19 7-7 3 3-7 7-3-3z'/><path d='m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z'/><path d='m2 2 7.586 7.586'/><circle cx='11' cy='11' r='2'/></svg>\") 3 20, crosshair";
+            const dragOver = !!this.state.dessinDragOver;
+            const drawIcon = e('svg', { key:'di', width:34, height:34, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:1.6, strokeLinecap:'round', strokeLinejoin:'round' }, [
+              e('circle', { key:'a', cx:13.5, cy:6.5, r:.9, fill:'currentColor', stroke:'none' }),
+              e('circle', { key:'b', cx:17.5, cy:10.5, r:.9, fill:'currentColor', stroke:'none' }),
+              e('circle', { key:'c', cx:8.5, cy:7.5, r:.9, fill:'currentColor', stroke:'none' }),
+              e('circle', { key:'d', cx:6.5, cy:12.5, r:.9, fill:'currentColor', stroke:'none' }),
+              e('path', { key:'e', d:'M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z' }) ]);
+            return wrap([
+              e('div', { key:'cv',
+                onDragOver:(ev) => { ev.preventDefault(); if (!this.state.dessinDragOver) this.setState({ dessinDragOver: true }); },
+                onDragEnter:(ev) => { ev.preventDefault(); this.setState({ dessinDragOver: true }); },
+                onDragLeave:(ev) => { if (ev.currentTarget.contains(ev.relatedTarget)) return; this.setState({ dessinDragOver: false }); },
+                onDrop:(ev) => { ev.preventDefault(); this.setState({ dessinDragOver: false }); },
+                style:{ position:'relative', border: dragOver ? '2px solid var(--green)' : '1.5px dashed var(--tan)', borderRadius:'10px', background: dragOver ? 'var(--green-tint)' : surf, height:'132px', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'8px', padding:'6px', cursor: drawCur, transition:'background 120ms,border-color 120ms', color: dragOver ? 'var(--green-strong)' : 'var(--ink-muted)' } }, [
+                drawIcon,
+                e('span', { key:'t', style:{ fontSize:'12.5px', fontWeight:600 } }, 'dessiner la réponse ici'),
+                e('span', { key:'ou', onClick:(ev) => { ev.stopPropagation(); }, style:{ fontSize:'11.5px', color:'var(--ink-faint)', cursor:'pointer' } }, ['ou ', e('span', { key:'l', style:{ color:'var(--tan-strong)', fontWeight:600, textDecoration:'underline' } }, 'charger une image')]),
+                e('span', { key:'rz', title:'redimensionner l’encadré', style:{ position:'absolute', right:'5px', bottom:'5px', width:'14px', height:'14px', cursor:'nwse-resize' } },
+                  e('svg', { width:14, height:14, viewBox:'0 0 14 14', fill:'none', stroke:'var(--ink-faint)', strokeWidth:1.4, strokeLinecap:'round' }, [
+                    e('line', { key:'a', x1:13, y1:5, x2:5, y2:13 }),
+                    e('line', { key:'b', x1:13, y1:9.5, x2:9.5, y2:13 }) ])) ]) ]);
+          }
+          if (qtype === 'audio') {
+            const bars = [10,18,26,14,22,30,16,24,12,20,28,14,18,22,12];
+            return wrap([ e('div', { key:'b', style:{ ...cardStyle, display:'flex', alignItems:'center', gap:'14px', padding:'14px 16px' } }, [
+                e('span', { key:'mic', style:{ width:'40px', height:'40px', borderRadius:'999px', background:'var(--green)', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', flex:'none' } }, _typeIcon('audio',18)),
+                e('div', { key:'w', style:{ display:'flex', alignItems:'center', gap:'3px', flex:1, height:'34px' } }, bars.map((hh,i)=>e('span', { key:i, style:{ width:'3px', height:hh+'px', borderRadius:'2px', background:'var(--green-light)' } }))),
+                e('span', { key:'t', style:{ fontSize:'12px', fontWeight:600, color:'var(--ink-muted)', fontVariantNumeric:'tabular-nums' } }, '0:00') ]) ]);
+          }
+          if (qtype === 'sondage') {
+            const pcts = [46,32,22,15,9,6];
+            return wrap([ e('div', { key:'b', style:{ display:'flex', flexDirection:'column', gap:'10px' } }, choices.map((c,i)=>{ const p = pcts[i % pcts.length]; return e('div', { key:i, style:{ display:'flex', flexDirection:'column', gap:'4px' } }, [
+                e('div', { key:'r', style:{ display:'flex', justifyContent:'space-between', fontSize:'12px', color:'var(--ink-body)' } }, [ e('span', { key:'l' }, c || ('option '+String.fromCharCode(65+i))), e('span', { key:'p', style:{ color:'var(--ink-muted)', fontWeight:600 } }, p+'\u00A0%') ]),
+                e('div', { key:'t', style:{ height:'8px', borderRadius:'999px', background:'var(--green-tint)', overflow:'hidden' } }, e('div', { key:'f', style:{ width:p+'%', height:'100%', background:'var(--green-light)', borderRadius:'999px' } })) ]); })) ]);
+          }
+          if (qtype === 'fichier') {
+            const url = (draft && draft.fileUrl != null) ? draft.fileUrl : '';
+            const types = [['pdf','PDF'],['image','image'],['word','Word'],['excel','Excel'],['ppt','PowerPoint'],['txt','texte'],['audio','audio'],['video','vidéo'],['zip','ZIP']];
+            const accepted = Array.isArray(draft && draft.fileTypes) ? draft.fileTypes : ['pdf','image','word'];
+            const toggleType = (k) => { const d = this.state.examEd.draft; const cur = Array.isArray(d.fileTypes) ? d.fileTypes : ['pdf','image','word']; const nx = cur.indexOf(k) !== -1 ? cur.filter(x => x !== k) : cur.concat([k]); setEd({ draft: { ...d, fileTypes: nx } }); };
+            const typePills = e('div', { key:'tp', style:{ display:'flex', flexWrap:'wrap', gap:'8px' } }, types.map(t => { const on = accepted.indexOf(t[0]) !== -1; return e('button', { key:t[0], onClick:() => toggleType(t[0]), style:{ display:'inline-flex', alignItems:'center', gap:'7px', cursor:'pointer', fontFamily:'var(--font-sans)', fontSize:'12px', fontWeight:600, padding:'6px 11px', borderRadius:'999px', border:'1px solid ' + (on ? 'var(--green)' : 'var(--line-strong)'), background: on ? 'var(--green-tint)' : 'var(--surface-raised)', color: on ? 'var(--green-strong)' : 'var(--ink-muted)', transition:'all 120ms var(--ease-out,ease)' } }, [
+              e('span', { key:'d', style:{ width:'8px', height:'8px', borderRadius:'999px', flex:'none', background: on ? 'var(--green)' : 'var(--line-strong)' } }),
+              e('span', { key:'l' }, t[1]) ]); }));
+            return wrap([
+              (this.state.advancedOpen ? e('div', { key:'types', style:{ display:'flex', flexDirection:'column', gap:'8px' } }, [
+                e('span', { key:'e', style:{ fontSize:'10px', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--ink-muted)' } }, 'types de fichiers acceptés'),
+                typePills ]) : null),
+              e('div', { key:'url', style:{ display:'flex', flexDirection:'column', gap:'6px' } }, [
+                e('span', { key:'l', style:{ fontSize:'10px', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--ink-muted)' } }, '(lien vers le dépôt)'),
+                e('div', { key:'field', style:{ ...cardStyle, display:'flex', alignItems:'center', gap:'8px', minWidth:0, padding:'7px 11px' } }, [
+                  e('svg', { key:'lk', width:15, height:15, viewBox:'0 0 24 24', fill:'none', stroke:'var(--ink-faint)', strokeWidth:1.75, strokeLinecap:'round', strokeLinejoin:'round', style:{ flex:'none' } }, [
+                    e('path', { key:'a', d:'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71' }),
+                    e('path', { key:'b', d:'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71' }) ]),
+                  e('input', { key:'i', value:url, placeholder:'https://exemple.culture.app/corrige.pdf', onChange:(ev) => { const d = this.state.examEd.draft; setEd({ draft: { ...d, fileUrl: ev.target.value } }); }, style:{ flex:1, minWidth:0, border:'none', background:'transparent', outline:'none', fontFamily:'var(--font-sans)', fontSize:'12.5px', color:'var(--ink-body)' } }) ]) ]) ]);
+          }
+          return wrap([ e('div', { key:'b', style:{ border:'1.5px dashed var(--line-strong)', borderRadius:'8px', background:surf, padding:'14px 16px', display:'flex', alignItems:'center', gap:'12px', color:'var(--ink-muted)' } }, [
+              e('span', { key:'i', style:{ display:'flex', color:'var(--tan-strong)', flex:'none' } }, _typeIcon('sansrep',20)),
+              e('span', { key:'t', style:{ fontSize:'12.5px', lineHeight:1.5 } }, ["Pour une consigne qui se réalise ailleurs (entourer sur une carte, activité physique…)", e('br', { key:'br' }), '→ Ajoute des attendus pour aider l\u2019IA à corriger.']) ]) ]);
+        })();
+        const _dessinToolbar = (() => {
+          const e = React.createElement;
+          const dColor = this.state.dessinColor || '#3C6B39';
+          const dW = this.state.dessinWidth || 4;
+          const dOpen = !!this.state.dessinPickerOpen;
+          const palette = ['#3C6B39','#B26A3B','#2E2A24','#B23B3B','#2F6B8A','#C9A227','#7A4FA3','#2E8B6B','#D2691E','#8A8F98'];
+          const widths = [{ k:'w1', v:2 }, { k:'w2', v:4 }, { k:'w3', v:7 }];
+          const swatch = (c,k) => e('button', { key:k, onClick: () => this.setState({ dessinColor: c, dessinPickerOpen: false }), style:{ width:'20px', height:'20px', borderRadius:'999px', background:c, border: c===dColor ? '2px solid var(--ink)' : '1px solid rgba(0,0,0,.12)', cursor:'pointer', padding:0, flex:'none' } });
+          const colorBtn = e('div', { key:'cwrap', style:{ position:'relative', flex:'none' } }, [
+            e('button', { key:'cb', title:'couleur du trait', onClick: () => this.setState({ dessinPickerOpen: !this.state.dessinPickerOpen }), style:{ width:'26px', height:'26px', borderRadius:'999px', background:dColor, border:'2px solid var(--surface-raised)', boxShadow:'0 0 0 1px var(--line-strong)', cursor:'pointer', padding:0 } }),
+            dOpen ? e('div', { key:'pop', style:{ position:'absolute', top:'33px', left:0, zIndex:40, display:'grid', gridTemplateColumns:'repeat(5, 20px)', gap:'6px', background:'var(--surface-raised)', border:'1px solid var(--line-strong)', borderRadius:'10px', boxShadow:'var(--shadow-lg)', padding:'7px' } }, palette.map((c,i) => swatch(c,'s'+i))) : null ]);
+          const widthSel = e('div', { key:'wsel', style:{ display:'flex', alignItems:'center', gap:'3px', background:'var(--surface-raised)', border:'1px solid var(--line-strong)', borderRadius:'8px', padding:'3px 5px', flex:'none' } }, widths.map(w => e('button', { key:w.k, title:'épaisseur du trait', onClick: () => this.setState({ dessinWidth: w.v }), style:{ width:'26px', height:'22px', display:'flex', alignItems:'center', justifyContent:'center', background: dW===w.v ? 'var(--green-tint)' : 'transparent', borderRadius:'6px', border:'none', cursor:'pointer', padding:0 } }, e('span', { style:{ width:'16px', height:w.v+'px', borderRadius:'999px', background: dW===w.v ? 'var(--green-strong)' : 'var(--ink-muted)' } }))));
+          return e('div', { style:{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' } }, this.state.advancedOpen ? [ colorBtn, widthSel, e('div', { key:'att', style:{ marginLeft:'auto' } }, _mkAttendusBtn()) ] : [ colorBtn, widthSel ]);
+        })();
+        const allBank = this.data.bank.concat(this.state.bkExtra || []);
+        const bkDead = this.state.bkDel || [];
+        const bankById = {}; allBank.forEach(b => { bankById[b.id] = b; });
+        const allQids = ed.parts.reduce((a, p) => a.concat(p.qids), []);
+        const ptsOf = (id) => (ed.points[id] != null ? ed.points[id] : 1);
+        const fr = (n) => String(n).replace('.', ',');
+        const totalPts = allQids.reduce((t, id) => t + ptsOf(id), 0);
+        const zones = ['left', 'right', 'off'];
+        const edPills = ed.pills.some(p => p.id === 'bareme') ? ed.pills : ed.pills.concat([{ id: 'bareme', label: 'Barème', zone: 'right' }]);
+        const mkPills = (zone) => edPills.filter(p => p.zone === zone).map(p => ({
+          label: p.label,
+          named: !p.custom, custom: !!p.custom,
+          bareme: p.id === 'bareme', notBareme: p.id !== 'bareme',
+          setLabel: (e) => setEd({ pills: edPills.map(x => x.id === p.id ? { ...x, label: e.target.value } : x) }),
+          drag: () => { this._dragPill = p.id; },
+          cycle: () => { const nz = zones[(zones.indexOf(p.zone) + 1) % 3]; setEd({ pills: edPills.map(x => x.id === p.id ? { ...x, zone: nz } : x) }); },
+        }));
+        const dropZone = (zone) => (e) => {
+          e.preventDefault(); const id = this._dragPill; if (!id) return; this._dragPill = null;
+          setEd({ pills: edPills.map(x => x.id === id ? { ...x, zone } : x) });
+        };
+        const moveQ = (src, fn) => {
+          const parts = this.state.examEd.parts.map(p => ({ ...p, qids: p.qids.filter(x => x !== src) }));
+          fn(parts); setEd({ parts });
+        };
+        let num = 0;
+        const sheetAnswer = (b) => {
+          const e = React.createElement;
+          const t = b.type || 'qcm';
+          const opts = b.choices || [];
+          const box = (round, k) => e('span', { key:k, style:{ width:'12px', height:'12px', border:'1px solid var(--ink-muted)', borderRadius: round ? '999px' : '3px', flex:'none' } });
+          const optRow = (label, round, i) => e('span', { key:i, style:{ display:'flex', alignItems:'center', gap:'7px', fontSize:'12px', color:'var(--ink-body)' } }, [ box(round, 'b'), e('span', { key:'l' }, label) ]);
+          const line = (k) => e('span', { key:k, style:{ display:'block', height:'1px', background:'var(--line-strong)' } });
+          if (t === 'qcm' || t === 'qcs' || t === 'sondage') {
+            return e('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px 18px' } }, opts.map((o, i) => optRow(o, t !== 'qcm', i)));
+          }
+          if (t === 'texte') {
+            return e('div', { style:{ display:'flex', flexDirection:'column', gap:'11px', paddingTop:'6px' } }, [0,1,2].map(i => line(i)));
+          }
+          if (t === 'liste') {
+            const n = b.listLines || 3;
+            return e('div', { style:{ display:'flex', flexDirection:'column', gap:'11px', paddingTop:'4px' } }, Array.from({ length:n }).map((_, i) => e('div', { key:i, style:{ display:'flex', alignItems:'center', gap:'9px' } }, [
+              e('span', { key:'n', style:{ fontSize:'12px', color:'var(--ink-muted)', fontWeight:600, flex:'none' } }, (i+1) + '.'), e('span', { key:'l', style:{ flex:1, height:'1px', background:'var(--line-strong)' } }) ])));
+          }
+          if (t === 'grille') {
+            const rows = b.gRows || ['ligne 1','ligne 2'], cols = b.gCols || ['colonne 1','colonne 2'];
+            const header = e('div', { key:'h', style:{ display:'flex', gap:'8px', alignItems:'flex-end' } }, [ e('span', { key:'c', style:{ flex:'0 0 96px' } }) ].concat(cols.map((c, i) => e('span', { key:i, style:{ flex:'1 1 0', textAlign:'center', fontSize:'11px', fontWeight:600, color:'var(--ink-body)' } }, c))));
+            const body = rows.map((r, ri) => e('div', { key:ri, style:{ display:'flex', gap:'8px', alignItems:'center' } }, [ e('span', { key:'l', style:{ flex:'0 0 96px', fontSize:'11.5px', color:'var(--ink-body)' } }, r) ].concat(cols.map((_, ci) => e('span', { key:ci, style:{ flex:'1 1 0', display:'flex', justifyContent:'center' } }, e('span', { style:{ width:'13px', height:'13px', border:'1px solid var(--ink-muted)', borderRadius:'3px' } }))))));
+            return e('div', { style:{ display:'flex', flexDirection:'column', gap:'7px' } }, [header].concat(body));
+          }
+          if (t === 'match') {
+            const pairs = b.pairs || [['A','1'],['B','2']];
+            const dot = (k) => e('span', { key:k, style:{ width:'8px', height:'8px', borderRadius:'999px', border:'1px solid var(--ink-muted)', flex:'none' } });
+            return e('div', { style:{ display:'flex', gap:'28px' } }, [
+              e('div', { key:'L', style:{ display:'flex', flexDirection:'column', gap:'9px', flex:1 } }, pairs.map((p, i) => e('div', { key:i, style:{ display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:'var(--ink-body)' } }, [ e('span', { key:'t', style:{ flex:1 } }, p[0]), dot('d') ]))),
+              e('div', { key:'R', style:{ display:'flex', flexDirection:'column', gap:'9px', flex:1 } }, pairs.map((p, i) => e('div', { key:i, style:{ display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:'var(--ink-body)' } }, [ dot('d'), e('span', { key:'t' }, p[1]) ]))) ]);
+          }
+          if (t === 'ordre') {
+            const items = b.items || ['élément 1','élément 2','élément 3'];
+            return e('div', { style:{ display:'flex', flexDirection:'column', gap:'8px' } }, items.map((it, i) => e('div', { key:i, style:{ display:'flex', alignItems:'center', gap:'10px', fontSize:'12px', color:'var(--ink-body)' } }, [ e('span', { key:'b', style:{ width:'20px', height:'20px', border:'1px solid var(--ink-muted)', borderRadius:'5px', flex:'none' } }), e('span', { key:'t' }, it) ])));
+          }
+          if (t === 'dessin') {
+            return e('div', { style:{ border:'1.5px dashed var(--line-strong)', borderRadius:'8px', height:'92px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11.5px', color:'var(--ink-faint)' } }, 'espace de dessin');
+          }
+          if (t === 'fichier') {
+            return e('div', { style:{ display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:'var(--ink-muted)', border:'1px dashed var(--line-strong)', borderRadius:'8px', padding:'9px 12px' } }, [
+              e('svg', { key:'i', width:15, height:15, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:1.75, strokeLinecap:'round', strokeLinejoin:'round', style:{ flex:'none' } }, [ e('path', { key:'a', d:'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z' }), e('path', { key:'b', d:'M14 3v6h6' }) ]),
+              e('span', { key:'t' }, 'fichier à rendre en ligne (PDF, image)') ]);
+          }
+          if (t === 'audio') {
+            return e('div', { style:{ display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:'var(--ink-muted)' } }, [
+              e('svg', { key:'i', width:15, height:15, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:1.75, strokeLinecap:'round', strokeLinejoin:'round', style:{ flex:'none' } }, [ e('rect', { key:'a', x:9, y:2, width:6, height:12, rx:3 }), e('path', { key:'b', d:'M5 10v2a7 7 0 0 0 14 0v-2' }), e('line', { key:'c', x1:12, y1:19, x2:12, y2:22 }) ]),
+              e('span', { key:'t' }, 'réponse orale à enregistrer') ]);
+          }
+          if (t === 'sansrep') {
+            return e('div', { style:{ fontSize:'11.5px', color:'var(--ink-faint)', fontStyle:'italic' } }, '→ réponse hors feuille (consigne réalisée ailleurs)');
+          }
+          return e('div', { style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px 18px' } }, opts.map((o, i) => optRow(o, false, i)));
+        };
+        const sheetParts = ed.parts.map((p, pi) => {
+          const qs = p.qids.map(qid => {
+            const b = bankById[qid]; num += 1;
+            const editing = !!(ed.draft && ed.draft.editQid === qid);
+            return {
+              num, q: b.q,
+              isEditing: editing, notEditing: !editing,
+              choices: b.choices.map(label => ({ label })),
+              previewEl: sheetAnswer(b),
+              pts: fr(ptsOf(qid)),
+              onPts: (e) => { const v = parseFloat(String(e.target.value).replace(',', '.')); setEd({ points: { ...this.state.examEd.points, [qid]: isNaN(v) ? 0 : v } }); },
+              edit: () => setEd({ draft: { q: b.q, choices: b.choices.slice(), correct: 0, corrects: b.corrects || [0], type: b.type || 'qcm', gainMode: 'fixe', pts: ptsOf(qid), maxPts: 2, penMode: 'fixe', penPts: 0, penScope: 'mauvaise', editQid: qid } }),
+              remove: () => setEd({ parts: this.state.examEd.parts.map(pp => ({ ...pp, qids: pp.qids.filter(x => x !== qid) })) }),
+              dragStart: () => { this._dragQ = qid; },
+              drop: (e) => {
+                e.preventDefault(); e.stopPropagation(); const src = this._dragQ; this._dragQ = null;
+                if (!src || src === qid) return;
+                moveQ(src, (parts) => { const tp = parts.find(pp => pp.qids.indexOf(qid) !== -1); tp.qids.splice(tp.qids.indexOf(qid), 0, src); });
+              },
+            };
+          });
+          const partPts = p.qids.reduce((t, id) => t + ptsOf(id), 0);
+          return {
+            name: p.name,
+            ptsLabel: '/ ' + fr(partPts) + ' pts',
+            rename: (e) => setEd({ parts: this.state.examEd.parts.map(pp => pp.id === p.id ? { ...pp, name: e.target.value } : pp) }),
+            canDelete: ed.parts.length > 1 && pi > 0,
+            remove: () => { const parts = this.state.examEd.parts.slice(); const rm = parts.splice(pi, 1)[0]; parts[pi - 1] = { ...parts[pi - 1], qids: parts[pi - 1].qids.concat(rm.qids) }; setEd({ parts }); },
+            empty: p.qids.length === 0,
+            questions: qs,
+            dropEnd: (e) => {
+              e.preventDefault(); const src = this._dragQ; this._dragQ = null; if (!src) return;
+              moveQ(src, (parts) => { if (parts[pi].qids.indexOf(src) === -1) parts[pi].qids.push(src); });
+            },
+          };
+        });
+        return {
+          banqueList: (() => { const bqThemes = s.bqThemes || []; const bqSort = s.bqSort || 'defaut';
+            let arr = allBank
+            .filter(b => bkDead.indexOf(b.id) === -1)
+            .filter(b => bqThemes.length === 0 || bqThemes.indexOf(b.chap) !== -1)
+            .filter(b => !s.bqSearch || (b.q + ' ' + b.chap).toLowerCase().indexOf(s.bqSearch.toLowerCase()) !== -1);
+            if (bqSort === 'az') arr = arr.slice().sort((a, b) => (a.q || '').localeCompare(b.q || '', 'fr'));
+            else if (bqSort === 'za') arr = arr.slice().sort((a, b) => (b.q || '').localeCompare(a.q || '', 'fr'));
+            else if (bqSort === 'theme') arr = arr.slice().sort((a, b) => (a.chap || '').localeCompare(b.chap || '', 'fr') || (a.q || '').localeCompare(b.q || '', 'fr'));
+            return arr
+            .map(b => {
+              const inEx = allQids.indexOf(b.id) !== -1;
+              return {
+                q: b.q, meta: (b.type === 'qcs' ? 'QCS' : b.type === 'texte' ? 'Texte' : 'QCM') + ' · ' + b.chap,
+                btnLabel: inEx ? '✓ dans l\u2019examen' : '+ ajouter',
+                btnBg: inEx ? 'var(--green-tint)' : 'var(--surface-raised)',
+                btnColor: inEx ? 'var(--green-strong)' : 'var(--ink-body)',
+                btnBorder: inEx ? '1px solid var(--green-light)' : '1px solid var(--line-strong)',
+                cardBg: inEx ? 'var(--green-tint)' : 'var(--surface-raised)',
+                cardBorder: inEx ? '1px solid var(--green-light)' : '1px solid var(--line)',
+                pinBg: inEx ? 'var(--green)' : 'transparent',
+                pinBorder: inEx ? '1px solid var(--green)' : '1.5px dashed var(--line-strong)',
+                pinColor: inEx ? 'var(--on-green)' : 'var(--ink-faint)',
+                pinGlyph: inEx ? '✓' : '+',
+                edit: (e) => { if (e && e.stopPropagation) e.stopPropagation(); setEd({ draft: { q: b.q, choices: b.choices.slice(), correct: 0, corrects: b.corrects || [0], type: b.type || 'qcm', gainMode: 'fixe', pts: ptsOf(b.id), maxPts: 2, penMode: 'fixe', penPts: 0, penScope: 'mauvaise' } }); },
+                duplicate: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.setState({ bkExtra: (this.state.bkExtra || []).concat([{ id: 'bx' + Date.now() + Math.random().toString(36).slice(2, 5), q: b.q + ' (copie)', chap: b.chap, choices: b.choices.slice() }]) }); },
+                remove: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.setState({ bkDel: (this.state.bkDel || []).concat([b.id]) }); },
+                toggle: () => {
+                  if (inEx) setEd({ parts: this.state.examEd.parts.map(pp => ({ ...pp, qids: pp.qids.filter(x => x !== b.id) })) });
+                  else {
+                    const parts = this.state.examEd.parts.slice();
+                    const lastP = { ...parts[parts.length - 1] };
+                    lastP.qids = lastP.qids.concat([b.id]);
+                    parts[parts.length - 1] = lastP;
+                    setEd({ parts });
+                  }
+                },
+              };
+            }); })(),
+          sheetQuestions: allQids.map((qid, i) => ({ num: i + 1, q: bankById[qid].q, choices: bankById[qid].choices.map(label => ({ label })) })),
+          sheetCount: allQids.length,
+          sheetEmpty: allQids.length === 0 && !draft,
+          sheetParts,
+          partsCount: ed.parts.length,
+          addPart: () => setEd({ parts: this.state.examEd.parts.concat([{ id: 'p' + Date.now(), name: 'Partie ' + (this.state.examEd.parts.length + 1), qids: [] }]) }),
+          sheetShowCtrl: !(this.props.apercuImpression ?? false),
+          hasDraft: !!draft && !draft.editQid,
+          advancedOpen: !!s.advancedOpen,
+          simpleMode: !s.advancedOpen,
+          advDesktop: isDesktop && !!s.advancedOpen,
+          toggleAdvanced: () => this.setState({ advancedOpen: !this.state.advancedOpen }),
+          ...(() => {
+            if (!s.advancedOpen) return { advBtnBg: 'transparent', advBtnBorder: 'var(--line-strong)', advBtnColor: 'var(--ink-muted)' };
+            const v = this.props.styleParamAvance ?? 'V1 · vert doux';
+            if (v.startsWith('V2')) return { advBtnBg: 'var(--surface-raised)', advBtnBorder: 'var(--ink-body)', advBtnColor: 'var(--ink-body)' };
+            if (v.startsWith('V3')) return { advBtnBg: 'var(--green)', advBtnBorder: 'var(--green)', advBtnColor: '#fff' };
+            if (v.startsWith('V4')) return { advBtnBg: 'var(--tan-tint)', advBtnBorder: 'var(--tan)', advBtnColor: 'var(--tan-strong)' };
+            return { advBtnBg: 'var(--green-tint)', advBtnBorder: 'var(--green-light)', advBtnColor: 'var(--green-strong)' };
+          })(),
+          gainColDir: 'column',
+          editIndent: isMobile ? '0px' : '22px',
+          editBoxSurface: isMobile
+            ? 'border:none;border-left:3px solid var(--green-light);background:transparent;border-radius:0;padding:4px 0 4px 14px;'
+            : 'border:1.5px dashed var(--green-light);background:var(--green-tint);border-radius:12px;padding:14px 16px;',
+          draftNum: num + 1,
+          draftShowNum: !(qtype === 'sansrep' && !((gainMode === 'temps') ? (dm.maxPts != null ? dm.maxPts : 2) : (dm.pts != null ? dm.pts : 1)) && !(penMode === 'fixe' ? (dm.penPts != null ? dm.penPts : 0) : 0) && penMode !== 'elim'),
+          draftNumLabel: 'sera la question ' + (num + 1),
+          draftQ: draft ? draft.q : '',
+          setDraftQ: (e) => setEd({ draft: { ...this.state.examEd.draft, q: e.target.value } }),
+          draftPts: draft ? fr(draft.pts) : '1',
+          setDraftPts: (e) => { const v = parseFloat(String(e.target.value).replace(',', '.')); setEd({ draft: { ...this.state.examEd.draft, pts: isNaN(v) ? 0 : v } }); },
+          draftType: qtype,
+          draftTypeLabel: ({ qcm:'QCM', qcs:'QCS', texte:'TEXTE', liste:'LISTE', grille:'TABLEAU', match:'MATCHING', ordre:"TRIER DANS L'ORDRE", dessin:'DESSIN', fichier:'FICHIER', audio:'AUDIO', sondage:'SONDAGE', sansrep:'VIDE' })[qtype] || 'QCM',
+          draftIsTexte: qtype !== 'qcm' && qtype !== 'qcs',
+          draftNotTexte: qtype === 'qcm' || qtype === 'qcs',
+          draftDescText: ({ texte:"réponse libre — l'élève rédige sa réponse ; tu la corrigeras manuellement.", liste:"liste — l'élève saisit plusieurs réponses, une par ligne numérotée ; chaque ligne est corrigée.", grille:"tableau — l'élève coche des cases dans une grille (lignes × colonnes), comme une grille à cocher.", match:"matching — l'élève relie chaque élément à sa correspondance.", ordre:"trier dans l'ordre — l'élève replace les éléments dans le bon ordre.", dessin:"dessin — l'élève dépose un schéma ou un croquis ; correction manuelle.", fichier:"fichier — l'élève dépose un fichier (PDF, image, document…) comme réponse, ou colle un lien ; correction manuelle.", audio:"audio — l'élève enregistre une réponse vocale ; correction manuelle.", sondage:"sondage — recueille l'avis des élèves ; aucune bonne réponse.", sansrep:"aucune réponse à saisir sous la question — utilise ce type quand la consigne se réalise ailleurs : entourer un élément sur une carte affichée plus haut, une activité physique ou périscolaire, une manipulation… ajoute des attendus pour que l'IA tente malgré tout une correction avec les éléments dont elle dispose." })[qtype] || '',
+          draftTypeCurLabel: _typeLabelMap[qtype] || 'QCM',
+          draftTypeCurIcon: _typeIcon(qtype, 17),
+          typeMenuOpen: !!s.typeMenuOpen,
+          toggleTypeMenu: () => this.setState({ typeMenuOpen: !this.state.typeMenuOpen }),
+          typeMenuItems: _typeDefs.map((t) => {
+            const k = t[0], on = qtype === k;
+            return {
+              value: k, label: t[1], isOn: on, iconEl: _typeIcon(k, 16), check: on ? '✓' : '',
+              rowStyle: 'display:flex;align-items:center;gap:10px;width:100%;text-align:left;cursor:pointer;font-family:var(--font-sans);font-size:12.5px;font-weight:600;padding:9px 12px;border:none;background:' + (on ? 'var(--green-tint)' : 'transparent') + ';color:' + (on ? 'var(--green-strong)' : 'var(--ink-body)') + ';transition:background 120ms var(--ease-out,ease);',
+              rowHover: 'background:' + (on ? 'var(--green-tint)' : 'var(--tan-tint)') + ';color:' + (on ? 'var(--green-strong)' : 'var(--ink)') + ';',
+              set: () => { this.setState({ typeMenuOpen: false }); if (k === 'qcs') { const d = this.state.examEd.draft; const cur = Array.isArray(d.corrects) ? d.corrects : (d.correct != null ? [d.correct] : []); const nc = cur.length ? [cur[0]] : [0]; setEd({ draft: { ...d, type: 'qcs', corrects: nc, correct: nc[0] } }); } else { dset({ type: k }); } },
+            };
+          }),
+          draftTypeVisual: _typeVisual,
+          dessinToolbar: _dessinToolbar,
+          draftIsDessin: qtype === 'dessin',
+          dessinAdv: qtype === 'dessin' && !!s.advancedOpen,
+          dessinBaseBg: (draft && draft.baseOnImage) ? 'var(--green-tint)' : 'var(--surface-raised)',
+          dessinBaseBorder: (draft && draft.baseOnImage) ? 'var(--green)' : 'var(--line-strong)',
+          dessinBaseColor: (draft && draft.baseOnImage) ? 'var(--green-strong)' : 'var(--ink-muted)',
+          toggleDessinBase: () => { const d = this.state.examEd.draft; if (!d) return; setEd({ draft: { ...d, baseOnImage: !d.baseOnImage } }); },
+          dessinBaseTrackBg: (draft && draft.baseOnImage) ? 'var(--green)' : 'var(--surface-inset, var(--line))',
+          dessinBaseTrackBorder: (draft && draft.baseOnImage) ? 'var(--green)' : 'var(--line-strong)',
+          dessinBaseKnobLeft: (draft && draft.baseOnImage) ? '17px' : '2px',
+          dessinBaseLabelColor: (draft && draft.baseOnImage) ? 'var(--green-strong)' : 'var(--ink-body)',
+          dessinBaseLabel: isDesktop ? 'basé sur l\u2019image de la question' : 'annoter l\u2019image',
+          attendusOpen: !!(draft && draft.attendusOpen),
+          attendusText: draft ? (draft.attendus || '') : '',
+          attendusBtnLabel: (draft && draft.attendusOpen) ? '− masquer les attendus' : ((draft && (draft.attendus || '').trim()) ? 'afficher les attendus' : '+ ajouter des attendus'),
+          toggleAttendus: () => { const d = this.state.examEd.draft; setEd({ draft: { ...d, attendusOpen: !d.attendusOpen } }); },
+          setAttendus: (e) => setEd({ draft: { ...this.state.examEd.draft, attendus: e.target.value } }),
+          attendusBtn: _mkAttendusBtn(),
+          attendusInline: ['qcm','qcs','texte','liste','grille'].indexOf(qtype) !== -1,
+          attendusShared: ['qcm','qcs','texte','liste','grille','dessin'].indexOf(qtype) === -1,
+          notionsList: (draft ? (draft.notions || []) : []).map((n, i) => {
+            const lvl = n.bloom || 1;
+            const _bl = { 1:'mémoriser', 2:'comprendre', 3:'appliquer', 4:'analyser' };
+            return {
+              name: n.name, bloomName: _bl[lvl] || _bl[1],
+              cycleBloom: () => { const d = this.state.examEd.draft; const arr = (d.notions || []).slice(); arr[i] = { ...arr[i], bloom: ((arr[i].bloom || 1) % 4) + 1 }; setEd({ draft: { ...d, notions: arr } }); },
+              remove: () => { const d = this.state.examEd.draft; setEd({ draft: { ...d, notions: (d.notions || []).filter((_, j) => j !== i) } }); },
+            };
+          }),
+          notionsMaxWidth: isDesktop ? 'calc(50% - 4px)' : '100%',
+          notionInput: draft ? (draft.notionDraft || '') : '',
+          setNotionInput: (e) => setEd({ draft: { ...this.state.examEd.draft, notionDraft: e.target.value } }),
+          addNotion: () => { const d = this.state.examEd.draft; const nm = (d.notionDraft || '').trim(); if (!nm) return; setEd({ draft: { ...d, notions: (d.notions || []).concat([{ name: nm, bloom: 1 }]), notionDraft: '' } }); },
+          addNotionKey: (e) => { if (e.key === 'Enter') { e.preventDefault(); const d = this.state.examEd.draft; const nm = (d.notionDraft || '').trim(); if (!nm) return; setEd({ draft: { ...d, notions: (d.notions || []).concat([{ name: nm, bloom: 1 }]), notionDraft: '' } }); } },
+          draftIsQcm: qtype === 'qcm',
+          uniqueSimpleQcm: qtype === 'qcm' && (isDesktop || !s.advancedOpen),
+          uniqueAdvQcm: qtype === 'qcm' && !!s.advancedOpen,
+          uniqueOn: !!(draft && draft.uniqueAns),
+          uniqueTrackBg: (draft && draft.uniqueAns) ? 'var(--green)' : 'var(--surface-inset, var(--line))',
+          uniqueTrackBorder: (draft && draft.uniqueAns) ? 'var(--green)' : 'var(--line-strong)',
+          uniqueKnobLeft: (draft && draft.uniqueAns) ? '17px' : '2px',
+          uniqueLabelColor: (draft && draft.uniqueAns) ? 'var(--green-strong)' : 'var(--ink-body)',
+          uniquePillBg: (draft && draft.uniqueAns) ? 'var(--green-tint)' : 'var(--surface-raised)',
+          uniquePillBorder: (draft && draft.uniqueAns) ? 'var(--green)' : 'var(--line-strong)',
+          uniquePillColor: (draft && draft.uniqueAns) ? 'var(--green-strong)' : 'var(--ink-muted)',
+          uniquePillDot: (draft && draft.uniqueAns) ? 'var(--green)' : 'var(--line-strong)',
+          toggleUnique: () => { const d = this.state.examEd.draft; if (!d) return; const willBe = !d.uniqueAns; const patch = { uniqueAns: willBe }; if (willBe) { const cur = Array.isArray(d.corrects) ? d.corrects : (d.correct != null ? [d.correct] : []); const nc = cur.length ? [cur[0]] : []; patch.corrects = nc; patch.correct = nc.length ? nc[0] : 0; } setEd({ draft: { ...d, ...patch } }); },
+          uniqueAdvAny: (qtype === 'qcm' || qtype === 'grille') && !!s.advancedOpen && !isDesktop,
+          uniqueTrackBgAny: (qtype === 'grille' ? !!this._grilleUnique : !!(draft && draft.uniqueAns)) ? 'var(--green)' : 'var(--surface-inset, var(--line))',
+          uniqueTrackBorderAny: (qtype === 'grille' ? !!this._grilleUnique : !!(draft && draft.uniqueAns)) ? 'var(--green)' : 'var(--line-strong)',
+          uniqueKnobLeftAny: (qtype === 'grille' ? !!this._grilleUnique : !!(draft && draft.uniqueAns)) ? '17px' : '2px',
+          uniqueLabelColorAny: (qtype === 'grille' ? !!this._grilleUnique : !!(draft && draft.uniqueAns)) ? 'var(--green-strong)' : 'var(--ink-body)',
+          uniquePillBgAny: (qtype === 'grille' ? !!this._grilleUnique : !!(draft && draft.uniqueAns)) ? 'var(--green-tint)' : 'var(--surface-raised)',
+          uniquePillBorderAny: (qtype === 'grille' ? !!this._grilleUnique : !!(draft && draft.uniqueAns)) ? 'var(--green)' : 'var(--line-strong)',
+          uniquePillColorAny: (qtype === 'grille' ? !!this._grilleUnique : !!(draft && draft.uniqueAns)) ? 'var(--green-strong)' : 'var(--ink-muted)',
+          uniquePillDotAny: (qtype === 'grille' ? !!this._grilleUnique : !!(draft && draft.uniqueAns)) ? 'var(--green)' : 'var(--line-strong)',
+          toggleUniqueAny: () => { if (qtype === 'grille') { const willBe = !this._grilleUnique; if (willBe) { const rows = this._grilleRows || [], cols = this._grilleCols || [], checked = this._grilleChecked || {}; const nx = {}; rows.forEach((_, r) => { for (let c = 0; c < cols.length; c++) { if (checked[r + '-' + c]) { nx[r + '-' + c] = true; break; } } }); this._grilleChecked = nx; } this._grilleUnique = willBe; this.forceUpdate(); } else { const d = this.state.examEd.draft; if (!d) return; const willBe = !d.uniqueAns; const patch = { uniqueAns: willBe }; if (willBe) { const cur = Array.isArray(d.corrects) ? d.corrects : (d.correct != null ? [d.correct] : []); const nc = cur.length ? [cur[0]] : []; patch.corrects = nc; patch.correct = nc.length ? nc[0] : 0; } setEd({ draft: { ...d, ...patch } }); } },
+          draftRows: (draft && (qtype === 'qcm' || qtype === 'qcs') ? draft.choices : []).map((c, i) => {
+            const sel = corrects.indexOf(i) !== -1;
+            const isQcm = qtype === 'qcm';
+            const radioMode = qtype === 'qcs' || (isQcm && !!draft.uniqueAns);
+            const libreSet = Array.isArray(draft.libre) ? draft.libre : [];
+            const libreOn = libreSet.indexOf(i) !== -1;
+            return {
+            value: c, ph: 'réponse libre …',
+            dotRadius: radioMode ? '999px' : '5px',
+            dotBorder: sel ? (radioMode ? '5px solid var(--green)' : '5.5px solid var(--green)') : '1.5px solid var(--line-strong)',
+            dotBg: 'transparent',
+            dotGlyph: '',
+            showCheck: false,
+            setVal: (e) => { const ch = this.state.examEd.draft.choices.slice(); ch[i] = e.target.value; setEd({ draft: { ...this.state.examEd.draft, choices: ch } }); },
+            pick: () => { const d = this.state.examEd.draft; const cur = Array.isArray(d.corrects) ? d.corrects : (d.correct != null ? [d.correct] : []); const single = (d.type || 'qcm') === 'qcs' || !!d.uniqueAns; let nc; if (!single) { nc = cur.indexOf(i) !== -1 ? cur.filter(x => x !== i) : cur.concat([i]); } else { nc = [i]; } setEd({ draft: { ...d, corrects: nc, correct: nc.length ? nc[0] : 0 } }); },
+            libreOn,
+            libreBg: libreOn ? 'var(--green)' : 'var(--surface-raised)',
+            libreBorder: libreOn ? '1px solid var(--green)' : '1px solid var(--line-strong)',
+            libreColor: libreOn ? '#fff' : 'var(--ink-muted)',
+            toggleLibre: () => { const d = this.state.examEd.draft; const cur = Array.isArray(d.libre) ? d.libre : []; const nc = cur.indexOf(i) !== -1 ? cur.filter(x => x !== i) : cur.concat([i]); setEd({ draft: { ...d, libre: nc } }); },
+            canRemove: draft.choices.length > 2,
+            remove: () => { const d = this.state.examEd.draft; const ch = d.choices.slice(); ch.splice(i, 1); const cur = (Array.isArray(d.corrects) ? d.corrects : (d.correct != null ? [d.correct] : [])).filter(x => x !== i).map(x => x > i ? x - 1 : x); const lib = (Array.isArray(d.libre) ? d.libre : []).filter(x => x !== i).map(x => x > i ? x - 1 : x); setEd({ draft: { ...d, choices: ch, corrects: cur, correct: cur.length ? cur[0] : 0, libre: lib } }); },
+            };
+          }),
+          addDraftChoice: () => { const d = this.state.examEd.draft; setEd({ draft: { ...d, choices: d.choices.concat(['']) } }); },
+          draftSaveDisabled: !draft || !draft.q.trim(),
+          draftSaveBg: (draft && draft.q.trim()) ? 'var(--green)' : 'var(--green-light)',
+          draftSaveOpacity: (draft && draft.q.trim()) ? '1' : '0.55',
+          draftSaveCursor: (draft && draft.q.trim()) ? 'pointer' : 'not-allowed',
+          cancelDraft: () => setEd({ draft: null }),
+          gainIsFixe: gainMode === 'fixe', gainIsTemps: gainMode === 'temps',
+          gainFixeStyle: gainMode === 'fixe' ? _segOn : _segOff,
+          gainTempsStyle: gainMode === 'temps' ? _segOn : _segOff,
+          setGainFixe: () => dset({ gainMode: 'fixe' }),
+          setGainTemps: () => dset({ gainMode: 'temps' }),
+          draftMaxPts: draft ? fr(dm.maxPts != null ? dm.maxPts : 2) : '2',
+          setDraftMaxPts: (e) => { const v = parseFloat(String(e.target.value).replace(',', '.')); dset({ maxPts: isNaN(v) ? 0 : v }); },
+          draftNumInput: _numI,
+          penIsNone: penMode === 'aucune', penIsFixe: penMode === 'fixe', penIsElim: penMode === 'elim', penNotNone: penMode !== 'aucune',
+          penNoneStyle: penMode === 'aucune' ? _segOn : _segOff,
+          penFixeStyle: penMode === 'fixe' ? _segOn : _segOff,
+          penElimStyle: penMode === 'elim' ? _segDanger : _segOff,
+          setPenNone: () => dset({ penMode: 'aucune' }),
+          setPenFixe: () => dset({ penMode: 'fixe' }),
+          setPenElim: () => dset({ penMode: 'elim' }),
+          draftPenPts: draft ? fr(dm.penPts != null ? dm.penPts : 0) : '0',
+          setDraftPenPts: (e) => { const v = parseFloat(String(e.target.value).replace(',', '.')); dset({ penPts: isNaN(v) ? 0 : Math.abs(v) }); },
+          scopeCheck: penScope === 'toute' ? '✓' : '',
+          scopeBoxBg: penScope === 'toute' ? 'var(--green)' : 'var(--surface-raised)',
+          scopeBoxBorder: penScope === 'toute' ? '1px solid var(--green)' : '1px solid var(--line-strong)',
+          toggleScopeAll: () => dset({ penScope: penScope === 'toute' ? 'mauvaise' : 'toute' }),
+          gainTempsCheck: gainMode === 'temps' ? '✓' : '',
+          gainTempsBoxBg: gainMode === 'temps' ? 'var(--green)' : 'var(--surface-raised)',
+          gainTempsBoxBorder: gainMode === 'temps' ? '1px solid var(--green)' : '1px solid var(--line-strong)',
+          toggleGainTemps: () => dset({ gainMode: gainMode === 'temps' ? 'fixe' : 'temps' }),
+          penShowNeg: penMode !== 'elim',
+          penElimCheck: penMode === 'elim' ? '✓' : '',
+          penElimBoxBg: penMode === 'elim' ? 'var(--danger, #B23B3B)' : 'var(--surface-raised)',
+          penElimBoxBorder: penMode === 'elim' ? '1px solid var(--danger, #B23B3B)' : '1px solid var(--line-strong)',
+          togglePenElim: () => dset({ penMode: penMode === 'elim' ? 'fixe' : 'elim' }),
+          gainTempsIconColor: gainMode === 'temps' ? '#fff' : 'var(--ink-muted)',
+          penElimIconColor: penMode === 'elim' ? '#fff' : 'var(--ink-muted)',
+          scopeIconColor: penScope === 'toute' ? '#fff' : 'var(--ink-muted)',
+          saveDraft: () => {
+            const d = this.state.examEd.draft; if (!d || !d.q.trim()) return;
+            const cleaned = d.choices.map(c => c.trim()).filter(Boolean);
+            const choices = cleaned.length ? cleaned : ['réponse A', 'réponse B'];
+            const gainE = (d.gainMode === 'temps') ? (d.maxPts != null ? d.maxPts : 2) : (d.pts != null ? d.pts : 1);
+            const qt = d.type || 'qcm';
+            const savedChoices = qt === 'texte' ? [] : choices;
+            const savedCorrects = qt === 'texte' ? [] : (Array.isArray(d.corrects) ? d.corrects : []).filter(x => x < savedChoices.length);
+            if (d.editQid) {
+              const eid = d.editQid;
+              const orig = this.data.bank.concat(this.state.bkExtra || []).filter(x => x.id === eid).slice(-1)[0] || {};
+              const rest = (this.state.bkExtra || []).filter(x => x.id !== eid);
+              this.setState({
+                bkExtra: rest.concat([{ id: eid, q: d.q.trim(), chap: orig.chap || 'question', choices: savedChoices, type: qt, corrects: savedCorrects }]),
+                examEd: { ...this.state.examEd, draft: null, points: { ...this.state.examEd.points, [eid]: gainE } },
+              });
+              return;
+            }
+            const id = 'nq' + Date.now() + Math.random().toString(36).slice(2, 5);
+            const parts = this.state.examEd.parts.slice();
+            const lp = { ...parts[parts.length - 1] }; lp.qids = lp.qids.concat([id]); parts[parts.length - 1] = lp;
+            const gain = (d.gainMode === 'temps') ? (d.maxPts != null ? d.maxPts : 2) : (d.pts != null ? d.pts : 1);
+            this.setState({
+              bkExtra: (this.state.bkExtra || []).concat([{ id, q: d.q.trim(), chap: 'nouvelle question', choices: savedChoices, type: qt, corrects: savedCorrects }]),
+              examEd: { ...this.state.examEd, draft: null, parts, points: { ...this.state.examEd.points, [id]: gain } },
+            });
+          },
+          totalPtsLabel: fr(totalPts) + ' pts',
+          examTitle: ed.title, examTitleVal: ed.title,
+          setTitle: (e) => setEd({ title: e.target.value }),
+          hdrOpen: s.hdrOpen, hdrClosed: !s.hdrOpen,
+          toggleHdr: () => this.setState({ hdrOpen: !this.state.hdrOpen }),
+          hasPageBreak: !!s.hasPageBreak,
+          addPageBreak: () => this.setState({ hasPageBreak: true }),
+          removePageBreak: () => this.setState({ hasPageBreak: false }),
+          examTimerOn: !!s.examTimerOn,
+          examTimerVal: s.examTimerVal != null ? s.examTimerVal : 120,
+          setTimerVal: (e) => this.setState({ examTimerVal: e.target.value }),
+          timerBtnColor: s.examTimerOn ? 'var(--green-strong)' : 'var(--ink-muted)',
+          timerBtnBg: s.examTimerOn ? 'var(--green-tint)' : 'var(--surface-raised)',
+          timerBtnBorder: s.examTimerOn ? 'var(--green-light)' : 'var(--line-strong)',
+          toggleTimer: () => this.setState({ examTimerOn: !this.state.examTimerOn }),
+          hdrBtnLabel: s.hdrOpen ? 'terminer' : 'personnaliser',
+          hdrMainBg: 'var(--surface-raised)', hdrMainColor: 'var(--ink-body)', hdrMainBorder: '1px solid var(--ink-body)',
+          hdrZoneOutline: s.hdrOpen ? '1.5px dashed var(--line-strong)' : 'none',
+          examSubtitle: ed.subtitle != null ? ed.subtitle : 'Géographie — les capitales · 30 min · calculatrice interdite',
+          setSubtitle: (e) => setEd({ subtitle: e.target.value }),
+          pillsLeft: mkPills('left'), pillsRight: mkPills('right'), pillsOff: mkPills('off'),
+          pillOver: (e) => e.preventDefault(),
+          dropLeft: dropZone('left'), dropRight: dropZone('right'), dropOff: dropZone('off'),
+          addCustomPill: () => setEd({ pills: edPills.concat([{ id: 'c' + Date.now(), label: 'pilule…', zone: 'off', custom: true }]) }),
+          hasFavHdr: !!s.favHdr,
+          favNotMatches: !!s.favHdr && JSON.stringify(edPills.map(p => [p.id, p.zone, p.label])) !== JSON.stringify(s.favHdr.map(p => [p.id, p.zone, p.label])),
+          favShowSave: !s.favHdr || JSON.stringify(edPills.map(p => [p.id, p.zone, p.label])) !== JSON.stringify(s.favHdr.map(p => [p.id, p.zone, p.label])),
+          favHdrFill: (s.favHdrSaved || (s.favHdr && JSON.stringify(edPills.map(p => [p.id, p.zone, p.label])) === JSON.stringify(s.favHdr.map(p => [p.id, p.zone, p.label])))) ? 'currentColor' : 'none',
+          saveFavLabel: s.favHdrSaved ? 'favori enregistré ✓' : 'enregistrer en favori',
+          saveFavHdr: () => { this.setState({ favHdr: edPills.map(p => ({ ...p })), favHdrSaved: true }); setTimeout(() => this.setState({ favHdrSaved: false }), 1800); },
+          applyFavHdr: () => { if (this.state.favHdr) setEd({ pills: this.state.favHdr.map(p => ({ ...p })) }); },
+          headerCols: isDesktop ? '1fr 1fr' : '1fr',
+          sheetW: '100%',
+          sheetZoom: '1',
+          sheetBg: isDesktop ? '#FFFDF9' : 'transparent',
+          sheetBorder: isDesktop ? '1px solid var(--line)' : 'none',
+          sheetTopBorder: isDesktop ? '1px solid var(--line)' : '1px solid var(--line-strong)',
+          sheetRadius: isDesktop ? '6px' : '0',
+          sheetShadow: 'none',
+          sheetPad: isDesktop ? '36px 40px' : '20px 2px 8px',
+          hdrDir: 'row',
+          hdrGap: isDesktop ? '28px' : '16px',
+          hdrZoneDir: 'column',
+          hdrZoneGap: isDesktop ? '9px' : '10px',
+          hdrLeftMax: isDesktop ? '52%' : 'none',
+          hdrRightW: isDesktop ? '220px' : 'auto',
+          hdrRightFlex: isDesktop ? 'none' : '1',
+          hdrBaremeAlign: isDesktop ? 'right' : 'left',
+          hdrLineDisp: isDesktop ? 'block' : 'none',
+          fsHdr: isDesktop ? '12.5px' : '14px',
+          fsTitle: isDesktop ? '20px' : '19px',
+          fsSub: isDesktop ? '12px' : '13px',
+          fsQ: isDesktop ? '13.5px' : '15px',
+          statCols: isDesktop ? 'repeat(4, 1fr)' : '1fr 1fr',
+        };
+      })(),
+      createRows: [0, 1, 2, 3].map(i => ({
+        ph: 'réponse ' + String.fromCharCode(65 + i),
+        dotBorder: i === 0 ? '5px solid var(--green)' : '1.5px solid var(--line-strong)',
+        dotBg: 'transparent',
+      })),
+
+      // exercice
+      exRunning: !s.ex.done, exDone: s.ex.done,
+      exQuestion: q.q,
+      exAnswers: answers,
+      exStack,
+      exHasStack,
+      exStackWrapStyle: 'max-width:620px;width:100%;margin:0 auto;padding:' + (s.exPadT || 60) + 'px 24px ' + (s.exPadB || 60) + 'px 24px;box-sizing:border-box;display:flex;flex-direction:column;gap:22px;',
+      exScrollOverflow: s.exScrollable ? 'auto' : 'hidden',
+      exScrollRef: (el) => { this._exEl = el; },
+      exBandRef: (el) => { this._exBandEl = el; },
+      exActiveRef: (el) => { this._exActiveEl = el; },
+      exShowPart: isMultiGroup,
+      exPartLabel: 'partie ' + (s.ex.i - grpFirst + 1) + ' / ' + grpSize,
+      exGroupCtx: grpCtx,
+      exGroupCtxImage: !!(grpCtx && grpCtx.kind === 'image'),
+      exGroupCtxText: !!(grpCtx && grpCtx.kind === 'text'),
+      exGroupCtxLabel: grpCtx ? (grpCtx.label || '') : '',
+      exGroupCtxNote: grpCtx ? (grpCtx.note || '') : '',
+      exProgressW: ((s.ex.i + (s.ex.checked ? 1 : 0)) / total * 100) + '%',
+      exChecked: s.ex.checked,
+      exFeedback, exFeedbackColor: ok ? 'var(--success-strong)' : 'var(--danger-strong)',
+      exFeedbackTitle: ok ? 'correct' : 'pas tout à fait',
+      exFeedbackSub: `la bonne réponse est « ${q.a[q.correct]} ».`,
+      exFeedbackTitleStyle: 'font-size:19px;font-weight:700;line-height:1.2;color:' + (ok ? 'var(--success-strong)' : 'var(--danger-strong)') + ';',
+      exFeedbackSubStyle: 'font-size:14px;font-weight:600;line-height:1.3;margin-top:2px;color:' + (ok ? 'var(--success-strong)' : 'var(--danger-strong)') + ';',
+      explainOpen: !!s.explainOpen,
+      toggleExplain: () => this.setState(st => {
+        if (st.explainOpen) return { explainOpen: false };
+        const seed = q.explain
+          ? q.explain
+          : ('« ' + q.a[q.correct] + ' » est la bonne réponse à « ' + q.q + ' ». révise bien cette brique — et pose-moi tes questions si un point reste flou, je suis là pour t\u2019aider à comprendre.');
+        const needSeed = st.chatQ !== s.ex.i || !st.chatMsgs || !st.chatMsgs.length;
+        return needSeed
+          ? { explainOpen: true, chatMsgs: [{ role: 'ai', text: seed }], chatQ: s.ex.i, chatInput: '', chatBusy: false, chatCtx: { q: q.q, correct: q.a[q.correct], answers: q.a } }
+          : { explainOpen: true };
+      }),
+      chatQuestion: q.q,
+      chatBusy: !!s.chatBusy,
+      chatInput: s.chatInput || '',
+      chatCanSend: !!(s.chatInput && s.chatInput.trim()) && !s.chatBusy,
+      onChatInput: (e) => this.setState({ chatInput: e.target.value }),
+      onChatKey: (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this._sendChat(); } },
+      sendChat: () => this._sendChat(),
+      chatScrollRef: (el) => { this._chatEl = el; },
+      chatMsgsList: (s.chatMsgs || []).map((m, i) => {
+        const isAi = m.role === 'ai';
+        return {
+          key: 'm' + i, isAi, isUser: !isAi, text: m.text,
+          rowStyle: 'display:flex;gap:10px;align-items:flex-end;' + (isAi ? 'justify-content:flex-start;' : 'justify-content:flex-end;'),
+          bubbleStyle: 'max-width:78%;padding:11px 14px;font-size:14.5px;line-height:1.5;text-wrap:pretty;box-shadow:var(--shadow-sm);' + (isAi
+            ? 'background:var(--surface-page);border:1px solid var(--line);color:var(--ink-body);border-radius:16px 16px 16px 4px;'
+            : 'background:var(--green);color:#fff;border-radius:16px 16px 4px 16px;'),
+        };
+      }),
+      stopProp: (e) => e.stopPropagation(),
+      showBandHandle: isMobile && s.ex.checked,
+      showBandArrow: isDesktop && s.ex.checked,
+      bandShowExtras: s.ex.checked && !s.bandCollapsed,
+      bandPad: '16px 24px',
+      bandArrowRot: s.bandCollapsed ? 'rotate(180deg)' : 'rotate(0deg)',
+      bandArrowTitle: s.bandCollapsed ? 'déplier' : 'replier',
+      toggleBand: () => this.setState(st => ({ bandCollapsed: !st.bandCollapsed })),
+      onBandTouchStart: (e) => { this._bandY = e.touches && e.touches[0] ? e.touches[0].clientY : null; },
+      onBandTouchEnd: (e) => {
+        if (this._bandY == null) return;
+        const endY = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientY : this._bandY;
+        const dy = endY - this._bandY;
+        if (dy > 34) this.setState({ bandCollapsed: true });
+        else if (dy < -34) this.setState({ bandCollapsed: false });
+        this._bandY = null;
+      },
+      exCorrectAnswer: '« ' + q.a[q.correct] + ' »',
+      exExplanation: q.explain || ('« ' + q.a[q.correct] + ' » est la bonne réponse à « ' + q.q + ' ». révise cette brique pour bien l\'ancrer.'),
+      exFeedbackStyle: (isMobile
+        ? 'display:flex;flex-direction:column;text-align:left;padding-left:7px;text-wrap:pretty;'
+        : 'flex:1;min-width:0;max-width:420px;margin:0 auto 0 -4px;text-align:left;text-wrap:pretty;max-height:52px;overflow:hidden;display:flex;flex-direction:column;justify-content:center;') + 'color:' + (ok ? 'var(--success-strong)' : 'var(--danger-strong)') + ';animation:cuFadeUp 200ms;',
+      exBtnLabel, exBtnAction, exBtnClass: exWrong ? 'ex-btn-danger' : '', xpBurstEl,
+      exExplainColor: exWrong ? 'var(--danger-strong)' : 'var(--green-strong)',
+      exExplainCls: exWrong ? 'ex-explain-bad' : 'ex-explain-ok',
+      exBtnBlock: true,
+      exBtnRowStyle: isMobile ? 'max-width:620px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:12px;' : 'width:100%;display:flex;align-items:center;gap:20px;justify-content:flex-end;height:52px;',
+      exBtnWrapStyle: isMobile ? 'width:100%;' : 'width:300px;',
+      exBtnDisabled: !s.ex.checked && s.ex.sel == null,
+      exScore: s.ex.correct + '/' + total,
+      answerCols: isDesktop ? '1fr 1fr' : '1fr',
+      quitExercice: () => this.go('parcours'),
+      backParcours: () => this.go('parcours'),
+    };
+  }
+}
+</script>
+</body>
+</html>
