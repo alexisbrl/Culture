@@ -406,7 +406,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         document.body
       )}
       {openQuestionBlocked && createPortal(
-        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', zIndex: 90, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 999, background: palette.ink, color: palette.parchment, fontFamily: "'Inter Tight', system-ui, sans-serif", fontSize: 12.5, boxShadow: `0 12px 32px ${ink(0.30)}` }}>
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', zIndex: 90, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 999, background: palette.ink, color: palette.parchment, fontFamily: 'var(--font-sans)', fontSize: 12.5, boxShadow: `0 12px 32px ${ink(0.30)}` }}>
           <AlertTriangle size={14} strokeWidth={2} color={palette.amberGlow} />
           {t('tab.questionEditing')}
         </div>,

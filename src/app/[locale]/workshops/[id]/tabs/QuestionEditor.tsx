@@ -265,7 +265,7 @@ function ChoiceListEditor({
   return (
     <div>
       {choices.length === 0 && (
-        <div style={{ fontFamily: "'Caveat', cursive", fontSize: 15, color: palette.amber, padding: '4px 0 10px' }}>
+        <div style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: palette.amber, padding: '4px 0 10px' }}>
           {t('choices.prompt', { what: showPairs ? t('choices.promptPairs') : t('choices.promptOptions') })}
         </div>
       )}
@@ -473,7 +473,7 @@ export default function QuestionEditor({
       <div onClick={onCancel} style={{ position: 'absolute', inset: 0, background: ink(0.42), backdropFilter: 'blur(2px)' }} />
 
       {/* panel */}
-      <div style={{ position: 'relative', width: 640, maxWidth: '100%', maxHeight: '100%', borderRadius: 18, background: palette.cream, boxShadow: `0 24px 64px ${ink(0.24)}`, display: 'flex', flexDirection: 'column', fontFamily: "'Inter Tight', system-ui, sans-serif", overflow: 'hidden' }}>
+      <div style={{ position: 'relative', width: 640, maxWidth: '100%', maxHeight: '100%', borderRadius: 18, background: palette.cream, boxShadow: `0 24px 64px ${ink(0.24)}`, display: 'flex', flexDirection: 'column', fontFamily: 'var(--font-sans)', overflow: 'hidden' }}>
         {/* header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: `1px solid ${ink(0.08)}`, flexShrink: 0 }}>
           <div>

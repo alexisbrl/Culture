@@ -279,7 +279,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
         <div style={{ width: 230, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, borderRight: `1px solid ${ink(0.08)}`, paddingRight: 16, overflowY: 'auto', minHeight: 0 }}>
           <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft }}>{t('generator.sentQuestions')}</div>
           <div style={{ fontSize: 11, color: palette.inkFaint, marginBottom: 4 }}>{t('generator.checkToAdd')}</div>
-          {available.length === 0 && <div style={{ fontFamily: "'Caveat', cursive", fontSize: 15, color: palette.amber }}>{t('generator.sendFromBank')}</div>}
+          {available.length === 0 && <div style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: palette.amber }}>{t('generator.sendFromBank')}</div>}
           {available.map(q => {
             const included = includedIds.includes(q.id);
             const incomplete = hasNoAnswer(q) || !q.content.trim();

@@ -173,7 +173,7 @@ export default function ProgrammeTab({ chapters, workshopId, canManage }: { chap
         {chapters.length === 0 ? (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
             <div style={{ textAlign: 'center', maxWidth: 360 }}>
-              <div style={{ fontFamily: "'Caveat', cursive", fontSize: 20, color: '#7a4d20' }}>{t('emptyTitle')}</div>
+              <div style={{ fontFamily: 'var(--font-serif)', fontSize: 20, color: '#7a4d20' }}>{t('emptyTitle')}</div>
               <div style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 6 }}>{t('emptyDesc')}</div>
             </div>
           </div>
@@ -198,7 +198,7 @@ export default function ProgrammeTab({ chapters, workshopId, canManage }: { chap
                   <span key={c.id} style={{ width: i >= left && i < left + VISIBLE ? 16 : 7, height: 7, borderRadius: 999, background: i >= left && i < left + VISIBLE ? palette.amber : ink(0.2), transition: 'all .3s', display: 'inline-block' }} />
                 ))}
               </div>
-              <span style={{ fontFamily: "'Caveat', cursive", fontSize: 15, color: '#7a4d20' }}>
+              <span style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: '#7a4d20' }}>
                 {t('chapterIndicator', { from: left + 1, to: Math.min(chapters.length, left + VISIBLE), total: chapters.length })}
               </span>
             </div>

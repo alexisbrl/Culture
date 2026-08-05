@@ -126,7 +126,7 @@ export default function AnalyseTab() {
               );
             })}
           </div>
-          <div style={{ fontFamily: "'Caveat', cursive", fontSize: 15, color: palette.amber, marginTop: 10, textAlign: 'center' as const }}>{t('distribution.insight')}</div>
+          <div style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: palette.amber, marginTop: 10, textAlign: 'center' as const }}>{t('distribution.insight')}</div>
         </ACard>
       </div>
 

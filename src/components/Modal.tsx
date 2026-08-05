@@ -29,7 +29,7 @@ export default function Modal({ onClose, width = 420, portal = false, children }
   const node = (
     <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: ink(0.42), backdropFilter: 'blur(2px)' }} />
-      <div style={{ position: 'relative', width, maxWidth: '90vw', background: palette.cream, borderRadius: radius.xl, padding: 24, boxShadow: shadow.modal, fontFamily: "'Inter Tight', system-ui, sans-serif", textAlign: 'center' as const }}>
+      <div style={{ position: 'relative', width, maxWidth: '90vw', background: palette.cream, borderRadius: radius.xl, padding: 24, boxShadow: shadow.modal, fontFamily: 'var(--font-sans)', textAlign: 'center' as const }}>
         {children}
       </div>
     </div>

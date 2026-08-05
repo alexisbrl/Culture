@@ -23,7 +23,7 @@ export default function CoursTab() {
         <p style={{ margin: 0, fontSize: 13.5, color: palette.inkMuted, lineHeight: 1.6 }}>
           {t('description')}
         </p>
-        <div style={{ fontFamily: "'Caveat', cursive", fontSize: 17, color: palette.amber, marginTop: 14 }}>{t('tagline')}</div>
+        <div style={{ fontFamily: 'var(--font-serif)', fontSize: 17, color: palette.amber, marginTop: 14 }}>{t('tagline')}</div>
       </div>
     </div>
   );

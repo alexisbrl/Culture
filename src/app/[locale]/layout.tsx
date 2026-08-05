@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter_Tight, Caveat, Geist_Mono } from 'next/font/google';
+import { Hanken_Grotesk, Geist_Mono } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
@@ -13,16 +13,10 @@ import DashboardHeader from '@/components/DashboardHeader';
 import Footer from '@/components/Footer';
 import SessionWatcher from '@/components/SessionWatcher';
 
-const interTight = Inter_Tight({
+const hankenGrotesk = Hanken_Grotesk({
   variable: '--font-sans',
   subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
-});
-
-const caveat = Caveat({
-  variable: '--font-script',
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
+  weight: ['400', '500', '600', '700'],
 });
 
 const geistMono = Geist_Mono({
@@ -61,7 +55,7 @@ export default async function LocaleLayout({ children, params }: Props) {
 
   return (
     <ClerkProvider localization={clerkLocalization}>
-      <html lang={locale} className={`${interTight.variable} ${caveat.variable} ${geistMono.variable} h-full`}>
+      <html lang={locale} className={`${hankenGrotesk.variable} ${geistMono.variable} h-full`}>
         <body className="min-h-full flex flex-col bg-white">
           <NextIntlClientProvider messages={messages}>
             <SessionWatcher />

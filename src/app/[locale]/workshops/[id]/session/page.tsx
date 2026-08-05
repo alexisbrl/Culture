@@ -56,7 +56,7 @@ export default function SessionPage() {
           <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-44 h-44 rounded-full" style={{ background: 'radial-gradient(circle, rgba(246,201,112,0.3), rgba(246,201,112,0) 70%)' }} />
           <div className="text-[10px] font-semibold tracking-[0.14em] uppercase text-ink-soft mb-1">{t('youWater')}</div>
           <div className="text-[15px] font-medium text-ink text-center">Biologie cellulaire</div>
-          <div className="font-script text-base text-amber mb-2">{t('plantTagline', { level: 2 })}</div>
+          <div className="text-base text-amber mb-2" style={{ fontFamily: 'var(--font-serif)' }}>{t('plantTagline', { level: 2 })}</div>
           <div className="relative w-[170px] h-[150px] mt-1.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/assets/trees/paulownia-3.png" alt="" className="absolute inset-0 w-full h-full object-contain" />
@@ -115,7 +115,7 @@ export default function SessionPage() {
               <div className="mt-5 px-4 py-3 border border-dashed border-ink/[0.18] rounded-[10px] flex items-center gap-2.5 bg-white/50">
                 <PencilLine className="w-4 h-4 text-amber" />
                 <div className="flex-1 text-[13px] text-ink-soft">
-                  <span className="font-script text-[15px] text-amber">{t('hintPrompt')}</span> · {t('premiumFeature')}
+                  <span className="text-[15px] text-amber" style={{ fontFamily: 'var(--font-serif)' }}>{t('hintPrompt')}</span> · {t('premiumFeature')}
                 </div>
               </div>
             </div>

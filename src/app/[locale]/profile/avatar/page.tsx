@@ -47,9 +47,7 @@ export default function AvatarEditorPage() {
   const catDef = CATS.find(c => c.key === activeCat)!;
 
   return (
-    <div style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", background: palette.cream, minHeight: 'calc(100vh - 65px)', padding: '24px 40px 40px', color: palette.ink }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&family=Caveat:wght@400;500;600&display=swap');`}</style>
-
+    <div style={{ fontFamily: 'var(--font-sans)', background: palette.cream, minHeight: 'calc(100vh - 65px)', padding: '24px 40px 40px', color: palette.ink }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         {/* Breadcrumb */}
         <div style={{ fontSize: 12, color: palette.inkFaint, marginBottom: 10 }}>
@@ -59,7 +57,7 @@ export default function AvatarEditorPage() {
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 4 }}>
           <h2 style={{ margin: 0, fontSize: 26, fontWeight: 500, letterSpacing: '-0.015em' }}>{t('title')}</h2>
-          <span style={{ fontFamily: "'Caveat', cursive", fontSize: 18, color: palette.amber }}>{t('titleScript')}</span>
+          <span style={{ fontFamily: 'var(--font-serif)', fontSize: 18, color: palette.amber }}>{t('titleScript')}</span>
         </div>
         <div style={{ fontSize: 13, color: palette.inkSoft, marginBottom: 22 }}>{t('subtitle')}</div>
 
@@ -86,7 +84,7 @@ export default function AvatarEditorPage() {
             </div>
 
             <div style={{ textAlign: 'center', marginTop: 14 }}>
-              <div style={{ fontFamily: "'Caveat', cursive", fontSize: 17, color: palette.amber }}>{t('livePreview')}</div>
+              <div style={{ fontFamily: 'var(--font-serif)', fontSize: 17, color: palette.amber }}>{t('livePreview')}</div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18 }}>

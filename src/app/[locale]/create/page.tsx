@@ -26,7 +26,7 @@ export default function CreatePage() {
           <h1 className="text-[27px] font-medium text-ink tracking-tight">
             {t('title')}
           </h1>
-          <p className="font-script text-[19px] text-amber mt-1">
+          <p className="text-[19px] text-amber mt-1" style={{ fontFamily: 'var(--font-serif)' }}>
             {t('subtitle')}
           </p>
         </div>
@@ -45,7 +45,7 @@ export default function CreatePage() {
               <div className="text-lg text-ink font-medium">
                 {t('source.dropHere')}
               </div>
-              <div className="font-script text-base text-amber mt-1">
+              <div className="text-base text-amber mt-1" style={{ fontFamily: 'var(--font-serif)' }}>
                 {t('source.dropTagline')}
               </div>
               <button className="mt-4 px-5 py-2.5 rounded-[10px] bg-amber text-parchment text-[13.5px] font-medium shadow-[0_6px_16px_rgba(168,122,58,0.28)] hover:brightness-105 transition">

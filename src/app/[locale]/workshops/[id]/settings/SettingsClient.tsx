@@ -228,7 +228,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
   return (
     <div
       style={{
-        fontFamily: "'Inter Tight', system-ui, sans-serif",
+        fontFamily: 'var(--font-sans)',
         color: palette.ink,
         minHeight: 'calc(100vh - 65px)',
         background: palette.cream,
@@ -236,8 +236,6 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         cursor: 'default',
       }}
     >
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Caveat:wght@400;500;600&display=swap');`}</style>
-
       {/* ── Sidebar ── */}
       <div
         style={{

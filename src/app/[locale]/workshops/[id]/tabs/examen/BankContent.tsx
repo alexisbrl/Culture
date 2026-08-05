@@ -529,7 +529,7 @@ function BankContent({ questions, pools, exams, openId, setOpenId, onEditQuestio
           </div>
         ))}
         {filtered.length === 0 && (
-          <div style={{ fontFamily: "'Caveat', cursive", fontSize: 16, color: palette.amber, padding: '20px 0', textAlign: 'center' as const }}>{tr('bank.noMatch')}</div>
+          <div style={{ fontFamily: 'var(--font-serif)', fontSize: 16, color: palette.amber, padding: '20px 0', textAlign: 'center' as const }}>{tr('bank.noMatch')}</div>
         )}
       </div>
       {pendingDeleteQuestion && (() => {

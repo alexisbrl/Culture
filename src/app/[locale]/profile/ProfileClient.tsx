@@ -56,12 +56,11 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=Caveat:wght@400;500&display=swap');
-        .profile-root * { font-family: 'Inter Tight', sans-serif; box-sizing: border-box; }
+        .profile-root * { font-family: var(--font-sans); box-sizing: border-box; }
         .profile-btn-dark {
           background: #2d2a24; color: #f4f0e6; border: none;
           border-radius: 10px; padding: 8px 16px; font-size: 13px; font-weight: 500;
-          cursor: pointer; font-family: 'Inter Tight', sans-serif;
+          cursor: pointer; font-family: var(--font-sans);
           text-decoration: none; display: inline-block;
         }
         .profile-btn-dark:hover { background: #3d3a34; }
@@ -69,7 +68,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
           background: transparent; color: #5a4838;
           border: 1.5px solid rgba(90,72,56,0.25); border-radius: 10px;
           padding: 8px 16px; font-size: 13px; font-weight: 500;
-          cursor: pointer; font-family: 'Inter Tight', sans-serif;
+          cursor: pointer; font-family: var(--font-sans);
           text-decoration: none; display: inline-block;
         }
         .profile-btn-ghost:hover { background: rgba(90,72,56,0.06); }
@@ -135,7 +134,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName }:
           <div style={{ flex: 1, minWidth: 220 }}>
             <div
               style={{
-                fontFamily: 'Caveat, cursive',
+                fontFamily: 'var(--font-serif)',
                 fontSize: 18,
                 color: palette.amber,
                 marginBottom: 2,

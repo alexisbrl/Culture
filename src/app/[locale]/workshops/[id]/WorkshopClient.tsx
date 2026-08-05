@@ -83,10 +83,7 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
   }, [locale, workshopId]);
 
   return (
-    <div style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", color: palette.ink, minHeight: 'calc(100vh - 65px)', background: palette.cream, display: 'flex', flexDirection: 'column' }}>
-      {/* Google Fonts */}
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&family=Caveat:wght@400;500;600&display=swap');`}</style>
-
+    <div style={{ fontFamily: 'var(--font-sans)', color: palette.ink, minHeight: 'calc(100vh - 65px)', background: palette.cream, display: 'flex', flexDirection: 'column' }}>
       {/* Workshop header */}
       <div style={{ paddingTop: 16, flexShrink: 0 }}>
         <div style={{ padding: '14px 24px 0' }}>
