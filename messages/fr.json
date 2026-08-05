@@ -285,7 +285,7 @@
     "results": "résultats",
     "searching": "recherche…",
     "noResults": "aucun atelier trouvé",
-    "members": "membres",
+    "members": "{count, plural, one {# membre} other {# membres}}",
     "cultureModules": "proposés par Culture",
     "emptyTitle": "aucun atelier pour le moment",
     "emptyDesc": "créez votre premier atelier ou rejoignez-en un existant via la recherche.",

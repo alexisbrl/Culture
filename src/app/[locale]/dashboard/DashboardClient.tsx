@@ -326,8 +326,11 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
     }
   }
 
+  // Fond crème comme partout ailleurs dans l'app connectée (T49) : le dégradé
+  // vert qui traînait ici faisait de « mes ateliers » la seule page à ne pas
+  // être sur `--surface-page`.
   return (
-    <div className="relative min-h-[calc(100vh-60px)] bg-gradient-to-b from-[var(--green-tint)] to-[var(--surface-page)] font-sans px-6 lg:px-10 py-8" style={{ color: palette.ink }}>
+    <div className="relative min-h-[calc(100vh-60px)] bg-[var(--surface-page)] font-sans px-6 lg:px-10 py-8" style={{ color: palette.ink }}>
       <div className="max-w-6xl mx-auto rounded-[20px] bg-cream/92 backdrop-blur-xl border border-ink/[0.07] shadow-[var(--shadow-lg)] flex flex-col">
         {/* header */}
         <div className="flex items-center justify-between px-7 pt-6">
@@ -414,7 +417,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                           <div className="font-medium text-ink text-sm mb-1">{w.name}</div>
                           <div className="text-[11.5px] text-ink-soft flex items-center gap-1.5">
                             <Users className="w-3 h-3" />
-                            {w.member_count} {t('members')}
+                            {t('members', { count: w.member_count })}
                           </div>
                         </div>
                       </div>
@@ -439,7 +442,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                     <div className="font-medium text-ink text-sm mb-1">{m.name}</div>
                     <div className="text-[11.5px] text-ink-soft flex items-center gap-1.5">
                       <Users className="w-3 h-3" />
-                      {m.members.toLocaleString(locale)} {t('members')}
+                      {t('members', { count: m.members })}
                     </div>
                   </div>
                 </div>
@@ -604,7 +607,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                   <h2 className="text-[20px] font-medium text-ink mb-1.5">{preview.name}</h2>
                   <div className="flex items-center gap-2 text-[12.5px] text-ink-soft mb-4">
                     <Users className="w-3.5 h-3.5" />
-                    <span>{preview.memberCount.toLocaleString(locale)} {t('members')}</span>
+                    <span>{t('members', { count: preview.memberCount })}</span>
                     <span className="w-[2px] h-[2px] rounded-full bg-ink-soft" />
                     <span>{t('createdBy')} {preview.ownerName}</span>
                   </div>
@@ -714,7 +717,7 @@ function WorkshopCard({ workshop, locale, onExpand }: { workshop: WorkshopCardDa
         <div className="font-medium text-ink text-sm mb-1 line-clamp-2">{workshop.name}</div>
         <div className="text-[11.5px] text-ink-soft flex items-center gap-1.5">
           <Users className="w-3 h-3" />
-          {workshop.member_count} {t('members')}
+          {t('members', { count: workshop.member_count })}
         </div>
       </div>
     </Link>
@@ -769,7 +772,7 @@ function JoinRequestCard({ workshop, locale, onOpen }: { workshop: WorkshopCardD
         <div className="font-medium text-ink text-sm mb-1 line-clamp-2">{workshop.name}</div>
         <div className="text-[11.5px] text-ink-soft flex items-center gap-1.5">
           <Users className="w-3 h-3" />
-          {workshop.member_count} {t('members')}
+          {t('members', { count: workshop.member_count })}
         </div>
       </div>
     </button>

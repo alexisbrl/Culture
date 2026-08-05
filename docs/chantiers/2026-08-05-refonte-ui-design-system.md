@@ -811,7 +811,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
   - Fichiers : `src/app/[locale]/workshops/[id]/tabs/examen/BankContent.tsx`
   - Dépend de : aucune
 
-- [ ] **T49 — Mes ateliers : fond et pluriel**
+- [x] **T49 — Mes ateliers : fond et pluriel**
   - (1) La page est la seule de l'app connectée à poser un fond vert pâle au lieu du
     crème `--paper` employé partout ailleurs. (2) Le compte de membres s'écrit
     « 1 membres » : la clé `dashboard.members` est un mot figé concaténé à un nombre,
@@ -998,6 +998,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 - 2026-08-05 — T46 — [voir commit] — Clé `settings.notions.sectionTitle` ajoutée (FR+EN) et rendue en tête de section, même graphie que `SectionCard`. Les « + » littéraux retirés de `settings.notions.add` et `settings.chapters.add`, l'icône Lucide les portait déjà.
 
 - 2026-08-05 — T47 — [voir commit] — `LinkButton variant="ghost" size="sm"` vers `/profile/avatar`, clé `profile.edit` (FR+EN). La ligne « modifier l'avatar » de la liste reste en place : même cible, deux points d'entrée, comme la maquette.
+
+- 2026-08-05 — T49 — [voir commit] — Dégradé `from-[var(--green-tint)]` remplacé par `bg-[var(--surface-page)]`. `dashboard.members` passe en pluriel ICU (`{count, plural, …}`, FR+EN) et les cinq points d'appel arrêtent de concaténer le nombre à la main.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->

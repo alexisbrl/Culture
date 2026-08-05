@@ -285,7 +285,7 @@
     "results": "results",
     "searching": "searching…",
     "noResults": "no workshop found",
-    "members": "members",
+    "members": "{count, plural, one {# member} other {# members}}",
     "cultureModules": "offered by Culture",
     "emptyTitle": "no workshops yet",
     "emptyDesc": "create your first workshop or join one via search.",
