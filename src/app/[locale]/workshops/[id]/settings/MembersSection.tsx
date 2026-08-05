@@ -3,8 +3,9 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Mail, UserPlus, Pencil, Plus, Trash2 } from 'lucide-react';
-import { palette, ink, withAlpha } from '@/lib/theme';
-import Modal from '@/components/Modal';
+import { palette, ink, shadow, withAlpha } from '@/lib/theme';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   inviteMemberByTag, getWorkshopInvitations, cancelInvitation, setMemberRole, removeMember,
   getJoinRequests, approveJoinRequest, rejectJoinRequest, type PendingInvite,
@@ -238,13 +239,14 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                     style={{
                       fontSize: 13,
                       fontFamily: "'ui-monospace', 'monospace', inherit",
-                      padding: '7px 12px',
+                      padding: '9px 12px',
                       border: `1px solid ${ink(0.14)}`,
                       borderRadius: 9,
                       outline: 'none',
                       background: withAlpha(palette.paper, 0.7),
                       color: palette.ink,
                       width: 130,
+                      boxSizing: 'border-box',
                       letterSpacing: '0.04em',
                     }}
                   />
@@ -326,10 +328,10 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
               <button
                 onClick={() => setFilterGroupId(null)}
                 style={{
-                  fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit',
-                  border: filterGroupId === null ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`,
-                  background: filterGroupId === null ? palette.ink : ink(0.04),
-                  color: filterGroupId === null ? palette.parchment : '#3a352c',
+                  fontSize: 11.5, padding: '5px 11px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', minHeight: 26,
+                  border: filterGroupId === null ? `1px solid ${palette.ink}` : `1px solid ${palette.line}`,
+                  background: filterGroupId === null ? palette.ink : palette.surfaceSunken,
+                  color: filterGroupId === null ? palette.onInk : palette.inkMuted,
                 }}
               >
                 {t('groups.filterAll')}
@@ -343,34 +345,34 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                       onClick={() => setFilterGroupId(active ? null : g.id)}
                       title={t('groups.viewTitle')}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999,
+                        display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 11px', borderRadius: 999, minHeight: 26,
                         cursor: 'pointer', fontFamily: 'inherit',
-                        border: active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`,
-                        background: active ? palette.ink : ink(0.04),
-                        color: active ? palette.parchment : '#3a352c',
+                        border: active ? `1px solid ${palette.ink}` : `1px solid ${palette.line}`,
+                        background: active ? palette.ink : palette.surfaceSunken,
+                        color: active ? palette.onInk : palette.inkMuted,
                       }}
                     >
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: g.color, display: 'inline-block' }} />
                       {g.name}
-                      <span style={{ color: active ? withAlpha(palette.parchment, 0.7) : palette.inkFaint }}>· {memberCount}</span>
+                      <span style={{ color: active ? withAlpha(palette.onInk, 0.7) : palette.inkFaint }}>· {memberCount}</span>
                     </button>
                     <button
                       onClick={() => (editingGroup === g.id ? setEditingGroup(null) : openEditGroup(g))}
                       title={t('groups.editTitle')}
-                      style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', border: `1px solid ${ink(0.15)}`, background: palette.paper, color: palette.inkFaint, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      style={{ position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: '50%', border: `1px solid ${palette.lineStrong}`, background: palette.surfaceRaised, color: palette.inkFaint, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     >
-                      <Pencil size={7} />
+                      <Pencil size={8} />
                     </button>
                     {editingGroup === g.id && (
                       <>
                         <div onClick={() => setEditingGroup(null)} style={{ position: 'fixed', inset: 0, zIndex: 29 }} />
-                        <div style={{ position: 'absolute', top: 26, left: 0, zIndex: 30, width: 190, background: palette.paper, border: `1px solid ${ink(0.10)}`, borderRadius: 12, boxShadow: `0 12px 32px ${ink(0.16)}`, padding: 10 }}>
+                        <div style={{ position: 'absolute', top: 26, left: 0, zIndex: 30, width: 190, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg, padding: 10 }}>
                           <input
                             autoFocus
                             value={editGroupName}
                             onChange={(e) => setEditGroupName(e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') saveEditGroup(); if (e.key === 'Escape') setEditingGroup(null); }}
-                            style={{ width: '100%', fontSize: 11.5, padding: '6px 8px', borderRadius: 8, border: `1px solid ${ink(0.14)}`, outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box' }}
+                            style={{ width: '100%', fontSize: 11.5, padding: '7px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box', background: palette.surfaceInput, color: palette.ink }}
                           />
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
                             {LABEL_COLORS.map((c) => (
@@ -378,21 +380,21 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                                 key={c}
                                 onClick={() => setEditGroupColor(c)}
                                 title={c}
-                                style={{ width: 16, height: 16, borderRadius: '50%', background: c, border: editGroupColor === c ? '2px solid #2d2a24' : `1px solid ${ink(0.15)}`, cursor: 'pointer', padding: 0 }}
+                                style={{ width: 16, height: 16, borderRadius: '50%', background: c, border: editGroupColor === c ? `2px solid ${palette.ink}` : `1px solid ${palette.lineStrong}`, cursor: 'pointer', padding: 0 }}
                               />
                             ))}
                           </div>
                           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                            <button onClick={saveEditGroup} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: 'none', background: palette.ink, color: palette.parchment, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            <button onClick={saveEditGroup} style={{ flex: 1, fontSize: 11, padding: '6px 8px', borderRadius: 8, border: 'none', background: palette.ink, color: palette.onInk, cursor: 'pointer', fontFamily: 'inherit' }}>
                               {t('groups.save')}
                             </button>
-                            <button onClick={() => setEditingGroup(null)} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            <button onClick={() => setEditingGroup(null)} style={{ flex: 1, fontSize: 11, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>
                               {t('groups.cancel')}
                             </button>
                           </div>
                           <button
                             onClick={() => setPendingDeleteGroup(g.id)}
-                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${withAlpha(palette.danger, 0.30)}`, background: withAlpha(palette.danger, 0.08), color: palette.danger, cursor: 'pointer', fontFamily: 'inherit' }}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', fontSize: 11, padding: '6px 8px', borderRadius: 8, border: `1px solid ${withAlpha(palette.danger, 0.30)}`, background: withAlpha(palette.danger, 0.08), color: palette.danger, cursor: 'pointer', fontFamily: 'inherit' }}
                           >
                             <Trash2 size={11} />
                             {t('groups.delete')}
@@ -411,17 +413,17 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                     onChange={(e) => setNewGroupName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleAddGroup(); if (e.key === 'Escape') { setCreatingGroup(false); setNewGroupName(''); } }}
                     placeholder={t('groups.namePlaceholder')}
-                    style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, border: `1px solid ${ink(0.18)}`, outline: 'none', fontFamily: 'inherit', width: 130 }}
+                    style={{ fontSize: 11.5, padding: '5px 10px', borderRadius: 999, border: `1px solid ${palette.lineStrong}`, outline: 'none', fontFamily: 'inherit', width: 130, background: palette.surfaceInput, color: palette.ink, minHeight: 26, boxSizing: 'border-box' }}
                   />
-                  <button onClick={handleAddGroup} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: palette.ink, color: palette.parchment, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <button onClick={handleAddGroup} style={{ fontSize: 11.5, padding: '5px 11px', borderRadius: 999, border: `1px solid ${palette.ink}`, background: palette.ink, color: palette.onInk, cursor: 'pointer', fontFamily: 'inherit', minHeight: 26 }}>
                     {t('groups.add')}
                   </button>
-                  <button onClick={() => { setCreatingGroup(false); setNewGroupName(''); }} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <button onClick={() => { setCreatingGroup(false); setNewGroupName(''); }} style={{ fontSize: 11.5, padding: '5px 11px', borderRadius: 999, border: `1px solid ${palette.line}`, background: 'transparent', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit', minHeight: 26 }}>
                     {t('groups.cancel')}
                   </button>
                 </span>
               ) : (
-                <button onClick={() => setCreatingGroup(true)} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px dashed ${ink(0.20)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <button onClick={() => setCreatingGroup(true)} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, padding: '5px 11px', borderRadius: 999, border: `1.5px dashed ${palette.lineStrong}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit', minHeight: 26 }}>
                   <Plus size={11} />
                   {t('groups.newGroup')}
                 </button>
@@ -476,6 +478,11 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
             // Rendu d'une ligne : les chips de groupe excluent toujours le groupe
             // actuellement sélectionné (redondant avec la section dans laquelle
             // on se trouve déjà) ; les autres groupes du membre restent affichés.
+            // Mode dense : chaque type d'information a sa colonne à largeur fixe
+            // (avatar / nom / rôle / tag / groupes / actions), pour que rien ne
+            // zigzague d'une ligne à l'autre. La colonne actions garde sa largeur
+            // même vide (propriétaire sans action, ou aucun groupe) pour que les
+            // boutons restent alignés d'une ligne à l'autre.
             function renderMemberRow(member: Member, isLast: boolean, actionSlot: ReactNode) {
               const otherGroupIds = filterGroupId ? member.groupIds.filter((g) => g !== filterGroupId) : member.groupIds;
               return (
@@ -485,35 +492,37 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                     display: 'flex',
                     alignItems: 'center',
                     gap: 12,
-                    padding: '12px 0',
-                    borderBottom: isLast ? 'none' : '1px solid rgba(45,42,36,0.06)',
+                    minHeight: 44,
+                    padding: '8px 0',
+                    borderBottom: isLast ? 'none' : `1px solid ${palette.line}`,
+                    flexWrap: 'wrap',
                   }}
                 >
                   {/* Avatar */}
                   <div
                     style={{
-                      width: 30,
-                      height: 30,
+                      width: 32,
+                      height: 32,
                       borderRadius: '50%',
                       background: avatarGradient(member.displayName),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: palette.paper,
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      color: palette.onInk,
                       flexShrink: 0,
                     }}
                   >
                     {member.displayName.charAt(0).toUpperCase()}
                   </div>
 
-                  {/* Name + role */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  {/* Nom */}
+                  <div style={{ flex: 1, minWidth: 110 }}>
                     <div
                       style={{
-                        fontSize: 13,
-                        fontWeight: 450,
+                        fontSize: 13.5,
+                        fontWeight: 600,
                         color: palette.ink,
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
@@ -522,28 +531,36 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                     >
                       {member.displayName}
                     </div>
-                    <div style={{ fontSize: 11, color: palette.inkFaint }}>
-                      {t(`role.${member.role}`)} · {member.uniqueTag}
-                    </div>
+                  </div>
+
+                  {/* Rôle */}
+                  <div style={{ width: 96, flexShrink: 0, fontSize: 12, color: palette.ink }}>
+                    {t(`role.${member.role}`)}
+                  </div>
+
+                  {/* Tag */}
+                  <div style={{ width: 80, flexShrink: 0, fontSize: 12, fontFamily: "'ui-monospace', 'monospace', inherit", color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {member.uniqueTag}
                   </div>
 
                   {/* Autres groupes du membre (lecture seule) — le groupe actif n'est pas répété */}
-                  {otherGroupIds.length > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', flexShrink: 0, maxWidth: 200 }}>
-                      {otherGroupIds.map((gid) => {
-                        const g = localGroups.find((x) => x.id === gid);
-                        if (!g) return null;
-                        return (
-                          <span key={gid} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '2px 8px', borderRadius: 999, background: ink(0.05), color: palette.inkMuted, whiteSpace: 'nowrap' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: g.color, display: 'inline-block' }} />
-                            {g.name}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
+                  <div style={{ width: 150, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                    {otherGroupIds.map((gid) => {
+                      const g = localGroups.find((x) => x.id === gid);
+                      if (!g) return null;
+                      return (
+                        <span key={gid} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '2px 8px', borderRadius: 999, background: palette.surfaceSunken, color: palette.inkMuted, whiteSpace: 'nowrap' }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: g.color, display: 'inline-block' }} />
+                          {g.name}
+                        </span>
+                      );
+                    })}
+                  </div>
 
-                  {actionSlot}
+                  {/* Actions — largeur fixe, alignées à droite, réservée même vide */}
+                  <div style={{ width: 150, flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                    {actionSlot}
+                  </div>
                 </div>
               );
             }
@@ -554,7 +571,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                 member,
                 i === localMembers.length - 1,
                 member.role !== 'owner' && actorRank > ROLE_RANK[member.role] ? (
-                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <>
                     {member.role === 'member' && (
                       <SmallBtn tone="ghost" disabled={memberActionId === member.id} onClick={() => handleSetRole(member, 'manager')}>
                         {t('members.promote')}
@@ -568,7 +585,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                     <SmallBtn tone="danger" disabled={memberActionId === member.id} onClick={() => handleExcludeMember(member)}>
                       {t('members.exclude')}
                     </SmallBtn>
-                  </div>
+                  </>
                 ) : null
               ));
             }
@@ -582,11 +599,9 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
             const inGroup = localMembers.filter((m) => frozenPartition.inGroupIds.includes(m.id));
             const others = localMembers.filter((m) => frozenPartition.otherIds.includes(m.id));
             const checkbox = (member: Member) => (
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={member.groupIds.includes(groupId)}
                 onChange={() => toggleMemberGroup(member, groupId)}
-                style={{ width: 17, height: 17, cursor: 'pointer', flexShrink: 0 }}
               />
             );
             return (
@@ -613,31 +628,16 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
 
         {/* ── Confirmation de suppression d'un groupe ── */}
         {pendingDeleteGroup && (
-          <Modal width={380} onClose={() => setPendingDeleteGroup(null)}>
-            <div style={{ width: 38, height: 38, borderRadius: '50%', background: withAlpha(palette.danger, 0.12), color: palette.danger, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-              <Trash2 size={17} />
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6, textAlign: 'center' }}>
-              {t('groups.deleteConfirmTitle')}
-            </div>
-            <p style={{ fontSize: 12.5, color: palette.inkSoft, textAlign: 'center', margin: '0 0 20px' }}>
-              {t('groups.deleteConfirmDesc')}
-            </p>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => setPendingDeleteGroup(null)}
-                style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: `1px solid ${ink(0.14)}`, background: 'transparent', color: palette.inkMuted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                {t('cancel')}
-              </button>
-              <button
-                onClick={confirmDeleteGroup}
-                style={{ flex: 1, padding: '10px 14px', borderRadius: 10, background: palette.danger, color: palette.paper, border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                {t('groups.delete')}
-              </button>
-            </div>
-          </Modal>
+          <ConfirmDialog
+            width={380}
+            icon={<Trash2 size={17} />}
+            title={t('groups.deleteConfirmTitle')}
+            description={t('groups.deleteConfirmDesc')}
+            confirmLabel={t('groups.delete')}
+            cancelLabel={t('cancel')}
+            onConfirm={confirmDeleteGroup}
+            onCancel={() => setPendingDeleteGroup(null)}
+          />
         )}
     </>
   );

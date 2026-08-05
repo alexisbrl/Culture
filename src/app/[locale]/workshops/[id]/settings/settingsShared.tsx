@@ -162,7 +162,7 @@ export function SmallBtn({
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       style={{
-        padding: '7px 14px',
+        padding: '9px 14px',
         borderRadius: 9,
         background: disabled ? palette.surfaceSunken : styles.bg,
         border: disabled ? `1px solid ${palette.line}` : styles.border,
@@ -172,6 +172,7 @@ export function SmallBtn({
         fontFamily: 'inherit',
         fontWeight: 450,
         whiteSpace: 'nowrap',
+        boxSizing: 'border-box',
       }}
     >
       {children}
