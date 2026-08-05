@@ -14,6 +14,7 @@ import { useUser, SignOutButton } from '@clerk/nextjs';
 import { BarChart3, ChevronRight, Droplet, LogOut, Sprout } from 'lucide-react';
 import { palette, withAlpha, shadow } from '@/lib/theme';
 import { Button } from '@/components/ui/button';
+import LinkButton from '@/components/LinkButton';
 import AvatarComposer from '@/components/avatar/AvatarComposer';
 import { AvatarConfig, loadAvatarConfig } from '@/components/avatar/avatarConfig';
 import { markIntentionalSignOut } from '@/lib/signOutIntent';
@@ -112,6 +113,11 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, c
               </span>
             </div>
           </div>
+          {/* « éditer » — bouton de la maquette (T24), rétabli en T47. Il vise la
+              même page que la ligne « modifier l'avatar » plus bas, qui reste. */}
+          <LinkButton href={`/${locale}/profile/avatar`} variant="ghost" size="sm">
+            {t('edit')}
+          </LinkButton>
           {HAS_NOTIFICATIONS && <NotificationBell />}
         </div>
 

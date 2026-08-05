@@ -246,6 +246,7 @@
     "defaultName": "jardinier",
     "defaultNameFull": "Jardinier",
     "memberSince": "jardinier depuis {date}",
+    "edit": "éditer",
     "tracking": {
       "title": "suivi",
       "desc": "progression, maîtrise et statistiques détaillées"

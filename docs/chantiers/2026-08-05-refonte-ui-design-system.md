@@ -786,7 +786,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     `messages/{fr,en}.json`
   - Dépend de : aucune
 
-- [ ] **T47 — Profil : bouton « éditer » de la carte d'identité**
+- [x] **T47 — Profil : bouton « éditer » de la carte d'identité**
   - T24 demandait explicitement un bouton « éditer » à droite du nom (maquette ligne
     1325-1345) ; il n'a pas été posé. La seule entrée vers l'avatar est la ligne
     « modifier l'avatar » de la liste des paramètres, plus bas.
@@ -996,6 +996,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 - 2026-08-05 — T45 — [voir commit] — Les actions orphelines en bas de carte étaient un **symptôme de T44**, pas un bug propre : la ligne est en `flexWrap: 'wrap'` et la colonne d'actions passait à la ligne faute de largeur. Réglé sans y toucher. Reste livré ici : `avatarGradient` (rampe de 8 teintes HSL générées) remplacé par `avatarTone`/`avatarTones` dans `src/lib/theme.ts`, reprises de `regMembers` de la maquette.
 
 - 2026-08-05 — T46 — [voir commit] — Clé `settings.notions.sectionTitle` ajoutée (FR+EN) et rendue en tête de section, même graphie que `SectionCard`. Les « + » littéraux retirés de `settings.notions.add` et `settings.chapters.add`, l'icône Lucide les portait déjà.
+
+- 2026-08-05 — T47 — [voir commit] — `LinkButton variant="ghost" size="sm"` vers `/profile/avatar`, clé `profile.edit` (FR+EN). La ligne « modifier l'avatar » de la liste reste en place : même cible, deux points d'entrée, comme la maquette.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->

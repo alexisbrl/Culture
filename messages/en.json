@@ -246,6 +246,7 @@
     "defaultName": "gardener",
     "defaultNameFull": "Gardener",
     "memberSince": "gardener since {date}",
+    "edit": "edit",
     "tracking": {
       "title": "tracking",
       "desc": "progress, mastery and detailed statistics"
