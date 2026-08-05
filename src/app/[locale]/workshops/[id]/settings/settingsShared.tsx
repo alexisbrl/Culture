@@ -46,12 +46,9 @@ export function formatFileSize(bytes: number, units: { b: string; kb: string; mb
   return `${(bytes / (1024 * 1024)).toFixed(1)} ${units.mb}`;
 }
 
-export function avatarGradient(name: string) {
-  const hues = [220, 160, 30, 270, 190, 340, 80, 130];
-  const idx = name.charCodeAt(0) % hues.length;
-  const h = hues[idx];
-  return `linear-gradient(135deg, hsl(${h},55%,62%), hsl(${(h + 40) % 360},60%,52%))`;
-}
+// Teinte de la pastille d'initiale d'un membre. Réexport de `avatarTone`
+// (src/lib/theme.ts) : les teintes sont des tokens, pas une rampe HSL générée.
+export { avatarTone } from '@/lib/theme';
 
 // ─── Sub-components ───────────────────────────────────────────────────────
 

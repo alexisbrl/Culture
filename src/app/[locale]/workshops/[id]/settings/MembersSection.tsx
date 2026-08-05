@@ -12,7 +12,7 @@ import {
   createMemberGroup, updateMemberGroup, deleteMemberGroup, setMemberGroups as setMemberGroupsAction, type MemberGroup,
 } from '@/app/actions/workshops';
 import { LABEL_COLORS } from '../tabs/examen/examShared';
-import { ROLE_RANK, avatarGradient, Row, SmallBtn, SectionCard, type Member, type WorkshopRole } from './settingsShared';
+import { ROLE_RANK, avatarTone, Row, SmallBtn, SectionCard, type Member, type WorkshopRole } from './settingsShared';
 
 export default function MembersSection({ workshopId, isPremium, currentUserRole, members, groups }: { workshopId: string; isPremium: boolean; currentUserRole: WorkshopRole; members: Member[]; groups: MemberGroup[] }) {
   const t = useTranslations('settings');
@@ -504,7 +504,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                       width: 32,
                       height: 32,
                       borderRadius: '50%',
-                      background: avatarGradient(member.displayName),
+                      background: avatarTone(member.displayName),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',

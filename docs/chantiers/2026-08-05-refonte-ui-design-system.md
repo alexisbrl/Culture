@@ -758,7 +758,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
   - Fichiers : `src/app/[locale]/workshops/[id]/settings/SettingsClient.tsx`
   - Dépend de : aucune
 
-- [ ] **T45 — Membres & rôles : lignes conformes au mode dense**
+- [x] **T45 — Membres & rôles : lignes conformes au mode dense**
   - Trois écarts relevés en revue : (1) « promouvoir » / « exclure » sont rendus
     **une seule fois en bas de la carte**, orphelins, au lieu d'être alignés à droite
     de **chaque ligne** comme dans la maquette ; (2) rôle et tag occupent deux
@@ -993,8 +993,11 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 
 - 2026-08-05 — T44 — [voir commit] — Conteneur centré `maxWidth: 1100` autour de nav + contenu ; le plafond de 760 px du contenu saute, la barre latérale perd son fond levé et son filet (la maquette la pose à même le fond de page). Piège rencontré : `overflow-y: auto` sur la barre latérale force `overflow-x` à `auto` et sortait une barre horizontale sous la nav — retiré, cinq entrées ne débordent jamais.
 
+- 2026-08-05 — T45 — [voir commit] — Les actions orphelines en bas de carte étaient un **symptôme de T44**, pas un bug propre : la ligne est en `flexWrap: 'wrap'` et la colonne d'actions passait à la ligne faute de largeur. Réglé sans y toucher. Reste livré ici : `avatarGradient` (rampe de 8 teintes HSL générées) remplacé par `avatarTone`/`avatarTones` dans `src/lib/theme.ts`, reprises de `regMembers` de la maquette.
+
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
+- 2026-08-05 — T45 — **Rôle et tag gardés en colonnes distinctes, pas empilés sous le nom** comme dans la maquette. Les deux règles du chantier se contredisent ici : le mode dense impose « chaque type d'information a sa colonne à position fixe » et « contraste plein sur toute donnée », alors que la maquette met `{rôle} · {tag}` en sous-texte atténué. Suivi le mode dense — la ligne tient désormais sans repli depuis T44, et les colonnes restent lisibles.
 - 2026-08-05 — T1 — Le critère d'acceptation `grep -ci "brick" messages/en.json` = 0 est structurellement impossible tant que T2 n'a pas renommé les clés (`bricksLabel`, `addBrickOption`, `noBricks`, `bricks`, `brickCount`, `masteredBricks` contiennent toutes "brick" dans leur nom de clé anglais, que T1 n'a pas le droit de toucher). Vérifié après coup : les seules occurrences restantes dans `messages/en.json` sont bien dans des clés, aucune dans une valeur. Le critère se vérifie donc au niveau du couple T1+T2, pas de T1 seul — poursuite immédiate vers T2 dans la même session pour refermer ce point.
 - 2026-08-05 — T1 — Les textes anglais employaient un mélange incohérent "brick(s)"/"block(s)" pour désigner le même concept (ex. `bricksLabel: "Knowledge blocks"`, `masteredBricks: "mastered bricks"`). La consigne ne mentionnait explicitement que "brick"→"notion", mais laisser "block(s)" en l'état aurait produit un lexique anglais incohérent avec le FR ("notion" partout). Décision : les deux formes ("brick(s)" et "block(s)") ont été renommées en "notion(s)" en anglais, à l'exception de `garden.panel.blocks` (« Blocks » du Jardin Terra Nil — zone interdite, concept différent, non touché).
 - 2026-08-05 — T2 — En reprenant T2, trouvé dans `git log`/le journal ci-dessus la trace d'une exécution antérieure (commits `94cb430`/`98c5387`, déjà poussés) interrompue en cours de tâche sur une demande d'autorisation, n'ayant fait que le `git mv` de `bricks.ts`→`notions.ts`, `workshopBricks.ts`→`workshopNotions.ts` et `BricksSection.tsx`→`NotionsSection.tsx` sans toucher au contenu. Vérifié qu'aucun contenu n'avait divergé (diffs à 0 insertion sur ces renommages) avant de construire dessus. T2 a été menée à terme dans cette session — réécriture complète des fichiers renommés + tous les autres fichiers listés dans la tâche, `messages/{fr,en}.json` (clés), `CLAUDE.md` §1, `docs/backlog.md` — et validée par `build`/`lint`, ce qui referme le travail laissé en suspens par l'exécution précédente.

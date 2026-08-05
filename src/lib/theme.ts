@@ -64,6 +64,37 @@ export const palette = {
 } as const;
 
 /**
+ * Teintes des pastilles d'initiale (membres d'un atelier).
+ *
+ * Reprises telles quelles de la maquette (`regMembers`, App-Culture.dc.html
+ * ligne 2700) : quatre tokens du design system plus deux teintes sourdes que la
+ * maquette introduit sans les nommer (`--blue` avec repli, et un prune). Elles
+ * remplacent une rampe de huit teintes HSL générées (saturation 55-60 %), qui
+ * produisait des pastilles cyan et magenta franchement hors palette.
+ *
+ * Volontairement plates : la maquette n'applique aucun dégradé aux avatars.
+ */
+export const avatarTones = [
+  '#7A9BB5',              // bleu sourd (--blue de la maquette)
+  '#9B7AB5',              // prune sourd
+  palette.greenSoft,      // --green-light
+  palette.amber,          // --tan
+  palette.green,          // --green
+  palette.greenBrand,     // --green-strong
+] as const;
+
+/**
+ * Teinte stable d'un membre, dérivée de son nom. Somme des codes de caractères
+ * plutôt que le seul premier caractère : deux membres dont le prénom commence
+ * par la même lettre (fréquent) recevaient sinon toujours la même pastille.
+ */
+export function avatarTone(name: string): string {
+  let sum = 0;
+  for (let i = 0; i < name.length; i += 1) sum += name.charCodeAt(i);
+  return avatarTones[sum % avatarTones.length];
+}
+
+/**
  * Couleur de marque + opacité → rgba. Ex. withAlpha(palette.danger, 0.12).
  * Pour l'encre (#2A2620), préférer le raccourci `ink(alpha)` ci-dessous.
  */
