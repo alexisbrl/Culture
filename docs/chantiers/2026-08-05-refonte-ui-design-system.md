@@ -836,3 +836,34 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
      tranché en autonomie. Une entrée par tâche : les options envisagées, la
      recommandation de l'agent, et pourquoi il n'a pas tranché. Alexis arbitre au
      réveil. Ne pas confondre avec « Tâches bloquées » (échec technique). -->
+
+- **T23 — Écran de fin d'exercice.** La maquette (ligne 671-680) montre un écran
+  « belle récolte. » affiché « à la fin des questions du chapitre », avec un score
+  de session. Vérifié dans `src/lib/workshops/exam.ts`
+  (`drawParcoursQuestion`, lignes 306-339) : le tirage pioche **indéfiniment** au
+  hasard parmi les questions du chapitre, en excluant seulement la question
+  immédiatement précédente (`excludeId`, un seul id, pas un ensemble de « déjà
+  vues ») — il n'y a **aucune notion de session, de fin de chapitre, ni de score
+  cumulé** nulle part côté serveur. `drawExercise`/`gradeExercise`
+  (`app/actions/parcoursExercise.ts`) n'exposent pas non plus le nombre total de
+  questions du chapitre (nécessaire pour détecter « toutes vues »), et
+  `getParcoursQuestions` (qui l'exposerait) est réservée aux gestionnaires — la
+  renvoyer au candidat serait un changement de surface de sécurité.
+  - **Options envisagées** : (a) modifier `drawParcoursQuestion` pour accepter un
+    ensemble d'ids exclus et renvoyer `null` une fois le chapitre épuisé — implique
+    de toucher `src/lib/workshops/exam.ts`/`app/actions/parcoursExercise.ts`, zone
+    interdite hors T2 ; (b) fixer arbitrairement une longueur de session (ex. 10
+    questions) et afficher l'écran de fin après ce nombre — invente une règle
+    produit non spécifiée nulle part dans la feuille de route ni `docs/product-spec.md`.
+  - **Recommandation** : l'option (a) est la plus fidèle à la maquette et la plus
+    simple à raisonner (session = un passage sur toutes les questions du
+    chapitre, sans répétition) ; elle demande une évolution mineure et sûre du
+    contrat serveur (accepter `string[]` au lieu de `string | undefined` pour
+    l'exclusion, renvoyer `prompt: null` sans erreur quand l'ensemble est épuisé —
+    cas déjà géré côté client par l'état `emptyTitle`/`emptyDesc`, à re-libeller en
+    « chapitre terminé »). C'est un changement de **comportement** (fin réelle
+    après N questions au lieu d'un tirage infini), pas seulement d'habillage —
+    d'où la mise de côté malgré la petite taille du changement de code.
+  - Case laissée décochée. T24 (Lot 6 — Profil) ne dépend pas réellement du
+    contenu de T23 (fichiers disjoints) — poursuite du chantier sur les lots
+    suivants sans attendre cet arbitrage.
