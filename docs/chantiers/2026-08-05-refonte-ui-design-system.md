@@ -744,7 +744,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     `src/components/DashboardHeader.tsx`, `messages/{fr,en}.json`
   - Dépend de : aucune
 
-- [ ] **T44 — Réglages : coquille centrée**
+- [x] **T44 — Réglages : coquille centrée**
   - La page Réglages plafonne son contenu à 760 px mais ne centre rien : en 1920 px,
     la navigation et les cartes sont collées au bord gauche avec ~800 px de vide à
     droite. La maquette rend cet écran dans la coquille centrée
@@ -990,6 +990,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 - 2026-08-05 — **Fin de session autonome — arrêt volontaire avant T38.** Huit tâches livrées et poussées ce tour (T30-T37, un commit chacune) : tout le Lot 7 (Réglages d'atelier) et T34-T37 du Lot 8 (Générateur d'examen). T38 (« Feuille A4 et éditeur de question ») est la seule tâche de toute la feuille de route à porter son propre avertissement dédié (« ne toucher ni à la logique de pagination A4 ni au calcul de hauteur ») — elle touche `GeneratorContent.tsx` (la zone de rendu du flux, lignes ~450-720, non touchée par T37, cf. décision ci-dessus) et `QuestionEditor.tsx` (789 lignes, pas encore ouvert). Sans aucun moyen de vérification visuelle possible cette nuit (authentification Clerk bloquant systématiquement l'accès à l'app en local, cf. chaque tâche d'écran depuis T12), l'attaquer en fin d'une session déjà longue aurait maximisé le risque sur le point le plus délicat du chantier — casser silencieusement la génération de PDF d'examen ne se verrait qu'au déploiement. Décision : s'arrêter proprement ici plutôt que de s'acharner (cf. règle « ne pas brûler le quota d'une nuit sur un seul point dur », compétence `chantier-run`). Le chantier reste actif (`docs/chantiers/EN-COURS.md` inchangé) — la prochaine routine reprendra directement sur T38, avec un contexte frais.
 
 - 2026-08-05 — T43 — [voir commit] — Chrome hérité supprimé de `WorkshopClient` (fil d'Ariane, titre, chips, boutons flottants) ; ses actions vivent dans `WorkshopActionsMenu`, nouveau composant partagé entre la barre du haut et le bandeau téléphone. Rendu vérifié dans Chrome : menu à 2 entrées pour un propriétaire (réglages, partage), « quitter » n'apparaît que pour les non-propriétaires.
+
+- 2026-08-05 — T44 — [voir commit] — Conteneur centré `maxWidth: 1100` autour de nav + contenu ; le plafond de 760 px du contenu saute, la barre latérale perd son fond levé et son filet (la maquette la pose à même le fond de page). Piège rencontré : `overflow-y: auto` sur la barre latérale force `overflow-x` à `auto` et sortait une barre horizontale sous la nav — retiré, cinq entrées ne débordent jamais.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->

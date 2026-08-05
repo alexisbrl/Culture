@@ -235,23 +235,27 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         color: palette.ink,
         minHeight: 'calc(100vh - 60px)',
         background: palette.cream,
-        display: 'flex',
         cursor: 'default',
       }}
     >
+      {/* Coquille centrée (T44) — la maquette rend cet écran dans le conteneur
+          centré de l'app (`shellWidth`), la page elle-même occupant toute la
+          largeur disponible à l'intérieur. Sans ce conteneur, navigation et
+          cartes restaient collées au bord gauche du viewport. */}
+      <div className="mx-auto flex w-full md:gap-7 md:px-6 md:py-8" style={{ maxWidth: 1100 }}>
       {/* ── Sidebar (ordinateur) ── */}
       <div
         className="hidden md:flex"
         style={{
           width: 232,
           flexShrink: 0,
-          borderRight: `1px solid ${palette.line}`,
-          background: palette.surfaceRaised,
-          padding: '22px 16px',
           position: 'sticky',
-          top: 0,
-          height: 'calc(100vh - 60px)',
-          overflowY: 'auto',
+          top: 24,
+          alignSelf: 'flex-start',
+          // Pas d'`overflow` ici : la navigation compte cinq entrées et ne
+          // débordera jamais verticalement, alors qu'un `overflow-y: auto` force
+          // `overflow-x` à `auto` et fait apparaître une barre horizontale dès
+          // qu'un libellé (en `nowrap`) dépasse les 232 px.
           flexDirection: 'column',
           gap: 0,
         }}
@@ -328,8 +332,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
       {/* ── Main content ── */}
       <div
-        className="px-5 pt-0 pb-10 md:px-8 md:pt-10"
-        style={{ flex: 1, overflow: 'auto', maxWidth: 760, boxSizing: 'border-box' }}
+        className="px-5 pt-0 pb-10 md:p-0"
+        style={{ flex: 1, minWidth: 0, boxSizing: 'border-box' }}
       >
         {/* Sélecteur de section (téléphone) — même système que le changement d'atelier */}
         <div
@@ -635,6 +639,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             <PremiumSection workshopId={workshopId} isPremium={isPremium} memberCount={members.length} />
           </div>
         )}
+      </div>
       </div>
 
       {/* ── Barre d'enregistrement (visible si modifications non sauvegardées) ── */}
