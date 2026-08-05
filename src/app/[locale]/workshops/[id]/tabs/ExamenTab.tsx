@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, ArrowRight, X } from 'lucide-react';
-import { palette, ink, withAlpha } from '@/lib/theme';
+import { AlertTriangle, ArrowRight, FileText, Search, X } from 'lucide-react';
+import { palette, ink, radius, shadow, withAlpha } from '@/lib/theme';
 import QuestionEditor, { type Question, emptyQuestion } from './QuestionEditor';
 import {
   getExamBankData, saveQuestion, createPool as createPoolAction, updatePool as updatePoolAction,
@@ -19,9 +19,10 @@ import HistoryContent from './examen/HistoryContent';
 import BankContent from './examen/BankContent';
 import GeneratorContent from './examen/GeneratorContent';
 
-// ---- PANEL TITLES ----
-const IDS = ['history', 'bank', 'generator'] as const;
-type PanelId = typeof IDS[number];
+// Onglet actif de la colonne gauche — « generator » (la feuille A4) n'est plus
+// un onglet : c'est une colonne à part, toujours visible (variante retenue
+// « banqueOngletsLarge », voir docs/design/README.md et T34 de la feuille de route).
+type LeftTab = 'history' | 'bank';
 
 // génération d'id unique au niveau module (hors composant) — évite l'appel impur Date.now() dans le render
 function newExamId() { return 'e' + Date.now(); }
@@ -29,12 +30,7 @@ function newExamId() { return 'e' + Date.now(); }
 // ---- MAIN EXAMEN TAB ----
 export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const t = useTranslations('examen');
-  const panelTitle = (id: PanelId): string => id === 'history' ? t('tab.panelHistory') : id === 'bank' ? t('tab.panelBank') : t('tab.panelGenerator');
-  const stageRef = useRef<HTMLDivElement>(null);
-  const tileRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const prevRects = useRef<Record<string, { l: number; t: number; w: number; h: number }>>({});
-  const [dim, setDim] = useState({ w: 0, h: 0 });
-  const [order, setOrder] = useState<PanelId[]>(['history', 'bank', 'generator']);
+  const [leftTab, setLeftTab] = useState<LeftTab>('bank');
   const [exams, setExams] = useState<Exam[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [pools, setPools] = useState<Pool[]>([]);
@@ -65,11 +61,6 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     }
   }
 
-  const GAP = 16;
-  const SIDE_W = 320;
-  // sous cette largeur, les 3 panneaux passent d'une mise en page côte-à-côte (avec mise à l'échelle)
-  // à une pile verticale plein-largeur (échelle 1:1, scroll vertical) — reflow façon Gmail au zoom navigateur.
-  const STACK_BP = 860;
   const draftLoaded = useRef(false);
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -108,51 +99,13 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     setExamConfig(defaultExamConfig());
   }
 
-  useLayoutEffect(() => {
-    const el = stageRef.current;
-    if (!el) return;
-    const measure = () => {
-      const w = Math.round(el.clientWidth);
-      const h = Math.round(el.clientHeight);
-      if (w > 0 && h > 0) {
-        setDim(prev => (prev.w === w && prev.h === h) ? prev : { w, h });
-      }
-    };
-    // mesure en continu (et pas seulement au premier rendu) : un changement de zoom navigateur modifie
-    // la largeur en px CSS disponible et doit donc redéclencher le calcul de mise en page/reflow.
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  useLayoutEffect(() => {
-    IDS.forEach(id => {
-      const el = tileRefs.current[id];
-      if (!el) return;
-      const nr = { l: el.offsetLeft, t: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
-      const pr = prevRects.current[id];
-      prevRects.current[id] = nr;
-      if (!pr || !nr.w || !nr.h) return;
-      const dx = pr.l - nr.l, dy = pr.t - nr.t;
-      const sx = pr.w / nr.w, sy = pr.h / nr.h;
-      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5 && Math.abs(sx - 1) < 0.004 && Math.abs(sy - 1) < 0.004) return;
-      if (typeof el.animate !== 'function') return;
-      el.animate([
-        { transformOrigin: 'top left', transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` },
-        { transformOrigin: 'top left', transform: 'translate(0px, 0px) scale(1, 1)' },
-      ], { duration: 480, easing: 'cubic-bezier(0.33, 1, 0.68, 1)' });
-    });
-  });
-
-  function focus(id: PanelId) {
-    setOrder(prev => {
-      const i = prev.indexOf(id);
-      if (i <= 0) return prev;
-      const n = [...prev];
-      const tmp = n[0]; n[0] = n[i]; n[i] = tmp;
-      return n;
-    });
+  // Amène un onglet au premier plan de la colonne gauche. « generator » (la
+  // feuille A4) n'est plus un onglet dans la coquille retenue — elle est déjà
+  // toujours visible dans la colonne de droite, donc no-op. Signature conservée
+  // pour ne pas toucher les appelants (`requestEditExam`, `handleGenerate`…).
+  function focus(id: LeftTab | 'generator') {
+    if (id === 'generator') return;
+    setLeftTab(id);
   }
 
   function handleGenerate() {
@@ -280,95 +233,83 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     setDraftIds(prev => prev.filter(id => !ids.includes(id)));
   }
 
-  function rectFor(role: number) {
-    const { w, h } = dim;
-    if (w < STACK_BP) {
-      // pile verticale plein-largeur : chaque panneau occupe toute la largeur disponible (s=1, pas de
-      // mise à l'échelle) ; le panneau focus (role 0) est plus grand, les 2 autres défilent en dessous.
-      const mainH = 620;
-      const sideH = 400;
-      const y = role === 0 ? 0 : role === 1 ? mainH + GAP : mainH + GAP + sideH + GAP;
-      return { x: 0, y, w, h: role === 0 ? mainH : sideH, main: role === 0 };
-    }
-    const mainW = Math.max(360, w - SIDE_W - GAP);
-    const sideH = (h - GAP) / 2;
-    if (role === 0) return { x: 0, y: 0, w: mainW, h, main: true };
-    if (role === 1) return { x: mainW + GAP, y: 0, w: SIDE_W, h: sideH, main: false };
-    return { x: mainW + GAP, y: sideH + GAP, w: SIDE_W, h: sideH, main: false };
-  }
-
-  const stacked = dim.w < STACK_BP;
-  const mainW = stacked ? dim.w : Math.max(360, dim.w - SIDE_W - GAP);
-  const ready = dim.w > 0 && dim.h > 0;
+  const tabButtonStyle = (active: boolean, corner: 'left' | 'right'): React.CSSProperties => ({
+    flex: 1,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    fontSize: 13,
+    fontWeight: 600,
+    color: active ? palette.greenBrand : palette.inkMuted,
+    background: active ? withAlpha(palette.green, 0.12) : 'transparent',
+    border: 'none',
+    borderBottom: `2px solid ${active ? palette.green : 'transparent'}`,
+    borderTopLeftRadius: corner === 'left' ? radius.lg : 0,
+    borderTopRightRadius: corner === 'right' ? radius.lg : 0,
+    padding: '13px 8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  });
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <style>{`@keyframes examPop { 0% { background: rgba(232,184,108,0.42); } 100% { } }`}</style>
-      <div ref={stageRef} style={{ flex: 1, position: 'relative', margin: '22px 22px 20px', minHeight: 0, overflow: stacked ? 'auto' : 'visible', paddingBottom: stacked ? 50 : 0 }}>
-        {ready && IDS.map(id => {
-          const role = order.indexOf(id);
-          const r = rectFor(role);
-          const s = r.w / mainW;
-          // historique/banque défilent via ce conteneur (l'éditeur gère son propre scroll interne) : on
-          // réserve une petite marge à droite pour décoller la scrollbar de la bordure de la tuile, comme
-          // c'est déjà le cas pour l'éditeur d'examen.
-          const contentW = id === 'generator' ? mainW : mainW - 16;
-          return (
-            <div key={id} ref={el => { tileRefs.current[id] = el; }} style={{ position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h, borderRadius: 16, overflow: 'hidden', border: r.main ? '1px solid rgba(45,42,36,0.10)' : `1px solid ${ink(0.08)}`, background: id === 'generator' ? palette.creamAlt : palette.cream, boxShadow: r.main ? '0 16px 44px rgba(45,42,36,0.10)' : `0 6px 18px ${ink(0.08)}`, zIndex: r.main ? 2 : 1 }}>
-              <div style={{ position: 'absolute', top: 0, left: 0, width: contentW, height: r.h / s, transform: `scale(${s})`, transformOrigin: '0 0', overflowY: id === 'generator' ? 'hidden' : 'auto', overflowX: 'hidden', background: id === 'generator' ? palette.creamAlt : palette.cream }}>
-                {id === 'history' && <HistoryContent exams={exams} justAddedId={justAdded} onEdit={requestEditExam} onNew={() => setIntroOpen(true)} onDelete={e => setPendingDeleteExam(e)} />}
-                {id === 'bank' && (
-                  <BankContent
-                    questions={questions}
-                    pools={pools}
-                    exams={exams}
-                    openId={openId}
-                    setOpenId={setOpenId}
-                    onEditQuestion={q => setEditingQuestion(q)}
-                    onNewQuestion={() => setEditingQuestion(emptyQuestion())}
-                    onSendOne={handleSendOne}
-                    onCreatePool={handleCreatePool}
-                    onUpdatePool={handleUpdatePool}
-                    onDeletePool={handleDeletePool}
-                    onDuplicateQuestion={handleDuplicateQuestion}
-                    onDeleteQuestion={handleDeleteQuestion}
-                  />
-                )}
-                {id === 'generator' && <GeneratorContent questions={questions} draftIds={draftIds} config={examConfig} onConfigChange={setExamConfig} editing={editing} onCancelEdit={() => setEditing(null)} onGenerate={handleGenerate} onOpenQuestion={handleOpenQuestion} onRemoveFromDraft={handleRemoveFromDraft} onClearEditor={handleClearEditor} />}
-              </div>
-              {id === 'bank' && editingQuestion && (
-                <>
-                  <QuestionEditor
-                    question={editingQuestion}
-                    allQuestions={questions}
-                    pools={pools}
-                    notions={notions}
-                    onCreatePool={handleCreatePool}
-                    onSave={handleSaveQuestion}
-                    onCancel={() => setEditingQuestion(null)}
-                  />
-                  {!r.main && (
-                    <div onClick={() => focus(id)} style={{ position: 'absolute', inset: 0, zIndex: 61, cursor: 'pointer' }} />
-                  )}
-                </>
-              )}
-              {!r.main && (
-                <>
-                  <div onClick={() => focus(id)} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 34, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', cursor: 'pointer', background: 'linear-gradient(180deg, rgba(252,249,242,0.96), rgba(252,249,242,0.0))' }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: palette.amber, display: 'inline-block' }} />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: palette.ink }}>{panelTitle(id)}</span>
-                  </div>
-                  <div onClick={() => focus(id)} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: ink(0.0), transition: 'background 180ms ease', cursor: 'pointer' }}>
-                    <button onClick={e => { e.stopPropagation(); focus(id); }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 999, border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: withAlpha(palette.paper, 0.96), color: palette.ink, fontSize: 12.5, fontWeight: 500, boxShadow: `0 6px 18px ${ink(0.20)}`, opacity: 0, pointerEvents: 'none' }}>
-                      <svg width="14" height="14" viewBox="0 0 14 14"><path d="M5.5 1.5H1.5V5.5M8.5 12.5h4V8.5M1.5 8.5v4h4M12.5 5.5v-4h-4" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      {t('expand')}
-                    </button>
-                  </div>
-                </>
+      {/* Coquille côte à côte (« banqueOngletsLarge ») : colonne gauche à onglets
+          pleine largeur (mes examens / questions) à 360px fixes, feuille A4
+          toujours visible à droite (flex:1) — empilées en dessous de 768px. */}
+      <div className="flex flex-col md:flex-row" style={{ flex: 1, minHeight: 0, gap: 20, margin: '22px 22px 20px', overflow: 'auto' }}>
+        <div className="w-full md:w-[360px]" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 420 }}>
+          <div style={{ display: 'flex', flexShrink: 0, border: `1px solid ${palette.lineStrong}`, borderBottom: 'none', borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, overflow: 'hidden' }}>
+            <button onClick={() => setLeftTab('history')} style={tabButtonStyle(leftTab === 'history', 'left')}>
+              <FileText size={15} strokeWidth={1.75} />
+              {t('tab.tabHistory')}
+            </button>
+            <button onClick={() => setLeftTab('bank')} style={tabButtonStyle(leftTab === 'bank', 'right')}>
+              <Search size={15} strokeWidth={1.75} />
+              {t('tab.tabBank')}
+            </button>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, position: 'relative', border: `1px solid ${palette.lineStrong}`, borderRadius: `0 0 ${radius.lg}px ${radius.lg}px`, background: palette.surfaceRaised, boxShadow: shadow.sm, overflow: 'hidden' }}>
+            {/* Montage permanent des deux onglets (display none/block) — préserve
+                la recherche/le tri en cours quand on bascule d'onglet, comme le
+                fait déjà SettingsClient pour ses sections. */}
+            <div style={{ display: leftTab === 'history' ? 'block' : 'none', height: '100%', overflowY: 'auto' }}>
+              <HistoryContent exams={exams} justAddedId={justAdded} onEdit={requestEditExam} onNew={() => setIntroOpen(true)} onDelete={e => setPendingDeleteExam(e)} />
+            </div>
+            <div style={{ display: leftTab === 'bank' ? 'block' : 'none', height: '100%', overflowY: 'auto', position: 'relative' }}>
+              <BankContent
+                questions={questions}
+                pools={pools}
+                exams={exams}
+                openId={openId}
+                setOpenId={setOpenId}
+                onEditQuestion={q => setEditingQuestion(q)}
+                onNewQuestion={() => setEditingQuestion(emptyQuestion())}
+                onSendOne={handleSendOne}
+                onCreatePool={handleCreatePool}
+                onUpdatePool={handleUpdatePool}
+                onDeletePool={handleDeletePool}
+                onDuplicateQuestion={handleDuplicateQuestion}
+                onDeleteQuestion={handleDeleteQuestion}
+              />
+              {editingQuestion && (
+                <QuestionEditor
+                  question={editingQuestion}
+                  allQuestions={questions}
+                  pools={pools}
+                  notions={notions}
+                  onCreatePool={handleCreatePool}
+                  onSave={handleSaveQuestion}
+                  onCancel={() => setEditingQuestion(null)}
+                />
               )}
             </div>
-          );
-        })}
+          </div>
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0, minHeight: 420, display: 'flex', flexDirection: 'column', border: `1px solid ${palette.line}`, borderRadius: radius.lg, background: palette.surfaceRaised, boxShadow: shadow.sm, overflow: 'hidden' }}>
+          <GeneratorContent questions={questions} draftIds={draftIds} config={examConfig} onConfigChange={setExamConfig} editing={editing} onCancelEdit={() => setEditing(null)} onGenerate={handleGenerate} onOpenQuestion={handleOpenQuestion} onRemoveFromDraft={handleRemoveFromDraft} onClearEditor={handleClearEditor} />
+        </div>
       </div>
       {pendingDeleteExam && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

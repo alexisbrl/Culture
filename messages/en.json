@@ -600,9 +600,8 @@
       "remove": "Remove"
     },
     "tab": {
-      "panelHistory": "Generated exam",
-      "panelBank": "Question bank",
-      "panelGenerator": "Exam editor",
+      "tabHistory": "my exams",
+      "tabBank": "questions",
       "deleteExamTitle": "Delete the exam?",
       "editorBusyTitle": "Editor already in use",
       "editorBusyDesc": "The exam editor already has changes in progress. Finish or clear the editor before editing {target}.",

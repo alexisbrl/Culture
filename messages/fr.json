@@ -600,9 +600,8 @@
       "remove": "Retirer"
     },
     "tab": {
-      "panelHistory": "Examen généré",
-      "panelBank": "Banque de questions",
-      "panelGenerator": "Éditeur d'examen",
+      "tabHistory": "mes examens",
+      "tabBank": "questions",
       "deleteExamTitle": "Supprimer l'examen ?",
       "editorBusyTitle": "Éditeur déjà en cours d'utilisation",
       "editorBusyDesc": "L'éditeur d'examen contient déjà des modifications en cours. Termine ou efface l'éditeur avant de modifier {target}.",
