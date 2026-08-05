@@ -711,17 +711,173 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     `src/app/[locale]/workshops/[id]/tabs/QuestionEditor.tsx`
   - Dépend de : T37
 
+### Lot 10 — Revue visuelle guidée (ajouté le 05/08/2026)
+
+> **Pourquoi ce lot existe.** T12 à T37 ont été livrées sans que le rendu soit vu une
+> seule fois (le navigateur intégré n'a pas la session Clerk). Le 05/08/2026, Claude
+> in Chrome a été débloqué : les 9 écrans ont été repassés en revue sur ordinateur,
+> maquette ouverte en parallèle. Ce lot corrige ce que la revue a trouvé. Les trois
+> points structurants ont été **arbitrés par Alexis en séance**, ils sont écrits dans
+> les tâches concernées. **Ce lot passe avant le Lot 9.**
+>
+> Le rendu **téléphone n'a pas pu être vérifié** : la fenêtre Chrome était maximisée
+> et `resize_window` reste sans effet dans ce cas. À reprendre.
+
+- [ ] **T43 — Retirer le chrome hérité d'atelier**
+  - `WorkshopClient.tsx` réaffiche, sur les onglets autres que Parcours, un fil
+    d'Ariane « jardin › {atelier} », le titre de l'atelier et les chips
+    premium/rôle/membres — alors que le nom vit déjà dans la barre du haut (T12).
+    Sur **tous** les onglets, il pose aussi « partager · QR » / « paramètres » /
+    « quitter » flottants en haut à droite du contenu. La maquette n'a rien de tout
+    cela : elle passe directement au contenu, l'engrenage de la barre du haut étant
+    le seul point d'entrée.
+  - **Arbitré par Alexis le 05/08/2026 : tout retirer.** Fil d'Ariane, titre et chips
+    supprimés sur tous les onglets. « partager · QR » et « quitter l'atelier »
+    déménagent dans un menu déroulant sous l'engrenage de la barre du haut (à côté de
+    « paramètres de l'atelier », déjà présent). Aucune fonctionnalité ne disparaît.
+  - Critère d'acceptation : plus aucun nom d'atelier ni bouton flottant au-dessus du
+    contenu, sur aucun onglet ; « partager · QR » ouvre toujours la modale QR et
+    « quitter l'atelier » toujours la confirmation, depuis le menu de l'engrenage ;
+    le partage reste réservé aux gestionnaires et « quitter » aux non-propriétaires ;
+    `npm run build` et `npm run lint` passent.
+  - Fichiers : `src/app/[locale]/workshops/[id]/WorkshopClient.tsx`,
+    `src/components/DashboardHeader.tsx`, `messages/{fr,en}.json`
+  - Dépend de : aucune
+
+- [ ] **T44 — Réglages : coquille centrée**
+  - La page Réglages plafonne son contenu à 760 px mais ne centre rien : en 1920 px,
+    la navigation et les cartes sont collées au bord gauche avec ~800 px de vide à
+    droite. La maquette rend cet écran dans la coquille centrée
+    (`shellWidth: min(1240px, calc(100vw - 48px))`, ligne 2345), la page elle-même
+    étant en `max-width:100%` à l'intérieur (`regPageMaxW`, ligne 2503).
+  - **Arbitré par Alexis le 05/08/2026 : coquille centrée ~1100 px**, navigation et
+    contenu ensemble dans le conteneur, à la manière de la maquette.
+  - Critère d'acceptation : en 1920 px, le bloc navigation + contenu est centré
+    horizontalement et les cartes occupent la largeur restante au lieu de rester à
+    760 px ; l'écran reste correct à 380 px ; `npm run build` et `npm run lint` passent.
+  - Fichiers : `src/app/[locale]/workshops/[id]/settings/SettingsClient.tsx`
+  - Dépend de : aucune
+
+- [ ] **T45 — Membres & rôles : lignes conformes au mode dense**
+  - Trois écarts relevés en revue : (1) « promouvoir » / « exclure » sont rendus
+    **une seule fois en bas de la carte**, orphelins, au lieu d'être alignés à droite
+    de **chaque ligne** comme dans la maquette ; (2) rôle et tag occupent deux
+    colonnes à côté du nom au lieu d'être empilés sous le nom (`{rôle} · {tag}`,
+    ligne de sous-texte) ; (3) les pastilles d'avatar utilisent un cyan et un magenta
+    saturés, hors palette — la maquette emploie des teintes sourdes (bleu-gris,
+    prune, sauge, tan).
+  - Reprendre les teintes de pastille depuis les tokens, jamais un hex en dur.
+  - Critère d'acceptation : chaque ligne de membre porte ses propres actions à
+    droite, l'identité est sur deux lignes (nom puis `{rôle} · {tag}`), aucune
+    pastille n'est hors palette ; les actions restent soumises aux mêmes règles de
+    rôle qu'avant ; `npm run build` et `npm run lint` passent.
+  - Fichiers : `src/app/[locale]/workshops/[id]/settings/MembersSection.tsx`
+  - Dépend de : aucune
+
+- [ ] **T46 — Chapitre & Notion : titre de section et double « + »**
+  - (1) La section est la seule des cinq à ne pas afficher son titre : la page
+    commence directement par la phrase de description. (2) Les boutons « ajouter un
+    chapitre » / « ajouter une notion » rendent une icône Lucide `Plus` **et** un
+    « + » littéral dans le libellé, d'où un double plus visible.
+  - Critère d'acceptation : la section affiche son titre comme les quatre autres ;
+    plus aucun « + » littéral dans un libellé déjà porté par une icône ;
+    `npm run build` et `npm run lint` passent.
+  - Fichiers : `src/app/[locale]/workshops/[id]/settings/NotionsSection.tsx`,
+    `messages/{fr,en}.json`
+  - Dépend de : aucune
+
+- [ ] **T47 — Profil : bouton « éditer » de la carte d'identité**
+  - T24 demandait explicitement un bouton « éditer » à droite du nom (maquette ligne
+    1325-1345) ; il n'a pas été posé. La seule entrée vers l'avatar est la ligne
+    « modifier l'avatar » de la liste des paramètres, plus bas.
+  - Bouton de style `ghost`, renvoyant vers `/profile/avatar` — la même cible que la
+    ligne existante, qui reste en place.
+  - Critère d'acceptation : le bouton « éditer » est visible à droite du nom et mène
+    à l'éditeur d'avatar ; `npm run build` et `npm run lint` passent.
+  - Fichiers : `src/app/[locale]/profile/ProfileClient.tsx`, `messages/{fr,en}.json`
+  - Dépend de : aucune
+
+- [ ] **T48 — Banque de questions : densité de la colonne**
+  - (1) Les titres de question ne sont pas tronqués : une question longue produit une
+    carte de huit lignes, là où la maquette tronque à une seule ligne. (2) La barre
+    d'outils occupe trois rangées (boutons, puis recherche, puis filtres et tri)
+    alors que la maquette met recherche + tri + filtre + « nouvelle » sur **une seule
+    ligne** (lignes 797 et suivantes). (3) « nouvelle question » est rendu en encre
+    foncée alors que la maquette en fait l'action primaire verte.
+  - Critère d'acceptation : un titre long tient sur une ligne tronquée, la barre
+    d'outils tient sur une rangée, « nouvelle question » est le vert primaire et
+    reste la seule action primaire de la colonne ; `npm run build` et `npm run lint`
+    passent.
+  - Fichiers : `src/app/[locale]/workshops/[id]/tabs/examen/BankContent.tsx`
+  - Dépend de : aucune
+
+- [ ] **T49 — Mes ateliers : fond et pluriel**
+  - (1) La page est la seule de l'app connectée à poser un fond vert pâle au lieu du
+    crème `--paper` employé partout ailleurs. (2) Le compte de membres s'écrit
+    « 1 membres » : la clé `dashboard.members` est un mot figé concaténé à un nombre,
+    sans pluriel ICU. Corriger sur les cinq points d'appel de `DashboardClient.tsx`,
+    en FR **et** en EN.
+  - Critère d'acceptation : le fond de la page est le crème du reste de l'app ;
+    « 1 membre » au singulier et « N membres » au pluriel, dans les deux langues ;
+    `npm run build` et `npm run lint` passent.
+  - Fichiers : `src/app/[locale]/dashboard/DashboardClient.tsx`, `messages/{fr,en}.json`
+  - Dépend de : aucune
+
+- [ ] **T50 — Coquille : états de chargement**
+  - Deux sauts visibles au chargement, tous deux dus à des données récupérées côté
+    client après le premier rendu : (1) l'onglet « examens » de la barre du haut
+    apparaît en retard (voire pas du tout sur un rendu rapide) parce que `canManage`
+    vient d'un `getWorkshop` client ; (2) sur Profil, la carte « suivi » et l'avatar
+    du header s'insèrent après coup et décalent la page.
+  - Réserver la place plutôt que masquer : pas de contenu factice, pas de compteur
+    inventé — un emplacement de la bonne taille, neutre, jusqu'à l'arrivée de la
+    donnée réelle.
+  - Critère d'acceptation : la barre du haut ne change plus de composition après le
+    premier rendu pour un gestionnaire, et l'arrivée de la carte « suivi » ne décale
+    plus le contenu qui la suit ; `npm run build` et `npm run lint` passent.
+  - Fichiers : `src/components/DashboardHeader.tsx`,
+    `src/app/[locale]/profile/ProfileClient.tsx`
+  - Dépend de : T43 (touche le même fichier de header)
+
+- [ ] **T51 — Exercice : état désactivé du bouton « valider »**
+  - Tant que la réponse est vide, « valider » est rendu dans un vert délavé qui se
+    lit comme un primaire raté plutôt que comme un état désactivé. Reprendre l'état
+    `disabled` du `Button` du design system (T6) au lieu d'une teinte ad hoc.
+  - Critère d'acceptation : le bouton désactivé est visiblement inerte et ne se
+    confond pas avec le vert primaire ; `npm run build` et `npm run lint` passent.
+  - Fichiers : `src/app/[locale]/workshops/[id]/exercise/[chapterId]/ExerciseClient.tsx`
+  - Dépend de : aucune
+
 ### Lot 9 — Clôture
 
 - [ ] **T39 — États vides « V2 » : Analyse et Générateur de cours**
-  - Remplacer le contenu d'`AnalyseTab.tsx` par l'état vide de la maquette (lignes
-    1400–1405 : titre « analyse. » en **sans**, phrase, badge `V2`) et créer le même
-    état vide pour « Générateur de cours » (lignes 1319–1324). **Vérifier d'abord**
-    que le contenu retiré d'`AnalyseTab` ne repose sur aucune donnée réelle ; s'il
-    en utilise, consigner ce qui est perdu dans le journal.
-  - Critère d'acceptation : les deux onglets affichent l'état vide avec badge `V2` ;
-    `npm run build` et `npm run lint` passent.
-  - Fichiers : `src/app/[locale]/workshops/[id]/tabs/AnalyseTab.tsx`,
+  - **Périmètre révisé par Alexis le 05/08/2026.** L'Analyse n'est plus rattachée à
+    un atelier mais **au profil** : l'onglet d'atelier `?tab=analyse` disparaît, et
+    la carte « suivi » du profil mène à une page d'analyse dédiée. Il ne reste donc
+    plus qu'à afficher l'état vide V2 de la maquette et à retravailler les liens qui
+    pointaient vers l'onglet d'atelier.
+  - Ce que montre exactement la maquette (lignes 1319-1324 et 1400-1405) : un bloc
+    centré verticalement, titre en **sans** minuscule (« analyse. », « générateur de
+    cours. »), puis un badge `V2` sur `--gold-tint`/`--gold-strong`. **Pas de phrase
+    d'accompagnement** — l'énoncé initial de T39 en mentionnait une, la maquette n'en
+    a pas.
+  - À faire : créer la page d'analyse rattachée au profil (route
+    `/[locale]/profile/analyse`, décidée en autonomie faute de chemin imposé par la
+    maquette — l'écran n'apparaît dans aucune barre de navigation, il n'est atteint
+    que depuis la carte « suivi ») ; y pointer la carte « suivi » à la place de
+    `?tab=analyse` ; retirer `AnalyseTab.tsx` de `WorkshopClient` ; poser le même
+    état vide dans `CoursTab.tsx`. **Vérifier d'abord** que le contenu retiré
+    d'`AnalyseTab` ne repose sur aucune donnée réelle (T12 l'a déjà constaté :
+    `KPIS`/`MEMBERS`/`SECTIONS` sont codés en dur) ; s'il en utilise, consigner ce
+    qui est perdu dans le journal.
+  - Critère d'acceptation : la carte « suivi » du profil ouvre la page d'analyse V2
+    sans dépendre d'un atelier ni d'un rôle ; l'onglet « cours » affiche le même état
+    vide ; plus aucun lien vers `?tab=analyse` dans `src/` ; `npm run build` et
+    `npm run lint` passent.
+  - Fichiers : `src/app/[locale]/profile/analyse/page.tsx` (nouveau),
+    `src/app/[locale]/profile/ProfileClient.tsx`,
+    `src/app/[locale]/workshops/[id]/WorkshopClient.tsx`,
+    `src/app/[locale]/workshops/[id]/tabs/AnalyseTab.tsx`,
     `src/app/[locale]/workshops/[id]/tabs/CoursTab.tsx`, `messages/{fr,en}.json`
   - Dépend de : T38
 
