@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { Check, ChevronDown, ChevronUp, Copy, Pencil, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Copy, Filter, Pencil, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
 import { palette, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { type Question, type ResponseType } from '../QuestionEditor';
@@ -253,7 +253,18 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
         }}
       >
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: palette.ink, lineHeight: 1.4 }}>
+          {/* Titre tronqué à deux lignes (T48) : sans plafond, une question longue
+              produisait une carte de huit lignes qui écrasait le reste de la
+              liste. La maquette n'en montre qu'une, deux laissent respirer les
+              énoncés réels sans casser le rythme de la colonne. Le titre complet
+              reste accessible au survol. */}
+          <div
+            title={q.title.trim() || q.content || tr('noStatement')}
+            style={{
+              flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: palette.ink, lineHeight: 1.4,
+              display: '-webkit-box', WebkitBoxOrient: 'vertical' as const, WebkitLineClamp: 2, overflow: 'hidden',
+            }}
+          >
             {q.title.trim() || q.content || tr('noStatement')}
           </div>
           {inDraft && (
@@ -351,14 +362,13 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
 
   return (
     <div style={{ padding: '16px 16px 20px' }}>
-      <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink, marginBottom: 10 }}>{tr('bank.title')}</div>
-
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-        <button onClick={onNewQuestion} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 13px', borderRadius: 10, background: palette.ink, color: palette.onInk, border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-          <Plus size={14} strokeWidth={2} /> {tr('bank.newQuestion')}
-        </button>
-        <button disabled title={tr('bank.generateAI')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 13px', borderRadius: 10, background: palette.surfaceSunken, color: palette.inkFaint, border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'not-allowed' }}>
-          <Sparkles size={14} strokeWidth={1.75} /> {tr('bank.generateAI')}
+      {/* Titre + génération par IA (placeholder désactivé, absent de la maquette
+          mais conservé depuis T36) — sortie de la barre d'outils pour que
+          celle-ci tienne sur une seule rangée, comme la maquette. */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+        <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{tr('bank.title')}</div>
+        <button disabled title={tr('bank.generateAI')} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 9px', borderRadius: 8, background: 'transparent', color: palette.inkFaint, border: `1px solid ${palette.line}`, fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, cursor: 'not-allowed', flexShrink: 0 }}>
+          <Sparkles size={13} strokeWidth={1.75} /> {tr('bank.generateAI')}
         </button>
       </div>
 
@@ -393,17 +403,23 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
         </div>
       )}
 
-      {/* Recherche */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: palette.surfaceInput, border: `1px solid ${palette.line}`, borderRadius: 10, padding: '8px 11px', marginBottom: 8 }}>
-        <Search size={15} strokeWidth={1.75} color={palette.inkFaint} style={{ flexShrink: 0 }} />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder={tr('bank.searchPlaceholder')} style={{ flex: 1, minWidth: 0, fontSize: 13, color: palette.ink, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'inherit' }} />
-      </div>
+      {/* Barre d'outils — recherche, filtres, tri et action primaire sur une
+          seule rangée (T48), comme la maquette. Filtres et tri sont réduits à
+          des boutons-icônes pour tenir dans la colonne. */}
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: 6, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0, background: palette.surfaceInput, border: `1px solid ${palette.line}`, borderRadius: 10, padding: '0 10px' }}>
+          <Search size={15} strokeWidth={1.75} color={palette.inkFaint} style={{ flexShrink: 0 }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={tr('bank.searchPlaceholder')} style={{ flex: 1, minWidth: 0, fontSize: 13, color: palette.ink, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'inherit' }} />
+        </div>
 
-      {/* Filtres + tri */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <div ref={filterRef} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-          <button onClick={() => setFilterOpen(o => !o)} style={{ width: '100%', fontSize: 12.5, fontWeight: 600, padding: '9px 12px', borderRadius: 9, border: activeFilterCount > 0 ? `1px solid ${palette.greenSoft}` : `1px solid ${palette.lineStrong}`, background: activeFilterCount > 0 ? withAlpha(palette.green, 0.12) : palette.surfaceRaised, color: activeFilterCount > 0 ? palette.greenBrand : palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>
-            {tr('bank.filters')}{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''} ▾
+        <div ref={filterRef} style={{ position: 'relative', flexShrink: 0 }}>
+          <button onClick={() => setFilterOpen(o => !o)} title={tr('bank.filters')} style={{ position: 'relative', height: '100%', minHeight: 34, width: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, borderRadius: 9, border: activeFilterCount > 0 ? `1px solid ${palette.greenSoft}` : `1px solid ${palette.lineStrong}`, background: activeFilterCount > 0 ? withAlpha(palette.green, 0.12) : palette.surfaceRaised, color: activeFilterCount > 0 ? palette.greenBrand : palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <Filter size={15} strokeWidth={1.75} />
+            {activeFilterCount > 0 && (
+              <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 15, height: 15, padding: '0 3px', borderRadius: 999, background: palette.green, color: palette.onGreen, fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {activeFilterCount}
+              </span>
+            )}
           </button>
           {filterOpen && (
             <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, width: 290, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg, zIndex: 20, display: 'flex', flexDirection: 'column', maxHeight: 'min(520px, calc(100vh - 200px))' }}>
@@ -536,10 +552,12 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', borderRadius: 9, border: `1px solid ${palette.lineStrong}`, background: palette.surfaceRaised, overflow: 'hidden', flexShrink: 0 }}>
-          <button type="button" title={sortDir === 'asc' ? tr('bank.sortAsc') : tr('bank.sortDesc')} onClick={() => setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')} style={{ width: 32, height: 34, border: 'none', borderRight: `1px solid ${palette.line}`, background: 'transparent', color: palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
+          <button type="button" title={sortDir === 'asc' ? tr('bank.sortAsc') : tr('bank.sortDesc')} onClick={() => setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')} style={{ width: 28, minHeight: 34, alignSelf: 'stretch', border: 'none', borderRight: `1px solid ${palette.line}`, background: 'transparent', color: palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
             {sortDir === 'asc' ? <ChevronUp size={14} strokeWidth={1.75} /> : <ChevronDown size={14} strokeWidth={1.75} />}
           </button>
-          <select value={sortBy} onChange={e => changeSortBy(e.target.value as SortBy)} style={{ fontSize: 12, padding: '8px 8px', border: 'none', background: 'transparent', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit', outline: 'none' }}>
+          {/* Le `select` natif garde son libellé : c'est le seul contrôle de la
+              barre dont la valeur courante doit rester lisible d'un coup d'œil. */}
+          <select value={sortBy} onChange={e => changeSortBy(e.target.value as SortBy)} title={tr('bank.sortBy')} style={{ fontSize: 11.5, maxWidth: 74, padding: '8px 2px', border: 'none', background: 'transparent', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit', outline: 'none' }}>
             <option value="recent">{tr('bank.sortRecent')}</option>
             <option value="name">{tr('bank.sortName')}</option>
             <option value="type">{tr('bank.sortType')}</option>
@@ -547,6 +565,11 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
             <option value="label">{tr('bank.sortLabel')}</option>
           </select>
         </div>
+
+        {/* Seule action primaire de la colonne (T48) — la maquette la met en vert. */}
+        <button onClick={onNewQuestion} title={tr('bank.newQuestion')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, minHeight: 34, padding: '0 11px', borderRadius: 9, background: palette.green, color: palette.onGreen, border: 'none', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+          <Plus size={15} strokeWidth={2.25} /> {tr('bank.newShort')}
+        </button>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

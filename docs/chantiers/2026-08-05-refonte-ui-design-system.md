@@ -797,7 +797,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
   - Fichiers : `src/app/[locale]/profile/ProfileClient.tsx`, `messages/{fr,en}.json`
   - Dépend de : aucune
 
-- [ ] **T48 — Banque de questions : densité de la colonne**
+- [x] **T48 — Banque de questions : densité de la colonne**
   - (1) Les titres de question ne sont pas tronqués : une question longue produit une
     carte de huit lignes, là où la maquette tronque à une seule ligne. (2) La barre
     d'outils occupe trois rangées (boutons, puis recherche, puis filtres et tri)
@@ -1003,8 +1003,11 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 
 - 2026-08-05 — T51 — [voir commit] — **Le constat de la revue était faux** : le vert délavé *est* l'état désactivé du design system (`cursor:not-allowed; opacity:.5; transform:none; box-shadow:none`, `_ds_bundle.js`), et `Button` l'appliquait déjà à l'exception du curseur. Seul correctif réel : `disabled:pointer-events-none` → `disabled:cursor-not-allowed`, avec les règles de survol repassées en `enabled:` (elles se seraient sinon déclenchées sur un bouton désactivé). Aucun changement dans `ExerciseClient`.
 
+- 2026-08-05 — T48 — [voir commit] — Barre d'outils fusionnée en une rangée (recherche extensible, filtres et tri en boutons-icônes, « nouvelle » en vert primaire) ; « générer par IA » remonte sur la ligne de titre ; titres de question plafonnés à 2 lignes (`-webkit-line-clamp`), titre complet au survol. Libellés de tri raccourcis (« trier · date d'ajout » → « date ») pour laisser de la place à la recherche dans une colonne de ~300 px.
+
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
+- 2026-08-05 — T48 — **Troncature à 2 lignes et non 1** comme la maquette. Les questions réelles de l'atelier de test sont nettement plus longues que les libellés du prototype (« Quelle est la capitale de la France ? ») : à une ligne, la moitié d'entre elles devenaient illisibles. Deux lignes gardent le rythme de colonne sans amputer l'énoncé.
 - 2026-08-05 — T45 — **Rôle et tag gardés en colonnes distinctes, pas empilés sous le nom** comme dans la maquette. Les deux règles du chantier se contredisent ici : le mode dense impose « chaque type d'information a sa colonne à position fixe » et « contraste plein sur toute donnée », alors que la maquette met `{rôle} · {tag}` en sous-texte atténué. Suivi le mode dense — la ligne tient désormais sans repli depuis T44, et les colonnes restent lisibles.
 - 2026-08-05 — T1 — Le critère d'acceptation `grep -ci "brick" messages/en.json` = 0 est structurellement impossible tant que T2 n'a pas renommé les clés (`bricksLabel`, `addBrickOption`, `noBricks`, `bricks`, `brickCount`, `masteredBricks` contiennent toutes "brick" dans leur nom de clé anglais, que T1 n'a pas le droit de toucher). Vérifié après coup : les seules occurrences restantes dans `messages/en.json` sont bien dans des clés, aucune dans une valeur. Le critère se vérifie donc au niveau du couple T1+T2, pas de T1 seul — poursuite immédiate vers T2 dans la même session pour refermer ce point.
 - 2026-08-05 — T1 — Les textes anglais employaient un mélange incohérent "brick(s)"/"block(s)" pour désigner le même concept (ex. `bricksLabel: "Knowledge blocks"`, `masteredBricks: "mastered bricks"`). La consigne ne mentionnait explicitement que "brick"→"notion", mais laisser "block(s)" en l'état aurait produit un lexique anglais incohérent avec le FR ("notion" partout). Décision : les deux formes ("brick(s)" et "block(s)") ont été renommées en "notion(s)" en anglais, à l'exception de `garden.panel.blocks` (« Blocks » du Jardin Terra Nil — zone interdite, concept différent, non touché).
