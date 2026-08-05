@@ -109,26 +109,31 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
         )}
       </div>
 
-      {/* Workshop header */}
+      {/* Chrome hérité (nom + chips + actions) — le nom vit désormais aussi
+          dans la barre du haut globale (T12) ET dans l'en-tête propre de
+          Parcours (T18) ; sur cet onglet on ne garde donc que les actions
+          (partage/réglages/quitter), pas encore relogées ailleurs. */}
       <div style={{ paddingTop: 16, flexShrink: 0 }}>
         <div style={{ padding: '14px 24px 0' }}>
-          {/* Breadcrumb */}
-          <div style={{ fontSize: 11, color: palette.inkSoft, marginBottom: 10 }}>
-            <Link href={`/${locale}/dashboard`} style={{ color: palette.inkSoft, textDecoration: 'none' }}>{t('breadcrumbGarden')}</Link>
-            <span style={{ margin: '0 6px' }}>›</span>
-            <span style={{ color: palette.ink }}>{workshopName.toLowerCase()}</span>
-          </div>
-
-          {/* Title row */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 500, color: palette.ink, letterSpacing: '-0.015em' }}>{workshopName}</h1>
-              {isPremium && <Chip tone="amber">{t('premiumBadge')}</Chip>}
-              <Chip tone="dim">{t(`role.${currentUserRole}`)}</Chip>
-              <span style={{ fontSize: 12, color: palette.inkSoft }}>
-                {t('memberCount', { count: members.length, plural: members.length > 1 ? 's' : '' })}
-              </span>
+          {activeTab !== 'programme' && (
+            <div style={{ fontSize: 11, color: palette.inkSoft, marginBottom: 10 }}>
+              <Link href={`/${locale}/dashboard`} style={{ color: palette.inkSoft, textDecoration: 'none' }}>{t('breadcrumbGarden')}</Link>
+              <span style={{ margin: '0 6px' }}>›</span>
+              <span style={{ color: palette.ink }}>{workshopName.toLowerCase()}</span>
             </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: activeTab === 'programme' ? 'flex-end' : 'space-between', gap: 16, flexWrap: 'wrap' }}>
+            {activeTab !== 'programme' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 500, color: palette.ink, letterSpacing: '-0.015em' }}>{workshopName}</h1>
+                {isPremium && <Chip tone="amber">{t('premiumBadge')}</Chip>}
+                <Chip tone="dim">{t(`role.${currentUserRole}`)}</Chip>
+                <span style={{ fontSize: 12, color: palette.inkSoft }}>
+                  {t('memberCount', { count: members.length, plural: members.length > 1 ? 's' : '' })}
+                </span>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8 }}>
               {/* Partage/QR réservé aux gestionnaires : c'est une invitation à
                   rejoindre l'atelier, pas une action de candidat. */}
@@ -157,7 +162,9 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
 
       {/* Tab content — fills remaining height */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {activeTab === 'programme' && <ProgrammeTab chapters={chapters} workshopId={workshopId} canManage={canManage} />}
+        {activeTab === 'programme' && (
+          <ProgrammeTab chapters={chapters} workshopId={workshopId} workshopName={workshopName} canManage={canManage} />
+        )}
         {canManage && activeTab === 'examen' && <ExamenTab workshopId={workshopId} />}
         {canManage && activeTab === 'analyse' && <AnalyseTab />}
         {canManage && activeTab === 'cours' && <CoursTab />}

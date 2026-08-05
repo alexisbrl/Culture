@@ -86,8 +86,8 @@ export const ink = (alpha: number) => `rgba(42, 38, 32, ${alpha})`;
 export const radius = { sm: 12, md: 12, lg: 20, pill: 999 } as const;
 
 /**
- * Ombres — deux élévations chaudes (teinte brun-écorce, `--shadow-sm`/`--shadow-lg`)
- * + halo de focus.
+ * Ombres — deux élévations chaudes (teinte brun-écorce, tokens `--shadow-sm`
+ * et `--shadow-lg`) + halo de focus.
  */
 export const shadow = {
   sm: '0 1px 2px rgba(74, 58, 33, 0.05), 0 4px 12px rgba(74, 58, 33, 0.06)',
