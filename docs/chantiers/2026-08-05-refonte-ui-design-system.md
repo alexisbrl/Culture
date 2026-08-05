@@ -774,7 +774,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
   - Fichiers : `src/app/[locale]/workshops/[id]/settings/MembersSection.tsx`
   - Dépend de : aucune
 
-- [ ] **T46 — Chapitre & Notion : titre de section et double « + »**
+- [x] **T46 — Chapitre & Notion : titre de section et double « + »**
   - (1) La section est la seule des cinq à ne pas afficher son titre : la page
     commence directement par la phrase de description. (2) Les boutons « ajouter un
     chapitre » / « ajouter une notion » rendent une icône Lucide `Plus` **et** un
@@ -994,6 +994,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 - 2026-08-05 — T44 — [voir commit] — Conteneur centré `maxWidth: 1100` autour de nav + contenu ; le plafond de 760 px du contenu saute, la barre latérale perd son fond levé et son filet (la maquette la pose à même le fond de page). Piège rencontré : `overflow-y: auto` sur la barre latérale force `overflow-x` à `auto` et sortait une barre horizontale sous la nav — retiré, cinq entrées ne débordent jamais.
 
 - 2026-08-05 — T45 — [voir commit] — Les actions orphelines en bas de carte étaient un **symptôme de T44**, pas un bug propre : la ligne est en `flexWrap: 'wrap'` et la colonne d'actions passait à la ligne faute de largeur. Réglé sans y toucher. Reste livré ici : `avatarGradient` (rampe de 8 teintes HSL générées) remplacé par `avatarTone`/`avatarTones` dans `src/lib/theme.ts`, reprises de `regMembers` de la maquette.
+
+- 2026-08-05 — T46 — [voir commit] — Clé `settings.notions.sectionTitle` ajoutée (FR+EN) et rendue en tête de section, même graphie que `SectionCard`. Les « + » littéraux retirés de `settings.notions.add` et `settings.chapters.add`, l'icône Lucide les portait déjà.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->

@@ -833,13 +833,14 @@
       "confirmBtn": "Confirm activation"
     },
     "notions": {
+      "sectionTitle": "Chapter & Notion",
       "title": "Notions",
       "desc": "The workshop's information units — extracted from your source files by the AI, or added by hand.",
       "sourceFiles": "Source files",
       "manageFiles": "manage files",
       "regenAI": "✦ regenerate with AI",
       "edit": "edit",
-      "add": "+ add a notion",
+      "add": "add a notion",
       "save": "save",
       "cancel": "cancel",
       "delete": "delete",
@@ -856,7 +857,7 @@
     "chapters": {
       "title": "Chapters",
       "desc": "Chapters group the notions. Each chapter grows a pot in the educational programme.",
-      "add": "+ add a chapter",
+      "add": "add a chapter",
       "rename": "rename",
       "namePlaceholder": "Chapter name",
       "moveUp": "move up",

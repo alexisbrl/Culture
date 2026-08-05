@@ -833,13 +833,14 @@
       "confirmBtn": "Confirmer l'activation"
     },
     "notions": {
+      "sectionTitle": "Chapitre & Notion",
       "title": "Notions",
       "desc": "Les unités d'information de l'atelier — extraites des fichiers sources par l'IA, ou ajoutées à la main.",
       "sourceFiles": "Fichiers source",
       "manageFiles": "gérer les fichiers",
       "regenAI": "✦ régénérer par IA",
       "edit": "éditer",
-      "add": "+ ajouter une notion",
+      "add": "ajouter une notion",
       "save": "enregistrer",
       "cancel": "annuler",
       "delete": "supprimer",
@@ -856,7 +857,7 @@
     "chapters": {
       "title": "Chapitres",
       "desc": "Les chapitres regroupent les notions. Chaque chapitre fait pousser un pot dans le programme éducatif.",
-      "add": "+ ajouter un chapitre",
+      "add": "ajouter un chapitre",
       "rename": "renommer",
       "namePlaceholder": "Nom du chapitre",
       "moveUp": "monter",

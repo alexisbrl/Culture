@@ -325,6 +325,9 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
     <>
       {/* ── En-tête + fichiers source (fonction réelle, absente de la maquette) ── */}
       <div style={{ marginBottom: 18 }}>
+        {/* Titre de section — même graphie que les quatre autres sections
+            (SectionCard), qui reprennent le libellé de la barre latérale. */}
+        <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink, marginBottom: 3 }}>{t('notions.sectionTitle')}</div>
         <div style={{ fontSize: 12.5, color: palette.inkFaint, marginBottom: 10 }}>{t('notions.desc')}</div>
         <Row label={t('notions.sourceFiles')} noBorder>
           <div style={{ display: 'flex', gap: 8 }}>
