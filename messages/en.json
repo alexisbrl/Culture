@@ -473,7 +473,7 @@
     "history": {
       "title": "Generated exams",
       "subtitle": "{count} exams · workshop history",
-      "newExam": "new exam",
+      "newExam": "new",
       "colExam": "exam",
       "colDate": "date",
       "colQuestions": "questions",
@@ -484,7 +484,16 @@
       "edit": "edit",
       "duplicate": "duplicate",
       "export": "export",
-      "deleteAction": "delete"
+      "deleteAction": "delete",
+      "searchPlaceholder": "search an exam…",
+      "sortTitle": "sort by",
+      "sort": {
+        "recent": "most recent",
+        "ancien": "oldest",
+        "az": "A → Z"
+      },
+      "filterTitle": "filter by status",
+      "noResults": "no exam matches the search."
     },
     "bank": {
       "title": "Question bank",

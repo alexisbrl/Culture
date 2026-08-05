@@ -473,7 +473,7 @@
     "history": {
       "title": "Examens générés",
       "subtitle": "{count} examens · historique de l'atelier",
-      "newExam": "nouvel examen",
+      "newExam": "nouvel",
       "colExam": "examen",
       "colDate": "date",
       "colQuestions": "questions",
@@ -484,7 +484,16 @@
       "edit": "modifier",
       "duplicate": "dupliquer",
       "export": "exporter",
-      "deleteAction": "supprimer"
+      "deleteAction": "supprimer",
+      "searchPlaceholder": "rechercher un examen…",
+      "sortTitle": "trier par",
+      "sort": {
+        "recent": "plus récents",
+        "ancien": "plus anciens",
+        "az": "A → Z"
+      },
+      "filterTitle": "filtrer par statut",
+      "noResults": "aucun examen ne correspond à la recherche."
     },
     "bank": {
       "title": "Banque de questions",

@@ -1,56 +1,187 @@
 'use client';
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { palette, ink, withAlpha } from '@/lib/theme';
-import { Settings, Copy, Download, FileText } from 'lucide-react';
-import { type Exam, statusStyle, IconBtn } from './examShared';
+import { ArrowUpDown, Check, Copy, Download, Filter, Plus, Search, Trash2 } from 'lucide-react';
+import { palette, shadow, withAlpha } from '@/lib/theme';
+import { type Exam, statusStyle } from './examShared';
 
-// ---- HISTORY ----
+type SortKey = 'recent' | 'ancien' | 'az';
+type Status = 'brouillon' | 'publié' | 'archivé';
+const STATUSES: Status[] = ['brouillon', 'publié', 'archivé'];
+
+// ---- HISTORY — barre de recherche/tri/filtres toujours visible + cartes en
+// mode dense (variante retenue, lignes 810-869 de App-Culture.dc.html : le
+// prototype garde le tri sur l'ordre d'insertion — pas de vraie date en base
+// pour les examens générés — donc « plus récents »/« plus anciens » se
+// contentent d'inverser la liste, exactement comme le fait le getter réel
+// `examsList` de la maquette). ----
 function HistoryContent({ exams, justAddedId, onEdit, onNew, onDelete }: { exams: Exam[]; justAddedId: string | null; onEdit: (e: Exam) => void; onNew: () => void; onDelete: (e: Exam) => void }) {
   const t = useTranslations('examen');
   const statusLabel = (s: string): string => s === 'publié' ? t('status.publié') : s === 'brouillon' ? t('status.brouillon') : s === 'archivé' ? t('status.archivé') : s;
+
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<SortKey>('recent');
+  const [sortOpen, setSortOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Status[]>([]);
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  const q = search.trim().toLowerCase();
+  let filtered = exams
+    .filter((e) => !q || e.title.toLowerCase().includes(q))
+    .filter((e) => statusFilter.length === 0 || statusFilter.includes(e.status as Status));
+  if (sort === 'ancien') filtered = [...filtered].reverse();
+  else if (sort === 'az') filtered = [...filtered].sort((a, b) => a.title.localeCompare(b.title, 'fr'));
+
+  function toggleStatus(s: Status) {
+    setStatusFilter((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
+  }
+
   return (
-    <div style={{ padding: '20px 24px 24px', minHeight: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div>
-          <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{t('history.title')}</div>
-          <div style={{ fontSize: 12.5, color: palette.inkSoft }}>{t('history.subtitle', { count: exams.length })}</div>
+    <div style={{ padding: '16px 16px 20px' }} onClick={() => { setSortOpen(false); setFilterOpen(false); }}>
+      <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink, marginBottom: 2 }}>{t('history.title')}</div>
+      <div style={{ fontSize: 12, color: palette.inkSoft, marginBottom: 12 }}>{t('history.subtitle', { count: exams.length })}</div>
+
+      {/* Barre de recherche + tri + filtres — toujours visible (variante retenue) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, background: palette.surfaceInput, border: `1px solid ${palette.line}`, borderRadius: 10, padding: '8px 11px' }}>
+          <Search size={15} strokeWidth={1.75} color={palette.inkFaint} style={{ flexShrink: 0 }} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('history.searchPlaceholder')}
+            style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', outline: 'none', fontFamily: 'inherit', fontSize: 13, color: palette.ink }}
+          />
         </div>
-        <button onClick={onNew} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, background: palette.ink, color: palette.parchment, border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-          <span style={{ fontSize: 15 }}>+</span> {t('history.newExam')}
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setSortOpen((v) => !v); setFilterOpen(false); }}
+            title={t('history.sortTitle')}
+            style={{
+              cursor: 'pointer', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+              border: `1px solid ${sortOpen || sort !== 'recent' ? palette.greenSoft : palette.lineStrong}`,
+              background: sortOpen || sort !== 'recent' ? withAlpha(palette.green, 0.12) : palette.surfaceRaised,
+              color: sortOpen || sort !== 'recent' ? palette.greenBrand : palette.inkMuted,
+            }}
+          >
+            <ArrowUpDown size={16} strokeWidth={1.75} />
+          </button>
+          {sortOpen && (
+            <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 158, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg, padding: 5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: palette.inkFaint, padding: '6px 10px 4px' }}>{t('history.sortTitle').toUpperCase()}</div>
+              {(['recent', 'ancien', 'az'] as SortKey[]).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => { setSort(key); setSortOpen(false); }}
+                  style={{ cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', fontSize: 13, fontWeight: 600, color: sort === key ? palette.greenBrand : palette.inkMuted, background: sort === key ? withAlpha(palette.green, 0.12) : 'transparent', border: 'none', borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
+                >
+                  {t(`history.sort.${key}`)}
+                  {sort === key && <Check size={13} strokeWidth={2.5} color={palette.greenBrand} />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setFilterOpen((v) => !v); setSortOpen(false); }}
+            title={t('history.filterTitle')}
+            style={{
+              cursor: 'pointer', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+              border: `1px solid ${filterOpen || statusFilter.length > 0 ? palette.greenSoft : palette.lineStrong}`,
+              background: filterOpen || statusFilter.length > 0 ? withAlpha(palette.green, 0.12) : palette.surfaceRaised,
+              color: filterOpen || statusFilter.length > 0 ? palette.greenBrand : palette.inkMuted,
+            }}
+          >
+            <Filter size={16} strokeWidth={1.75} />
+          </button>
+          {filterOpen && (
+            <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 170, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg, padding: 5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: palette.inkFaint, padding: '6px 10px 4px' }}>{t('history.filterTitle').toUpperCase()}</div>
+              {STATUSES.map((s) => {
+                const on = statusFilter.includes(s);
+                return (
+                  <button
+                    key={s}
+                    onClick={() => toggleStatus(s)}
+                    style={{ cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', fontSize: 13, fontWeight: 600, color: on ? palette.greenBrand : palette.inkMuted, background: on ? withAlpha(palette.green, 0.12) : 'transparent', border: 'none', borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
+                  >
+                    {statusLabel(s)}
+                    {on && <Check size={13} strokeWidth={2.5} color={palette.greenBrand} />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <button
+          onClick={onNew}
+          title={t('history.newExam')}
+          style={{ cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, fontSize: 13, fontWeight: 600, padding: '9px 13px', borderRadius: 10, background: palette.green, border: 'none', color: palette.onGreen, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+        >
+          <Plus size={15} strokeWidth={2} />
+          {t('history.newExam')}
         </button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr 0.8fr 1fr 1fr 1.1fr', gap: 12, padding: '0 14px 8px', fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint }}>
-        <span>{t('history.colExam')}</span><span>{t('history.colDate')}</span><span>{t('history.colQuestions')}</span><span>{t('history.colTakenBy')}</span><span>{t('history.colAvg')}</span><span style={{ textAlign: 'right' as const }}>{t('history.colActions')}</span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {exams.map(e => {
+
+      {/* Filtres actifs */}
+      {statusFilter.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 9 }}>
+          {statusFilter.map((s) => (
+            <button
+              key={s}
+              onClick={() => toggleStatus(s)}
+              style={{ cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, padding: '4px 8px 4px 11px', borderRadius: 999, background: withAlpha(palette.green, 0.12), border: `1px solid ${palette.greenSoft}`, color: palette.greenBrand, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              {statusLabel(s)}
+              <span style={{ fontSize: 14, lineHeight: 1 }}>×</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Liste — une carte par examen, mode dense */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+        {filtered.length === 0 && (
+          <div style={{ fontSize: 12.5, color: palette.inkFaint, textAlign: 'center', padding: '20px 0' }}>
+            {t('history.noResults')}
+          </div>
+        )}
+        {filtered.map((e) => {
           const st = statusStyle(e.status);
           const hot = e.id === justAddedId;
           return (
-            <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr 0.8fr 1fr 1fr 1.1fr', gap: 12, alignItems: 'center', padding: '14px', borderRadius: 12, background: hot ? withAlpha(palette.amberGlow, 0.18) : withAlpha(palette.paper, 0.8), border: hot ? '1.5px solid rgba(168,122,58,0.45)' : `1px solid ${ink(0.08)}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                <span style={{ width: 36, height: 36, borderRadius: 9, background: ink(0.05), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <FileText size={18} color={palette.amber} strokeWidth={1.75} />
+            <div
+              key={e.id}
+              onClick={() => onEdit(e)}
+              style={{
+                cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 3, padding: '11px 13px', borderRadius: 12,
+                background: hot ? withAlpha(palette.gold, 0.14) : palette.surfaceRaised,
+                border: hot ? `1.5px solid ${palette.gold}` : `1px solid ${palette.line}`,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</div>
+                <span style={{ flexShrink: 0, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' as const, background: st.bg, color: st.fg, borderRadius: 6, padding: '3px 6px' }}>
+                  {statusLabel(e.status)}
                 </span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 500, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</div>
-                  <span style={{ display: 'inline-block', marginTop: 4, fontSize: 10, padding: '2px 8px', borderRadius: 999, background: st.bg, color: st.fg }}>{statusLabel(e.status)}</span>
-                </div>
               </div>
-              <span style={{ fontSize: 12, color: palette.inkMuted }}>{e.date}</span>
-              <span style={{ fontSize: 12.5, color: palette.ink, fontVariantNumeric: 'tabular-nums' }}>{e.q}</span>
-              <span style={{ fontSize: 12, color: palette.inkMuted, fontVariantNumeric: 'tabular-nums' }}>{e.taken > 0 ? t('history.takenMembers', { count: e.taken }) : '—'}</span>
-              <span style={{ fontSize: 12.5, color: e.avg === '—' ? palette.inkGhost : palette.ink, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{e.avg}</span>
-              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                <IconBtn title={t('history.edit')} onClick={() => onEdit(e)}>
-                  <Settings size={14} strokeWidth={1.75} />
-                </IconBtn>
-                <IconBtn title={t('history.duplicate')}><Copy size={14} strokeWidth={1.75} /></IconBtn>
-                <IconBtn title={t('history.export')}><Download size={14} strokeWidth={1.75} /></IconBtn>
-                <IconBtn title={t('history.deleteAction')} onClick={() => onDelete(e)}>
-                  <svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 4h9M5.5 4V2.5h3V4M5.5 6.5v4M8.5 6.5v4M3.5 4l.7 8h5.6l.7-8" stroke={palette.danger} strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </IconBtn>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: palette.inkMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {t('history.colQuestions')} : {e.q} · {e.date}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }} onClick={(ev) => ev.stopPropagation()}>
+                  {/* dupliquer/exporter : pas encore de fonction réelle derrière (déjà le cas avant ce chantier) — icônes décoratives conservées à l'identique */}
+                  <button title={t('history.duplicate')} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${palette.lineStrong}`, background: palette.surfaceRaised, color: palette.inkMuted, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
+                    <Copy size={13} strokeWidth={1.75} />
+                  </button>
+                  <button title={t('history.export')} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${palette.lineStrong}`, background: palette.surfaceRaised, color: palette.inkMuted, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
+                    <Download size={13} strokeWidth={1.75} />
+                  </button>
+                  <button title={t('history.deleteAction')} onClick={() => onDelete(e)} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${palette.lineStrong}`, background: palette.surfaceRaised, color: palette.inkMuted, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
+                    <Trash2 size={13} strokeWidth={1.75} />
+                  </button>
+                </div>
               </div>
             </div>
           );
