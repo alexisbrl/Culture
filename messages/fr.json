@@ -18,7 +18,13 @@
     "tabCours": "cours",
     "tabProfil": "profil",
     "changeWorkshop": "changer d'atelier",
-    "workshopSettings": "paramètres de l'atelier"
+    "workshopSettings": "paramètres de l'atelier",
+    "switcherTitle": "changer d'atelier",
+    "switcherLoading": "chargement…",
+    "switcherEmpty": "aucun atelier pour l'instant",
+    "premiumWorkshop": "atelier premium",
+    "newWorkshop": "nouvel atelier",
+    "allWorkshops": "tous mes ateliers"
   },
   "hero": {
     "badge": "Bêta en cours · Rejoignez les pionniers",

@@ -12,6 +12,7 @@ import { markIntentionalSignOut } from '@/lib/signOutIntent';
 import { setUserLocale } from '@/app/actions/profile';
 import { getWorkshop } from '@/app/actions/workshops';
 import { Badge } from '@/components/ui/badge';
+import WorkshopSwitcher from '@/components/WorkshopSwitcher';
 
 type WorkshopHeaderInfo = { name: string; role: 'owner' | 'manager' | 'member' };
 
@@ -22,6 +23,7 @@ export default function DashboardHeader() {
   const searchParams = useSearchParams();
   const { user } = useUser();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
   const [workshop, setWorkshop] = useState<WorkshopHeaderInfo | null>(null);
 
@@ -92,15 +94,17 @@ export default function DashboardHeader() {
           <span style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: 19, color: 'var(--ink)' }}>Culture</span>
         </Link>
         {workshopId && workshop && (
-          <div className="flex min-w-0 items-center gap-2 text-[13px] text-[var(--ink-muted)]">
+          <div className="relative flex min-w-0 items-center gap-2 text-[13px] text-[var(--ink-muted)]">
             <span className="truncate font-semibold text-[var(--ink)]">{workshop.name}</span>
             <button
               type="button"
               title={t('changeWorkshop')}
+              onClick={() => setSwitcherOpen((v) => !v)}
               className="flex size-[22px] shrink-0 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface-page)] text-[var(--ink-muted)] outline-none focus-visible:shadow-[var(--shadow-focus)]"
             >
               <ChevronDown size={12} strokeWidth={2} />
             </button>
+            <WorkshopSwitcher open={switcherOpen} onClose={() => setSwitcherOpen(false)} currentWorkshopId={workshopId} />
           </div>
         )}
       </div>

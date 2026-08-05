@@ -18,7 +18,13 @@
     "tabCours": "courses",
     "tabProfil": "profile",
     "changeWorkshop": "switch workshop",
-    "workshopSettings": "workshop settings"
+    "workshopSettings": "workshop settings",
+    "switcherTitle": "switch workshop",
+    "switcherLoading": "loading…",
+    "switcherEmpty": "no workshop yet",
+    "premiumWorkshop": "premium workshop",
+    "newWorkshop": "new workshop",
+    "allWorkshops": "all my workshops"
   },
   "hero": {
     "badge": "Beta launching · Join the pioneers",
