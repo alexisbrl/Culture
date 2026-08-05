@@ -751,6 +751,26 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 
 ## Journal
 <!-- Append-only. Une ligne par tâche terminée : date, tâche, commit, note. -->
+
+- **2026-08-05 — T2 en cours, non commitée.** Une exécution s'est interrompue en
+  demandant une autorisation, après avoir livré T1 (commit `91c6773`). Le travail
+  de T2 est **laissé dans l'arbre**, à reprendre : ne pas le jeter sans l'avoir
+  inspecté.
+  - **Fait** : `src/lib/workshops/{bricks.ts→notions.ts, chapters.ts, exam.ts, examTypes.ts}` ;
+    `src/app/actions/{workshopBricks.ts→workshopNotions.ts, examQuestions.ts,
+    parcoursQuestions.ts, workshopChapters.ts}` ; `settings/{page.tsx,
+    settingsShared.tsx}` ; `BricksSection.tsx` renommé en `NotionsSection.tsx`
+    (fichier renommé, **contenu pas encore mis à jour**).
+  - **Reste à faire** : le contenu de `NotionsSection.tsx` (import de
+    `@/app/actions/workshopBricks` devenu mort, clés i18n `bricks.*` → `notions.*`,
+    `Chapter.brickCount` → `notionCount`), puis `SettingsClient.tsx`,
+    `AnalyseTab.tsx`, `ExamenTab.tsx`, `ProgrammeTab.tsx`, `QuestionEditor.tsx`,
+    `programme/ParcoursQuestions.tsx`. Enfin la note dans `CLAUDE.md` et
+    `docs/backlog.md` sur le renommage des tables restant à faire.
+  - **État de la validation** : `npm run typecheck` échoue (normal, renommage à
+    mi-chemin). `src/lib/database.types.ts` et les noms de tables Supabase sont
+    intacts, comme prévu.
+  - Terminer T2, faire **un seul commit**, cocher la case. T1 est déjà cochée.
 - 2026-08-05 — T1 — (commit à suivre) — Valeurs renommées dans `messages/fr.json` et `messages/en.json` ; `grep -ci "brique" messages/fr.json` = 0. `build`/`lint` OK, pas d'écran à vérifier.
 
 ## Décisions prises en autonomie
