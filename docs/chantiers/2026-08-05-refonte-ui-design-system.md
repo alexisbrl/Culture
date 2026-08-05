@@ -521,7 +521,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
   - Fichiers : `src/app/[locale]/workshops/[id]/exercise/[chapterId]/ExerciseClient.tsx`
   - Dépend de : T21
 
-- [ ] **T23 — Écran de fin d'exercice**
+- [x] **T23 — Écran de fin d'exercice**
   - Ligne 676 : écran « belle récolte. » (en **sans**), score de la session, bouton
     de retour au parcours.
   - **Débloqué le 05/08/2026 — règle de fin arbitrée par Alexis.** Le tirage serveur
@@ -1007,6 +1007,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 
 - 2026-08-05 — T50 — [voir commit] — Place réservée plutôt que contenu factice : onglet « examens » rendu en `invisible` tant que `getWorkshop` n'a pas répondu (largeur exacte, pas un gabarit approché) ; carte « suivi » du profil précédée d'un bloc de même hauteur, `firstWorkshopId` passant de `null` à `undefined | null` pour distinguer « en chargement » de « aucun atelier ». **Limite connue** : la barre du haut vit dans `[locale]/layout.tsx`, au-dessus de l'arbre de `WorkshopClient` — elle ne peut pas recevoir le rôle déjà résolu côté serveur, d'où l'appel client qui subsiste. Le supprimer demanderait de remonter la donnée dans le layout, hors périmètre d'un chantier d'interface.
 
+- 2026-08-06 — T23 — [voir commit] — `EXERCISE_SESSION_LENGTH = 10` compté côté client dans `ExerciseClient.tsx` ; à la 10ᵉ correction, écran de fin (`Leaf`, « belle récolte. », score réel) remplace directement la carte de question, bouton « retour au parcours » vers l'atelier. `messages/{fr,en}.json` : clés `exercise.doneTitle/doneScore/backToParcours`. `build`/`lint` OK (0 erreur, mêmes 26 warnings pré-existants). **Rendu non vérifié — aucun navigateur Chrome connecté** (`list_connected_browsers` vide), un seul essai fait ; Alexis relira cet écran sur la PR.
+
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
 - 2026-08-05 — T48 — **Troncature à 2 lignes et non 1** comme la maquette. Les questions réelles de l'atelier de test sont nettement plus longues que les libellés du prototype (« Quelle est la capitale de la France ? ») : à une ligne, la moitié d'entre elles devenaient illisibles. Deux lignes gardent le rythme de colonne sans amputer l'énoncé.
@@ -1076,6 +1078,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 - 2026-08-05 — T37 — **Bouton « personnaliser » ouvert par défaut (`hdrOpen = true`), alors que la maquette le replie par défaut.** Le titre/les pilules d'identité/les champs personnalisés sont déjà visibles en permanence dans l'app réelle depuis avant ce chantier (aucun mécanisme de repli n'existait) ; les masquer par défaut aurait réduit la découvrabilité d'un réglage jusqu'ici toujours visible — un recul d'ergonomie non demandé explicitement. Le bouton est fonctionnel dans les deux sens (l'utilisateur peut replier s'il le souhaite), seul l'état initial diffère de la maquette.
 - 2026-08-05 — T37 — **Pilules d'identité restées dans le panneau de réglages séparé, pas déplacées en édition directe sur la feuille A4.** La maquette édite ces pilules directement sur l'en-tête de la page imprimée elle-même (zones gauche/droite superposées au rendu réel), alors que l'app actuelle a une architecture différente : un panneau de réglages dédié, distinct du rendu du flux de questions. Reproduire l'édition in-place aurait exigé de restructurer la zone de rendu de la feuille — precisément la zone que T37 (et l'avertissement pagination de la feuille de route) interdit de toucher hors T38. Le glisser-déposer gauche/droite/hors-feuille reste fonctionnellement identique (même trois zones, même résultat sur `config.presentation`), seule sa position à l'écran diffère de la maquette.
 - 2026-08-05 — T37 — **« sous-titre (atelier · durée · consigne) » de l'énoncé de T37 non ajouté.** Aucun champ de consigne libre n'existe dans `ExamConfig` (`src/lib/workshops/examTypes.ts`) — l'ajouter serait une évolution du modèle de données, hors périmètre d'un chantier « interface uniquement » (`src/lib/**` est en zone interdite sauf T2). Le sous-titre littéral de la maquette (atelier · durée · consigne) est de toute façon rendu à même la feuille A4 dans le prototype, donc dans la zone de rendu réservée à T38 — à réévaluer à ce moment-là, sans garantie que l'ajout d'un champ « consigne » soit dans le périmètre même de T38 (habillage seulement, pas de nouvelle donnée).
+
+- 2026-08-06 — T23 — **La correction de la 10ᵉ question n'est pas affichée : l'écran de fin la remplace directement**, plutôt que d'afficher d'abord le verdict puis un bouton « suivant » menant à l'écran de fin. C'est la lecture la plus simple de « le bouton cède la place à l'écran de fin » (maquette : `exDone` remplace tout l'écran, pas un ajout sous la correction) et ça évite un état intermédiaire à trois branches (résultat + bouton fin) non prévu par la maquette.
 
 ## Tâches bloquées
 <!-- Tâches abandonnées après 2 échecs, avec le motif et ce qui a été tenté. -->

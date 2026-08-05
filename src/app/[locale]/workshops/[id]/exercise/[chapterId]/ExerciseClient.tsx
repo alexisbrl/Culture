@@ -20,9 +20,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { Check, Loader2, RotateCw, Sprout, X } from 'lucide-react';
-import { palette, withAlpha, shadow } from '@/lib/theme';
+import { ArrowRight, Check, Leaf, Loader2, RotateCw, Sprout, X } from 'lucide-react';
+import { palette, radius, withAlpha, shadow } from '@/lib/theme';
 import { Button } from '@/components/ui/button';
+import LinkButton from '@/components/LinkButton';
 import { drawExercise, gradeExercise } from '@/app/actions/parcoursExercise';
 import type { ExercisePrompt, ExerciseResult } from '@/lib/workshops/examTypes';
 
@@ -33,6 +34,12 @@ type Props = {
   chapterId: string;
   chapterName: string;
 };
+
+// Longueur de session choisie côté client : le tirage serveur pioche
+// indéfiniment sans notion de fin de chapitre (voir plus haut) — ce nombre est
+// une règle produit provisoire, à revoir avec la vraie mécanique de
+// progression (docs/backlog.md). Voir docs/chantiers/2026-08-05-refonte-ui-design-system.md, T23.
+const EXERCISE_SESSION_LENGTH = 10;
 
 export default function ExerciseClient({ locale, workshopId, workshopName, chapterId, chapterName }: Props) {
   const t = useTranslations('exercise');
@@ -45,6 +52,9 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
   const [result, setResult] = useState<ExerciseResult | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
+  const [answeredCount, setAnsweredCount] = useState(0);
+  const [correctCount, setCorrectCount] = useState(0);
+  const [done, setDone] = useState(false);
 
   const draw = useCallback(
     async (excludeId?: string) => {
@@ -76,6 +86,10 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
       return;
     }
     setResult(res.result);
+    const answeredSoFar = answeredCount + 1;
+    setAnsweredCount(answeredSoFar);
+    if (res.result.correct === true) setCorrectCount((c) => c + 1);
+    if (answeredSoFar >= EXERCISE_SESSION_LENGTH) setDone(true);
   }
 
   const isChoice = prompt?.responseType === 'qcs' || prompt?.responseType === 'qcm';
@@ -139,8 +153,22 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
         </div>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 20px 40px' }}>
-        <div style={{ maxWidth: 680, margin: '0 auto' }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 20px 40px', display: 'flex' }}>
+        {done ? (
+          <div style={{ margin: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', maxWidth: 420, padding: '24px 0' }}>
+            <div style={{ width: 120, height: 120, borderRadius: radius.pill, background: withAlpha(palette.green, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+              <Leaf size={48} strokeWidth={1.5} color={palette.green} />
+            </div>
+            <div style={{ fontWeight: 600, fontSize: 30, color: palette.greenBrand }}>{t('doneTitle')}</div>
+            <div style={{ fontSize: 14.5, color: palette.inkSoft, marginTop: 10 }}>{t('doneScore', { count: correctCount })}</div>
+            <div style={{ marginTop: 28 }}>
+              <LinkButton href={`/${locale}/workshops/${workshopId}`} variant="primary" size="lg">
+                {t('backToParcours')} <ArrowRight size={16} strokeWidth={1.75} />
+              </LinkButton>
+            </div>
+          </div>
+        ) : (
+        <div style={{ maxWidth: 680, margin: '0 auto', width: '100%' }}>
           {error && <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 12 }}>{error}</div>}
 
           <div style={{ background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 16, padding: '22px 24px', boxShadow: shadow.sm }}>
@@ -221,6 +249,7 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
             )}
           </div>
         </div>
+        )}
       </div>
     </div>
   );

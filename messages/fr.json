@@ -1002,7 +1002,10 @@
     "verdictWrong": "Mauvaise réponse",
     "verdictNeutral": "Pas de correction automatique pour ce type de réponse.",
     "expectedAnswer": "Réponse attendue :",
-    "gradeError": "Erreur lors de la correction"
+    "gradeError": "Erreur lors de la correction",
+    "doneTitle": "belle récolte.",
+    "doneScore": "{count, plural, =0 {aucune bonne réponse} one {# bonne réponse} other {# bonnes réponses}}",
+    "backToParcours": "retour au parcours"
   },
   "accountPricing": {
     "tagline": "de la graine à l'arbre —",
