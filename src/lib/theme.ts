@@ -82,23 +82,16 @@ export function withAlpha(hex: string, alpha: number): string {
  */
 export const ink = (alpha: number) => `rgba(42, 38, 32, ${alpha})`;
 
-/**
- * Rayons d'arrondi — deux valeurs + pill (Culture Design System, T5).
- * `xl` est un alias historique vers `lg` (`--radius-lg`), conservé le temps
- * que les appelants existants (ex. Modal.tsx) soient repeints (T10).
- */
-export const radius = { sm: 12, md: 12, lg: 20, pill: 999, xl: 20 } as const;
+/** Rayons d'arrondi — deux valeurs + pill (Culture Design System). */
+export const radius = { sm: 12, md: 12, lg: 20, pill: 999 } as const;
 
 /**
  * Ombres — deux élévations chaudes (teinte brun-écorce, `--shadow-sm`/`--shadow-lg`)
- * + halo de focus. `modal`/`card` sont des alias historiques vers `lg`/`sm`,
- * conservés le temps que les appelants existants soient repeints (T10).
+ * + halo de focus.
  */
 export const shadow = {
   sm: '0 1px 2px rgba(74, 58, 33, 0.05), 0 4px 12px rgba(74, 58, 33, 0.06)',
   lg: '0 4px 12px rgba(74, 58, 33, 0.08), 0 24px 56px rgba(74, 58, 33, 0.12)',
   inset: 'inset 0 1px 2px rgba(74, 58, 33, 0.07)',
   focus: '0 0 0 3px var(--ring)',
-  modal: '0 4px 12px rgba(74, 58, 33, 0.08), 0 24px 56px rgba(74, 58, 33, 0.12)',
-  card: '0 1px 2px rgba(74, 58, 33, 0.05), 0 4px 12px rgba(74, 58, 33, 0.06)',
 } as const;
