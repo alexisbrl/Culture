@@ -281,6 +281,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 questions={questions}
                 pools={pools}
                 exams={exams}
+                draftIds={draftIds}
                 openId={openId}
                 setOpenId={setOpenId}
                 onEditQuestion={q => setEditingQuestion(q)}

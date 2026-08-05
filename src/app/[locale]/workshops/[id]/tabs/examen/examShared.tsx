@@ -85,7 +85,7 @@ export function DiffDots({ level }: { level: number }) {
 export function TypePill({ type }: { type: ResponseType }) {
   const t = useTranslations('examen');
   const c = RESPONSE_TYPE_COLORS[type] || palette.inkSoft;
-  return <span style={{ fontSize: 10, fontWeight: 500, padding: '3px 8px', borderRadius: 999, background: `${c}28`, color: '#3a352c', letterSpacing: '0.02em' }}>{t(`responseType.${type}`)}</span>;
+  return <span style={{ fontSize: 10, fontWeight: 500, padding: '3px 8px', borderRadius: 999, background: `${c}28`, color: palette.inkMuted, letterSpacing: '0.02em' }}>{t(`responseType.${type}`)}</span>;
 }
 
 export function WeightControls({ weight, onChange }: { weight: QuestionWeight; onChange: (patch: Partial<QuestionWeight>) => void }) {
@@ -403,9 +403,9 @@ export function statusStyle(s: string) {
   return ({ publié: { bg: withAlpha(palette.greenSoft, 0.20), fg: '#3f5630' }, brouillon: { bg: withAlpha(palette.amberGlow, 0.22), fg: '#7a4d20' }, archivé: { bg: ink(0.07), fg: palette.inkSoft } } as Record<string, { bg: string; fg: string }>)[s] ?? { bg: ink(0.07), fg: palette.inkSoft };
 }
 
-export function IconBtn({ children, title, onClick }: { children: React.ReactNode; title: string; onClick?: () => void }) {
+export function IconBtn({ children, title, onClick }: { children: React.ReactNode; title: string; onClick?: (e: React.MouseEvent) => void }) {
   return (
-    <button title={title} onClick={onClick} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${ink(0.12)}`, background: withAlpha(palette.paper, 0.7), color: palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>{children}</button>
+    <button title={title} onClick={onClick} style={{ width: 32, height: 32, borderRadius: 9, border: `1px solid ${palette.lineStrong}`, background: palette.surfaceRaised, color: palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>{children}</button>
   );
 }
 
