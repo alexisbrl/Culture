@@ -35,7 +35,7 @@
     "step1Title": "Upload your content",
     "step1Desc": "PDF, Word, video, images... Culture accepts all your existing formats. No need to start from scratch.",
     "step2Title": "AI structures it for you",
-    "step2Desc": "Our AI identifies key knowledge blocks and builds an adaptive learning path with quizzes, challenges, and spaced repetition.",
+    "step2Desc": "Our AI identifies key notions and builds an adaptive learning path with quizzes, challenges, and spaced repetition.",
     "step3Title": "Your learners progress",
     "step3Desc": "They advance at their own pace on web or mobile, unlock badges, and you track their progress in real time."
   },
@@ -428,10 +428,10 @@
       "optionsDivider": "Per-question options",
       "bloomLabel": "Target Bloom level",
       "bloomHint": "required — the cognitive level the question exercises",
-      "bricksLabel": "Knowledge blocks",
-      "bricksHint": "optional — the blocks the question draws on, across all chapters",
-      "addBrickOption": "link a block…",
-      "noBricks": "No block in this workshop. They are created in Settings → Knowledge blocks.",
+      "bricksLabel": "Notions",
+      "bricksHint": "optional — the notions the question draws on, across all chapters",
+      "addBrickOption": "link a notion…",
+      "noBricks": "No notion in this workshop. They are created in Settings → Notions.",
       "labelsLabel": "Labels",
       "labelsHint": "off by default — groups questions to generate exams",
       "labelNamePlaceholder": "label name…",
@@ -644,7 +644,7 @@
       "general": "General",
       "members": "Members & roles",
       "files": "Files",
-      "bricks": "Knowledge blocks",
+      "bricks": "Notions",
       "premium": "Premium workshop"
     },
     "role": {
@@ -689,7 +689,7 @@
       "title": "Danger zone",
       "desc": "Irreversible actions — proceed with caution.",
       "deleteLabel": "Delete the workshop",
-      "deleteHint": "all blocks, exams and progress will be lost",
+      "deleteHint": "all notions, exams and progress will be lost",
       "deleteBtn": "delete the workshop"
     },
     "saveBar": {
@@ -793,28 +793,28 @@
       "confirmBtn": "Confirm activation"
     },
     "bricks": {
-      "title": "Knowledge blocks",
+      "title": "Notions",
       "desc": "The workshop's information units — extracted from your source files by the AI, or added by hand.",
       "sourceFiles": "Source files",
       "manageFiles": "manage files",
       "regenAI": "✦ regenerate with AI",
       "edit": "edit",
-      "add": "+ add a block",
+      "add": "+ add a notion",
       "save": "save",
       "cancel": "cancel",
       "delete": "delete",
-      "titlePlaceholder": "Block title (the idea in one sentence)",
+      "titlePlaceholder": "Notion title (the idea in one sentence)",
       "contentPlaceholder": "Detailed content (optional)",
-      "empty": "No blocks yet — add them by hand or upload source files.",
-      "emptyChapter": "No blocks in this chapter.",
+      "empty": "No notions yet — add them by hand or upload source files.",
+      "emptyChapter": "No notions in this chapter.",
       "noChapter": "No chapter",
-      "count": "{count, plural, =0 {no blocks} one {# block} other {# blocks}}",
-      "deleteTitle": "Delete this block?",
+      "count": "{count, plural, =0 {no notions} one {# notion} other {# notions}}",
+      "deleteTitle": "Delete this notion?",
       "deleteDesc": "“{title}” will be permanently deleted, along with its mastery data."
     },
     "chapters": {
       "title": "Chapters",
-      "desc": "Chapters group the knowledge blocks. Each chapter grows a pot in the educational programme.",
+      "desc": "Chapters group the notions. Each chapter grows a pot in the educational programme.",
       "add": "+ add a chapter",
       "rename": "rename",
       "namePlaceholder": "Chapter name",
@@ -823,7 +823,7 @@
       "empty": "No chapters yet — the educational programme stays empty until you add one.",
       "count": "{count, plural, =0 {no chapters} one {# chapter} other {# chapters}}",
       "deleteTitle": "Delete this chapter?",
-      "deleteDesc": "“{name}” will be deleted and its pot will disappear from the programme. Its blocks are not deleted: they move back to “no chapter”."
+      "deleteDesc": "“{name}” will be deleted and its pot will disappear from the programme. Its notions are not deleted: they move back to “no chapter”."
     }
   },
   "workshop": {
@@ -923,10 +923,10 @@
   },
   "programme": {
     "startExercise": "start an exercise",
-    "brickCount": "{count, plural, =0 {no blocks} one {# block} other {# blocks}}",
+    "brickCount": "{count, plural, =0 {no notions} one {# notion} other {# notions}}",
     "chapterIndicator": "chapter {from}–{to} / {total}",
     "emptyTitle": "no chapters yet",
-    "emptyDesc": "Chapters are created in Settings → Knowledge blocks. Each chapter grows a pot here.",
+    "emptyDesc": "Chapters are created in Settings → Notions. Each chapter grows a pot here.",
     "questions": {
       "open": "programme questions",
       "back": "back to the programme",
@@ -1049,7 +1049,7 @@
     "kpi": {
       "members": "members",
       "avgProgress": "average progress",
-      "masteredBricks": "mastered bricks (avg.)",
+      "masteredBricks": "mastered notions (avg.)",
       "avgExamScore": "average exam score"
     },
     "masteryHeatmap": {
@@ -1106,7 +1106,7 @@
       "newPlot": "new plot"
     },
     "title": "plant a new subject.",
-    "subtitle": "“drop your courses — the AI grows the knowledge bricks for you.”",
+    "subtitle": "“drop your courses — the AI grows the notions for you.”",
     "source": {
       "kicker": "① source · the heart of your workshop",
       "dropHere": "drop your files here",
@@ -1116,7 +1116,7 @@
       "formatSuffix": " · 25 MB max / file",
       "futureFormats": "Word, PowerPoint, audio, video coming in V2",
       "filesAdded": "{count} files added",
-      "extractAfterCreation": "the AI will extract bricks after creation"
+      "extractAfterCreation": "the AI will extract notions after creation"
     },
     "identity": {
       "kicker": "② identity",
@@ -1127,7 +1127,7 @@
       "descriptionPlaceholder": "one line to set the scene…"
     },
     "createCta": "create the workshop",
-    "extractHint": "the AI then extracts the bricks · you can adjust everything"
+    "extractHint": "the AI then extracts the notions · you can adjust everything"
   },
   "cours": {
     "comingV2": "coming in V2",

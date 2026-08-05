@@ -216,7 +216,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 
 ### Lot 0 — Lexique
 
-- [ ] **T1 — Renommer « brique » en « notion » dans les textes visibles**
+- [x] **T1 — Renommer « brique » en « notion » dans les textes visibles**
   - Ne toucher qu'aux **valeurs** de `messages/fr.json` et `messages/en.json`, pas
     aux clés. FR : « brique de connaissance » → « notion », « brique » → « notion »,
     « briques » → « notions » (accorder les articles : « la brique » → « la
@@ -743,9 +743,12 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 
 ## Journal
 <!-- Append-only. Une ligne par tâche terminée : date, tâche, commit, note. -->
+- 2026-08-05 — T1 — (commit à suivre) — Valeurs renommées dans `messages/fr.json` et `messages/en.json` ; `grep -ci "brique" messages/fr.json` = 0. `build`/`lint` OK, pas d'écran à vérifier.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
+- 2026-08-05 — T1 — Le critère d'acceptation `grep -ci "brick" messages/en.json` = 0 est structurellement impossible tant que T2 n'a pas renommé les clés (`bricksLabel`, `addBrickOption`, `noBricks`, `bricks`, `brickCount`, `masteredBricks` contiennent toutes "brick" dans leur nom de clé anglais, que T1 n'a pas le droit de toucher). Vérifié après coup : les seules occurrences restantes dans `messages/en.json` sont bien dans des clés, aucune dans une valeur. Le critère se vérifie donc au niveau du couple T1+T2, pas de T1 seul — poursuite immédiate vers T2 dans la même session pour refermer ce point.
+- 2026-08-05 — T1 — Les textes anglais employaient un mélange incohérent "brick(s)"/"block(s)" pour désigner le même concept (ex. `bricksLabel: "Knowledge blocks"`, `masteredBricks: "mastered bricks"`). La consigne ne mentionnait explicitement que "brick"→"notion", mais laisser "block(s)" en l'état aurait produit un lexique anglais incohérent avec le FR ("notion" partout). Décision : les deux formes ("brick(s)" et "block(s)") ont été renommées en "notion(s)" en anglais, à l'exception de `garden.panel.blocks` (« Blocks » du Jardin Terra Nil — zone interdite, concept différent, non touché).
 
 ## Tâches bloquées
 <!-- Tâches abandonnées après 2 échecs, avec le motif. -->

@@ -35,7 +35,7 @@
     "step1Title": "Uploadez votre contenu",
     "step1Desc": "PDF, Word, vidéo, image... Culture accepte tous vos formats existants. Pas besoin de tout recommencer.",
     "step2Title": "L'IA décompose et structure",
-    "step2Desc": "Notre IA identifie les briques de connaissance clés et construit un parcours adaptatif, avec quiz, défis et révisions espacées.",
+    "step2Desc": "Notre IA identifie les notions clés et construit un parcours adaptatif, avec quiz, défis et révisions espacées.",
     "step3Title": "Vos apprenants progressent",
     "step3Desc": "Ils avancent à leur rythme sur web ou mobile, débloquent des badges, et vous suivez leurs progrès en temps réel."
   },
@@ -428,10 +428,10 @@
       "optionsDivider": "Options par question",
       "bloomLabel": "Niveau de Bloom visé",
       "bloomHint": "obligatoire — niveau cognitif que la question fait travailler",
-      "bricksLabel": "Briques de connaissance",
-      "bricksHint": "facultatif — les briques que la question mobilise, toutes chapitres confondus",
-      "addBrickOption": "associer une brique…",
-      "noBricks": "Aucune brique dans cet atelier. Elles se créent dans Paramètres → Briques de connaissance.",
+      "bricksLabel": "Notions",
+      "bricksHint": "facultatif — les notions que la question mobilise, toutes chapitres confondus",
+      "addBrickOption": "associer une notion…",
+      "noBricks": "Aucune notion dans cet atelier. Elles se créent dans Paramètres → Notions.",
       "labelsLabel": "Libellés",
       "labelsHint": "off par défaut — regroupe les questions pour générer des examens",
       "labelNamePlaceholder": "nom du libellé…",
@@ -644,7 +644,7 @@
       "general": "Général",
       "members": "Membres & rôles",
       "files": "Fichiers",
-      "bricks": "Briques de connaissance",
+      "bricks": "Notions",
       "premium": "Atelier Premium"
     },
     "role": {
@@ -689,7 +689,7 @@
       "title": "Zone de danger",
       "desc": "Actions irréversibles — procédez avec prudence.",
       "deleteLabel": "Supprimer l'atelier",
-      "deleteHint": "toutes les briques, examens et progressions seront perdus",
+      "deleteHint": "toutes les notions, examens et progressions seront perdus",
       "deleteBtn": "supprimer l'atelier"
     },
     "saveBar": {
@@ -793,28 +793,28 @@
       "confirmBtn": "Confirmer l'activation"
     },
     "bricks": {
-      "title": "Briques de connaissance",
+      "title": "Notions",
       "desc": "Les unités d'information de l'atelier — extraites des fichiers sources par l'IA, ou ajoutées à la main.",
       "sourceFiles": "Fichiers source",
       "manageFiles": "gérer les fichiers",
       "regenAI": "✦ régénérer par IA",
       "edit": "éditer",
-      "add": "+ ajouter une brique",
+      "add": "+ ajouter une notion",
       "save": "enregistrer",
       "cancel": "annuler",
       "delete": "supprimer",
-      "titlePlaceholder": "Titre de la brique (l'idée en une phrase)",
+      "titlePlaceholder": "Titre de la notion (l'idée en une phrase)",
       "contentPlaceholder": "Contenu détaillé (optionnel)",
-      "empty": "Aucune brique pour l'instant — ajoutez-les à la main ou déposez des fichiers sources.",
-      "emptyChapter": "Aucune brique dans ce chapitre.",
+      "empty": "Aucune notion pour l'instant — ajoutez-les à la main ou déposez des fichiers sources.",
+      "emptyChapter": "Aucune notion dans ce chapitre.",
       "noChapter": "Sans chapitre",
-      "count": "{count, plural, =0 {aucune brique} one {# brique} other {# briques}}",
-      "deleteTitle": "Supprimer cette brique ?",
+      "count": "{count, plural, =0 {aucune notion} one {# notion} other {# notions}}",
+      "deleteTitle": "Supprimer cette notion ?",
       "deleteDesc": "« {title} » sera définitivement supprimée, ainsi que les données de maîtrise associées."
     },
     "chapters": {
       "title": "Chapitres",
-      "desc": "Les chapitres regroupent les briques. Chaque chapitre fait pousser un pot dans le programme éducatif.",
+      "desc": "Les chapitres regroupent les notions. Chaque chapitre fait pousser un pot dans le programme éducatif.",
       "add": "+ ajouter un chapitre",
       "rename": "renommer",
       "namePlaceholder": "Nom du chapitre",
@@ -823,7 +823,7 @@
       "empty": "Aucun chapitre pour l'instant — le programme éducatif est vide tant qu'il n'y en a pas.",
       "count": "{count, plural, =0 {aucun chapitre} one {# chapitre} other {# chapitres}}",
       "deleteTitle": "Supprimer ce chapitre ?",
-      "deleteDesc": "« {name} » sera supprimé et son pot disparaîtra du programme. Ses briques ne sont pas supprimées : elles repassent dans « sans chapitre »."
+      "deleteDesc": "« {name} » sera supprimé et son pot disparaîtra du programme. Ses notions ne sont pas supprimées : elles repassent dans « sans chapitre »."
     }
   },
   "workshop": {
@@ -923,10 +923,10 @@
   },
   "programme": {
     "startExercise": "lancer un exercice",
-    "brickCount": "{count, plural, =0 {aucune brique} one {# brique} other {# briques}}",
+    "brickCount": "{count, plural, =0 {aucune notion} one {# notion} other {# notions}}",
     "chapterIndicator": "chapitre {from}–{to} / {total}",
     "emptyTitle": "aucun chapitre pour l'instant",
-    "emptyDesc": "Les chapitres se créent dans Paramètres → Briques de connaissance. Chaque chapitre fait pousser un pot ici.",
+    "emptyDesc": "Les chapitres se créent dans Paramètres → Notions. Chaque chapitre fait pousser un pot ici.",
     "questions": {
       "open": "questions du parcours",
       "back": "retour au programme",
@@ -1049,7 +1049,7 @@
     "kpi": {
       "members": "membres",
       "avgProgress": "progression moyenne",
-      "masteredBricks": "briques maîtrisées (moy.)",
+      "masteredBricks": "notions maîtrisées (moy.)",
       "avgExamScore": "note moyenne examens"
     },
     "masteryHeatmap": {
@@ -1106,7 +1106,7 @@
       "newPlot": "nouvelle parcelle"
     },
     "title": "plante une nouvelle matière.",
-    "subtitle": "« dépose tes cours — l'IA fera pousser les briques toute seule. »",
+    "subtitle": "« dépose tes cours — l'IA fera pousser les notions toute seule. »",
     "source": {
       "kicker": "① source · le cœur de ton atelier",
       "dropHere": "dépose tes fichiers ici",
@@ -1116,7 +1116,7 @@
       "formatSuffix": " · 25 Mo max / fichier",
       "futureFormats": "Word, PowerPoint, audio, vidéo arrivent en V2",
       "filesAdded": "{count} fichiers déposés",
-      "extractAfterCreation": "l'IA extraira les briques après la création"
+      "extractAfterCreation": "l'IA extraira les notions après la création"
     },
     "identity": {
       "kicker": "② identité",
@@ -1127,7 +1127,7 @@
       "descriptionPlaceholder": "une phrase pour situer la matière…"
     },
     "createCta": "créer l'atelier",
-    "extractHint": "l'IA extraira ensuite les briques · tu pourras tout ajuster"
+    "extractHint": "l'IA extraira ensuite les notions · tu pourras tout ajuster"
   },
   "cours": {
     "comingV2": "arrive en V2",
