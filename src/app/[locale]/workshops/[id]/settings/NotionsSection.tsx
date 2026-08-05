@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
-import { palette, ink } from '@/lib/theme';
+import { ChevronDown, ChevronUp, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { palette, shadow } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import {
   createWorkshopNotion,
@@ -18,7 +18,7 @@ import {
   reorderWorkshopChapters,
   type Chapter,
 } from '@/app/actions/workshopChapters';
-import { Row, SmallBtn, SectionCard } from './settingsShared';
+import { Row, SmallBtn } from './settingsShared';
 
 type Props = {
   workshopId: string;
@@ -28,12 +28,17 @@ type Props = {
   onManageFiles: () => void;
 };
 
+// Pseudo-identifiant du groupe « sans chapitre » dans la colonne de sélection —
+// distinct de `null` (qui, lui, signifie « aucune sélection », cas atteint
+// seulement à zéro chapitre ET zéro notion non rangée).
+const UNASSIGNED = '__unassigned__' as const;
+
 const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '9px 12px',
   borderRadius: 9,
-  border: `1px solid ${ink(0.14)}`,
-  background: palette.paper,
+  border: `1px solid ${palette.lineStrong}`,
+  background: palette.surfaceInput,
   color: palette.ink,
   fontSize: 13,
   fontFamily: 'inherit',
@@ -65,7 +70,7 @@ function NotionForm({
   const [chapterId, setChapterId] = useState<string>(initialChapterId ?? '');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 0' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px' }}>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -116,6 +121,14 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
   const [editingChapterName, setEditingChapterName] = useState('');
   const [chapterSaving, setChapterSaving] = useState(false);
   const [chapterDeleteTarget, setChapterDeleteTarget] = useState<Chapter | null>(null);
+
+  // Colonne de droite : chapitre sélectionné (deux colonnes, lignes 1717-1786 de
+  // la maquette). `UNASSIGNED` sélectionne le groupe « sans chapitre » — un cas
+  // que la maquette ne modélise pas (ses notions vivent toujours dans un
+  // chapitre), mais qu'on doit garder accessible pour ne rien casser côté réel.
+  const [selectedChapterId, setSelectedChapterId] = useState<string | typeof UNASSIGNED | null>(
+    initialChapters[0]?.id ?? (initialNotions.some((n) => !n.chapterId) ? UNASSIGNED : null)
+  );
 
   // ─── Notions ──────────────────────────────────────────────────────────────
 
@@ -186,6 +199,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
       setChapters((prev) => [...prev, chapter]);
       setChapterName('');
       setAddingChapter(false);
+      setSelectedChapterId(chapter.id);
     } else {
       setError(result.error ?? t('err.save'));
     }
@@ -217,6 +231,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
       // Les notions du chapitre ne sont pas supprimées : elles retombent dans
       // « sans chapitre » (FK en `on delete set null`).
       setNotions((prev) => prev.map((n) => (n.chapterId === target.id ? { ...n, chapterId: null } : n)));
+      if (selectedChapterId === target.id) setSelectedChapterId(UNASSIGNED);
     } else {
       setError(result.error ?? t('err.delete'));
     }
@@ -241,17 +256,21 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
 
   // ─── Rendu ────────────────────────────────────────────────────────────────
 
-  // Notions groupées par chapitre, dans l'ordre des chapitres ; les notions non
-  // rangées ferment la liste.
-  const groups: Array<{ chapter: Chapter | null; items: Notion[] }> = [
-    ...chapters.map((chapter) => ({ chapter, items: notions.filter((n) => n.chapterId === chapter.id) })),
-    { chapter: null, items: notions.filter((n) => !n.chapterId || !chapters.some((c) => c.id === n.chapterId)) },
-  ];
+  const unassignedNotions = notions.filter((n) => !n.chapterId || !chapters.some((c) => c.id === n.chapterId));
+  const showUnassignedEntry = unassignedNotions.length > 0 || selectedChapterId === UNASSIGNED;
+  const activeNotions = selectedChapterId === UNASSIGNED
+    ? unassignedNotions
+    : notions.filter((n) => n.chapterId === selectedChapterId);
+  // Rien à gérer nulle part : ni chapitre, ni notion non rangée — état vide
+  // fidèle à la maquette (lignes 1780-1782). Dans tous les autres cas (au
+  // moins un chapitre, ou des notions sans chapitre à retrouver), la colonne
+  // de droite reste utilisable même à zéro chapitre.
+  const nothingToManage = chapters.length === 0 && unassignedNotions.length === 0;
 
-  function renderNotion(notion: Notion, index: number) {
+  function renderNotionRow(notion: Notion) {
     if (editingId === notion.id) {
       return (
-        <div key={notion.id} style={{ display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${ink(0.06)}` }}>
+        <div key={notion.id} style={{ display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${palette.line}` }}>
           <NotionForm
             initialTitle={notion.title}
             initialContent={notion.content ?? ''}
@@ -261,7 +280,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
             onSave={(title, content, chapterId) => handleUpdate(notion.id, title, content, chapterId)}
             onCancel={() => setEditingId(null)}
           />
-          <div style={{ display: 'flex', justifyContent: 'flex-start', paddingBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-start', padding: '0 14px 12px' }}>
             <SmallBtn tone="danger" onClick={() => setDeleteTarget(notion)} disabled={saving}>
               {t('notions.delete')}
             </SmallBtn>
@@ -271,12 +290,9 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
     }
 
     return (
-      <div key={notion.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderBottom: `1px solid ${ink(0.06)}` }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: '#b8b1a6', fontFamily: 'ui-monospace, monospace', width: 24, flexShrink: 0 }}>
-          {String(index + 1).padStart(2, '0')}
-        </div>
+      <div key={notion.id} style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 44, padding: '8px 14px', borderBottom: `1px solid ${palette.line}` }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {notion.title}
           </div>
           {notion.content && (
@@ -285,157 +301,223 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
             </div>
           )}
         </div>
-        <SmallBtn tone="ghost" onClick={() => { setEditingId(notion.id); setAdding(false); setError(''); }}>
-          {t('notions.edit')}
-        </SmallBtn>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+          <button
+            onClick={() => { setEditingId(notion.id); setAdding(false); setError(''); }}
+            title={t('notions.edit')}
+            style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
+          >
+            <Pencil size={15} strokeWidth={1.75} />
+          </button>
+          <button
+            onClick={() => setDeleteTarget(notion)}
+            title={t('notions.delete')}
+            style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
+          >
+            <Trash2 size={15} strokeWidth={1.75} />
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
     <>
-      {/* ── Chapitres ── */}
-      <SectionCard title={t('chapters.title')} description={t('chapters.desc')}>
-        {chapters.length === 0 && !addingChapter && (
-          <div style={{ fontSize: 12.5, color: palette.inkFaint, padding: '16px 0', textAlign: 'center' }}>
-            {t('chapters.empty')}
-          </div>
-        )}
-
-        {chapters.map((chapter, i) => (
-          <div key={chapter.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderBottom: `1px solid ${ink(0.06)}` }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <button
-                onClick={() => moveChapter(i, -1)}
-                disabled={i === 0}
-                title={t('chapters.moveUp')}
-                style={{ border: 'none', background: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? ink(0.14) : palette.inkMuted, padding: 0, display: 'flex' }}
-              >
-                <ChevronUp size={14} />
-              </button>
-              <button
-                onClick={() => moveChapter(i, 1)}
-                disabled={i === chapters.length - 1}
-                title={t('chapters.moveDown')}
-                style={{ border: 'none', background: 'none', cursor: i === chapters.length - 1 ? 'default' : 'pointer', color: i === chapters.length - 1 ? ink(0.14) : palette.inkMuted, padding: 0, display: 'flex' }}
-              >
-                <ChevronDown size={14} />
-              </button>
-            </div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#b8b1a6', fontFamily: 'ui-monospace, monospace', width: 24, flexShrink: 0 }}>
-              {String(i + 1).padStart(2, '0')}
-            </div>
-            {editingChapterId === chapter.id ? (
-              <>
-                <input
-                  value={editingChapterName}
-                  onChange={(e) => setEditingChapterName(e.target.value)}
-                  maxLength={120}
-                  autoFocus
-                  style={{ ...inputStyle, flex: 1 }}
-                />
-                <SmallBtn tone="ghost" onClick={() => setEditingChapterId(null)} disabled={chapterSaving}>{t('notions.cancel')}</SmallBtn>
-                <SmallBtn tone="dark" onClick={() => handleRenameChapter(chapter.id)} disabled={chapterSaving || !editingChapterName.trim()}>{t('notions.save')}</SmallBtn>
-              </>
-            ) : (
-              <>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chapter.name}</div>
-                  <div style={{ fontSize: 11.5, color: palette.inkFaint, marginTop: 2 }}>{t('notions.count', { count: chapter.notionCount })}</div>
-                </div>
-                <SmallBtn tone="ghost" onClick={() => { setEditingChapterId(chapter.id); setEditingChapterName(chapter.name); setError(''); }}>
-                  {t('chapters.rename')}
-                </SmallBtn>
-                <SmallBtn tone="danger" onClick={() => setChapterDeleteTarget(chapter)}>{t('notions.delete')}</SmallBtn>
-              </>
-            )}
-          </div>
-        ))}
-
-        {addingChapter && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0' }}>
-            <input
-              value={chapterName}
-              onChange={(e) => setChapterName(e.target.value)}
-              placeholder={t('chapters.namePlaceholder')}
-              maxLength={120}
-              autoFocus
-              style={{ ...inputStyle, flex: 1 }}
-            />
-            <SmallBtn tone="ghost" onClick={() => { setAddingChapter(false); setChapterName(''); }} disabled={chapterSaving}>{t('notions.cancel')}</SmallBtn>
-            <SmallBtn tone="dark" onClick={handleCreateChapter} disabled={chapterSaving || !chapterName.trim()}>{t('notions.save')}</SmallBtn>
-          </div>
-        )}
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, borderTop: `1px solid ${ink(0.06)}`, marginTop: 4, paddingBottom: 10 }}>
-          <span style={{ fontSize: 12, color: palette.inkFaint }}>{t('chapters.count', { count: chapters.length })}</span>
-          {!addingChapter && (
-            <SmallBtn tone="ghost" onClick={() => { setAddingChapter(true); setError(''); }}>{t('chapters.add')}</SmallBtn>
-          )}
-        </div>
-      </SectionCard>
-
-      {/* ── Notions ── */}
-      <SectionCard title={t('notions.title')} description={t('notions.desc')}>
-        <Row label={t('notions.sourceFiles')} noBorder={false}>
+      {/* ── En-tête + fichiers source (fonction réelle, absente de la maquette) ── */}
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 12.5, color: palette.inkFaint, marginBottom: 10 }}>{t('notions.desc')}</div>
+        <Row label={t('notions.sourceFiles')} noBorder>
           <div style={{ display: 'flex', gap: 8 }}>
             <SmallBtn tone="ghost" onClick={onManageFiles}>{t('notions.manageFiles')}</SmallBtn>
             {/* Placeholder : la génération par IA arrive avec le module générateur */}
             <SmallBtn tone="dark" disabled>{t('notions.regenAI')}</SmallBtn>
           </div>
         </Row>
+      </div>
 
-        {error && (
-          <div style={{ fontSize: 12, color: palette.danger, padding: '10px 0', borderBottom: `1px solid ${ink(0.06)}` }}>{error}</div>
-        )}
+      {error && (
+        <div style={{ fontSize: 12.5, color: palette.danger, padding: '2px 0 12px' }}>{error}</div>
+      )}
 
-        <div style={{ marginTop: 4 }}>
-          {notions.length === 0 && !adding && (
-            <div style={{ fontSize: 12.5, color: palette.inkFaint, padding: '16px 0', textAlign: 'center' }}>
-              {t('notions.empty')}
+      {nothingToManage ? (
+        <div style={{ background: palette.cream, border: `1.5px dashed ${palette.lineStrong}`, borderRadius: 16, padding: '34px 24px', textAlign: 'center', fontSize: 13.5, color: palette.inkMuted }}>
+          {t('notions.needChapterHint')}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-[0.85fr_1.45fr]" style={{ gap: 16, alignItems: 'start' }}>
+          {/* ── Colonne Chapitres ── */}
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: palette.ink, padding: '0 2px' }}>
+              {t('chapters.title')}
             </div>
-          )}
-
-          {notions.length > 0 && groups.map(({ chapter, items }) => {
-            // On masque le groupe « sans chapitre » quand il est vide, mais on
-            // garde un chapitre vide visible (il existe, il a juste 0 notion).
-            if (!chapter && items.length === 0) return null;
-            return (
-              <div key={chapter?.id ?? 'unassigned'}>
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: palette.inkSoft, padding: '14px 0 6px' }}>
-                  {chapter ? chapter.name : t('notions.noChapter')}
+            <div style={{ fontSize: 12, color: palette.inkFaint, padding: '2px 2px 8px' }}>{t('chapters.desc')}</div>
+            <div style={{ background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 14, boxShadow: shadow.sm, overflow: 'hidden' }}>
+              {addingChapter ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: `1px solid ${palette.line}` }}>
+                  <input
+                    value={chapterName}
+                    onChange={(e) => setChapterName(e.target.value)}
+                    placeholder={t('chapters.namePlaceholder')}
+                    maxLength={120}
+                    autoFocus
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <SmallBtn tone="ghost" onClick={() => { setAddingChapter(false); setChapterName(''); }} disabled={chapterSaving}>{t('notions.cancel')}</SmallBtn>
+                  <SmallBtn tone="dark" onClick={handleCreateChapter} disabled={chapterSaving || !chapterName.trim()}>{t('notions.save')}</SmallBtn>
                 </div>
-                {items.length === 0 ? (
-                  <div style={{ fontSize: 12, color: palette.inkFaint, padding: '6px 0 10px' }}>{t('notions.emptyChapter')}</div>
-                ) : (
-                  items.map((notion, i) => renderNotion(notion, i))
-                )}
-              </div>
-            );
-          })}
+              ) : (
+                <button
+                  onClick={() => { setAddingChapter(true); setError(''); }}
+                  className="hover:bg-[var(--green-tint)]"
+                  style={{ width: '100%', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', border: 'none', borderBottom: `1px solid ${palette.line}`, background: 'transparent', color: palette.greenBrand, fontSize: 13.5, fontWeight: 600 }}
+                >
+                  <Plus size={16} strokeWidth={2} />
+                  {t('chapters.add')}
+                </button>
+              )}
 
-          {adding && (
-            <NotionForm
-              initialTitle=""
-              initialContent=""
-              initialChapterId={null}
-              chapters={chapters}
-              saving={saving}
-              onSave={handleCreate}
-              onCancel={() => setAdding(false)}
-            />
-          )}
-        </div>
+              {chapters.length === 0 && (
+                <div style={{ padding: '18px 14px', textAlign: 'center', fontSize: 12.5, color: palette.inkFaint }}>
+                  {t('chapters.empty')}
+                </div>
+              )}
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, borderTop: `1px solid ${ink(0.06)}`, marginTop: 4, paddingBottom: 10 }}>
-          <span style={{ fontSize: 12, color: palette.inkFaint }}>{t('notions.count', { count: notions.length })}</span>
-          {!adding && (
-            <SmallBtn tone="ghost" onClick={() => { setAdding(true); setEditingId(null); setError(''); }}>
-              {t('notions.add')}
-            </SmallBtn>
-          )}
+              {chapters.map((chapter, i) => {
+                const isActive = selectedChapterId === chapter.id;
+                if (editingChapterId === chapter.id) {
+                  return (
+                    <div key={chapter.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: i < chapters.length - 1 || showUnassignedEntry ? `1px solid ${palette.line}` : 'none' }}>
+                      <input
+                        value={editingChapterName}
+                        onChange={(e) => setEditingChapterName(e.target.value)}
+                        maxLength={120}
+                        autoFocus
+                        style={{ ...inputStyle, flex: 1 }}
+                      />
+                      <SmallBtn tone="ghost" onClick={() => setEditingChapterId(null)} disabled={chapterSaving}>{t('notions.cancel')}</SmallBtn>
+                      <SmallBtn tone="dark" onClick={() => handleRenameChapter(chapter.id)} disabled={chapterSaving || !editingChapterName.trim()}>{t('notions.save')}</SmallBtn>
+                    </div>
+                  );
+                }
+                return (
+                  <div
+                    key={chapter.id}
+                    onClick={() => setSelectedChapterId(chapter.id)}
+                    style={{
+                      position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minHeight: 44,
+                      padding: '8px 14px 8px 17px', cursor: 'pointer',
+                      borderBottom: i < chapters.length - 1 || showUnassignedEntry ? `1px solid ${palette.line}` : 'none',
+                      background: isActive ? palette.surfaceSunken : 'transparent',
+                    }}
+                  >
+                    <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: isActive ? palette.green : 'transparent' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); moveChapter(i, -1); }}
+                        disabled={i === 0}
+                        title={t('chapters.moveUp')}
+                        style={{ border: 'none', background: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? palette.inkFaint : palette.inkMuted, padding: 0, display: 'flex' }}
+                      >
+                        <ChevronUp size={13} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); moveChapter(i, 1); }}
+                        disabled={i === chapters.length - 1}
+                        title={t('chapters.moveDown')}
+                        style={{ border: 'none', background: 'none', cursor: i === chapters.length - 1 ? 'default' : 'pointer', color: i === chapters.length - 1 ? palette.inkFaint : palette.inkMuted, padding: 0, display: 'flex' }}
+                      >
+                        <ChevronDown size={13} />
+                      </button>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: isActive ? 700 : 600, color: isActive ? palette.greenBrand : palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {chapter.name}
+                      </div>
+                      <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 1 }}>
+                        {t('notions.count', { count: chapter.notionCount })}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setEditingChapterId(chapter.id); setEditingChapterName(chapter.name); setError(''); }}
+                        title={t('chapters.rename')}
+                        style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
+                      >
+                        <Pencil size={15} strokeWidth={1.75} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setChapterDeleteTarget(chapter); }}
+                        title={t('notions.delete')}
+                        style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
+                      >
+                        <Trash2 size={15} strokeWidth={1.75} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {showUnassignedEntry && (
+                <div
+                  onClick={() => setSelectedChapterId(UNASSIGNED)}
+                  style={{
+                    position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minHeight: 44,
+                    padding: '8px 14px 8px 17px', cursor: 'pointer',
+                    background: selectedChapterId === UNASSIGNED ? palette.surfaceSunken : 'transparent',
+                  }}
+                >
+                  <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: selectedChapterId === UNASSIGNED ? palette.green : 'transparent' }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: selectedChapterId === UNASSIGNED ? 700 : 600, color: selectedChapterId === UNASSIGNED ? palette.greenBrand : palette.inkMuted, fontStyle: 'italic' }}>
+                      {t('notions.noChapter')}
+                    </div>
+                    <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 1 }}>
+                      {t('notions.count', { count: unassignedNotions.length })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Colonne Notions du chapitre sélectionné ── */}
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: palette.ink, padding: '0 2px 8px' }}>
+              {t('notions.title')}
+            </div>
+            <div style={{ background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 14, boxShadow: shadow.sm, overflow: 'hidden' }}>
+              <button
+                onClick={() => { setAdding(true); setEditingId(null); setError(''); }}
+                className="hover:bg-[var(--green-tint)]"
+                style={{ width: '100%', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', border: 'none', borderBottom: `1px solid ${palette.line}`, background: 'transparent', color: palette.greenBrand, fontSize: 13.5, fontWeight: 600 }}
+              >
+                <Plus size={16} strokeWidth={2} />
+                {t('notions.add')}
+              </button>
+
+              {adding && (
+                <NotionForm
+                  initialTitle=""
+                  initialContent=""
+                  initialChapterId={selectedChapterId === UNASSIGNED ? null : selectedChapterId}
+                  chapters={chapters}
+                  saving={saving}
+                  onSave={handleCreate}
+                  onCancel={() => setAdding(false)}
+                />
+              )}
+
+              {activeNotions.length === 0 ? (
+                <div style={{ padding: '22px 20px', textAlign: 'center', fontSize: 13, color: palette.inkMuted }}>
+                  {t('notions.emptyChapter')}
+                </div>
+              ) : (
+                activeNotions.map((notion) => renderNotionRow(notion))
+              )}
+            </div>
+          </div>
         </div>
-      </SectionCard>
+      )}
 
       {deleteTarget && (
         <ConfirmDialog
