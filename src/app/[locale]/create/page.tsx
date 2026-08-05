@@ -15,7 +15,7 @@ export default function CreatePage() {
   const t = useTranslations('createWorkshop');
 
   return (
-    <div className="min-h-[calc(100vh-65px)] bg-cream font-sans">
+    <div className="min-h-[calc(100vh-60px)] bg-cream font-sans">
       <div className="max-w-5xl mx-auto px-6 py-8">
         {/* breadcrumb + header */}
         <div className="text-[11px] text-ink-soft mb-1">

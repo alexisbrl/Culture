@@ -11,7 +11,14 @@
     "profile": "Mon profil",
     "goPremium": "Passer Premium ✨",
     "signOut": "Se déconnecter",
-    "switchTo": "Passer en {locale}"
+    "switchTo": "Passer en {locale}",
+    "tabJardin": "jardin",
+    "tabParcours": "parcours",
+    "tabExamens": "examens",
+    "tabCours": "cours",
+    "tabProfil": "profil",
+    "changeWorkshop": "changer d'atelier",
+    "workshopSettings": "paramètres de l'atelier"
   },
   "hero": {
     "badge": "Bêta en cours · Rejoignez les pionniers",
@@ -828,12 +835,6 @@
   },
   "workshop": {
     "breadcrumbGarden": "jardin",
-    "tabs": {
-      "programme": "Programme éducatif",
-      "examen": "Génération d'examen",
-      "analyse": "Analyse",
-      "cours": "Génération de cours"
-    },
     "shareBtn": "partager · QR",
     "settingsLink": "paramètres",
     "role": {

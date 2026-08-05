@@ -230,7 +230,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
       style={{
         fontFamily: 'var(--font-sans)',
         color: palette.ink,
-        minHeight: 'calc(100vh - 65px)',
+        minHeight: 'calc(100vh - 60px)',
         background: palette.cream,
         display: 'flex',
         cursor: 'default',
@@ -246,7 +246,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           padding: '22px 16px',
           position: 'sticky',
           top: 0,
-          height: 'calc(100vh - 65px)',
+          height: 'calc(100vh - 60px)',
           overflowY: 'auto',
           display: 'flex',
           flexDirection: 'column',

@@ -47,7 +47,7 @@ export default function AvatarEditorPage() {
   const catDef = CATS.find(c => c.key === activeCat)!;
 
   return (
-    <div style={{ fontFamily: 'var(--font-sans)', background: palette.cream, minHeight: 'calc(100vh - 65px)', padding: '24px 40px 40px', color: palette.ink }}>
+    <div style={{ fontFamily: 'var(--font-sans)', background: palette.cream, minHeight: 'calc(100vh - 60px)', padding: '24px 40px 40px', color: palette.ink }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         {/* Breadcrumb */}
         <div style={{ fontSize: 12, color: palette.inkFaint, marginBottom: 10 }}>

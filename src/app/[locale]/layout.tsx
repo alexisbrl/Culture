@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { Hanken_Grotesk, Geist_Mono } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
@@ -59,7 +60,13 @@ export default async function LocaleLayout({ children, params }: Props) {
         <body className="min-h-full flex flex-col bg-white">
           <NextIntlClientProvider messages={messages}>
             <SessionWatcher />
-            {isLoggedIn ? <DashboardHeader /> : <Navbar />}
+            {isLoggedIn ? (
+              <Suspense fallback={<div style={{ height: 60, borderBottom: '1px solid var(--line)', background: 'var(--surface-raised)' }} className="hidden md:block" />}>
+                <DashboardHeader />
+              </Suspense>
+            ) : (
+              <Navbar />
+            )}
             <main className="flex-1">{children}</main>
             {!isLoggedIn && <Footer />}
           </NextIntlClientProvider>

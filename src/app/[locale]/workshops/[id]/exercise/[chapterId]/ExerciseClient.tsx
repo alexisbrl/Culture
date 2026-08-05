@@ -112,7 +112,7 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     result?.correct === true ? palette.green : result?.correct === false ? palette.danger : palette.inkMuted;
 
   return (
-    <div style={{ minHeight: 'calc(100vh - 65px)', background: palette.cream, padding: '26px 22px 60px' }}>
+    <div style={{ minHeight: 'calc(100vh - 60px)', background: palette.cream, padding: '26px 22px 60px' }}>
       <div style={{ maxWidth: 720, margin: '0 auto' }}>
         <Link
           href={`/${locale}/workshops/${workshopId}`}

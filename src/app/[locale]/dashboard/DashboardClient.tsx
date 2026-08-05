@@ -324,7 +324,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
   }
 
   return (
-    <div className="relative min-h-[calc(100vh-65px)] bg-gradient-to-b from-[#eef6e2] via-[#e4efd4] to-[#d6e7cf] font-sans px-6 lg:px-10 py-8" style={{ color: palette.ink }}>
+    <div className="relative min-h-[calc(100vh-60px)] bg-gradient-to-b from-[#eef6e2] via-[#e4efd4] to-[#d6e7cf] font-sans px-6 lg:px-10 py-8" style={{ color: palette.ink }}>
       <div className="max-w-6xl mx-auto rounded-[20px] bg-cream/92 backdrop-blur-xl border border-ink/[0.07] shadow-[0_40px_90px_rgba(45,42,36,0.16)] flex flex-col">
         {/* header */}
         <div className="flex items-center justify-between px-7 pt-6">

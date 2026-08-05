@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { QrCode, Settings, LogOut } from 'lucide-react';
 import ShareQRModal from '@/components/ShareQRModal';
@@ -29,13 +29,6 @@ type Props = {
 
 type TabId = 'programme' | 'examen' | 'analyse' | 'cours';
 
-const TABS: { id: TabId; soon?: string }[] = [
-  { id: 'programme' },
-  { id: 'examen' },
-  { id: 'analyse', soon: 'V2' },
-  { id: 'cours', soon: 'V2' },
-];
-
 function Chip({ children, tone = 'default' }: { children: React.ReactNode; tone?: 'default' | 'amber' | 'sage' | 'dim' }) {
   const styles = {
     default: { bg: withAlpha(palette.paper, 0.7), border: ink(0.08), color: palette.ink },
@@ -53,10 +46,12 @@ function Chip({ children, tone = 'default' }: { children: React.ReactNode; tone?
 export default function WorkshopClient({ locale, workshopId, workshopName, currentUserRole, isPremium, members, chapters }: Props) {
   const t = useTranslations('workshop');
   const router = useRouter();
+  const searchParams = useSearchParams();
   // Propriétaire ou gestionnaire : accès aux onglets de gestion + paramètres.
   const canManage = currentUserRole === 'owner' || currentUserRole === 'manager';
-  const visibleTabs = canManage ? TABS : TABS.filter((t) => t.id === 'programme');
-  const [activeTab, setActiveTab] = useState<TabId>('programme');
+  // La navigation entre onglets vit désormais dans la barre du haut globale
+  // (DashboardHeader, T12) — cet onglet ne fait plus que lire l'URL (?tab=).
+  const activeTab = (searchParams.get('tab') as TabId | null) ?? 'programme';
 
   const [shareOpen, setShareOpen] = useState(false);
   const [joinUrl, setJoinUrl] = useState('');
@@ -127,16 +122,6 @@ export default function WorkshopClient({ locale, workshopId, workshopName, curre
               )}
             </div>
           </div>
-        </div>
-
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 26, padding: '14px 24px 0', borderBottom: `1px solid ${ink(0.08)}` }}>
-          {visibleTabs.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 0 12px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5, color: activeTab === tab.id ? palette.ink : palette.inkSoft, fontWeight: activeTab === tab.id ? 500 : 400, borderBottom: activeTab === tab.id ? '2px solid #a87a3a' : '2px solid transparent', marginBottom: -1 }}>
-              {t(`tabs.${tab.id}`)}
-              {tab.soon && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 999, background: withAlpha(palette.amber, 0.18), color: '#7a4d20', fontWeight: 600, letterSpacing: '0.04em' }}>{tab.soon}</span>}
-            </button>
-          ))}
         </div>
       </div>
 
