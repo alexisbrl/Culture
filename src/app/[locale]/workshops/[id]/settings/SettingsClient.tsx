@@ -632,7 +632,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
         {isOwner && (
           <div style={{ display: activeSection === 'premium' ? 'contents' : 'none' }}>
-            <PremiumSection workshopId={workshopId} isPremium={isPremium} />
+            <PremiumSection workshopId={workshopId} isPremium={isPremium} memberCount={members.length} />
           </div>
         )}
       </div>
