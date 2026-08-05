@@ -105,8 +105,10 @@ connectée.
   la maquette. Le contenu actuel d'`AnalyseTab.tsx` est retiré.
 - **Les écrans non maquettés de l'app connectée** (création d'atelier, éditeur
   d'avatar, page `session`) sont repeints aux tokens sans changement de mise en page.
-- **Validation d'une tâche : `npm run build` + `npm run lint`.** Pas de Playwright
-  (non installé), pas de capture. Alexis relit le rendu sur la PR.
+- **Validation d'une tâche : `npm run build` + `npm run lint` partout, plus une
+  vérification visuelle sur les tâches qui produisent un écran.** Pas de Playwright
+  (non installé), pas de capture archivée. Le détail est dans « Règles d'exécution »
+  ci-dessous — il **précise** l'étape 2.4 de `/chantier-run`, il ne la contredit pas.
 
 ## Hors périmètre
 
@@ -145,21 +147,40 @@ connectée.
    `tsc --noEmit` ne suffit pas (piège Turbopack, `CLAUDE.md` §1). `npm run lint`
    doit renvoyer **0 erreur** ; les warnings « React Compiler readiness » existants
    sont tolérés et ne doivent pas être « corrigés » en retirant un effet.
-3. **i18n obligatoire** : toute chaîne visible passe par next-intl, ajoutée dans
+   *(`docs/**` est exclu du lint : le bundle de maquette n'est pas une source.)*
+
+3. **Vérification visuelle — sur les tâches d'écran uniquement (T12 à T41).**
+   Précision de l'étape 2.4 de `/chantier-run`, décidée avec Alexis :
+   - **T1 à T11** (lexique, tokens, composants isolés) et **T42** (documentation) :
+     `build` + `lint` suffisent. Il n'y a pas d'écran à regarder — ne pas lancer le
+     serveur de dev pour rien.
+   - **T12 à T41** : lancer le serveur via `preview_start` (entrée `culture` de
+     `.claude/launch.json`), ouvrir la page concernée, la comparer à l'écran
+     correspondant de la maquette (table des lignes dans `docs/design/README.md`),
+     et vérifier que la console ne contient aucune erreur. **Une tâche d'écran n'est
+     pas terminée tant que le rendu n'a pas été vu.**
+   - **Repli si la page est inatteignable** — la plupart des écrans sont derrière
+     l'authentification Clerk et une session n'est pas garantie en autonomie. Si la
+     page ne peut pas être ouverte pour cette raison (ou si le serveur de dev refuse
+     de démarrer), **ne pas y consacrer deux tentatives** : se rabattre sur
+     `build` + `lint`, terminer la tâche, et le noter dans le journal (« rendu non
+     vérifié — page derrière l'authentification »). Alexis relira ces écrans-là sur
+     la PR.
+4. **i18n obligatoire** : toute chaîne visible passe par next-intl, ajoutée dans
    `messages/fr.json` **et** `messages/en.json`. Jamais de chaîne en dur.
    Routine détaillée : `.claude/rules/i18n.md`.
-4. **Icônes : `lucide-react` uniquement.** La maquette contient des SVG Lucide
+5. **Icônes : `lucide-react` uniquement.** La maquette contient des SVG Lucide
    inline — les remplacer par le composant Lucide correspondant, jamais recopier le
    SVG. Épaisseur de trait 1,75 ; tailles 16 px en ligne de texte, 18–20 px dans les
    boutons et la nav, 22–24 px isolées. **Zéro emoji en guise d'icône.**
-5. **Aucune couleur, ombre, rayon ou espacement hors tokens.** Pas de hex en dur
+6. **Aucune couleur, ombre, rayon ou espacement hors tokens.** Pas de hex en dur
    dans un `style={{}}` — passer par `src/lib/theme.ts` ou une variable CSS.
-6. **Cocher la tâche** dans ce fichier, ajouter une ligne au **Journal**, et inclure
+7. **Cocher la tâche** dans ce fichier, ajouter une ligne au **Journal**, et inclure
    cette mise à jour dans le commit de la tâche.
-7. **En cas d'ambiguïté : décider, documenter, continuer.** Consigner l'arbitrage
+8. **En cas d'ambiguïté : décider, documenter, continuer.** Consigner l'arbitrage
    dans « Décisions prises en autonomie ». Ne jamais s'arrêter pour attendre une
    réponse.
-8. **Après 2 échecs sur une tâche, l'abandonner**, la consigner dans « Tâches
+9. **Après 2 échecs sur une tâche, l'abandonner**, la consigner dans « Tâches
    bloquées » avec le motif, et passer à la suivante.
 
 ### Le mode dense (écrans experts)
