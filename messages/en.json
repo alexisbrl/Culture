@@ -555,6 +555,8 @@
       "incompleteTooltip": "incomplete question - click to complete",
       "removeFromList": "remove from list",
       "settings": "settings",
+      "customize": "customize",
+      "done": "done",
       "label": "title",
       "show": "show",
       "presentation": "presentation",

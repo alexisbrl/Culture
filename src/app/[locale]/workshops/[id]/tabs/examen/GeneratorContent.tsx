@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { Check, Star, RefreshCw, SeparatorHorizontal, AlertTriangle } from 'lucide-react';
-import { palette, ink, withAlpha } from '@/lib/theme';
+import { Check, ChevronDown, ChevronUp, Star, RefreshCw, SeparatorHorizontal, SlidersHorizontal, AlertTriangle } from 'lucide-react';
+import { palette, ink, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { type Question } from '../QuestionEditor';
 import {
@@ -47,6 +47,10 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
   const [favoritePresentation, setFavoritePresentation] = useState<ExamPresentation>(defaultPresentation());
   const [confirmApplyFavoriteOpen, setConfirmApplyFavoriteOpen] = useState(false);
   const [confirmSaveFavoriteOpen, setConfirmSaveFavoriteOpen] = useState(false);
+  // Bouton « personnaliser »/« terminer » de la maquette (toggleHdr/hdrOpen,
+  // ligne 939) — replié par défaut dans la maquette, mais gardé ouvert ici par
+  // défaut pour ne rien masquer d'une fonctionnalité déjà visible avant T37.
+  const [hdrOpen, setHdrOpen] = useState(true);
 
   useEffect(() => {
     setFavoritePresentation(getFavoritePresentation());
@@ -271,12 +275,12 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
       {editing && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: withAlpha(palette.amberGlow, 0.18), border: `1px solid ${withAlpha(palette.amber, 0.35)}`, marginBottom: 14, flexShrink: 0 }}>
           <span style={{ fontSize: 14, color: palette.amber }}>✎</span>
-          <div style={{ flex: 1, fontSize: 12.5, color: '#3a352c' }}>{t('generator.editingPrefix')} <b style={{ fontWeight: 600 }}>{editing.title}</b></div>
-          <button onClick={onCancelEdit} style={{ fontSize: 11.5, color: '#7a4d20', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{t('generator.cancelEdit')}</button>
+          <div style={{ flex: 1, fontSize: 12.5, color: palette.ink }}>{t('generator.editingPrefix')} <b style={{ fontWeight: 600 }}>{editing.title}</b></div>
+          <button onClick={onCancelEdit} style={{ fontSize: 11.5, color: palette.amberLight, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{t('generator.cancelEdit')}</button>
         </div>
       )}
       <div style={{ display: 'flex', gap: 16, alignItems: 'stretch', flex: 1, minHeight: 0 }}>
-        <div style={{ width: 230, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, borderRight: `1px solid ${ink(0.08)}`, paddingRight: 16, overflowY: 'auto', minHeight: 0 }}>
+        <div style={{ width: 230, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, borderRight: `1px solid ${palette.line}`, paddingRight: 16, overflowY: 'auto', minHeight: 0 }}>
           <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft }}>{t('generator.sentQuestions')}</div>
           <div style={{ fontSize: 11, color: palette.inkFaint, marginBottom: 4 }}>{t('generator.checkToAdd')}</div>
           {available.length === 0 && <div style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: palette.amber }}>{t('generator.sendFromBank')}</div>}
@@ -284,14 +288,14 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
             const included = includedIds.includes(q.id);
             const incomplete = hasNoAnswer(q) || !q.content.trim();
             return (
-              <div key={q.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 9px', borderRadius: 8, background: included ? withAlpha(palette.green, 0.08) : withAlpha(palette.paper, 0.7), border: `1px solid ${ink(0.06)}` }}>
+              <div key={q.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 9px', borderRadius: 8, background: included ? withAlpha(palette.green, 0.08) : palette.surfaceRaised, border: `1px solid ${palette.line}` }}>
                 <input type="checkbox" checked={included} onChange={() => toggleAvailable(q.id)} style={{ marginTop: 2, flexShrink: 0, accentColor: palette.green }} />
                 {incomplete && (
                   <button onClick={() => onOpenQuestion(q.id)} title={t('generator.incompleteTooltip')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 17, height: 17, borderRadius: '50%', border: `1px solid ${withAlpha(palette.danger, 0.35)}`, background: withAlpha(palette.danger, 0.10), color: palette.danger, cursor: 'pointer', padding: 0, flexShrink: 0, alignSelf: 'flex-start' }}><AlertTriangle size={10} strokeWidth={2} /></button>
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, color: '#3a352c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.title.trim() || q.content || t('noStatement')}</div>
-                  {q.parts.length > 0 && <span style={{ fontSize: 10.5, color: '#7a4d20' }}>{t('generator.parts', { count: q.parts.length + 1 })}</span>}
+                  <div style={{ fontSize: 12, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.title.trim() || q.content || t('noStatement')}</div>
+                  {q.parts.length > 0 && <span style={{ fontSize: 10.5, color: palette.amberLight }}>{t('generator.parts', { count: q.parts.length + 1 })}</span>}
                 </div>
                 <span onClick={() => requestRemoveFromDraft(q.id)} title={t('generator.removeFromList')} style={{ fontSize: 14, color: palette.danger, cursor: 'pointer', flexShrink: 0 }}>×</span>
               </div>
@@ -300,16 +304,32 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
         </div>
 
         <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', minHeight: 0, paddingRight: 24, boxSizing: 'border-box' as const }}>
-          <div style={{ background: ink(0.03), borderRadius: 10, padding: 12, marginBottom: 16 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft, marginBottom: 8 }}>{t('generator.settings')}</div>
+          <div style={{ background: palette.surfaceSunken, borderRadius: 10, padding: 12, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: hdrOpen ? 8 : 0 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: palette.inkSoft }}>{t('generator.settings')}</div>
+              {/* « personnaliser »/« terminer » (toggleHdr/hdrOpen de la maquette, ligne 939) —
+                  replie le titre/les pilules d'identité/les champs personnalisés ; les
+                  statistiques (sections/questions/barème/durée) restent toujours visibles. */}
+              <button
+                type="button"
+                onClick={() => setHdrOpen(v => !v)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600, color: palette.inkMuted, background: palette.surfaceRaised, border: `1px solid ${palette.lineStrong}`, borderRadius: 999, padding: '6px 12px', cursor: 'pointer', fontFamily: 'inherit', boxShadow: shadow.sm }}
+              >
+                <SlidersHorizontal size={13} strokeWidth={1.75} />
+                {hdrOpen ? t('generator.done') : t('generator.customize')}
+                {hdrOpen ? <ChevronUp size={13} strokeWidth={1.75} /> : <ChevronDown size={13} strokeWidth={1.75} />}
+              </button>
+            </div>
 
+            {hdrOpen && (
+            <>
             <div style={{ fontSize: 11, color: palette.inkMuted, marginBottom: 6 }}>{t('generator.label')}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <input value={config.title} onChange={e => patchConfig({ title: e.target.value })} style={{ flex: 1, fontSize: 15, fontWeight: 500, color: palette.ink, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '10px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
+              <input value={config.title} onChange={e => patchConfig({ title: e.target.value })} style={{ flex: 1, fontSize: 15, fontWeight: 500, color: palette.ink, border: `1px solid ${palette.lineStrong}`, borderRadius: 9, padding: '10px 12px', background: palette.surfaceInput, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
               <button
                 type="button"
                 onClick={() => patchConfig({ titleIncluded: !config.titleIncluded })}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '9px 14px', borderRadius: 999, border: config.titleIncluded ? '1px solid rgba(79,107,64,0.35)' : `1px solid ${ink(0.14)}`, background: config.titleIncluded ? withAlpha(palette.green, 0.14) : 'transparent', color: config.titleIncluded ? palette.green : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' as const }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '9px 14px', borderRadius: 999, border: config.titleIncluded ? `1px solid ${palette.greenSoft}` : `1px solid ${palette.lineStrong}`, background: config.titleIncluded ? withAlpha(palette.green, 0.14) : 'transparent', color: config.titleIncluded ? palette.green : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' as const }}
               >
                 {config.titleIncluded && <Check size={13} strokeWidth={2.5} />}
                 {t('generator.show')}
@@ -323,7 +343,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                   type="button"
                   onClick={() => setConfirmApplyFavoriteOpen(true)}
                   title={t('generator.applyFavorite')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '5px 10px', borderRadius: 999, border: `1px solid ${withAlpha(palette.amber, 0.30)}`, background: withAlpha(palette.amberGlow, 0.14), color: '#7a4d20', cursor: 'pointer', fontFamily: 'inherit' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '5px 10px', borderRadius: 999, border: `1px solid ${withAlpha(palette.amber, 0.30)}`, background: withAlpha(palette.amberGlow, 0.14), color: palette.amberLight, cursor: 'pointer', fontFamily: 'inherit' }}
                 >
                   <Star size={11.5} strokeWidth={2} fill={palette.amber} color={palette.amber} />
                   {t('generator.favorite')}
@@ -332,7 +352,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                   type="button"
                   onClick={() => setConfirmSaveFavoriteOpen(true)}
                   title={t('generator.replaceFavorite')}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: `1px solid ${ink(0.12)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', padding: 0 }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: `1px solid ${palette.lineStrong}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', padding: 0 }}
                 >
                   <RefreshCw size={12} strokeWidth={2} />
                 </button>
@@ -344,7 +364,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                   key={side}
                   onDragOver={e => { e.preventDefault(); if (draggingIdentityKey && sideOfItem(draggingIdentityKey) === side) moveIdentity(draggingIdentityKey, side); }}
                   onDrop={e => { e.preventDefault(); if (draggingIdentityKey) moveIdentity(draggingIdentityKey, side); }}
-                  style={{ flex: 1, minHeight: 44, border: `1px dashed ${ink(0.18)}`, borderRadius: 9, padding: 8, display: 'flex', flexWrap: 'wrap' as const, alignContent: 'flex-start' as const, gap: 6 }}
+                  style={{ flex: 1, minHeight: 44, border: `1px dashed ${palette.lineStrong}`, borderRadius: 9, padding: 8, display: 'flex', flexWrap: 'wrap' as const, alignContent: 'flex-start' as const, gap: 6 }}
                 >
                   <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em', width: '100%' }}>{side === 'left' ? t('generator.left') : t('generator.right')}</div>
                   {identityOrder.filter(id => sideOfItem(id) === side).map(id => {
@@ -373,7 +393,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
             <div
               onDragOver={e => { e.preventDefault(); if (draggingIdentityKey && sideOfItem(draggingIdentityKey) === 'hidden') moveIdentity(draggingIdentityKey, 'hidden'); }}
               onDrop={e => { e.preventDefault(); if (draggingIdentityKey) moveIdentity(draggingIdentityKey, 'hidden'); }}
-              style={{ minHeight: 36, border: `1px dashed ${ink(0.14)}`, borderRadius: 9, padding: 8, display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 6, marginBottom: 14 }}
+              style={{ minHeight: 36, border: `1px dashed ${palette.line}`, borderRadius: 9, padding: 8, display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 6, marginBottom: 14 }}
             >
               <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em', width: '100%' }}>{t('generator.notShown')}</div>
               {identityOrder.filter(id => sideOfItem(id) === 'hidden').map(id => {
@@ -386,7 +406,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                     onDragEnd={() => setDraggingIdentityKey(null)}
                     onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (draggingIdentityKey && draggingIdentityKey !== id && sideOfItem(draggingIdentityKey) === 'hidden') moveIdentity(draggingIdentityKey, 'hidden', id); }}
                     onDrop={e => { e.preventDefault(); e.stopPropagation(); if (draggingIdentityKey && draggingIdentityKey !== id) moveIdentity(draggingIdentityKey, 'hidden', id); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, padding: removable ? '5px 6px 5px 11px' : '5px 11px', borderRadius: 999, border: `1px solid ${ink(0.14)}`, background: 'transparent', color: palette.inkFaint, cursor: 'grab', opacity: draggingIdentityKey === id ? 0.4 : 1 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, padding: removable ? '5px 6px 5px 11px' : '5px 11px', borderRadius: 999, border: `1px solid ${palette.line}`, background: 'transparent', color: palette.inkFaint, cursor: 'grab', opacity: draggingIdentityKey === id ? 0.4 : 1 }}
                   >
                     <span style={{ color: palette.inkFaint, fontSize: 11 }}>⠿</span>
                     {labelOfItem(id)}
@@ -404,36 +424,38 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                     onChange={e => setNewFieldName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomField(); } if (e.key === 'Escape') { setCreatingCustomField(false); setNewFieldName(''); } }}
                     placeholder={t('generator.customFieldPlaceholder')}
-                    style={{ fontSize: 11.5, padding: '5px 9px', borderRadius: 999, border: `1px solid ${ink(0.18)}`, background: palette.paper, fontFamily: 'inherit', outline: 'none', width: 140 }}
+                    style={{ fontSize: 11.5, padding: '5px 9px', borderRadius: 999, border: `1px solid ${palette.lineStrong}`, background: palette.surfaceInput, fontFamily: 'inherit', outline: 'none', width: 140, color: palette.ink }}
                   />
-                  <button type="button" onClick={addCustomField} style={{ fontSize: 11.5, padding: '5px 10px', borderRadius: 999, border: 'none', background: palette.green, color: palette.paper, cursor: 'pointer', fontFamily: 'inherit' }}>{t('add')}</button>
+                  <button type="button" onClick={addCustomField} style={{ fontSize: 11.5, padding: '5px 10px', borderRadius: 999, border: 'none', background: palette.green, color: palette.onGreen, cursor: 'pointer', fontFamily: 'inherit' }}>{t('add')}</button>
                   <button type="button" onClick={() => { setCreatingCustomField(false); setNewFieldName(''); }} style={{ fontSize: 11.5, padding: '5px 8px', borderRadius: 999, border: 'none', background: 'none', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>{t('cancelLower')}</button>
                 </span>
               ) : (
-                <button type="button" onClick={() => setCreatingCustomField(true)} style={{ fontSize: 11.5, padding: '5px 11px', borderRadius: 999, border: `1px dashed ${ink(0.25)}`, background: 'transparent', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>{t('generator.addCustomField')}</button>
+                <button type="button" onClick={() => setCreatingCustomField(true)} style={{ fontSize: 11.5, padding: '5px 11px', borderRadius: 999, border: `1.5px dashed ${palette.lineStrong}`, background: 'transparent', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>{t('generator.addCustomField')}</button>
               )}
             </div>
+            </>
+            )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-              <div style={{ background: ink(0.04), borderRadius: 9, padding: '10px 12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: hdrOpen ? 0 : 12 }}>
+              <div style={{ background: palette.surfaceRaised, borderRadius: 9, padding: '10px 12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('generator.sections')}</div>
                   <button type="button" onClick={addSection} style={{ fontSize: 13, fontWeight: 500, color: palette.green, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>{t('generator.addSection')}</button>
                 </div>
                 <div style={{ fontSize: 14, color: palette.ink, fontWeight: 500, marginTop: 1 }}>{config.sections.length}</div>
               </div>
-              <div style={{ background: ink(0.04), borderRadius: 9, padding: '10px 12px' }}>
+              <div style={{ background: palette.surfaceRaised, borderRadius: 9, padding: '10px 12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('generator.questions')}</div>
                   <button type="button" onClick={addPageBreak} title={t('generator.addPageBreakTooltip')} style={{ fontSize: 13, fontWeight: 500, color: palette.green, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>{t('generator.addPageBreak')}</button>
                 </div>
                 <div style={{ fontSize: 14, color: palette.ink, fontWeight: 500, marginTop: 1 }}>{includedIds.length}</div>
               </div>
-              <div style={{ background: ink(0.04), borderRadius: 9, padding: '10px 12px' }}>
+              <div style={{ background: palette.surfaceRaised, borderRadius: 9, padding: '10px 12px' }}>
                 <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('generator.scale')}</div>
                 <div style={{ fontSize: 14, color: palette.ink, fontWeight: 500, marginTop: 1 }}>{t('generator.points', { count: totalPoints, plural: totalPoints === 1 ? '' : 's' })}</div>
               </div>
-              <div style={{ background: ink(0.04), borderRadius: 9, padding: '10px 12px' }}>
+              <div style={{ background: palette.surfaceRaised, borderRadius: 9, padding: '10px 12px' }}>
                 <div style={{ fontSize: 9.5, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('generator.duration')}</div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 1 }}>
                   <input type="number" min={5} step={5} value={config.durationMinutes} onChange={e => patchConfig({ durationMinutes: Math.max(0, Number(e.target.value) || 0) })} style={{ width: 50, fontSize: 14, color: palette.ink, fontWeight: 500, border: 'none', background: 'transparent', fontFamily: 'inherit', padding: 0, outline: 'none' }} />
