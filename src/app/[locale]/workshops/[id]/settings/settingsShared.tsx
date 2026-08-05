@@ -4,7 +4,7 @@
 // helpers de présentation (Row, Switch, SmallBtn, SectionCard…) réutilisés par
 // SettingsClient et ses sections (Général/Membres/Fichiers/Notions/Premium).
 import { palette, ink, withAlpha } from '@/lib/theme';
-import { FileText, Music, File as FileIcon } from 'lucide-react';
+import { FileText, LayoutGrid, Music, SlidersHorizontal, Star, Users, type LucideIcon, File as FileIcon } from 'lucide-react';
 import type { FileCategory } from '@/app/actions/workshopFiles';
 
 export type WorkshopRole = 'owner' | 'manager' | 'member';
@@ -21,12 +21,12 @@ export type Member = {
 
 export type NavSection = 'general' | 'members' | 'notions' | 'files' | 'premium';
 
-export const NAV_ITEMS: { id: NavSection; label: string }[] = [
-  { id: 'general', label: 'Général' },
-  { id: 'members', label: 'Membres & rôles' },
-  { id: 'files', label: 'Fichiers' },
-  { id: 'notions', label: 'Notions' },
-  { id: 'premium', label: 'Atelier Premium' },
+export const NAV_ITEMS: { id: NavSection; icon: LucideIcon }[] = [
+  { id: 'general', icon: SlidersHorizontal },
+  { id: 'members', icon: Users },
+  { id: 'files', icon: FileText },
+  { id: 'notions', icon: LayoutGrid },
+  { id: 'premium', icon: Star },
 ];
 
 export const ROLE_RANK: Record<WorkshopRole, number> = { owner: 3, manager: 2, member: 1 };

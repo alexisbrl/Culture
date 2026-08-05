@@ -652,13 +652,14 @@
   },
   "settings": {
     "sidebarLabel": "Paramètres",
+    "closeSettings": "fermer les paramètres",
     "cancel": "Annuler",
     "delete": "Supprimer",
     "nav": {
       "general": "Général",
       "members": "Membres & rôles",
       "files": "Fichiers",
-      "notions": "Notions",
+      "notions": "Chapitre & Notion",
       "premium": "Atelier Premium"
     },
     "role": {

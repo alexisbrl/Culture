@@ -1,12 +1,12 @@
 'use client';
 
-import { palette, ink, withAlpha } from '@/lib/theme';
+import { palette, ink, withAlpha, shadow } from '@/lib/theme';
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { AlertTriangle, Check, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, Trash2, X } from 'lucide-react';
 import Modal from '@/components/Modal';
 import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, type MemberGroup } from '@/app/actions/workshops';
 import type { WorkshopFile } from '@/app/actions/workshopFiles';
@@ -50,6 +50,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
   const isOwner = currentUserRole === 'owner';
 
   const [activeSection, setActiveSection] = useState<NavSection>('general');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Section 1 — General
   const [workshopNameInput, setWorkshopNameInput] = useState(workshopName);
@@ -225,6 +226,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
     }
   }
 
+  const visibleNavItems = NAV_ITEMS.filter((item) => item.id !== 'premium' || isOwner);
+
   return (
     <div
       style={{
@@ -236,19 +239,19 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         cursor: 'default',
       }}
     >
-      {/* ── Sidebar ── */}
+      {/* ── Sidebar (ordinateur) ── */}
       <div
+        className="hidden md:flex"
         style={{
           width: 232,
           flexShrink: 0,
-          borderRight: `1px solid ${ink(0.07)}`,
-          background: 'rgba(252,249,242,0.6)',
+          borderRight: `1px solid ${palette.line}`,
+          background: palette.surfaceRaised,
           padding: '22px 16px',
           position: 'sticky',
           top: 0,
           height: 'calc(100vh - 60px)',
           overflowY: 'auto',
-          display: 'flex',
           flexDirection: 'column',
           gap: 0,
         }}
@@ -277,10 +280,10 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         {/* Label */}
         <div
           style={{
-            fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: '0.08em',
-            color: '#b8b1a6',
+            fontSize: 10.5,
+            fontWeight: 700,
+            letterSpacing: '0.12em',
+            color: palette.inkFaint,
             textTransform: 'uppercase',
             marginBottom: 8,
             paddingLeft: 10,
@@ -291,26 +294,31 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
         {/* Nav items — « Atelier Premium » réservé au propriétaire */}
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {NAV_ITEMS.filter((item) => item.id !== 'premium' || isOwner).map((item) => {
+          {visibleNavItems.map((item) => {
             const active = activeSection === item.id;
+            const Icon = item.icon;
             return (
               <button
                 key={item.id}
                 onClick={() => setActiveSection(item.id)}
                 style={{
-                  padding: '8px 10px',
-                  borderRadius: 9,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '9px 12px',
+                  borderRadius: 12,
                   border: 'none',
-                  background: active ? withAlpha(palette.amber, 0.14) : 'transparent',
-                  color: active ? '#7a4d20' : palette.inkMuted,
-                  fontWeight: active ? 500 : 400,
-                  fontSize: 13,
+                  background: active ? palette.surfaceSunken : 'transparent',
+                  color: active ? palette.ink : palette.inkMuted,
+                  fontWeight: 600,
+                  fontSize: 13.5,
                   cursor: 'pointer',
                   fontFamily: 'inherit',
                   textAlign: 'left',
-                  transition: 'all 0.12s',
+                  whiteSpace: 'nowrap',
                 }}
               >
+                <Icon size={16} strokeWidth={1.75} style={{ flexShrink: 0, color: active ? palette.green : palette.inkFaint }} />
                 {t(`nav.${item.id}`)}
               </button>
             );
@@ -320,13 +328,55 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
       {/* ── Main content ── */}
       <div
-        style={{
-          flex: 1,
-          overflow: 'auto',
-          padding: '40px 32px 40px 40px',
-          maxWidth: 760,
-        }}
+        className="px-5 pt-0 pb-10 md:px-8 md:pt-10"
+        style={{ flex: 1, overflow: 'auto', maxWidth: 760, boxSizing: 'border-box' }}
       >
+        {/* Sélecteur de section (téléphone) — même système que le changement d'atelier */}
+        <div
+          className="md:hidden"
+          style={{ position: 'sticky', top: 0, zIndex: 40, margin: '0 -20px 22px', background: palette.surfaceRaised, borderBottom: `1px solid ${palette.line}` }}
+        >
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <button
+              onClick={() => setMobileNavOpen((v) => !v)}
+              style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 10, padding: '15px 24px' }}
+            >
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: palette.inkFaint }}>{t('sidebarLabel')}</span>
+              <span style={{ width: 20, height: 20, borderRadius: 999, border: `1px solid ${palette.line}`, background: palette.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted }}>
+                <ChevronDown size={11} strokeWidth={2.25} />
+              </span>
+            </button>
+            <Link
+              href={`/${locale}/workshops/${workshopId}`}
+              title={t('closeSettings')}
+              style={{ flexShrink: 0, marginRight: 20, width: 30, height: 30, borderRadius: 999, border: `1px solid ${palette.line}`, background: palette.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted }}
+            >
+              <X size={14} strokeWidth={2.25} />
+            </Link>
+          </div>
+          {mobileNavOpen && (
+            <div style={{ position: 'absolute', top: '100%', left: 16, width: 300, maxWidth: 'calc(100% - 32px)', zIndex: 60, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 14, boxShadow: shadow.lg, overflow: 'hidden', boxSizing: 'border-box' }}>
+              {visibleNavItems.map((item) => {
+                const active = activeSection === item.id;
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActiveSection(item.id);
+                      setMobileNavOpen(false);
+                    }}
+                    style={{ width: '100%', border: 'none', background: active ? withAlpha(palette.green, 0.08) : 'transparent', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: `1px solid ${palette.line}`, textAlign: 'left', fontSize: 13.5, fontWeight: 600, color: active ? palette.green : palette.ink }}
+                  >
+                    <Icon size={16} strokeWidth={1.75} style={{ flexShrink: 0 }} />
+                    {t(`nav.${item.id}`)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {activeSection === 'general' && (
         <>
         {/* ── 1. Général ── */}

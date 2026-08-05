@@ -652,13 +652,14 @@
   },
   "settings": {
     "sidebarLabel": "Settings",
+    "closeSettings": "close settings",
     "cancel": "Cancel",
     "delete": "Delete",
     "nav": {
       "general": "General",
       "members": "Members & roles",
       "files": "Files",
-      "notions": "Notions",
+      "notions": "Chapter & Notion",
       "premium": "Premium workshop"
     },
     "role": {
