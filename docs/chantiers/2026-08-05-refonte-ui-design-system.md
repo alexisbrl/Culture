@@ -823,7 +823,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
   - Fichiers : `src/app/[locale]/dashboard/DashboardClient.tsx`, `messages/{fr,en}.json`
   - Dépend de : aucune
 
-- [ ] **T50 — Coquille : états de chargement**
+- [x] **T50 — Coquille : états de chargement**
   - Deux sauts visibles au chargement, tous deux dus à des données récupérées côté
     client après le premier rendu : (1) l'onglet « examens » de la barre du haut
     apparaît en retard (voire pas du tout sur un rendu rapide) parce que `canManage`
@@ -1004,6 +1004,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 - 2026-08-05 — T51 — [voir commit] — **Le constat de la revue était faux** : le vert délavé *est* l'état désactivé du design system (`cursor:not-allowed; opacity:.5; transform:none; box-shadow:none`, `_ds_bundle.js`), et `Button` l'appliquait déjà à l'exception du curseur. Seul correctif réel : `disabled:pointer-events-none` → `disabled:cursor-not-allowed`, avec les règles de survol repassées en `enabled:` (elles se seraient sinon déclenchées sur un bouton désactivé). Aucun changement dans `ExerciseClient`.
 
 - 2026-08-05 — T48 — [voir commit] — Barre d'outils fusionnée en une rangée (recherche extensible, filtres et tri en boutons-icônes, « nouvelle » en vert primaire) ; « générer par IA » remonte sur la ligne de titre ; titres de question plafonnés à 2 lignes (`-webkit-line-clamp`), titre complet au survol. Libellés de tri raccourcis (« trier · date d'ajout » → « date ») pour laisser de la place à la recherche dans une colonne de ~300 px.
+
+- 2026-08-05 — T50 — [voir commit] — Place réservée plutôt que contenu factice : onglet « examens » rendu en `invisible` tant que `getWorkshop` n'a pas répondu (largeur exacte, pas un gabarit approché) ; carte « suivi » du profil précédée d'un bloc de même hauteur, `firstWorkshopId` passant de `null` à `undefined | null` pour distinguer « en chargement » de « aucun atelier ». **Limite connue** : la barre du haut vit dans `[locale]/layout.tsx`, au-dessus de l'arbre de `WorkshopClient` — elle ne peut pas recevoir le rôle déjà résolu côté serveur, d'où l'appel client qui subsiste. Le supprimer demanderait de remonter la donnée dans le layout, hors périmètre d'un chantier d'interface.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->

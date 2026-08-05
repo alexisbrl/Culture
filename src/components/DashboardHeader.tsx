@@ -171,11 +171,18 @@ export default function DashboardHeader() {
             >
               {t('tabParcours')}
             </Link>
-            {canManage && (
+            {/* `canManage` vient d'un appel client (`getWorkshop`) : tant qu'il
+                n'a pas répondu, on réserve la largeur de l'onglet au lieu de le
+                faire surgir après coup en décalant tout le groupe (T50). Le
+                libellé est rendu invisible plutôt que remplacé par un gabarit,
+                pour que la largeur réservée soit exactement la bonne. */}
+            {workshop === null ? (
+              <span aria-hidden className={`${tabClass(false)} invisible`}>{t('tabExamens')}</span>
+            ) : canManage ? (
               <Link href={`/${locale}/workshops/${workshopId}?tab=examen`} className={tabClass(activeTab === 'examen')}>
                 {t('tabExamens')}
               </Link>
-            )}
+            ) : null}
             <span
               aria-disabled="true"
               title={t('tabCours')}

@@ -43,7 +43,10 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, c
   const fullName = [firstName, lastName].filter(Boolean).join(' ') || t('defaultNameFull');
   const { user } = useUser();
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
-  const [firstWorkshopId, setFirstWorkshopId] = useState<string | null>(null);
+  // `undefined` = en cours de chargement, `null` = aucun atelier. Distinguer les
+  // deux permet de réserver la place de la carte « suivi » au lieu de la faire
+  // apparaître après coup en décalant tout ce qui suit (T50).
+  const [firstWorkshopId, setFirstWorkshopId] = useState<string | null | undefined>(undefined);
 
   // Avatar synchronisé au compte (publicMetadata.avatarParts), repli localStorage.
   useEffect(() => {
@@ -132,6 +135,13 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, c
               {t('streak.days', { count: 0 })}
             </div>
           </div>
+        )}
+
+        {/* Emplacement réservé pendant le chargement (T50) : même hauteur que la
+            carte ci-dessous, pour que son arrivée ne décale pas le forfait ni la
+            liste des paramètres. */}
+        {firstWorkshopId === undefined && (
+          <div aria-hidden style={{ ...cardStyle, background: 'transparent', borderColor: 'transparent', boxShadow: 'none', height: 81, marginTop: 14 }} />
         )}
 
         {/* Suivi — vers l'onglet Analyse (état vide V2), masqué sans atelier */}
