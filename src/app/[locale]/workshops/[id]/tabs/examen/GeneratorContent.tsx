@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { Check, ChevronDown, ChevronUp, Star, RefreshCw, SeparatorHorizontal, SlidersHorizontal, AlertTriangle } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Star, RefreshCw, SeparatorHorizontal, SlidersHorizontal, AlertTriangle, PenLine } from 'lucide-react';
 import { palette, ink, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { type Question } from '../QuestionEditor';
@@ -274,7 +274,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
       </div>
       {editing && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: withAlpha(palette.amberGlow, 0.18), border: `1px solid ${withAlpha(palette.amber, 0.35)}`, marginBottom: 14, flexShrink: 0 }}>
-          <span style={{ fontSize: 14, color: palette.amber }}>✎</span>
+          <PenLine size={14} strokeWidth={1.75} color={palette.amber} />
           <div style={{ flex: 1, fontSize: 12.5, color: palette.ink }}>{t('generator.editingPrefix')} <b style={{ fontWeight: 600 }}>{editing.title}</b></div>
           <button onClick={onCancelEdit} style={{ fontSize: 11.5, color: palette.amberLight, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{t('generator.cancelEdit')}</button>
         </div>
@@ -615,7 +615,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                                 onBlur={() => setFocusedSectionIdx(null)}
                                 style={{ width: '100%', fontSize: 16, fontWeight: 600, color: palette.tanStrong, background: focusedSectionIdx === row.sectionIdx ? withAlpha(palette.amber, 0.06) : 'transparent', border: 'none', padding: '14px 40px 10px 34px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const }}
                               />
-                              <span style={{ position: 'absolute' as const, right: 16, top: 16, fontSize: 12, color: withAlpha(palette.amber, 0.45), pointerEvents: 'none' as const }}>✎</span>
+                              <PenLine size={13} strokeWidth={1.75} style={{ position: 'absolute' as const, right: 16, top: 17, color: withAlpha(palette.amber, 0.45), pointerEvents: 'none' as const }} />
                             </div>
                           );
                         }

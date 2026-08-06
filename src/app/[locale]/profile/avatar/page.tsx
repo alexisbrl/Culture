@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useUser } from '@clerk/nextjs';
+import { Check } from 'lucide-react';
 import AvatarComposer from '@/components/avatar/AvatarComposer';
 import { AvatarConfig, CATS, DEFAULT_CONFIG, loadAvatarConfig, saveAvatarConfig } from '@/components/avatar/avatarConfig';
 import { updateAvatarParts } from '@/app/actions/profile';
@@ -156,7 +157,7 @@ export default function AvatarEditorPage() {
                         background: palette.amber, color: palette.paper, fontSize: 12,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         boxShadow: `0 2px 6px ${withAlpha(palette.amber, 0.4)}`, zIndex: 2,
-                      }}>✓</span>
+                      }}><Check size={12} strokeWidth={3} /></span>
                     )}
                   </button>
                 );

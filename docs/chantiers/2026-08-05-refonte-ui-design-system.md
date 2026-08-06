@@ -895,7 +895,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     `src/app/[locale]/workshops/[id]/session/page.tsx`
   - Dépend de : T39
 
-- [ ] **T41 — Passe finale : hex en dur, violet, emojis-icônes**
+- [x] **T41 — Passe finale : hex en dur, violet, emojis-icônes**
   - Balayer **les fichiers de l'app connectée uniquement** (dashboard, workshops,
     profile, components partagés) : remplacer tout hex restant dans un `style={{}}`
     par un token, supprimer toute classe `violet-*`, remplacer tout emoji utilisé
@@ -1015,6 +1015,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 
 - 2026-08-06 — T40 — [voir commit] — Les 4 écrans repeints aux tokens (`WorkshopNewClient.tsx` — Tailwind gray/violet/slate → `var(--x)` + composants `Input`/`Label`/`Button` partagés ; `create/page.tsx`, `profile/avatar/page.tsx`, `session/page.tsx` — hex/rgba en dur remplacés, dont l'ancien vert `rgba(79,107,64,…)` et l'ancien ambre `rgba(168,122,58,…)` bannis par `CLAUDE.md` §1). `AvatarBuilder.tsx` supprimé — code mort (système SVG legacy, zéro import ailleurs que lui-même, `AvatarSVG`/`types.ts` restent vivants via `Navbar.tsx` vitrine). Ajout `palette.tanStrong`/`palette.greenTint` (design system, sans équivalent legacy). `build`/`lint` OK. **Rendu vérifié dans Chrome** sur les 4 écrans (`/workshops/new`, `/create`, `/profile/avatar`, `/workshops/{id}/session`) : aucun blanc pur, aucun violet, formulaire fonctionnel (nom tapé → bouton activé), aucune erreur console.
 
+- 2026-08-06 — T41 — [voir commit] — Dernier hex/rgba en dur retonifié dans `examShared.tsx`/`ExamenTab.tsx`/`GeneratorContent.tsx`/`QuestionEditor.tsx`/`session/page.tsx`/`profile/avatar/page.tsx` (dont l'ancien vert et l'ancien ambre en rgba, à nouveau). Nouveau `palette.categoryTones` (theme.ts) — 4 teintes catégorielles hors palette de marque, pour `RESPONSE_TYPE_COLORS`/`LABEL_COLORS`, même esprit qu'`avatarTones`. Ajout `palette.tanTint`/`palette.goldTint`. 6 emoji/symboles utilisés comme icônes remplacés par leur équivalent Lucide exact (`Check`, `X`, `PenLine`, `Flag`) dans `session/page.tsx`, `GeneratorContent.tsx` (×2), `QuestionEditor.tsx` (×2), `profile/avatar/page.tsx`, `examShared.tsx`. `grep` de contrôle : plus aucun hex/violet dans `dashboard`/`workshops`/`profile`/`components` hors vitrine. `build`/`lint` OK. **Rendu vérifié dans Chrome** : générateur d'examen (aucune erreur console), profil/avatar (badge de sélection ✓ → coche Lucide visible).
+
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
 - 2026-08-05 — T48 — **Troncature à 2 lignes et non 1** comme la maquette. Les questions réelles de l'atelier de test sont nettement plus longues que les libellés du prototype (« Quelle est la capitale de la France ? ») : à une ligne, la moitié d'entre elles devenaient illisibles. Deux lignes gardent le rythme de colonne sans amputer l'énoncé.
@@ -1090,6 +1092,9 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 - 2026-08-06 — T38 — **Ajout de `palette.tanStrong` (`#6E5736`, `--tan-strong` du design system) et rapprochement de `#c8c2b6`/`#d8d4cb` (sans équivalent exact) vers `palette.lineStrong`/`palette.line` respectivement.** Ces deux teintes de gris-tan n'ont pas de token dédié ; choisies par distance colorimétrique la plus proche parmi les tokens documentés (même méthode que T3/T5/T6/T7 pour les rôles manquants).
 
 - 2026-08-06 — T40 — **`AvatarBuilder.tsx` supprimé plutôt que retonifié**, bien que listé dans les « Fichiers » de T40. Vérifié (`grep -rl AvatarBuilder src/`) : aucun import nulle part sauf le fichier lui-même — code mort, jamais rendu par `/profile/avatar` (qui utilise `AvatarComposer`). Retonifier du code jamais exécuté n'aurait rien changé à l'écran réel ; le supprimer purge les dernières classes `violet-*` du dossier `avatar/` sans risque (le système SVG encore utilisé par la vitrine, `AvatarSVG.tsx`/`types.ts`, n'est pas touché).
+
+- 2026-08-06 — T41 — **`Footer.tsx`, `Navbar.tsx`, `WaitlistForm.tsx`, `AvatarSVG.tsx`, `avatar/types.ts` non touchés** malgré des classes `violet-*`/hex encore présentes, bien que physiquement sous `src/components/**` (dans le périmètre littéral de T41). Vérifié pour chacun leur unique point de montage : `Footer`/`Navbar` sont rendus uniquement `{!isLoggedIn && ...}` dans `[locale]/layout.tsx` (vitrine déconnectée) ; `WaitlistForm` n'est importé que par `[locale]/page.tsx` (landing) ; `AvatarSVG`/`types.ts` ne sont consommés que par `Navbar.tsx` (cf. le piège déjà documenté dans `.claude/rules/frontend-patterns.md` sur les deux systèmes d'avatar). Le périmètre du chantier exclut explicitement toute la vitrine déconnectée — ces fichiers en relèvent malgré leur emplacement, donc gardent l'ancienne charte, comme le reste de la vitrine.
+- 2026-08-06 — T41 — **Couleurs illustratives des avatars laissées en l'état** (`AvatarComposer.tsx`, `avatarConfig.ts` : teintes de peau `#f2c8a0`/`#e8a870`). Ce sont des couleurs de contenu (carnations d'un personnage), pas des couleurs de chrome UI — au même titre qu'un member `avatarTone` ou qu'un swatch de `categoryTones`, elles n'ont pas vocation à égaler un rôle strict de la palette de marque.
 
 ## Tâches bloquées
 <!-- Tâches abandonnées après 2 échecs, avec le motif et ce qui a été tenté. -->

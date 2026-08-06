@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, PencilLine } from 'lucide-react';
+import { ArrowLeft, Check, PencilLine, X } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
 
 const QUESTION = {
@@ -91,10 +91,10 @@ export default function SessionPage() {
                   const letter = ['A', 'B', 'C', 'D'][i];
                   const isSel = selected === opt.id;
                   let cls = 'border-ink/[0.12] bg-[var(--surface-raised)]/90';
-                  let icon: string | null = null;
+                  let icon: React.ReactNode = null;
                   if (status === 'submitted') {
-                    if (opt.correct) { cls = 'border-[1.5px] border-green/45 bg-green-soft/[0.16]'; icon = '✓'; }
-                    else if (isSel) { cls = 'border-[1.5px] border-danger/40 bg-danger/10'; icon = '·'; }
+                    if (opt.correct) { cls = 'border-[1.5px] border-green/45 bg-green-soft/[0.16]'; icon = <Check size={18} strokeWidth={2} color={palette.greenBrand} />; }
+                    else if (isSel) { cls = 'border-[1.5px] border-danger/40 bg-danger/10'; icon = <X size={18} strokeWidth={2} color="var(--danger-strong)" />; }
                   } else if (isSel) {
                     cls = 'border-[1.5px] border-amber/45 bg-amber-glow/[0.16]';
                   }
@@ -106,7 +106,7 @@ export default function SessionPage() {
                     >
                       <div className="w-8 h-8 rounded-full border border-ink/[0.14] bg-[var(--surface-raised)] flex items-center justify-center text-[13px] font-medium text-ink-muted shrink-0">{letter}</div>
                       <div className="flex-1 text-base text-ink leading-snug">{opt.label}</div>
-                      {icon && <div className="text-base" style={{ color: opt.correct ? palette.greenBrand : 'var(--danger-strong)' }}>{icon}</div>}
+                      {icon}
                     </div>
                   );
                 })}

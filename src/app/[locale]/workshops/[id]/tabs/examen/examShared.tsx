@@ -5,8 +5,8 @@
 // présentationnels réutilisés par HistoryContent / BankContent / GeneratorContent / ExamenTab.
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Settings2 } from 'lucide-react';
-import { palette, ink, withAlpha } from '@/lib/theme';
+import { Flag, Settings2 } from 'lucide-react';
+import { palette, ink, withAlpha, categoryTones } from '@/lib/theme';
 import { type Question, type ResponseType } from '../QuestionEditor';
 
 // ---- shared data ----
@@ -32,13 +32,13 @@ export const RESPONSE_TYPE_COLORS: Record<ResponseType, string> = {
   sans_reponse: palette.inkSoft,
   qcs: palette.amberLight,
   qcm: palette.greenSoft,
-  textuelle: '#9eb3b9',
-  dessin: '#a890b8',
-  audio: '#a890b8',
-  sondage: '#9eb3b9',
+  textuelle: categoryTones.blueGray,
+  dessin: categoryTones.mauve,
+  audio: categoryTones.mauve,
+  sondage: categoryTones.blueGray,
   fill_blank: palette.amberLight,
-  matching: '#a890b8',
-  ordre: '#a890b8',
+  matching: categoryTones.mauve,
+  ordre: categoryTones.mauve,
 };
 
 export type SortBy = 'difficulty' | 'name' | 'type' | 'label' | 'recent';
@@ -72,7 +72,7 @@ export function isPageBreakId(id: string): boolean {
   return id.startsWith(PAGE_BREAK_PREFIX);
 }
 
-export const LABEL_COLORS = ['#9eb3b9', '#a890b8', palette.greenSoft, palette.amberLight, palette.danger, palette.greenBrand, palette.amber, palette.inkFaint, '#6b8ea8', '#c2603a'];
+export const LABEL_COLORS = [categoryTones.blueGray, categoryTones.mauve, palette.greenSoft, palette.amberLight, palette.danger, palette.greenBrand, palette.amber, palette.inkFaint, categoryTones.steelBlue, categoryTones.rust];
 
 export function DiffDots({ level }: { level: number }) {
   return (
@@ -94,12 +94,12 @@ export function WeightControls({ weight, onChange }: { weight: QuestionWeight; o
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
       <input type="number" min={0} step={0.5} value={weight.points} onChange={e => onChange({ points: Number(e.target.value) || 0 })} title={t('weight.points')} style={{ width: 42, fontSize: 11, padding: '4px 5px', borderRadius: 6, border: `1px solid ${ink(0.14)}`, background: palette.paper, fontFamily: 'inherit', textAlign: 'center' as const }} />
       {!weight.eliminatory && (
-        <button type="button" onClick={() => onChange({ negative: { ...weight.negative, enabled: !weight.negative.enabled } })} title={t('weight.negative')} style={{ fontSize: 11, padding: '4px 7px', borderRadius: 6, border: weight.negative.enabled ? '1px solid rgba(184,90,74,0.4)' : `1px solid ${ink(0.12)}`, background: weight.negative.enabled ? withAlpha(palette.danger, 0.12) : withAlpha(palette.paper, 0.7), color: weight.negative.enabled ? palette.danger : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>−</button>
+        <button type="button" onClick={() => onChange({ negative: { ...weight.negative, enabled: !weight.negative.enabled } })} title={t('weight.negative')} style={{ fontSize: 11, padding: '4px 7px', borderRadius: 6, border: weight.negative.enabled ? `1px solid ${withAlpha(palette.danger, 0.4)}` : `1px solid ${ink(0.12)}`, background: weight.negative.enabled ? withAlpha(palette.danger, 0.12) : withAlpha(palette.paper, 0.7), color: weight.negative.enabled ? palette.danger : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>−</button>
       )}
       {!weight.eliminatory && weight.negative.enabled && (
         <input type="number" min={0} step={0.5} value={weight.negative.value} onChange={e => onChange({ negative: { ...weight.negative, value: Number(e.target.value) || 0 } })} title={t('weight.negativeValue')} style={{ width: 42, fontSize: 11, padding: '4px 5px', borderRadius: 6, border: `1px solid ${withAlpha(palette.danger, 0.3)}`, background: palette.paper, fontFamily: 'inherit', textAlign: 'center' as const, color: palette.danger }} />
       )}
-      <button type="button" onClick={() => onChange({ eliminatory: !weight.eliminatory, negative: weight.eliminatory ? weight.negative : { ...weight.negative, enabled: false } })} title={t('weight.eliminatory')} style={{ fontSize: 11, padding: '4px 7px', borderRadius: 6, border: weight.eliminatory ? '1px solid rgba(184,90,74,0.4)' : `1px solid ${ink(0.12)}`, background: weight.eliminatory ? palette.danger : withAlpha(palette.paper, 0.7), color: weight.eliminatory ? palette.paper : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>⚑</button>
+      <button type="button" onClick={() => onChange({ eliminatory: !weight.eliminatory, negative: weight.eliminatory ? weight.negative : { ...weight.negative, enabled: false } })} title={t('weight.eliminatory')} style={{ fontSize: 11, padding: '4px 7px', borderRadius: 6, border: weight.eliminatory ? `1px solid ${withAlpha(palette.danger, 0.4)}` : `1px solid ${ink(0.12)}`, background: weight.eliminatory ? palette.danger : withAlpha(palette.paper, 0.7), color: weight.eliminatory ? palette.paper : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center' }}><Flag size={11} strokeWidth={2} /></button>
     </div>
   );
 }
@@ -218,7 +218,7 @@ export function renderAnswerSpace(q: Question, audioLabel: string) {
           {q.choices.map((c, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ width: 14, height: 14, border: `1.5px solid ${ink(0.35)}`, borderRadius: q.responseType === 'qcm' ? 3 : 999, flexShrink: 0, display: 'inline-block' }} />
-              <span style={{ fontSize: 13, color: '#3a352c' }}>{c}</span>
+              <span style={{ fontSize: 13, color: palette.inkMuted }}>{c}</span>
             </div>
           ))}
         </div>
@@ -230,10 +230,10 @@ export function renderAnswerSpace(q: Question, audioLabel: string) {
       return (
         <div style={{ marginTop: 14, display: 'flex', gap: 32 }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
-            {pairs.map((p, i) => <div key={i} style={{ fontSize: 13, color: '#3a352c' }}>{i + 1}. {p[0]}</div>)}
+            {pairs.map((p, i) => <div key={i} style={{ fontSize: 13, color: palette.inkMuted }}>{i + 1}. {p[0]}</div>)}
           </div>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
-            {pairs.map((p, i) => <div key={i} style={{ fontSize: 13, color: '#3a352c' }}>{String.fromCharCode(65 + i)}. {p[1] ?? ''}</div>)}
+            {pairs.map((p, i) => <div key={i} style={{ fontSize: 13, color: palette.inkMuted }}>{String.fromCharCode(65 + i)}. {p[1] ?? ''}</div>)}
           </div>
         </div>
       );
@@ -245,7 +245,7 @@ export function renderAnswerSpace(q: Question, audioLabel: string) {
           {q.choices.map((c, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ width: 26, height: 26, border: `1.5px solid ${ink(0.35)}`, borderRadius: 6, flexShrink: 0 }} />
-              <span style={{ fontSize: 13, color: '#3a352c' }}>{c}</span>
+              <span style={{ fontSize: 13, color: palette.inkMuted }}>{c}</span>
             </div>
           ))}
         </div>
@@ -400,7 +400,7 @@ export function toggleQuestionInSections(sections: ExamSection[], id: string): E
 }
 
 export function statusStyle(s: string) {
-  return ({ publié: { bg: withAlpha(palette.greenSoft, 0.20), fg: '#3f5630' }, brouillon: { bg: withAlpha(palette.amberGlow, 0.22), fg: '#7a4d20' }, archivé: { bg: ink(0.07), fg: palette.inkSoft } } as Record<string, { bg: string; fg: string }>)[s] ?? { bg: ink(0.07), fg: palette.inkSoft };
+  return ({ publié: { bg: withAlpha(palette.greenSoft, 0.20), fg: palette.greenBrand }, brouillon: { bg: withAlpha(palette.amberGlow, 0.22), fg: palette.tanStrong }, archivé: { bg: ink(0.07), fg: palette.inkSoft } } as Record<string, { bg: string; fg: string }>)[s] ?? { bg: ink(0.07), fg: palette.inkSoft };
 }
 
 export function IconBtn({ children, title, onClick }: { children: React.ReactNode; title: string; onClick?: (e: React.MouseEvent) => void }) {
@@ -419,7 +419,7 @@ export function EditQuestionButton({ id, onOpenQuestion }: { id: string; onOpenQ
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       title={t('editQuestion')}
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: hovered ? '1px solid rgba(45,42,36,0.14)' : '1px solid transparent', background: hovered ? ink(0.045) : 'transparent', color: hovered ? palette.inkSoft : palette.inkFaint, cursor: 'pointer', padding: 0, flexShrink: 0, transition: 'background 0.12s, border-color 0.12s' }}
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: hovered ? `1px solid ${ink(0.14)}` : '1px solid transparent', background: hovered ? ink(0.045) : 'transparent', color: hovered ? palette.inkSoft : palette.inkFaint, cursor: 'pointer', padding: 0, flexShrink: 0, transition: 'background 0.12s, border-color 0.12s' }}
     >
       <Settings2 size={14} strokeWidth={1.85} />
     </button>
@@ -432,7 +432,7 @@ export function ActiveChip({ label, color, negative, filterKey, onRemove, setDra
       draggable
       onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', filterKey); setDraggedKey(filterKey); }}
       onDragEnd={() => setDraggedKey(null)}
-      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 6px 5px 11px', borderRadius: 999, border: negative ? '1px solid rgba(184,90,74,0.45)' : `1px solid ${ink(0.30)}`, background: negative ? palette.danger : palette.ink, color: palette.parchment, fontFamily: 'inherit', cursor: 'grab', clipPath: 'inset(0 round 999px)' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 6px 5px 11px', borderRadius: 999, border: negative ? `1px solid ${withAlpha(palette.danger, 0.45)}` : `1px solid ${ink(0.30)}`, background: negative ? palette.danger : palette.ink, color: palette.parchment, fontFamily: 'inherit', cursor: 'grab', clipPath: 'inset(0 round 999px)' }}
     >
       {color && <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, display: 'inline-block' }} />}
       {label}

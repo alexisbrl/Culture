@@ -4,6 +4,7 @@ import { palette, ink, withAlpha } from '@/lib/theme';
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { Check, PenLine } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 //
@@ -326,7 +327,7 @@ function ChoiceListEditor({
                   fontSize: 11, cursor: 'pointer', padding: 0,
                 }}
               >
-                {correctChoices.includes(i) ? '✓' : ''}
+                {correctChoices.includes(i) && <Check size={12} strokeWidth={2.5} />}
               </button>
             )}
             {showFreeTextMarker && (
@@ -342,7 +343,7 @@ function ChoiceListEditor({
                   fontSize: 10.5, cursor: 'pointer', padding: 0,
                 }}
               >
-                ✎
+                <PenLine size={11} strokeWidth={2} />
               </button>
             )}
             {showPairs ? (

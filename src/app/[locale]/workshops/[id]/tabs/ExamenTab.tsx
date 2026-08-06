@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, ArrowRight, FileText, Search, X } from 'lucide-react';
-import { palette, ink, radius, shadow, withAlpha } from '@/lib/theme';
+import { palette, ink, radius, shadow, withAlpha, categoryTones } from '@/lib/theme';
 import QuestionEditor, { type Question, emptyQuestion } from './QuestionEditor';
 import {
   getExamBankData, saveQuestion, createPool as createPoolAction, updatePool as updatePoolAction,
@@ -207,7 +207,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
 
   function handleCreatePool(name: string): string {
     const id = 'pool' + Date.now();
-    const pool = { id, name, color: '#9eb3b9' };
+    const pool = { id, name, color: categoryTones.blueGray };
     setPools(prev => [...prev, pool]);
     createPoolAction(workshopId, pool).catch(err => console.error('création libellé échouée', err));
     return id;
@@ -369,14 +369,14 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             <div onClick={() => setIntroOpen(false)} style={{ position: 'absolute', inset: 0, background: ink(0.46), backdropFilter: 'blur(3px)' }} />
             <div style={{ position: 'relative', height: '90vh', width: 'calc(90vh * 0.75)', maxWidth: '92vw' }}>
               {/* carte : fond, texte, bouton — clippée pour les coins arrondis */}
-              <div style={{ position: 'absolute', inset: 0, borderRadius: 28, overflow: 'hidden', background: 'linear-gradient(160deg, #fdf9ef 0%, #f6ead2 100%)', boxShadow: `0 28px 70px ${ink(0.32)}` }}>
+              <div style={{ position: 'absolute', inset: 0, borderRadius: 28, overflow: 'hidden', background: `linear-gradient(160deg, ${palette.creamAlt} 0%, ${palette.tanTint} 100%)`, boxShadow: `0 28px 70px ${ink(0.32)}` }}>
                 <button onClick={() => setIntroOpen(false)} title={t('tab.introClose')} style={{ position: 'absolute', top: 18, right: 18, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: '50%', border: `1px solid ${ink(0.12)}`, background: palette.paper, color: palette.ink, cursor: 'pointer' }}>
                   <X size={17} strokeWidth={2} />
                 </button>
 
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: `${HEADER_PCT}%`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 70px', textAlign: 'center' }}>
                   <div style={{ fontSize: 23, fontWeight: 600, color: palette.ink }}>{t('tab.introTitle')}</div>
-                  <div style={{ fontSize: 13.5, color: '#8a7f64', marginTop: 8 }}>{t('tab.introSubtitle')}</div>
+                  <div style={{ fontSize: 13.5, color: palette.inkFaint, marginTop: 8 }}>{t('tab.introSubtitle')}</div>
                 </div>
 
                 {steps.map((step, i) => (
@@ -393,8 +393,8 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                       justifyContent: 'center',
                     }}
                   >
-                    <div style={{ fontSize: 16, fontWeight: 600, color: '#7a4d20', marginBottom: 8 }}>{step.title}</div>
-                    <div style={{ fontSize: 13.5, color: '#3a352c', lineHeight: 1.65 }}>{step.text}</div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: palette.tanStrong, marginBottom: 8 }}>{step.title}</div>
+                    <div style={{ fontSize: 13.5, color: palette.inkMuted, lineHeight: 1.65 }}>{step.text}</div>
                   </div>
                 ))}
 
@@ -429,7 +429,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                     position: 'absolute',
                     inset: 0,
                     borderRadius: '46% 54% 58% 42% / 50% 46% 54% 50%',
-                    background: 'radial-gradient(circle at 32% 28%, #f2cf8e 0%, #dba85a 55%, #c98f43 100%)',
+                    background: `radial-gradient(circle at 32% 28%, ${palette.goldTint} 0%, ${palette.gold} 55%, ${palette.amberLight} 100%)`,
                     boxShadow: `0 20px 46px ${withAlpha(palette.amber, 0.38)}`,
                   }} />
                   <div style={{
@@ -440,7 +440,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                     justifyContent: 'center',
                     fontSize: 12,
                     fontWeight: 600,
-                    color: 'rgba(122,77,32,0.55)',
+                    color: withAlpha(palette.tanStrong, 0.55),
                     textAlign: 'center',
                   }}>
                     {t('tab.introImage', { n: i + 1 })}

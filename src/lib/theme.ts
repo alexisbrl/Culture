@@ -63,6 +63,8 @@ export const palette = {
   onInk: '#F2EDE3',         // --on-ink
   tanStrong: '#6E5736',     // --tan-strong (texte brun fort, ex. titre de partie sur la feuille A4)
   greenTint: '#E7EEDB',     // --green-tint (fonds/dégradés doux à teinte verte)
+  tanTint: '#ECE1CB',       // --tan-tint (fonds/dégradés doux à teinte tan)
+  goldTint: '#F3EBD2',      // --gold-tint (fonds/dégradés doux à teinte or)
 } as const;
 
 /**
@@ -84,6 +86,19 @@ export const avatarTones = [
   palette.green,          // --green
   palette.greenBrand,     // --green-strong
 ] as const;
+
+/**
+ * Teintes catégorielles hors palette de marque stricte (vert/tan/ink/danger/or) —
+ * pour distinguer visuellement plusieurs catégories (types de question, libellés
+ * d'examen) sans réutiliser indéfiniment le vert ou l'ambre. Reprises de la
+ * maquette, même esprit qu'`avatarTones` ci-dessus.
+ */
+export const categoryTones = {
+  blueGray: '#9EB3B9',
+  mauve: '#A890B8',
+  steelBlue: '#6B8EA8',
+  rust: '#C2603A',
+} as const;
 
 /**
  * Teinte stable d'un membre, dérivée de son nom. Somme des codes de caractères
