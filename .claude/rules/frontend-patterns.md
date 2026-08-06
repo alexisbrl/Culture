@@ -8,7 +8,11 @@ paths:
 
 ## Design tokens
 
-Toujours utiliser les tokens de `src/lib/theme.ts` (`palette`, `ink(alpha)`, `radius`, `shadow`) pour les couleurs de marque dans un `style={{}}` — jamais de hex en dur. `theme.ts` doit rester synchronisé avec les variables CSS de `globals.css` (`--primary`…) utilisées par les classes Tailwind. Icônes : exclusivement `lucide-react` (règle absolue, voir `CLAUDE.md` §1).
+Toujours utiliser les tokens de `src/lib/theme.ts` (`palette`, `ink(alpha)`, `withAlpha(hex, alpha)`, `radius`, `shadow`) pour les couleurs de marque dans un `style={{}}` — jamais de hex/rgba en dur. Dans un `className` Tailwind, référencer directement la variable CSS (`bg-[var(--surface-raised)]`) plutôt qu'un nom de couleur Tailwind générique (`bg-white`, `bg-gray-50`…) : la palette n'a **jamais** de blanc pur ni de gris neutre (« never white, never dark », doctrine du design system). `theme.ts` doit rester synchronisé avec les variables CSS portées par le Culture Design System dans `globals.css` (bloc `@theme inline` pour les classes Tailwind nommées type `bg-cream`/`text-ink`/`text-amber`, et le bloc `:root` pour les `var(--x)` bruts) — les deux exposent les mêmes valeurs sous deux syntaxes différentes.
+
+**Couleur sans token exact.** Le Culture Design System n'a que 6 familles (vert/tan/ink/danger/gold/surfaces) — une couleur héritée de l'ancienne charte ou de la maquette qui ne correspond à aucune n'a pas d'équivalent direct. Chercher la valeur la plus proche par distance colorimétrique parmi les tokens documentés (`docs/design/_ds/culture-design-system-…/tokens/colors.css`) plutôt que garder le hex en dur ; si le rôle sémantique manque encore à `palette`, l'y ajouter (ex. `tanStrong`/`greenTint`/`tanTint`/`goldTint`, ajoutés au fil du chantier de refonte UI pour des rôles présents dans les tokens du design system mais pas encore dans `palette`). Pour une **teinte catégorielle** hors palette de marque (distinguer visuellement plusieurs catégories — types de question, pastilles de membre, libellés d'examen — sans réutiliser indéfiniment le vert ou l'ambre), voir les précédents `avatarTones` et `categoryTones` : un petit tableau nommé et documenté dans `theme.ts`, jamais du hex dispersé dans les composants.
+
+Icônes : exclusivement `lucide-react`, jamais de symbole Unicode/emoji en guise d'icône fonctionnelle quand un composant Lucide équivalent existe (`Check`, `X`, `PenLine`, `Flag`…) — règle absolue, voir `CLAUDE.md` §1.
 
 ## Layout plein écran sous `[locale]/layout.tsx`
 

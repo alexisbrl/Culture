@@ -87,7 +87,7 @@ Pages hors-projet à ne pas consulter :
 | Framework | Next.js 16 (App Router) |
 | Langage | TypeScript (strict) |
 | Styling | Tailwind CSS v4 |
-| Typographie | Inter Tight (corps) × Caveat (accents manuscrits) — utilitaire `.font-script` |
+| Typographie | Hanken Grotesk (seule police — pas de sérif, `--font-serif` alias vers la sans) |
 | Auth | Clerk (`@clerk/nextjs`) |
 | Base de données | Supabase (`@supabase/supabase-js`) |
 | UI | shadcn/ui + Base UI (`@base-ui/react`) |

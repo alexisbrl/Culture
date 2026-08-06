@@ -906,7 +906,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
   - Fichiers : app connectée + `src/components/**` (**pas** la vitrine, **pas** le jardin)
   - Dépend de : T40
 
-- [ ] **T42 — Documentation**
+- [x] **T42 — Documentation**
   - `CLAUDE.md` : typographie §3 (Hanken Grotesk, retrait Inter Tight × Caveat et
     `.font-script`), règle de lexique notion/brick si T2 ne l'a pas déjà posée.
     `docs/product-spec.md` : lexique « notion », navigation de l'app connectée
@@ -1016,6 +1016,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 - 2026-08-06 — T40 — [voir commit] — Les 4 écrans repeints aux tokens (`WorkshopNewClient.tsx` — Tailwind gray/violet/slate → `var(--x)` + composants `Input`/`Label`/`Button` partagés ; `create/page.tsx`, `profile/avatar/page.tsx`, `session/page.tsx` — hex/rgba en dur remplacés, dont l'ancien vert `rgba(79,107,64,…)` et l'ancien ambre `rgba(168,122,58,…)` bannis par `CLAUDE.md` §1). `AvatarBuilder.tsx` supprimé — code mort (système SVG legacy, zéro import ailleurs que lui-même, `AvatarSVG`/`types.ts` restent vivants via `Navbar.tsx` vitrine). Ajout `palette.tanStrong`/`palette.greenTint` (design system, sans équivalent legacy). `build`/`lint` OK. **Rendu vérifié dans Chrome** sur les 4 écrans (`/workshops/new`, `/create`, `/profile/avatar`, `/workshops/{id}/session`) : aucun blanc pur, aucun violet, formulaire fonctionnel (nom tapé → bouton activé), aucune erreur console.
 
 - 2026-08-06 — T41 — [voir commit] — Dernier hex/rgba en dur retonifié dans `examShared.tsx`/`ExamenTab.tsx`/`GeneratorContent.tsx`/`QuestionEditor.tsx`/`session/page.tsx`/`profile/avatar/page.tsx` (dont l'ancien vert et l'ancien ambre en rgba, à nouveau). Nouveau `palette.categoryTones` (theme.ts) — 4 teintes catégorielles hors palette de marque, pour `RESPONSE_TYPE_COLORS`/`LABEL_COLORS`, même esprit qu'`avatarTones`. Ajout `palette.tanTint`/`palette.goldTint`. 6 emoji/symboles utilisés comme icônes remplacés par leur équivalent Lucide exact (`Check`, `X`, `PenLine`, `Flag`) dans `session/page.tsx`, `GeneratorContent.tsx` (×2), `QuestionEditor.tsx` (×2), `profile/avatar/page.tsx`, `examShared.tsx`. `grep` de contrôle : plus aucun hex/violet dans `dashboard`/`workshops`/`profile`/`components` hors vitrine. `build`/`lint` OK. **Rendu vérifié dans Chrome** : générateur d'examen (aucune erreur console), profil/avatar (badge de sélection ✓ → coche Lucide visible).
+
+- 2026-08-06 — T42 — [voir commit] — `CLAUDE.md` §3 (Hanken Grotesk). `docs/product-spec.md` : lexique « notion » (rename complet du document, y compris la description du terme corrigée pour refléter le changement de spécification du 19/07/2026 déjà réel mais jamais reporté ici), section navigation entièrement réécrite (plus de page d'accueil Jardin — stale depuis T16 — coquille barre du haut/barre d'onglets, sélecteur d'atelier), Analyse rattachée au profil et passée en V2. `docs/changelog.md` : entrée de clôture du chantier. `docs/backlog.md` : items paliers tarifaires Premium (inerte) et gamification V2 non branchée (notifications/gouttes/série). `.claude/rules/frontend-patterns.md` : section Design tokens étoffée (règle « never white », méthode de la couleur la plus proche, précédent `avatarTones`/`categoryTones`, règle emoji-icône). `build`/`lint` OK.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->

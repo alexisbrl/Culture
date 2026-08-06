@@ -14,7 +14,7 @@
 **Architecture :** **API-first** obligatoire dès la V1 — chaque domaine fonctionnel expose une API interne propre (voir `.claude/rules/server-architecture.md` pour le pattern de code).
 
 **Deux modules principaux :**
-1. **Générateur pédagogique** — upload de fichiers → briques de connaissance → programme éducatif personnalisé + générateur d'examens
+1. **Générateur pédagogique** — upload de fichiers → notions → programme éducatif personnalisé + générateur d'examens
 2. **Examens standardisés** — certification officielle (développement prévu à partir de la V3, non prioritaire pour le MVP)
 
 ---
@@ -27,7 +27,7 @@
 |---|---|
 | Création de compte et authentification | — |
 | Upload de fichiers PDF | Un ou plusieurs fichiers par atelier |
-| Décomposition en briques de connaissance | Via IA. Briques modifiables manuellement. |
+| Décomposition en notions | Via IA. Notions modifiables manuellement. |
 | Génération de questions | Via IA. Types : QCM, réponse ouverte, fill in the blank, matching, trier dans l'ordre. |
 | Parcours d'apprentissage séquencé | Enchaînement d'exercices sans gamification visuelle |
 | Gestion d'un atelier | Ateliers toujours privés (adhésion validée), rôles gestionnaire/candidat, paramètres de base |
@@ -63,10 +63,10 @@ Termes utilisés dans toute la codebase et dans ce document.
 | Terme | Définition |
 |---|---|
 | **Atelier** | Espace pédagogique créé par un gestionnaire à partir de fichiers sources. Contient un programme éducatif et un générateur d'examens. |
-| **Brique de connaissance** | Unité minimale d'information extraite d'un fichier source par l'IA. Possède un niveau de difficulté, un niveau d'importance et une position chronologique. |
-| **Programme éducatif** | Parcours d'entraînements personnalisés par candidat, généré à partir des briques d'un atelier. |
-| **Section** | Groupe de briques de connaissance au sein d'un programme éducatif. |
-| **Générateur d'examen** | Outil permettant de créer, gérer et corriger des examens à partir des briques d'un atelier. |
+| **Notion** | Unité minimale d'information extraite d'un fichier source par l'IA (ou créée à la main). Un titre obligatoire, un contenu détaillé optionnel, rattachement à un chapitre optionnel. Terme produit et code depuis le chantier de refonte UI (08/2026) — anciennement « brique de connaissance » ; les tables Supabase restent nommées `workshop_bricks`/`brick_mastery`/`exam_question_bricks`, voir `CLAUDE.md` §1. |
+| **Programme éducatif** | Parcours d'entraînements personnalisés par candidat, généré à partir des notions d'un atelier. |
+| **Section** | Groupe de notions au sein d'un programme éducatif. |
+| **Générateur d'examen** | Outil permettant de créer, gérer et corriger des examens à partir des notions d'un atelier. |
 | **Entraînement** | Terme générique pour une session d'apprentissage dans le programme éducatif. Englobe Exercices et Activités. |
 | **Exercice** | Entraînement au format question/réponse standard. |
 | **Activité** | Entraînement au format ludique (V2+). |
@@ -155,14 +155,20 @@ Un propriétaire peut activer le statut Premium sur son atelier. C'est une opér
 - Fichiers exemples disponibles pour créer son premier atelier
 - **Règle de déverrouillage des fonctionnalités :** les fonctionnalités sont masquées par défaut et révélées au moment où elles deviennent pertinentes, pas après un délai fixe.
 
-**Home page = Jardin** (`/garden`) — page principale après connexion, cible du logo Culture
+**Pas de page d'accueil — entrée directe dans l'atelier** *(révisé le 05/08/2026, chantier de refonte UI)*. La connexion mène directement au dernier atelier travaillé (le plus récent parmi les ateliers possédés puis rejoints), onglet Parcours — jamais à une page d'accueil intermédiaire. Un utilisateur sans atelier atterrit sur `/dashboard` (voir ci-dessous). La navigation entre les ateliers passe par un **sélecteur d'atelier** (chevron à côté du nom de l'atelier courant, dans la barre du haut) plutôt que par une page dédiée.
+
+**Coquille de navigation**
+- **Ordinateur** : barre du haut fixe — logo, sélecteur d'atelier, groupe d'onglets d'atelier (Parcours / Examens *(gestionnaires)* / Cours), lien Jardin, lien Profil, cloche de notifications, engrenage (paramètres de l'atelier + menu partage/quitter).
+- **Téléphone** : bandeau d'atelier (nom + sélecteur) sous une barre d'onglets fixée en bas d'écran (mêmes destinations qu'en barre du haut).
+- Implémentation : `src/components/DashboardHeader.tsx` (coquille + sélecteur), `src/app/[locale]/workshops/[id]/WorkshopClient.tsx` (onglets + bandeau mobile).
+
+**Jardin** (`/garden`) — reste accessible depuis la coquille de navigation, mais n'est plus la page d'accueil.
 - Le jardin est **indépendant des ateliers** : atelier = cours où l'on gagne de l'XP ; jardin = lieu où l'on cultive des plantes qui grandissent grâce à l'XP gagné. Les arbres ne sont PAS liés à un atelier.
 - **Style « Terra Nil »** : une île de terre fixe (forme immuable) posée dans l'eau, sans ombres. On peint la surface des cases via un inventaire (herbe/chemin/herbe haute/terre/eau-lac/pont), puis on pose des objets (arbres, maison 2×2, montagne 3×3) et des cosmétiques. Mode édition avec déplacer/ranger.
 - Implémentation actuelle : `src/app/[locale]/garden/{page.tsx, GardenClient.tsx, gardenEngine.ts}` (SVG isométrique). Mock **localStorage** `culture.garden.v2` ; schéma Supabase jardin + croissance via XP réel restent à créer.
-- Donne accès à : recherche d'atelier, profil, paramètres, toutes les autres fonctionnalités
 - Visuellement chaleureux et apaisant (nature / lofi) — doit donner envie d'y revenir
 
-**Recherche d'atelier** — fusionnée dans `/dashboard` (mes ateliers + recherche + Preview d'atelier). `/search` redirige vers `/dashboard`.
+**« Mes ateliers » — page secondaire** (`/dashboard`, anciennement page d'accueil ; fusionnée avec la recherche d'atelier). `/search` redirige vers `/dashboard`. Atteignable depuis le sélecteur d'atelier ; sert aussi de repli pour un utilisateur qui n'a encore aucun atelier.
 - Affiche les ateliers publics + les ateliers loisir proposés par Culture
 - **Ateliers loisir Culture :** créés et maintenus par Culture sur des sujets grand public. Disponibles selon l'abonnement : 5 (gratuit) / 10 (Premium) / 15 (Premium+).
 - Chaque atelier affiche une **page de présentation** (« Preview », en modale) : image de couverture, nom, description, propriétaire, nombre de membres, bouton « rejoindre » (envoie une demande d'adhésion — voir « Rejoindre un atelier » ci-dessous) ou « entrer » si déjà membre.
@@ -194,9 +200,9 @@ Un propriétaire peut activer le statut Premium sur son atelier. C'est une opér
 **Création**
 1. L'utilisateur crée un atelier (nom, description, image de couverture)
 2. Il dépose des fichiers sources (PDF en V1 — autres formats en V2+)
-3. L'IA décompose les fichiers en briques de connaissance
-4. L'IA organise automatiquement les briques en sections et génère le programme éducatif
-5. Le gestionnaire peut modifier les briques et l'organisation manuellement
+3. L'IA décompose les fichiers en notions
+4. L'IA organise automatiquement les notions en sections et génère le programme éducatif
+5. Le gestionnaire peut modifier les notions et l'organisation manuellement
 
 **Rejoindre un atelier**
 - Tous les ateliers sont **toujours privés** : on les rejoint via une **demande d'adhésion** validée par un gestionnaire/propriétaire (accepter/refuser), ou sur invitation directe (réservée aux ateliers Premium — voir plus bas). Il n'existe plus de notion public/privé ni de limites de candidats (total/mensuel) — ces quotas seront gérés par les structures via l'API (V3).
@@ -218,31 +224,31 @@ Un propriétaire peut activer le statut Premium sur son atelier. C'est une opér
 | Donner la propriété | Uniquement le propriétaire. Il perd son statut de propriétaire. *(non implémenté à ce jour)* |
 | Supprimer l'atelier | Uniquement le propriétaire. |
 
-### Briques de connaissance
+### Notions
 
 - Générées par l'IA à partir des fichiers sources de l'atelier, ou ajoutées à la main
-- Chaque brique possède : un **titre** (l'idée en une phrase) et un **contenu détaillé** optionnel
-- Une brique peut être rattachée à un **chapitre** — le rattachement est optionnel, les briques non rangées apparaissent sous « sans chapitre »
+- Chaque notion possède : un **titre** (l'idée en une phrase) et un **contenu détaillé** optionnel
+- Une notion peut être rattachée à un **chapitre** — le rattachement est optionnel, les notions non rangées apparaissent sous « sans chapitre »
 - Pas de niveau de difficulté ni d'importance (décision du 19/07/2026, remplace la spécification initiale)
-- CRUD manuel réservé au propriétaire et aux gestionnaires, dans Paramètres → Briques de connaissance
-- La qualité des briques dépend de la qualité des fichiers déposés — pas de filtrage côté application.
+- CRUD manuel réservé au propriétaire et aux gestionnaires, dans Paramètres → Notions
+- La qualité des notions dépend de la qualité des fichiers déposés — pas de filtrage côté application.
 
-**Maîtrise d'une brique — Taxonomie de Bloom**
+**Maîtrise d'une notion — Taxonomie de Bloom**
 
-Le niveau de maîtrise d'une brique par un utilisateur se mesure sur les 6 niveaux de Bloom (1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser, 5 évaluer, 6 créer) : on veut pouvoir distinguer un candidat qui a seulement mémorisé une brique de celui qui sait la critiquer. La table `brick_mastery` (utilisateur × brique × `bloom_level`) est **créée mais pas encore alimentée** — c'est la fondation posée pour le module Analyse.
+Le niveau de maîtrise d'une notion par un utilisateur se mesure sur les 6 niveaux de Bloom (1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser, 5 évaluer, 6 créer) : on veut pouvoir distinguer un candidat qui a seulement mémorisé une notion de celui qui sait la critiquer. La table `brick_mastery` (utilisateur × notion × `bloom_level` — table encore nommée `bricks` en base, voir `CLAUDE.md` §1) est **créée mais pas encore alimentée** — c'est la fondation posée pour le module Analyse.
 
 ### Chapitres
 
-- Un chapitre appartient à un atelier et regroupe des briques de connaissance
+- Un chapitre appartient à un atelier et regroupe des notions
 - Ordre d'affichage **réorganisable à la main** (colonne `position`), qui détermine l'ordre des pots dans le programme éducatif
-- Gérés depuis Paramètres → Briques de connaissance (création, renommage, réorganisation, suppression), réservés au propriétaire et aux gestionnaires
-- Supprimer un chapitre **ne supprime pas ses briques** : elles retombent dans « sans chapitre »
+- Gérés depuis Paramètres → Notions (création, renommage, réorganisation, suppression), réservés au propriétaire et aux gestionnaires
+- Supprimer un chapitre **ne supprime pas ses notions** : elles retombent dans « sans chapitre »
 - Un chapitre = un pot dans l'onglet Programme éducatif. Le nombre de pots suit donc directement le nombre de chapitres, et un atelier sans chapitre affiche un programme vide.
 
 ### Programme éducatif
 
 **Structure**
-- Personnalisé pour chaque candidat, organisé en **chapitres** (groupes de briques)
+- Personnalisé pour chaque candidat, organisé en **chapitres** (groupes de notions)
 - Un pot par chapitre, dans l'ordre défini par le gestionnaire
 - La plante de chaque pot reste enroulée sur elle-même : le « chemin » d'exercices dépliable a été retiré le 19/07/2026 (il reposait sur des exercices factices). Le bouton « lancer un exercice » de chaque pot ouvre la page d'exercice du chapitre.
 
@@ -250,16 +256,16 @@ Le niveau de maîtrise d'une brique par un utilisateur se mesure sur les 6 nivea
 
 Un bouton « questions du parcours », en haut de l'onglet (gestionnaires uniquement), ouvre la vue de gestion de ces questions. Elles sont stockées dans la **même table que la banque du générateur d'examen** (`exam_questions`), distinguées par la colonne `context` (`'exam'` / `'parcours'`), et éditées avec le même éditeur de question. Les deux surfaces restent étanches : la banque d'examen ne montre que `context = 'exam'`, la vue parcours que `context = 'parcours'`. Les pools (étiquettes) sont en revanche partagés entre les deux.
 
-**Niveau de Bloom et briques couvertes (toutes les questions)**
+**Niveau de Bloom et notions couvertes (toutes les questions)**
 
 Toute question — parcours **et** banque d'examen — porte :
 
 - un **niveau de Bloom visé, obligatoire** (`exam_questions.bloom_level`, 1 mémoriser → 6 créer). Garanti à trois niveaux : `not null default 1` + contrainte `check between 1 and 6` en base, type non optionnel côté TypeScript, et sélecteur segmenté toujours à une valeur active côté UI — il n'existe aucun état « sans niveau ». À ne pas confondre avec `brick_mastery.bloom_level`, qui mesure le niveau *atteint* par un candidat ; celui-ci est le niveau *visé* par la question.
-- zéro à N **briques de connaissance** (table de jonction `exam_question_bricks`, `on delete cascade` des deux côtés : supprimer une brique détache les questions, supprimer une question retire ses liens). Aucune restriction de chapitre — une question peut mobiliser des briques de plusieurs chapitres.
+- zéro à N **notions** (table de jonction `exam_question_bricks` — encore nommée `bricks` en base, voir `CLAUDE.md` §1 —, `on delete cascade` des deux côtés : supprimer une notion détache les questions, supprimer une question retire ses liens). Aucune restriction de chapitre — une question peut mobiliser des notions de plusieurs chapitres.
 
 Les deux se saisissent dans l'éditeur de question, section « Options par question ».
 
-Chaque question de parcours se rattache en plus à **un chapitre** (`exam_questions.chapter_id`). L'affectation se fait par un sélecteur **sur chaque ligne de la liste** — enregistrement immédiat, sans passer par l'éditeur, qui est partagé avec la banque d'examen et ignore les chapitres. Une question sans chapitre n'est jamais tirée (son sélecteur est souligné en rouge). Supprimer un chapitre ne supprime pas ses questions : elles retombent dans « sans chapitre » (FK `on delete set null`, même choix que les briques).
+Chaque question de parcours se rattache en plus à **un chapitre** (`exam_questions.chapter_id`). L'affectation se fait par un sélecteur **sur chaque ligne de la liste** — enregistrement immédiat, sans passer par l'éditeur, qui est partagé avec la banque d'examen et ignore les chapitres. Une question sans chapitre n'est jamais tirée (son sélecteur est souligné en rouge). Supprimer un chapitre ne supprime pas ses questions : elles retombent dans « sans chapitre » (FK `on delete set null`, même choix que les notions).
 
 **Exercice (page candidat)**
 
@@ -283,9 +289,9 @@ Sécurité : le client ne reçoit **jamais** `answer` ni `correctChoices` au tir
 
 - Chaque **nouvelle question** (hors réitération) consomme **1 goutte d'eau**
 - Les gouttes d'eau se regagnent : avec le temps / en quantité aléatoire après un nombre aléatoire de questions
-- Score d'une brique : +X pour une réponse réussie / -X pour une réponse ratée (score minimum = 0)
+- Score d'une notion : +X pour une réponse réussie / -X pour une réponse ratée (score minimum = 0)
 - Une question ratée est **réposée** jusqu'à être réussie — seule la première tentative affecte le score
-- À partir d'un seuil de score défini : la brique est marquée **acquise**
+- À partir d'un seuil de score défini : la notion est marquée **acquise**
 - Affichage de la bonne réponse : utiliser la réponse de l'utilisateur corrigée et complétée des éléments manquants (pas une réponse modèle générique)
 - **Échange avec l'IA** disponible en cours d'apprentissage pour poser des questions ou obtenir des explications (Premium — V2)
 - Dans les ateliers Premium : un gestionnaire peut **valider manuellement** une section pour un candidat (V2)
@@ -395,17 +401,19 @@ Les examens et corrections sont associés au membre qui les a passés (associati
 
 Questions affichées une par une sur un écran partagé. Options : afficher la réponse / afficher les statistiques de réponses / afficher un classement (points ; égalité → temps de réponse global).
 
-### Analyse *(gestionnaires uniquement)*
+### Analyse *(V2)*
+
+**Périmètre révisé le 05/08/2026** (chantier de refonte UI) : l'Analyse n'est plus un onglet par atelier réservé aux gestionnaires, mais une **vue de suivi personnelle rattachée au profil** (`/profile/analyse`), indépendante de tout atelier ou rôle — accessible à tout utilisateur via la carte « suivi » de `/profile`. Actuellement un état vide « V2 » (titre + badge, aucune donnée) ; le contenu ci-dessous reste la cible fonctionnelle à spécifier plus précisément le moment venu (portée multi-ateliers à définir) :
 
 - Ensemble des notes obtenues par chaque membre avec leurs coefficients
 - Moyenne des notes par membre
 - Avancement de l'état des connaissances par membre
-- Export au format CSV *(V2)*
+- Export au format CSV
 
 ### Génération de cours *(Premium+, gestionnaires — V2)*
 
 - Slides animées convertibles en PDF
-- Générées à partir des briques de connaissance de l'atelier
+- Générées à partir des notions de l'atelier
 - Générées par l'IA, modifiables manuellement
 
 ---
