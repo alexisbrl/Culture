@@ -20,12 +20,18 @@ type Props = {
 };
 
 /**
- * Vue « chapitres » de la maquette (vueChapitres, lignes 490-526) : chapitre
- * en cours en héros + liste des autres. Les barres de progression sont celles
- * du membre connecté, calculées sur le score de maîtrise de ses notions (voir
- * src/lib/workshops/mastery.ts). Un chapitre sans notion reliée à ses
- * questions reste à 0 % : c'est la donnée réelle, pas un état de chargement.
- * Le chapitre héros est le premier par `position`.
+ * Vue « chapitres » de la maquette (vueChapitres, lignes 490-526) : un bloc
+ * héros au milieu + la liste de TOUS les chapitres en bas.
+ *
+ * Le bloc héros n'est qu'un **raccourci** vers le chapitre en cours (le premier
+ * par `position`) : il ne porte pas de barre de progression, sinon la même
+ * information s'afficherait deux fois. Le chapitre en cours n'est pas retiré de
+ * la liste du bas — c'est là qu'on lit l'avancement de chaque chapitre.
+ *
+ * Les barres de progression sont celles du membre connecté, calculées sur le
+ * score de maîtrise de ses notions (voir src/lib/workshops/mastery.ts). Un
+ * chapitre sans notion reliée à ses questions reste à 0 % : c'est la donnée
+ * réelle, pas un état de chargement.
  */
 export default function ProgrammeTab({ chapters, workshopId, workshopName, canManage, progress }: Props) {
   const t = useTranslations('programme');
@@ -37,7 +43,7 @@ export default function ProgrammeTab({ chapters, workshopId, workshopName, canMa
   }
 
   const sorted = [...chapters].sort((a, b) => a.position - b.position);
-  const [hero, ...rest] = sorted;
+  const hero = sorted[0];
 
   return (
     <div className="relative flex-1 overflow-y-auto">
@@ -80,41 +86,36 @@ export default function ProgrammeTab({ chapters, workshopId, workshopName, canMa
                 {t('currentChapterEyebrow')}
               </div>
               <div className="mt-2 text-[21px] font-bold text-[var(--ink)]">{hero.name}</div>
-              <ProgressBar value={progress.chapterPercent[hero.id] ?? 0} className="mt-4 w-[220px]" />
               <LinkButton href={`/${locale}/workshops/${workshopId}/exercise/${hero.id}`} size="lg" className="mt-[22px]">
                 {t('startExercise')}
                 <ArrowRight size={18} strokeWidth={1.75} />
               </LinkButton>
             </div>
 
-            {rest.length > 0 && (
-              <>
-                <div className="my-6 flex items-center gap-3.5">
-                  <span className="h-px flex-1 bg-[var(--line)]" />
-                  <span className="text-[11px] font-bold tracking-[0.14em] text-[var(--ink-faint)] uppercase">
-                    {t('allChaptersEyebrow')}
+            <div className="my-6 flex items-center gap-3.5">
+              <span className="h-px flex-1 bg-[var(--line)]" />
+              <span className="text-[11px] font-bold tracking-[0.14em] text-[var(--ink-faint)] uppercase">
+                {t('allChaptersEyebrow')}
+              </span>
+              <span className="h-px flex-1 bg-[var(--line)]" />
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {sorted.map((chapter) => (
+                <Link
+                  key={chapter.id}
+                  href={`/${locale}/workshops/${workshopId}/exercise/${chapter.id}`}
+                  className="flex items-center gap-3.5 rounded-2xl border border-[var(--line)] bg-[var(--surface-raised)] px-[18px] py-3.5 shadow-[var(--shadow-sm)] transition-transform hover:-translate-y-0.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-[var(--ink)]">{chapter.name}</span>
+                    <ProgressBar value={progress.chapterPercent[chapter.id] ?? 0} size="sm" className="mt-2.5" />
+                  </div>
+                  <span className="flex size-[34px] flex-none items-center justify-center rounded-full bg-[var(--green-tint)] text-[var(--green-strong)]">
+                    <Play size={14} strokeWidth={1.75} fill="currentColor" />
                   </span>
-                  <span className="h-px flex-1 bg-[var(--line)]" />
-                </div>
-                <div className="flex flex-col gap-2.5">
-                  {rest.map((chapter) => (
-                    <Link
-                      key={chapter.id}
-                      href={`/${locale}/workshops/${workshopId}/exercise/${chapter.id}`}
-                      className="flex items-center gap-3.5 rounded-2xl border border-[var(--line)] bg-[var(--surface-raised)] px-[18px] py-3.5 shadow-[var(--shadow-sm)] transition-transform hover:-translate-y-0.5"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <span className="block text-sm font-bold text-[var(--ink)]">{chapter.name}</span>
-                        <ProgressBar value={progress.chapterPercent[chapter.id] ?? 0} size="sm" className="mt-2.5" />
-                      </div>
-                      <span className="flex size-[34px] flex-none items-center justify-center rounded-full bg-[var(--green-tint)] text-[var(--green-strong)]">
-                        <Play size={14} strokeWidth={1.75} fill="currentColor" />
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              </>
-            )}
+                </Link>
+              ))}
+            </div>
           </>
         )}
       </div>

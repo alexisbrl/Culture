@@ -251,7 +251,9 @@ Le niveau de maîtrise d'une notion par un utilisateur se mesure sur les niveaux
 - Personnalisé pour chaque candidat, organisé en **chapitres** (groupes de notions)
 - Un pot par chapitre, dans l'ordre défini par le gestionnaire
 - La plante de chaque pot reste enroulée sur elle-même : le « chemin » d'exercices dépliable a été retiré le 19/07/2026 (il reposait sur des exercices factices). Le bouton « lancer un exercice » de chaque pot ouvre la page d'exercice du chapitre.
-- **Barres de progression** (06/08/2026) : une sous le nom de l'atelier avec son pourcentage, une sous le chapitre en cours, une par ligne de la liste des chapitres. Elles montrent la progression du **membre connecté** — voir « Mécanique de progression ». Le bouton « liste des questions du parcours » (gestionnaires) est ancré en haut à droite de la zone, hors de la colonne de contenu, pour ne pas mordre sur les noms d'atelier longs.
+- **Barres de progression** (06/08/2026) : une sous le nom de l'atelier avec son pourcentage, et une par ligne de la liste des chapitres. Elles montrent la progression du **membre connecté** — voir « Mécanique de progression ».
+- **Bloc central = raccourci, pas indicateur** : le bloc « chapitre en cours » au milieu de la page ne porte **pas** de barre de progression — c'est un simple raccourci vers le chapitre en cours (le premier par position). L'avancement de ce chapitre se lit dans la liste du bas, qui contient **tous** les chapitres, chapitre en cours compris.
+- Le bouton « liste des questions du parcours » (gestionnaires) est ancré en haut à droite de la zone, hors de la colonne de contenu, pour ne pas mordre sur les noms d'atelier longs.
 
 **Questions du parcours**
 
