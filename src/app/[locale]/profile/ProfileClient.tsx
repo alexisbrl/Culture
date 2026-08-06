@@ -127,9 +127,15 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
 
           {/* Avatar calé sur le BAS de la bannière (`bottom: 0`, pas de marge) :
               le buste doit affleurer le bord, pas flotter au milieu. Il déborde
-              donc sous la ligne du nom — d'où le z-index, le nom passe devant. */}
+              donc sous la ligne du nom — d'où le z-index, le nom passe devant.
+              `overflow: visible` lève le rognage carré du composeur, dont le
+              cadre `bust` (FRAMES, y=70) coupe le haut des coiffures les plus
+              hautes (chignons). C'est la bannière, elle, qui rogne — ce qui
+              donne exactement l'effet voulu en bas. */}
           <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', lineHeight: 0 }}>
-            {avatarConfig && <AvatarComposer config={avatarConfig} size={148} frame="bust" />}
+            {avatarConfig && (
+              <AvatarComposer config={avatarConfig} size={148} frame="bust" style={{ overflow: 'visible' }} />
+            )}
           </div>
 
           <div
@@ -137,7 +143,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
               position: 'absolute',
               left: 20,
               right: 20,
-              bottom: 16,
+              bottom: 9,
               zIndex: 1,
               display: 'flex',
               alignItems: 'baseline',
@@ -147,7 +153,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
           >
             <span
               style={{
-                fontSize: 22,
+                fontSize: 25,
                 fontWeight: 700,
                 color: palette.ink,
                 overflow: 'hidden',
