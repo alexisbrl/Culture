@@ -174,10 +174,14 @@ Un propriétaire peut activer le statut Premium sur son atelier. C'est une opér
 - Chaque atelier affiche une **page de présentation** (« Preview », en modale) : image de couverture, nom, description, propriétaire, nombre de membres, bouton « rejoindre » (envoie une demande d'adhésion — voir « Rejoindre un atelier » ci-dessous) ou « entrer » si déjà membre.
 - Le QR code de partage d'un atelier pointe vers `/dashboard?preview=<id>`, qui ouvre automatiquement la Preview.
 
-**Profil utilisateur**
+**Profil utilisateur** *(mise en page arrêtée le 06/08/2026)*
 - Avatar personnalisable (personnage en jardinier), composé de PNG via `AvatarComposer` (`src/components/avatar/avatarConfig.ts` + `/profile/avatar`) — source de vérité : `publicMetadata.avatarParts` du compte Clerk (synchronisé sur tous les appareils, pas seulement en local).
-- Affiche le tag de l'utilisateur (Crockford-like, 8 caractères)
-- Accès à la page abonnement (avec l'abonnement actuel mis en avant)
+- **Bannière rayée** en tête : avatar centré (sans contour), nom en bas à gauche suivi du tag en plus petit (Crockford-like, 8 caractères), bouton « éditer » en haut à droite. « éditer » est le **seul** accès au composeur d'avatar — il n'y a plus de ligne « modifier l'avatar » dans les paramètres. Pas de date d'inscription.
+- **Carrousel de 5 statistiques** (série, XP, temps passé, succès, notions maîtrisées) : rangée à défilement horizontal, barre de défilement masquée — les dernières tuiles se découvrent en faisant glisser. ⚠️ **Non fonctionnel** : aucune de ces données n'existe côté serveur, les valeurs sont celles de la maquette, figées (`PLACEHOLDER_STATS`). Même statut que le compteur de gouttes et la cloche de notifications.
+- **Encart d'abonnement** : pour un compte gratuit, un encart doré d'upsell (« passe à Smart / débloque tout ton jardin », bouton vers `/pricing`, mention « ton forfait actuel · basique ») ; pour un compte déjà payant, une carte sobre rappelant le forfait réel. ⚠️ Le vocabulaire « Smart »/« basique » vient de la maquette et **ne correspond pas** aux offres Gratuit / Premium / Premium+ de `/pricing` — arbitrage à faire, voir `docs/backlog.md`.
+- **Carte « suivi »** → `/profile/analyse` (vue de suivi personnelle, voir plus bas).
+- **Paramètres** : notifications *(non fonctionnel)*, langue, aide & contact, se déconnecter. La ligne « langue » ouvre un menu court (français / english) qui navigue vers la même page dans l'autre locale ; la préférence est ensuite persistée sur le compte par `DashboardHeader` (`publicMetadata.locale`, source de vérité pour la langue des emails).
+- **Barre du haut** : la page profil garde le sélecteur d'atelier et le groupe d'onglets, alimentés par le **dernier atelier visité** (`getLastVisitedWorkshop`) puisque son URL n'en porte aucun. Le Jardin et le tableau de bord gardent une barre nue.
 - Accès à la page Examen officiel (module 2)
 
 **Page sociale** *(V2)*

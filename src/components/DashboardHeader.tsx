@@ -10,7 +10,7 @@ import AvatarComposer from '@/components/avatar/AvatarComposer';
 import { loadAvatarConfig, type AvatarConfig } from '@/components/avatar/avatarConfig';
 import { markIntentionalSignOut } from '@/lib/signOutIntent';
 import { setUserLocale } from '@/app/actions/profile';
-import { getWorkshop } from '@/app/actions/workshops';
+import { getWorkshop, getLastVisitedWorkshop } from '@/app/actions/workshops';
 import { Badge } from '@/components/ui/badge';
 import WorkshopSwitcher from '@/components/WorkshopSwitcher';
 import WorkshopActionsMenu from '@/components/WorkshopActionsMenu';
@@ -60,29 +60,51 @@ export default function DashboardHeader() {
   }, [user, locale]);
 
   const workshopMatch = pathname.match(/^\/[a-z]{2}\/workshops\/([^/]+)/);
-  const workshopId = workshopMatch && workshopMatch[1] !== 'new' ? workshopMatch[1] : null;
+  const urlWorkshopId = workshopMatch && workshopMatch[1] !== 'new' ? workshopMatch[1] : null;
+
+  const activeTab = searchParams.get('tab') ?? 'programme';
+  const isJardin = pathname.includes('/garden');
+  const isProfil = pathname.includes('/profile');
 
   // Nom + rôle de l'atelier courant, pour la barre du haut. Appel client à la
   // server action existante (pas de nouvelle route) : coût d'une requête en plus
   // par navigation d'atelier, accepté pour ce socle de navigation (T12).
   useEffect(() => {
-    if (!workshopId) {
+    if (!urlWorkshopId) {
       setWorkshop(null);
       return;
     }
     let cancelled = false;
-    getWorkshop(workshopId).then((w) => {
+    getWorkshop(urlWorkshopId).then((w) => {
       if (!cancelled) setWorkshop(w ? { name: w.name, role: w.currentUserRole } : null);
     });
     return () => {
       cancelled = true;
     };
-  }, [workshopId]);
+  }, [urlWorkshopId]);
 
-  const canManage = workshop?.role === 'owner' || workshop?.role === 'manager';
-  const activeTab = searchParams.get('tab') ?? 'programme';
-  const isJardin = pathname.includes('/garden');
-  const isProfil = pathname.includes('/profile');
+  // L'URL du profil ne porte aucun atelier, mais la maquette y garde le
+  // sélecteur et le groupe d'onglets : on rétablit le contexte avec le dernier
+  // atelier visité. Volontairement limité au profil — le Jardin et le tableau de
+  // bord n'appartiennent à aucun atelier et gardent une barre nue.
+  const [lastWorkshop, setLastWorkshop] = useState<({ id: string } & WorkshopHeaderInfo) | null>(null);
+  useEffect(() => {
+    if (urlWorkshopId || !isProfil) {
+      setLastWorkshop(null);
+      return;
+    }
+    let cancelled = false;
+    getLastVisitedWorkshop().then((w) => {
+      if (!cancelled) setLastWorkshop(w);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [urlWorkshopId, isProfil]);
+
+  const workshopId = urlWorkshopId ?? lastWorkshop?.id ?? null;
+  const activeWorkshop = urlWorkshopId ? workshop : lastWorkshop;
+  const canManage = activeWorkshop?.role === 'owner' || activeWorkshop?.role === 'manager';
 
   const otherLocale = locale === 'fr' ? 'en' : 'fr';
   const pathWithoutLocale = pathname.replace(`/${locale}`, '') || '/dashboard';
@@ -144,9 +166,9 @@ export default function DashboardHeader() {
           <Sprout size={20} strokeWidth={1.75} className="text-[var(--green)]" />
           <span style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: 19, color: 'var(--ink)' }}>Culture</span>
         </Link>
-        {workshopId && workshop && (
+        {workshopId && activeWorkshop && (
           <div className="relative flex min-w-0 items-center gap-2 text-[13px] text-[var(--ink-muted)]">
-            <span className="truncate font-semibold text-[var(--ink)]">{workshop.name}</span>
+            <span className="truncate font-semibold text-[var(--ink)]">{activeWorkshop.name}</span>
             <button
               type="button"
               title={t('changeWorkshop')}
@@ -177,7 +199,7 @@ export default function DashboardHeader() {
                 faire surgir après coup en décalant tout le groupe (T50). Le
                 libellé est rendu invisible plutôt que remplacé par un gabarit,
                 pour que la largeur réservée soit exactement la bonne. */}
-            {workshop === null ? (
+            {activeWorkshop === null ? (
               <span aria-hidden className={`${tabClass(false)} invisible`}>{t('tabExamens')}</span>
             ) : canManage ? (
               <Link href={`/${locale}/workshops/${workshopId}?tab=examen`} className={tabClass(activeTab === 'examen')}>
@@ -201,8 +223,8 @@ export default function DashboardHeader() {
       </nav>
 
       <div className="flex flex-1 items-center justify-end gap-3">
-        {workshopId && workshop && (
-          <WorkshopActionsMenu workshopId={workshopId} workshopName={workshop.name} role={workshop.role} />
+        {workshopId && activeWorkshop && (
+          <WorkshopActionsMenu workshopId={workshopId} workshopName={activeWorkshop.name} role={activeWorkshop.role} />
         )}
 
         <NotificationBell />

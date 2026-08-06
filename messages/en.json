@@ -245,15 +245,10 @@
     "metaTitle": "Profile — Culture",
     "defaultName": "gardener",
     "defaultNameFull": "Gardener",
-    "memberSince": "gardener since {date}",
     "edit": "edit",
     "tracking": {
       "title": "tracking",
       "desc": "progress, mastery and detailed statistics"
-    },
-    "streak": {
-      "label": "today's watering can",
-      "days": "{count} days of watering in a row"
     },
     "plan": {
       "free": "Free plan",
@@ -268,13 +263,29 @@
     },
     "settings": {
       "title": "settings",
-      "editAvatar": "edit avatar",
       "notifications": "notifications",
       "notificationsHint": "enabled",
       "language": "language",
-      "languageName": "English",
       "help": "help & contact",
-      "signOut": "sign out"
+      "signOut": "sign out",
+      "languages": {
+        "fr": "français",
+        "en": "english"
+      }
+    },
+    "stats": {
+      "streak": "day streak",
+      "xp": "total XP earned",
+      "time": "spent working",
+      "achievements": "achievements unlocked",
+      "notions": "notions mastered"
+    },
+    "upsell": {
+      "eyebrow": "go Smart",
+      "title": "unlock your whole garden",
+      "desc": "unlimited workshops, advanced AI exams and full progress tracking.",
+      "cta": "Try Smart!",
+      "current": "your current plan · basic"
     }
   },
   "dashboard": {
@@ -377,7 +388,9 @@
       "notSet": "(answer not set)",
       "prefix": "answer · "
     },
-    "answerSpace": { "audio": "🎙 audio response space" },
+    "answerSpace": {
+      "audio": "🎙 audio response space"
+    },
     "weight": {
       "points": "points",
       "negative": "negative points",
@@ -680,7 +693,11 @@
       "manager": "manager",
       "member": "member"
     },
-    "fileUnit": { "b": "B", "kb": "KB", "mb": "MB" },
+    "fileUnit": {
+      "b": "B",
+      "kb": "KB",
+      "mb": "MB"
+    },
     "err": {
       "upload": "Upload error",
       "generic": "Error",

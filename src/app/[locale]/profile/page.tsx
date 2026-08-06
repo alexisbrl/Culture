@@ -28,7 +28,6 @@ export default async function ProfilePage() {
       uniqueId={uniqueId}
       firstName={user.firstName ?? ''}
       lastName={user.lastName ?? ''}
-      createdAt={user.createdAt ? new Date(user.createdAt).toISOString() : null}
       tier={tier}
     />
   );

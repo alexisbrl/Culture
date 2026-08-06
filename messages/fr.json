@@ -245,15 +245,10 @@
     "metaTitle": "Profil — Culture",
     "defaultName": "jardinier",
     "defaultNameFull": "Jardinier",
-    "memberSince": "jardinier depuis {date}",
     "edit": "éditer",
     "tracking": {
       "title": "suivi",
       "desc": "progression, maîtrise et statistiques détaillées"
-    },
-    "streak": {
-      "label": "arrosoir du jour",
-      "days": "{count} jours d'arrosage d'affilée"
     },
     "plan": {
       "free": "forfait Gratuit",
@@ -268,13 +263,29 @@
     },
     "settings": {
       "title": "paramètres",
-      "editAvatar": "modifier l'avatar",
       "notifications": "notifications",
       "notificationsHint": "activées",
       "language": "langue",
-      "languageName": "français",
       "help": "aide & contact",
-      "signOut": "se déconnecter"
+      "signOut": "se déconnecter",
+      "languages": {
+        "fr": "français",
+        "en": "english"
+      }
+    },
+    "stats": {
+      "streak": "jours d'affilée",
+      "xp": "XP total gagné",
+      "time": "passées à travailler",
+      "achievements": "succès débloqués",
+      "notions": "notions maîtrisées"
+    },
+    "upsell": {
+      "eyebrow": "passe à Smart",
+      "title": "débloque tout ton jardin",
+      "desc": "ateliers illimités, examens IA avancés et suivi complet de la progression.",
+      "cta": "Essayer Smart !",
+      "current": "ton forfait actuel · basique"
     }
   },
   "dashboard": {
@@ -377,7 +388,9 @@
       "notSet": "(réponse non définie)",
       "prefix": "réponse · "
     },
-    "answerSpace": { "audio": "🎙 espace de réponse audio" },
+    "answerSpace": {
+      "audio": "🎙 espace de réponse audio"
+    },
     "weight": {
       "points": "points",
       "negative": "points négatifs",
@@ -680,7 +693,11 @@
       "manager": "gestionnaire",
       "member": "membre"
     },
-    "fileUnit": { "b": "o", "kb": "Ko", "mb": "Mo" },
+    "fileUnit": {
+      "b": "o",
+      "kb": "Ko",
+      "mb": "Mo"
+    },
     "err": {
       "upload": "Erreur lors du téléchargement",
       "generic": "Erreur",
