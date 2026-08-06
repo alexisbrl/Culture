@@ -126,8 +126,9 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
           </div>
 
           {/* Avatar calé sur le BAS de la bannière (`bottom: 0`, pas de marge) :
-              le buste doit affleurer le bord, pas flotter au milieu. Il déborde
-              donc sous la ligne du nom — d'où le z-index, le nom passe devant.
+              le buste doit affleurer le bord, pas flotter au milieu. Sa coiffure
+              monte à hauteur du nom, en haut à gauche — d'où le z-index sur le
+              bloc nom + tag, qui passe devant.
               `overflow: visible` lève le rognage carré du composeur, dont le
               cadre `bust` (FRAMES, y=70) coupe le haut des coiffures les plus
               hautes (chignons). C'est la bannière, elle, qui rogne — ce qui
@@ -143,11 +144,12 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
               position: 'absolute',
               left: 20,
               right: 20,
-              bottom: 9,
+              top: 16,
               zIndex: 1,
               display: 'flex',
-              alignItems: 'baseline',
-              gap: 10,
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              gap: 5,
               minWidth: 0,
             }}
           >
