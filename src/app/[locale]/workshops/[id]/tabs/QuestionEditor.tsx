@@ -96,9 +96,9 @@ function Segmented<T extends string>({ value, onChange, options }: { value: T; o
               borderRadius: 999,
               cursor: o.soon ? 'default' : 'pointer',
               fontFamily: 'inherit',
-              border: o.soon ? '1px solid rgba(45,42,36,0.08)' : active ? '1px solid rgba(45,42,36,0.30)' : `1px solid ${ink(0.10)}`,
+              border: o.soon ? `1px solid ${ink(0.08)}` : active ? `1px solid ${ink(0.30)}` : `1px solid ${ink(0.10)}`,
               background: o.soon ? ink(0.05) : active ? palette.ink : withAlpha(palette.paper, 0.7),
-              color: o.soon ? palette.inkFaint : active ? palette.parchment : '#3a352c',
+              color: o.soon ? palette.inkFaint : active ? palette.parchment : palette.inkMuted,
               fontWeight: active ? 500 : 400,
               transition: 'all 0.12s',
             }}
@@ -122,7 +122,7 @@ function MiniSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean
         justifyContent: value ? 'flex-end' : 'flex-start', transition: 'all 0.18s',
       }}
     >
-      <span style={{ width: 16, height: 16, borderRadius: '50%', background: palette.paper, display: 'block', boxShadow: '0 1px 3px rgba(0,0,0,0.18)' }} />
+      <span style={{ width: 16, height: 16, borderRadius: '50%', background: palette.paper, display: 'block', boxShadow: `0 1px 3px ${ink(0.18)}` }} />
     </button>
   );
 }
@@ -307,7 +307,7 @@ function ChoiceListEditor({
               onDragStart={() => setDragIndex(i)}
               onDragEnd={() => { setDragIndex(null); setDropIndicator(null); }}
               title={t('choices.dragReorder')}
-              style={{ cursor: 'grab', color: '#c8c2b6', fontSize: 13, lineHeight: 1, padding: '0 2px', flexShrink: 0, userSelect: 'none' as const }}
+              style={{ cursor: 'grab', color: palette.lineStrong, fontSize: 13, lineHeight: 1, padding: '0 2px', flexShrink: 0, userSelect: 'none' as const }}
             >
               ⠿
             </span>
@@ -366,8 +366,8 @@ function ChoiceListEditor({
             )}
             {showOrder && (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <button onClick={() => move(i, -1)} disabled={i === 0} style={{ border: 'none', background: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? '#d8d4cb' : palette.inkSoft, padding: 0, lineHeight: 1, fontSize: 11 }}>▲</button>
-                <button onClick={() => move(i, 1)} disabled={i === choices.length - 1} style={{ border: 'none', background: 'none', cursor: i === choices.length - 1 ? 'default' : 'pointer', color: i === choices.length - 1 ? '#d8d4cb' : palette.inkSoft, padding: 0, lineHeight: 1, fontSize: 11 }}>▼</button>
+                <button onClick={() => move(i, -1)} disabled={i === 0} style={{ border: 'none', background: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? palette.line : palette.inkSoft, padding: 0, lineHeight: 1, fontSize: 11 }}>▲</button>
+                <button onClick={() => move(i, 1)} disabled={i === choices.length - 1} style={{ border: 'none', background: 'none', cursor: i === choices.length - 1 ? 'default' : 'pointer', color: i === choices.length - 1 ? palette.line : palette.inkSoft, padding: 0, lineHeight: 1, fontSize: 11 }}>▼</button>
               </div>
             )}
             <button onClick={() => removeChoice(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: palette.danger, fontSize: 16, padding: '0 2px', lineHeight: 1 }}>×</button>

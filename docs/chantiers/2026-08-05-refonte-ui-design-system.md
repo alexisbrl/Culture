@@ -698,7 +698,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
   - Fichiers : `src/app/[locale]/workshops/[id]/tabs/examen/GeneratorContent.tsx`
   - Dépend de : T36
 
-- [ ] **T38 — Feuille A4 et éditeur de question**
+- [x] **T38 — Feuille A4 et éditeur de question**
   - Repeindre la feuille A4 et l'éditeur de question sur les tokens : surfaces,
     filets, rayons, boutons pointillés « + question » / « + partie », sélecteur de
     type, options de réponse. **Ne toucher ni à la logique de pagination A4 ni au
@@ -1009,6 +1009,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 
 - 2026-08-06 — T23 — [voir commit] — `EXERCISE_SESSION_LENGTH = 10` compté côté client dans `ExerciseClient.tsx` ; à la 10ᵉ correction, écran de fin (`Leaf`, « belle récolte. », score réel) remplace directement la carte de question, bouton « retour au parcours » vers l'atelier. `messages/{fr,en}.json` : clés `exercise.doneTitle/doneScore/backToParcours`. `build`/`lint` OK (0 erreur, mêmes 26 warnings pré-existants). **Rendu vérifié dans Chrome** (Alexis a reconnecté le navigateur en cours de session) : 10 questions enchaînées sur l'atelier « Evalia » (Les fleuves), écran de fin conforme à la maquette, singulier « 1 bonne réponse » correct, bouton « retour au parcours » ramène bien à l'atelier sans erreur console.
 
+- 2026-08-06 — T38 — [voir commit] — Aucun changement à la pagination/au calcul de hauteur, seulement les couleurs en dur : `GeneratorContent.tsx` (`#3a352c`→`palette.inkMuted`, `#7a4d20`→nouveau `palette.tanStrong`, `#c8c2b6`×2→`palette.lineStrong`, `rgba(168,122,58,0.4)`→`withAlpha(palette.amber,0.4)`) et `QuestionEditor.tsx` (`#3a352c`→`palette.inkMuted`, `#c8c2b6`→`palette.lineStrong`, `#d8d4cb`×2→`palette.line`, `rgba(45,42,36,…)`→`ink(…)`, `rgba(0,0,0,0.18)`→`ink(0.18)`). Couleurs vérifiées contre le rendu réel de la maquette (`docs/design/App-Culture.dc.html` via `getComputedStyle`, pas de lecture visuelle approximative). `build`/`lint` OK. **Rendu vérifié dans Chrome** : éditeur d'examen avec 4 questions envoyées, une feuille A4 complète (identité, titre de partie, questions numérotées, pondération, poignées de glisser-déposer), aucune erreur console, aucune requête réseau parasite (le brouillon de test n'a pas été enregistré).
+
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
 - 2026-08-05 — T48 — **Troncature à 2 lignes et non 1** comme la maquette. Les questions réelles de l'atelier de test sont nettement plus longues que les libellés du prototype (« Quelle est la capitale de la France ? ») : à une ligne, la moitié d'entre elles devenaient illisibles. Deux lignes gardent le rythme de colonne sans amputer l'énoncé.
@@ -1080,6 +1082,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 - 2026-08-05 — T37 — **« sous-titre (atelier · durée · consigne) » de l'énoncé de T37 non ajouté.** Aucun champ de consigne libre n'existe dans `ExamConfig` (`src/lib/workshops/examTypes.ts`) — l'ajouter serait une évolution du modèle de données, hors périmètre d'un chantier « interface uniquement » (`src/lib/**` est en zone interdite sauf T2). Le sous-titre littéral de la maquette (atelier · durée · consigne) est de toute façon rendu à même la feuille A4 dans le prototype, donc dans la zone de rendu réservée à T38 — à réévaluer à ce moment-là, sans garantie que l'ajout d'un champ « consigne » soit dans le périmètre même de T38 (habillage seulement, pas de nouvelle donnée).
 
 - 2026-08-06 — T23 — **La correction de la 10ᵉ question n'est pas affichée : l'écran de fin la remplace directement**, plutôt que d'afficher d'abord le verdict puis un bouton « suivant » menant à l'écran de fin. C'est la lecture la plus simple de « le bouton cède la place à l'écran de fin » (maquette : `exDone` remplace tout l'écran, pas un ajout sous la correction) et ça évite un état intermédiaire à trois branches (résultat + bouton fin) non prévu par la maquette.
+
+- 2026-08-06 — T38 — **Ajout de `palette.tanStrong` (`#6E5736`, `--tan-strong` du design system) et rapprochement de `#c8c2b6`/`#d8d4cb` (sans équivalent exact) vers `palette.lineStrong`/`palette.line` respectivement.** Ces deux teintes de gris-tan n'ont pas de token dédié ; choisies par distance colorimétrique la plus proche parmi les tokens documentés (même méthode que T3/T5/T6/T7 pour les rôles manquants).
 
 ## Tâches bloquées
 <!-- Tâches abandonnées après 2 échecs, avec le motif et ce qui a été tenté. -->

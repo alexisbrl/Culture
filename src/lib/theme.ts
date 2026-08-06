@@ -61,6 +61,7 @@ export const palette = {
   gold: '#C39A47',          // --gold
   onGreen: '#F5F8EF',       // --on-green
   onInk: '#F2EDE3',         // --on-ink
+  tanStrong: '#6E5736',     // --tan-strong (texte brun fort, ex. titre de partie sur la feuille A4)
 } as const;
 
 /**

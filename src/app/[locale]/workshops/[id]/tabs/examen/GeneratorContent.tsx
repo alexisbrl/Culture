@@ -557,14 +557,14 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                         if (row.kind === 'pagebreak') {
                           return (
                             <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_PAGE_BREAK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' as const, opacity: dragFlatIdx === row.gi ? 0.4 : 1 }}>
-                              <span draggable onDragStart={() => setDragFlatIdx(row.gi)} onDragEnd={() => { setDragFlatIdx(null); setDropIndicator(null); }} title={t('generator.dragReorder')} style={{ cursor: 'grab', color: '#c8c2b6', fontSize: 13, lineHeight: 1, userSelect: 'none' as const }}>⠿</span>
+                              <span draggable onDragStart={() => setDragFlatIdx(row.gi)} onDragEnd={() => { setDragFlatIdx(null); setDropIndicator(null); }} title={t('generator.dragReorder')} style={{ cursor: 'grab', color: palette.lineStrong, fontSize: 13, lineHeight: 1, userSelect: 'none' as const }}>⠿</span>
                             </div>
                           );
                         }
                         const incomplete = hasNoAnswer(row.q);
                         return (
                           <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, paddingTop: 20, boxSizing: 'border-box' as const, opacity: dragFlatIdx === row.gi ? 0.4 : 1 }}>
-                            <span draggable onDragStart={() => setDragFlatIdx(row.gi)} onDragEnd={() => { setDragFlatIdx(null); setDropIndicator(null); }} onMouseEnter={() => setHoveredRowKey(row.key)} onMouseLeave={() => setHoveredRowKey(null)} title={t('generator.dragReorder')} style={{ cursor: 'grab', color: '#c8c2b6', fontSize: 13, lineHeight: 1, userSelect: 'none' as const }}>⠿</span>
+                            <span draggable onDragStart={() => setDragFlatIdx(row.gi)} onDragEnd={() => { setDragFlatIdx(null); setDropIndicator(null); }} onMouseEnter={() => setHoveredRowKey(row.key)} onMouseLeave={() => setHoveredRowKey(null)} title={t('generator.dragReorder')} style={{ cursor: 'grab', color: palette.lineStrong, fontSize: 13, lineHeight: 1, userSelect: 'none' as const }}>⠿</span>
                             {incomplete ? incompleteIcon(row.q.id) : <EditQuestionButton id={row.q.id} onOpenQuestion={onOpenQuestion} />}
                           </div>
                         );
@@ -578,7 +578,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                         <div ref={el => { qRefs.current['__page1_header__'] = el; }}>
                           {identityBlockHeight > 0 && (
                             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '24px 34px 0' }}>
-                              <div style={{ fontSize: 13, color: '#3a352c', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              <div style={{ fontSize: 13, color: palette.inkMuted, display: 'flex', flexDirection: 'column', gap: 6 }}>
                                 {identityLeftKeys.map(key => (
                                   <div key={key} style={{ display: 'flex', alignItems: 'baseline', gap: 6, width: 220 }}>
                                     <span>{labelOfItem(key)}</span>
@@ -586,7 +586,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                                   </div>
                                 ))}
                               </div>
-                              <div style={{ fontSize: 13, color: '#3a352c', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              <div style={{ fontSize: 13, color: palette.inkMuted, display: 'flex', flexDirection: 'column', gap: 6 }}>
                                 {identityRightKeys.map(key => (
                                   <div key={key} style={{ display: 'flex', alignItems: 'baseline', gap: 6, width: 160 }}>
                                     <span>{labelOfItem(key)}</span>
@@ -613,7 +613,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
                                 onChange={e => updateSection(row.sectionIdx, { title: e.target.value })}
                                 onFocus={() => setFocusedSectionIdx(row.sectionIdx)}
                                 onBlur={() => setFocusedSectionIdx(null)}
-                                style={{ width: '100%', fontSize: 16, fontWeight: 600, color: '#7a4d20', background: focusedSectionIdx === row.sectionIdx ? withAlpha(palette.amber, 0.06) : 'transparent', border: 'none', padding: '14px 40px 10px 34px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const }}
+                                style={{ width: '100%', fontSize: 16, fontWeight: 600, color: palette.tanStrong, background: focusedSectionIdx === row.sectionIdx ? withAlpha(palette.amber, 0.06) : 'transparent', border: 'none', padding: '14px 40px 10px 34px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const }}
                               />
                               <span style={{ position: 'absolute' as const, right: 16, top: 16, fontSize: 12, color: withAlpha(palette.amber, 0.45), pointerEvents: 'none' as const }}>✎</span>
                             </div>
@@ -734,7 +734,7 @@ function GeneratorContent({ questions, draftIds, config, onConfigChange, editing
             <div
               onDragOver={e => { e.preventDefault(); setDropIndicator(flat.length); }}
               onDrop={e => { e.preventDefault(); handleDrop(flat.length, config.sections.length - 1); }}
-              style={{ height: 18, marginTop: -8, marginBottom: 14, borderRadius: 6, background: dropIndicator === flat.length ? withAlpha(palette.amber, 0.12) : 'transparent', border: dropIndicator === flat.length ? '1px dashed rgba(168,122,58,0.4)' : '1px dashed transparent' }}
+              style={{ height: 18, marginTop: -8, marginBottom: 14, borderRadius: 6, background: dropIndicator === flat.length ? withAlpha(palette.amber, 0.12) : 'transparent', border: dropIndicator === flat.length ? `1px dashed ${withAlpha(palette.amber, 0.4)}` : '1px dashed transparent' }}
             />
           )}
 
