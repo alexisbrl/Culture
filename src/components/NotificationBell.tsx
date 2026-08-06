@@ -6,8 +6,9 @@ import { Bell } from 'lucide-react';
 
 /**
  * Cloche de notifications — dessinée d'après la maquette (lignes 109-129 de
- * App-Culture.dc.html), jamais montée : aucune donnée de notification
- * n'existe encore côté serveur. Voir T15,
+ * App-Culture.dc.html). Montée dans DashboardHeader mais NON FONCTIONNELLE :
+ * aucune donnée de notification n'existe encore côté serveur, le panneau
+ * affiche deux exemples figés et les boutons ne font que le refermer. Voir T15,
  * docs/chantiers/2026-08-05-refonte-ui-design-system.md. Le contenu des
  * exemples ci-dessous reste volontairement en français (donnée fictive
  * représentative d'un futur flux réel, cf. .claude/rules/i18n.md) ; seuls

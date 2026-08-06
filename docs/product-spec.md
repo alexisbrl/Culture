@@ -235,7 +235,7 @@ Un propriétaire peut activer le statut Premium sur son atelier. C'est une opér
 
 **Maîtrise d'une notion — Taxonomie de Bloom**
 
-Le niveau de maîtrise d'une notion par un utilisateur se mesure sur les 6 niveaux de Bloom (1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser, 5 évaluer, 6 créer) : on veut pouvoir distinguer un candidat qui a seulement mémorisé une notion de celui qui sait la critiquer. La table `brick_mastery` (utilisateur × notion × `bloom_level` — table encore nommée `bricks` en base, voir `CLAUDE.md` §1) est **créée mais pas encore alimentée** — c'est la fondation posée pour le module Analyse.
+Le niveau de maîtrise d'une notion par un utilisateur se mesure sur les niveaux de Bloom (1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser, 5 évaluer, 6 créer) : on veut pouvoir distinguer un candidat qui a seulement mémorisé une notion de celui qui sait la critiquer. La table `brick_mastery` (utilisateur × notion — table encore nommée `bricks` en base, voir `CLAUDE.md` §1) porte un **score de 0 à 40** : 10 points par niveau atteint, 4 niveaux utiles. `bloom_level` en est la valeur dérivée (`floor(score/10)`, plafonné à 4), conservée pour le module Analyse. Alimentée depuis le 06/08/2026 par les bonnes réponses du parcours — voir « Mécanique de progression » ci-dessous et `src/lib/workshops/mastery.ts`.
 
 ### Chapitres
 
@@ -251,6 +251,7 @@ Le niveau de maîtrise d'une notion par un utilisateur se mesure sur les 6 nivea
 - Personnalisé pour chaque candidat, organisé en **chapitres** (groupes de notions)
 - Un pot par chapitre, dans l'ordre défini par le gestionnaire
 - La plante de chaque pot reste enroulée sur elle-même : le « chemin » d'exercices dépliable a été retiré le 19/07/2026 (il reposait sur des exercices factices). Le bouton « lancer un exercice » de chaque pot ouvre la page d'exercice du chapitre.
+- **Barres de progression** (06/08/2026) : une sous le nom de l'atelier avec son pourcentage, une sous le chapitre en cours, une par ligne de la liste des chapitres. Elles montrent la progression du **membre connecté** — voir « Mécanique de progression ». Le bouton « liste des questions du parcours » (gestionnaires) est ancré en haut à droite de la zone, hors de la colonne de contenu, pour ne pas mordre sur les noms d'atelier longs.
 
 **Questions du parcours**
 
@@ -287,11 +288,23 @@ Sécurité : le client ne reçoit **jamais** `answer` ni `correctChoices` au tir
 
 **Mécanique de progression**
 
-- Chaque **nouvelle question** (hors réitération) consomme **1 goutte d'eau**
-- Les gouttes d'eau se regagnent : avec le temps / en quantité aléatoire après un nombre aléatoire de questions
-- Score d'une notion : +X pour une réponse réussie / -X pour une réponse ratée (score minimum = 0)
-- Une question ratée est **réposée** jusqu'à être réussie — seule la première tentative affecte le score
-- À partir d'un seuil de score défini : la notion est marquée **acquise**
+*Modèle arrêté le 06/08/2026, implémenté dans `src/lib/workshops/mastery.ts`.*
+
+Chaque question porte un niveau de Bloom visé dont on tire une **cible** `T = 10 × min(bloom, 4)`. Une bonne réponse rapproche le score de la notion de cette cible, sans jamais la dépasser :
+
+```
+gain = floor( min( T − score , (T − score) × 0,4 + 1,5 ) )   si score < T, sinon 0
+```
+
+C'est un **rattrapage exponentiel plafonné**. Le terme proportionnel fait qu'une question difficile rapporte beaucoup quand on part de bas (13 points à score 0 pour une cible 30) et plus rien une fois dépassée ; le bonus fixe garantit qu'on atteint la cible en un nombre fini de réponses (3 pour une cible 10, 5 pour une cible 30) au lieu de s'en approcher indéfiniment. Le `floor` garde des scores entiers.
+
+- Une **mauvaise réponse ne retire rien** : le score est monotone, une notion travaillée ne régresse jamais. Idem pour les questions sans correction automatique (texte libre, dessin, audio) : `correct: null`, donc score inchangé.
+- Le **plafond par cible** est structurant : une question « mémoriser » ne peut pas prouver qu'on sait analyser. Un chapitre qui n'a que des questions de Bloom 1 plafonne ses notions à 10 points, donc à 33 % d'avancement.
+- Une question n'alimente que les notions qui lui sont **explicitement reliées** (`exam_question_bricks`). Une question sans notion reliée ne fait progresser aucune barre.
+- **Avancement affiché** — calculé sur le score exact, pas sur le niveau, et saturé à 30 (les 3 premiers niveaux valent 100 %, le 4e est du bonus) : notion = `min(score, 30) / 30`, chapitre = `Σ min(score, 30) / (30 × nombre de notions)`, atelier = même formule sur toutes ses notions.
+- Chaque **nouvelle question** (hors réitération) consomme **1 goutte d'eau** *(V2 — l'énergie n'existe pas encore, le compteur de la barre du haut affiche une valeur fixe)*
+- Les gouttes d'eau se regagnent : avec le temps / en quantité aléatoire après un nombre aléatoire de questions *(V2)*
+- Une question ratée est **réposée** jusqu'à être réussie *(non implémenté — le tirage est uniforme dans le chapitre)*
 - Affichage de la bonne réponse : utiliser la réponse de l'utilisateur corrigée et complétée des éléments manquants (pas une réponse modèle générique)
 - **Échange avec l'IA** disponible en cours d'apprentissage pour poser des questions ou obtenir des explications (Premium — V2)
 - Dans les ateliers Premium : un gestionnaire peut **valider manuellement** une section pour un candidat (V2)

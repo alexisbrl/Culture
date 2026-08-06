@@ -6,8 +6,10 @@ type Props = {
 
 /**
  * Compteur de gouttes — dessiné d'après la maquette (ligne 131-134 de
- * App-Culture.dc.html), jamais monté : aucune donnée d'énergie/gouttes
- * n'existe encore. Voir T15, docs/chantiers/2026-08-05-refonte-ui-design-system.md.
+ * App-Culture.dc.html). Monté dans DashboardHeader sur une valeur fixe :
+ * l'énergie est une mécanique V2 (docs/product-spec.md), aucune donnée réelle
+ * n'existe encore côté serveur. Voir T15,
+ * docs/chantiers/2026-08-05-refonte-ui-design-system.md.
  */
 export default function DropletCounter({ count }: Props) {
   return (

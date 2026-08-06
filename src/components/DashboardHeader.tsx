@@ -19,11 +19,12 @@ import DropletCounter from '@/components/DropletCounter';
 
 type WorkshopHeaderInfo = { name: string; role: 'owner' | 'manager' | 'member' };
 
-// Aucune donnée de notification ni de gouttes n'existe encore côté serveur —
-// composants dessinés (T15) mais non montés tant que ces fonctions n'existent
-// pas. Voir docs/chantiers/2026-08-05-refonte-ui-design-system.md.
-const HAS_NOTIFICATIONS = false;
-const HAS_DROPLETS = false;
+// Énergie (gouttes) : la mécanique n'existe pas encore côté serveur (V2, voir
+// docs/product-spec.md « Mécanique de progression »). Le compteur est monté sur
+// une valeur fixe, non fonctionnelle — comme la cloche de notifications, dont
+// le contenu est un exemple figé. À remplacer par la vraie donnée le jour où
+// l'énergie et les notifications existent.
+const PLACEHOLDER_DROPLETS = 12;
 
 export default function DashboardHeader() {
   const t = useTranslations('nav');
@@ -204,8 +205,8 @@ export default function DashboardHeader() {
           <WorkshopActionsMenu workshopId={workshopId} workshopName={workshop.name} role={workshop.role} />
         )}
 
-        {HAS_DROPLETS && <DropletCounter count={0} />}
-        {HAS_NOTIFICATIONS && <NotificationBell />}
+        <NotificationBell />
+        <DropletCounter count={PLACEHOLDER_DROPLETS} />
 
         <div className="relative">
           <button

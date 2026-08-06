@@ -964,6 +964,7 @@
     "startExercise": "lancer un exercice",
     "notionCount": "{count, plural, =0 {aucune notion} one {# notion} other {# notions}}",
     "chapterIndicator": "chapitre {from}–{to} / {total}",
+    "progressPercent": "{pct} %",
     "currentChapterEyebrow": "chapitre en cours",
     "allChaptersEyebrow": "tous les chapitres",
     "emptyTitle": "aucun chapitre pour l'instant",

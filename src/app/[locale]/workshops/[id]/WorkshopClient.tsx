@@ -7,6 +7,7 @@ import WorkshopSwitcher from '@/components/WorkshopSwitcher';
 import WorkshopActionsMenu from '@/components/WorkshopActionsMenu';
 import ProgrammeTab from './tabs/ProgrammeTab';
 import type { Chapter } from '@/app/actions/workshopChapters';
+import type { ParcoursProgress } from '@/app/actions/parcoursProgress';
 import ExamenTab from './tabs/ExamenTab';
 import CoursTab from './tabs/CoursTab';
 import { palette } from '@/lib/theme';
@@ -21,11 +22,12 @@ type Props = {
   isPremium: boolean;
   members: { id: string; userId: string; role: 'owner' | 'manager' | 'member'; joinedAt: string; displayName: string; uniqueTag: string }[];
   chapters: Chapter[];
+  progress: ParcoursProgress;
 };
 
 type TabId = 'programme' | 'examen' | 'cours';
 
-export default function WorkshopClient({ workshopId, workshopName, currentUserRole, chapters }: Props) {
+export default function WorkshopClient({ workshopId, workshopName, currentUserRole, chapters, progress }: Props) {
   const searchParams = useSearchParams();
   // Propriétaire ou gestionnaire : accès aux onglets de gestion + paramètres.
   const canManage = currentUserRole === 'owner' || currentUserRole === 'manager';
@@ -66,7 +68,13 @@ export default function WorkshopClient({ workshopId, workshopName, currentUserRo
       {/* Tab content — fills remaining height */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {activeTab === 'programme' && (
-          <ProgrammeTab chapters={chapters} workshopId={workshopId} workshopName={workshopName} canManage={canManage} />
+          <ProgrammeTab
+            chapters={chapters}
+            workshopId={workshopId}
+            workshopName={workshopName}
+            canManage={canManage}
+            progress={progress}
+          />
         )}
         {canManage && activeTab === 'examen' && <ExamenTab workshopId={workshopId} />}
         {canManage && activeTab === 'cours' && <CoursTab />}
