@@ -62,6 +62,7 @@ export const palette = {
   onGreen: '#F5F8EF',       // --on-green
   onInk: '#F2EDE3',         // --on-ink
   tanStrong: '#6E5736',     // --tan-strong (texte brun fort, ex. titre de partie sur la feuille A4)
+  greenTint: '#E7EEDB',     // --green-tint (fonds/dégradés doux à teinte verte)
 } as const;
 
 /**

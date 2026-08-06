@@ -881,7 +881,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
     `src/app/[locale]/workshops/[id]/tabs/CoursTab.tsx`, `messages/{fr,en}.json`
   - Dépend de : T38
 
-- [ ] **T40 — Écrans non maquettés repeints**
+- [x] **T40 — Écrans non maquettés repeints**
   - Création d'atelier (`/workshops/new`, `/create`), éditeur d'avatar
     (`/profile/avatar`) et page `session` : appliquer les tokens (couleurs, typo,
     rayons, ombres) et les nouveaux composants, **sans changer la mise en page**.
@@ -1013,6 +1013,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 
 - 2026-08-06 — T39 — [voir commit] — Nouvelle page `profile/analyse/page.tsx` (état vide V2, indépendante de tout atelier) ; carte « suivi » de `ProfileClient.tsx` pointe dessus sans condition (plus de `getUserWorkshops`/état de chargement, code simplifié). `AnalyseTab.tsx` supprimé (mock data pure) et son onglet retiré de `WorkshopClient.tsx`/`TabId`. `CoursTab.tsx` réécrit sur le même état vide V2 (illustration SVG custom et hex bannis `#a87a3a`/`rgba(45,42,36,…)` retirés). Réutilise `<Badge tone="premium">` (déjà `--gold-tint`/`--gold-strong`, T9) plutôt qu'un nouveau composant. Namespaces i18n `analyse`/`cours` réduits à leur seule clé `title` (FR+EN), tout le reste était mort. `build`/`lint` OK. **Rendu vérifié dans Chrome** : `/profile` → carte suivi → `/profile/analyse` (« analyse. » + badge V2, conforme maquette) ; `?tab=cours` d'un atelier → même état vide (« générateur de cours. ») ; nav sans entrée « analyse » ; aucune erreur console.
 
+- 2026-08-06 — T40 — [voir commit] — Les 4 écrans repeints aux tokens (`WorkshopNewClient.tsx` — Tailwind gray/violet/slate → `var(--x)` + composants `Input`/`Label`/`Button` partagés ; `create/page.tsx`, `profile/avatar/page.tsx`, `session/page.tsx` — hex/rgba en dur remplacés, dont l'ancien vert `rgba(79,107,64,…)` et l'ancien ambre `rgba(168,122,58,…)` bannis par `CLAUDE.md` §1). `AvatarBuilder.tsx` supprimé — code mort (système SVG legacy, zéro import ailleurs que lui-même, `AvatarSVG`/`types.ts` restent vivants via `Navbar.tsx` vitrine). Ajout `palette.tanStrong`/`palette.greenTint` (design system, sans équivalent legacy). `build`/`lint` OK. **Rendu vérifié dans Chrome** sur les 4 écrans (`/workshops/new`, `/create`, `/profile/avatar`, `/workshops/{id}/session`) : aucun blanc pur, aucun violet, formulaire fonctionnel (nom tapé → bouton activé), aucune erreur console.
+
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
 - 2026-08-05 — T48 — **Troncature à 2 lignes et non 1** comme la maquette. Les questions réelles de l'atelier de test sont nettement plus longues que les libellés du prototype (« Quelle est la capitale de la France ? ») : à une ligne, la moitié d'entre elles devenaient illisibles. Deux lignes gardent le rythme de colonne sans amputer l'énoncé.
@@ -1086,6 +1088,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 - 2026-08-06 — T23 — **La correction de la 10ᵉ question n'est pas affichée : l'écran de fin la remplace directement**, plutôt que d'afficher d'abord le verdict puis un bouton « suivant » menant à l'écran de fin. C'est la lecture la plus simple de « le bouton cède la place à l'écran de fin » (maquette : `exDone` remplace tout l'écran, pas un ajout sous la correction) et ça évite un état intermédiaire à trois branches (résultat + bouton fin) non prévu par la maquette.
 
 - 2026-08-06 — T38 — **Ajout de `palette.tanStrong` (`#6E5736`, `--tan-strong` du design system) et rapprochement de `#c8c2b6`/`#d8d4cb` (sans équivalent exact) vers `palette.lineStrong`/`palette.line` respectivement.** Ces deux teintes de gris-tan n'ont pas de token dédié ; choisies par distance colorimétrique la plus proche parmi les tokens documentés (même méthode que T3/T5/T6/T7 pour les rôles manquants).
+
+- 2026-08-06 — T40 — **`AvatarBuilder.tsx` supprimé plutôt que retonifié**, bien que listé dans les « Fichiers » de T40. Vérifié (`grep -rl AvatarBuilder src/`) : aucun import nulle part sauf le fichier lui-même — code mort, jamais rendu par `/profile/avatar` (qui utilise `AvatarComposer`). Retonifier du code jamais exécuté n'aurait rien changé à l'écran réel ; le supprimer purge les dernières classes `violet-*` du dossier `avatar/` sans risque (le système SVG encore utilisé par la vitrine, `AvatarSVG.tsx`/`types.ts`, n'est pas touché).
 
 ## Tâches bloquées
 <!-- Tâches abandonnées après 2 échecs, avec le motif et ce qui a été tenté. -->

@@ -38,8 +38,8 @@ export default function CreatePage() {
               {t('source.kicker')}
             </div>
 
-            <div className="rounded-[18px] border-2 border-dashed border-amber/45 bg-gradient-to-b from-[#e8d8a8]/20 to-cream/60 px-8 py-10 text-center mb-3.5">
-              <div className="mx-auto mb-3.5 w-16 h-16 rounded-2xl bg-white border border-ink/10 flex items-center justify-center shadow-sm">
+            <div className="rounded-[18px] border-2 border-dashed border-amber/45 bg-gradient-to-b from-[var(--tan-tint)]/40 to-cream/60 px-8 py-10 text-center mb-3.5">
+              <div className="mx-auto mb-3.5 w-16 h-16 rounded-2xl bg-[var(--surface-raised)] border border-ink/10 flex items-center justify-center shadow-sm">
                 <Upload className="w-7 h-7 text-amber" />
               </div>
               <div className="text-lg text-ink font-medium">
@@ -48,14 +48,14 @@ export default function CreatePage() {
               <div className="text-base text-amber mt-1" style={{ fontFamily: 'var(--font-serif)' }}>
                 {t('source.dropTagline')}
               </div>
-              <button className="mt-4 px-5 py-2.5 rounded-[10px] bg-amber text-parchment text-[13.5px] font-medium shadow-[0_6px_16px_rgba(168,122,58,0.28)] hover:brightness-105 transition">
+              <button className="mt-4 px-5 py-2.5 rounded-[10px] bg-amber text-parchment text-[13.5px] font-medium shadow-[0_6px_16px_rgba(156,124,77,0.28)] hover:brightness-105 transition">
                 {t('source.browseFiles')}
               </button>
               <div className="mt-4 text-[11.5px] text-ink-soft">
                 {t('source.formatPrefix')}
                 <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-ink/[0.06]">.pdf</span>
                 {t('source.formatSuffix')}
-                <span className="mx-1.5 text-[#cbc6bb]">·</span>
+                <span className="mx-1.5 text-[var(--line-strong)]">·</span>
                 <span className="text-ink-faint">
                   {t('source.futureFormats')}
                 </span>
@@ -70,7 +70,7 @@ export default function CreatePage() {
             </div>
             <div className="flex flex-col gap-2">
               {FILES.map((f) => (
-                <div key={f.name} className="flex items-center gap-3 px-3 py-2.5 bg-white/80 border border-ink/[0.07] rounded-[10px]">
+                <div key={f.name} className="flex items-center gap-3 px-3 py-2.5 bg-[var(--surface-raised)]/80 border border-ink/[0.07] rounded-[10px]">
                   <FileText className="w-6 h-7 text-amber shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="text-[13px] text-ink font-medium truncate">{f.name}</div>
@@ -84,30 +84,30 @@ export default function CreatePage() {
 
           {/* SIDE — identity */}
           <div className="flex flex-col gap-3.5 lg:sticky lg:top-4">
-            <div className="bg-white/85 border border-ink/[0.08] rounded-[14px] px-[18px] py-4">
+            <div className="bg-[var(--surface-raised)]/85 border border-ink/[0.08] rounded-[14px] px-[18px] py-4">
               <div className="text-[10px] font-semibold tracking-[0.16em] uppercase text-ink-soft mb-3">
                 {t('identity.kicker')}
               </div>
-              <div className="w-full h-[92px] rounded-[10px] overflow-hidden relative mb-3 bg-gradient-to-br from-[#cfd9c0] to-[#a8b896]">
-                <div className="absolute bottom-2 right-2 text-[10px] text-white bg-ink/50 px-2 py-[3px] rounded-md cursor-pointer">
+              <div className="w-full h-[92px] rounded-[10px] overflow-hidden relative mb-3 bg-gradient-to-br from-[var(--green-tint)] to-[var(--green-light)]">
+                <div className="absolute bottom-2 right-2 text-[10px] text-[var(--on-ink)] bg-ink/50 px-2 py-[3px] rounded-md cursor-pointer">
                   {t('identity.changeCover')}
                 </div>
               </div>
               <div className="text-[10.5px] text-ink-soft mb-1">{t('identity.nameLabel')}</div>
               <input
                 placeholder={t('identity.namePlaceholder')}
-                className="w-full px-3 py-2.5 border border-ink/[0.14] rounded-lg text-[13px] bg-white text-ink mb-3 outline-none focus:border-amber/50"
+                className="w-full px-3 py-2.5 border border-ink/[0.14] rounded-lg text-[13px] bg-[var(--surface-input)] text-ink mb-3 outline-none focus:border-amber/50"
               />
               <div className="text-[10.5px] text-ink-soft mb-1">{t('identity.descriptionLabel')}</div>
               <textarea
                 placeholder={t('identity.descriptionPlaceholder')}
-                className="w-full px-3 py-2.5 border border-ink/[0.14] rounded-lg text-[12.5px] bg-white text-ink h-14 resize-none leading-snug outline-none focus:border-amber/50"
+                className="w-full px-3 py-2.5 border border-ink/[0.14] rounded-lg text-[12.5px] bg-[var(--surface-input)] text-ink h-14 resize-none leading-snug outline-none focus:border-amber/50"
               />
             </div>
 
             <Link
               href={`/${locale}/dashboard`}
-              className="px-[18px] py-3.5 rounded-xl bg-green text-parchment text-center text-[14.5px] font-medium shadow-[0_8px_22px_rgba(79,107,64,0.30)] hover:brightness-105 transition inline-flex items-center justify-center gap-1.5"
+              className="px-[18px] py-3.5 rounded-xl bg-green text-parchment text-center text-[14.5px] font-medium shadow-[0_8px_22px_rgba(60,107,57,0.30)] hover:brightness-105 transition inline-flex items-center justify-center gap-1.5"
             >
               {t('createCta')} <ChevronRight className="w-4 h-4" />
             </Link>
