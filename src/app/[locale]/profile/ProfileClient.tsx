@@ -10,7 +10,7 @@
 // d'arrosage, aucun XP, aucun temps passé ni succès n'existe côté serveur —
 // tout est V2, voir docs/product-spec.md) et la ligne « notifications ».
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -54,6 +54,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
   const { user } = useUser();
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
   const [langOpen, setLangOpen] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
   // Avatar synchronisé au compte (publicMetadata.avatarParts), repli localStorage.
   useEffect(() => {
@@ -69,6 +70,41 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
   function chooseLocale(next: 'fr' | 'en') {
     setLangOpen(false);
     if (next !== locale) router.push(`/${next}/profile`);
+  }
+
+  // Carrousel de statistiques : glisser-déposer à la souris, pour retrouver au
+  // clavier-souris le geste qu'on a naturellement au doigt sur téléphone.
+  // `scrollLeft` est écrit directement sur le nœud (pas d'état React) : un rendu
+  // par pixel parcouru rendrait le glissement saccadé. Seul le curseur
+  // grab/grabbing passe par un état, changé deux fois par geste.
+  const stripRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ pointerId: number; startX: number; startScroll: number } | null>(null);
+
+  function handleStripPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    // Le tactile défile déjà nativement, avec inertie : le capturer ici le
+    // remplacerait par une simulation moins fluide.
+    if (e.pointerType !== 'mouse') return;
+    const el = stripRef.current;
+    if (!el) return;
+    dragRef.current = { pointerId: e.pointerId, startX: e.clientX, startScroll: el.scrollLeft };
+    el.setPointerCapture(e.pointerId);
+    setDragging(true);
+  }
+
+  function handleStripPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    const el = stripRef.current;
+    if (!drag || !el || e.pointerId !== drag.pointerId) return;
+    el.scrollLeft = drag.startScroll - (e.clientX - drag.startX);
+  }
+
+  function handleStripPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    const el = stripRef.current;
+    if (!drag || !el || e.pointerId !== drag.pointerId) return;
+    if (el.hasPointerCapture(drag.pointerId)) el.releasePointerCapture(drag.pointerId);
+    dragRef.current = null;
+    setDragging(false);
   }
 
   const cardStyle: React.CSSProperties = {
@@ -187,11 +223,25 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
             horizontal : il y a plus de tuiles que de largeur disponible, la
             dernière se découvre en faisant défiler. La barre de défilement est
             masquée (les deux syntaxes sont nécessaires : `scrollbar-width` pour
-            Firefox, le pseudo-élément pour Chrome/Safari), le geste molette /
-            trackpad / clavier reste possible. */}
+            Firefox, le pseudo-élément pour Chrome/Safari) ; molette, trackpad,
+            clavier et glisser-déposer restent possibles.
+            Pas de `scroll-snap` : la rangée doit rester exactement là où on la
+            lâche, sans se recaler toute seule sur une tuile. */}
         <div
-          className="snap-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:snap-start"
-          style={{ display: 'flex', gap: 10, marginTop: 14, overflowX: 'auto' }}
+          ref={stripRef}
+          onPointerDown={handleStripPointerDown}
+          onPointerMove={handleStripPointerMove}
+          onPointerUp={handleStripPointerUp}
+          onPointerCancel={handleStripPointerUp}
+          className="[scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          style={{
+            display: 'flex',
+            gap: 10,
+            marginTop: 14,
+            overflowX: 'auto',
+            cursor: dragging ? 'grabbing' : 'grab',
+            userSelect: 'none',
+          }}
         >
           {statTiles.map(({ icon: Icon, value, label }) => (
             <div key={label} style={{ ...cardStyle, padding: '14px 14px 16px', width: 122, flex: '0 0 auto' }}>
