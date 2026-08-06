@@ -8,7 +8,6 @@ import WorkshopActionsMenu from '@/components/WorkshopActionsMenu';
 import ProgrammeTab from './tabs/ProgrammeTab';
 import type { Chapter } from '@/app/actions/workshopChapters';
 import ExamenTab from './tabs/ExamenTab';
-import AnalyseTab from './tabs/AnalyseTab';
 import CoursTab from './tabs/CoursTab';
 import { palette } from '@/lib/theme';
 
@@ -24,7 +23,7 @@ type Props = {
   chapters: Chapter[];
 };
 
-type TabId = 'programme' | 'examen' | 'analyse' | 'cours';
+type TabId = 'programme' | 'examen' | 'cours';
 
 export default function WorkshopClient({ workshopId, workshopName, currentUserRole, chapters }: Props) {
   const searchParams = useSearchParams();
@@ -70,7 +69,6 @@ export default function WorkshopClient({ workshopId, workshopName, currentUserRo
           <ProgrammeTab chapters={chapters} workshopId={workshopId} workshopName={workshopName} canManage={canManage} />
         )}
         {canManage && activeTab === 'examen' && <ExamenTab workshopId={workshopId} />}
-        {canManage && activeTab === 'analyse' && <AnalyseTab />}
         {canManage && activeTab === 'cours' && <CoursTab />}
       </div>
 

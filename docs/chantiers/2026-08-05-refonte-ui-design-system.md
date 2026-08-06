@@ -850,7 +850,7 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 
 ### Lot 9 — Clôture
 
-- [ ] **T39 — États vides « V2 » : Analyse et Générateur de cours**
+- [x] **T39 — États vides « V2 » : Analyse et Générateur de cours**
   - **Périmètre révisé par Alexis le 05/08/2026.** L'Analyse n'est plus rattachée à
     un atelier mais **au profil** : l'onglet d'atelier `?tab=analyse` disparaît, et
     la carte « suivi » du profil mène à une page d'analyse dédiée. Il ne reste donc
@@ -1010,6 +1010,8 @@ Pour la banque de questions, l'éditeur d'examen, les membres et les fichiers :
 - 2026-08-06 — T23 — [voir commit] — `EXERCISE_SESSION_LENGTH = 10` compté côté client dans `ExerciseClient.tsx` ; à la 10ᵉ correction, écran de fin (`Leaf`, « belle récolte. », score réel) remplace directement la carte de question, bouton « retour au parcours » vers l'atelier. `messages/{fr,en}.json` : clés `exercise.doneTitle/doneScore/backToParcours`. `build`/`lint` OK (0 erreur, mêmes 26 warnings pré-existants). **Rendu vérifié dans Chrome** (Alexis a reconnecté le navigateur en cours de session) : 10 questions enchaînées sur l'atelier « Evalia » (Les fleuves), écran de fin conforme à la maquette, singulier « 1 bonne réponse » correct, bouton « retour au parcours » ramène bien à l'atelier sans erreur console.
 
 - 2026-08-06 — T38 — [voir commit] — Aucun changement à la pagination/au calcul de hauteur, seulement les couleurs en dur : `GeneratorContent.tsx` (`#3a352c`→`palette.inkMuted`, `#7a4d20`→nouveau `palette.tanStrong`, `#c8c2b6`×2→`palette.lineStrong`, `rgba(168,122,58,0.4)`→`withAlpha(palette.amber,0.4)`) et `QuestionEditor.tsx` (`#3a352c`→`palette.inkMuted`, `#c8c2b6`→`palette.lineStrong`, `#d8d4cb`×2→`palette.line`, `rgba(45,42,36,…)`→`ink(…)`, `rgba(0,0,0,0.18)`→`ink(0.18)`). Couleurs vérifiées contre le rendu réel de la maquette (`docs/design/App-Culture.dc.html` via `getComputedStyle`, pas de lecture visuelle approximative). `build`/`lint` OK. **Rendu vérifié dans Chrome** : éditeur d'examen avec 4 questions envoyées, une feuille A4 complète (identité, titre de partie, questions numérotées, pondération, poignées de glisser-déposer), aucune erreur console, aucune requête réseau parasite (le brouillon de test n'a pas été enregistré).
+
+- 2026-08-06 — T39 — [voir commit] — Nouvelle page `profile/analyse/page.tsx` (état vide V2, indépendante de tout atelier) ; carte « suivi » de `ProfileClient.tsx` pointe dessus sans condition (plus de `getUserWorkshops`/état de chargement, code simplifié). `AnalyseTab.tsx` supprimé (mock data pure) et son onglet retiré de `WorkshopClient.tsx`/`TabId`. `CoursTab.tsx` réécrit sur le même état vide V2 (illustration SVG custom et hex bannis `#a87a3a`/`rgba(45,42,36,…)` retirés). Réutilise `<Badge tone="premium">` (déjà `--gold-tint`/`--gold-strong`, T9) plutôt qu'un nouveau composant. Namespaces i18n `analyse`/`cours` réduits à leur seule clé `title` (FR+EN), tout le reste était mort. `build`/`lint` OK. **Rendu vérifié dans Chrome** : `/profile` → carte suivi → `/profile/analyse` (« analyse. » + badge V2, conforme maquette) ; `?tab=cours` d'un atelier → même état vide (« générateur de cours. ») ; nav sans entrée « analyse » ; aucune erreur console.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->

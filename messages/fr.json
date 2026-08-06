@@ -1080,40 +1080,7 @@
     }
   },
   "analyse": {
-    "header": {
-      "title": "Tableau de bord",
-      "subtitle": "vue gestionnaire · {count} membres · mis à jour il y a {minutes} min"
-    },
-    "period": {
-      "d7": "7 jours",
-      "d30": "30 jours",
-      "all": "tout"
-    },
-    "exportCsv": "exporter CSV",
-    "kpi": {
-      "members": "membres",
-      "avgProgress": "progression moyenne",
-      "masteredNotions": "notions maîtrisées (moy.)",
-      "avgExamScore": "note moyenne examens"
-    },
-    "masteryHeatmap": {
-      "kicker": "maîtrise par section (moyenne du groupe)"
-    },
-    "distribution": {
-      "kicker": "répartition · section en cours",
-      "insight": "« le gros du groupe est sur la mitochondrie »"
-    },
-    "membersTable": {
-      "title": "Progression par membre",
-      "count": "{shown} sur {total} · trier par progression ▾",
-      "col": {
-        "member": "membre",
-        "section": "section en cours",
-        "progress": "progression",
-        "lastActivity": "dernière activité",
-        "score": "note"
-      }
-    }
+    "title": "analyse."
   },
   "session": {
     "leaveSession": "quitter la session",
@@ -1174,10 +1141,7 @@
     "extractHint": "l'IA extraira ensuite les notions · tu pourras tout ajuster"
   },
   "cours": {
-    "comingV2": "arrive en V2",
-    "title": "Génération de cours animés",
-    "description": "À partir des fichiers source de l'atelier, l'IA assemblera des slides animées, narrées section par section — pour introduire une notion avant de l'arroser.",
-    "tagline": "« on prépare la serre… »"
+    "title": "générateur de cours."
   },
   "auth": {
     "signIn": {

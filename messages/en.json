@@ -1080,40 +1080,7 @@
     }
   },
   "analyse": {
-    "header": {
-      "title": "Dashboard",
-      "subtitle": "manager view · {count} members · updated {minutes} min ago"
-    },
-    "period": {
-      "d7": "7 days",
-      "d30": "30 days",
-      "all": "all"
-    },
-    "exportCsv": "export CSV",
-    "kpi": {
-      "members": "members",
-      "avgProgress": "average progress",
-      "masteredNotions": "mastered notions (avg.)",
-      "avgExamScore": "average exam score"
-    },
-    "masteryHeatmap": {
-      "kicker": "mastery by section (group average)"
-    },
-    "distribution": {
-      "kicker": "distribution · current section",
-      "insight": "“most of the group is on mitochondria”"
-    },
-    "membersTable": {
-      "title": "Progress by member",
-      "count": "{shown} of {total} · sort by progress ▾",
-      "col": {
-        "member": "member",
-        "section": "current section",
-        "progress": "progress",
-        "lastActivity": "last activity",
-        "score": "score"
-      }
-    }
+    "title": "analysis."
   },
   "session": {
     "leaveSession": "leave session",
@@ -1174,10 +1141,7 @@
     "extractHint": "the AI then extracts the notions · you can adjust everything"
   },
   "cours": {
-    "comingV2": "coming in V2",
-    "title": "Animated course generation",
-    "description": "From the workshop's source files, the AI will assemble animated slides, narrated section by section — to introduce a concept before watering it.",
-    "tagline": "“the greenhouse is getting ready…”"
+    "title": "course generator."
   },
   "auth": {
     "signIn": {

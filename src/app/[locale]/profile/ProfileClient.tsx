@@ -1,10 +1,10 @@
 'use client';
 
-// Page profil : carte d'identité, bloc « suivi » (renvoie vers l'onglet Analyse
-// de l'atelier le plus récent — pas de vue cross-atelier), bloc forfait (tier
-// réel, Clerk publicMetadata) et liste de paramètres. Aucune notion de série
-// d'arrosage n'existe côté serveur : ce bloc est écrit puis masqué derrière
-// HAS_STREAK, même principe que HAS_NOTIFICATIONS/HAS_DROPLETS (T15). Voir
+// Page profil : carte d'identité, bloc « suivi » (page d'analyse dédiée au
+// profil, T39 — indépendante de tout atelier), bloc forfait (tier réel, Clerk
+// publicMetadata) et liste de paramètres. Aucune notion de série d'arrosage
+// n'existe côté serveur : ce bloc est écrit puis masqué derrière HAS_STREAK,
+// même principe que HAS_NOTIFICATIONS/HAS_DROPLETS (T15). Voir
 // docs/chantiers/2026-08-05-refonte-ui-design-system.md, Lot 6.
 
 import { useEffect, useState } from 'react';
@@ -18,7 +18,6 @@ import LinkButton from '@/components/LinkButton';
 import AvatarComposer from '@/components/avatar/AvatarComposer';
 import { AvatarConfig, loadAvatarConfig } from '@/components/avatar/avatarConfig';
 import { markIntentionalSignOut } from '@/lib/signOutIntent';
-import { getUserWorkshops } from '@/app/actions/workshops';
 import NotificationBell from '@/components/NotificationBell';
 import type { SubscriptionTier } from '@/lib/subscription';
 
@@ -43,30 +42,12 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, c
   const fullName = [firstName, lastName].filter(Boolean).join(' ') || t('defaultNameFull');
   const { user } = useUser();
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
-  // `undefined` = en cours de chargement, `null` = aucun atelier. Distinguer les
-  // deux permet de réserver la place de la carte « suivi » au lieu de la faire
-  // apparaître après coup en décalant tout ce qui suit (T50).
-  const [firstWorkshopId, setFirstWorkshopId] = useState<string | null | undefined>(undefined);
 
   // Avatar synchronisé au compte (publicMetadata.avatarParts), repli localStorage.
   useEffect(() => {
     const fromAccount = user?.publicMetadata?.avatarParts as AvatarConfig | undefined;
     setAvatarConfig(fromAccount ?? loadAvatarConfig());
   }, [user]);
-
-  // Le bloc « suivi » renvoie vers l'onglet Analyse — pas de vue cross-atelier
-  // dans l'app aujourd'hui, on prend l'atelier le plus récent (même ordre de
-  // priorité que l'entrée directe en atelier, T16). Masqué si aucun atelier.
-  useEffect(() => {
-    let cancelled = false;
-    getUserWorkshops().then(({ owned, joined }) => {
-      if (cancelled) return;
-      setFirstWorkshopId(owned[0]?.id ?? joined[0]?.id ?? null);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const memberSince = createdAt
     ? new Date(createdAt).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'long', year: 'numeric' })
@@ -137,29 +118,20 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, c
           </div>
         )}
 
-        {/* Emplacement réservé pendant le chargement (T50) : même hauteur que la
-            carte ci-dessous, pour que son arrivée ne décale pas le forfait ni la
-            liste des paramètres. */}
-        {firstWorkshopId === undefined && (
-          <div aria-hidden style={{ ...cardStyle, background: 'transparent', borderColor: 'transparent', boxShadow: 'none', height: 81, marginTop: 14 }} />
-        )}
-
-        {/* Suivi — vers l'onglet Analyse (état vide V2), masqué sans atelier */}
-        {firstWorkshopId && (
-          <Link
-            href={`/${locale}/workshops/${firstWorkshopId}?tab=analyse`}
-            style={{ ...cardStyle, padding: '18px 20px', marginTop: 14, display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none' }}
-          >
-            <span style={{ width: 44, height: 44, borderRadius: 12, background: withAlpha(palette.green, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.greenBrand, flexShrink: 0 }}>
-              <BarChart3 size={20} strokeWidth={1.75} />
-            </span>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: palette.ink }}>{t('tracking.title')}</span>
-              <span style={{ display: 'block', fontSize: 12.5, color: palette.inkMuted, marginTop: 2 }}>{t('tracking.desc')}</span>
-            </span>
-            <ChevronRight size={18} strokeWidth={1.75} color={palette.inkMuted} />
-          </Link>
-        )}
+        {/* Suivi — page d'analyse dédiée (état vide V2), indépendante de tout atelier */}
+        <Link
+          href={`/${locale}/profile/analyse`}
+          style={{ ...cardStyle, padding: '18px 20px', marginTop: 14, display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none' }}
+        >
+          <span style={{ width: 44, height: 44, borderRadius: 12, background: withAlpha(palette.green, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.greenBrand, flexShrink: 0 }}>
+            <BarChart3 size={20} strokeWidth={1.75} />
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: palette.ink }}>{t('tracking.title')}</span>
+            <span style={{ display: 'block', fontSize: 12.5, color: palette.inkMuted, marginTop: 2 }}>{t('tracking.desc')}</span>
+          </span>
+          <ChevronRight size={18} strokeWidth={1.75} color={palette.inkMuted} />
+        </Link>
 
         {/* Forfait — tier réel du compte */}
         <div style={{ ...cardStyle, padding: '16px 18px', marginTop: 14, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
