@@ -33,21 +33,18 @@ et l'incident du 22/06/2026 dans `docs/changelog.md`.
 
 ## À appliquer
 
-### 1. Bloom ramené à 4 niveaux — `2026-08-09-bloom-4-niveaux.sql`
-
-- **Attend** : le déploiement de `feat/progression-parcours`.
-- **Pourquoi ça attend** : les contraintes `exam_questions_bloom_level_check` et
-  `brick_mastery_bloom_level_check` autorisent encore 1..6. Les resserrer à 1..4
-  ferait échouer les écritures du code en ligne, qui propose toujours 6 crans.
-- **Risque si on oublie** : aucun risque immédiat — le filet applicatif
-  (`toBloomLevel()`, qui ramène tout `>= 4` sur 4) suffit. La contrainte en base
-  reste simplement plus laxiste que le modèle.
-- **Données** : rien à migrer (0 ligne `> 4` au 09/08/2026 ; le SQL contient
-  quand même un filet `update ... where bloom_level > 4`).
+AUCUN
 
 ---
 
 ## Appliqué / sans objet
+
+- **10/08/2026 — Bloom ramené à 4 niveaux** (`2026-08-09-bloom-4-niveaux.sql`) :
+  appliquée après le merge de `feat/progression-parcours` (PR #32) et le
+  déploiement production Vercel. Contraintes `exam_questions_bloom_level_check`
+  (1..4) et `brick_mastery_bloom_level_check` (0..4) vérifiées en base ;
+  0 ligne à migrer. `database.types.ts` inchangé (une contrainte check ne
+  modifie pas les types générés).
 
 - **09/08/2026 — `exam_questions.expectations`** (texte des « attendus ») :
   additive, appliquée directement.

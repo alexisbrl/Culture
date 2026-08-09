@@ -55,3 +55,7 @@ Le barème avancé de l'éditeur en ligne est complet : gain dégressif dans le 
 La pastille d'alerte de la gouttière, le filtre « incomplète » de la banque et la modale « enregistrer quand même » disparaissent, avec `answerMissing()` / `hasNoAnswer()` / `NO_ANSWER_ID`. Avec neuf types de réponse dont quatre sans correction automatique (dessin, audio, fichier, vide), « incomplet » ne désignait plus rien d'utile — une question de type dessin était signalée en permanence sans qu'il y ait quoi que ce soit à corriger.
 
 Nouveauté d'organisation : `docs/migrations/EN-ATTENTE-DEPLOIEMENT.md` devient le **point d'entrée unique** des migrations qui attendent une mise en ligne (règle expand/contract, `CLAUDE.md` §1). Une seule question — « qu'est-ce qui reste à appliquer maintenant que c'est déployé ? » — se répond en lisant ce fichier.
+
+## 10/08/2026 — Migration Bloom 4 niveaux appliquée en production
+
+La branche `feat/progression-parcours` (PR #32 — refonte UI, progression du parcours, refonte des types de réponse de l'éditeur d'examen) est mergée dans `main` et déployée sur Vercel. La migration *contract* `2026-08-09-bloom-4-niveaux.sql` a ensuite été appliquée : contraintes `exam_questions_bloom_level_check` resserrée à 1..4 et `brick_mastery_bloom_level_check` à 0..4, aucune ligne à migrer. Premier cycle complet du circuit `EN-ATTENTE-DEPLOIEMENT.md` (déployer d'abord, contracter ensuite) — la section « À appliquer » est revenue à `AUCUN`.
