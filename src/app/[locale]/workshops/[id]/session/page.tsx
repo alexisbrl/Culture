@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, PencilLine } from 'lucide-react';
-import { palette, ink } from '@/lib/theme';
+import { ArrowLeft, Check, PencilLine, X } from 'lucide-react';
+import { palette, ink, withAlpha } from '@/lib/theme';
 
 const QUESTION = {
   n: 4,
@@ -32,9 +32,9 @@ export default function SessionPage() {
   const pct = 41;
 
   return (
-    <div className="h-[calc(100vh-65px)] bg-cream font-sans flex flex-col">
+    <div className="h-[calc(100vh-60px)] bg-cream font-sans flex flex-col">
       {/* top bar */}
-      <div className="flex items-center justify-between px-6 py-3.5 border-b border-ink/[0.07] bg-white/70 backdrop-blur shrink-0">
+      <div className="flex items-center justify-between px-6 py-3.5 border-b border-ink/[0.07] bg-[var(--surface-raised)]/70 backdrop-blur shrink-0">
         <Link href={`/${locale}/workshops/${id}`} className="text-[12.5px] text-ink-muted flex items-center gap-1.5 hover:text-ink">
           <ArrowLeft className="w-3.5 h-3.5" /> {t('leaveSession')}
         </Link>
@@ -52,11 +52,11 @@ export default function SessionPage() {
       {/* body */}
       <div className="flex-1 grid grid-cols-1 md:grid-cols-[300px_1fr] min-h-0">
         {/* plant rail */}
-        <div className="relative overflow-hidden hidden md:flex flex-col items-center px-[22px] py-7 bg-gradient-to-b from-[#eef0dd] via-[#e3ead7] to-[#d8e6cf]">
-          <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-44 h-44 rounded-full" style={{ background: 'radial-gradient(circle, rgba(246,201,112,0.3), rgba(246,201,112,0) 70%)' }} />
+        <div className="relative overflow-hidden hidden md:flex flex-col items-center px-[22px] py-7 bg-gradient-to-b from-[var(--green-tint)] to-[var(--surface-sunken)]">
+          <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-44 h-44 rounded-full" style={{ background: `radial-gradient(circle, ${withAlpha(palette.gold, 0.3)}, ${withAlpha(palette.gold, 0)} 70%)` }} />
           <div className="text-[10px] font-semibold tracking-[0.14em] uppercase text-ink-soft mb-1">{t('youWater')}</div>
           <div className="text-[15px] font-medium text-ink text-center">Biologie cellulaire</div>
-          <div className="font-script text-base text-amber mb-2">{t('plantTagline', { level: 2 })}</div>
+          <div className="text-base text-amber mb-2" style={{ fontFamily: 'var(--font-serif)' }}>{t('plantTagline', { level: 2 })}</div>
           <div className="relative w-[170px] h-[150px] mt-1.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/assets/trees/paulownia-3.png" alt="" className="absolute inset-0 w-full h-full object-contain" />
@@ -64,11 +64,11 @@ export default function SessionPage() {
           <div className="w-full max-w-[200px] mt-auto">
             <div className="flex justify-between text-[11px] text-ink-soft mb-1.5">
               <span>{t('level', { level: 2 })}</span>
-              <span className="text-[#3f5630]">{t('bonusIfScore', { threshold: '9/12' })}</span>
+              <span className="text-[var(--green-strong)]">{t('bonusIfScore', { threshold: '9/12' })}</span>
             </div>
             <div className="h-2 rounded-full bg-ink/[0.08] overflow-hidden relative">
               <div className="h-full bg-green-soft" style={{ width: `${pct}%` }} />
-              <div className="absolute top-0 bottom-0 w-[2px] bg-[#3f5630]" style={{ left: `${pct}%` }} />
+              <div className="absolute top-0 bottom-0 w-[2px] bg-[var(--green-strong)]" style={{ left: `${pct}%` }} />
             </div>
             <div className="text-[11px] text-ink-soft mt-1.5 text-center">{t('dropRule', { pct })}</div>
           </div>
@@ -90,11 +90,11 @@ export default function SessionPage() {
                 {QUESTION.options.map((opt, i) => {
                   const letter = ['A', 'B', 'C', 'D'][i];
                   const isSel = selected === opt.id;
-                  let cls = 'border-ink/[0.12] bg-white/90';
-                  let icon: string | null = null;
+                  let cls = 'border-ink/[0.12] bg-[var(--surface-raised)]/90';
+                  let icon: React.ReactNode = null;
                   if (status === 'submitted') {
-                    if (opt.correct) { cls = 'border-[1.5px] border-green/45 bg-green-soft/[0.16]'; icon = '✓'; }
-                    else if (isSel) { cls = 'border-[1.5px] border-danger/40 bg-danger/10'; icon = '·'; }
+                    if (opt.correct) { cls = 'border-[1.5px] border-green/45 bg-green-soft/[0.16]'; icon = <Check size={18} strokeWidth={2} color={palette.greenBrand} />; }
+                    else if (isSel) { cls = 'border-[1.5px] border-danger/40 bg-danger/10'; icon = <X size={18} strokeWidth={2} color="var(--danger-strong)" />; }
                   } else if (isSel) {
                     cls = 'border-[1.5px] border-amber/45 bg-amber-glow/[0.16]';
                   }
@@ -104,30 +104,30 @@ export default function SessionPage() {
                       onClick={() => status === 'idle' && setSelected(opt.id)}
                       className={`flex items-center gap-4 px-5 py-[18px] rounded-[14px] border cursor-pointer transition ${cls}`}
                     >
-                      <div className="w-8 h-8 rounded-full border border-ink/[0.14] bg-white flex items-center justify-center text-[13px] font-medium text-ink-muted shrink-0">{letter}</div>
+                      <div className="w-8 h-8 rounded-full border border-ink/[0.14] bg-[var(--surface-raised)] flex items-center justify-center text-[13px] font-medium text-ink-muted shrink-0">{letter}</div>
                       <div className="flex-1 text-base text-ink leading-snug">{opt.label}</div>
-                      {icon && <div className="text-base" style={{ color: opt.correct ? '#3f5630' : '#9a4d3a' }}>{icon}</div>}
+                      {icon}
                     </div>
                   );
                 })}
               </div>
 
-              <div className="mt-5 px-4 py-3 border border-dashed border-ink/[0.18] rounded-[10px] flex items-center gap-2.5 bg-white/50">
+              <div className="mt-5 px-4 py-3 border border-dashed border-ink/[0.18] rounded-[10px] flex items-center gap-2.5 bg-[var(--surface-raised)]/50">
                 <PencilLine className="w-4 h-4 text-amber" />
                 <div className="flex-1 text-[13px] text-ink-soft">
-                  <span className="font-script text-[15px] text-amber">{t('hintPrompt')}</span> · {t('premiumFeature')}
+                  <span className="text-[15px] text-amber" style={{ fontFamily: 'var(--font-serif)' }}>{t('hintPrompt')}</span> · {t('premiumFeature')}
                 </div>
               </div>
             </div>
           </div>
 
           {/* footer CTA */}
-          <div className="px-6 md:px-[52px] py-4 border-t border-ink/[0.07] bg-white/60 shrink-0">
+          <div className="px-6 md:px-[52px] py-4 border-t border-ink/[0.07] bg-[var(--surface-raised)]/60 shrink-0">
             <div className="max-w-[720px] mx-auto flex gap-2.5">
               <button className="px-[18px] py-3.5 rounded-xl bg-transparent border border-ink/[0.16] text-ink-muted text-sm">{t('skip')}</button>
               <button
                 onClick={() => setStatus(status === 'idle' ? 'submitted' : 'idle')}
-                className="flex-1 px-[18px] py-3.5 rounded-xl text-parchment text-[15px] font-medium shadow-[0_8px_20px_rgba(79,107,64,0.28)] transition"
+                className="flex-1 px-[18px] py-3.5 rounded-xl text-parchment text-[15px] font-medium shadow-[0_8px_20px_rgba(60,107,57,0.28)] transition"
                 style={{ background: status === 'submitted' ? palette.green : palette.greenSoft }}
               >
                 {status === 'submitted' ? t('nextQuestion') : t('submitAndWater')}

@@ -1,23 +1,24 @@
 'use client';
 
-import { palette, ink, withAlpha } from '@/lib/theme';
+import { palette, ink, withAlpha, shadow } from '@/lib/theme';
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { AlertTriangle, Check, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, Trash2, X } from 'lucide-react';
 import Modal from '@/components/Modal';
-import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, type MemberGroup } from '@/app/actions/workshops';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, leaveWorkshop, type MemberGroup } from '@/app/actions/workshops';
 import type { WorkshopFile } from '@/app/actions/workshopFiles';
-import type { Brick } from '@/app/actions/workshopBricks';
+import type { Notion } from '@/app/actions/workshopNotions';
 import type { Chapter } from '@/app/actions/workshopChapters';
 import { COVER_GRADIENTS, COVER_GRADIENT_KEYS, COVER_EMOJIS, coverGradientFor, emojiFor } from '@/lib/workshopCover';
 import ShareQRModal from '@/components/ShareQRModal';
 import { NAV_ITEMS, Row, Switch, SmallBtn, SectionCard, type WorkshopRole, type Member, type NavSection } from './settingsShared';
 import MembersSection from './MembersSection';
 import FilesSection from './FilesSection';
-import BricksSection from './BricksSection';
+import NotionsSection from './NotionsSection';
 import PremiumSection from './PremiumSection';
 
 type Props = {
@@ -37,19 +38,23 @@ type Props = {
   members: Member[];
   groups: MemberGroup[];
   files: WorkshopFile[];
-  bricks: Brick[];
+  notions: Notion[];
   chapters: Chapter[];
 };
 
-export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, isPremium, showProgramme: showProgrammeProp, members, groups, files: initialFiles, bricks, chapters }: Props) {
+export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, isPremium, showProgramme: showProgrammeProp, members, groups, files: initialFiles, notions, chapters }: Props) {
   const router = useRouter();
   const t = useTranslations('settings');
 
   // Propriétaire vs gestionnaire : seul le propriétaire touche à l'argent (Premium)
   // et à la suppression de l'atelier ; le reste est accessible aux deux.
+  // Un membre simple voit une version réduite : section Général seule, nom et
+  // description en lecture seule, QR, et « quitter l'atelier » en zone de danger.
   const isOwner = currentUserRole === 'owner';
+  const isMember = currentUserRole === 'member';
 
   const [activeSection, setActiveSection] = useState<NavSection>('general');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Section 1 — General
   const [workshopNameInput, setWorkshopNameInput] = useState(workshopName);
@@ -225,34 +230,56 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
     }
   }
 
+  const visibleNavItems = NAV_ITEMS.filter((item) =>
+    isMember ? item.id === 'general' : item.id !== 'premium' || isOwner,
+  );
+
+  // ── Quitter l'atelier (membre et gestionnaire — le propriétaire supprime) ──
+  const [leaveWorkshopOpen, setLeaveWorkshopOpen] = useState(false);
+  const [leavingWorkshop, setLeavingWorkshop] = useState(false);
+  const [leaveWorkshopError, setLeaveWorkshopError] = useState('');
+  const tw = useTranslations('workshop');
+
+  async function handleLeaveWorkshop() {
+    setLeavingWorkshop(true);
+    setLeaveWorkshopError('');
+    const result = await leaveWorkshop(workshopId);
+    if (result.success) {
+      router.push(`/${locale}/dashboard`);
+      return;
+    }
+    setLeavingWorkshop(false);
+    setLeaveWorkshopError(result.error ?? tw('leaveConfirm.error'));
+  }
+
   return (
     <div
       style={{
-        fontFamily: "'Inter Tight', system-ui, sans-serif",
+        fontFamily: 'var(--font-sans)',
         color: palette.ink,
-        minHeight: 'calc(100vh - 65px)',
+        minHeight: 'calc(100vh - 60px)',
         background: palette.cream,
-        display: 'flex',
         cursor: 'default',
       }}
     >
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Caveat:wght@400;500;600&display=swap');`}</style>
-
-      {/* ── Sidebar ── */}
+      {/* Coquille centrée (T44) — la maquette rend cet écran dans le conteneur
+          centré de l'app (`shellWidth`), la page elle-même occupant toute la
+          largeur disponible à l'intérieur. Sans ce conteneur, navigation et
+          cartes restaient collées au bord gauche du viewport. */}
+      <div className="settings-shell mx-auto flex w-full md:gap-7 md:px-6 md:py-8" style={{ maxWidth: 1100 }}>
+      {/* ── Sidebar (ordinateur) ── */}
       <div
+        className="scroll-panel hidden md:flex"
         style={{
           width: 232,
           flexShrink: 0,
-          borderRight: `1px solid ${ink(0.07)}`,
-          background: 'rgba(252,249,242,0.6)',
-          padding: '22px 16px',
-          position: 'sticky',
-          top: 0,
-          height: 'calc(100vh - 65px)',
-          overflowY: 'auto',
-          display: 'flex',
+          // Pas de `sticky` : la coquille (.settings-shell) est bornée au
+          // viewport et ne défile pas — la navigation reste en place d'elle-même.
+          // `scroll-panel` (barre masquée) couvre le cas d'un viewport trop bas
+          // pour afficher toutes les entrées : la colonne défile alors seule.
           flexDirection: 'column',
           gap: 0,
+          minHeight: 0,
         }}
       >
         {/* Back link */}
@@ -279,10 +306,10 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         {/* Label */}
         <div
           style={{
-            fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: '0.08em',
-            color: '#b8b1a6',
+            fontSize: 10.5,
+            fontWeight: 700,
+            letterSpacing: '0.12em',
+            color: palette.inkFaint,
             textTransform: 'uppercase',
             marginBottom: 8,
             paddingLeft: 10,
@@ -293,26 +320,31 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
         {/* Nav items — « Atelier Premium » réservé au propriétaire */}
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {NAV_ITEMS.filter((item) => item.id !== 'premium' || isOwner).map((item) => {
+          {visibleNavItems.map((item) => {
             const active = activeSection === item.id;
+            const Icon = item.icon;
             return (
               <button
                 key={item.id}
                 onClick={() => setActiveSection(item.id)}
                 style={{
-                  padding: '8px 10px',
-                  borderRadius: 9,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '9px 12px',
+                  borderRadius: 12,
                   border: 'none',
-                  background: active ? withAlpha(palette.amber, 0.14) : 'transparent',
-                  color: active ? '#7a4d20' : palette.inkMuted,
-                  fontWeight: active ? 500 : 400,
-                  fontSize: 13,
+                  background: active ? palette.surfaceSunken : 'transparent',
+                  color: active ? palette.ink : palette.inkMuted,
+                  fontWeight: 600,
+                  fontSize: 13.5,
                   cursor: 'pointer',
                   fontFamily: 'inherit',
                   textAlign: 'left',
-                  transition: 'all 0.12s',
+                  whiteSpace: 'nowrap',
                 }}
               >
+                <Icon size={16} strokeWidth={1.75} style={{ flexShrink: 0, color: active ? palette.green : palette.inkFaint }} />
                 {t(`nav.${item.id}`)}
               </button>
             );
@@ -320,22 +352,79 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         </nav>
       </div>
 
-      {/* ── Main content ── */}
+      {/* ── Main content — seule colonne à défiler (sans barre visible) ── */}
       <div
-        style={{
-          flex: 1,
-          overflow: 'auto',
-          padding: '40px 32px 40px 40px',
-          maxWidth: 760,
-        }}
+        className="scroll-panel px-5 pt-0 pb-10 md:px-0 md:pt-0 md:pb-4"
+        style={{ flex: 1, minWidth: 0, boxSizing: 'border-box' }}
       >
+        {/* Sélecteur de section (téléphone) — même système que le changement d'atelier */}
+        <div
+          className="md:hidden"
+          style={{ position: 'sticky', top: 0, zIndex: 40, margin: '0 -20px 22px', background: palette.surfaceRaised, borderBottom: `1px solid ${palette.line}` }}
+        >
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <button
+              onClick={() => setMobileNavOpen((v) => !v)}
+              style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 10, padding: '15px 24px' }}
+            >
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: palette.inkFaint }}>{t('sidebarLabel')}</span>
+              <span style={{ width: 20, height: 20, borderRadius: 999, border: `1px solid ${palette.line}`, background: palette.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted }}>
+                <ChevronDown size={11} strokeWidth={2.25} />
+              </span>
+            </button>
+            <Link
+              href={`/${locale}/workshops/${workshopId}`}
+              title={t('closeSettings')}
+              style={{ flexShrink: 0, marginRight: 20, width: 30, height: 30, borderRadius: 999, border: `1px solid ${palette.line}`, background: palette.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted }}
+            >
+              <X size={14} strokeWidth={2.25} />
+            </Link>
+          </div>
+          {mobileNavOpen && (
+            <div style={{ position: 'absolute', top: '100%', left: 16, width: 300, maxWidth: 'calc(100% - 32px)', zIndex: 60, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 14, boxShadow: shadow.lg, overflow: 'hidden', boxSizing: 'border-box' }}>
+              {visibleNavItems.map((item) => {
+                const active = activeSection === item.id;
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActiveSection(item.id);
+                      setMobileNavOpen(false);
+                    }}
+                    style={{ width: '100%', border: 'none', background: active ? withAlpha(palette.green, 0.08) : 'transparent', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: `1px solid ${palette.line}`, textAlign: 'left', fontSize: 13.5, fontWeight: 600, color: active ? palette.green : palette.ink }}
+                  >
+                    <Icon size={16} strokeWidth={1.75} style={{ flexShrink: 0 }} />
+                    {t(`nav.${item.id}`)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {activeSection === 'general' && (
         <>
         {/* ── 1. Général ── */}
-        <SectionCard
-          title={t('general.title')}
-          description={t('general.desc')}
-        >
+        <SectionCard title={t('general.title')}>
+          {isMember ? (
+            <>
+              {/* Membre simple : nom et description en lecture seule. */}
+              <Row label={t('general.nameLabel')}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: palette.inkSoft }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.04em', color: palette.inkFaint }}>{uniqueTag}</span>
+                  <span style={{ color: palette.lineStrong }}>·</span>
+                  {workshopName}
+                </span>
+              </Row>
+              <Row label={t('general.descLabel')} noBorder>
+                <span style={{ fontSize: 13, color: palette.inkSoft, maxWidth: 300, textAlign: 'right' }}>
+                  {description || '—'}
+                </span>
+              </Row>
+            </>
+          ) : (
+            <>
           <Row label={t('general.nameLabel')}>
             <div
               style={{
@@ -343,16 +432,16 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 alignItems: 'center',
                 gap: 8,
                 padding: '7px 12px',
-                border: `1px solid ${ink(0.14)}`,
-                borderRadius: 9,
-                background: withAlpha(palette.paper, 0.7),
+                border: `1px solid ${palette.line}`,
+                borderRadius: 12,
+                background: palette.surfaceInput,
                 width: 300,
               }}
             >
               <span
                 style={{
                   fontSize: 13,
-                  fontFamily: 'ui-monospace, monospace',
+                  fontFamily: 'var(--font-mono)',
                   letterSpacing: '0.04em',
                   color: palette.inkFaint,
                   flexShrink: 0,
@@ -360,7 +449,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
               >
                 {uniqueTag}
               </span>
-              <span style={{ fontSize: 13, color: '#c8c2b8', flexShrink: 0 }}>-</span>
+              <span style={{ fontSize: 13, color: palette.lineStrong, flexShrink: 0 }}>·</span>
               <input
                 type="text"
                 value={workshopNameInput}
@@ -380,7 +469,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             </div>
           </Row>
 
-          <Row label={t('general.descLabel')} hint={t('general.previewHint')}>
+          <Row label={t('general.descLabel')}>
             <textarea
               value={descriptionInput}
               onChange={(e) => setDescriptionInput(e.target.value)}
@@ -390,10 +479,10 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 fontSize: 13,
                 fontFamily: 'inherit',
                 padding: '8px 12px',
-                border: `1px solid ${ink(0.14)}`,
-                borderRadius: 9,
+                border: `1px solid ${palette.line}`,
+                borderRadius: 12,
                 outline: 'none',
-                background: withAlpha(palette.paper, 0.7),
+                background: palette.surfaceInput,
                 color: palette.ink,
                 width: 260,
                 resize: 'vertical',
@@ -401,7 +490,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             />
           </Row>
 
-          <Row label={t('general.coverLabel')} hint={t('general.previewHint')}>
+          <Row label={t('general.coverLabel')}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
               <div style={{ display: 'flex', gap: 8 }}>
                 {COVER_GRADIENT_KEYS.map((key) => (
@@ -417,7 +506,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       height: 32,
                       borderRadius: 9,
                       background: COVER_GRADIENTS[key],
-                      border: !useCustomCover && selectedCover === key ? '2px solid #2d2a24' : '2px solid transparent',
+                      border: !useCustomCover && selectedCover === key ? `2px solid ${palette.ink}` : '2px solid transparent',
                       cursor: 'pointer',
                       padding: 0,
                     }}
@@ -438,11 +527,11 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                       width: 32,
                       height: 32,
                       borderRadius: 9,
-                      backgroundColor: coverImage ? 'transparent' : ink(0.06),
+                      backgroundColor: coverImage ? 'transparent' : palette.surfaceSunken,
                       backgroundImage: coverImage ? `url(${coverImage})` : 'none',
                       backgroundSize: 'cover',
                       backgroundPosition: 'center',
-                      border: useCustomCover && coverImage ? '2px solid #2d2a24' : `2px dashed ${ink(0.22)}`,
+                      border: useCustomCover && coverImage ? `2px solid ${palette.ink}` : `2px dashed ${palette.lineStrong}`,
                       cursor: uploadingCover ? 'default' : 'pointer',
                       padding: 0,
                       display: 'flex',
@@ -466,7 +555,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                         height: 16,
                         borderRadius: '50%',
                         background: palette.danger,
-                        border: '1px solid #fcf9f2',
+                        border: `1px solid ${palette.surfaceRaised}`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -474,7 +563,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                         padding: 0,
                       }}
                     >
-                      <X size={10} color="#fff" />
+                      <X size={10} color={palette.onInk} />
                     </button>
                   )}
                 </div>
@@ -492,7 +581,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             </div>
           </Row>
 
-          <Row label={t('general.emojiLabel')} hint={t('general.previewHint')}>
+          <Row label={t('general.emojiLabel')}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {COVER_EMOJIS.map((e) => (
                 <button
@@ -507,8 +596,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    background: withAlpha(palette.paper, 0.7),
-                    border: selectedEmoji === e ? '2px solid #2d2a24' : '2px solid transparent',
+                    background: palette.surfaceInput,
+                    border: selectedEmoji === e ? `2px solid ${palette.ink}` : '2px solid transparent',
                     cursor: 'pointer',
                     padding: 0,
                   }}
@@ -528,45 +617,53 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
               })}
             </span>
           </Row>
+            </>
+          )}
         </SectionCard>
 
         {/* ── 2. Accès & limites ── */}
-        <SectionCard
-          title={t('access.title')}
-          description={t('access.desc')}
-        >
-          <Row label={t('access.showProgramme')}>
-            <Switch value={showProgramme} onChange={setShowProgramme} />
-          </Row>
+        <SectionCard title={t('access.title')}>
+          {!isMember && (
+            <Row label={t('access.showProgramme')}>
+              <Switch value={showProgramme} onChange={setShowProgramme} />
+            </Row>
+          )}
 
-          <Row label={t('access.qr')} hint={t('access.qrHint')} noBorder>
+          <Row label={t('access.qr')} noBorder>
             <button
               onClick={() => setShareOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: 'transparent', border: `1px solid ${palette.lineStrong}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
             >
-              <QrCode size={13} />
+              <QrCode size={13} strokeWidth={1.75} />
               {t('access.shareQr')}
             </button>
           </Row>
         </SectionCard>
 
-        {/* ── Zone de danger (suppression) — propriétaire uniquement ── */}
-        {isOwner && (
-        <SectionCard
-          title={t('danger.title')}
-          description={t('danger.desc')}
-        >
-          <Row
-            label={t('danger.deleteLabel')}
-            hint={t('danger.deleteHint')}
-            noBorder
-          >
-            <SmallBtn tone="danger" onClick={() => setDeleteStep('confirm')}>
-              {t('danger.deleteBtn')}
-            </SmallBtn>
-          </Row>
+        {/* ── Zone de danger — supprimer (propriétaire) ou quitter (les autres) ── */}
+        <SectionCard title={t('danger.title')}>
+          {isOwner ? (
+            <Row
+              label={t('danger.deleteLabel')}
+              hint={t('danger.deleteHint')}
+              noBorder
+            >
+              <SmallBtn tone="danger" onClick={() => setDeleteStep('confirm')}>
+                {t('danger.deleteBtn')}
+              </SmallBtn>
+            </Row>
+          ) : (
+            <Row
+              label={t('danger.leaveLabel')}
+              hint={t('danger.leaveHint')}
+              noBorder
+            >
+              <SmallBtn tone="danger" onClick={() => setLeaveWorkshopOpen(true)}>
+                {tw('leaveBtn')}
+              </SmallBtn>
+            </Row>
+          )}
         </SectionCard>
-        )}
         </>
         )}
 
@@ -578,15 +675,16 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           <FilesSection workshopId={workshopId} initialFiles={initialFiles} />
         </div>
 
-        <div style={{ display: activeSection === 'bricks' ? 'contents' : 'none' }}>
-          <BricksSection workshopId={workshopId} bricks={bricks} chapters={chapters} onManageFiles={() => setActiveSection('files')} />
+        <div style={{ display: activeSection === 'notions' ? 'contents' : 'none' }}>
+          <NotionsSection workshopId={workshopId} notions={notions} chapters={chapters} />
         </div>
 
         {isOwner && (
           <div style={{ display: activeSection === 'premium' ? 'contents' : 'none' }}>
-            <PremiumSection workshopId={workshopId} isPremium={isPremium} />
+            <PremiumSection workshopId={workshopId} isPremium={isPremium} memberCount={members.length} />
           </div>
         )}
+      </div>
       </div>
 
       {/* ── Barre d'enregistrement (visible si modifications non sauvegardées) ── */}
@@ -845,6 +943,26 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
       {/* Share / QR modal */}
       <ShareQRModal open={shareOpen} onClose={() => setShareOpen(false)} title={workshopName} url={joinUrl} />
+
+      {/* ── Confirmation « quitter l'atelier » (non-propriétaire) ── */}
+      {leaveWorkshopOpen && (
+        <ConfirmDialog
+          width={420}
+          title={tw('leaveConfirm.title')}
+          description={
+            <>
+              {tw('leaveConfirm.desc', { name: workshopName })}
+              {leaveWorkshopError && <div style={{ color: 'var(--danger)', marginTop: 8 }}>{leaveWorkshopError}</div>}
+            </>
+          }
+          confirmLabel={leavingWorkshop ? '…' : tw('leaveConfirm.confirm')}
+          cancelLabel={tw('leaveConfirm.cancel')}
+          onCancel={() => {
+            if (!leavingWorkshop) setLeaveWorkshopOpen(false);
+          }}
+          onConfirm={handleLeaveWorkshop}
+        />
+      )}
 
       {/* ── Modale « modifications non enregistrées » ── */}
       {showLeaveConfirm && (

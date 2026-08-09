@@ -1,6 +1,6 @@
 'use client';
 
-import { palette, ink } from '@/lib/theme';
+import { palette, ink, radius, shadow } from '@/lib/theme';
 
 import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
@@ -39,7 +39,7 @@ export default function ShareQRModal({ open, onClose, title, url }: Props) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: ink(0.5), backdropFilter: 'blur(4px)', padding: 16 }} onClick={onClose}>
-      <div style={{ background: palette.paper, borderRadius: 20, boxShadow: `0 30px 80px ${ink(0.18)}`, padding: 24, width: '100%', maxWidth: 360, fontFamily: 'inherit', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ background: palette.surfaceRaised, borderRadius: radius.lg, boxShadow: shadow.lg, padding: 24, width: '100%', maxWidth: 360, fontFamily: 'inherit', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
         <button onClick={onClose} style={{ position: 'absolute', top: 14, right: 14, background: 'none', border: 'none', cursor: 'pointer', color: palette.inkFaint, padding: 4, display: 'flex' }}>
           <X size={16} />
         </button>
@@ -49,7 +49,7 @@ export default function ShareQRModal({ open, onClose, title, url }: Props) {
 
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
           <div style={{ padding: 14, background: palette.paper, borderRadius: 14, border: `1px solid ${ink(0.10)}` }}>
-            {url && <QRCodeCanvas ref={canvasRef} value={url} size={180} bgColor="#ffffff" fgColor="#2d2a24" level="M" />}
+            {url && <QRCodeCanvas ref={canvasRef} value={url} size={180} bgColor={palette.paper} fgColor={palette.ink} level="M" />}
           </div>
         </div>
 

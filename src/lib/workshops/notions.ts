@@ -1,17 +1,17 @@
-// Logique métier « briques de connaissance » (liste, création, édition,
+// Logique métier « notions » (liste, création, édition,
 // suppression) — même découpage que @/lib/workshops/files : module pur, pas de
 // Clerk `auth()`, pas de `revalidatePath`. Les wrappers `'use server'` de
-// app/actions/workshopBricks.ts gardent l'authz et la revalidation.
+// app/actions/workshopNotions.ts gardent l'authz et la revalidation.
 //
-// Une brique n'a ni difficulté ni importance (décision 19/07/2026, remplace le
+// Une notion n'a ni difficulté ni importance (décision 19/07/2026, remplace le
 // cahier des charges initial). `chapter_id` reste null tant que la table des
 // chapitres n'existe pas. La table `brick_mastery` (niveau Bloom par
-// utilisateur × brique) est la fondation de l'Analyse — rien ne l'alimente
-// encore.
+// utilisateur × notion) est la fondation de l'Analyse — rien ne l'alimente
+// encore. Lexique : notion (produit, code) = brick (base), voir CLAUDE.md §1.
 
 import { getSupabaseServerClient } from '@/lib/supabase';
 
-export type Brick = {
+export type Notion = {
   id: string;
   title: string;
   content: string | null;
@@ -19,19 +19,20 @@ export type Brick = {
   createdAt: string;
 };
 
-export const BRICK_TITLE_MAX = 200;
-export const BRICK_CONTENT_MAX = 2000;
+export const NOTION_TITLE_MAX = 200;
+export const NOTION_CONTENT_MAX = 2000;
 
 function validate(title: string, content: string | null): string | null {
   if (!title.trim()) return 'Le titre est requis';
-  if (title.length > BRICK_TITLE_MAX) return `Titre trop long (${BRICK_TITLE_MAX} caractères max)`;
-  if (content && content.length > BRICK_CONTENT_MAX) return `Contenu trop long (${BRICK_CONTENT_MAX} caractères max)`;
+  if (title.length > NOTION_TITLE_MAX) return `Titre trop long (${NOTION_TITLE_MAX} caractères max)`;
+  if (content && content.length > NOTION_CONTENT_MAX) return `Contenu trop long (${NOTION_CONTENT_MAX} caractères max)`;
   return null;
 }
 
-export async function listBricks(workshopId: string): Promise<Brick[]> {
+export async function listNotions(workshopId: string): Promise<Notion[]> {
   const supabase = getSupabaseServerClient();
 
+  // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
   const { data, error } = await supabase
     .from('workshop_bricks')
     .select('id, title, content, chapter_id, created_at')
@@ -39,7 +40,7 @@ export async function listBricks(workshopId: string): Promise<Brick[]> {
     .order('created_at', { ascending: true });
 
   if (error) {
-    console.error('listBricks error:', error);
+    console.error('listNotions error:', error);
     return [];
   }
 
@@ -53,7 +54,7 @@ export async function listBricks(workshopId: string): Promise<Brick[]> {
 }
 
 // Vérifie qu'un chapitre appartient bien à cet atelier avant de l'associer —
-// sinon on rattacherait une brique au chapitre d'un autre atelier.
+// sinon on rattacherait une notion au chapitre d'un autre atelier.
 async function chapterBelongsToWorkshop(workshopId: string, chapterId: string): Promise<boolean> {
   const supabase = getSupabaseServerClient();
   const { data } = await supabase
@@ -65,13 +66,13 @@ async function chapterBelongsToWorkshop(workshopId: string, chapterId: string): 
   return !!data;
 }
 
-export async function createBrick(
+export async function createNotion(
   workshopId: string,
   userId: string,
   title: string,
   content: string | null,
   chapterId: string | null = null
-): Promise<{ success: boolean; brick?: Brick; error?: string }> {
+): Promise<{ success: boolean; notion?: Notion; error?: string }> {
   const invalid = validate(title, content);
   if (invalid) return { success: false, error: invalid };
 
@@ -81,6 +82,7 @@ export async function createBrick(
 
   const supabase = getSupabaseServerClient();
 
+  // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
   const { data, error } = await supabase
     .from('workshop_bricks')
     .insert({
@@ -94,19 +96,19 @@ export async function createBrick(
     .single();
 
   if (error || !data) {
-    console.error('createBrick error:', error);
+    console.error('createNotion error:', error);
     return { success: false, error: 'Erreur lors de la création' };
   }
 
   return {
     success: true,
-    brick: { id: data.id, title: data.title, content: data.content, chapterId: data.chapter_id, createdAt: data.created_at },
+    notion: { id: data.id, title: data.title, content: data.content, chapterId: data.chapter_id, createdAt: data.created_at },
   };
 }
 
-export async function updateBrick(
+export async function updateNotion(
   workshopId: string,
-  brickId: string,
+  notionId: string,
   title: string,
   content: string | null,
   chapterId: string | null = null
@@ -120,38 +122,40 @@ export async function updateBrick(
 
   const supabase = getSupabaseServerClient();
 
-  // Le filtre workshop_id garantit qu'on ne peut pas modifier la brique d'un
-  // autre atelier avec un brickId volé (l'authz du wrapper porte sur workshopId).
+  // Le filtre workshop_id garantit qu'on ne peut pas modifier la notion d'un
+  // autre atelier avec un notionId volé (l'authz du wrapper porte sur workshopId).
+  // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
   const { data, error } = await supabase
     .from('workshop_bricks')
     .update({ title: title.trim(), content: content?.trim() || null, chapter_id: chapterId, updated_at: new Date().toISOString() })
-    .eq('id', brickId)
+    .eq('id', notionId)
     .eq('workshop_id', workshopId)
     .select('id');
 
   if (error) {
-    console.error('updateBrick error:', error);
+    console.error('updateNotion error:', error);
     return { success: false, error: 'Erreur lors de la modification' };
   }
-  if (!data || data.length === 0) return { success: false, error: 'Brique introuvable' };
+  if (!data || data.length === 0) return { success: false, error: 'Notion introuvable' };
 
   return { success: true };
 }
 
-export async function deleteBrick(
+export async function deleteNotion(
   workshopId: string,
-  brickId: string
+  notionId: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = getSupabaseServerClient();
 
+  // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
   const { error } = await supabase
     .from('workshop_bricks')
     .delete()
-    .eq('id', brickId)
+    .eq('id', notionId)
     .eq('workshop_id', workshopId);
 
   if (error) {
-    console.error('deleteBrick error:', error);
+    console.error('deleteNotion error:', error);
     return { success: false, error: 'Erreur lors de la suppression' };
   }
 

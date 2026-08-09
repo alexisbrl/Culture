@@ -6,6 +6,7 @@ import LinkButton from '@/components/LinkButton';
 import { getLocale } from 'next-intl/server';
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
+import { getUserWorkshops } from '@/app/actions/workshops';
 import {
   Upload,
   Brain,
@@ -24,7 +25,15 @@ import {
 export default async function HomePage() {
   const { userId } = await auth();
   const locale = await getLocale();
-  if (userId) redirect(`/${locale}/dashboard`);
+  if (userId) {
+    // Pas de page d'accueil connectée (variante V2 · sans accueil) : on entre
+    // directement dans le dernier atelier travaillé (owned avant joined,
+    // chacun déjà trié par dernière visite — voir getUserWorkshops).
+    // Aucun atelier → repli sur /dashboard (état vide + création).
+    const { owned, joined } = await getUserWorkshops();
+    const lastWorkshop = owned[0] ?? joined[0];
+    redirect(lastWorkshop ? `/${locale}/workshops/${lastWorkshop.id}` : `/${locale}/dashboard`);
+  }
   return <HomePageClient locale={locale} />;
 }
 

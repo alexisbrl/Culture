@@ -11,9 +11,10 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { ArrowLeft, Loader2, Plus } from 'lucide-react';
-import { palette, ink, withAlpha } from '@/lib/theme';
+import { ArrowLeft, Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
+import { palette, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { Button } from '@/components/ui/button';
 import type { Chapter } from '@/app/actions/workshopChapters';
 import QuestionEditor, { type Question, emptyQuestion } from '../QuestionEditor';
 import {
@@ -32,7 +33,7 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [pools, setPools] = useState<Pool[]>([]);
-  const [bricks, setBricks] = useState<{ id: string; title: string }[]>([]);
+  const [notions, setNotions] = useState<{ id: string; title: string }[]>([]);
   const [editing, setEditing] = useState<Question | null>(null);
   // Le chapitre s'affecte depuis la liste, pas depuis l'éditeur (partagé avec
   // la banque d'examen, qui ignore les chapitres). Cet état ne pilote donc
@@ -50,7 +51,7 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
         if (cancelled) return;
         setQuestions(data.questions);
         setPools(data.pools);
-        setBricks(data.bricks);
+        setNotions(data.notions);
         setLoading(false);
       })
       .catch(() => {
@@ -120,7 +121,7 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
   // QuestionEditor attend un identifiant de pool en retour synchrone : on crée
   // le pool localement puis on l'enregistre, en annulant l'ajout si ça échoue.
   function handleCreatePool(name: string): string {
-    const pool: Pool = { id: 'p' + Date.now(), name, color: '#9a948a' };
+    const pool: Pool = { id: 'p' + Date.now(), name, color: palette.inkFaint };
     setPools((prev) => [...prev, pool]);
     createParcoursPool(workshopId, pool).then((result) => {
       if (!result.success) {
@@ -139,7 +140,7 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
           question={editing}
           allQuestions={questions}
           pools={pools}
-          bricks={bricks}
+          notions={notions}
           onCreatePool={handleCreatePool}
           onSave={handleSave}
           onCancel={() => setEditing(null)}
@@ -162,12 +163,9 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
         >
           <ArrowLeft size={14} /> {t('questions.back')}
         </button>
-        <button
-          onClick={() => openEditor(emptyQuestion())}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: palette.ink, border: '1px solid #2d2a24', color: palette.paper, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
-        >
+        <Button variant="ink" size="sm" onClick={() => openEditor(emptyQuestion())}>
           <Plus size={13} /> {t('questions.new')}
-        </button>
+        </Button>
       </div>
 
       <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{t('questions.title')}</div>
@@ -176,7 +174,7 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
 
       {error && <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 10 }}>{error}</div>}
 
-      <div style={{ background: withAlpha(palette.paper, 0.85), borderRadius: 14, border: `1px solid ${ink(0.07)}`, padding: '6px 18px' }}>
+      <div style={{ background: palette.surfaceRaised, borderRadius: 14, border: `1px solid ${palette.line}`, padding: '6px 18px' }}>
         {loading ? (
           <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 12.5, color: palette.inkSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
             <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> {t('questions.loading')}
@@ -187,9 +185,9 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
           questions.map((q, i) => (
             <div
               key={q.id}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderBottom: i < questions.length - 1 ? `1px solid ${ink(0.06)}` : 'none' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 36, padding: '9px 0', borderBottom: i < questions.length - 1 ? `1px solid ${palette.line}` : 'none' }}
             >
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#b8b1a6', fontFamily: 'ui-monospace, monospace', width: 24, flexShrink: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: palette.inkFaint, fontFamily: 'var(--font-mono)', width: 24, flexShrink: 0 }}>
                 {String(i + 1).padStart(2, '0')}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -206,25 +204,29 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
                 value={q.chapterId ?? ''}
                 onChange={(e) => handleChapterChange(q, e.target.value || null)}
                 title={t('questions.chapter')}
-                style={{ flexShrink: 0, maxWidth: 190, padding: '7px 10px', borderRadius: 9, border: `1px solid ${q.chapterId ? ink(0.16) : withAlpha(palette.danger, 0.35)}`, background: palette.paper, color: q.chapterId ? palette.ink : palette.inkFaint, fontSize: 12.5, fontFamily: 'inherit', cursor: 'pointer' }}
+                style={{ flexShrink: 0, width: 190, height: 32, padding: '0 10px', borderRadius: 9, border: `1px solid ${q.chapterId ? palette.lineStrong : withAlpha(palette.danger, 0.45)}`, background: palette.surfaceInput, color: q.chapterId ? palette.ink : palette.inkFaint, fontSize: 12.5, fontFamily: 'inherit', cursor: 'pointer' }}
               >
                 <option value="">{t('questions.noChapter')}</option>
                 {chapters.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
-              <button
-                onClick={() => openEditor(q)}
-                style={{ padding: '7px 14px', borderRadius: 9, background: 'transparent', border: `1px solid ${ink(0.16)}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                {t('questions.edit')}
-              </button>
-              <button
-                onClick={() => setDeleteTarget(q)}
-                style={{ padding: '7px 14px', borderRadius: 9, background: withAlpha(palette.danger, 0.10), border: `1px solid ${withAlpha(palette.danger, 0.30)}`, color: palette.danger, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                {t('questions.delete')}
-              </button>
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <button
+                  onClick={() => openEditor(q)}
+                  title={t('questions.edit')}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 9, background: 'transparent', border: `1px solid ${palette.lineStrong}`, color: palette.inkMuted, cursor: 'pointer' }}
+                >
+                  <Pencil size={14} strokeWidth={1.75} />
+                </button>
+                <button
+                  onClick={() => setDeleteTarget(q)}
+                  title={t('questions.delete')}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 9, background: withAlpha(palette.danger, 0.10), border: `1px solid ${withAlpha(palette.danger, 0.30)}`, color: palette.danger, cursor: 'pointer' }}
+                >
+                  <Trash2 size={14} strokeWidth={1.75} />
+                </button>
+              </div>
             </div>
           ))
         )}

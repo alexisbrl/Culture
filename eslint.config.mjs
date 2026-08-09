@@ -21,6 +21,9 @@ const eslintConfig = defineConfig([
     // ce ne sont pas des sources de l'app, on ne les lint pas.
     "_handoff/**",
     "culture-design-system/**",
+    // Bundle de handoff Claude Design (versionné, cf. docs/design/README.md) :
+    // prototype + runtime + composants compilés. Documentation, pas des sources.
+    "docs/**",
   ]),
   {
     // Règles « React Compiler readiness » (eslint-plugin-react-hooks v6) : elles signalent

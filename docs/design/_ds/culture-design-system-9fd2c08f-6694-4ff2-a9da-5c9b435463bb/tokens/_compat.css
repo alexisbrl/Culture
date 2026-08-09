@@ -1,0 +1,78 @@
+/* Culture — Legacy token compatibility
+ * ════════════════════════════════════════════════════════════════════════
+ * NOT part of the design system's public surface. The system is defined by
+ * tokens/colors.css, typography.css and spacing.css (a deliberately small set).
+ *
+ * This file keeps the OLD, wider ramp names alive — every one collapsed onto a
+ * value from the tight palette — so existing components and screens render
+ * unchanged. New work should use the primary tokens, not these.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Greens → 4 values ────────────────────────────────────────────── */
+  --green-900: var(--green-strong);
+  --green-800: var(--green-strong);
+  --green-700: var(--green);
+  --green-600: var(--green);
+  --green-500: var(--green-light);
+  --green-400: var(--green-light);
+  --green-300: var(--green-tint);
+  --green-200: var(--green-tint);
+  --green-100: var(--green-tint);
+
+  /* ── Tans → 3 values ──────────────────────────────────────────────── */
+  --tan-700: var(--tan-strong);
+  --tan-600: var(--tan-strong);
+  --tan-500: var(--tan);
+  --tan-400: var(--tan);
+  --tan-300: var(--line-strong); /* light tan borders/dropzones */
+  --tan-200: var(--tan-tint);
+  --tan-100: var(--tan-tint);
+
+  /* ── Gold → 3 values ──────────────────────────────────────────────── */
+  --gold-600: var(--gold-strong);
+  --gold-500: var(--gold);
+  --gold-300: var(--gold);
+  --gold-100: var(--gold-tint);
+
+  /* ── Ink → 4 values ───────────────────────────────────────────────── */
+  --ink-900: var(--ink);
+  --ink-800: var(--actionink-bg-hover);
+  --ink-700: var(--ink-body);
+  --ink-500: var(--ink-muted);
+  --ink-400: var(--ink-faint);
+
+  /* ── Cream surfaces ───────────────────────────────────────────────── */
+  --cream-canvas: var(--surface-canvas);
+  --cream-page:   var(--surface-page);
+  --cream-raised: var(--surface-raised);
+  --cream-bright: var(--surface-input);
+  --cream-sunken: var(--surface-sunken);
+
+  /* ── Semantic legacy ──────────────────────────────────────────────── */
+  --success-600: var(--success-strong);
+  --success-500: var(--success);
+  --success-100: var(--success-tint);
+  --alert-600:   var(--danger-strong);
+  --alert-500:   var(--danger);
+  --alert-100:   var(--danger-tint);
+  --warn-500:    var(--gold-strong); /* "à soif" attention → amber */
+  --warn-100:    var(--gold-tint);
+
+  /* ── Radii legacy → 12 / 20 / pill ────────────────────────────────── */
+  --radius-xs:  var(--radius-sm);
+  --radius-xl:  var(--radius-lg);
+  --radius-2xl: var(--radius-lg);
+
+  /* ── Shadow legacy → sm / lg ──────────────────────────────────────── */
+  --shadow-xs:     var(--shadow-sm);
+  --shadow-md:     var(--shadow-sm);
+  --shadow-window: var(--shadow-lg);
+
+  /* ── Type legacy ──────────────────────────────────────────────────── */
+  --fw-light: var(--fw-regular);
+  --fw-extra: var(--fw-bold);
+  --text-2xs: var(--text-xs);
+  --text-4xl: var(--text-2xl);
+  --leading-normal: var(--leading-relaxed);
+}

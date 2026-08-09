@@ -2,9 +2,9 @@
 
 // Boîte à outils partagée des Paramètres d'atelier : types/constantes de rôle,
 // helpers de présentation (Row, Switch, SmallBtn, SectionCard…) réutilisés par
-// SettingsClient et ses sections (Général/Membres/Fichiers/Briques/Premium).
-import { palette, ink, withAlpha } from '@/lib/theme';
-import { FileText, Music, File as FileIcon } from 'lucide-react';
+// SettingsClient et ses sections (Général/Membres/Fichiers/Notions/Premium).
+import { palette, withAlpha, shadow } from '@/lib/theme';
+import { FileText, LayoutGrid, Music, SlidersHorizontal, Star, Users, type LucideIcon, File as FileIcon } from 'lucide-react';
 import type { FileCategory } from '@/app/actions/workshopFiles';
 
 export type WorkshopRole = 'owner' | 'manager' | 'member';
@@ -19,14 +19,14 @@ export type Member = {
   groupIds: string[];
 };
 
-export type NavSection = 'general' | 'members' | 'bricks' | 'files' | 'premium';
+export type NavSection = 'general' | 'members' | 'notions' | 'files' | 'premium';
 
-export const NAV_ITEMS: { id: NavSection; label: string }[] = [
-  { id: 'general', label: 'Général' },
-  { id: 'members', label: 'Membres & rôles' },
-  { id: 'files', label: 'Fichiers' },
-  { id: 'bricks', label: 'Briques de connaissance' },
-  { id: 'premium', label: 'Atelier Premium' },
+export const NAV_ITEMS: { id: NavSection; icon: LucideIcon }[] = [
+  { id: 'general', icon: SlidersHorizontal },
+  { id: 'members', icon: Users },
+  { id: 'files', icon: FileText },
+  { id: 'notions', icon: LayoutGrid },
+  { id: 'premium', icon: Star },
 ];
 
 export const ROLE_RANK: Record<WorkshopRole, number> = { owner: 3, manager: 2, member: 1 };
@@ -46,12 +46,9 @@ export function formatFileSize(bytes: number, units: { b: string; kb: string; mb
   return `${(bytes / (1024 * 1024)).toFixed(1)} ${units.mb}`;
 }
 
-export function avatarGradient(name: string) {
-  const hues = [220, 160, 30, 270, 190, 340, 80, 130];
-  const idx = name.charCodeAt(0) % hues.length;
-  const h = hues[idx];
-  return `linear-gradient(135deg, hsl(${h},55%,62%), hsl(${(h + 40) % 360},60%,52%))`;
-}
+// Teinte de la pastille d'initiale d'un membre. Réexport de `avatarTone`
+// (src/lib/theme.ts) : les teintes sont des tokens, pas une rampe HSL générée.
+export { avatarTone } from '@/lib/theme';
 
 // ─── Sub-components ───────────────────────────────────────────────────────
 
@@ -74,12 +71,12 @@ export function Row({
         justifyContent: 'space-between',
         gap: 16,
         padding: '14px 0',
-        borderBottom: noBorder ? 'none' : `1px solid ${ink(0.06)}`,
+        borderBottom: noBorder ? 'none' : `1px solid ${palette.line}`,
         flexWrap: 'wrap',
       }}
     >
       <div>
-        <div style={{ fontSize: 13.5, fontWeight: 450, color: palette.ink }}>{label}</div>
+        <div style={{ fontSize: 13.5, fontWeight: 600, color: palette.ink }}>{label}</div>
         {hint && <div style={{ fontSize: 11.5, color: palette.inkFaint, marginTop: 2 }}>{hint}</div>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -98,7 +95,7 @@ export function Switch({ value, onChange }: { value: boolean; onChange: (v: bool
         height: 24,
         borderRadius: 999,
         border: 'none',
-        background: value ? palette.greenSoft : ink(0.14),
+        background: value ? palette.green : palette.lineStrong,
         cursor: 'pointer',
         padding: 3,
         display: 'flex',
@@ -115,8 +112,8 @@ export function Switch({ value, onChange }: { value: boolean; onChange: (v: bool
           width: 18,
           height: 18,
           borderRadius: '50%',
-          background: palette.paper,
-          boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
+          background: palette.surfaceInput,
+          boxShadow: shadow.sm,
         }}
       />
     </button>
@@ -137,7 +134,7 @@ export function SmallBtn({
   const styles = {
     ghost: {
       bg: 'transparent',
-      border: `1px solid ${ink(0.16)}`,
+      border: `1px solid ${palette.lineStrong}`,
       color: palette.inkMuted,
     },
     danger: {
@@ -147,13 +144,13 @@ export function SmallBtn({
     },
     dark: {
       bg: palette.ink,
-      border: '1px solid #2d2a24',
-      color: palette.paper,
+      border: `1px solid ${palette.ink}`,
+      color: palette.onInk,
     },
     amber: {
       bg: palette.amber,
-      border: '1px solid #a87a3a',
-      color: palette.paper,
+      border: `1px solid ${palette.amberLight}`,
+      color: palette.onInk,
     },
   }[tone];
 
@@ -162,16 +159,17 @@ export function SmallBtn({
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       style={{
-        padding: '7px 14px',
+        padding: '9px 14px',
         borderRadius: 9,
-        background: disabled ? ink(0.12) : styles.bg,
-        border: disabled ? '1px solid rgba(45,42,36,0.12)' : styles.border,
+        background: disabled ? palette.surfaceSunken : styles.bg,
+        border: disabled ? `1px solid ${palette.line}` : styles.border,
         color: disabled ? palette.inkFaint : styles.color,
         fontSize: 12.5,
         cursor: disabled ? 'not-allowed' : 'pointer',
         fontFamily: 'inherit',
         fontWeight: 450,
         whiteSpace: 'nowrap',
+        boxSizing: 'border-box',
       }}
     >
       {children}
@@ -185,20 +183,20 @@ export function SectionCard({
   children,
 }: {
   title: string;
-  description: string;
+  description?: string;
   children: React.ReactNode;
 }) {
   return (
     <div style={{ marginBottom: 36 }}>
       <div style={{ marginBottom: 10 }}>
         <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink, marginBottom: 3 }}>{title}</div>
-        <div style={{ fontSize: 12.5, color: palette.inkFaint }}>{description}</div>
+        {description && <div style={{ fontSize: 12.5, color: palette.inkFaint }}>{description}</div>}
       </div>
       <div
         style={{
-          background: withAlpha(palette.paper, 0.85),
+          background: palette.surfaceRaised,
           borderRadius: 14,
-          border: `1px solid ${ink(0.07)}`,
+          border: `1px solid ${palette.line}`,
           padding: '6px 18px',
         }}
       >

@@ -156,6 +156,23 @@ export async function getWorkshop(workshopId: string) {
   }
 }
 
+// ─── Dernier atelier visité (contexte de la barre du haut hors page d'atelier) ─
+
+export async function getLastVisitedWorkshop(): Promise<{
+  id: string;
+  name: string;
+  role: 'owner' | 'manager' | 'member';
+} | null> {
+  try {
+    const { userId } = await auth();
+    if (!userId) return null;
+    return await coreLib.getLastVisitedWorkshop(userId);
+  } catch (err) {
+    console.error('getLastVisitedWorkshop error:', err);
+    return null;
+  }
+}
+
 // ─── Get workshop preview (public join page) ─────────────────────────────────
 
 export async function getWorkshopPreview(workshopId: string): Promise<{

@@ -1,0 +1,76 @@
+/* Culture — Typography
+ * ────────────────────────────────────────────────────────────────────────
+ * Two voices, no more:
+ *   serif  — lowercase hero titles & editorial        (warm, bookish)
+ *   sans   — everything else: UI, body, data, asides  (humanist grotesque)
+ *
+ * Four weights. One 7-step scale. House rule: serif titles are lowercase.
+ * Warm "accroche" asides are sans in tan — colour + copy carry the warmth,
+ * never a separate typeface.
+ *
+ * (Source Serif 4 / Hanken Grotesk are Google-Fonts substitutions for
+ *  unspecified brand fonts — swap when the real families arrive.)
+ */
+
+:root {
+  /* ── Families ─────────────────────────────────────────────────────── */
+  --font-serif:  'Source Serif 4', 'Iowan Old Style', Georgia, serif;
+  --font-sans:   'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* the third (script) family was retired — this alias resolves to SANS so any
+     legacy reference renders in a validated font, never a handwriting face */
+  --font-script: var(--font-sans);
+
+  /* ── Weights (4) ──────────────────────────────────────────────────── */
+  --fw-regular:  400; /* @kind font */
+  --fw-medium:   500; /* @kind font */
+  --fw-semibold: 600; /* @kind font */
+  --fw-bold:     700; /* @kind font */
+
+  /* ── Scale (7 steps) ──────────────────────────────────────────────── */
+  --text-xs:   0.75rem;  /* 12 — meta, eyebrow caps        */
+  --text-sm:   0.875rem; /* 14 — UI default, captions      */
+  --text-md:   1rem;     /* 16 — body                      */
+  --text-lg:   1.25rem;  /* 20 — lead, card titles         */
+  --text-xl:   1.75rem;  /* 28 — section titles            */
+  --text-2xl:  2.5rem;   /* 40 — page heroes / stats       */
+  --text-3xl:  3.5rem;   /* 56 — landing display           */
+
+  /* ── Line height & tracking ───────────────────────────────────────── */
+  --leading-tight:   1.12; /* headings        */
+  --leading-snug:    1.3;
+  --leading-relaxed: 1.6;  /* body            */
+
+  --tracking-eyebrow: 0.14em; /* UPPERCASE labels */
+  --tracking-tight:  -0.01em;
+  --tracking-normal: 0;
+
+  /* ── Semantic roles ───────────────────────────────────────────────── */
+  /* hero — lowercase serif page title ("ton jardin t'attend.") */
+  --type-hero-family:  var(--font-serif);
+  --type-hero-size:    var(--text-2xl);
+  --type-hero-weight:  var(--fw-semibold);
+  --type-hero-leading: var(--leading-tight);
+
+  /* accroche — a warm tan aside set in SANS (no distinct typeface). The warmth
+     comes from colour + copy, not the font. */
+  --type-accroche-family: var(--font-sans);
+  --type-accroche-size:   var(--text-lg);
+  --type-accroche-weight: var(--fw-medium);
+
+  /* eyebrow — UPPERCASE tracked caps ("AUJOURD'HUI") */
+  --type-eyebrow-family:   var(--font-sans);
+  --type-eyebrow-size:     var(--text-xs);
+  --type-eyebrow-weight:   var(--fw-bold);
+  --type-eyebrow-tracking: var(--tracking-eyebrow);
+
+  /* body */
+  --type-body-family:  var(--font-sans);
+  --type-body-size:    var(--text-md);
+  --type-body-weight:  var(--fw-regular);
+  --type-body-leading: var(--leading-relaxed);
+
+  /* stat numeral ("14,2/20") */
+  --type-stat-family: var(--font-sans);
+  --type-stat-size:   var(--text-2xl);
+  --type-stat-weight: var(--fw-bold);
+}

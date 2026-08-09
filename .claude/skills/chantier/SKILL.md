@@ -112,7 +112,12 @@ Présente-lui le découpage **avant** d'écrire le fichier. C'est son dernier po
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
 
 ## Tâches bloquées
-<!-- Tâches abandonnées après 2 échecs, avec le motif. -->
+<!-- Tâches abandonnées après 2 échecs, avec le motif et ce qui a été tenté. -->
+
+## Tâches mises de côté
+<!-- Tâches non tentées parce que le choix à faire était trop structurant pour être
+     tranché en autonomie : options envisagées, recommandation, raison de ne pas
+     avoir tranché. Ne pas confondre avec « Tâches bloquées » (échec technique). -->
 ```
 
 ## Règles absolues du cadrage

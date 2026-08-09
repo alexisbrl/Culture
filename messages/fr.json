@@ -9,9 +9,27 @@
     "cta": "Rejoindre la beta",
     "myWorkshops": "Mes ateliers",
     "profile": "Mon profil",
-    "goPremium": "Passer Premium ✨",
     "signOut": "Se déconnecter",
-    "switchTo": "Passer en {locale}"
+    "switchTo": "Passer en {locale}",
+    "tabJardin": "jardin",
+    "tabParcours": "parcours",
+    "tabExamens": "examens",
+    "tabCours": "cours",
+    "tabProfil": "profil",
+    "changeWorkshop": "changer d'atelier",
+    "workshopSettings": "paramètres de l'atelier",
+    "switcherTitle": "changer d'atelier",
+    "switcherLoading": "chargement…",
+    "switcherEmpty": "aucun atelier pour l'instant",
+    "premiumWorkshop": "atelier premium",
+    "newWorkshop": "nouvel atelier",
+    "allWorkshops": "tous mes ateliers"
+  },
+  "notifications": {
+    "title": "notifications",
+    "join": "rejoindre",
+    "ignore": "ignorer",
+    "cancel": "annuler"
   },
   "hero": {
     "badge": "Bêta en cours · Rejoignez les pionniers",
@@ -35,7 +53,7 @@
     "step1Title": "Uploadez votre contenu",
     "step1Desc": "PDF, Word, vidéo, image... Culture accepte tous vos formats existants. Pas besoin de tout recommencer.",
     "step2Title": "L'IA décompose et structure",
-    "step2Desc": "Notre IA identifie les briques de connaissance clés et construit un parcours adaptatif, avec quiz, défis et révisions espacées.",
+    "step2Desc": "Notre IA identifie les notions clés et construit un parcours adaptatif, avec quiz, défis et révisions espacées.",
     "step3Title": "Vos apprenants progressent",
     "step3Desc": "Ils avancent à leur rythme sur web ou mobile, débloquent des badges, et vous suivez leurs progrès en temps réel."
   },
@@ -224,42 +242,49 @@
   },
   "profile": {
     "metaTitle": "Profil — Culture",
-    "breadcrumbGarden": "jardin",
-    "breadcrumbCurrent": "profil",
-    "greeting": "bonjour {name},",
     "defaultName": "jardinier",
     "defaultNameFull": "Jardinier",
-    "premiumBadge": "★ Premium",
-    "memberSince": "jardinier depuis mars 2026",
-    "editProfile": "éditer le profil",
-    "editAvatar": "éditer l'avatar",
-    "shareGarden": "partager mon jardin",
+    "edit": "éditer",
+    "tracking": {
+      "title": "suivi",
+      "desc": "progression, maîtrise et statistiques détaillées"
+    },
+    "plan": {
+      "free": "forfait Gratuit",
+      "premium": "forfait Premium",
+      "premiumPlus": "forfait Premium+",
+      "desc": {
+        "free": "5 ateliers loisir · apprentissage QCM",
+        "premium": "10 ateliers loisir · générateur d'examen · échange IA",
+        "premiumPlus": "15 ateliers loisir · tout Premium"
+      },
+      "manage": "gérer mon offre"
+    },
+    "settings": {
+      "title": "paramètres",
+      "notifications": "notifications",
+      "notificationsHint": "activées",
+      "language": "langue",
+      "help": "aide & contact",
+      "signOut": "se déconnecter",
+      "languages": {
+        "fr": "français",
+        "en": "english"
+      }
+    },
     "stats": {
-      "streak": "jours de série",
-      "activeWorkshops": "ateliers actifs",
-      "livingPlants": "plantes vivantes",
-      "questionsAnswered": "questions répondues"
+      "streak": "jours d'affilée",
+      "xp": "XP total gagné",
+      "time": "passées à travailler",
+      "achievements": "succès débloqués",
+      "notions": "notions maîtrisées"
     },
-    "subscription": {
-      "label": "abonnement",
-      "plan": "★ Premium · 10 €/mois",
-      "features": "Énergie illimitée · Sans publicités · Générateur d'examen inclus · Échange IA en cours d'apprentissage · Partage avec 2 personnes",
-      "manage": "gérer l'abonnement →",
-      "share": "partager (2 places)"
-    },
-    "energy": {
-      "label": "arrosoir du jour",
-      "sessions": "{count} sessions aujourd'hui",
-      "nextJoker": "prochain joker dans {hours} h"
-    },
-    "exam": {
-      "label": "examen officiel",
-      "title": "Page publique de certification",
-      "desc": "Récapitule tous vos examens standardisés officiels. Partageable publiquement via lien ou QR code. Disponible à partir de la version 3."
-    },
-    "friends": {
-      "label": "jardiniers amis",
-      "desc": "Ajoutez des amis via leur tag et suivez leur progression. Disponible en version 2."
+    "upsell": {
+      "eyebrow": "passe à Smart",
+      "title": "débloque tout ton jardin",
+      "desc": "ateliers illimités, examens IA avancés et suivi complet de la progression.",
+      "cta": "Essayer Smart !",
+      "current": "ton forfait actuel · basique"
     }
   },
   "dashboard": {
@@ -270,7 +295,7 @@
     "results": "résultats",
     "searching": "recherche…",
     "noResults": "aucun atelier trouvé",
-    "members": "membres",
+    "members": "{count, plural, one {# membre} other {# membres}}",
     "cultureModules": "proposés par Culture",
     "emptyTitle": "aucun atelier pour le moment",
     "emptyDesc": "créez votre premier atelier ou rejoignez-en un existant via la recherche.",
@@ -313,9 +338,7 @@
       "1": "Mémoriser",
       "2": "Comprendre",
       "3": "Appliquer",
-      "4": "Analyser",
-      "5": "Évaluer",
-      "6": "Créer"
+      "4": "Analyser"
     },
     "cancel": "Annuler",
     "delete": "Supprimer",
@@ -323,16 +346,16 @@
     "cancelLower": "annuler",
     "expand": "agrandir",
     "responseType": {
-      "sans_reponse": "Sans réponse",
-      "qcs": "QCS",
+      "sans_reponse": "vide",
+      "qcs": "QCM",
       "qcm": "QCM",
-      "textuelle": "Textuelle",
-      "dessin": "Dessin",
-      "audio": "Audio",
-      "sondage": "Sondage",
-      "fill_blank": "Texte à trous",
-      "matching": "Matching",
-      "ordre": "Trier dans l'ordre"
+      "textuelle": "texte",
+      "liste": "liste",
+      "tableau": "tableau",
+      "matching": "paire",
+      "dessin": "dessin",
+      "fichier": "fichier",
+      "audio": "audio"
     },
     "questionType": {
       "textuel": "Textuel",
@@ -344,33 +367,14 @@
       "prenom": "Prénom",
       "tag": "Tag - Culture",
       "classe": "Classe",
-      "date": "Date"
+      "date": "Date",
+      "bareme": "Barème"
     },
-    "status": {
-      "publié": "publié",
-      "brouillon": "brouillon",
-      "archivé": "archivé"
+    "answerSpace": {
+      "audio": "🎙 espace de réponse audio"
     },
-    "answer": {
-      "noCorrectChoice": "(bonne réponse non définie)",
-      "noPairs": "(paires non définies)",
-      "noOrder": "(ordre non défini)",
-      "none": "aucune réponse associée",
-      "surveyFree": "sondage · réponse libre ({choices})",
-      "surveyNoCorrection": "sondage sans correction",
-      "freeNoCorrection": "réponse libre · sans correction",
-      "notSet": "(réponse non définie)",
-      "prefix": "réponse · "
-    },
-    "answerSpace": { "audio": "🎙 espace de réponse audio" },
-    "weight": {
-      "points": "points",
-      "negative": "points négatifs",
-      "negativeValue": "valeur du point négatif",
-      "eliminatory": "question éliminatoire"
-    },
-    "diff": "diff",
     "editQuestion": "modifier la question",
+    "cancelEditQuestion": "annuler la modification",
     "editor": {
       "new": "Nouvelle question",
       "edit": "Modifier la question",
@@ -384,26 +388,19 @@
       "visualEdit": "éditer l'image — outil basique à venir",
       "audioComing": "🎙️ enregistrement / import audio — outil à venir",
       "contentLabel": "Énoncé de la question",
-      "contentHintFill": "utilise « ___ » pour marquer chaque trou à compléter",
       "contentPlaceholder": "Écris ou colle l'énoncé de la question…",
       "rTypeLabel": "Type de réponse",
       "rTypeHint": "Sans réponse par défaut",
       "choicesPairs": "Paires à associer",
-      "choicesOrder": "Éléments à ordonner",
       "choicesOptions": "Options de réponse",
       "hintQcs": "une seule bonne réponse",
       "hintQcm": "une ou plusieurs bonnes réponses",
-      "hintSurveyA": "sondage sans correction · option « réponse libre » disponible",
-      "hintSurveyB": "active l'icône ✎ sur une option pour permettre une réponse libre",
       "hintMatching": "associe chaque élément à sa correspondance",
-      "hintOrder": "l'ordre de la liste ci-dessous est l'ordre correct",
       "shuffleLabel": "Ordre aléatoire",
       "shuffleHint": "mélange l'ordre des options pour chaque étudiant",
-      "answerHintFill": "réponses attendues pour chaque trou, séparées par une virgule, dans l'ordre",
       "answerHintDessin": "description ou image de référence pour la correction (outil dessin à venir)",
       "answerHintAudio": "transcription ou éléments attendus dans la réponse audio",
       "answerHintDefault": "utilisée pour la correction assistée par IA",
-      "answerLabelFill": "Réponses attendues",
       "answerLabelDefault": "Réponse associée",
       "answerPlaceholder": "Réponse de référence…",
       "freeAnswerLabel": "Réponse libre",
@@ -428,10 +425,10 @@
       "optionsDivider": "Options par question",
       "bloomLabel": "Niveau de Bloom visé",
       "bloomHint": "obligatoire — niveau cognitif que la question fait travailler",
-      "bricksLabel": "Briques de connaissance",
-      "bricksHint": "facultatif — les briques que la question mobilise, toutes chapitres confondus",
-      "addBrickOption": "associer une brique…",
-      "noBricks": "Aucune brique dans cet atelier. Elles se créent dans Paramètres → Briques de connaissance.",
+      "notionsLabel": "Notions",
+      "notionsHint": "facultatif — les notions que la question mobilise, toutes chapitres confondus",
+      "addNotionOption": "associer une notion…",
+      "noNotions": "Aucune notion dans cet atelier. Elles se créent dans Paramètres → Notions.",
       "labelsLabel": "Libellés",
       "labelsHint": "off par défaut — regroupe les questions pour générer des examens",
       "labelNamePlaceholder": "nom du libellé…",
@@ -444,41 +441,39 @@
       "prompt": "« ajoute {what} »",
       "promptPairs": "des paires",
       "promptOptions": "des options de réponse",
-      "dragReorder": "glisser pour réorganiser",
       "correctUnique": "bonne réponse (unique)",
       "correct": "bonne réponse",
-      "freeTextMarker": "réponse libre — l'étudiant écrit ce qu'il veut",
       "pairLeft": "élément {n}",
       "pairRight": "correspondance",
-      "freeInput": "saisie libre",
-      "option": "option {n}",
+      "option": "réponse libre…",
       "addPair": "+ paire",
-      "addOption": "+ option",
-      "needCorrect": "indique au moins une bonne réponse en cochant l'option correspondante"
+      "addOption": "+ ajouter une réponse"
     },
     "history": {
-      "title": "Examens générés",
-      "subtitle": "{count} examens · historique de l'atelier",
-      "newExam": "nouvel examen",
-      "colExam": "examen",
-      "colDate": "date",
+      "newExam": "nouvel",
       "colQuestions": "questions",
-      "colTakenBy": "passé par",
-      "colAvg": "note moy.",
-      "colActions": "actions",
-      "takenMembers": "{count} membres",
       "edit": "modifier",
-      "duplicate": "dupliquer",
       "export": "exporter",
-      "deleteAction": "supprimer"
+      "deleteAction": "supprimer",
+      "searchPlaceholder": "rechercher un examen…",
+      "filterNone": "aucun filtre disponible",
+      "noResults": "aucun examen ne correspond à la recherche."
+    },
+    "sort": {
+      "by": "trier",
+      "asc": "ordre croissant",
+      "desc": "ordre décroissant",
+      "recent": "date",
+      "name": "nom",
+      "type": "type",
+      "label": "tag"
     },
     "bank": {
-      "title": "Banque de questions",
       "include": "inclure",
       "exclude": "exclure",
       "dropFilterHere": "glisse un filtre ici",
       "newQuestion": "nouvelle question",
-      "generateAI": "générer par IA",
+      "newShort": "nouvelle",
       "searchPlaceholder": "chercher une question…",
       "filters": "filtres",
       "filtersReset": "réinitialiser",
@@ -487,108 +482,73 @@
       "rTypeSection": "type de réponse",
       "statusSection": "statut",
       "statusNew": "Nouveau",
-      "statusIncomplete": "Incomplète",
       "labelsSection": "libellés",
       "newLabel": "+ libellé",
-      "difficultySection": "difficulté",
-      "noDifficulty": "sans difficulté",
-      "diffLevel": "{n}/5",
-      "filterNoDifficulty": "sans difficulté",
-      "filterDifficulty": "difficulté {n}/5",
+      "chapterSection": "chapitre",
+      "noChapter": "sans chapitre",
       "editLabelTitle": "modifier le libellé",
       "saveLabel": "enregistrer",
       "deleteLabel": "supprimer le libellé",
-      "parts": "{count} parties",
-      "part": "Partie {n}",
-      "showDetail": "voir le détail ▾",
-      "hideDetail": "masquer le détail ▴",
+      "showParts": "question liée · voir les {count} parties",
+      "hideParts": "masquer les parties",
       "editQuestion": "modifier la question",
-      "duplicateQuestion": "dupliquer la question",
       "deleteQuestion": "supprimer la question",
-      "sendToEditor": "envoyer vers l'éditeur d'examen",
       "noMatch": "« aucune question ne correspond à ces filtres »",
-      "sortAsc": "ordre croissant",
-      "sortDesc": "ordre décroissant",
-      "sortRecent": "trier · date d'ajout",
-      "sortName": "trier · nom",
-      "sortType": "trier · type",
-      "sortDifficulty": "trier · difficulté",
-      "sortLabel": "trier · libellé",
       "deleteQuestionTitle": "Supprimer cette question ?",
       "deleteQuestionInExams": "Elle sera retirée des examens suivants :",
       "deleteLabelTitle": "Supprimer le libellé « {name} » ?",
       "deleteLabelCount": "Il sera retiré de {count} question(s). "
     },
     "generator": {
-      "title": "Éditeur d'examen",
-      "subtitle": "les questions s'enchaînent dans cet ordre — glisse pour réorganiser",
       "cancelEdits": "annuler les modifications",
       "resetEditor": "réinitialiser l'éditeur",
       "editingPrefix": "Modification de",
       "cancelEdit": "annuler ✕",
-      "sentQuestions": "questions envoyées",
-      "checkToAdd": "coche pour ajouter à l'examen",
-      "sendFromBank": "« envoie des questions depuis la banque »",
-      "incompleteTooltip": "question incomplète - cliquer pour compléter",
-      "removeFromList": "retirer de la liste",
-      "settings": "paramètres",
-      "label": "intitulé",
-      "show": "afficher",
-      "presentation": "présentation",
+      "headerZone": "EN-TÊTE",
+      "saveFavorite": "enregistrer en favori",
+      "minShort": "min",
+      "titlePlaceholder": "intitulé de l’examen…",
+      "titleHint": "clique pour modifier l’intitulé",
+      "subtitlePlaceholder": "sous-titre — matière, durée, consignes…",
+      "subtitleHint": "clique pour modifier le sous-titre",
+      "pillPlacedHint": "glisse (ou clique) pour déplacer",
+      "pillHiddenHint": "glisse (ou clique) pour l’afficher sur la copie",
+      "customize": "personnaliser",
+      "done": "terminer",
       "applyFavorite": "appliquer la présentation favorite",
-      "favorite": "favori",
+      "isFavorite": "cet en-tête est déjà ta présentation favorite",
       "replaceFavorite": "remplacer le favori par la présentation actuelle",
-      "left": "à gauche",
-      "right": "à droite",
-      "notShown": "non affiché",
       "customFieldPlaceholder": "nom de la pilule…",
       "addCustomField": "+ pilule personnalisée",
-      "sections": "parties",
       "addSection": "+ partie",
-      "questions": "questions",
-      "addPageBreak": "+ saut de page",
       "addPageBreakTooltip": "ajouter un saut de page",
-      "scale": "barème",
       "points": "{count} pt{plural}",
       "duration": "durée",
-      "durationMin": "min · {duration}",
-      "flow": "déroulé de l'examen",
       "emptySection": "partie vide — glisse une question ici",
       "pageBreak": "saut de page",
       "removeSection": "supprimer la partie",
       "removePageBreak": "retirer le saut de page",
-      "partWeightTooltip": "pondération de la partie {n}",
-      "partShort": "part. {n}",
       "removeFromExam": "retirer de l'examen",
       "dragReorder": "glisser pour réorganiser",
       "saveChanges": "enregistrer les modifications",
       "saveExam": "enregistrer l'examen",
-      "page": "page {n} / {total}",
-      "parts": "{count} parties",
+      "pageNumber": "{n} / {total}",
       "removeSectionTitle": "Supprimer la partie « {title} » ?",
       "removeSectionDesc": "Les {count} question(s) de cette partie ne seront plus dans l'examen et retourneront dans la liste des questions envoyées.",
       "cancelEditsTitle": "Annuler les modifications ?",
       "clearTitle": "Effacer l'éditeur d'examen ?",
       "clearDescEditing": "Les modifications en cours seront abandonnées. L'examen déjà enregistré n'est pas affecté.",
       "clearDesc": "L'intitulé, les parties, la pondération et les questions envoyées seront réinitialisés.",
-      "saveAnywayTitle": "Enregistrer malgré tout ?",
-      "saveAnywayDesc": "{count} question(s) de cet examen {plural} (sans réponse associée ou sans énoncé).",
-      "saveAnywayPluralOne": "est incomplète",
-      "saveAnywayPluralMany": "sont incomplètes",
       "applyFavoriteTitle": "Appliquer la présentation favorite ?",
       "applyFavoriteDesc": "La section présentation va être remplacée par votre favori.",
       "apply": "Appliquer",
       "replaceFavoriteTitle": "Remplacer le favori ?",
       "replaceFavoriteDesc": "Enregistre la présentation actuelle comme favorite. Elle remplacera l'ancienne favorite.",
-      "save": "Enregistrer",
-      "removeQuestionTitle": "Retirer cette question ?",
-      "removeQuestionDesc": "Elle est cochée dans l'examen en cours — la retirer de la liste des questions envoyées la retirera aussi de l'aperçu.",
-      "remove": "Retirer"
+      "save": "Enregistrer"
     },
     "tab": {
-      "panelHistory": "Examen généré",
-      "panelBank": "Banque de questions",
-      "panelGenerator": "Éditeur d'examen",
+      "tabHistory": "mes examens",
+      "tabBank": "questions",
       "deleteExamTitle": "Supprimer l'examen ?",
       "editorBusyTitle": "Éditeur déjà en cours d'utilisation",
       "editorBusyDesc": "L'éditeur d'examen contient déjà des modifications en cours. Termine ou efface l'éditeur avant de modifier {target}.",
@@ -605,6 +565,73 @@
       "introImage": "image {n}",
       "introClose": "fermer",
       "introStart": "Commencer"
+    },
+    "inline": {
+      "newQuestion": "nouvelle question",
+      "editQuestion": "modifier la question",
+      "statementPlaceholder": "intitulé de la question…",
+      "attachImage": "ajouter une image intégrée",
+      "pointsTitle": "barème de la question",
+      "points": "pts",
+      "uniqueAnswer": "réponse unique",
+      "uniqueAnswerHint": "une seule bonne réponse peut être cochée",
+      "advanced": "paramètres avancés",
+      "addPart": "+ question liée",
+      "save": "enregistrer →",
+      "statementRequired": "l’intitulé de la question est obligatoire",
+      "attachAudio": "ajouter un audio",
+      "soon": "bientôt",
+      "scoreLabel": "barème",
+      "penaltyLabel": "mauvaise réponse",
+      "penaltyTitle": "malus appliqué à une mauvaise réponse",
+      "timedScore": "calculer le score en fonction du temps de réponse",
+      "eliminatory": "éliminatoire — une mauvaise réponse annule la question",
+      "penaltyScope": "inclure l’absence de réponse dans la pénalité",
+      "lines": "nombre de lignes",
+      "expectationsTitle": "ajouter des instructions pour la correction",
+      "expectationsAdd": "+ ajouter des attendus",
+      "expectationsShow": "afficher les attendus",
+      "expectationsHide": "− masquer les attendus",
+      "expectationsPlaceholder": "instructions de correction — détails attendus, réponses acceptées, points de vigilance…",
+      "notionsTitle": "notions associées",
+      "notionSearch": "associer une notion…",
+      "removeNotion": "retirer la notion",
+      "labelsTitle": "libellés",
+      "removeRow": "retirer cette ligne",
+      "removeColumn": "retirer la colonne",
+      "addRow": "+ ajouter une ligne",
+      "numbers": "numéros",
+      "numbersHint": "afficher ou masquer les numéros à gauche de chaque réponse",
+      "expectedAnswers": "réponses attendues",
+      "tableRowPlaceholder": "ligne…",
+      "tableColPlaceholder": "colonne…",
+      "tableCheckHint": "coche la bonne case",
+      "tableUniqueHint": "une seule bonne case peut être cochée par ligne",
+      "addTableRow": "+ ligne",
+      "addTableCol": "+ colonne",
+      "matchLeft": "élément…",
+      "matchRight": "correspondance…",
+      "drawOnImage": "basé sur l’image de la question",
+      "drawHere": "dessiner la réponse ici",
+      "fileTypesLabel": "types de fichiers acceptés",
+      "fileUrlLabel": "(lien vers le dépôt)",
+      "fileUrlPlaceholder": "https://exemple.culture.app/corrige.pdf",
+      "emptyHintA": "Pour une consigne qui se réalise ailleurs (entourer sur une carte, activité physique…)",
+      "emptyHintB": "→ Ajoute des attendus pour aider l’IA à corriger.",
+      "shuffle": "ordre aléatoire",
+      "matchSplitHint": "glisser pour ajuster la largeur des colonnes",
+      "drawOnImageHint": "l’élève dessinera par-dessus l’image de la question"
+    },
+    "fileType": {
+      "pdf": "PDF",
+      "image": "image",
+      "word": "Word",
+      "excel": "Excel",
+      "ppt": "PowerPoint",
+      "txt": "texte",
+      "audio": "audio",
+      "video": "vidéo",
+      "zip": "ZIP"
     }
   },
   "avatar": {
@@ -638,13 +665,14 @@
   },
   "settings": {
     "sidebarLabel": "Paramètres",
+    "closeSettings": "fermer les paramètres",
     "cancel": "Annuler",
     "delete": "Supprimer",
     "nav": {
       "general": "Général",
       "members": "Membres & rôles",
-      "files": "Fichiers",
-      "bricks": "Briques de connaissance",
+      "files": "Ressources",
+      "notions": "Chapitre & Notion",
       "premium": "Atelier Premium"
     },
     "role": {
@@ -652,7 +680,11 @@
       "manager": "gestionnaire",
       "member": "membre"
     },
-    "fileUnit": { "b": "o", "kb": "Ko", "mb": "Mo" },
+    "fileUnit": {
+      "b": "o",
+      "kb": "Ko",
+      "mb": "Mo"
+    },
     "err": {
       "upload": "Erreur lors du téléchargement",
       "generic": "Erreur",
@@ -666,10 +698,8 @@
     },
     "general": {
       "title": "Général",
-      "desc": "Informations de base de l'atelier.",
       "nameLabel": "Nom de l'atelier",
       "descLabel": "Description",
-      "previewHint": "affichée dans la preview de l'atelier",
       "descPlaceholder": "décrivez votre atelier en quelques mots…",
       "coverLabel": "Image de couverture",
       "uploadAria": "uploader votre image",
@@ -679,18 +709,17 @@
     },
     "access": {
       "title": "Accès & limites",
-      "desc": "Tous les ateliers sont privés : on les rejoint via une demande validée par un gestionnaire ou sur invitation.",
       "showProgramme": "Afficher le programme éducatif",
       "qr": "QR code",
-      "qrHint": "redirige directement vers l'atelier",
       "shareQr": "partager · QR"
     },
     "danger": {
-      "title": "Zone de danger",
-      "desc": "Actions irréversibles — procédez avec prudence.",
+      "title": "Zone de danger - Irréversible",
       "deleteLabel": "Supprimer l'atelier",
-      "deleteHint": "toutes les briques, examens et progressions seront perdus",
-      "deleteBtn": "supprimer l'atelier"
+      "deleteHint": "toutes les notions, examens et progressions seront perdus",
+      "deleteBtn": "supprimer l'atelier",
+      "leaveLabel": "Quitter l'atelier",
+      "leaveHint": "vous perdrez l'accès à l'atelier et à votre progression"
     },
     "saveBar": {
       "unsaved": "modifications non enregistrées",
@@ -720,9 +749,7 @@
     },
     "members": {
       "title": "Membres & rôles",
-      "desc": "Gérez les accès et les permissions des membres de l'atelier.",
       "inviteLabel": "Inviter un utilisateur",
-      "inviteHint": "par tag",
       "inviting": "envoi…",
       "invite": "inviter",
       "inviteSent": "Invitation envoyée à {name}.",
@@ -754,18 +781,19 @@
       "filterAll": "tous les membres",
       "inGroupCount": "Dans le groupe ({count})",
       "otherMembersCount": "Autres membres ({count})",
+      "otherMembers": "autres membres",
+      "checkToAdd": "coche pour ajouter au groupe",
       "emptyGroup": "aucun membre dans ce groupe pour l'instant",
       "allInGroup": "tous les membres sont déjà dans ce groupe",
       "deleteConfirmTitle": "Supprimer ce groupe ?",
       "deleteConfirmDesc": "Il sera retiré de tous les membres concernés. Cette action est irréversible."
     },
     "files": {
-      "title": "Fichiers",
-      "desc": "Tous les fichiers déposés dans cet atelier, triés par nom.",
-      "addFile": "Ajouter un fichier",
-      "addFileHint": "glisser-déposer ou parcourir · taille max. 50 Mo",
+      "title": "Ressources",
+      "dropHere": "glisse tes fichiers ici ou",
+      "browse": "parcourir",
+      "addFileHint": "PDF, images, documents · 50 Mo max par fichier",
       "uploading": "téléchargement… {percent}%",
-      "addFileBtn": "ajouter un fichier",
       "noFiles": "aucun fichier déposé pour l'instant.",
       "saveTitle": "enregistrer",
       "cancelTitle": "annuler",
@@ -777,63 +805,78 @@
     },
     "premium": {
       "title": "Atelier Premium",
-      "desc": "Activez le statut Premium pour débloquer des fonctionnalités avancées pour tous les membres.",
-      "statusLabel": "Statut de l'atelier",
-      "statusHint": "passage Premium définitif",
-      "statusBadge": "✓ atelier premium",
-      "goPremiumLabel": "Passer l'atelier Premium",
-      "goPremiumHint": "badge visible · engagement irréversible",
-      "badgePremium": "badge premium",
-      "activate": "activer →",
-      "testPwLabel": "Mot de passe d'activation (test)",
+      "eyebrowActive": "abonnement",
+      "eyebrowInactive": "passage en premium",
+      "activeBadge": "Premium actif",
+      "activeTitle": "Cet atelier profite de tous les avantages Premium.",
+      "activeBilling": "Facturation : environ {total} € / mois · {count, plural, one {# membre} other {# membres}}",
+      "heroTitle": "Passe cet atelier en Premium",
+      "perMonthFor": "/ mois pour {count, plural, one {# membre} other {# membres}}",
+      "perMemberNote": "soit environ {avg} € par membre · tarif dégressif",
+      "activate": "Passer l'atelier en Premium",
+      "irreversibleNote": "passage définitif et irréversible — l'atelier devient privé à vie pour tous ses membres",
+      "advantagesTitle": "Ce que débloque le Premium",
+      "advantages": {
+        "noAds": "Sans publicité",
+        "unlimitedEnergy": "Utilisation illimitée",
+        "aiExchange": "Échange avec l'IA",
+        "examGenerator": "Accès au générateur d'examen",
+        "inviteMembers": "Ajout de membres depuis l'atelier",
+        "fileStorage": "Téléchargement jusqu'à 5 Go de fichiers",
+        "dailyJoker": "1 joker aléatoire par jour + via quêtes",
+        "exclusivePlants": "Plantes exclusives"
+      },
+      "tiersTitle": "Détail des prix",
+      "tiersNote": "plus l'atelier compte de membres, moins chaque place coûte.",
+      "tiers": {
+        "t1": "1er membre",
+        "t2to4": "2 à 4 membres",
+        "t5to9": "5 à 9 membres",
+        "t10to19": "10 à 19 membres",
+        "t20to49": "20 à 49 membres",
+        "t50to99": "50 à 99 membres",
+        "t100plus": "100 membres et +"
+      },
+      "yourTier": "votre palier",
+      "perMemberUnit": "/ membre",
       "testPwHint": "mode de test — sera retiré avec l'intégration du paiement",
-      "pwPlaceholder": "mot de passe…",
+      "pwPlaceholder": "code d'activation…",
       "confirmTitle": "Passer l'atelier Premium",
       "confirmDesc": "Cette action est définitive et irréversible : l'atelier deviendra privé pour toujours et tous ses membres (actuels et futurs) auront un accès Premium à vie.",
       "confirmBtn": "Confirmer l'activation"
     },
-    "bricks": {
-      "title": "Briques de connaissance",
-      "desc": "Les unités d'information de l'atelier — extraites des fichiers sources par l'IA, ou ajoutées à la main.",
-      "sourceFiles": "Fichiers source",
-      "manageFiles": "gérer les fichiers",
-      "regenAI": "✦ régénérer par IA",
+    "notions": {
+      "sectionTitle": "Chapitre & Notion",
+      "title": "Notions",
       "edit": "éditer",
-      "add": "+ ajouter une brique",
+      "add": "ajouter une notion",
       "save": "enregistrer",
       "cancel": "annuler",
       "delete": "supprimer",
-      "titlePlaceholder": "Titre de la brique (l'idée en une phrase)",
+      "titlePlaceholder": "Titre de la notion (l'idée en une phrase)",
       "contentPlaceholder": "Contenu détaillé (optionnel)",
-      "empty": "Aucune brique pour l'instant — ajoutez-les à la main ou déposez des fichiers sources.",
-      "emptyChapter": "Aucune brique dans ce chapitre.",
+      "empty": "Aucune notion pour l'instant — ajoutez-les à la main ou déposez des fichiers sources.",
+      "emptyChapter": "Aucune notion dans ce chapitre.",
       "noChapter": "Sans chapitre",
-      "count": "{count, plural, =0 {aucune brique} one {# brique} other {# briques}}",
-      "deleteTitle": "Supprimer cette brique ?",
+      "needChapterHint": "crée un chapitre pour y planter tes premières notions.",
+      "count": "{count, plural, =0 {aucune notion} one {# notion} other {# notions}}",
+      "deleteTitle": "Supprimer cette notion ?",
       "deleteDesc": "« {title} » sera définitivement supprimée, ainsi que les données de maîtrise associées."
     },
     "chapters": {
       "title": "Chapitres",
-      "desc": "Les chapitres regroupent les briques. Chaque chapitre fait pousser un pot dans le programme éducatif.",
-      "add": "+ ajouter un chapitre",
+      "add": "ajouter un chapitre",
       "rename": "renommer",
       "namePlaceholder": "Nom du chapitre",
-      "moveUp": "monter",
-      "moveDown": "descendre",
+      "dragHint": "glisser pour réordonner",
       "empty": "Aucun chapitre pour l'instant — le programme éducatif est vide tant qu'il n'y en a pas.",
       "count": "{count, plural, =0 {aucun chapitre} one {# chapitre} other {# chapitres}}",
       "deleteTitle": "Supprimer ce chapitre ?",
-      "deleteDesc": "« {name} » sera supprimé et son pot disparaîtra du programme. Ses briques ne sont pas supprimées : elles repassent dans « sans chapitre »."
+      "deleteDesc": "« {name} » sera supprimé et son pot disparaîtra du programme. Ses notions ne sont pas supprimées : elles repassent dans « sans chapitre »."
     }
   },
   "workshop": {
     "breadcrumbGarden": "jardin",
-    "tabs": {
-      "programme": "Programme éducatif",
-      "examen": "Génération d'examen",
-      "analyse": "Analyse",
-      "cours": "Génération de cours"
-    },
     "shareBtn": "partager · QR",
     "settingsLink": "paramètres",
     "role": {
@@ -923,12 +966,15 @@
   },
   "programme": {
     "startExercise": "lancer un exercice",
-    "brickCount": "{count, plural, =0 {aucune brique} one {# brique} other {# briques}}",
+    "notionCount": "{count, plural, =0 {aucune notion} one {# notion} other {# notions}}",
     "chapterIndicator": "chapitre {from}–{to} / {total}",
+    "progressPercent": "{pct} %",
+    "currentChapterEyebrow": "chapitre en cours",
+    "allChaptersEyebrow": "tous les chapitres",
     "emptyTitle": "aucun chapitre pour l'instant",
-    "emptyDesc": "Les chapitres se créent dans Paramètres → Briques de connaissance. Chaque chapitre fait pousser un pot ici.",
+    "emptyDesc": "Les chapitres se créent dans Paramètres → Notions.",
     "questions": {
-      "open": "questions du parcours",
+      "open": "liste des questions du parcours",
       "back": "retour au programme",
       "title": "Questions du parcours pédagogique",
       "desc": "Les questions posées aux candidats pendant leur parcours. Distinctes de la banque du générateur d'examen.",
@@ -944,7 +990,7 @@
       "deleteTitle": "Supprimer cette question ?",
       "chapter": "Chapitre de rattachement",
       "noChapter": "sans chapitre",
-      "noChapterHint": "Chaque question doit être rattachée à un chapitre : sans chapitre, elle n'est jamais tirée par le bouton « lancer un exercice » d'un pot."
+      "noChapterHint": "Chaque question doit être rattachée à un chapitre : sans chapitre, elle n'est jamais tirée par le bouton « lancer un exercice »."
     }
   },
   "exercise": {
@@ -961,7 +1007,10 @@
     "verdictWrong": "Mauvaise réponse",
     "verdictNeutral": "Pas de correction automatique pour ce type de réponse.",
     "expectedAnswer": "Réponse attendue :",
-    "gradeError": "Erreur lors de la correction"
+    "gradeError": "Erreur lors de la correction",
+    "doneTitle": "belle récolte.",
+    "doneScore": "{count, plural, =0 {aucune bonne réponse} one {# bonne réponse} other {# bonnes réponses}}",
+    "backToParcours": "retour au parcours"
   },
   "accountPricing": {
     "tagline": "de la graine à l'arbre —",
@@ -1036,40 +1085,7 @@
     }
   },
   "analyse": {
-    "header": {
-      "title": "Tableau de bord",
-      "subtitle": "vue gestionnaire · {count} membres · mis à jour il y a {minutes} min"
-    },
-    "period": {
-      "d7": "7 jours",
-      "d30": "30 jours",
-      "all": "tout"
-    },
-    "exportCsv": "exporter CSV",
-    "kpi": {
-      "members": "membres",
-      "avgProgress": "progression moyenne",
-      "masteredBricks": "briques maîtrisées (moy.)",
-      "avgExamScore": "note moyenne examens"
-    },
-    "masteryHeatmap": {
-      "kicker": "maîtrise par section (moyenne du groupe)"
-    },
-    "distribution": {
-      "kicker": "répartition · section en cours",
-      "insight": "« le gros du groupe est sur la mitochondrie »"
-    },
-    "membersTable": {
-      "title": "Progression par membre",
-      "count": "{shown} sur {total} · trier par progression ▾",
-      "col": {
-        "member": "membre",
-        "section": "section en cours",
-        "progress": "progression",
-        "lastActivity": "dernière activité",
-        "score": "note"
-      }
-    }
+    "title": "analyse."
   },
   "session": {
     "leaveSession": "quitter la session",
@@ -1106,7 +1122,7 @@
       "newPlot": "nouvelle parcelle"
     },
     "title": "plante une nouvelle matière.",
-    "subtitle": "« dépose tes cours — l'IA fera pousser les briques toute seule. »",
+    "subtitle": "« dépose tes cours — l'IA fera pousser les notions toute seule. »",
     "source": {
       "kicker": "① source · le cœur de ton atelier",
       "dropHere": "dépose tes fichiers ici",
@@ -1116,7 +1132,7 @@
       "formatSuffix": " · 25 Mo max / fichier",
       "futureFormats": "Word, PowerPoint, audio, vidéo arrivent en V2",
       "filesAdded": "{count} fichiers déposés",
-      "extractAfterCreation": "l'IA extraira les briques après la création"
+      "extractAfterCreation": "l'IA extraira les notions après la création"
     },
     "identity": {
       "kicker": "② identité",
@@ -1127,13 +1143,10 @@
       "descriptionPlaceholder": "une phrase pour situer la matière…"
     },
     "createCta": "créer l'atelier",
-    "extractHint": "l'IA extraira ensuite les briques · tu pourras tout ajuster"
+    "extractHint": "l'IA extraira ensuite les notions · tu pourras tout ajuster"
   },
   "cours": {
-    "comingV2": "arrive en V2",
-    "title": "Génération de cours animés",
-    "description": "À partir des fichiers source de l'atelier, l'IA assemblera des slides animées, narrées section par section — pour introduire une notion avant de l'arroser.",
-    "tagline": "« on prépare la serre… »"
+    "title": "générateur de cours."
   },
   "auth": {
     "signIn": {

@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, ArrowRight, X } from 'lucide-react';
-import { palette, ink, withAlpha } from '@/lib/theme';
-import QuestionEditor, { type Question, emptyQuestion } from './QuestionEditor';
+import { AlertTriangle, ArrowRight, FileText, Search, X } from 'lucide-react';
+import { palette, ink, radius, shadow, withAlpha, categoryTones } from '@/lib/theme';
+import { type Question, emptyQuestion } from './QuestionEditor';
 import {
   getExamBankData, saveQuestion, createPool as createPoolAction, updatePool as updatePoolAction,
   deletePool as deletePoolAction, deleteQuestion as deleteQuestionAction, saveGeneratedExam,
@@ -14,14 +14,16 @@ import {
 import {
   type Exam, type Pool, type ExamConfig,
   defaultExamConfig, normalizeExamConfig, configQuestionIds, formatDuration, clearWeightingFor,
+  toggleQuestionInSections, isPageBreakId, pruneUnknownQuestions,
 } from './examen/examShared';
 import HistoryContent from './examen/HistoryContent';
 import BankContent from './examen/BankContent';
 import GeneratorContent from './examen/GeneratorContent';
 
-// ---- PANEL TITLES ----
-const IDS = ['history', 'bank', 'generator'] as const;
-type PanelId = typeof IDS[number];
+// Onglet actif de la colonne gauche — « generator » (la feuille A4) n'est plus
+// un onglet : c'est une colonne à part, toujours visible (variante retenue
+// « banqueOngletsLarge », voir docs/design/README.md et T34 de la feuille de route).
+type LeftTab = 'history' | 'bank';
 
 // génération d'id unique au niveau module (hors composant) — évite l'appel impur Date.now() dans le render
 function newExamId() { return 'e' + Date.now(); }
@@ -29,20 +31,20 @@ function newExamId() { return 'e' + Date.now(); }
 // ---- MAIN EXAMEN TAB ----
 export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const t = useTranslations('examen');
-  const panelTitle = (id: PanelId): string => id === 'history' ? t('tab.panelHistory') : id === 'bank' ? t('tab.panelBank') : t('tab.panelGenerator');
-  const stageRef = useRef<HTMLDivElement>(null);
-  const tileRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const prevRects = useRef<Record<string, { l: number; t: number; w: number; h: number }>>({});
-  const [dim, setDim] = useState({ w: 0, h: 0 });
-  const [order, setOrder] = useState<PanelId[]>(['history', 'bank', 'generator']);
+  const [leftTab, setLeftTab] = useState<LeftTab>('bank');
   const [exams, setExams] = useState<Exam[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [pools, setPools] = useState<Pool[]>([]);
-  const [bricks, setBricks] = useState<{ id: string; title: string }[]>([]);
+  // `chapterId` sur la notion + la liste des chapitres : de quoi filtrer la
+  // banque par chapitre, qu'une question ne porte pas elle-même (elle en hérite
+  // par ses notions associées).
+  const [notions, setNotions] = useState<{ id: string; title: string; chapterId: string | null }[]>([]);
+  const [chapters, setChapters] = useState<{ id: string; name: string }[]>([]);
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [editing, setEditing] = useState<Exam | null>(null);
   const [pendingDeleteExam, setPendingDeleteExam] = useState<Exam | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [newQuestionId, setNewQuestionId] = useState<string | null>(null);
   const [draftIds, setDraftIds] = useState<string[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [examConfig, setExamConfig] = useState<ExamConfig>(defaultExamConfig());
@@ -65,24 +67,26 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     }
   }
 
-  const GAP = 16;
-  const SIDE_W = 320;
-  // sous cette largeur, les 3 panneaux passent d'une mise en page côte-à-côte (avec mise à l'échelle)
-  // à une pile verticale plein-largeur (échelle 1:1, scroll vertical) — reflow façon Gmail au zoom navigateur.
-  const STACK_BP = 860;
   const draftLoaded = useRef(false);
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    Promise.all([getExamBankData(workshopId), getExamDraft(workshopId)]).then(([{ questions, pools, exams, bricks }, draft]) => {
+    Promise.all([getExamBankData(workshopId), getExamDraft(workshopId)]).then(([{ questions, pools, exams, notions, chapters }, draft]) => {
       const mappedExams = exams.map(e => ({ id: e.id, title: e.title, date: e.date, q: e.q, dur: e.dur, avg: e.avg, status: e.status, taken: e.taken, questionIds: e.questionIds, config: e.config }));
       setQuestions(questions);
       setPools(pools);
-      setBricks(bricks);
+      setNotions(notions);
+      setChapters(chapters);
       setExams(mappedExams);
       if (draft) {
-        setDraftIds(draft.draftIds);
-        setExamConfig(draft.config?.sections ? normalizeExamConfig(draft.config) : defaultExamConfig());
+        // Filet : un brouillon peut référencer une question qui n'existe plus
+        // (supprimée ailleurs, ou création abandonnée par une fermeture d'onglet
+        // avant enregistrement). Ces identifiants ne s'affichent nulle part mais
+        // compteraient dans le barème — on les écarte à la lecture.
+        const known = new Set(questions.map(q => q.id));
+        const keep = (id: string) => isPageBreakId(id) || known.has(id);
+        setDraftIds(draft.draftIds.filter(keep));
+        setExamConfig(draft.config?.sections ? pruneUnknownQuestions(normalizeExamConfig(draft.config), keep) : defaultExamConfig());
         if (draft.editingId) {
           const found = mappedExams.find(e => e.id === draft.editingId);
           if (found) setEditing(found);
@@ -92,15 +96,22 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       .finally(() => { draftLoaded.current = true; });
   }, [workshopId]);
 
-  // sauvegarde du brouillon de l'éditeur d'examen (reprise après reconnexion / le lendemain)
+  // Sauvegarde du brouillon de l'éditeur d'examen (reprise après reconnexion /
+  // le lendemain). Une question en cours de création n'existe qu'en mémoire tant
+  // qu'elle n'est pas enregistrée : la persister ici laisserait un identifiant
+  // fantôme dans l'examen, invisible sur la feuille mais compté dans le barème.
   useEffect(() => {
     if (!draftLoaded.current) return;
     if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
+    const pendingId = newQuestionId;
+    const keep = (id: string) => id !== pendingId;
+    const config = pendingId ? pruneUnknownQuestions(examConfig, keep) : examConfig;
+    const ids = pendingId ? draftIds.filter(keep) : draftIds;
     draftSaveTimer.current = setTimeout(() => {
-      saveExamDraft(workshopId, { draftIds, config: examConfig, editingId: editing?.id ?? null }).catch(err => console.error('sauvegarde du brouillon échouée', err));
+      saveExamDraft(workshopId, { draftIds: ids, config, editingId: editing?.id ?? null }).catch(err => console.error('sauvegarde du brouillon échouée', err));
     }, 800);
     return () => { if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current); };
-  }, [workshopId, draftIds, examConfig, editing]);
+  }, [workshopId, draftIds, examConfig, editing, newQuestionId]);
 
   function handleClearEditor() {
     setEditing(null);
@@ -108,51 +119,13 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     setExamConfig(defaultExamConfig());
   }
 
-  useLayoutEffect(() => {
-    const el = stageRef.current;
-    if (!el) return;
-    const measure = () => {
-      const w = Math.round(el.clientWidth);
-      const h = Math.round(el.clientHeight);
-      if (w > 0 && h > 0) {
-        setDim(prev => (prev.w === w && prev.h === h) ? prev : { w, h });
-      }
-    };
-    // mesure en continu (et pas seulement au premier rendu) : un changement de zoom navigateur modifie
-    // la largeur en px CSS disponible et doit donc redéclencher le calcul de mise en page/reflow.
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  useLayoutEffect(() => {
-    IDS.forEach(id => {
-      const el = tileRefs.current[id];
-      if (!el) return;
-      const nr = { l: el.offsetLeft, t: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
-      const pr = prevRects.current[id];
-      prevRects.current[id] = nr;
-      if (!pr || !nr.w || !nr.h) return;
-      const dx = pr.l - nr.l, dy = pr.t - nr.t;
-      const sx = pr.w / nr.w, sy = pr.h / nr.h;
-      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5 && Math.abs(sx - 1) < 0.004 && Math.abs(sy - 1) < 0.004) return;
-      if (typeof el.animate !== 'function') return;
-      el.animate([
-        { transformOrigin: 'top left', transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` },
-        { transformOrigin: 'top left', transform: 'translate(0px, 0px) scale(1, 1)' },
-      ], { duration: 480, easing: 'cubic-bezier(0.33, 1, 0.68, 1)' });
-    });
-  });
-
-  function focus(id: PanelId) {
-    setOrder(prev => {
-      const i = prev.indexOf(id);
-      if (i <= 0) return prev;
-      const n = [...prev];
-      const tmp = n[0]; n[0] = n[i]; n[i] = tmp;
-      return n;
-    });
+  // Amène un onglet au premier plan de la colonne gauche. « generator » (la
+  // feuille A4) n'est plus un onglet dans la coquille retenue — elle est déjà
+  // toujours visible dans la colonne de droite, donc no-op. Signature conservée
+  // pour ne pas toucher les appelants (`requestEditExam`, `handleGenerate`…).
+  function focus(id: LeftTab | 'generator') {
+    if (id === 'generator') return;
+    setLeftTab(id);
   }
 
   function handleGenerate() {
@@ -191,16 +164,65 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     deleteGeneratedExam(workshopId, exam.id).catch(err => console.error('suppression de l\'examen échouée', err));
   }
 
+  // Ouvre le formulaire en ligne sur la feuille. Une seule question à la fois :
+  // deux formulaires ouverts, ce serait deux brouillons concurrents pour un même
+  // examen. Rappuyer sur le bouton de la question déjà ouverte referme le
+  // formulaire — même effet que son bouton « annuler ».
   function handleOpenQuestion(id: string) {
     const q = questions.find(p => p.id === id);
     if (!q) return;
-    if (editingQuestion && editingQuestion.id !== id) {
+    if (editingQuestion) {
+      if (editingQuestion.id === id) { handleCancelQuestion(); return; }
       setOpenQuestionBlocked(true);
       setTimeout(() => setOpenQuestionBlocked(false), 2200);
       return;
     }
     setEditingQuestion(q);
-    focus('bank');
+  }
+
+  // Crayon de la banque : l'édition se fait sur la feuille, donc une question qui
+  // n'est pas encore dans l'examen l'y rejoint (fin de la dernière partie).
+  function requestEditQuestion(q: Question) {
+    if (editingQuestion) {
+      if (editingQuestion.id === q.id) { handleCancelQuestion(); return; }
+      setOpenQuestionBlocked(true);
+      setTimeout(() => setOpenQuestionBlocked(false), 2200);
+      return;
+    }
+    if (!configQuestionIds(examConfig).includes(q.id)) handleToggleQuestionInExam(q.id);
+    setEditingQuestion(q);
+  }
+
+  // « nouvelle » : la question n'existe qu'en mémoire tant qu'elle n'est pas
+  // enregistrée, mais la feuille ne sait afficher que des questions connues —
+  // on l'insère donc tout de suite, et l'annulation la retire partout.
+  function handleNewQuestion() {
+    if (editingQuestion) {
+      setOpenQuestionBlocked(true);
+      setTimeout(() => setOpenQuestionBlocked(false), 2200);
+      return;
+    }
+    const q = emptyQuestion();
+    setQuestions(prev => [q, ...prev]);
+    setExamConfig(prev => ({ ...prev, sections: toggleQuestionInSections(prev.sections, q.id) }));
+    setDraftIds(prev => [...prev, q.id]);
+    setNewQuestionId(q.id);
+    setEditingQuestion(q);
+  }
+
+  function handleCancelQuestion() {
+    const id = newQuestionId;
+    if (id) {
+      setQuestions(prev => prev.filter(p => p.id !== id));
+      setExamConfig(prev => ({
+        ...prev,
+        sections: prev.sections.map(sec => ({ ...sec, questionIds: sec.questionIds.filter(qid => qid !== id) })),
+        weighting: clearWeightingFor(prev.weighting, id),
+      }));
+      setDraftIds(prev => prev.filter(qid => qid !== id));
+    }
+    setNewQuestionId(null);
+    setEditingQuestion(null);
   }
 
   function handleSaveQuestion(q: Question) {
@@ -211,13 +233,9 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       return [withCreatedAt, ...prev];
     });
     setEditingQuestion(null);
-    saveQuestion(workshopId, q).catch(err => console.error('enregistrement question échoué', err));
-  }
-
-  function handleDuplicateQuestion(q: Question) {
-    const copy: Question = { ...q, id: 'q' + Date.now() + Math.random().toString(36).slice(2, 7), examIds: [] };
-    setQuestions(prev => [copy, ...prev]);
-    saveQuestion(workshopId, copy).catch(err => console.error('duplication de la question échouée', err));
+    setNewQuestionId(null);
+    const toSave = q.createdAt ? q : { ...q, createdAt: new Date().toISOString() };
+    saveQuestion(workshopId, toSave).catch(err => console.error('enregistrement question échoué', err));
   }
 
   function handleDeleteQuestion(deleted: Question) {
@@ -254,7 +272,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
 
   function handleCreatePool(name: string): string {
     const id = 'pool' + Date.now();
-    const pool = { id, name, color: '#9eb3b9' };
+    const pool = { id, name, color: categoryTones.blueGray };
     setPools(prev => [...prev, pool]);
     createPoolAction(workshopId, pool).catch(err => console.error('création libellé échouée', err));
     return id;
@@ -272,103 +290,151 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     deletePoolAction(workshopId, id, affected).catch(err => console.error('suppression libellé échouée', err));
   }
 
-  function handleSendOne(id: string) {
-    setDraftIds(prev => prev.includes(id) ? prev : [id, ...prev]);
+  // Un clic sur une carte de la banque met la question dans l'examen, un second
+  // l'en retire (comportement de la maquette). Il n'y a plus de liste
+  // intermédiaire « questions envoyées » : `draftIds` suit exactement les
+  // questions de l'examen — c'est lui qui allume la pastille verte de la carte,
+  // et il reste la clé de la reprise du brouillon.
+  function handleToggleQuestionInExam(id: string) {
+    const sections = toggleQuestionInSections(examConfig.sections, id);
+    const included = configQuestionIds({ ...examConfig, sections }).includes(id);
+    setExamConfig({
+      ...examConfig,
+      sections,
+      weighting: included ? examConfig.weighting : clearWeightingFor(examConfig.weighting, id),
+    });
+    setDraftIds(prev => (included ? (prev.includes(id) ? prev : [...prev, id]) : prev.filter(qid => qid !== id)));
   }
 
   function handleRemoveFromDraft(ids: string[]) {
     setDraftIds(prev => prev.filter(id => !ids.includes(id)));
   }
 
-  function rectFor(role: number) {
-    const { w, h } = dim;
-    if (w < STACK_BP) {
-      // pile verticale plein-largeur : chaque panneau occupe toute la largeur disponible (s=1, pas de
-      // mise à l'échelle) ; le panneau focus (role 0) est plus grand, les 2 autres défilent en dessous.
-      const mainH = 620;
-      const sideH = 400;
-      const y = role === 0 ? 0 : role === 1 ? mainH + GAP : mainH + GAP + sideH + GAP;
-      return { x: 0, y, w, h: role === 0 ? mainH : sideH, main: role === 0 };
-    }
-    const mainW = Math.max(360, w - SIDE_W - GAP);
-    const sideH = (h - GAP) / 2;
-    if (role === 0) return { x: 0, y: 0, w: mainW, h, main: true };
-    if (role === 1) return { x: mainW + GAP, y: 0, w: SIDE_W, h: sideH, main: false };
-    return { x: mainW + GAP, y: sideH + GAP, w: SIDE_W, h: sideH, main: false };
-  }
-
-  const stacked = dim.w < STACK_BP;
-  const mainW = stacked ? dim.w : Math.max(360, dim.w - SIDE_W - GAP);
-  const ready = dim.w > 0 && dim.h > 0;
+  const tabButtonStyle = (active: boolean, corner: 'left' | 'right'): React.CSSProperties => ({
+    flex: 1,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    fontSize: 13,
+    fontWeight: 600,
+    color: active ? palette.greenBrand : palette.inkMuted,
+    background: active ? withAlpha(palette.green, 0.12) : 'transparent',
+    border: 'none',
+    borderBottom: `2px solid ${active ? palette.green : 'transparent'}`,
+    borderTopLeftRadius: corner === 'left' ? radius.lg : 0,
+    borderTopRightRadius: corner === 'right' ? radius.lg : 0,
+    padding: '13px 8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  });
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <style>{`@keyframes examPop { 0% { background: rgba(232,184,108,0.42); } 100% { } }`}</style>
-      <div ref={stageRef} style={{ flex: 1, position: 'relative', margin: '22px 22px 20px', minHeight: 0, overflow: stacked ? 'auto' : 'visible', paddingBottom: stacked ? 50 : 0 }}>
-        {ready && IDS.map(id => {
-          const role = order.indexOf(id);
-          const r = rectFor(role);
-          const s = r.w / mainW;
-          // historique/banque défilent via ce conteneur (l'éditeur gère son propre scroll interne) : on
-          // réserve une petite marge à droite pour décoller la scrollbar de la bordure de la tuile, comme
-          // c'est déjà le cas pour l'éditeur d'examen.
-          const contentW = id === 'generator' ? mainW : mainW - 16;
-          return (
-            <div key={id} ref={el => { tileRefs.current[id] = el; }} style={{ position: 'absolute', left: r.x, top: r.y, width: r.w, height: r.h, borderRadius: 16, overflow: 'hidden', border: r.main ? '1px solid rgba(45,42,36,0.10)' : `1px solid ${ink(0.08)}`, background: id === 'generator' ? palette.creamAlt : palette.cream, boxShadow: r.main ? '0 16px 44px rgba(45,42,36,0.10)' : `0 6px 18px ${ink(0.08)}`, zIndex: r.main ? 2 : 1 }}>
-              <div style={{ position: 'absolute', top: 0, left: 0, width: contentW, height: r.h / s, transform: `scale(${s})`, transformOrigin: '0 0', overflowY: id === 'generator' ? 'hidden' : 'auto', overflowX: 'hidden', background: id === 'generator' ? palette.creamAlt : palette.cream }}>
-                {id === 'history' && <HistoryContent exams={exams} justAddedId={justAdded} onEdit={requestEditExam} onNew={() => setIntroOpen(true)} onDelete={e => setPendingDeleteExam(e)} />}
-                {id === 'bank' && (
-                  <BankContent
-                    questions={questions}
-                    pools={pools}
-                    exams={exams}
-                    openId={openId}
-                    setOpenId={setOpenId}
-                    onEditQuestion={q => setEditingQuestion(q)}
-                    onNewQuestion={() => setEditingQuestion(emptyQuestion())}
-                    onSendOne={handleSendOne}
-                    onCreatePool={handleCreatePool}
-                    onUpdatePool={handleUpdatePool}
-                    onDeletePool={handleDeletePool}
-                    onDuplicateQuestion={handleDuplicateQuestion}
-                    onDeleteQuestion={handleDeleteQuestion}
-                  />
-                )}
-                {id === 'generator' && <GeneratorContent questions={questions} draftIds={draftIds} config={examConfig} onConfigChange={setExamConfig} editing={editing} onCancelEdit={() => setEditing(null)} onGenerate={handleGenerate} onOpenQuestion={handleOpenQuestion} onRemoveFromDraft={handleRemoveFromDraft} onClearEditor={handleClearEditor} />}
-              </div>
-              {id === 'bank' && editingQuestion && (
-                <>
-                  <QuestionEditor
-                    question={editingQuestion}
-                    allQuestions={questions}
-                    pools={pools}
-                    bricks={bricks}
-                    onCreatePool={handleCreatePool}
-                    onSave={handleSaveQuestion}
-                    onCancel={() => setEditingQuestion(null)}
-                  />
-                  {!r.main && (
-                    <div onClick={() => focus(id)} style={{ position: 'absolute', inset: 0, zIndex: 61, cursor: 'pointer' }} />
-                  )}
-                </>
-              )}
-              {!r.main && (
-                <>
-                  <div onClick={() => focus(id)} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 34, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', cursor: 'pointer', background: 'linear-gradient(180deg, rgba(252,249,242,0.96), rgba(252,249,242,0.0))' }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: palette.amber, display: 'inline-block' }} />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: palette.ink }}>{panelTitle(id)}</span>
-                  </div>
-                  <div onClick={() => focus(id)} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: ink(0.0), transition: 'background 180ms ease', cursor: 'pointer' }}>
-                    <button onClick={e => { e.stopPropagation(); focus(id); }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 999, border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: withAlpha(palette.paper, 0.96), color: palette.ink, fontSize: 12.5, fontWeight: 500, boxShadow: `0 6px 18px ${ink(0.20)}`, opacity: 0, pointerEvents: 'none' }}>
-                      <svg width="14" height="14" viewBox="0 0 14 14"><path d="M5.5 1.5H1.5V5.5M8.5 12.5h4V8.5M1.5 8.5v4h4M12.5 5.5v-4h-4" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      {t('expand')}
-                    </button>
-                  </div>
-                </>
-              )}
+      {/* Coquille côte à côte (« banqueOngletsLarge ») : colonne gauche à onglets
+          pleine largeur (mes examens / questions) à 440px fixes, feuille A4
+          toujours visible à droite (largeur fixe du bloc A4) — empilées en
+          dessous de 768px. */}
+      {/* Répartition du vide horizontal : les deux colonnes ont une largeur
+          fixe, tout le reste est distribué par trois cales flex dans un rapport
+          1 : 2 : 3 — marge de page à gauche, écart banque↔feuille (deux fois la
+          marge), puis vide à droite de la feuille (inchangé : la moitié du vide
+          total, comme dans le rapport 1:1:2 d'origine). Les marges
+          négatives de la colonne de droite (-60 / -120) retirent de ce calcul
+          tout ce qui sépare son bord du papier : les vides se mesurent alors
+          exactement bord à bord de la feuille. Largeur 1236 = les 1188 du bloc
+          A4 (TOOLBAR_WIDTH) + les 48 de padding de GeneratorContent (24 à
+          gauche, 12 à droite, 12 de plus sur le panneau défilant) — sans quoi
+          le bloc déborde et la barre d'outils ne s'aligne plus sur le bord du
+          papier. 60 = 24 de padding gauche + 26 de gouttière + 10 d'espace ;
+          120 = 12 + 12 de padding droit + 10 d'espace + 86 de gouttière. */}
+      {/* `split-shell` (globals.css) borne la hauteur au viewport à partir de
+          768px : c'est ce qui rend les deux colonnes indépendantes — la page ne
+          défile plus, chaque panneau fait défiler son propre contenu, et la
+          marge basse de 28px laisse la bande de crème visible sous les
+          panneaux. En dessous de 768px les colonnes s'empilent et c'est la page
+          qui défile, comme avant. */}
+      {/* Pas de `flex: 1` ici : en tant qu'élément flex, un `flex-basis: 0` fait
+          gagner la répartition flex sur la hauteur déclarée et la coquille
+          reprendrait la hauteur de son contenu. */}
+      <div className="split-shell flex flex-col gap-5 mx-[22px] overflow-auto md:mx-0 md:flex-row md:gap-0" style={{ minHeight: 0, marginTop: 22, marginBottom: 28 }}>
+        {/* `minWidth` : sur un écran trop étroit pour le bloc A4 (moins de
+            ~1500px), il ne reste rien à répartir — les cales gardent alors la
+            marge de page et l'écart minimum d'avant, et c'est la feuille qui
+            est rognée à droite comme elle l'était déjà.
+            `pointerEvents: 'none'` sur les trois cales : les marges négatives de
+            la colonne de droite (-60 / -120) les font chevaucher les gouttières
+            de la feuille, et une cale placée APRÈS dans le DOM capte alors les
+            clics de la gouttière qu'elle recouvre (les croix de retrait étaient
+            devenues inertes). Ce sont des blocs vides, ils n'ont aucune raison
+            de recevoir un clic. */}
+        <div className="hidden md:block" style={{ flex: '1 1 0', minWidth: 22, pointerEvents: 'none' }} />
+        <div className="w-full md:w-[440px]" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 420 }}>
+          <div style={{ display: 'flex', flexShrink: 0, border: `1px solid ${palette.lineStrong}`, borderBottom: 'none', borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, overflow: 'hidden' }}>
+            <button onClick={() => setLeftTab('history')} style={tabButtonStyle(leftTab === 'history', 'left')}>
+              <FileText size={15} strokeWidth={1.75} />
+              {t('tab.tabHistory')}
+            </button>
+            <button onClick={() => setLeftTab('bank')} style={tabButtonStyle(leftTab === 'bank', 'right')}>
+              <Search size={15} strokeWidth={1.75} />
+              {t('tab.tabBank')}
+            </button>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, position: 'relative', border: `1px solid ${palette.lineStrong}`, borderRadius: `0 0 ${radius.lg}px ${radius.lg}px`, background: palette.surfaceRaised, boxShadow: shadow.sm, overflow: 'hidden' }}>
+            {/* Montage permanent des deux onglets (display none/block) — préserve
+                la recherche/le tri en cours quand on bascule d'onglet, comme le
+                fait déjà SettingsClient pour ses sections. */}
+            <div className="scroll-panel" style={{ display: leftTab === 'history' ? 'block' : 'none', height: '100%' }}>
+              <HistoryContent exams={exams} justAddedId={justAdded} onEdit={requestEditExam} onNew={() => setIntroOpen(true)} onDelete={e => setPendingDeleteExam(e)} />
             </div>
-          );
-        })}
+            <div className="scroll-panel" style={{ display: leftTab === 'bank' ? 'block' : 'none', height: '100%', position: 'relative' }}>
+              <BankContent
+                questions={questions}
+                pools={pools}
+                exams={exams}
+                notions={notions}
+                chapters={chapters}
+                draftIds={draftIds}
+                editingQuestionId={editingQuestion?.id ?? null}
+                openId={openId}
+                setOpenId={setOpenId}
+                onEditQuestion={requestEditQuestion}
+                onNewQuestion={handleNewQuestion}
+                onToggleInExam={handleToggleQuestionInExam}
+                onCreatePool={handleCreatePool}
+                onUpdatePool={handleUpdatePool}
+                onDeletePool={handleDeletePool}
+                onDeleteQuestion={handleDeleteQuestion}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Pas de carte autour de la feuille : le seul cadre visible doit être
+            celui du papier lui-même (bordure + ombre du bloc A4), comme dans la
+            maquette. Un panneau blanc de plus créait un encadré dans l'encadré. */}
+        <div className="hidden md:block" style={{ flex: '2 1 0', minWidth: 20, pointerEvents: 'none' }} />
+        <div className="w-full md:w-[1236px] md:flex-none md:-ml-[60px] md:-mr-[120px]" style={{ minWidth: 0, minHeight: 420, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <GeneratorContent
+            questions={questions}
+            config={examConfig}
+            onConfigChange={setExamConfig}
+            editing={editing}
+            onCancelEdit={() => setEditing(null)}
+            onGenerate={handleGenerate}
+            onOpenQuestion={handleOpenQuestion}
+            onRemoveFromDraft={handleRemoveFromDraft}
+            onClearEditor={handleClearEditor}
+            editingQuestion={editingQuestion}
+            newQuestionId={newQuestionId}
+            pools={pools}
+            notions={notions}
+            onCreatePool={handleCreatePool}
+            onSaveQuestion={handleSaveQuestion}
+            onCancelQuestion={handleCancelQuestion}
+          />
+        </div>
+        <div className="hidden md:block" style={{ flex: '3 1 0', minWidth: 22, pointerEvents: 'none' }} />
       </div>
       {pendingDeleteExam && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -406,7 +472,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         document.body
       )}
       {openQuestionBlocked && createPortal(
-        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', zIndex: 90, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 999, background: palette.ink, color: palette.parchment, fontFamily: "'Inter Tight', system-ui, sans-serif", fontSize: 12.5, boxShadow: `0 12px 32px ${ink(0.30)}` }}>
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', zIndex: 90, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 999, background: palette.ink, color: palette.parchment, fontFamily: 'var(--font-sans)', fontSize: 12.5, boxShadow: `0 12px 32px ${ink(0.30)}` }}>
           <AlertTriangle size={14} strokeWidth={2} color={palette.amberGlow} />
           {t('tab.questionEditing')}
         </div>,
@@ -427,14 +493,14 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             <div onClick={() => setIntroOpen(false)} style={{ position: 'absolute', inset: 0, background: ink(0.46), backdropFilter: 'blur(3px)' }} />
             <div style={{ position: 'relative', height: '90vh', width: 'calc(90vh * 0.75)', maxWidth: '92vw' }}>
               {/* carte : fond, texte, bouton — clippée pour les coins arrondis */}
-              <div style={{ position: 'absolute', inset: 0, borderRadius: 28, overflow: 'hidden', background: 'linear-gradient(160deg, #fdf9ef 0%, #f6ead2 100%)', boxShadow: `0 28px 70px ${ink(0.32)}` }}>
+              <div style={{ position: 'absolute', inset: 0, borderRadius: 28, overflow: 'hidden', background: `linear-gradient(160deg, ${palette.creamAlt} 0%, ${palette.tanTint} 100%)`, boxShadow: `0 28px 70px ${ink(0.32)}` }}>
                 <button onClick={() => setIntroOpen(false)} title={t('tab.introClose')} style={{ position: 'absolute', top: 18, right: 18, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: '50%', border: `1px solid ${ink(0.12)}`, background: palette.paper, color: palette.ink, cursor: 'pointer' }}>
                   <X size={17} strokeWidth={2} />
                 </button>
 
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: `${HEADER_PCT}%`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 70px', textAlign: 'center' }}>
                   <div style={{ fontSize: 23, fontWeight: 600, color: palette.ink }}>{t('tab.introTitle')}</div>
-                  <div style={{ fontSize: 13.5, color: '#8a7f64', marginTop: 8 }}>{t('tab.introSubtitle')}</div>
+                  <div style={{ fontSize: 13.5, color: palette.inkFaint, marginTop: 8 }}>{t('tab.introSubtitle')}</div>
                 </div>
 
                 {steps.map((step, i) => (
@@ -451,8 +517,8 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                       justifyContent: 'center',
                     }}
                   >
-                    <div style={{ fontSize: 16, fontWeight: 600, color: '#7a4d20', marginBottom: 8 }}>{step.title}</div>
-                    <div style={{ fontSize: 13.5, color: '#3a352c', lineHeight: 1.65 }}>{step.text}</div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: palette.tanStrong, marginBottom: 8 }}>{step.title}</div>
+                    <div style={{ fontSize: 13.5, color: palette.inkMuted, lineHeight: 1.65 }}>{step.text}</div>
                   </div>
                 ))}
 
@@ -487,7 +553,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                     position: 'absolute',
                     inset: 0,
                     borderRadius: '46% 54% 58% 42% / 50% 46% 54% 50%',
-                    background: 'radial-gradient(circle at 32% 28%, #f2cf8e 0%, #dba85a 55%, #c98f43 100%)',
+                    background: `radial-gradient(circle at 32% 28%, ${palette.goldTint} 0%, ${palette.gold} 55%, ${palette.amberLight} 100%)`,
                     boxShadow: `0 20px 46px ${withAlpha(palette.amber, 0.38)}`,
                   }} />
                   <div style={{
@@ -498,7 +564,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                     justifyContent: 'center',
                     fontSize: 12,
                     fontWeight: 600,
-                    color: 'rgba(122,77,32,0.55)',
+                    color: withAlpha(palette.tanStrong, 0.55),
                     textAlign: 'center',
                   }}>
                     {t('tab.introImage', { n: i + 1 })}

@@ -28,13 +28,15 @@ export type Database = {
           bloom_level: number
           brick_id: string
           id: string
+          score: number
           updated_at: string
           user_id: string
         }
         Insert: {
-          bloom_level: number
+          bloom_level?: number
           brick_id: string
           id?: string
+          score?: number
           updated_at?: string
           user_id: string
         }
@@ -42,6 +44,7 @@ export type Database = {
           bloom_level?: number
           brick_id?: string
           id?: string
+          score?: number
           updated_at?: string
           user_id?: string
         }
@@ -208,10 +211,44 @@ export type Database = {
           },
         ]
       }
+      exam_question_bricks: {
+        Row: {
+          brick_id: string
+          created_at: string
+          question_id: string
+        }
+        Insert: {
+          brick_id: string
+          created_at?: string
+          question_id: string
+        }
+        Update: {
+          brick_id?: string
+          created_at?: string
+          question_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_question_bricks_brick_id_fkey"
+            columns: ["brick_id"]
+            isOneToOne: false
+            referencedRelation: "workshop_bricks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_question_bricks_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "exam_questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exam_questions: {
         Row: {
           answer: string
           answer_optional: boolean
+          bloom_level: number
           chapter_id: string | null
           choices: Json
           content: string
@@ -235,6 +272,7 @@ export type Database = {
         Insert: {
           answer?: string
           answer_optional?: boolean
+          bloom_level?: number
           chapter_id?: string | null
           choices?: Json
           content?: string
@@ -258,6 +296,7 @@ export type Database = {
         Update: {
           answer?: string
           answer_optional?: boolean
+          bloom_level?: number
           chapter_id?: string | null
           choices?: Json
           content?: string

@@ -1,0 +1,82 @@
+/* Culture — base layer
+ * Minimal, opinionated defaults so any consuming page inherits the garden
+ * feel: cream canvas, warm body text, sensible font smoothing, calm focus.
+ */
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--surface-page);
+  color: var(--text-body);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: var(--leading-relaxed);
+  font-weight: var(--fw-regular);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Lowercase serif heroes */
+h1, h2 {
+  font-family: var(--font-serif);
+  color: var(--text-strong);
+  font-weight: var(--fw-semibold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  margin: 0;
+}
+
+h3, h4, h5 {
+  font-family: var(--font-sans);
+  color: var(--text-strong);
+  font-weight: var(--fw-bold);
+  line-height: var(--leading-snug);
+  margin: 0;
+}
+
+p { margin: 0; }
+
+a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+a:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-radius: var(--radius-sm);
+}
+
+/* ---- Utility voices (handy in cards / specimens) --------------------- */
+.u-eyebrow {
+  font-family: var(--font-sans);
+  font-size: var(--type-eyebrow-size);
+  font-weight: var(--type-eyebrow-weight);
+  letter-spacing: var(--type-eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.u-accroche {
+  font-family: var(--font-sans);
+  font-size: var(--type-accroche-size);
+  font-weight: var(--type-accroche-weight);
+  color: var(--text-script);
+  font-style: normal;
+}
+
+.u-hero {
+  font-family: var(--font-serif);
+  font-weight: var(--fw-semibold);
+  color: var(--text-strong);
+  text-transform: lowercase;
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}

@@ -12,6 +12,9 @@ import {
 } from 'lucide-react';
 import { searchWorkshops, requestToJoinWorkshop, restoreWorkshop, getWorkshopPreview, acceptInvitation, declineInvitation, cancelJoinRequest, WorkshopCardData } from '@/app/actions/workshops';
 import { coverStyleFor, emojiFor } from '@/lib/workshopCover';
+import LinkButton from '@/components/LinkButton';
+import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
 
 type TrashedWorkshop = { id: string; name: string; deleted_at: string; days_remaining: number };
 
@@ -44,10 +47,10 @@ type PreviewData = {
 
 type Tone = 'amber' | 'sky' | 'sage' | 'wood';
 const TONE_CSS: Record<Tone, string> = {
-  amber: 'linear-gradient(135deg, #e8d8a8, #c89860)',
-  sky: 'linear-gradient(135deg, #c7d4d8, #9eb3b9)',
-  sage: 'linear-gradient(135deg, #cfd9c0, #a8b896)',
-  wood: 'linear-gradient(135deg, #cbb79a, #a08a72)',
+  amber: 'linear-gradient(135deg, var(--gold-tint), var(--gold-strong))',
+  sky: 'linear-gradient(135deg, var(--line-strong), var(--ink-faint))',
+  sage: 'linear-gradient(135deg, var(--green-tint), var(--green-light))',
+  wood: 'linear-gradient(135deg, var(--tan-tint), var(--tan-strong))',
 };
 
 const CULTURE_MODULES: Array<{ id: string; name: string; tone: Tone; emoji: string; members: number; briques: number; level: string; desc: string; addedAt: string }> = [
@@ -323,11 +326,12 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
     }
   }
 
+  // Fond crème comme partout ailleurs dans l'app connectée (T49) : le dégradé
+  // vert qui traînait ici faisait de « mes ateliers » la seule page à ne pas
+  // être sur `--surface-page`.
   return (
-    <div className="relative min-h-[calc(100vh-65px)] bg-gradient-to-b from-[#eef6e2] via-[#e4efd4] to-[#d6e7cf] font-sans px-6 lg:px-10 py-8" style={{ fontFamily: "'Inter Tight', system-ui, sans-serif", color: palette.ink }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&family=Caveat:wght@400;500;600&display=swap');`}</style>
-
-      <div className="max-w-6xl mx-auto rounded-[20px] bg-cream/92 backdrop-blur-xl border border-ink/[0.07] shadow-[0_40px_90px_rgba(45,42,36,0.16)] flex flex-col">
+    <div className="relative min-h-[calc(100vh-60px)] bg-[var(--surface-page)] font-sans px-6 lg:px-10 py-8" style={{ color: palette.ink }}>
+      <div className="max-w-6xl mx-auto rounded-[20px] bg-cream/92 backdrop-blur-xl border border-ink/[0.07] shadow-[var(--shadow-lg)] flex flex-col">
         {/* header */}
         <div className="flex items-center justify-between px-7 pt-6">
           <div>
@@ -338,18 +342,15 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
               {t('greeting', { name: firstName })}
             </div>
           </div>
-          <Link
-            href={`/${locale}/workshops/new`}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] bg-green text-parchment text-[13px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)] hover:opacity-90 transition"
-          >
+          <LinkButton href={`/${locale}/workshops/new`} size="sm">
             <Plus className="w-4 h-4" />
             {t('newWorkshop')}
-          </Link>
+          </LinkButton>
         </div>
 
         {/* search */}
         <div ref={searchContainerRef} className="relative px-7 pt-5">
-          <div className="flex items-center gap-3 px-[18px] py-3 bg-white rounded-[14px] border border-ink/[0.08] shadow-[0_6px_22px_rgba(45,42,36,0.06)]">
+          <div className="flex items-center gap-3 px-[18px] py-3 bg-white rounded-[14px] border border-ink/[0.08] shadow-[var(--shadow-sm)]">
             <Search className="w-[18px] h-[18px] text-ink-soft" />
             <input
               ref={searchInputRef}
@@ -373,7 +374,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
 
           {/* explorer panel — overlays the workshops below while search is active */}
           {searchOpen && (
-          <div className="absolute left-7 right-7 top-full mt-2 z-20 max-h-[75vh] overflow-y-auto rounded-2xl bg-cream border border-ink/[0.08] shadow-[0_20px_50px_rgba(45,42,36,0.18)] px-5 pt-5 pb-4">
+          <div className="absolute left-7 right-7 top-full mt-2 z-20 max-h-[75vh] overflow-y-auto rounded-2xl bg-cream border border-ink/[0.08] shadow-[var(--shadow-lg)] px-5 pt-5 pb-4">
             {searchQuery.trim().length >= 2 ? (
               <>
                 <div className="text-[13px] font-medium text-ink mb-3">
@@ -407,7 +408,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                             });
                           });
                         }}
-                        className="cursor-pointer rounded-2xl overflow-hidden bg-white/90 border border-ink/[0.08] shadow-[0_4px_16px_rgba(45,42,36,0.06)] flex flex-col"
+                        className="cursor-pointer rounded-2xl overflow-hidden bg-white/90 border border-ink/[0.08] shadow-[var(--shadow-sm)] flex flex-col"
                       >
                         <div className="relative h-[90px]" style={coverStyleFor(w.id, w.cover_gradient, w.cover_image_url, w.cover_image_active)}>
                           <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{emojiFor(w.id, w.emoji)}</div>
@@ -416,7 +417,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                           <div className="font-medium text-ink text-sm mb-1">{w.name}</div>
                           <div className="text-[11.5px] text-ink-soft flex items-center gap-1.5">
                             <Users className="w-3 h-3" />
-                            {w.member_count} {t('members')}
+                            {t('members', { count: w.member_count })}
                           </div>
                         </div>
                       </div>
@@ -432,7 +433,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                 <div
                   key={m.id}
                   onClick={() => setPreview(moduleToPreview(m))}
-                  className="cursor-pointer rounded-2xl overflow-hidden bg-white/90 border border-ink/[0.08] shadow-[0_4px_16px_rgba(45,42,36,0.06)] flex flex-col"
+                  className="cursor-pointer rounded-2xl overflow-hidden bg-white/90 border border-ink/[0.08] shadow-[var(--shadow-sm)] flex flex-col"
                 >
                   <div className="relative h-[90px]" style={{ background: TONE_CSS[m.tone] }}>
                     <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{m.emoji}</div>
@@ -441,7 +442,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                     <div className="font-medium text-ink text-sm mb-1">{m.name}</div>
                     <div className="text-[11.5px] text-ink-soft flex items-center gap-1.5">
                       <Users className="w-3 h-3" />
-                      {m.members.toLocaleString(locale)} {t('members')}
+                      {t('members', { count: m.members })}
                     </div>
                   </div>
                 </div>
@@ -454,21 +455,18 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
         {/* my workshops */}
         <div className="px-7 pt-6 pb-7">
           {!hasWorkshops ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-green-soft/15 flex items-center justify-center mb-4">
-                <Sprout className="w-8 h-8 text-green" />
-              </div>
-              <h3 className="text-[15px] font-medium text-ink mb-2">
-                {t('emptyTitle')}
-              </h3>
-              <p className="text-ink-soft text-[13px] mb-6 max-w-xs">
-                {t('emptyDesc')}
-              </p>
-              <Link href={`/${locale}/workshops/new`} className="flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-green text-parchment text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)]">
-                <Plus className="w-4 h-4" />
-                {t('createWorkshop')}
-              </Link>
-            </div>
+            <EmptyState
+              icon={Sprout}
+              title={t('emptyTitle')}
+              description={t('emptyDesc')}
+              className="py-16"
+              action={
+                <LinkButton href={`/${locale}/workshops/new`} size="sm">
+                  <Plus className="w-4 h-4" />
+                  {t('createWorkshop')}
+                </LinkButton>
+              }
+            />
           ) : (
             <div className="space-y-8">
               {/* owned */}
@@ -548,7 +546,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                         <button
                           onClick={() => handleRestore(w.id)}
                           disabled={restoringId === w.id}
-                          className="flex items-center gap-2 text-[12px] font-medium text-green hover:text-[#3f5630] disabled:opacity-50"
+                          className="flex items-center gap-2 text-[12px] font-medium text-green hover:text-[var(--green-strong)] disabled:opacity-50"
                         >
                           {restoringId === w.id
                             ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />{t('restoring')}</>
@@ -567,7 +565,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
       {/* preview modal */}
       {(preview || previewLoading) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-sm p-4" onClick={closePreview}>
-          <div className="w-full max-w-2xl rounded-[20px] bg-cream shadow-[0_30px_80px_rgba(45,42,36,0.25)] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-2xl rounded-[20px] bg-cream shadow-[var(--shadow-lg)] overflow-hidden" onClick={(e) => e.stopPropagation()}>
             {previewLoading && !preview ? (
               <div className="flex items-center justify-center h-[300px]">
                 <Loader2 className="w-6 h-6 animate-spin text-ink-soft" />
@@ -597,7 +595,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                       {preview.isPremium && (
                         <span
                           className="text-[11px] px-2.5 py-1 rounded-full font-medium"
-                          style={{ background: withAlpha(palette.amberGlow, 0.85), color: '#7a4d20' }}
+                          style={{ background: withAlpha(palette.amberGlow, 0.85), color: palette.amberLight }}
                         >
                           Premium
                         </span>
@@ -609,12 +607,12 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                   <h2 className="text-[20px] font-medium text-ink mb-1.5">{preview.name}</h2>
                   <div className="flex items-center gap-2 text-[12.5px] text-ink-soft mb-4">
                     <Users className="w-3.5 h-3.5" />
-                    <span>{preview.memberCount.toLocaleString(locale)} {t('members')}</span>
+                    <span>{t('members', { count: preview.memberCount })}</span>
                     <span className="w-[2px] h-[2px] rounded-full bg-ink-soft" />
                     <span>{t('createdBy')} {preview.ownerName}</span>
                   </div>
                   {preview.description && (
-                    <p className="text-[13.5px] text-[#3a352c] leading-relaxed mb-5">{preview.description}</p>
+                    <p className="text-[13.5px] text-[var(--ink-body)] leading-relaxed mb-5">{preview.description}</p>
                   )}
 
                   {preview.isInvitation ? (
@@ -622,7 +620,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                       <button
                         onClick={() => handleAcceptInvitation(preview.id)}
                         disabled={acceptingId === preview.id || decliningId === preview.id}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-green text-parchment text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)] disabled:opacity-60"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-green text-parchment text-[13.5px] font-medium shadow-[var(--shadow-xs)] disabled:opacity-60"
                       >
                         {acceptingId === preview.id
                           ? <><Loader2 className="w-4 h-4 animate-spin" />{t('accepting')}</>
@@ -639,7 +637,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                       </button>
                     </div>
                   ) : preview.isMock ? (
-                    <Link href={`/${locale}/dashboard`} onClick={closePreview} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-green text-parchment text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)]">
+                    <Link href={`/${locale}/dashboard`} onClick={closePreview} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-green text-parchment text-[13.5px] font-medium shadow-[var(--shadow-xs)]">
                       {t('joinMock')} <ArrowRight className="w-4 h-4" />
                     </Link>
                   ) : preview.isMember ? (
@@ -669,7 +667,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                       <button
                         onClick={() => handleRequestJoin(preview.id)}
                         disabled={joiningId === preview.id}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-green text-parchment text-[13.5px] font-medium shadow-[0_6px_16px_rgba(79,107,64,0.28)] disabled:opacity-60"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-green text-parchment text-[13.5px] font-medium shadow-[var(--shadow-xs)] disabled:opacity-60"
                       >
                         {joiningId === preview.id
                           ? <><Loader2 className="w-4 h-4 animate-spin" />{t('sending')}</>
@@ -694,14 +692,14 @@ function WorkshopCard({ workshop, locale, onExpand }: { workshop: WorkshopCardDa
   const t = useTranslations('dashboard');
   const coverStyle = coverStyleFor(workshop.id, workshop.cover_gradient, workshop.cover_image_url, workshop.cover_image_active);
   return (
-    <Link href={`/${locale}/workshops/${workshop.id}`} className="group rounded-2xl overflow-hidden bg-white/90 border border-ink/[0.08] shadow-[0_4px_16px_rgba(45,42,36,0.06)] hover:shadow-[0_10px_28px_rgba(45,42,36,0.12)] hover:-translate-y-0.5 transition flex flex-col">
+    <Link href={`/${locale}/workshops/${workshop.id}`} className="group rounded-2xl overflow-hidden bg-white/90 border border-ink/[0.08] shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-lg)] hover:-translate-y-0.5 transition flex flex-col">
       <div className="relative h-[90px]" style={coverStyle}>
         <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{emojiFor(workshop.id, workshop.emoji)}</div>
         <div className="absolute top-2.5 left-2.5 flex flex-wrap items-center gap-1">
           {workshop.is_premium && (
             <span
               className="inline-flex items-center gap-1 text-[10.5px] px-2 py-0.5 rounded-full font-semibold shadow-sm"
-              style={{ background: withAlpha(palette.amberGlow, 0.92), color: '#7a4d20' }}
+              style={{ background: withAlpha(palette.amberGlow, 0.92), color: palette.amberLight }}
             >
               <Crown className="w-2.5 h-2.5" /> Premium
             </span>
@@ -719,7 +717,7 @@ function WorkshopCard({ workshop, locale, onExpand }: { workshop: WorkshopCardDa
         <div className="font-medium text-ink text-sm mb-1 line-clamp-2">{workshop.name}</div>
         <div className="text-[11.5px] text-ink-soft flex items-center gap-1.5">
           <Users className="w-3 h-3" />
-          {workshop.member_count} {t('members')}
+          {t('members', { count: workshop.member_count })}
         </div>
       </div>
     </Link>
@@ -732,7 +730,7 @@ function InvitationCard({ workshop, locale, onOpen }: { workshop: WorkshopCardDa
   return (
     <button
       onClick={onOpen}
-      className="group text-left rounded-2xl overflow-hidden bg-white/90 border-2 border-amber/45 shadow-[0_4px_16px_rgba(168,122,58,0.12)] hover:shadow-[0_10px_28px_rgba(168,122,58,0.18)] hover:-translate-y-0.5 transition flex flex-col"
+      className="group text-left rounded-2xl overflow-hidden bg-white/90 border-2 border-amber/45 shadow-[0_4px_16px_color-mix(in_oklab,var(--tan)_12%,transparent)] hover:shadow-[0_10px_28px_color-mix(in_oklab,var(--tan)_18%,transparent)] hover:-translate-y-0.5 transition flex flex-col"
     >
       <div className="relative h-[90px]" style={coverStyle}>
         <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{emojiFor(workshop.id, workshop.emoji)}</div>
@@ -759,7 +757,7 @@ function JoinRequestCard({ workshop, locale, onOpen }: { workshop: WorkshopCardD
   return (
     <button
       onClick={onOpen}
-      className="group text-left rounded-2xl overflow-hidden bg-white/90 border-2 border-green-soft/45 shadow-[0_4px_16px_rgba(79,107,64,0.10)] hover:shadow-[0_10px_28px_rgba(79,107,64,0.16)] hover:-translate-y-0.5 transition flex flex-col"
+      className="group text-left rounded-2xl overflow-hidden bg-white/90 border-2 border-green-soft/45 shadow-[0_4px_16px_color-mix(in_oklab,var(--green)_10%,transparent)] hover:shadow-[0_10px_28px_color-mix(in_oklab,var(--green)_16%,transparent)] hover:-translate-y-0.5 transition flex flex-col"
     >
       <div className="relative h-[90px]" style={coverStyle}>
         <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{emojiFor(workshop.id, workshop.emoji)}</div>
@@ -774,7 +772,7 @@ function JoinRequestCard({ workshop, locale, onOpen }: { workshop: WorkshopCardD
         <div className="font-medium text-ink text-sm mb-1 line-clamp-2">{workshop.name}</div>
         <div className="text-[11.5px] text-ink-soft flex items-center gap-1.5">
           <Users className="w-3 h-3" />
-          {workshop.member_count} {t('members')}
+          {t('members', { count: workshop.member_count })}
         </div>
       </div>
     </button>

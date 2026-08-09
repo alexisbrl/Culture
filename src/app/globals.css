@@ -9,7 +9,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
-  --font-script: var(--font-script);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -43,33 +42,47 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 
-  /* Culture Brand Colors (green / earth / cream) */
-  --color-culture-green: #5f8a3f;
-  --color-culture-green-deep: #4f6b40;
-  --color-culture-green-soft: #7a9968;
-  --color-culture-amber: #a87a3a;
-  --color-culture-cream: #fcf9f2;
-  --color-culture-ink: #2d2a24;
-  --color-culture-muted: #7a766d;
+  /* Culture Brand Colors (green / earth / cream) — alignées sur les tokens
+     Culture Design System ci-dessous (docs/design/_ds/…/tokens/colors.css). */
+  --color-culture-green: #3C6B39;
+  --color-culture-green-deep: #2D5029;
+  --color-culture-green-soft: #82A968;
+  --color-culture-amber: #9C7C4D;
+  --color-culture-cream: #F4EFE6;
+  --color-culture-ink: #2A2620;
+  --color-culture-muted: #696253;
 
   /* Design tokens sémantiques — DOIVENT rester alignés sur src/lib/theme.ts (palette).
-     Génèrent les utilitaires text-ink, bg-cream, border-ink, text-green, etc. */
-  --color-ink: #2d2a24;
-  --color-ink-muted: #5a564c;
-  --color-ink-soft: #7a766d;
-  --color-ink-faint: #9a948a;
-  --color-ink-ghost: #bdb8ad;
-  --color-cream: #fcf9f2;
-  --color-cream-alt: #fbf7ef;
-  --color-parchment: #f4f0e6;
-  --color-paper: #ffffff;
-  --color-green: #4f6b40;
-  --color-green-brand: #5f8a3f;
-  --color-green-soft: #7a9968;
-  --color-amber: #a87a3a;
-  --color-amber-light: #c89860;
-  --color-amber-glow: #e8b86c;
-  --color-danger: #b85a4a;
+     Génèrent les utilitaires text-ink, bg-cream, border-ink, text-green, etc.
+     Anciens noms conservés comme alias vers les valeurs du Culture Design System
+     (voir la table de correspondance dans src/lib/theme.ts). */
+  --color-ink: #2A2620;
+  --color-ink-muted: #4A4234;
+  --color-ink-soft: #696253;
+  --color-ink-faint: #9A917F;
+  --color-ink-ghost: #9A917F;
+  --color-cream: #F4EFE6;
+  --color-cream-alt: #FCFAF4;
+  --color-parchment: #F5F8EF;
+  --color-paper: #FEFCF7;
+  --color-green: #3C6B39;
+  --color-green-brand: #2D5029;
+  --color-green-soft: #82A968;
+  --color-amber: #9C7C4D;
+  --color-amber-light: #8C6C24;
+  --color-amber-glow: #C39A47;
+  --color-danger: #BC5439;
+
+  /* Nouveaux rôles du Culture Design System (pas d'équivalent legacy). */
+  --color-surface-raised: #FCFAF4;
+  --color-surface-input: #FEFCF7;
+  --color-surface-sunken: #ECE4D5;
+  --color-line: #E3DAC9;
+  --color-line-strong: #D6CBB5;
+  --color-success: #5C8C4D;
+  --color-gold: #C39A47;
+  --color-on-green: #F5F8EF;
+  --color-on-ink: #F2EDE3;
 }
 
 :root {
@@ -102,6 +115,246 @@
   --sidebar-ring: oklch(0.56 0.11 135);
 }
 
+/* ─── Culture Design System — tokens de couleur ──────────────────────────────
+   Port de docs/design/_ds/culture-design-system-…/tokens/{colors,_compat}.css.
+   Déclarés en second : leurs --border/--ring priment sur les valeurs oklch
+   génériques shadcn ci-dessus, pour aligner les composants shadcn restants sur
+   la marque. Noms et rôles identiques à la source, ne pas renommer ici — la
+   correspondance avec les anciens noms vit dans src/lib/theme.ts (palette). */
+:root {
+  /* ── Surfaces — pile crème chaude (jamais blanc, jamais sombre) ────── */
+  --surface-canvas: #E7E0D1;
+  --surface-page:   #F4EFE6;
+  --surface-raised: #FCFAF4;
+  --surface-input:  #FEFCF7;
+  --surface-sunken: #ECE4D5;
+  --surface-ink:    #2A2620;
+
+  /* ── Vert — le héros. Action, progression, croissance ──────────────── */
+  --green-strong: #2D5029;
+  --green:        #3C6B39;
+  --green-light:  #82A968;
+  --green-tint:   #E7EEDB;
+
+  /* ── Tan — terre chaude. Action secondaire, accroche, accents ──────── */
+  --tan-strong: #6E5736;
+  --tan:        #9C7C4D;
+  --tan-tint:   #ECE1CB;
+
+  /* ── Encre — rampe de texte grise chaude ────────────────────────────── */
+  --ink:        #2A2620;
+  --ink-body:   #4A4234;
+  --ink-muted:  #696253;
+  --ink-faint:  #9A917F;
+
+  /* ── Filets — hairlines chaudes ──────────────────────────────────────── */
+  --line-strong: #D6CBB5;
+  --line:        #E3DAC9;
+  --line-soft:   #EDE7D8;
+
+  /* ── Fonctionnel — teintes jardin, sourdes ──────────────────────────── */
+  --success:        #5C8C4D;
+  --success-strong: #4A7340;
+  --success-tint:   #E5EFDA;
+  --danger:         #BC5439;
+  --danger-strong:  #9C4328;
+  --danger-tint:    #F4E2DA;
+  --gold:           #C39A47;
+  --gold-strong:    #8C6C24;
+  --gold-tint:      #F3EBD2;
+
+  /* ── On-colours (texte sur fond plein) ──────────────────────────────── */
+  --on-green: #F5F8EF;
+  --on-ink:   #F2EDE3;
+  --on-tan:   #FBF7EE;
+
+  /* ═══ Alias sémantiques ═══ */
+  --surface-card: var(--surface-raised);
+  --surface-dark: var(--surface-ink);
+
+  --text-strong:   var(--ink);
+  --text-body:     var(--ink-body);
+  --text-muted:    var(--ink-muted);
+  --text-faint:    var(--ink-faint);
+  --text-on-dark:  var(--on-ink);
+  --text-on-green: var(--on-green);
+  --text-script:   var(--tan);
+  --text-link:     var(--green);
+
+  --action-bg:       var(--green);
+  --action-bg-hover: var(--green-strong);
+  --action-bg-press: var(--green-strong);
+  --action-fg:       var(--on-green);
+
+  --action2-bg:       var(--tan);
+  --action2-bg-hover: var(--tan-strong);
+  --action2-fg:       var(--on-tan);
+
+  --actionink-bg:       var(--ink);
+  --actionink-bg-hover: #3C372F;
+  --actionink-fg:       var(--on-ink);
+
+  --border:        var(--line);
+  --border-strong: var(--line-strong);
+  --border-soft:   var(--line-soft);
+
+  --ring: color-mix(in oklab, var(--green) 50%, transparent);
+
+  /* ── Compatibilité — anciennes rampes plus larges (tokens/_compat.css) ─ */
+  --green-900: var(--green-strong);
+  --green-800: var(--green-strong);
+  --green-700: var(--green);
+  --green-600: var(--green);
+  --green-500: var(--green-light);
+  --green-400: var(--green-light);
+  --green-300: var(--green-tint);
+  --green-200: var(--green-tint);
+  --green-100: var(--green-tint);
+
+  --tan-700: var(--tan-strong);
+  --tan-600: var(--tan-strong);
+  --tan-500: var(--tan);
+  --tan-400: var(--tan);
+  --tan-300: var(--line-strong);
+  --tan-200: var(--tan-tint);
+  --tan-100: var(--tan-tint);
+
+  --gold-600: var(--gold-strong);
+  --gold-500: var(--gold);
+  --gold-300: var(--gold);
+  --gold-100: var(--gold-tint);
+
+  --ink-900: var(--ink);
+  --ink-800: var(--actionink-bg-hover);
+  --ink-700: var(--ink-body);
+  --ink-500: var(--ink-muted);
+  --ink-400: var(--ink-faint);
+
+  --cream-canvas: var(--surface-canvas);
+  --cream-page:   var(--surface-page);
+  --cream-raised: var(--surface-raised);
+  --cream-bright: var(--surface-input);
+  --cream-sunken: var(--surface-sunken);
+
+  --success-600: var(--success-strong);
+  --success-500: var(--success);
+  --success-100: var(--success-tint);
+  --alert-600:   var(--danger-strong);
+  --alert-500:   var(--danger);
+  --alert-100:   var(--danger-tint);
+  --warn-500:    var(--gold-strong);
+  --warn-100:    var(--gold-tint);
+
+  /* ── Typographie — Culture Design System (tokens/typography.css) ─────
+     --font-sans vient de next/font (Hanken Grotesk, voir layout.tsx).
+     Alexis a tranché « tout en sans » (chantier refonte UI, 08/2026) :
+     Source Serif 4 n'est pas chargée, --font-serif est un alias vers
+     --font-sans (même logique que l'ancien alias script, retiré). */
+  --font-serif: var(--font-sans);
+
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
+  --text-xs:  0.75rem;  /* 12 — meta, eyebrow caps   */
+  --text-sm:  0.875rem; /* 14 — UI par défaut         */
+  --text-md:  1rem;     /* 16 — corps                 */
+  --text-lg:  1.25rem;  /* 20 — lead, titres de carte */
+  --text-xl:  1.75rem;  /* 28 — titres de section     */
+  --text-2xl: 2.5rem;   /* 40 — héros de page / stats */
+  --text-3xl: 3.5rem;   /* 56 — display landing       */
+
+  --leading-tight:   1.12;
+  --leading-snug:    1.3;
+  --leading-relaxed: 1.6;
+
+  --tracking-eyebrow: 0.14em;
+  --tracking-tight:   -0.01em;
+  --tracking-normal:  0;
+
+  --type-hero-family:  var(--font-serif);
+  --type-hero-size:    var(--text-2xl);
+  --type-hero-weight:  var(--fw-semibold);
+  --type-hero-leading: var(--leading-tight);
+
+  --type-accroche-family: var(--font-sans);
+  --type-accroche-size:   var(--text-lg);
+  --type-accroche-weight: var(--fw-medium);
+
+  --type-eyebrow-family:   var(--font-sans);
+  --type-eyebrow-size:     var(--text-xs);
+  --type-eyebrow-weight:   var(--fw-bold);
+  --type-eyebrow-tracking: var(--tracking-eyebrow);
+
+  --type-body-family:  var(--font-sans);
+  --type-body-size:    var(--text-md);
+  --type-body-weight:  var(--fw-regular);
+  --type-body-leading: var(--leading-relaxed);
+
+  --type-stat-family: var(--font-sans);
+  --type-stat-size:   var(--text-2xl);
+  --type-stat-weight: var(--fw-bold);
+
+  /* ── Espacement — Culture Design System (tokens/spacing.css) ─────────
+     Grille 4 px. Ne collisionne pas avec les utilitaires Tailwind
+     rounded- / shadow- existants : ceux-ci sont compilés avec des valeurs
+     calc(var(--radius)) ou littérales figées à la génération, ils ne
+     lisent pas ces variables — ces tokens servent aux styles inline et
+     aux classes arbitraires (rounded-[var(--radius-lg)]) au fil des
+     tâches d'écran. */
+  --space-1:  0.25rem;  /* 4  */
+  --space-2:  0.5rem;   /* 8  */
+  --space-3:  0.75rem;  /* 12 */
+  --space-4:  1rem;     /* 16 */
+  --space-5:  1.25rem;  /* 20 */
+  --space-6:  1.5rem;   /* 24 */
+  --space-8:  2rem;     /* 32 */
+  --space-10: 2.5rem;   /* 40 */
+  --space-12: 3rem;     /* 48 */
+  --space-16: 4rem;     /* 64 */
+
+  /* ── Rayons — deux valeurs + pill ──────────────────────────────────── */
+  --radius-sm:   12px; /* la valeur de référence — inputs, boutons, puces, petites cartes */
+  --radius-md:   12px; /* alias de sm ; "md" reste le nom par défaut */
+  --radius-lg:   20px; /* cartes, panneaux, coquille de l'app */
+  --radius-pill: 999px;
+
+  /* ── Bordures ──────────────────────────────────────────────────────── */
+  --border-width:    1px;
+  --border-hairline: 1px solid var(--line);
+  --border-dashed:   1.5px dashed var(--line-strong); /* dropzones, « à venir » */
+
+  /* ── Ombres — deux élévations chaudes (teinte brun-écorce) ────────── */
+  --shadow-sm: 0 1px 2px rgba(74, 58, 33, 0.05),
+               0 4px 12px rgba(74, 58, 33, 0.06); /* cartes, état de repos */
+  --shadow-lg: 0 4px 12px rgba(74, 58, 33, 0.08),
+               0 24px 56px rgba(74, 58, 33, 0.12); /* dialogues, popovers, coquille */
+  --shadow-inset: inset 0 1px 2px rgba(74, 58, 33, 0.07); /* pistes, puits */
+  --shadow-focus: 0 0 0 3px var(--ring);                  /* halo de focus */
+
+  /* ── Mouvement ─────────────────────────────────────────────────────── */
+  --ease-out:  cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 360ms;
+  --transition-base: all var(--dur-base) var(--ease-soft);
+
+  /* ── Mise en page ──────────────────────────────────────────────────── */
+  --container-max: 1240px;
+  --content-max:   880px;
+  --nav-height:    60px;
+
+  /* ── Compatibilité — anciens noms de rayon/ombre (tokens/_compat.css) */
+  --radius-xs:  var(--radius-sm);
+  --radius-xl:  var(--radius-lg);
+  --radius-2xl: var(--radius-lg);
+  --shadow-xs:     var(--shadow-sm);
+  --shadow-md:     var(--shadow-sm);
+  --shadow-window: var(--shadow-lg);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -112,6 +365,10 @@
   }
   html {
     @apply font-sans scroll-smooth;
+  }
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
   }
 }
 
@@ -137,8 +394,40 @@
   .badge-glow {
     box-shadow: 0 0 20px rgba(95, 138, 63, 0.3);
   }
-  .font-script {
-    font-family: var(--font-script), 'Caveat', cursive;
+  /* Panneau à défilement autonome (colonnes de l'onglet examen) : la molette
+     n'agit que sur le panneau survolé (`overscroll-behavior: contain` coupe la
+     propagation au parent une fois la fin atteinte) et aucune barre n'est
+     visible. */
+  .scroll-panel {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* anciens Edge/IE */
+  }
+  .scroll-panel::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+  /* Coquille à deux colonnes de l'onglet examen : à partir de 768px sa hauteur
+     est bornée au viewport (61px de barre du haut + 22 de marge haute + 28 de
+     marge basse), donc la page ne défile plus et chaque colonne fait défiler
+     son propre contenu. En dessous, les colonnes s'empilent et la page défile
+     normalement. */
+  @media (min-width: 768px) {
+    .split-shell {
+      height: calc(100vh - 111px);
+      overflow: hidden;
+    }
+  }
+  /* Coquille des Paramètres d'atelier : même principe que .split-shell mais
+     directement sous la barre du haut (61px). La navigation de gauche tient
+     sans défiler ; seule la colonne de droite défile (via .scroll-panel, sans
+     barre visible). En dessous de 768px, la page défile normalement. */
+  @media (min-width: 768px) {
+    .settings-shell {
+      height: calc(100vh - 61px);
+      overflow: hidden;
+    }
   }
 }
 

@@ -233,7 +233,7 @@ export async function inviteByTag(
   if (!targetUser) {
     return {
       success: false,
-      error: "Utilisateur introuvable. Vérifiez le tag et assurez-vous que l'utilisateur s'est connecté à Culture.",
+      error: 'Utilisateur introuvable',
     };
   }
 

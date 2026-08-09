@@ -1,10 +1,10 @@
 // Logique métier « chapitres » (liste, création, renommage, suppression,
-// réorganisation) — module pur, même découpage que @/lib/workshops/bricks :
+// réorganisation) — module pur, même découpage que @/lib/workshops/notions :
 // pas de Clerk `auth()`, pas de `revalidatePath`. Les wrappers `'use server'`
 // de app/actions/workshopChapters.ts gardent l'authz et la revalidation.
 //
 // L'ordre des chapitres (`position`) pilote directement l'ordre des pots dans
-// l'onglet Programme. Supprimer un chapitre ne supprime pas ses briques : la FK
+// l'onglet Programme. Supprimer un chapitre ne supprime pas ses notions : la FK
 // est en `on delete set null`, elles retombent dans « sans chapitre ».
 
 import { getSupabaseServerClient } from '@/lib/supabase';
@@ -13,7 +13,7 @@ export type Chapter = {
   id: string;
   name: string;
   position: number;
-  brickCount: number;
+  notionCount: number;
 };
 
 export const CHAPTER_NAME_MAX = 120;
@@ -27,8 +27,9 @@ function validateName(name: string): string | null {
 export async function listChapters(workshopId: string): Promise<Chapter[]> {
   const supabase = getSupabaseServerClient();
 
-  // Chapitres + briques : deux requêtes indépendantes → parallèle (règle N+1).
-  const [{ data: chapters, error }, { data: bricks }] = await Promise.all([
+  // Chapitres + notions : deux requêtes indépendantes → parallèle (règle N+1).
+  // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
+  const [{ data: chapters, error }, { data: notions }] = await Promise.all([
     supabase
       .from('workshop_chapters')
       .select('id, name, position')
@@ -43,7 +44,7 @@ export async function listChapters(workshopId: string): Promise<Chapter[]> {
   }
 
   const countMap: Record<string, number> = {};
-  for (const b of bricks ?? []) {
+  for (const b of notions ?? []) {
     if (b.chapter_id) countMap[b.chapter_id] = (countMap[b.chapter_id] ?? 0) + 1;
   }
 
@@ -51,7 +52,7 @@ export async function listChapters(workshopId: string): Promise<Chapter[]> {
     id: c.id,
     name: c.name,
     position: c.position,
-    brickCount: countMap[c.id] ?? 0,
+    notionCount: countMap[c.id] ?? 0,
   }));
 }
 
@@ -87,7 +88,7 @@ export async function createChapter(
     return { success: false, error: 'Erreur lors de la création' };
   }
 
-  return { success: true, chapter: { id: data.id, name: data.name, position: data.position, brickCount: 0 } };
+  return { success: true, chapter: { id: data.id, name: data.name, position: data.position, notionCount: 0 } };
 }
 
 export async function renameChapter(
@@ -122,7 +123,7 @@ export async function deleteChapter(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = getSupabaseServerClient();
 
-  // Les briques du chapitre ne sont pas supprimées : la FK est en
+  // Les notions du chapitre ne sont pas supprimées : la FK est en
   // `on delete set null`, elles repassent dans « sans chapitre ».
   const { error } = await supabase
     .from('workshop_chapters')

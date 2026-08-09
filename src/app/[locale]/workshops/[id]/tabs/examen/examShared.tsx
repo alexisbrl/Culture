@@ -3,10 +3,10 @@
 // Boîte à outils partagée de l'onglet « Génération d'examen » : types de domaine,
 // constantes (pagination A4, couleurs), fonctions utilitaires pures et petits composants
 // présentationnels réutilisés par HistoryContent / BankContent / GeneratorContent / ExamenTab.
-import { useState } from 'react';
+import { Fragment, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Settings2 } from 'lucide-react';
-import { palette, ink, withAlpha } from '@/lib/theme';
+import { AlignLeft, ArrowDown, ArrowUp, CheckSquare, File, Filter, Link2, List, Mic, Palette, Paperclip, Plus, Search, Settings2, Table, type LucideIcon } from 'lucide-react';
+import { palette, ink, withAlpha, categoryTones, shadow } from '@/lib/theme';
 import { type Question, type ResponseType } from '../QuestionEditor';
 
 // ---- shared data ----
@@ -19,60 +19,273 @@ import type {
   IdentitySide, CandidateIdentity, CustomField, ExamPresentation, ExamSection, QuestionWeight, ExamConfig,
   ExamPool, GeneratedExam,
 } from '@/lib/workshops/examTypes';
+// bornes du curseur de partage gauche/droite des paires — la copie applique le même réglage que l'éditeur
+import { MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MAX, MATCH_SPLIT_MIN } from '@/lib/workshops/examTypes';
 export type { IdentitySide, CandidateIdentity, CustomField, ExamPresentation, ExamSection, QuestionWeight, ExamConfig };
 export type Pool = ExamPool;
 export type Exam = GeneratedExam;
 
-export const DEFAULT_IDENTITY_ORDER: (keyof CandidateIdentity)[] = ['nom', 'prenom', 'tag', 'classe', 'date'];
+export const DEFAULT_IDENTITY_ORDER: (keyof CandidateIdentity)[] = ['nom', 'prenom', 'tag', 'classe', 'date', 'bareme'];
 export const IDENTITY_KEY_SET = new Set<string>(DEFAULT_IDENTITY_ORDER);
-export const IDENTITY_LABELS: Record<keyof CandidateIdentity, string> = { nom: 'Nom', prenom: 'Prénom', tag: 'Tag - Culture', classe: 'Classe', date: 'Date' };
+export const IDENTITY_LABELS: Record<keyof CandidateIdentity, string> = { nom: 'Nom', prenom: 'Prénom', tag: 'Tag - Culture', classe: 'Classe', date: 'Date', bareme: 'Barème' };
+// Le barème n'est pas un champ à remplir par l'élève : il s'affiche « …… / N pts »
+// et ne porte donc pas de ligne de pointillés comme les autres pilules.
+export const BAREME_KEY = 'bareme';
 
 // ---- small helpers ----
 export const RESPONSE_TYPE_COLORS: Record<ResponseType, string> = {
   sans_reponse: palette.inkSoft,
-  qcs: palette.amberLight,
+  qcs: palette.greenSoft,
   qcm: palette.greenSoft,
-  textuelle: '#9eb3b9',
-  dessin: '#a890b8',
-  audio: '#a890b8',
-  sondage: '#9eb3b9',
-  fill_blank: palette.amberLight,
-  matching: '#a890b8',
-  ordre: '#a890b8',
+  textuelle: categoryTones.blueGray,
+  liste: categoryTones.steelBlue,
+  tableau: palette.amberLight,
+  matching: categoryTones.mauve,
+  dessin: categoryTones.mauve,
+  fichier: categoryTones.rust,
+  audio: categoryTones.mauve,
 };
 
-export type SortBy = 'difficulty' | 'name' | 'type' | 'label' | 'recent';
+// La difficulté a été retirée des critères de tri le 09/08/2026 (elle reste un
+// filtre) : cinq critères pour une colonne étroite, dont un que personne ne
+// classait par ordre croissant.
+export type SortBy = 'name' | 'type' | 'label' | 'recent';
 export type SortDir = 'asc' | 'desc';
 
 export const DEFAULT_SORT_DIR: Record<SortBy, SortDir> = {
-  difficulty: 'desc',
   name: 'asc',
   type: 'asc',
   label: 'asc',
   recent: 'desc',
 };
 
+// Dimensions de la barre d'outils des deux listes. Elles ne sortent pas d'ici :
+// les listes passent par `ListToolbar`, ce qui garantit que les cartes
+// commencent à la même hauteur de part et d'autre et qu'on bascule d'un onglet
+// à l'autre sans que la liste ne saute d'un pixel.
+const TOOLBAR_H = 34;
+const TOOLBAR_GAP = 6;
+const TOOLBAR_MB = 12;
+
+/** Bouton de sens de tri : la double flèche ↑↓ habituelle, celle du sens actif
+ *  en gras et à pleine encre, l'autre effacée. Deux icônes Lucide serrées l'une
+ *  contre l'autre plutôt que `ArrowUpDown` — d'un seul composant on ne peut pas
+ *  styler une flèche sans l'autre, et un SVG maison est proscrit (CLAUDE.md §1). */
+export function SortDirIcon({ dir, size = 13 }: { dir: SortDir; size?: number }) {
+  const asc = dir === 'asc';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+      <ArrowUp size={size} strokeWidth={asc ? 2.75 : 1.5} color={asc ? palette.ink : palette.inkGhost} />
+      <ArrowDown size={size} strokeWidth={asc ? 1.5 : 2.75} color={asc ? palette.inkGhost : palette.ink} style={{ marginLeft: -3 }} />
+    </span>
+  );
+}
+
+/** Contrôle de tri des deux listes de l'onglet (banque de questions et
+ *  historique d'examens) : sens de tri à gauche, critère à droite, dans un même
+ *  bloc segmenté. Chaque liste passe les critères qui la concernent — le reste
+ *  (dimensions, libellés) est commun, condition pour que les deux barres
+ *  d'outils fassent exactement la même hauteur et que les cartes des deux
+ *  listes se superposent quand on bascule de l'une à l'autre.
+ *
+ *  Le critère courant reste écrit en clair — c'est le seul contrôle de la barre
+ *  dont la valeur doit se lire d'un coup d'œil — mais sans chevron ni largeur
+ *  fixe : le `select` natif est rendu transparent et posé par-dessus un simple
+ *  libellé, qui donne au bloc la largeur exacte du texte affiché. On garde le
+ *  déroulé natif au clic (et au clavier) sans hériter de sa décoration ni de sa
+ *  largeur intrinsèque, qui se cale sur l'option la plus longue. */
+function SortControl({ options, value, onChange, dir, onToggleDir }: {
+  options: readonly SortBy[];
+  value: SortBy;
+  onChange: (v: SortBy) => void;
+  dir: SortDir;
+  onToggleDir: () => void;
+}) {
+  const t = useTranslations('examen');
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', borderRadius: 9, border: `1px solid ${palette.lineStrong}`, background: palette.surfaceRaised, overflow: 'hidden', flexShrink: 0 }}>
+      <button type="button" title={dir === 'asc' ? t('sort.asc') : t('sort.desc')} onClick={onToggleDir} style={{ width: 30, minHeight: TOOLBAR_H, alignSelf: 'stretch', border: 'none', borderRight: `1px solid ${palette.line}`, background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
+        <SortDirIcon dir={dir} />
+      </button>
+      <span style={{ position: 'relative', alignSelf: 'stretch', display: 'inline-flex', alignItems: 'center', padding: '0 9px', flexShrink: 0 }}>
+        <span aria-hidden style={{ fontSize: 11.5, color: palette.inkMuted, whiteSpace: 'nowrap' as const }}>{t(`sort.${value}`)}</span>
+        <select
+          value={value}
+          onChange={e => onChange(e.target.value as SortBy)}
+          title={t('sort.by')}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, border: 'none', padding: 0 }}
+        >
+          {options.map(opt => <option key={opt} value={opt}>{t(`sort.${opt}`)}</option>)}
+        </select>
+      </span>
+    </div>
+  );
+}
+
+/** Bouton « filtrer » de la barre d'outils, et son panneau déroulant. Chaque
+ *  liste fournit le contenu du panneau (`children`) et le nombre de filtres
+ *  actifs, qui allume le bouton et sa pastille. Sans critère de filtre
+ *  disponible (`disabled`), le bouton reste en place mais grisé — la barre
+ *  garde la même composition d'une liste à l'autre.
+ *  `containerRef` sert au clic-dehors, que l'appelant gère (lui seul sait si
+ *  une modale du panneau doit le neutraliser).
+ *
+ *  Le panneau est **posé par le composant lui-même**, en `position: fixed` aux
+ *  coordonnées du bouton : en `absolute`, il était rogné par le panneau
+ *  défilant de la colonne (`overflow`), et un panneau plus large que la colonne
+ *  sortait de l'écran. En `fixed`, il échappe au rognage (aucun ancêtre n'a de
+ *  `transform`, sinon le repère redeviendrait celui de l'ancêtre — voir
+ *  .claude/rules/frontend-patterns.md) et se recale sur le bord de la fenêtre.
+ *  Il reste dans le DOM du conteneur, donc le clic-dehors de l'appelant, qui
+ *  teste `containerRef.contains`, continue de fonctionner. */
+const FILTER_PANEL_MARGIN = 8;  // écart minimum conservé avec le bord de la fenêtre
+
+export function FilterButton({ title, count = 0, open = false, disabled = false, onToggle, containerRef, panelWidth = 290, children }: {
+  title: string;
+  count?: number;
+  open?: boolean;
+  disabled?: boolean;
+  onToggle?: () => void;
+  containerRef?: React.RefObject<HTMLDivElement | null>;
+  panelWidth?: number;
+  children?: React.ReactNode;
+}) {
+  const active = count > 0;
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [panelPos, setPanelPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
+
+  const place = useCallback(() => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const top = r.bottom + 6;
+    const next = {
+      left: Math.max(FILTER_PANEL_MARGIN, Math.min(r.left, window.innerWidth - panelWidth - FILTER_PANEL_MARGIN)),
+      top,
+      maxHeight: Math.max(220, window.innerHeight - top - 16),
+    };
+    // Comparaison explicite avant d'écrire : cet effet tourne à chaque rendu
+    // (pas de tableau de dépendances), une écriture systématique bouclerait.
+    setPanelPos(prev => (prev && prev.left === next.left && prev.top === next.top && prev.maxHeight === next.maxHeight) ? prev : next);
+  }, [panelWidth]);
+
+  // Sans tableau de dépendances : le bouton bouge aussi quand la liste se
+  // réagence sous lui (l'apparition des zones inclure/exclure le descend de
+  // ~66px), et le panneau doit suivre — pas seulement au scroll ou au resize.
+  useLayoutEffect(() => {
+    if (open) place();
+  });
+
+  // Le scroll est écouté en capture : c'est le panneau de la colonne qui
+  // défile, pas la fenêtre.
+  useLayoutEffect(() => {
+    if (!open) return;
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open, place]);
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        ref={btnRef}
+        onClick={onToggle}
+        disabled={disabled}
+        title={title}
+        style={{
+          position: 'relative', height: '100%', minHeight: TOOLBAR_H, width: TOOLBAR_H, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, borderRadius: 9, fontFamily: 'inherit',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          border: `1px solid ${disabled ? palette.line : active ? palette.greenSoft : palette.lineStrong}`,
+          background: disabled ? palette.surfaceSunken : active ? withAlpha(palette.green, 0.12) : palette.surfaceRaised,
+          color: disabled ? palette.inkGhost : active ? palette.greenBrand : palette.inkMuted,
+        }}
+      >
+        <Filter size={15} strokeWidth={1.75} />
+        {active && (
+          <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 15, height: 15, padding: '0 3px', borderRadius: 999, background: palette.green, color: palette.onGreen, fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {count}
+          </span>
+        )}
+      </button>
+      {open && panelPos && (
+        <div
+          style={{
+            position: 'fixed', left: panelPos.left, top: panelPos.top, width: panelWidth, maxHeight: panelPos.maxHeight,
+            background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg,
+            // au-dessus de la barre du haut collante (z-50), sous les modales
+            zIndex: 60, display: 'flex', flexDirection: 'column',
+          }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Barre d'outils des deux listes de l'onglet : recherche · filtre · tri ·
+ *  action primaire, sur une seule rangée (T48), comme la maquette. Les
+ *  dimensions sont figées ici et le bouton de filtre est un emplacement —
+ *  chaque liste passe son propre `FilterButton`, avec les critères qui la
+ *  concernent. */
+export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter, sortOptions, sortBy, onSortByChange, sortDir, onToggleSortDir, actionLabel, actionTitle, onAction }: {
+  search: string;
+  onSearchChange: (v: string) => void;
+  searchPlaceholder: string;
+  filter: React.ReactNode;
+  sortOptions: readonly SortBy[];
+  sortBy: SortBy;
+  onSortByChange: (v: SortBy) => void;
+  sortDir: SortDir;
+  onToggleSortDir: () => void;
+  actionLabel: string;
+  actionTitle: string;
+  onAction: () => void;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'stretch', gap: TOOLBAR_GAP, marginBottom: TOOLBAR_MB }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0, background: palette.surfaceInput, border: `1px solid ${palette.line}`, borderRadius: 10, padding: '0 10px' }}>
+        <Search size={15} strokeWidth={1.75} color={palette.inkFaint} style={{ flexShrink: 0 }} />
+        <input value={search} onChange={e => onSearchChange(e.target.value)} placeholder={searchPlaceholder} style={{ flex: 1, minWidth: 0, fontSize: 13, color: palette.ink, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'inherit' }} />
+      </div>
+      {filter}
+      <SortControl options={sortOptions} value={sortBy} onChange={onSortByChange} dir={sortDir} onToggleDir={onToggleSortDir} />
+      {/* Seule action primaire de la colonne (T48) — la maquette la met en vert. */}
+      <button onClick={onAction} title={actionTitle} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, minHeight: TOOLBAR_H, padding: '0 11px', borderRadius: 9, background: palette.green, color: palette.onGreen, border: 'none', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+        <Plus size={15} strokeWidth={2.25} /> {actionLabel}
+      </button>
+    </div>
+  );
+}
+
 export const NEVER_EXAM_ID = '__never__';
 export const NO_DIFFICULTY = 0;
-export const NO_ANSWER_ID = '__no_answer__';
 
 // pagination de l'aperçu A4 (panneau « Éditeur d'examen ») — dimensions en px pour un bloc de 880px de large
 export const A4_PAGE_HEIGHT = 1494; // ≈ ratio A4 (210×297mm) pour un bloc de 1056px de large
 export const A4_ROW_GAP = 0; // les questions sont désormais collées (un seul bloc continu par section) — pas de marge entre lignes
 export const A4_SECTION_HEADER_HEIGHT = 44; // hauteur approx. de la barre de titre de section (+ marge)
-export const A4_TITLE_BLOCK_HEIGHT = 162; // hauteur approx. du titre d'examen centré en haut de la 1ère page (incl. ~1,5cm d'espace avant la 1ère partie)
-export const A4_IDENTITY_ROW_HEIGHT = 24; // hauteur approx. d'une ligne d'identité candidat (nom/prénom/tag/classe/date)
+export const A4_TITLE_BLOCK_HEIGHT = 180; // hauteur approx. du bloc titre + sous-titre centré en haut de la 1ère page (incl. ~1,5cm d'espace avant la 1ère partie)
+export const A4_IDENTITY_ROW_HEIGHT = 29; // hauteur approx. d'une ligne d'identité candidat (nom/prénom/tag/classe/date), interligne compris
 export const A4_ROW_FALLBACK_HEIGHT = 396; // hauteur estimée avant la première mesure réelle
 export const A4_BLOCK_WIDTH = 1056; // largeur du bloc question au format A4 dans l'aperçu
 export const A4_MARGIN_PX = Math.round(A4_BLOCK_WIDTH / 21 * 1); // marge non imprimable de 1cm en haut et en bas de chaque page (1056px ≈ 21cm de large)
 export const A4_PAGE_BREAK_HEIGHT = 56; // hauteur approx. du repère « saut de page » dans l'aperçu
+// Pas des lignes à remplir sur la copie. Référence : la ligne d'une liste
+// numérotée (hauteur du numéro + gouttière) — toute réponse lignée (texte,
+// liste sans numéros, repli des autres types) utilise le même pas, sinon ses
+// lignes sont deux fois plus serrées et l'élève n'a pas la place d'écrire.
+export const A4_ANSWER_LINE_HEIGHT = 18;
+export const A4_ANSWER_LINE_GAP = 22;
 export const PAGE_BREAK_PREFIX = 'pb';
 
 export function isPageBreakId(id: string): boolean {
   return id.startsWith(PAGE_BREAK_PREFIX);
 }
 
-export const LABEL_COLORS = ['#9eb3b9', '#a890b8', palette.greenSoft, palette.amberLight, palette.danger, palette.greenBrand, palette.amber, palette.inkFaint, '#6b8ea8', '#c2603a'];
+export const LABEL_COLORS = [categoryTones.blueGray, categoryTones.mauve, palette.greenSoft, palette.amberLight, palette.danger, palette.greenBrand, palette.amber, palette.inkFaint, categoryTones.steelBlue, categoryTones.rust];
 
 export function DiffDots({ level }: { level: number }) {
   return (
@@ -82,57 +295,46 @@ export function DiffDots({ level }: { level: number }) {
   );
 }
 
-export function TypePill({ type }: { type: ResponseType }) {
+// Icônes des types de réponse — source unique, partagée avec le menu de types de
+// l'éditeur de question (`InlineQuestionEditor`) pour qu'un type garde le même
+// pictogramme partout. `qcs` reprend celle de `qcm` : c'est sa variante « réponse
+// unique ». Le type de réponse s'affiche par cette icône seule dans la banque
+// (09/08/2026) — la pilule textuelle mangeait une ligne entière pour une
+// information que le pictogramme donne d'un coup d'œil ; le libellé complet reste
+// au survol.
+export const RESPONSE_TYPE_ICONS: Record<ResponseType, LucideIcon> = {
+  qcm: CheckSquare,
+  qcs: CheckSquare,
+  textuelle: AlignLeft,
+  liste: List,
+  tableau: Table,
+  matching: Link2,
+  dessin: Palette,
+  fichier: Paperclip,
+  audio: Mic,
+  sans_reponse: File,
+};
+
+export function TypeIcon({ type, size = 14 }: { type: ResponseType; size?: number }) {
   const t = useTranslations('examen');
+  const Icon = RESPONSE_TYPE_ICONS[type] ?? File;
   const c = RESPONSE_TYPE_COLORS[type] || palette.inkSoft;
-  return <span style={{ fontSize: 10, fontWeight: 500, padding: '3px 8px', borderRadius: 999, background: `${c}28`, color: '#3a352c', letterSpacing: '0.02em' }}>{t(`responseType.${type}`)}</span>;
-}
-
-export function WeightControls({ weight, onChange }: { weight: QuestionWeight; onChange: (patch: Partial<QuestionWeight>) => void }) {
-  const t = useTranslations('examen');
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-      <input type="number" min={0} step={0.5} value={weight.points} onChange={e => onChange({ points: Number(e.target.value) || 0 })} title={t('weight.points')} style={{ width: 42, fontSize: 11, padding: '4px 5px', borderRadius: 6, border: `1px solid ${ink(0.14)}`, background: palette.paper, fontFamily: 'inherit', textAlign: 'center' as const }} />
-      {!weight.eliminatory && (
-        <button type="button" onClick={() => onChange({ negative: { ...weight.negative, enabled: !weight.negative.enabled } })} title={t('weight.negative')} style={{ fontSize: 11, padding: '4px 7px', borderRadius: 6, border: weight.negative.enabled ? '1px solid rgba(184,90,74,0.4)' : `1px solid ${ink(0.12)}`, background: weight.negative.enabled ? withAlpha(palette.danger, 0.12) : withAlpha(palette.paper, 0.7), color: weight.negative.enabled ? palette.danger : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>−</button>
-      )}
-      {!weight.eliminatory && weight.negative.enabled && (
-        <input type="number" min={0} step={0.5} value={weight.negative.value} onChange={e => onChange({ negative: { ...weight.negative, value: Number(e.target.value) || 0 } })} title={t('weight.negativeValue')} style={{ width: 42, fontSize: 11, padding: '4px 5px', borderRadius: 6, border: `1px solid ${withAlpha(palette.danger, 0.3)}`, background: palette.paper, fontFamily: 'inherit', textAlign: 'center' as const, color: palette.danger }} />
-      )}
-      <button type="button" onClick={() => onChange({ eliminatory: !weight.eliminatory, negative: weight.eliminatory ? weight.negative : { ...weight.negative, enabled: false } })} title={t('weight.eliminatory')} style={{ fontSize: 11, padding: '4px 7px', borderRadius: 6, border: weight.eliminatory ? '1px solid rgba(184,90,74,0.4)' : `1px solid ${ink(0.12)}`, background: weight.eliminatory ? palette.danger : withAlpha(palette.paper, 0.7), color: weight.eliminatory ? palette.paper : palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>⚑</button>
-    </div>
-  );
-}
-
-export function Diff({ n }: { n: number }) {
-  const t = useTranslations('examen');
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-      <span style={{ fontSize: 9, color: palette.inkFaint, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('diff')}</span>
-      {Array.from({ length: 5 }, (_, i) => <span key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: i < n ? palette.amber : ink(0.12), display: 'inline-block' }} />)}
+    <span title={t(`responseType.${type}`)} style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: size + 8, height: size + 8, borderRadius: 7, background: withAlpha(c, 0.22), color: palette.inkMuted }}>
+      <Icon size={size} strokeWidth={1.75} />
     </span>
   );
 }
 
-export function answerMissing(p: { responseType: ResponseType; answer: string; choices: string[]; correctChoices: number[]; answerOptional?: boolean }): boolean {
-  // sans_reponse / sondage : l'absence de réponse est voulue, pas "manquante"
-  if (p.responseType === 'sans_reponse' || p.responseType === 'sondage') return false;
-  // textuelle marquée "réponse libre" : l'absence de réponse de référence est volontaire
-  if (p.responseType === 'textuelle' && p.answerOptional) return false;
-  if (p.responseType === 'qcm' || p.responseType === 'qcs') {
-    return p.correctChoices.map((i) => p.choices[i]).filter(Boolean).length === 0;
-  }
-  if (p.responseType === 'matching' || p.responseType === 'ordre') {
-    return p.choices.length === 0;
-  }
-  return !p.answer || !p.answer.trim();
-}
+// La pondération ne se règle plus depuis la gouttière de la feuille (elle
+// encombrait la marge sans être lisible) : elle vit dans l'éditeur de question
+// posé sur la copie — barème simple par défaut, malus/éliminatoire dans les
+// paramètres avancés. Voir `InlineQuestionEditor`.
 
-export function hasNoAnswer(q: Question): boolean {
-  if (answerMissing(q)) return true;
-  return q.parts.some((part) => answerMissing(part));
-}
-
+// Le statut « réponse incomplète » (pastille d'alerte sur la feuille, filtre de
+// la banque, garde-fou avant enregistrement) a été retiré le 09/08/2026 : avec
+// neuf types de réponse dont plusieurs sans correction automatique (dessin,
+// audio, fichier, vide), « incomplet » ne voulait plus rien dire d'utile.
 
 // une entrée aplatie est soit une vraie question, soit un repère « saut de page » (pseudo-question
 // déplaçable comme une question mais jamais affichée/imprimée dans l'examen final)
@@ -201,8 +403,8 @@ export function clearWeightingFor(weighting: Record<string, QuestionWeight>, id:
 // `audioLabel` est passé par l'appelant (la traduction next-intl ne peut pas être lue dans une fonction pure).
 export function renderAnswerSpace(q: Question, audioLabel: string) {
   const blankLines = (n: number) => (
-    <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: 22 }}>
-      {Array.from({ length: n }, (_, i) => <div key={i} style={{ borderBottom: `1px solid ${ink(0.18)}` }} />)}
+    <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: A4_ANSWER_LINE_GAP }}>
+      {Array.from({ length: n }, (_, i) => <div key={i} style={{ height: A4_ANSWER_LINE_HEIGHT, borderBottom: `1px solid ${ink(0.18)}` }} />)}
     </div>
   );
 
@@ -210,42 +412,96 @@ export function renderAnswerSpace(q: Question, audioLabel: string) {
     case 'sans_reponse':
       return null;
     case 'qcm':
-    case 'qcs':
-    case 'sondage': {
+    case 'qcs': {
       if (q.choices.length === 0) return blankLines(3);
       return (
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
           {q.choices.map((c, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ width: 14, height: 14, border: `1.5px solid ${ink(0.35)}`, borderRadius: q.responseType === 'qcm' ? 3 : 999, flexShrink: 0, display: 'inline-block' }} />
-              <span style={{ fontSize: 13, color: '#3a352c' }}>{c}</span>
+              <span style={{ fontSize: 13, color: palette.inkMuted }}>{c}</span>
             </div>
           ))}
         </div>
       );
     }
+    // L'élève relie les points : l'élément est collé à gauche de son point
+    // (texte aligné à droite), la correspondance collée à droite du sien
+    // (texte aligné à gauche). Pas de numérotation — ce sont les traits tracés
+    // d'un point à l'autre qui font la réponse. Le partage gauche/droite suit
+    // le curseur réglé dans l'éditeur (5 % → 95 %).
     case 'matching': {
       if (q.choices.length === 0) return blankLines(3);
       const pairs = q.choices.map(c => c.split(' :: '));
+      const split = Math.min(Math.max(q.typeOptions?.matchSplit ?? MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MIN), MATCH_SPLIT_MAX);
+      const PAIR_LINE = 18;
+      // Vide de part et d'autre de la ligne de partage : c'est là que l'élève
+      // trace ses traits, les deux points ne doivent pas se toucher. Symétrique,
+      // donc la proportion des colonnes reste celle du curseur de l'éditeur.
+      const PAIR_DOT_GUTTER = 26;
+      // Grille à deux colonnes plutôt que deux colonnes indépendantes : les deux
+      // cases d'une paire partagent la même rangée, donc elles commencent
+      // toujours à la même hauteur et l'écart entre rangées reste constant même
+      // quand une correspondance est vide. Le texte passe à la ligne (comme dans
+      // l'éditeur) au lieu de déborder sur le point.
+      const cell = (text: string, side: 'left' | 'right') => (
+        <div style={{ minWidth: 0, boxSizing: 'border-box' as const, display: 'flex', alignItems: 'flex-start', gap: 10, justifyContent: side === 'left' ? 'flex-end' : 'flex-start', paddingRight: side === 'left' ? PAIR_DOT_GUTTER : 0, paddingLeft: side === 'right' ? PAIR_DOT_GUTTER : 0 }}>
+          {side === 'right' && <span style={{ flexShrink: 0, width: 7, height: 7, marginTop: (PAIR_LINE - 7) / 2, borderRadius: '50%', background: ink(0.45) }} />}
+          <span style={{ minWidth: 0, fontSize: 13, lineHeight: `${PAIR_LINE}px`, color: palette.inkMuted, textAlign: side === 'left' ? 'right' as const : 'left' as const, overflowWrap: 'anywhere' as const }}>{text}</span>
+          {side === 'left' && <span style={{ flexShrink: 0, width: 7, height: 7, marginTop: (PAIR_LINE - 7) / 2, borderRadius: '50%', background: ink(0.45) }} />}
+        </div>
+      );
       return (
-        <div style={{ marginTop: 14, display: 'flex', gap: 32 }}>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
-            {pairs.map((p, i) => <div key={i} style={{ fontSize: 13, color: '#3a352c' }}>{i + 1}. {p[0]}</div>)}
-          </div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
-            {pairs.map((p, i) => <div key={i} style={{ fontSize: 13, color: '#3a352c' }}>{String.fromCharCode(65 + i)}. {p[1] ?? ''}</div>)}
-          </div>
+        <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: `${split * 100}% 1fr`, rowGap: 14 }}>
+          {pairs.map((p, i) => (
+            <Fragment key={i}>
+              {cell(p[0] ?? '', 'left')}
+              {cell(p[1] ?? '', 'right')}
+            </Fragment>
+          ))}
         </div>
       );
     }
-    case 'ordre': {
-      if (q.choices.length === 0) return blankLines(3);
+    // Liste : autant de lignes à remplir que de réponses attendues, numérotées
+    // si l'option l'est. Le contenu saisi côté éditeur est la référence de
+    // correction, il ne s'imprime pas sur la copie de l'élève.
+    case 'liste': {
+      const expected = Math.max(1, q.typeOptions?.listExpected ?? q.choices.filter(c => c.trim()).length ?? 3);
+      const numbered = q.typeOptions?.listNumbered ?? true;
       return (
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
-          {q.choices.map((c, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ width: 26, height: 26, border: `1.5px solid ${ink(0.35)}`, borderRadius: 6, flexShrink: 0 }} />
-              <span style={{ fontSize: 13, color: '#3a352c' }}>{c}</span>
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: A4_ANSWER_LINE_GAP }}>
+          {Array.from({ length: expected }, (_, i) => (
+            <div key={i} style={{ height: A4_ANSWER_LINE_HEIGHT, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+              {numbered && <span style={{ fontSize: 12, lineHeight: 1.2, color: palette.inkFaint, flexShrink: 0 }}>{i + 1}.</span>}
+              <div style={{ flex: 1, borderBottom: `1px solid ${ink(0.18)}` }} />
+            </div>
+          ))}
+        </div>
+      );
+    }
+    // Tableau : la grille à cocher telle que l'élève la reçoit — cases vides,
+    // rondes si une seule réponse par ligne est permise.
+    case 'tableau': {
+      const rows = q.typeOptions?.tableRows ?? [];
+      const cols = q.typeOptions?.tableCols ?? [];
+      if (rows.length === 0 || cols.length === 0) return blankLines(3);
+      const unique = q.typeOptions?.tableUnique ?? false;
+      return (
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+            <div style={{ flex: '0 0 130px' }} />
+            {cols.map((c, ci) => (
+              <div key={ci} style={{ flex: '1 1 0', minWidth: 0, textAlign: 'center' as const, fontSize: 12, fontWeight: 600, color: palette.inkMuted }}>{c}</div>
+            ))}
+          </div>
+          {rows.map((r, ri) => (
+            <div key={ri} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ flex: '0 0 130px', fontSize: 13, color: palette.inkMuted }}>{r}</div>
+              {cols.map((_c, ci) => (
+                <div key={ci} style={{ flex: '1 1 0', display: 'flex', justifyContent: 'center' }}>
+                  <span style={{ width: 16, height: 16, border: `1.5px solid ${ink(0.35)}`, borderRadius: unique ? 999 : 3, display: 'inline-block' }} />
+                </div>
+              ))}
             </div>
           ))}
         </div>
@@ -255,8 +511,10 @@ export function renderAnswerSpace(q: Question, audioLabel: string) {
       return <div style={{ marginTop: 14, height: 180, border: `1px dashed ${ink(0.22)}`, borderRadius: 6 }} />;
     case 'audio':
       return <div style={{ marginTop: 14, height: 60, border: `1px dashed ${ink(0.22)}`, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, color: palette.inkFaint }}>{audioLabel}</div>;
-    case 'fill_blank':
-      return blankLines(3);
+    // Fichier : le dépôt se fait hors de la copie — une seule ligne pour noter
+    // le nom du fichier rendu ou le lien.
+    case 'fichier':
+      return <div style={{ marginTop: 14, height: 44, border: `1px dashed ${ink(0.22)}`, borderRadius: 6 }} />;
     case 'textuelle':
       return blankLines(q.textLines ?? 4);
     default:
@@ -287,6 +545,7 @@ export function normalizeExamConfig(config: ExamConfig): ExamConfig {
   const missing = validIds.filter(id => !saved.includes(id));
   return {
     ...config,
+    subtitle: config.subtitle ?? '',
     titleIncluded: config.titleIncluded ?? true,
     presentation: {
       identity: {
@@ -295,6 +554,7 @@ export function normalizeExamConfig(config: ExamConfig): ExamConfig {
         tag: normalizeIdentitySide(rawIdentity.tag, 'left'),
         classe: normalizeIdentitySide(rawIdentity.classe, 'left'),
         date: normalizeIdentitySide(rawIdentity.date, 'right'),
+        bareme: normalizeIdentitySide(rawIdentity.bareme, 'right'),
       },
       customFields,
       identityOrder: [...saved, ...missing],
@@ -302,13 +562,23 @@ export function normalizeExamConfig(config: ExamConfig): ExamConfig {
   };
 }
 
+/** Ne garde dans les parties (et la pondération) que les identifiants acceptés par `keep`. */
+export function pruneUnknownQuestions(config: ExamConfig, keep: (id: string) => boolean): ExamConfig {
+  const sections = config.sections.map(sec => ({ ...sec, questionIds: sec.questionIds.filter(keep) }));
+  const weighting = Object.fromEntries(
+    Object.entries(config.weighting).filter(([key]) => keep(key.split('::')[0])),
+  );
+  return { ...config, sections, weighting };
+}
+
 export function defaultPresentation(): ExamPresentation {
-  return { identity: { nom: 'left', prenom: 'left', tag: 'left', classe: 'hidden', date: 'right' }, identityOrder: [...DEFAULT_IDENTITY_ORDER], customFields: [] };
+  return { identity: { nom: 'left', prenom: 'left', tag: 'left', classe: 'hidden', date: 'right', bareme: 'right' }, identityOrder: [...DEFAULT_IDENTITY_ORDER], customFields: [] };
 }
 
 export function defaultExamConfig(title?: string): ExamConfig {
   return {
     title: title ?? '',
+    subtitle: '',
     titleIncluded: true,
     durationMinutes: 120,
     presentation: defaultPresentation(),
@@ -337,6 +607,33 @@ export function getFavoritePresentation(): ExamPresentation {
 export function saveFavoritePresentation(presentation: ExamPresentation) {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(FAVORITE_PRESENTATION_KEY, JSON.stringify(presentation));
+}
+
+/** Signature de ce qu'un en-tête donne à voir : le contenu ordonné de chacune de
+ *  ses deux colonnes, telles qu'elles sont rendues.
+ *
+ *  Deux choses en sont volontairement absentes, parce qu'elles ne se voient pas
+ *  sur la copie : les champs masqués, et la façon dont les deux colonnes
+ *  s'entrelacent dans `identityOrder`. Ce dernier point compte — sortir puis
+ *  remettre une pilule la renvoie en fin d'ordre global, ce qui réordonne
+ *  l'entrelacement sans déplacer quoi que ce soit à l'écran. */
+function presentationSignature(p: ExamPresentation): string {
+  const sideOf = (id: string): IdentitySide => IDENTITY_KEY_SET.has(id)
+    ? p.identity[id as keyof CandidateIdentity]
+    : p.customFields.find(f => f.id === id)?.side ?? 'hidden';
+  const labelOf = (id: string): string => IDENTITY_KEY_SET.has(id)
+    ? id
+    : p.customFields.find(f => f.id === id)?.label ?? '';
+  const column = (side: IdentitySide) => p.identityOrder
+    .filter(id => sideOf(id) === side)
+    .map(id => `${id}:${labelOf(id)}`)
+    .join(',');
+  return `L[${column('left')}]R[${column('right')}]`;
+}
+
+/** Les deux en-têtes affichent-ils exactement la même chose ? */
+export function isSamePresentation(a: ExamPresentation, b: ExamPresentation): boolean {
+  return presentationSignature(a) === presentationSignature(b);
 }
 
 export function formatDuration(minutes: number): string {
@@ -399,18 +696,177 @@ export function toggleQuestionInSections(sections: ExamSection[], id: string): E
   return next;
 }
 
-export function statusStyle(s: string) {
-  return ({ publié: { bg: withAlpha(palette.greenSoft, 0.20), fg: '#3f5630' }, brouillon: { bg: withAlpha(palette.amberGlow, 0.22), fg: '#7a4d20' }, archivé: { bg: ink(0.07), fg: palette.inkSoft } } as Record<string, { bg: string; fg: string }>)[s] ?? { bg: ink(0.07), fg: palette.inkSoft };
-}
+// ---- gabarit commun des cartes de liste (banque de questions ET historique
+// d'examens, pour que les deux colonnes aient exactement la même trame) :
+// trois lignes de texte, pas une de plus. Tout est calé sur `CARD_LINE` —
+// hauteur des icônes (1 ligne), du bloc de boutons (2 lignes) et de la carte
+// elle-même (3 lignes + marges). Les mesures internes ne sortent pas d'ici :
+// les listes passent par `ListCard`, qui est le seul point d'entrée. ----
+export const CARD_LINE = 20;
+export const CARD_ACTION_BTN = 30;
+const CARD_PAD_X = 11;
+const CARD_PAD_Y = 9;
+const CARD_ACTION_GAP = 8;
+// gouttière réservée à droite des lignes 2 et 3 : 2 boutons + leur écart + une marge
+const CARD_ACTIONS_W = 2 * CARD_ACTION_BTN + CARD_ACTION_GAP + 6;
 
-export function IconBtn({ children, title, onClick }: { children: React.ReactNode; title: string; onClick?: () => void }) {
+/** Énoncé/titre de la carte, coupé à deux lignes avec « … » quand il déborde.
+ *
+ *  Les points de suspension suivent le dernier mot affiché, séparés par une
+ *  espace — pas collés au bord droit de la ligne. Ni `-webkit-line-clamp`, ni un
+ *  « … » posé en absolu ne savent faire ça : le premier impose
+ *  `display: -webkit-box`, où le flottant qui réserve la place des boutons cesse
+ *  d'en être un (les enfants deviennent des items de boîte), le second se pose
+ *  là où on l'ancre et pas là où le texte s'arrête.
+ *
+ *  Donc on cherche la coupe : recherche dichotomique sur le nombre de mots, en
+ *  mesurant chaque candidat **suffixé de « … »** dans une sonde hors écran qui
+ *  rejoue exactement la mise en page réelle (largeur, typographie, retrait de
+ *  première ligne, cale flottante). Mesurer avec les points inclus est ce qui
+ *  fait qu'un mot de plus saute quand ils ne tiennent pas. Repli caractère par
+ *  caractère quand un seul mot déborde déjà.
+ *
+ *  La mesure est rejouée à chaque rendu et à chaque changement de largeur de la
+ *  colonne (`ResizeObserver`), gardée par une comparaison pour ne pas boucler. */
+function ClampedTitle({ text, indent }: { text: string; indent: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [display, setDisplay] = useState(text);
+  // Largeur courante de la colonne, seule entrée variable de la mesure. Elle
+  // passe par un état : le `ResizeObserver` la met à jour, ce qui redéclenche la
+  // mesure quand le panneau est redimensionné (un rendu seul ne suffirait pas).
+  const [width, setWidth] = useState(0);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // `observe()` déclenche déjà un premier appel avec la taille initiale
+    const obs = new ResizeObserver(() => setWidth(el.clientWidth));
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !width) return;
+    const cs = getComputedStyle(el);
+    const probe = document.createElement('div');
+    probe.style.cssText = [
+      'position:absolute', 'top:0', 'left:-99999px', 'visibility:hidden', 'pointer-events:none',
+      `width:${width}px`, `font:${cs.fontWeight} ${cs.fontSize}/${cs.lineHeight} ${cs.fontFamily}`,
+      `letter-spacing:${cs.letterSpacing}`, `text-indent:${indent}px`, 'white-space:normal', 'overflow-wrap:anywhere',
+    ].join(';');
+    const spacer = document.createElement('span');
+    spacer.style.cssText = `float:right;width:${CARD_ACTIONS_W}px;height:${2 * CARD_LINE}px;shape-outside:inset(${CARD_LINE}px 0 0 0)`;
+    const node = document.createTextNode('');
+    probe.append(spacer, node);
+    document.body.appendChild(probe);
+    const fits = (s: string) => { node.nodeValue = s; return probe.scrollHeight <= 2 * CARD_LINE + 1; };
+
+    let next = text;
+    if (!fits(text)) {
+      const words = text.split(/\s+/).filter(Boolean);
+      // plus grand nombre de mots qui tient, points de suspension compris
+      let lo = 0, hi = words.length;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        if (fits(`${words.slice(0, mid).join(' ')} …`)) lo = mid; else hi = mid - 1;
+      }
+      if (lo > 0) {
+        next = `${words.slice(0, lo).join(' ')} …`;
+      } else {
+        // même le premier mot déborde : on le coupe en plein milieu, faute de mieux
+        let clo = 0, chi = text.length;
+        while (clo < chi) {
+          const mid = Math.ceil((clo + chi) / 2);
+          if (fits(`${text.slice(0, mid)} …`)) clo = mid; else chi = mid - 1;
+        }
+        next = clo > 0 ? `${text.slice(0, clo)} …` : '…';
+      }
+    }
+    document.body.removeChild(probe);
+    if (next !== display) setDisplay(next);
+  });
+
   return (
-    <button title={title} onClick={onClick} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${ink(0.12)}`, background: withAlpha(palette.paper, 0.7), color: palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>{children}</button>
+    <div
+      ref={ref}
+      title={text}
+      style={{
+        position: 'relative' as const, fontSize: 13, fontWeight: 600, color: palette.ink,
+        lineHeight: `${CARD_LINE}px`, height: 2 * CARD_LINE, textIndent: indent, overflow: 'hidden',
+        overflowWrap: 'anywhere' as const,
+      }}
+    >
+      {/* Cale flottante qui réserve la place des boutons. Un simple `margin-top`
+          ne suffit pas : les lignes contournent la boîte de MARGE du flottant,
+          donc la 1re ligne était raccourcie elle aussi. `shape-outside` limite
+          l'exclusion à la moitié basse — la 1re ligne court jusqu'au bord de la
+          carte, seule la 2e s'arrête avant les boutons. */}
+      <span style={{ float: 'right' as const, width: CARD_ACTIONS_W, height: 2 * CARD_LINE, shapeOutside: `inset(${CARD_LINE}px 0 0 0)` }} />
+      {display}
+    </div>
   );
 }
 
-// bouton « modifier la question » dans l'aperçu de l'éditeur d'examen — le cercle n'apparaît qu'au survol, pour indiquer que le bouton est cliquable
-export function EditQuestionButton({ id, onOpenQuestion }: { id: string; onOpenQuestion: (id: string) => void }) {
+/** Carte d'une des deux listes de l'onglet. Elle fixe la trame — trois lignes,
+ *  titre coupé sur les lignes 1-2, complément sur la ligne 3, bloc de boutons
+ *  ancré en bas à droite — et chaque liste ne fournit que son contenu :
+ *
+ *  - `leading` : ce qui précède le titre sur la 1re ligne (icônes de type…) ;
+ *    `indent` dit de combien la 1re ligne du titre s'écarte pour le contourner.
+ *  - `meta` : la 3e ligne (libellés de la question, décompte de l'examen…).
+ *  - `actions` : les boutons du coin bas droit, déjà protégés du clic de carte.
+ *  - `tint` : teinte translucide d'un état particulier (posée sur la feuille,
+ *    tout juste créée…), avec `borderColor` assorti.
+ *  - `children` : le détail déplié, sous le bloc de trois lignes. */
+export function ListCard({ onClick, tint, borderColor, leading, indent = 0, title, meta, actions, children }: {
+  onClick?: () => void;
+  tint?: string;
+  borderColor?: string;
+  leading?: React.ReactNode;
+  indent?: number;
+  title: string;
+  meta?: React.ReactNode;
+  actions?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        cursor: onClick ? 'pointer' : 'default', display: 'flex', flexDirection: 'column', padding: `${CARD_PAD_Y}px ${CARD_PAD_X}px`, borderRadius: 12,
+        background: tint ?? palette.surfaceRaised,
+        border: `1px solid ${borderColor ?? palette.line}`,
+      }}
+    >
+      <div style={{ position: 'relative' as const, height: 3 * CARD_LINE }}>
+        {leading && (
+          <div style={{ position: 'absolute' as const, top: 0, left: 0, height: CARD_LINE, display: 'flex', alignItems: 'center', gap: 4 }}>{leading}</div>
+        )}
+        <ClampedTitle text={title} indent={indent} />
+        <div style={{ height: CARD_LINE, paddingRight: CARD_ACTIONS_W, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>{meta}</div>
+        {actions && (
+          <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute' as const, right: 0, bottom: 0, height: 2 * CARD_LINE, display: 'flex', alignItems: 'center', gap: CARD_ACTION_GAP }}>{actions}</div>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** `active` : l'action du bouton est déjà en cours (question en cours de
+ *  modification) — l'icône et le liseré passent au vert, jamais le fond. */
+export function IconBtn({ children, title, onClick, size = 32, active = false }: { children: React.ReactNode; title: string; onClick?: (e: React.MouseEvent) => void; size?: number; active?: boolean }) {
+  return (
+    <button title={title} onClick={onClick} style={{ width: size, height: size, borderRadius: 9, border: `1px solid ${active ? palette.green : palette.lineStrong}`, background: palette.surfaceRaised, color: active ? palette.greenBrand : palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>{children}</button>
+  );
+}
+
+// bouton « modifier la question » dans l'aperçu de l'éditeur d'examen — le cercle
+// n'apparaît qu'au survol, pour indiquer que le bouton est cliquable. Quand la
+// question est ouverte dans le formulaire en ligne (`active`), seule l'icône
+// passe au vert (pas le fond) et le bouton annule la modification.
+export function EditQuestionButton({ id, onOpenQuestion, active = false }: { id: string; onOpenQuestion: (id: string) => void; active?: boolean }) {
   const t = useTranslations('examen');
   const [hovered, setHovered] = useState(false);
   return (
@@ -418,8 +874,8 @@ export function EditQuestionButton({ id, onOpenQuestion }: { id: string; onOpenQ
       onClick={() => onOpenQuestion(id)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      title={t('editQuestion')}
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: hovered ? '1px solid rgba(45,42,36,0.14)' : '1px solid transparent', background: hovered ? ink(0.045) : 'transparent', color: hovered ? palette.inkSoft : palette.inkFaint, cursor: 'pointer', padding: 0, flexShrink: 0, transition: 'background 0.12s, border-color 0.12s' }}
+      title={active ? t('cancelEditQuestion') : t('editQuestion')}
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: hovered ? `1px solid ${ink(0.14)}` : '1px solid transparent', background: hovered ? ink(0.045) : 'transparent', color: active ? palette.greenBrand : hovered ? palette.inkSoft : palette.inkFaint, cursor: 'pointer', padding: 0, flexShrink: 0, transition: 'background 0.12s, border-color 0.12s' }}
     >
       <Settings2 size={14} strokeWidth={1.85} />
     </button>
@@ -432,7 +888,7 @@ export function ActiveChip({ label, color, negative, filterKey, onRemove, setDra
       draggable
       onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', filterKey); setDraggedKey(filterKey); }}
       onDragEnd={() => setDraggedKey(null)}
-      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 6px 5px 11px', borderRadius: 999, border: negative ? '1px solid rgba(184,90,74,0.45)' : `1px solid ${ink(0.30)}`, background: negative ? palette.danger : palette.ink, color: palette.parchment, fontFamily: 'inherit', cursor: 'grab', clipPath: 'inset(0 round 999px)' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 6px 5px 11px', borderRadius: 999, border: negative ? `1px solid ${withAlpha(palette.danger, 0.45)}` : `1px solid ${ink(0.30)}`, background: negative ? palette.danger : palette.ink, color: palette.parchment, fontFamily: 'inherit', cursor: 'grab', clipPath: 'inset(0 round 999px)' }}
     >
       {color && <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, display: 'inline-block' }} />}
       {label}

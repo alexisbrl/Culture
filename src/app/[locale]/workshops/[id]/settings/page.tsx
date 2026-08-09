@@ -3,7 +3,7 @@ import { redirect, notFound } from 'next/navigation';
 import { getLocale } from 'next-intl/server';
 import { getWorkshop, getMemberGroups } from '@/app/actions/workshops';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
-import { getWorkshopBricks } from '@/app/actions/workshopBricks';
+import { getWorkshopNotions } from '@/app/actions/workshopNotions';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import SettingsClient from './SettingsClient';
 
@@ -21,14 +21,14 @@ export default async function SettingsPage({ params }: Props) {
   const workshop = await getWorkshop(id);
   if (!workshop) notFound();
 
-  // Paramètres accessibles au propriétaire et au gestionnaire ; un candidat est renvoyé.
-  if (workshop.currentUserRole === 'member') redirect(`/${locale}/workshops/${id}`);
+  // Paramètres accessibles à tous les rôles : l'engrenage est un lien direct vers
+  // cette page, qui rend une version réduite en lecture seule pour un membre simple.
 
   // Requêtes indépendantes → parallèle (règle N+1, cf. server-architecture.md)
-  const [files, groups, bricks, chapters] = await Promise.all([
+  const [files, groups, notions, chapters] = await Promise.all([
     getWorkshopFiles(id),
     getMemberGroups(id),
-    getWorkshopBricks(id),
+    getWorkshopNotions(id),
     getWorkshopChapters(id),
   ]);
 
@@ -61,7 +61,7 @@ export default async function SettingsPage({ params }: Props) {
       members={members}
       groups={groups}
       files={files}
-      bricks={bricks}
+      notions={notions}
       chapters={chapters}
     />
   );

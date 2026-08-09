@@ -2,7 +2,8 @@
 
 import type { ReactNode } from 'react';
 import Modal from './Modal';
-import { palette, ink, radius } from '@/lib/theme';
+import { Button } from '@/components/ui/button';
+import { palette } from '@/lib/theme';
 
 // Modale de confirmation partagée (carte crème centrée). Reproduit à l'identique
 // le motif dupliqué une dizaine de fois dans l'éditeur d'examen (et ailleurs) :
@@ -54,7 +55,6 @@ export default function ConfirmDialog({
 }: ConfirmDialogProps) {
   const iconBg = iconTone === 'accent' ? palette.amberTint : palette.dangerTint;
   const iconColor = iconTone === 'accent' ? palette.amber : palette.danger;
-  const confirmBg = confirmTone === 'confirm' ? palette.green : palette.danger;
 
   return (
     <Modal onClose={onCancel} width={width} portal={portal}>
@@ -67,8 +67,12 @@ export default function ConfirmDialog({
       )}
       {children}
       <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={onCancel} style={{ flex: 1, padding: '11px 14px', borderRadius: radius.md, border: `1px solid ${ink(0.14)}`, background: 'transparent', color: palette.inkMuted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>{cancelLabel}</button>
-        <button onClick={onConfirm} style={{ flex: 1, padding: '11px 14px', borderRadius: radius.md, border: 'none', background: confirmBg, color: palette.paper, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>{confirmLabel}</button>
+        <Button variant="ghost" size="sm" className="flex-1" onClick={onCancel}>
+          {cancelLabel}
+        </Button>
+        <Button variant={confirmTone === 'confirm' ? 'primary' : 'danger'} size="sm" className="flex-1" onClick={onConfirm}>
+          {confirmLabel}
+        </Button>
       </div>
     </Modal>
   );
