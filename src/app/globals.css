@@ -394,6 +394,41 @@
   .badge-glow {
     box-shadow: 0 0 20px rgba(95, 138, 63, 0.3);
   }
+  /* Panneau à défilement autonome (colonnes de l'onglet examen) : la molette
+     n'agit que sur le panneau survolé (`overscroll-behavior: contain` coupe la
+     propagation au parent une fois la fin atteinte) et aucune barre n'est
+     visible. */
+  .scroll-panel {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* anciens Edge/IE */
+  }
+  .scroll-panel::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+  /* Coquille à deux colonnes de l'onglet examen : à partir de 768px sa hauteur
+     est bornée au viewport (61px de barre du haut + 22 de marge haute + 28 de
+     marge basse), donc la page ne défile plus et chaque colonne fait défiler
+     son propre contenu. En dessous, les colonnes s'empilent et la page défile
+     normalement. */
+  @media (min-width: 768px) {
+    .split-shell {
+      height: calc(100vh - 111px);
+      overflow: hidden;
+    }
+  }
+  /* Coquille des Paramètres d'atelier : même principe que .split-shell mais
+     directement sous la barre du haut (61px). La navigation de gauche tient
+     sans défiler ; seule la colonne de droite défile (via .scroll-panel, sans
+     barre visible). En dessous de 768px, la page défile normalement. */
+  @media (min-width: 768px) {
+    .settings-shell {
+      height: calc(100vh - 61px);
+      overflow: hidden;
+    }
+  }
 }
 
 /* Balancement léger des arbres du Jardin (voir tree-sway-tool/resultat) */

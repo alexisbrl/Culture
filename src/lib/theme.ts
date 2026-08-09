@@ -124,6 +124,20 @@ export function withAlpha(hex: string, alpha: number): string {
 }
 
 /**
+ * Encre lisible sur un aplat de couleur quelconque (libellé d'examen, teinte
+ * catégorielle…) : luminance perçue (coefficients ITU-R BT.601) au-dessus du
+ * seuil → encre foncée, en dessous → encre claire. Utile dès qu'une couleur
+ * choisie par l'utilisateur devient un fond et non plus une pastille.
+ */
+export function inkOn(hex: string): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? palette.ink : palette.onInk;
+}
+
+/**
  * Translucide sur l'encre (#2A2620) — bordures, fonds légers, ombres, overlays.
  * Ex. ink(0.14) → 'rgba(42, 38, 32, 0.14)'. Remplace les innombrables
  * `rgba(45,42,36,0.XX)` codés en dur (ancienne valeur, avant T3).

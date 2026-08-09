@@ -4,6 +4,7 @@ import { assertManager, requireManager } from '@/lib/authz';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import * as examLib from '@/lib/workshops/exam';
 import * as notionsLib from '@/lib/workshops/notions';
+import * as chaptersLib from '@/lib/workshops/chapters';
 // Types de domaine (audit §5.3) : voir @/lib/workshops/examTypes — plus de
 // dépendance vers des composants UI (QuestionEditor.tsx/ExamenTab.tsx).
 // Redéclarés en alias locaux (un fichier `'use server'` ne peut pas réexporter
@@ -13,8 +14,11 @@ import type {
 } from '@/lib/workshops/examTypes';
 
 // Notions proposées à l'association dans l'éditeur — toutes celles de l'atelier,
-// sans restriction de chapitre.
-export type QuestionNotion = { id: string; title: string };
+// sans restriction de chapitre. `chapterId` sert au filtre par chapitre de la
+// banque : une question n'a pas de chapitre en propre (`chapter_id` est réservé
+// au parcours), elle en hérite par les notions qui lui sont associées.
+export type QuestionNotion = { id: string; title: string; chapterId: string | null };
+export type QuestionChapter = { id: string; name: string };
 
 export type ExamPool = ExamPoolType;
 export type GeneratedExam = GeneratedExamType;
@@ -31,19 +35,25 @@ export async function getExamBankData(workshopId: string): Promise<{
   pools: ExamPool[];
   exams: GeneratedExam[];
   notions: QuestionNotion[];
+  chapters: QuestionChapter[];
 }> {
   // Lecture réservée aux gestionnaires (la banque contient les réponses).
   if (!(await requireManager(workshopId))) {
-    return { questions: [], pools: [], exams: [], notions: [] };
+    return { questions: [], pools: [], exams: [], notions: [], chapters: [] };
   }
 
-  // Deux domaines indépendants → en parallèle (règle N+1).
-  const [data, notions] = await Promise.all([
+  // Trois domaines indépendants → en parallèle (règle N+1).
+  const [data, notions, chapters] = await Promise.all([
     examLib.getExamBankData(workshopId),
     notionsLib.listNotions(workshopId),
+    chaptersLib.listChapters(workshopId),
   ]);
 
-  return { ...data, notions: notions.map((n) => ({ id: n.id, title: n.title })) };
+  return {
+    ...data,
+    notions: notions.map((n) => ({ id: n.id, title: n.title, chapterId: n.chapterId })),
+    chapters: chapters.map((c) => ({ id: c.id, name: c.name })),
+  };
 }
 
 export async function saveQuestion(workshopId: string, question: Question): Promise<void> {

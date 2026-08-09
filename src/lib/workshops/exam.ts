@@ -22,7 +22,7 @@ import type {
   ExerciseChoice,
   ExerciseResult,
 } from '@/lib/workshops/examTypes';
-import { toBloomLevel } from '@/lib/workshops/examTypes';
+import { toBloomLevel, toResponseType, type QuestionTypeOptions } from '@/lib/workshops/examTypes';
 
 type QuestionRow = {
   id: string;
@@ -44,13 +44,15 @@ type QuestionRow = {
   parts: QuestionPart[];
   exam_ids: string[];
   text_lines: number;
+  expectations: string | null;
+  type_options: QuestionTypeOptions | null;
   created_at: string;
 };
 
 function normalizePart(part: Partial<QuestionPart>): QuestionPart {
   return {
     content: part.content ?? '',
-    responseType: part.responseType ?? 'sans_reponse',
+    responseType: part.responseType ? toResponseType(part.responseType) : 'sans_reponse',
     answer: part.answer ?? '',
     choices: part.choices ?? [],
     correctChoices: part.correctChoices ?? [],
@@ -73,7 +75,10 @@ function rowToQuestion(row: QuestionRow, notionIds: string[] = []): Question {
     id: row.id,
     title: row.title ?? '',
     questionType: row.question_type as Question['questionType'],
-    responseType: row.response_type as Question['responseType'],
+    // `toResponseType` absorbe les types retirés le 09/08/2026 (sondage, ordre,
+    // fill_blank) : les lignes déjà en base restent lisibles et se réécrivent
+    // avec la nouvelle valeur au premier enregistrement.
+    responseType: toResponseType(row.response_type),
     content: row.content,
     answer: row.answer,
     choices: row.choices ?? [],
@@ -86,6 +91,8 @@ function rowToQuestion(row: QuestionRow, notionIds: string[] = []): Question {
     parts: (row.parts ?? []).map(normalizePart),
     examIds: row.exam_ids ?? [],
     textLines: row.text_lines ?? 4,
+    expectations: row.expectations ?? '',
+    typeOptions: row.type_options ?? {},
     createdAt: row.created_at,
     chapterId: row.chapter_id ?? null,
   };
@@ -128,6 +135,8 @@ function questionToRow(workshopId: string, q: Question, context?: QuestionContex
     parts: q.parts ?? [],
     exam_ids: q.examIds,
     text_lines: q.textLines ?? 4,
+    expectations: q.expectations ?? '',
+    type_options: q.typeOptions ?? {},
     updated_at: new Date().toISOString(),
   };
 }

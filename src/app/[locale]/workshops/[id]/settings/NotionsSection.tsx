@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { ChevronDown, ChevronUp, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { GripVertical, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { palette, shadow } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import {
@@ -18,14 +18,12 @@ import {
   reorderWorkshopChapters,
   type Chapter,
 } from '@/app/actions/workshopChapters';
-import { Row, SmallBtn } from './settingsShared';
+import { SmallBtn } from './settingsShared';
 
 type Props = {
   workshopId: string;
   notions: Notion[];
   chapters: Chapter[];
-  /** Bascule vers la section Fichiers (les notions sont issues des fichiers sources). */
-  onManageFiles: () => void;
 };
 
 // Pseudo-identifiant du groupe « sans chapitre » dans la colonne de sélection —
@@ -103,7 +101,7 @@ function NotionForm({
   );
 }
 
-export default function NotionsSection({ workshopId, notions: initialNotions, chapters: initialChapters, onManageFiles }: Props) {
+export default function NotionsSection({ workshopId, notions: initialNotions, chapters: initialChapters }: Props) {
   const t = useTranslations('settings');
   const [notions, setNotions] = useState<Notion[]>(initialNotions);
   const [chapters, setChapters] = useState<Chapter[]>(initialChapters);
@@ -237,12 +235,27 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
     }
   }
 
-  async function moveChapter(index: number, direction: -1 | 1) {
-    const target = index + direction;
-    if (target < 0 || target >= chapters.length) return;
+  // Réordonnancement par glisser-déposer (poignée à 6 points, maquette ligne
+  // 1728-1732) : le drop réinsère le chapitre saisi à la position visée puis
+  // persiste l'ordre complet. L'index saisi vit dans un ref (le state ne sert
+  // qu'au style) : le handler de drop de la ligne cible a été attaché avant le
+  // re-render déclenché par le dragstart, sa closure ne voit donc pas le state.
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const dragIndexRef = useRef<number | null>(null);
+
+  function startChapterDrag(index: number | null) {
+    dragIndexRef.current = index;
+    setDragIndex(index);
+  }
+
+  async function handleDropOnChapter(targetIndex: number) {
+    const from = dragIndexRef.current;
+    startChapterDrag(null);
+    if (from === null || from === targetIndex) return;
 
     const reordered = [...chapters];
-    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(targetIndex, 0, moved);
     const previous = chapters;
     setChapters(reordered);
     setError('');
@@ -291,15 +304,9 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
 
     return (
       <div key={notion.id} style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 44, padding: '8px 14px', borderBottom: `1px solid ${palette.line}` }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {notion.title}
-          </div>
-          {notion.content && (
-            <div style={{ fontSize: 11.5, color: palette.inkFaint, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {notion.content}
-            </div>
-          )}
+        {/* Titre seul, comme la maquette — le contenu se lit dans le formulaire d'édition. */}
+        <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {notion.title}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
           <button
@@ -323,20 +330,9 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
 
   return (
     <>
-      {/* ── En-tête + fichiers source (fonction réelle, absente de la maquette) ── */}
-      <div style={{ marginBottom: 18 }}>
-        {/* Titre de section — même graphie que les quatre autres sections
-            (SectionCard), qui reprennent le libellé de la barre latérale. */}
-        <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink, marginBottom: 3 }}>{t('notions.sectionTitle')}</div>
-        <div style={{ fontSize: 12.5, color: palette.inkFaint, marginBottom: 10 }}>{t('notions.desc')}</div>
-        <Row label={t('notions.sourceFiles')} noBorder>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <SmallBtn tone="ghost" onClick={onManageFiles}>{t('notions.manageFiles')}</SmallBtn>
-            {/* Placeholder : la génération par IA arrive avec le module générateur */}
-            <SmallBtn tone="dark" disabled>{t('notions.regenAI')}</SmallBtn>
-          </div>
-        </Row>
-      </div>
+      {/* ── En-tête — titre seul, comme la maquette (pas de description ni de
+          ligne « fichiers source »). Même graphie que les autres sections. ── */}
+      <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink, marginBottom: 18 }}>{t('notions.sectionTitle')}</div>
 
       {error && (
         <div style={{ fontSize: 12.5, color: palette.danger, padding: '2px 0 12px' }}>{error}</div>
@@ -350,10 +346,9 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         <div className="grid grid-cols-1 md:grid-cols-[0.85fr_1.45fr]" style={{ gap: 16, alignItems: 'start' }}>
           {/* ── Colonne Chapitres ── */}
           <div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: palette.ink, padding: '0 2px' }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: palette.ink, padding: '0 2px 8px' }}>
               {t('chapters.title')}
             </div>
-            <div style={{ fontSize: 12, color: palette.inkFaint, padding: '2px 2px 8px' }}>{t('chapters.desc')}</div>
             <div style={{ background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 14, boxShadow: shadow.sm, overflow: 'hidden' }}>
               {addingChapter ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: `1px solid ${palette.line}` }}>
@@ -406,32 +401,26 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
                   <div
                     key={chapter.id}
                     onClick={() => setSelectedChapterId(chapter.id)}
+                    draggable
+                    onDragStart={() => startChapterDrag(i)}
+                    onDragEnd={() => startChapterDrag(null)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => { e.preventDefault(); handleDropOnChapter(i); }}
                     style={{
-                      position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minHeight: 44,
+                      position: 'relative', display: 'flex', alignItems: 'center', gap: 10, minHeight: 44,
                       padding: '8px 14px 8px 17px', cursor: 'pointer',
                       borderBottom: i < chapters.length - 1 || showUnassignedEntry ? `1px solid ${palette.line}` : 'none',
                       background: isActive ? palette.surfaceSunken : 'transparent',
+                      opacity: dragIndex === i ? 0.5 : 1,
                     }}
                   >
-                    <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: isActive ? palette.green : 'transparent' }} />
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); moveChapter(i, -1); }}
-                        disabled={i === 0}
-                        title={t('chapters.moveUp')}
-                        style={{ border: 'none', background: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? palette.inkFaint : palette.inkMuted, padding: 0, display: 'flex' }}
-                      >
-                        <ChevronUp size={13} />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); moveChapter(i, 1); }}
-                        disabled={i === chapters.length - 1}
-                        title={t('chapters.moveDown')}
-                        style={{ border: 'none', background: 'none', cursor: i === chapters.length - 1 ? 'default' : 'pointer', color: i === chapters.length - 1 ? palette.inkFaint : palette.inkMuted, padding: 0, display: 'flex' }}
-                      >
-                        <ChevronDown size={13} />
-                      </button>
-                    </div>
+                    <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: isActive ? palette.green : 'transparent' }} />
+                    <span title={t('chapters.dragHint')} style={{ cursor: 'grab', color: palette.inkFaint, flexShrink: 0, display: 'flex' }}>
+                      <GripVertical size={15} strokeWidth={1.75} />
+                    </span>
+                    {isActive && (
+                      <span style={{ width: 7, height: 7, borderRadius: 999, background: palette.green, flexShrink: 0 }} />
+                    )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: isActive ? 700 : 600, color: isActive ? palette.greenBrand : palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {chapter.name}

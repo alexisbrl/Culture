@@ -48,6 +48,7 @@ La base Supabase (`hhkmrejjksjpfetwefju`) est **partagée par le code local ET l
 - **Ajouter** une colonne/table (expand) : sans danger à tout moment (le code déployé l'ignore).
 - **Supprimer ou renommer** une colonne/table, ou changer un type (contract) : **interdit tant que le code déployé en production lit encore cet objet**. Beaucoup de `select` ne lisent que `{ data }` en ignorant `{ error }` → l'échec est **silencieux** (`data = null`) et casse la fonctionnalité sans alerte.
 - Ordre correct pour retirer un champ : (1) déployer le code qui ne l'utilise plus → (2) seulement ensuite, appliquer la migration de suppression.
+- **Toute migration en attente de déploiement se note dans `docs/migrations/EN-ATTENTE-DEPLOIEMENT.md`** — point d'entrée unique, à lire dès que l'utilisateur demande ce qu'il reste à faire « une fois en ligne ». Le SQL lui-même va dans `docs/migrations/<date>-<sujet>.sql`. Si la section « À appliquer » du fichier dit `AUCUN`, il n'y a rien à faire.
 - Incident de référence (22/06/2026, ateliers cassés en ligne pour avoir inversé cet ordre) : `docs/changelog.md`.
 
 **Garde-fous conditionnels au mode chantier.** Les migrations Supabase (`apply_migration`, `execute_sql`), l'écriture de `src/lib/database.types.ts` et les modifications du Jardin sont **bloquées tant qu'un chantier est ouvert** — c'est-à-dire tant que `docs/chantiers/EN-COURS.md` ne contient pas `AUCUN` : en autonomie, personne ne relit avant que la base ne change. En session interactive (hors chantier), elles sont autorisées normalement. Mécanisme : hook `PreToolUse` → `.claude/hooks/chantier-guard.mjs`, branché dans `.claude/settings.local.json`. En chantier, la conduite à tenir est celle du fichier : écrire le SQL dans `docs/migrations/`, le documenter dans la feuille de route, laisser l'humain l'appliquer. Les interdictions inconditionnelles (`git push --force`, écriture de `.env*`, `rm -rf`) restent dans `permissions.deny`, hors de portée de toute condition.
@@ -59,6 +60,7 @@ La base Supabase (`hhkmrejjksjpfetwefju`) est **partagée par le code local ET l
 - Pattern de code réutilisable ou piège technique → `.claude/rules/i18n.md`, `server-architecture.md`, ou `frontend-patterns.md` selon le sujet.
 - Décision/épisode marquant à conserver pour contexte historique (une entrée courte, pas un journal détaillé — `git log` fait foi pour le détail) → `docs/changelog.md`.
 - Dette technique / TODO connu → `docs/backlog.md`.
+- Migration de base qui attend un déploiement → `docs/migrations/EN-ATTENTE-DEPLOIEMENT.md` (voir §1).
 
 ---
 

@@ -2,49 +2,63 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
-import { AlertTriangle, Check, Loader2, Star } from 'lucide-react';
+import { useLocale, useTranslations } from 'next-intl';
+import { AlertTriangle, Check, Crown, Loader2 } from 'lucide-react';
 import { palette, radius, shadow, withAlpha } from '@/lib/theme';
 import Modal from '@/components/Modal';
 import { activateWorkshopPremium } from '@/app/actions/workshops';
-import { Row, SectionCard } from './settingsShared';
 
-// Tarif réel (cible) : ~3,5 €/membre à plat, voir docs/product-spec.md § Atelier
-// Premium. Purement indicatif ici (le paiement réel n'est pas encore branché,
-// cf. le mécanisme de test ci-dessous) — sert seulement à donner une estimation
-// avant activation, jamais à calculer une facturation réelle.
-const REAL_PRICE_PER_MEMBER = 3.5;
-
-// Grille de paliers dégressifs de la maquette (lignes 1698-1709 de
-// App-Culture.dc.html) — dessinée pour se conformer visuellement au design,
-// mais **inerte** : aucun palier dégressif n'existe réellement, le tarif réel
-// est le taux unique ci-dessus (docs/product-spec.md). Décision consignée dans
-// docs/chantiers/2026-08-05-refonte-ui-design-system.md (T32).
-const DEGRESSIVE_TIERS = [
-  { label: '1er membre', price: '1,00' },
-  { label: '2 à 4 membres', price: '0,85' },
-  { label: '5 à 9 membres', price: '0,75' },
-  { label: '10 à 19 membres', price: '0,68' },
-  { label: '20 à 49 membres', price: '0,63' },
-  { label: '50 à 99 membres', price: '0,60' },
-  { label: '100 membres et +', price: '0,575' },
+// Grille de paliers dégressifs (maquette, lignes 1698-1709 de App-Culture.dc.html).
+// C'est la source de vérité du prix affiché : le total mensuel est la somme
+// membre par membre à travers les paliers (ex. 6 membres = 1×1,00 + 3×0,85 +
+// 2×0,75 = 5,05 €). Purement indicatif tant que le paiement réel n'est pas
+// branché (activation par code de test ci-dessous) — jamais utilisé pour une
+// facturation réelle.
+const PRICE_TIERS = [
+  { key: 't1', upTo: 1, price: 1.0 },
+  { key: 't2to4', upTo: 4, price: 0.85 },
+  { key: 't5to9', upTo: 9, price: 0.75 },
+  { key: 't10to19', upTo: 19, price: 0.68 },
+  { key: 't20to49', upTo: 49, price: 0.63 },
+  { key: 't50to99', upTo: 99, price: 0.6 },
+  { key: 't100plus', upTo: Infinity, price: 0.57 },
 ] as const;
 
+// Total mensuel dégressif : chaque membre est facturé au prix du palier dans
+// lequel il tombe (le 1er à 1 €, les 3 suivants à 0,85 €, etc.).
+function monthlyTotal(memberCount: number): number {
+  let total = 0;
+  let prev = 0;
+  for (const tier of PRICE_TIERS) {
+    const span = Math.max(0, Math.min(memberCount, tier.upTo) - prev);
+    total += span * tier.price;
+    prev = tier.upTo;
+    if (memberCount <= tier.upTo) break;
+  }
+  return total;
+}
+
 const ADVANTAGE_KEYS = [
-  'noAds', 'unlimitedEnergy', 'aiExchange', 'examGenerator', 'inviteMembers', 'dailyJoker', 'exclusivePlants',
+  'noAds', 'unlimitedEnergy', 'aiExchange', 'examGenerator', 'inviteMembers', 'fileStorage', 'dailyJoker', 'exclusivePlants',
 ] as const;
 
 export default function PremiumSection({ workshopId, isPremium, memberCount }: { workshopId: string; isPremium: boolean; memberCount: number }) {
   const router = useRouter();
+  const locale = useLocale();
   const t = useTranslations('settings');
   const [premiumPassword, setPremiumPassword] = useState('');
   const [premiumError, setPremiumError] = useState('');
   const [activatingPremium, setActivatingPremium] = useState(false);
   const [showPremiumConfirm, setShowPremiumConfirm] = useState(false);
 
-  const total = memberCount * REAL_PRICE_PER_MEMBER;
-  const totalStr = total.toFixed(2).replace('.', ',').replace(',00', '');
-  const avgStr = REAL_PRICE_PER_MEMBER.toFixed(2).replace('.', ',').replace(',00', '');
+  const numberLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
+  const fmt = (value: number, decimals: number) =>
+    new Intl.NumberFormat(numberLocale, { minimumFractionDigits: decimals, maximumFractionDigits: 2 }).format(value);
+
+  const total = monthlyTotal(memberCount);
+  const totalStr = fmt(total, 2);
+  const avgStr = fmt(memberCount > 0 ? total / memberCount : 0, 2);
+  const currentTierIndex = PRICE_TIERS.findIndex((tier) => memberCount <= tier.upTo);
 
   async function handleActivatePremium() {
     setActivatingPremium(true);
@@ -61,16 +75,20 @@ export default function PremiumSection({ workshopId, isPremium, memberCount }: {
 
   return (
     <>
-        {/* ── 5. Atelier Premium (propriétaire uniquement) ── */}
-        <SectionCard
-          title={t('premium.title')}
-          description={t('premium.desc')}
-        >
+        {/* ── 5. Atelier Premium (propriétaire uniquement) ──
+            Pas de SectionCard ici : la section vit sans encadré, directement
+            sur le fond de la page (titre seul, sans description). */}
+        <div style={{ marginBottom: 36 }}>
+          <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink, marginBottom: 10 }}>
+            {t('premium.title')}
+          </div>
           {/* Carte de passage / statut actif — fond doré, lignes 1643-1678 de la maquette */}
           <div style={{ position: 'relative', overflow: 'hidden', background: withAlpha(palette.gold, 0.14), border: `1.5px solid ${palette.gold}`, borderRadius: radius.lg, padding: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Halo décoratif en haut à droite (maquette) */}
+            <div aria-hidden style={{ position: 'absolute', top: -55, right: -25, width: 170, height: 170, borderRadius: '50%', background: withAlpha(palette.gold, 0.16), pointerEvents: 'none' }} />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ width: 38, height: 38, borderRadius: 11, background: palette.gold, color: palette.onInk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Star size={19} strokeWidth={1.75} />
+                <Crown size={19} strokeWidth={1.75} />
               </span>
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: palette.amberLight }}>
                 {isPremium ? t('premium.eyebrowActive') : t('premium.eyebrowInactive')}
@@ -78,7 +96,7 @@ export default function PremiumSection({ workshopId, isPremium, memberCount }: {
             </div>
 
             {isPremium ? (
-              <div style={{ marginTop: 14 }}>
+              <div style={{ position: 'relative', marginTop: 14 }}>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: palette.gold, color: palette.onInk, fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 999 }}>
                   <Check size={13} strokeWidth={2.5} />
                   {t('premium.activeBadge')}
@@ -91,8 +109,7 @@ export default function PremiumSection({ workshopId, isPremium, memberCount }: {
                 </div>
               </div>
             ) : (
-              <>
-              <div style={{ marginTop: 14 }}>
+              <div style={{ position: 'relative', marginTop: 14 }}>
                 <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: 23, color: palette.ink, lineHeight: 1.2 }}>
                   {t('premium.heroTitle')}
                 </div>
@@ -111,51 +128,13 @@ export default function PremiumSection({ workshopId, isPremium, memberCount }: {
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                   }}
                 >
-                  <Star size={16} strokeWidth={2} />
+                  <Crown size={16} strokeWidth={2} />
                   {t('premium.activate')}
                 </button>
                 <div style={{ fontSize: 11.5, color: palette.inkMuted, textAlign: 'center', marginTop: 8 }}>
                   {t('premium.irreversibleNote')}
                 </div>
               </div>
-
-              {/* [TEST TEMPORAIRE — 13/06/2026] Activation par mot de passe en attendant Stripe. À retirer une fois le paiement réel branché. */}
-              <Row label={t('premium.testPwLabel')} hint={t('premium.testPwHint')} noBorder>
-                <input
-                  type="password"
-                  value={premiumPassword}
-                  onChange={(e) => { setPremiumPassword(e.target.value); setPremiumError(''); }}
-                  placeholder={t('premium.pwPlaceholder')}
-                  style={{
-                    fontSize: 13,
-                    padding: '9px 12px',
-                    border: `1px solid ${palette.lineStrong}`,
-                    borderRadius: 9,
-                    outline: 'none',
-                    background: palette.surfaceInput,
-                    color: palette.ink,
-                    width: 160,
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </Row>
-              {premiumError && (
-                <p
-                  style={{
-                    fontSize: 12.5,
-                    fontWeight: 500,
-                    color: palette.danger,
-                    background: withAlpha(palette.danger, 0.08),
-                    border: `1px solid ${withAlpha(palette.danger, 0.18)}`,
-                    borderRadius: 9,
-                    padding: '8px 12px',
-                    margin: '4px 0 0',
-                  }}
-                >
-                  {premiumError}
-                </p>
-              )}
-              </>
             )}
           </div>
 
@@ -176,48 +155,97 @@ export default function PremiumSection({ workshopId, isPremium, memberCount }: {
             ))}
           </div>
 
-          {/* Détail des prix — grille de paliers dégressifs dessinée mais INERTE :
-              aucun palier réel n'existe, le tarif réel est REAL_PRICE_PER_MEMBER
-              ci-dessus (docs/product-spec.md). aria-disabled + pointer-events:none
-              pour qu'elle ne semble jamais interactive. */}
-          <div style={{ marginTop: 22, opacity: 0.7 }} aria-disabled="true">
+          {/* Détail des prix — la grille dégressive qui sert au calcul du total
+              ci-dessus ; le palier courant de l'atelier est surligné. */}
+          <div style={{ marginTop: 22 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: palette.ink }}>{t('premium.tiersTitle')}</div>
             <div style={{ fontSize: 12.5, color: palette.inkFaint, marginTop: 3 }}>{t('premium.tiersNote')}</div>
-            <div style={{ marginTop: 12, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 14, boxShadow: shadow.sm, overflow: 'hidden', pointerEvents: 'none' }}>
-              {DEGRESSIVE_TIERS.map((tier, i) => (
-                <div
-                  key={tier.label}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14,
-                    padding: '13px 15px',
-                    borderBottom: i < DEGRESSIVE_TIERS.length - 1 ? `1px solid ${palette.line}` : 'none',
-                  }}
-                >
-                  <span style={{ fontSize: 14, fontWeight: 600, color: palette.inkMuted }}>{tier.label}</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: palette.inkMuted, whiteSpace: 'nowrap' }}>
-                    {tier.price} € <span style={{ fontSize: 11.5, fontWeight: 500, color: palette.inkFaint }}>/ membre</span>
-                  </span>
-                </div>
-              ))}
+            <div style={{ marginTop: 12, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 14, boxShadow: shadow.sm, overflow: 'hidden' }}>
+              {PRICE_TIERS.map((tier, i) => {
+                const isCurrent = i === currentTierIndex;
+                return (
+                  <div
+                    key={tier.key}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14,
+                      padding: '13px 15px',
+                      background: isCurrent ? withAlpha(palette.gold, 0.12) : 'transparent',
+                      borderBottom: i < PRICE_TIERS.length - 1 ? `1px solid ${palette.line}` : 'none',
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, fontWeight: 600, color: isCurrent ? palette.ink : palette.inkMuted }}>
+                      {t(`premium.tiers.${tier.key}`)}
+                      {isCurrent && (
+                        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', color: palette.amberLight, border: `1px solid ${withAlpha(palette.gold, 0.55)}`, borderRadius: 999, padding: '3px 9px', whiteSpace: 'nowrap' }}>
+                          {t('premium.yourTier')}
+                        </span>
+                      )}
+                    </span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: palette.ink, whiteSpace: 'nowrap' }}>
+                      {fmt(tier.price, Number.isInteger(tier.price) ? 0 : 2)} € <span style={{ fontSize: 11.5, fontWeight: 500, color: palette.inkFaint }}>{t('premium.perMemberUnit')}</span>
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        </SectionCard>
+        </div>
 
       {/* ── Modale « confirmation activation Premium » ──
           Modal directement (pas ConfirmDialog) : le bouton de confirmation doit
-          rester désactivable tant que le mot de passe de test est vide ou que
+          rester désactivable tant que le code de test est vide ou que
           l'activation est en cours (ConfirmDialog n'expose pas de `disabled` sur
           son bouton de confirmation) — évite un double déclenchement du
-          mécanisme d'activation irréversible. */}
+          mécanisme d'activation irréversible.
+          [TEST TEMPORAIRE — 13/06/2026] Activation par code en attendant Stripe.
+          À retirer une fois le paiement réel branché. */}
       {showPremiumConfirm && (
         <Modal width={400} onClose={() => { setShowPremiumConfirm(false); setPremiumError(''); }}>
           <div style={{ width: 38, height: 38, borderRadius: '50%', background: palette.amberTint, color: palette.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
             <AlertTriangle size={18} strokeWidth={2} />
           </div>
           <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6, textAlign: 'center' }}>{t('premium.confirmTitle')}</div>
-          <div style={{ fontSize: 12.5, color: palette.inkSoft, marginBottom: 20, textAlign: 'center' }}>
+          <div style={{ fontSize: 12.5, color: palette.inkSoft, marginBottom: 16, textAlign: 'center' }}>
             {t('premium.confirmDesc')}
           </div>
+          <input
+            type="password"
+            value={premiumPassword}
+            onChange={(e) => { setPremiumPassword(e.target.value); setPremiumError(''); }}
+            placeholder={t('premium.pwPlaceholder')}
+            autoFocus
+            style={{
+              fontSize: 13,
+              fontFamily: 'inherit',
+              padding: '10px 12px',
+              border: `1px solid ${palette.lineStrong}`,
+              borderRadius: 10,
+              outline: 'none',
+              background: palette.surfaceInput,
+              color: palette.ink,
+              width: '100%',
+              boxSizing: 'border-box',
+            }}
+          />
+          <div style={{ fontSize: 11, color: palette.inkFaint, marginTop: 6, marginBottom: premiumError ? 10 : 16 }}>
+            {t('premium.testPwHint')}
+          </div>
+          {premiumError && (
+            <p
+              style={{
+                fontSize: 12.5,
+                fontWeight: 500,
+                color: palette.danger,
+                background: withAlpha(palette.danger, 0.08),
+                border: `1px solid ${withAlpha(palette.danger, 0.18)}`,
+                borderRadius: 9,
+                padding: '8px 12px',
+                margin: '0 0 14px',
+              }}
+            >
+              {premiumError}
+            </p>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button
               disabled={activatingPremium || !premiumPassword}

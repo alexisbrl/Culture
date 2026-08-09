@@ -141,10 +141,10 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
   return (
     <div style={{ background: palette.cream, minHeight: 'calc(100vh - 60px)', padding: '28px 24px 48px' }}>
       <div style={{ maxWidth: 520, margin: '0 auto' }}>
-        {/* Bannière — rayures diagonales, avatar centré sans contour, nom en bas
-            à gauche avec le tag en plus petit à sa droite. « éditer » ouvre le
-            composeur d'avatar : c'est le seul accès, la ligne « modifier
-            l'avatar » a été retirée des paramètres. */}
+        {/* Bannière — rayures diagonales, avatar centré sans contour, nom en haut
+            à gauche avec le tag juste en dessous. « éditer » ouvre le composeur
+            d'avatar : c'est le seul accès, la ligne « modifier l'avatar » a été
+            retirée des paramètres. */}
         <div
           style={{
             position: 'relative',
@@ -175,6 +175,10 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
             )}
           </div>
 
+          {/* `pointerEvents: 'none'` — ce bloc s'étend sur toute la largeur de la
+              bannière (il faut cette largeur pour que les noms longs se tronquent
+              proprement) et passe donc PAR-DESSUS le bouton « éditer », dont il
+              avalerait les clics. Rien n'y est cliquable, on laisse traverser. */}
           <div
             style={{
               position: 'absolute',
@@ -182,6 +186,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
               right: 20,
               top: 16,
               zIndex: 1,
+              pointerEvents: 'none',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'flex-start',

@@ -11,7 +11,7 @@ import {
   getFileDownloadUrl, type WorkshopFile,
 } from '@/app/actions/workshopFiles';
 import type { UploadTicket } from '@/lib/storage';
-import { FileCategoryIcon, formatFileSize, SectionCard } from './settingsShared';
+import { FileCategoryIcon, formatFileSize } from './settingsShared';
 
 export default function FilesSection({ workshopId, initialFiles }: { workshopId: string; initialFiles: WorkshopFile[] }) {
   const t = useTranslations('settings');
@@ -156,18 +156,25 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
 
   return (
     <>
-        {/* ── Fichiers ── */}
-        <SectionCard
-          title={t('files.title')}
-          description={t('files.desc')}
-        >
+        {/* ── Fichiers — zone de dépôt autonome + carte de liste (maquette,
+            lignes 1597-1629 de App-Culture.dc.html) ── */}
+        <div style={{ marginBottom: 36 }}>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{t('files.title')}</div>
+          </div>
+
           {/* Zone de dépôt — bordure pointillée `--line-strong`, vire au vert au
-              survol/glisser-déposer (getter réel de la maquette, lignes 1600-1607
-              de App-Culture.dc.html) plutôt qu'à l'ambre de l'ancien habillage. */}
+              survol et au glisser-déposer. Bordure/fond en className (pas en
+              style) pour que le `hover:` CSS puisse s'appliquer. */}
           <label
             onDragOver={(e) => { e.preventDefault(); if (uploadProgress === null) setFileDragOver(true); }}
             onDragLeave={() => setFileDragOver(false)}
             onDrop={handleFileDrop}
+            className={`border-[1.5px] border-dashed ${
+              fileDragOver
+                ? 'border-[var(--green)] bg-[var(--green-tint)]'
+                : 'border-[var(--line-strong)] bg-[var(--surface-page)] hover:border-[var(--green)] hover:bg-[var(--green-tint)]'
+            }`}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -177,10 +184,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
               textAlign: 'center',
               cursor: uploadProgress !== null ? 'default' : 'pointer',
               padding: '26px 20px',
-              background: fileDragOver ? withAlpha(palette.green, 0.06) : 'transparent',
-              border: `1.5px dashed ${fileDragOver ? palette.green : palette.lineStrong}`,
               borderRadius: 16,
-              marginBottom: files.length > 0 ? 16 : 0,
               transition: 'border-color 160ms, background 160ms',
               position: 'relative',
             }}
@@ -192,13 +196,19 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
               disabled={uploadProgress !== null}
               style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
             />
-            <span style={{ width: 44, height: 44, borderRadius: 12, background: withAlpha(palette.green, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.greenBrand, flexShrink: 0 }}>
+            <span style={{ width: 44, height: 44, borderRadius: 12, background: palette.greenTint, display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.greenBrand, flexShrink: 0 }}>
               {uploadProgress !== null ? <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} /> : <Upload size={20} strokeWidth={1.75} />}
             </span>
             <span style={{ fontSize: 14, fontWeight: 600, color: palette.ink }}>
-              {uploadProgress !== null ? t('files.uploading', { percent: uploadProgress.percent }) : t('files.addFile')}
+              {uploadProgress !== null ? (
+                t('files.uploading', { percent: uploadProgress.percent })
+              ) : (
+                <>
+                  {t('files.dropHere')} <span style={{ color: palette.greenBrand }}>{t('files.browse')}</span>
+                </>
+              )}
             </span>
-            <span style={{ fontSize: 12.5, color: palette.inkFaint }}>{t('files.addFileHint')}</span>
+            <span style={{ fontSize: 12.5, color: palette.inkSoft }}>{t('files.addFileHint')}</span>
           </label>
 
           {uploadProgress !== null && (
@@ -221,10 +231,10 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
               {t('files.noFiles')}
             </div>
           ) : (
-            <div style={{ marginTop: 12 }}>
+            <div style={{ marginTop: 16, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 20, overflow: 'hidden' }}>
               {[...files]
                 .sort((a, b) => a.name.localeCompare(b.name))
-                .map((file, i, arr) => {
+                .map((file, i) => {
                   const { base, extension } = splitFileName(file.name);
                   const isEditing = editingFileId === file.id;
                   return (
@@ -233,13 +243,12 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 12,
-                      minHeight: 48,
-                      padding: '8px 0',
-                      borderBottom: i < arr.length - 1 ? `1px solid ${palette.line}` : 'none',
+                      gap: 14,
+                      padding: '12px 18px',
+                      borderTop: i > 0 ? `1px solid ${palette.line}` : 'none',
                     }}
                   >
-                    <div style={{ width: 36, height: 36, borderRadius: 10, background: withAlpha(palette.amber, 0.14), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 11, background: withAlpha(palette.amber, 0.14), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <FileCategoryIcon category={file.category} />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -289,7 +298,8 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                       ) : (
                         <div
                           style={{
-                            fontSize: 13,
+                            fontSize: 14,
+                            fontWeight: 600,
                             color: palette.ink,
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
@@ -297,51 +307,35 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                           }}
                         >
                           {base}
-                          {extension && <span style={{ color: palette.inkFaint }}>{extension}</span>}
                         </div>
                       )}
-                      <div style={{ fontSize: 11, color: palette.inkFaint, marginTop: 2 }}>
-                        {formatFileSize(file.size, fileUnits)}
+                      <div style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 2 }}>
+                        {extension ? `${extension.slice(1).toUpperCase()} · ` : ''}{formatFileSize(file.size, fileUnits)}
                       </div>
                     </div>
                     {!isEditing && (
-                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                        <button
+                          onClick={() => startEditingFile(file)}
+                          title={t('files.renameTitle')}
+                          className="flex size-[34px] cursor-pointer items-center justify-center rounded-[10px] border-none bg-transparent p-0 text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-body)]"
+                        >
+                          <Pencil size={16} strokeWidth={1.75} />
+                        </button>
                         <button
                           onClick={() => handleDownloadFile(file.id)}
                           disabled={downloadingFileId === file.id}
                           title={t('files.downloadTitle')}
-                          style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            width: 32, height: 32, borderRadius: 9,
-                            background: 'transparent', border: `1px solid ${palette.lineStrong}`,
-                            color: palette.inkMuted, cursor: 'pointer',
-                          }}
+                          className="flex size-[34px] cursor-pointer items-center justify-center rounded-[10px] border-none bg-transparent p-0 text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-body)]"
                         >
-                          {downloadingFileId === file.id ? <Loader2 size={14} strokeWidth={1.75} className="animate-spin" /> : <Download size={14} strokeWidth={1.75} />}
-                        </button>
-                        <button
-                          onClick={() => startEditingFile(file)}
-                          title={t('files.renameTitle')}
-                          style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            width: 32, height: 32, borderRadius: 9,
-                            background: 'transparent', border: `1px solid ${palette.lineStrong}`,
-                            color: palette.inkMuted, cursor: 'pointer',
-                          }}
-                        >
-                          <Pencil size={14} strokeWidth={1.75} />
+                          {downloadingFileId === file.id ? <Loader2 size={16} strokeWidth={1.75} className="animate-spin" /> : <Download size={16} strokeWidth={1.75} />}
                         </button>
                         <button
                           onClick={() => setPendingDeleteFile(file)}
                           title={t('files.deleteTitle')}
-                          style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            width: 32, height: 32, borderRadius: 9,
-                            background: withAlpha(palette.danger, 0.10), border: `1px solid ${withAlpha(palette.danger, 0.30)}`,
-                            color: palette.danger, cursor: 'pointer',
-                          }}
+                          className="flex size-[34px] cursor-pointer items-center justify-center rounded-[10px] border-none bg-transparent p-0 text-[var(--ink-muted)] hover:bg-[var(--danger-tint)] hover:text-[var(--danger)]"
                         >
-                          <Trash2 size={14} strokeWidth={1.75} />
+                          <Trash2 size={16} strokeWidth={1.75} />
                         </button>
                       </div>
                     )}
@@ -350,7 +344,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                 })}
             </div>
           )}
-        </SectionCard>
+        </div>
       {/* ── Modale « confirmation suppression fichier » ── */}
       {pendingDeleteFile && (
         <ConfirmDialog

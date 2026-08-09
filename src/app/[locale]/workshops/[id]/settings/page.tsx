@@ -21,8 +21,8 @@ export default async function SettingsPage({ params }: Props) {
   const workshop = await getWorkshop(id);
   if (!workshop) notFound();
 
-  // Paramètres accessibles au propriétaire et au gestionnaire ; un candidat est renvoyé.
-  if (workshop.currentUserRole === 'member') redirect(`/${locale}/workshops/${id}`);
+  // Paramètres accessibles à tous les rôles : l'engrenage est un lien direct vers
+  // cette page, qui rend une version réduite en lecture seule pour un membre simple.
 
   // Requêtes indépendantes → parallèle (règle N+1, cf. server-architecture.md)
   const [files, groups, notions, chapters] = await Promise.all([

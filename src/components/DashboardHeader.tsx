@@ -4,13 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { useUser, SignOutButton } from '@clerk/nextjs';
-import { Sprout, ChevronDown, UserCircle, LogOut, Crown, Route, FileText, BookOpen, User } from 'lucide-react';
-import AvatarComposer from '@/components/avatar/AvatarComposer';
-import { loadAvatarConfig, type AvatarConfig } from '@/components/avatar/avatarConfig';
-import { markIntentionalSignOut } from '@/lib/signOutIntent';
+import { useUser } from '@clerk/nextjs';
+import { Sprout, ChevronDown, Route, FileText, BookOpen, User } from 'lucide-react';
 import { setUserLocale } from '@/app/actions/profile';
 import { getWorkshop, getLastVisitedWorkshop } from '@/app/actions/workshops';
+import { clearLastWorkshop, saveLastWorkshop, type CachedWorkshop } from '@/lib/lastWorkshopCache';
 import { Badge } from '@/components/ui/badge';
 import WorkshopSwitcher from '@/components/WorkshopSwitcher';
 import WorkshopActionsMenu from '@/components/WorkshopActionsMenu';
@@ -26,23 +24,21 @@ type WorkshopHeaderInfo = { name: string; role: 'owner' | 'manager' | 'member' }
 // l'énergie et les notifications existent.
 const PLACEHOLDER_DROPLETS = 12;
 
-export default function DashboardHeader() {
+type Props = {
+  userId: string;
+  /** Dernier atelier visité, lu du cookie par le layout — voir lastWorkshopCache. */
+  initialWorkshop: CachedWorkshop | null;
+};
+
+export default function DashboardHeader({ userId, initialWorkshop }: Props) {
   const t = useTranslations('nav');
   const locale = useLocale();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { user } = useUser();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
-  const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
   const [workshop, setWorkshop] = useState<WorkshopHeaderInfo | null>(null);
-
-  // Avatar synchronisé au compte (publicMetadata.avatarParts), repli localStorage
-  // pour les configs non encore migrées. Se met à jour quand `user` change.
-  useEffect(() => {
-    const fromAccount = user?.publicMetadata?.avatarParts as AvatarConfig | undefined;
-    setAvatarConfig(fromAccount ?? loadAvatarConfig());
-  }, [user]);
+  const [lastWorkshop, setLastWorkshop] = useState<CachedWorkshop | null>(initialWorkshop);
 
   // Synchronise la langue préférée du compte (publicMetadata.locale) avec la
   // locale de l'URL — capture le choix initial ET chaque changement de langue,
@@ -76,39 +72,70 @@ export default function DashboardHeader() {
     }
     let cancelled = false;
     getWorkshop(urlWorkshopId).then((w) => {
-      if (!cancelled) setWorkshop(w ? { name: w.name, role: w.currentUserRole } : null);
+      if (cancelled) return;
+      const info = w ? { name: w.name, role: w.currentUserRole } : null;
+      setWorkshop(info);
+      // On mémorise au passage le contexte pour le profil : y arriver depuis une
+      // page d'atelier n'a alors plus rien à attendre du serveur.
+      if (info) {
+        setLastWorkshop({ id: urlWorkshopId, ...info });
+        saveLastWorkshop(userId, { id: urlWorkshopId, ...info });
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, [urlWorkshopId]);
+  }, [urlWorkshopId, userId]);
 
-  // L'URL du profil ne porte aucun atelier, mais la maquette y garde le
-  // sélecteur et le groupe d'onglets : on rétablit le contexte avec le dernier
-  // atelier visité. Volontairement limité au profil — le Jardin et le tableau de
-  // bord n'appartiennent à aucun atelier et gardent une barre nue.
-  const [lastWorkshop, setLastWorkshop] = useState<({ id: string } & WorkshopHeaderInfo) | null>(null);
+  // Jardin, profil et tableau de bord n'appartiennent à aucun atelier, mais la
+  // barre doit être IDENTIQUE partout où elle est affichée : on y rétablit le
+  // contexte avec le dernier atelier visité, au lieu d'une barre amputée.
+  //
+  // ⚠️ `lastWorkshop` est un SOUVENIR, pas l'état de la page courante : on ne le
+  // vide jamais en changeant de page. Le vider faisait disparaître le groupe
+  // d'onglets le temps de l'aller-retour serveur, puis réapparaître — le
+  // clignotement constaté en changeant de page.
+  //
+  // Le souvenir arrive déjà rempli du cookie (`initialWorkshop`, dès le HTML) :
+  // cet appel ne sert qu'à le rafraîchir en arrière-plan, si le nom ou le rôle a
+  // changé, ou si le cookie n'existait pas encore. Une réponse `null` fait
+  // autorité — plus aucun atelier accessible, on efface le souvenir.
   useEffect(() => {
-    if (urlWorkshopId || !isProfil) {
-      setLastWorkshop(null);
-      return;
-    }
+    if (urlWorkshopId) return;
     let cancelled = false;
     getLastVisitedWorkshop().then((w) => {
-      if (!cancelled) setLastWorkshop(w);
+      if (cancelled) return;
+      setLastWorkshop(w);
+      if (w) saveLastWorkshop(userId, w);
+      else clearLastWorkshop();
     });
     return () => {
       cancelled = true;
     };
-  }, [urlWorkshopId, isProfil]);
+  }, [urlWorkshopId, userId]);
 
+  // Contexte d'atelier de la barre : celui de l'URL sur une page d'atelier, le
+  // dernier visité partout ailleurs. Aucune page où la barre est affichée n'en
+  // est privée — le seul cas sans contexte est un compte qui n'a encore aucun
+  // atelier.
+  //
+  // Sur une page d'atelier, `workshop` repart de `null` à chaque changement
+  // d'`urlWorkshopId` : on retombe entre-temps sur le souvenir quand c'est le
+  // même atelier, sinon le nom dans le sélecteur et l'onglet « examens » (qui
+  // dépend du rôle) disparaîtraient le temps de l'aller-retour serveur.
   const workshopId = urlWorkshopId ?? lastWorkshop?.id ?? null;
-  const activeWorkshop = urlWorkshopId ? workshop : lastWorkshop;
+  const activeWorkshop = urlWorkshopId
+    ? (workshop ?? (lastWorkshop?.id === urlWorkshopId ? lastWorkshop : null))
+    : lastWorkshop;
   const canManage = activeWorkshop?.role === 'owner' || activeWorkshop?.role === 'manager';
 
-  const otherLocale = locale === 'fr' ? 'en' : 'fr';
-  const pathWithoutLocale = pathname.replace(`/${locale}`, '') || '/dashboard';
-  const otherLocalePath = `/${otherLocale}${pathWithoutLocale}`;
+  // Un onglet d'atelier n'est actif que sur une page d'atelier : ailleurs (jardin,
+  // profil, tableau de bord) le groupe est un raccourci, aucun de ses onglets ne
+  // décrit la page courante. Sans ce garde-fou, `activeTab` valant « programme »
+  // par défaut, « parcours » s'allumerait sur le tableau de bord.
+  // Les pages paramètres (et autres sous-pages) d'un atelier ne sont pas des
+  // onglets : « parcours »/« examens » n'y sont pas actifs, l'engrenage l'est.
+  const onWorkshopPage = !!urlWorkshopId && !pathname.includes('/settings');
 
   const tabClass = (active: boolean) =>
     `rounded-full px-4 py-2 text-sm outline-none transition-colors duration-[var(--dur-fast)] ease-[var(--ease-soft)] focus-visible:shadow-[var(--shadow-focus)] ${
@@ -133,13 +160,16 @@ export default function DashboardHeader() {
             <div className="flex flex-[3] items-stretch gap-1 rounded-2xl border border-[var(--line-strong)]">
               <Link
                 href={`/${locale}/workshops/${workshopId}?tab=programme`}
-                className={mobileItemClass(!isJardin && !isProfil && activeTab === 'programme')}
+                className={mobileItemClass(onWorkshopPage && activeTab === 'programme')}
               >
                 <Route size={22} strokeWidth={1.75} />
                 {t('tabParcours')}
               </Link>
               {canManage && (
-                <Link href={`/${locale}/workshops/${workshopId}?tab=examen`} className={mobileItemClass(activeTab === 'examen')}>
+                <Link
+                  href={`/${locale}/workshops/${workshopId}?tab=examen`}
+                  className={mobileItemClass(onWorkshopPage && activeTab === 'examen')}
+                >
                   <FileText size={22} strokeWidth={1.75} />
                   {t('tabExamens')}
                 </Link>
@@ -156,9 +186,13 @@ export default function DashboardHeader() {
           </Link>
         </nav>
       )}
+      {/* `sticky` plutôt que `fixed` : la barre reste dans le flux, donc aucune
+          page n'a besoin d'une compensation de hauteur. Les rares blocs collants
+          des pages (barre latérale des paramètres, colonne de création) ont leur
+          `top` décalé de 60 px en conséquence. */}
       {!isExercise && (
       <header
-        className="hidden items-center gap-6 px-6 md:flex"
+        className="sticky top-0 z-50 hidden items-center gap-6 px-6 md:flex"
         style={{ height: 60, borderBottom: '1px solid var(--line)', background: 'var(--surface-raised)' }}
       >
       <div className="flex min-w-0 flex-1 items-center gap-6">
@@ -190,7 +224,7 @@ export default function DashboardHeader() {
           <div className="flex items-center gap-0.5 rounded-full border border-[var(--line-strong)] px-1.5 py-[5px]">
             <Link
               href={`/${locale}/workshops/${workshopId}?tab=programme`}
-              className={tabClass(!isJardin && !isProfil && activeTab === 'programme')}
+              className={tabClass(onWorkshopPage && activeTab === 'programme')}
             >
               {t('tabParcours')}
             </Link>
@@ -202,7 +236,10 @@ export default function DashboardHeader() {
             {activeWorkshop === null ? (
               <span aria-hidden className={`${tabClass(false)} invisible`}>{t('tabExamens')}</span>
             ) : canManage ? (
-              <Link href={`/${locale}/workshops/${workshopId}?tab=examen`} className={tabClass(activeTab === 'examen')}>
+              <Link
+                href={`/${locale}/workshops/${workshopId}?tab=examen`}
+                className={tabClass(onWorkshopPage && activeTab === 'examen')}
+              >
                 {t('tabExamens')}
               </Link>
             ) : null}
@@ -224,66 +261,15 @@ export default function DashboardHeader() {
 
       <div className="flex flex-1 items-center justify-end gap-3">
         {workshopId && activeWorkshop && (
-          <WorkshopActionsMenu workshopId={workshopId} workshopName={activeWorkshop.name} role={activeWorkshop.role} />
+          <WorkshopActionsMenu workshopId={workshopId} />
         )}
 
+        {/* Pas de vignette d'avatar ici : le seul accès au profil est l'onglet
+            « profil » au centre. Tout ce que portait son menu déroulant (profil,
+            passage Premium, langue, déconnexion) existe déjà sur la page profil,
+            rien n'a été perdu en le retirant. */}
         <NotificationBell />
         <DropletCounter count={PLACEHOLDER_DROPLETS} />
-
-        <div className="relative">
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="flex items-center gap-2 rounded-full outline-none focus-visible:shadow-[var(--shadow-focus)]"
-          >
-            <div className="size-[30px] overflow-hidden rounded-full bg-[var(--surface-sunken)]">
-              {avatarConfig && <AvatarComposer config={avatarConfig} size={30} frame="head" />}
-            </div>
-          </button>
-
-          {menuOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 z-50 mt-2 w-56 rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface-raised)] py-2 shadow-[var(--shadow-lg)]">
-                <div className="px-4 py-1.5 text-sm font-medium text-[var(--ink)]">
-                  {user?.firstName ?? user?.emailAddresses[0]?.emailAddress.split('@')[0]}
-                </div>
-                <Link
-                  href={`/${locale}/profile`}
-                  onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-[var(--ink-body)] hover:bg-[var(--surface-sunken)]"
-                >
-                  <UserCircle size={16} strokeWidth={1.75} />
-                  {t('profile')}
-                </Link>
-                <Link
-                  href={`/${locale}/pricing`}
-                  onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-[var(--gold-600)] hover:bg-[var(--surface-sunken)]"
-                >
-                  <Crown size={16} strokeWidth={1.75} />
-                  {t('goPremium')}
-                </Link>
-                <Link
-                  href={otherLocalePath}
-                  onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-[var(--ink-body)] hover:bg-[var(--surface-sunken)]"
-                >
-                  {t('switchTo', { locale: otherLocale.toUpperCase() })}
-                </Link>
-                <div className="my-1 border-t border-[var(--line)]" />
-                <SignOutButton redirectUrl={`/${locale}`}>
-                  <button
-                    onClick={markIntentionalSignOut}
-                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-[var(--ink-body)] hover:bg-[var(--danger-tint)] hover:text-[var(--danger-strong)]"
-                  >
-                    <LogOut size={16} strokeWidth={1.75} />
-                    {t('signOut')}
-                  </button>
-                </SignOutButton>
-              </div>
-            </>
-          )}
-        </div>
       </div>
     </header>
     )}

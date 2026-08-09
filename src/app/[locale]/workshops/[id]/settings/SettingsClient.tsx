@@ -8,7 +8,8 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { AlertTriangle, Check, ChevronDown, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, Trash2, X } from 'lucide-react';
 import Modal from '@/components/Modal';
-import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, type MemberGroup } from '@/app/actions/workshops';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, leaveWorkshop, type MemberGroup } from '@/app/actions/workshops';
 import type { WorkshopFile } from '@/app/actions/workshopFiles';
 import type { Notion } from '@/app/actions/workshopNotions';
 import type { Chapter } from '@/app/actions/workshopChapters';
@@ -47,7 +48,10 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
   // Propriétaire vs gestionnaire : seul le propriétaire touche à l'argent (Premium)
   // et à la suppression de l'atelier ; le reste est accessible aux deux.
+  // Un membre simple voit une version réduite : section Général seule, nom et
+  // description en lecture seule, QR, et « quitter l'atelier » en zone de danger.
   const isOwner = currentUserRole === 'owner';
+  const isMember = currentUserRole === 'member';
 
   const [activeSection, setActiveSection] = useState<NavSection>('general');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -226,7 +230,27 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
     }
   }
 
-  const visibleNavItems = NAV_ITEMS.filter((item) => item.id !== 'premium' || isOwner);
+  const visibleNavItems = NAV_ITEMS.filter((item) =>
+    isMember ? item.id === 'general' : item.id !== 'premium' || isOwner,
+  );
+
+  // ── Quitter l'atelier (membre et gestionnaire — le propriétaire supprime) ──
+  const [leaveWorkshopOpen, setLeaveWorkshopOpen] = useState(false);
+  const [leavingWorkshop, setLeavingWorkshop] = useState(false);
+  const [leaveWorkshopError, setLeaveWorkshopError] = useState('');
+  const tw = useTranslations('workshop');
+
+  async function handleLeaveWorkshop() {
+    setLeavingWorkshop(true);
+    setLeaveWorkshopError('');
+    const result = await leaveWorkshop(workshopId);
+    if (result.success) {
+      router.push(`/${locale}/dashboard`);
+      return;
+    }
+    setLeavingWorkshop(false);
+    setLeaveWorkshopError(result.error ?? tw('leaveConfirm.error'));
+  }
 
   return (
     <div
@@ -242,22 +266,20 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           centré de l'app (`shellWidth`), la page elle-même occupant toute la
           largeur disponible à l'intérieur. Sans ce conteneur, navigation et
           cartes restaient collées au bord gauche du viewport. */}
-      <div className="mx-auto flex w-full md:gap-7 md:px-6 md:py-8" style={{ maxWidth: 1100 }}>
+      <div className="settings-shell mx-auto flex w-full md:gap-7 md:px-6 md:py-8" style={{ maxWidth: 1100 }}>
       {/* ── Sidebar (ordinateur) ── */}
       <div
-        className="hidden md:flex"
+        className="scroll-panel hidden md:flex"
         style={{
           width: 232,
           flexShrink: 0,
-          position: 'sticky',
-          top: 24,
-          alignSelf: 'flex-start',
-          // Pas d'`overflow` ici : la navigation compte cinq entrées et ne
-          // débordera jamais verticalement, alors qu'un `overflow-y: auto` force
-          // `overflow-x` à `auto` et fait apparaître une barre horizontale dès
-          // qu'un libellé (en `nowrap`) dépasse les 232 px.
+          // Pas de `sticky` : la coquille (.settings-shell) est bornée au
+          // viewport et ne défile pas — la navigation reste en place d'elle-même.
+          // `scroll-panel` (barre masquée) couvre le cas d'un viewport trop bas
+          // pour afficher toutes les entrées : la colonne défile alors seule.
           flexDirection: 'column',
           gap: 0,
+          minHeight: 0,
         }}
       >
         {/* Back link */}
@@ -330,9 +352,9 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         </nav>
       </div>
 
-      {/* ── Main content ── */}
+      {/* ── Main content — seule colonne à défiler (sans barre visible) ── */}
       <div
-        className="px-5 pt-0 pb-10 md:p-0"
+        className="scroll-panel px-5 pt-0 pb-10 md:px-0 md:pt-0 md:pb-4"
         style={{ flex: 1, minWidth: 0, boxSizing: 'border-box' }}
       >
         {/* Sélecteur de section (téléphone) — même système que le changement d'atelier */}
@@ -384,10 +406,25 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         {activeSection === 'general' && (
         <>
         {/* ── 1. Général ── */}
-        <SectionCard
-          title={t('general.title')}
-          description={t('general.desc')}
-        >
+        <SectionCard title={t('general.title')}>
+          {isMember ? (
+            <>
+              {/* Membre simple : nom et description en lecture seule. */}
+              <Row label={t('general.nameLabel')}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: palette.inkSoft }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.04em', color: palette.inkFaint }}>{uniqueTag}</span>
+                  <span style={{ color: palette.lineStrong }}>·</span>
+                  {workshopName}
+                </span>
+              </Row>
+              <Row label={t('general.descLabel')} noBorder>
+                <span style={{ fontSize: 13, color: palette.inkSoft, maxWidth: 300, textAlign: 'right' }}>
+                  {description || '—'}
+                </span>
+              </Row>
+            </>
+          ) : (
+            <>
           <Row label={t('general.nameLabel')}>
             <div
               style={{
@@ -432,7 +469,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             </div>
           </Row>
 
-          <Row label={t('general.descLabel')} hint={t('general.previewHint')}>
+          <Row label={t('general.descLabel')}>
             <textarea
               value={descriptionInput}
               onChange={(e) => setDescriptionInput(e.target.value)}
@@ -453,7 +490,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             />
           </Row>
 
-          <Row label={t('general.coverLabel')} hint={t('general.previewHint')}>
+          <Row label={t('general.coverLabel')}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
               <div style={{ display: 'flex', gap: 8 }}>
                 {COVER_GRADIENT_KEYS.map((key) => (
@@ -544,7 +581,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             </div>
           </Row>
 
-          <Row label={t('general.emojiLabel')} hint={t('general.previewHint')}>
+          <Row label={t('general.emojiLabel')}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {COVER_EMOJIS.map((e) => (
                 <button
@@ -580,18 +617,19 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
               })}
             </span>
           </Row>
+            </>
+          )}
         </SectionCard>
 
         {/* ── 2. Accès & limites ── */}
-        <SectionCard
-          title={t('access.title')}
-          description={t('access.desc')}
-        >
-          <Row label={t('access.showProgramme')}>
-            <Switch value={showProgramme} onChange={setShowProgramme} />
-          </Row>
+        <SectionCard title={t('access.title')}>
+          {!isMember && (
+            <Row label={t('access.showProgramme')}>
+              <Switch value={showProgramme} onChange={setShowProgramme} />
+            </Row>
+          )}
 
-          <Row label={t('access.qr')} hint={t('access.qrHint')} noBorder>
+          <Row label={t('access.qr')} noBorder>
             <button
               onClick={() => setShareOpen(true)}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: 'transparent', border: `1px solid ${palette.lineStrong}`, color: palette.inkMuted, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
@@ -602,23 +640,30 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           </Row>
         </SectionCard>
 
-        {/* ── Zone de danger (suppression) — propriétaire uniquement ── */}
-        {isOwner && (
-        <SectionCard
-          title={t('danger.title')}
-          description={t('danger.desc')}
-        >
-          <Row
-            label={t('danger.deleteLabel')}
-            hint={t('danger.deleteHint')}
-            noBorder
-          >
-            <SmallBtn tone="danger" onClick={() => setDeleteStep('confirm')}>
-              {t('danger.deleteBtn')}
-            </SmallBtn>
-          </Row>
+        {/* ── Zone de danger — supprimer (propriétaire) ou quitter (les autres) ── */}
+        <SectionCard title={t('danger.title')}>
+          {isOwner ? (
+            <Row
+              label={t('danger.deleteLabel')}
+              hint={t('danger.deleteHint')}
+              noBorder
+            >
+              <SmallBtn tone="danger" onClick={() => setDeleteStep('confirm')}>
+                {t('danger.deleteBtn')}
+              </SmallBtn>
+            </Row>
+          ) : (
+            <Row
+              label={t('danger.leaveLabel')}
+              hint={t('danger.leaveHint')}
+              noBorder
+            >
+              <SmallBtn tone="danger" onClick={() => setLeaveWorkshopOpen(true)}>
+                {tw('leaveBtn')}
+              </SmallBtn>
+            </Row>
+          )}
         </SectionCard>
-        )}
         </>
         )}
 
@@ -631,7 +676,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         </div>
 
         <div style={{ display: activeSection === 'notions' ? 'contents' : 'none' }}>
-          <NotionsSection workshopId={workshopId} notions={notions} chapters={chapters} onManageFiles={() => setActiveSection('files')} />
+          <NotionsSection workshopId={workshopId} notions={notions} chapters={chapters} />
         </div>
 
         {isOwner && (
@@ -898,6 +943,26 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
       {/* Share / QR modal */}
       <ShareQRModal open={shareOpen} onClose={() => setShareOpen(false)} title={workshopName} url={joinUrl} />
+
+      {/* ── Confirmation « quitter l'atelier » (non-propriétaire) ── */}
+      {leaveWorkshopOpen && (
+        <ConfirmDialog
+          width={420}
+          title={tw('leaveConfirm.title')}
+          description={
+            <>
+              {tw('leaveConfirm.desc', { name: workshopName })}
+              {leaveWorkshopError && <div style={{ color: 'var(--danger)', marginTop: 8 }}>{leaveWorkshopError}</div>}
+            </>
+          }
+          confirmLabel={leavingWorkshop ? '…' : tw('leaveConfirm.confirm')}
+          cancelLabel={tw('leaveConfirm.cancel')}
+          onCancel={() => {
+            if (!leavingWorkshop) setLeaveWorkshopOpen(false);
+          }}
+          onConfirm={handleLeaveWorkshop}
+        />
+      )}
 
       {/* ── Modale « modifications non enregistrées » ── */}
       {showLeaveConfirm && (

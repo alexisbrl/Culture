@@ -4,7 +4,7 @@ import { palette, ink, withAlpha } from '@/lib/theme';
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Check, PenLine } from 'lucide-react';
+
 
 // ─── Types ────────────────────────────────────────────────────────────────
 //
@@ -22,28 +22,28 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   audio: 'Audio',
 };
 
-export const RESPONSE_TYPE_LABELS: Record<ResponseType, string> = {
-  sans_reponse: 'Sans réponse',
-  qcs: 'QCS',
-  qcm: 'QCM',
-  textuelle: 'Textuelle',
-  dessin: 'Dessin',
-  audio: 'Audio',
-  sondage: 'Sondage',
-  fill_blank: 'Texte à trous',
-  matching: 'Matching',
-  ordre: "Trier dans l'ordre",
-};
-
-const RESPONSE_TYPE_ORDER: ResponseType[] = [
-  'textuelle', 'qcm', 'qcs', 'fill_blank', 'matching', 'ordre', 'dessin', 'audio', 'sondage', 'sans_reponse',
+// Ces constantes et les briques de formulaire plus bas sont partagées avec
+// l'éditeur en ligne de la feuille d'examen (`examen/InlineQuestionEditor`) :
+// une seule définition des types, des règles et du rendu des champs.
+//
+// `qcs` est volontairement absent de l'ordre du menu : c'est la variante
+// « réponse unique » de `qcm`, basculée par une pilule (voir `ResponseType`).
+export const RESPONSE_TYPE_ORDER: ResponseType[] = [
+  'qcm', 'textuelle', 'liste', 'tableau', 'matching', 'dessin', 'fichier', 'audio', 'sans_reponse',
 ];
 
-const CHOICE_BASED: ResponseType[] = ['qcs', 'qcm', 'sondage', 'matching', 'ordre'];
+export const CHOICE_BASED: ResponseType[] = ['qcs', 'qcm', 'matching'];
 
 // Types disponibles en V2 uniquement — affichés mais désactivés (badge V2)
-const QUESTION_TYPE_V2: QuestionType[] = ['visuel', 'audio'];
-const RESPONSE_TYPE_V2: ResponseType[] = ['dessin', 'audio', 'fill_blank', 'matching', 'ordre'];
+export const QUESTION_TYPE_V2: QuestionType[] = ['visuel', 'audio'];
+// Plus aucun type n'est différé : les neuf entrées du menu ont toutes leur bloc
+// d'édition et leur espace de réponse sur la copie (09/08/2026). La constante
+// reste pour ne pas casser ses consommateurs et pour un futur type différé.
+export const RESPONSE_TYPE_V2: ResponseType[] = [];
+
+export function emptyPart(): QuestionPart {
+  return { content: '', responseType: 'sans_reponse', answer: '', choices: [], correctChoices: [], shuffleChoices: false, textLines: 4, answerOptional: false, difficulty: { enabled: false, value: 3 }, duration: { enabled: false, minutes: 2, seconds: 0 } };
+}
 
 export function emptyQuestion(): Question {
   return {
@@ -72,7 +72,7 @@ export function emptyQuestion(): Question {
 
 // ─── Small building blocks (cohérents avec le design system du projet) ─────
 
-function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: React.ReactNode }) {
+export function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 8 }}>
       <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase' as const, color: palette.inkFaint }}>{children}</div>
@@ -81,7 +81,7 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: Reac
   );
 }
 
-function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { value: T; label: string; soon?: boolean }[] }) {
+export function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { value: T; label: string; soon?: boolean }[] }) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
       {options.map((o) => {
@@ -112,7 +112,7 @@ function Segmented<T extends string>({ value, onChange, options }: { value: T; o
   );
 }
 
-function MiniSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+export function MiniSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
       onClick={() => onChange(!value)}
@@ -128,7 +128,7 @@ function MiniSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean
   );
 }
 
-function TextField({ value, onChange, placeholder, multiline, rows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; multiline?: boolean; rows?: number }) {
+export function TextField({ value, onChange, placeholder, multiline, rows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; multiline?: boolean; rows?: number }) {
   const style: React.CSSProperties = {
     width: '100%', fontSize: 13, color: palette.ink, border: `1px solid ${ink(0.12)}`,
     borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none',
@@ -140,7 +140,7 @@ function TextField({ value, onChange, placeholder, multiline, rows = 3 }: { valu
   return <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={style} />;
 }
 
-function DifficultyDurationFields({
+export function DifficultyDurationFields({
   difficulty,
   duration,
   onDifficultyChange,
@@ -193,22 +193,29 @@ function SectionDivider({ title }: { title: string }) {
   );
 }
 
-// ─── Choice list editor (QCS / QCM / Sondage / Matching / Trier dans l'ordre) ─
-
-function ChoiceListEditor({
+// ─── Choice list editor (QCM, variante « réponse unique » comprise, et matching) ─
+//
+// `hideAddButton` : l'éditeur en ligne de la feuille d'examen place son propre
+// « + ajouter une réponse » sur la même rangée que les pilules de réglage
+// (maquette, l.1113-1119). Le popup du Parcours garde le bouton intégré.
+//
+// Pas de réordonnancement des réponses (09/08/2026) : la poignée de glisser-
+// déposer a été retirée. L'ordre d'affichage sur la copie relève de « ordre
+// aléatoire », pas d'un classement fixé à la main dans l'éditeur.
+export function ChoiceListEditor({
   responseType,
   choices,
   correctChoices,
   onChange,
+  hideAddButton = false,
 }: {
   responseType: ResponseType;
   choices: string[];
   correctChoices: number[];
   onChange: (choices: string[], correctChoices: number[]) => void;
+  hideAddButton?: boolean;
 }) {
   const t = useTranslations('examen');
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dropIndicator, setDropIndicator] = useState<number | null>(null);
 
   function updateChoice(i: number, value: string) {
     const next = [...choices];
@@ -226,42 +233,17 @@ function ChoiceListEditor({
     onChange(next, nextCorrect);
   }
 
-  function move(i: number, dir: -1 | 1) {
-    const j = i + dir;
-    if (j < 0 || j >= choices.length) return;
-    const next = [...choices];
-    [next[i], next[j]] = [next[j], next[i]];
-    const remap = (c: number) => (c === i ? j : c === j ? i : c);
-    onChange(next, correctChoices.map(remap));
-  }
-
-  function reorderInsert(from: number, insertBefore: number) {
-    if (insertBefore === from || insertBefore === from + 1) return;
-    const next = [...choices];
-    const [item] = next.splice(from, 1);
-    const to = from < insertBefore ? insertBefore - 1 : insertBefore;
-    next.splice(to, 0, item);
-    const remap = (c: number) => {
-      if (c === from) return to;
-      if (from < to) return c > from && c <= to ? c - 1 : c;
-      return c >= to && c < from ? c + 1 : c;
-    };
-    onChange(next, correctChoices.map(remap));
-  }
-
   function toggleCorrect(i: number) {
     if (responseType === 'qcs') {
       onChange(choices, correctChoices.includes(i) ? [] : [i]);
-    } else if (responseType === 'qcm' || responseType === 'sondage') {
+    } else if (responseType === 'qcm') {
       const has = correctChoices.includes(i);
       onChange(choices, has ? correctChoices.filter((c) => c !== i) : [...correctChoices, i]);
     }
   }
 
-  const showOrder = responseType === 'ordre';
   const showPairs = responseType === 'matching';
   const showCorrectMarker = responseType === 'qcs' || responseType === 'qcm';
-  const showFreeTextMarker = responseType === 'sondage';
 
   return (
     <div>
@@ -271,80 +253,23 @@ function ChoiceListEditor({
         </div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {choices.map((c, i) => {
-          const showLineBefore = dragIndex !== null && dragIndex !== i && dragIndex !== i - 1 && dropIndicator === i;
-          return (
+        {choices.map((c, i) => (
           <div key={i} style={{ marginBottom: 7 }}>
-            <div style={{
-              height: showLineBefore ? 3 : 0,
-              background: palette.amber,
-              borderRadius: 2,
-              margin: showLineBefore ? '0 0 4px' : '0',
-              transition: 'all 0.1s',
-            }} />
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              if (dragIndex === null) return;
-              const rect = e.currentTarget.getBoundingClientRect();
-              const before = (e.clientY - rect.top) < rect.height / 2;
-              setDropIndicator(before ? i : i + 1);
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (dragIndex !== null && dropIndicator !== null) reorderInsert(dragIndex, dropIndicator);
-              setDragIndex(null);
-              setDropIndicator(null);
-            }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              opacity: dragIndex === i ? 0.4 : 1,
-              borderRadius: 9,
-              transition: 'opacity 0.12s',
-            }}
-          >
-            <span
-              draggable
-              onDragStart={() => setDragIndex(i)}
-              onDragEnd={() => { setDragIndex(null); setDropIndicator(null); }}
-              title={t('choices.dragReorder')}
-              style={{ cursor: 'grab', color: palette.lineStrong, fontSize: 13, lineHeight: 1, padding: '0 2px', flexShrink: 0, userSelect: 'none' as const }}
-            >
-              ⠿
-            </span>
-            {showOrder && (
-              <span style={{ fontSize: 11, color: palette.inkFaint, fontVariantNumeric: 'tabular-nums', width: 18, textAlign: 'center' as const }}>{i + 1}</span>
-            )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {showCorrectMarker && (
+              /* Exactement la case du type « tableau » : 22px, pastille pleine
+                 par ombre interne, ronde quand une seule réponse est permise. */
               <button
                 onClick={() => toggleCorrect(i)}
                 title={responseType === 'qcs' ? t('choices.correctUnique') : t('choices.correct')}
                 style={{
-                  width: 20, height: 20, borderRadius: responseType === 'qcs' ? '50%' : 6, flexShrink: 0,
-                  border: correctChoices.includes(i) ? 'none' : `1.5px solid ${ink(0.18)}`,
-                  background: correctChoices.includes(i) ? palette.greenSoft : palette.paper,
-                  color: palette.paper, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 11, cursor: 'pointer', padding: 0,
+                  width: 22, height: 22, flexShrink: 0, boxSizing: 'border-box' as const,
+                  borderRadius: responseType === 'qcs' ? 999 : 6, cursor: 'pointer', padding: 0,
+                  border: correctChoices.includes(i) ? 'none' : `1.5px solid ${palette.lineStrong}`,
+                  boxShadow: correctChoices.includes(i) ? `inset 0 0 0 7px ${palette.green}` : 'none',
+                  background: palette.surfaceRaised,
                 }}
-              >
-                {correctChoices.includes(i) && <Check size={12} strokeWidth={2.5} />}
-              </button>
-            )}
-            {showFreeTextMarker && (
-              <button
-                onClick={() => toggleCorrect(i)}
-                title={t('choices.freeTextMarker')}
-                style={{
-                  width: 20, height: 20, borderRadius: 6, flexShrink: 0,
-                  border: correctChoices.includes(i) ? 'none' : `1.5px solid ${ink(0.18)}`,
-                  background: correctChoices.includes(i) ? palette.amber : palette.paper,
-                  color: correctChoices.includes(i) ? palette.paper : ink(0.25),
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 10.5, cursor: 'pointer', padding: 0,
-                }}
-              >
-                <PenLine size={11} strokeWidth={2} />
-              </button>
+              />
             )}
             {showPairs ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
@@ -352,48 +277,20 @@ function ChoiceListEditor({
                 <span style={{ fontSize: 12, color: palette.inkFaint }}>→</span>
                 <TextField value={c.split(' :: ')[1] ?? ''} onChange={(v) => updateChoice(i, `${c.split(' :: ')[0] ?? ''} :: ${v}`)} placeholder={t('choices.pairRight')} />
               </div>
-            ) : showFreeTextMarker && correctChoices.includes(i) ? (
-              <div style={{
-                flex: 1, fontSize: 13, color: palette.amber, border: `1px solid ${ink(0.12)}`,
-                borderRadius: 9, padding: '9px 12px', background: ink(0.03),
-                fontFamily: 'inherit', boxSizing: 'border-box' as const, fontStyle: 'italic',
-              }}>
-                {t('choices.freeInput')}
-              </div>
             ) : (
               <div style={{ flex: 1 }}>
                 <TextField value={c} onChange={(v) => updateChoice(i, v)} placeholder={t('choices.option', { n: i + 1 })} />
               </div>
             )}
-            {showOrder && (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <button onClick={() => move(i, -1)} disabled={i === 0} style={{ border: 'none', background: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? palette.line : palette.inkSoft, padding: 0, lineHeight: 1, fontSize: 11 }}>▲</button>
-                <button onClick={() => move(i, 1)} disabled={i === choices.length - 1} style={{ border: 'none', background: 'none', cursor: i === choices.length - 1 ? 'default' : 'pointer', color: i === choices.length - 1 ? palette.line : palette.inkSoft, padding: 0, lineHeight: 1, fontSize: 11 }}>▼</button>
-              </div>
-            )}
             <button onClick={() => removeChoice(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: palette.danger, fontSize: 16, padding: '0 2px', lineHeight: 1 }}>×</button>
           </div>
           </div>
-          );
-        })}
-        {(() => {
-          const showLineAfter = dragIndex !== null && dragIndex !== choices.length - 1 && dropIndicator === choices.length;
-          return (
-            <div style={{
-              height: showLineAfter ? 3 : 0,
-              background: palette.amber,
-              borderRadius: 2,
-              margin: showLineAfter ? '0 0 4px' : '0',
-              transition: 'all 0.1s',
-            }} />
-          );
-        })()}
+        ))}
       </div>
-      <button onClick={addChoice} style={{ marginTop: 10, fontSize: 12, padding: '7px 12px', borderRadius: 8, border: `1px dashed ${ink(0.20)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>
-        {showPairs ? t('choices.addPair') : t('choices.addOption')}
-      </button>
-      {(responseType === 'qcs' || responseType === 'qcm') && choices.length > 0 && correctChoices.length === 0 && (
-        <div style={{ fontSize: 11.5, color: palette.danger, marginTop: 8 }}>{t('choices.needCorrect')}</div>
+      {!hideAddButton && (
+        <button onClick={addChoice} style={{ marginTop: 10, fontSize: 12, padding: '7px 12px', borderRadius: 8, border: `1px dashed ${ink(0.20)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>
+          {showPairs ? t('choices.addPair') : t('choices.addOption')}
+        </button>
       )}
     </div>
   );
@@ -432,7 +329,7 @@ export default function QuestionEditor({
   const isNew = !allQuestions.some((q) => q.id === question.id);
   const canSave = draft.content.trim().length > 0;
   const isChoiceBased = CHOICE_BASED.includes(draft.responseType);
-  const hasAnswerField = !['sans_reponse', 'sondage'].includes(draft.responseType) && !isChoiceBased;
+  const hasAnswerField = draft.responseType !== 'sans_reponse' && !isChoiceBased;
 
   function patch(p: Partial<Question>) {
     setDraft((d) => ({ ...d, ...p }));
@@ -453,10 +350,6 @@ export default function QuestionEditor({
     patch({ pools: [...draft.pools, id] });
     setNewPoolName('');
     setCreatingPool(false);
-  }
-
-  function emptyPart(): QuestionPart {
-    return { content: '', responseType: 'sans_reponse', answer: '', choices: [], correctChoices: [], shuffleChoices: false, textLines: 4, answerOptional: false, difficulty: { enabled: false, value: 3 }, duration: { enabled: false, minutes: 2, seconds: 0 } };
   }
 
   function patchPart(idx: number, p: Partial<QuestionPart>) {
@@ -512,7 +405,7 @@ export default function QuestionEditor({
 
           {/* contenu */}
           <div style={{ marginTop: 18 }}>
-            <FieldLabel hint={draft.responseType === 'fill_blank' ? t('editor.contentHintFill') : undefined}>{t('editor.contentLabel')}</FieldLabel>
+            <FieldLabel>{t('editor.contentLabel')}</FieldLabel>
             <TextField value={draft.content} onChange={(v) => patch({ content: v })} placeholder={t('editor.contentPlaceholder')} multiline rows={4} />
           </div>
 
@@ -531,17 +424,10 @@ export default function QuestionEditor({
             <div style={{ marginTop: 14 }}>
               <FieldLabel hint={
                 draft.responseType === 'qcs' ? t('editor.hintQcs') :
-                draft.responseType === 'qcm' ? t('editor.hintQcm') :
-                draft.responseType === 'sondage' ? (
-                  <>
-                    {t('editor.hintSurveyA')}
-                    {draft.choices.length > 0 && <><br />{t('editor.hintSurveyB')}</>}
-                  </>
-                ) :
                 draft.responseType === 'matching' ? t('editor.hintMatching') :
-                t('editor.hintOrder')
+                t('editor.hintQcm')
               }>
-                {draft.responseType === 'matching' ? t('editor.choicesPairs') : draft.responseType === 'ordre' ? t('editor.choicesOrder') : t('editor.choicesOptions')}
+                {draft.responseType === 'matching' ? t('editor.choicesPairs') : t('editor.choicesOptions')}
               </FieldLabel>
               <ChoiceListEditor
                 responseType={draft.responseType}
@@ -549,7 +435,7 @@ export default function QuestionEditor({
                 correctChoices={draft.correctChoices}
                 onChange={(choices, correctChoices) => patch({ choices, correctChoices })}
               />
-              {(draft.responseType === 'qcs' || draft.responseType === 'qcm' || draft.responseType === 'sondage') && (
+              {(draft.responseType === 'qcs' || draft.responseType === 'qcm') && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
                   <FieldLabel hint={t('editor.shuffleHint')}>{t('editor.shuffleLabel')}</FieldLabel>
                   <MiniSwitch value={draft.shuffleChoices} onChange={(v) => patch({ shuffleChoices: v })} />
@@ -563,12 +449,11 @@ export default function QuestionEditor({
               {!(draft.responseType === 'textuelle' && draft.answerOptional) && (
                 <>
                   <FieldLabel hint={
-                    draft.responseType === 'fill_blank' ? t('editor.answerHintFill') :
                     draft.responseType === 'dessin' ? t('editor.answerHintDessin') :
                     draft.responseType === 'audio' ? t('editor.answerHintAudio') :
                     t('editor.answerHintDefault')
                   }>
-                    {draft.responseType === 'fill_blank' ? t('editor.answerLabelFill') : t('editor.answerLabelDefault')}
+                    {t('editor.answerLabelDefault')}
                   </FieldLabel>
                   <TextField value={draft.answer} onChange={(v) => patch({ answer: v })} placeholder={t('editor.answerPlaceholder')} multiline rows={3} />
                 </>
@@ -611,7 +496,7 @@ export default function QuestionEditor({
           </div>
           {draft.parts.map((part, idx) => {
             const partChoiceBased = CHOICE_BASED.includes(part.responseType);
-            const partHasAnswer = !['sans_reponse', 'sondage'].includes(part.responseType) && !partChoiceBased;
+            const partHasAnswer = part.responseType !== 'sans_reponse' && !partChoiceBased;
             return (
               <div key={idx} style={{ marginBottom: 14, padding: '14px 16px', borderRadius: 12, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.55) }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -630,9 +515,9 @@ export default function QuestionEditor({
                 </div>
                 {partChoiceBased && (
                   <div style={{ marginTop: 12 }}>
-                    <FieldLabel>{part.responseType === 'matching' ? t('editor.choicesPairs') : part.responseType === 'ordre' ? t('editor.choicesOrder') : t('editor.choicesOptions')}</FieldLabel>
+                    <FieldLabel>{part.responseType === 'matching' ? t('editor.choicesPairs') : t('editor.choicesOptions')}</FieldLabel>
                     <ChoiceListEditor responseType={part.responseType} choices={part.choices} correctChoices={part.correctChoices} onChange={(choices, correctChoices) => patchPart(idx, { choices, correctChoices })} />
-                    {(part.responseType === 'qcs' || part.responseType === 'qcm' || part.responseType === 'sondage') && (
+                    {(part.responseType === 'qcs' || part.responseType === 'qcm') && (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
                         <FieldLabel hint={t('editor.shuffleHint')}>{t('editor.shuffleLabel')}</FieldLabel>
                         <MiniSwitch value={part.shuffleChoices} onChange={(v) => patchPart(idx, { shuffleChoices: v })} />

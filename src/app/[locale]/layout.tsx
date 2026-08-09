@@ -6,6 +6,7 @@ import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { ClerkProvider } from '@clerk/nextjs';
 import { auth } from '@clerk/nextjs/server';
+import { cookies } from 'next/headers';
 import { frFR, enUS } from '@clerk/localizations';
 import { routing } from '@/i18n/routing';
 import '../globals.css';
@@ -13,6 +14,7 @@ import Navbar from '@/components/Navbar';
 import DashboardHeader from '@/components/DashboardHeader';
 import Footer from '@/components/Footer';
 import SessionWatcher from '@/components/SessionWatcher';
+import { LAST_WORKSHOP_COOKIE, parseLastWorkshop } from '@/lib/lastWorkshopCache';
 
 const hankenGrotesk = Hanken_Grotesk({
   variable: '--font-sans',
@@ -53,6 +55,9 @@ export default async function LocaleLayout({ children, params }: Props) {
   const clerkLocalization = locale === 'fr' ? frFR : enUS;
   const { userId } = await auth();
   const isLoggedIn = !!userId;
+  const lastWorkshop = isLoggedIn
+    ? parseLastWorkshop((await cookies()).get(LAST_WORKSHOP_COOKIE)?.value, userId)
+    : null;
 
   return (
     <ClerkProvider localization={clerkLocalization}>
@@ -62,7 +67,11 @@ export default async function LocaleLayout({ children, params }: Props) {
             <SessionWatcher />
             {isLoggedIn ? (
               <Suspense fallback={<div style={{ height: 60, borderBottom: '1px solid var(--line)', background: 'var(--surface-raised)' }} className="hidden md:block" />}>
-                <DashboardHeader />
+                {/* Contexte d'atelier passé dès le HTML : `userId` vient de
+                    l'`auth()` déjà fait plus haut et le dernier atelier d'un
+                    cookie déjà présent dans la requête — aucune requête base en
+                    plus, et le groupe d'onglets ne « pope » plus après coup. */}
+                <DashboardHeader userId={userId} initialWorkshop={lastWorkshop} />
               </Suspense>
             ) : (
               <Navbar />

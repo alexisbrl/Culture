@@ -2,15 +2,22 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { Check, ChevronDown, ChevronUp, Copy, Filter, Pencil, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
-import { palette, shadow, withAlpha } from '@/lib/theme';
+import { Link2, Pencil, Trash2 } from 'lucide-react';
+import { palette, shadow, withAlpha, ink, inkOn } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { type Question, type ResponseType } from '../QuestionEditor';
 import {
   type Pool, type Exam, type SortBy, type SortDir,
-  DEFAULT_SORT_DIR, NEVER_EXAM_ID, NO_DIFFICULTY, NO_ANSWER_ID, LABEL_COLORS,
-  hasNoAnswer, DiffDots, TypePill, Diff, IconBtn, ActiveChip,
+  DEFAULT_SORT_DIR, NEVER_EXAM_ID, LABEL_COLORS, CARD_LINE, CARD_ACTION_BTN,
+  TypeIcon, IconBtn, ActiveChip, ListToolbar, FilterButton, ListCard,
 } from './examShared';
+
+// Filtre « sans chapitre » : les questions dont aucune notion associée n'est
+// rattachée à un chapitre (y compris celles sans notion du tout).
+const NO_CHAPTER_ID = '__nochapter__';
+
+// critères de tri proposés par la banque de questions
+const BANK_SORTS: readonly SortBy[] = ['recent', 'name', 'type', 'label'];
 
 // ---- BANK — barre d'outils identique à T35 (recherche/tri/filtres toujours
 // visibles), lignes de questions en mode dense : la carte entière envoie la
@@ -22,45 +29,35 @@ import {
 // (`getExamBankData`, `.eq('context','exam')`), rien à filtrer ici. ----
 type FilterMode = 'pos' | 'neg';
 
-function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onEditQuestion, onNewQuestion, onSendOne, onCreatePool, onUpdatePool, onDeletePool, onDuplicateQuestion, onDeleteQuestion }: {
+// Gabarit de carte (`CARD_*`) et titre coupé à deux lignes (`ClampedTitle`) :
+// voir `examShared` — la liste d'examens suit exactement la même trame.
+const CARD_DRAFT_TINT = withAlpha(palette.green, 0.08); // teinte de la carte déjà posée sur la feuille
+
+function BankContent({ questions, pools, exams, notions, chapters, draftIds, editingQuestionId, openId, setOpenId, onEditQuestion, onNewQuestion, onToggleInExam, onCreatePool, onUpdatePool, onDeletePool, onDeleteQuestion }: {
   questions: Question[];
   pools: Pool[];
   exams: Exam[];
+  notions: { id: string; title: string; chapterId: string | null }[];
+  chapters: { id: string; name: string }[];
   draftIds: string[];
+  editingQuestionId: string | null;
   openId: string | null;
   setOpenId: (id: string | null) => void;
   onEditQuestion: (q: Question) => void;
   onNewQuestion: () => void;
-  onSendOne: (id: string) => void;
+  onToggleInExam: (id: string) => void;
   onCreatePool: (name: string) => string;
   onUpdatePool: (pool: Pool) => void;
   onDeletePool: (id: string) => void;
-  onDuplicateQuestion: (q: Question) => void;
   onDeleteQuestion: (q: Question) => void;
 }) {
   const tr = useTranslations('examen');
-  function answerSummary(q: { responseType: ResponseType; answer: string; choices: string[]; correctChoices: number[]; answerOptional?: boolean }): string {
-    if (q.responseType === 'qcm' || q.responseType === 'qcs') {
-      const correct = q.correctChoices.map((i) => q.choices[i]).filter(Boolean);
-      return correct.length ? correct.join(' · ') : tr('answer.noCorrectChoice');
-    }
-    if (q.responseType === 'matching') return q.choices.map((c) => c.replace(' :: ', ' → ')).join(' · ') || tr('answer.noPairs');
-    if (q.responseType === 'ordre') return q.choices.join(' → ') || tr('answer.noOrder');
-    if (q.responseType === 'sans_reponse') return tr('answer.none');
-    if (q.responseType === 'sondage') {
-      const freeText = q.correctChoices.map((i) => q.choices[i]).filter(Boolean);
-      return freeText.length ? tr('answer.surveyFree', { choices: freeText.join(' · ') }) : tr('answer.surveyNoCorrection');
-    }
-    if (q.responseType === 'textuelle' && q.answerOptional) return tr('answer.freeNoCorrection');
-    return q.answer || tr('answer.notSet');
-  }
   const qTypeLabel = (qt: string): string => qt === 'textuel' ? tr('questionType.textuel') : qt === 'visuel' ? tr('questionType.visuel') : qt === 'audio' ? tr('questionType.audio') : qt;
   const [filterQTypes, setFilterQTypes] = useState<string[]>([]);
   const [filterPools, setFilterPools] = useState<string[]>([]);
   const [filterTypes, setFilterTypes] = useState<ResponseType[]>([]);
-  const [filterDiffs, setFilterDiffs] = useState<number[]>([]);
+  const [filterChapters, setFilterChapters] = useState<string[]>([]);
   const [filterExams, setFilterExams] = useState<string[]>([]);
-  const [filterAnswer, setFilterAnswer] = useState<string[]>([]);
   const [filterModes, setFilterModes] = useState<Record<string, FilterMode>>({});
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
   const [dragOverZone, setDragOverZone] = useState<FilterMode | null>(null);
@@ -83,7 +80,21 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
 
   const allQTypes = Array.from(new Set(questions.map(q => q.questionType)));
   const allTypes = Array.from(new Set(questions.map(q => q.responseType)));
-  const activeFilterCount = filterQTypes.length + filterPools.length + filterTypes.length + filterDiffs.length + filterExams.length + filterAnswer.length;
+  const activeFilterCount = filterQTypes.length + filterPools.length + filterTypes.length + filterChapters.length + filterExams.length;
+
+  // Chapitre(s) d'une question = ceux de ses notions associées. La table de
+  // correspondance est construite une fois pour toutes les questions plutôt
+  // qu'un `find` par notion et par question.
+  const chapterOfNotion = new Map(notions.map(n => [n.id, n.chapterId]));
+  const chaptersOfQuestion = (q: Question): Set<string> => {
+    const set = new Set<string>();
+    for (const nid of q.notionIds ?? []) {
+      const cid = chapterOfNotion.get(nid);
+      if (cid) set.add(cid);
+    }
+    if (set.size === 0) set.add(NO_CHAPTER_ID);
+    return set;
+  };
 
   useEffect(() => {
     if (!filterOpen) return;
@@ -118,9 +129,9 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
     setFilterTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
     clearMode(`type:${t}`);
   }
-  function toggleDiffFilter(d: number) {
-    setFilterDiffs(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
-    clearMode(`diff:${d}`);
+  function toggleChapterFilter(id: string) {
+    setFilterChapters(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    clearMode(`chapter:${id}`);
   }
   function toggleExamFilter(id: string) {
     setFilterExams(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -128,10 +139,6 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
   }
   function toggleQTypeFilter(qt: string) {
     setFilterQTypes(prev => prev.includes(qt) ? prev.filter(x => x !== qt) : [...prev, qt]);
-  }
-  function toggleAnswerFilter(id: string) {
-    setFilterAnswer(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-    clearMode(`answer:${id}`);
   }
   function setFilterMode(key: string, mode: FilterMode) {
     setFilterModes(prev => ({ ...prev, [key]: mode }));
@@ -147,9 +154,8 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
     setFilterQTypes([]);
     setFilterPools([]);
     setFilterTypes([]);
-    setFilterDiffs([]);
+    setFilterChapters([]);
     setFilterExams([]);
-    setFilterAnswer([]);
     setFilterModes({});
   }
   function addLabel() {
@@ -188,31 +194,26 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
   const negPools = filterPools.filter(id => modeOf(`pool:${id}`) === 'neg');
   const posTypes = filterTypes.filter(t => modeOf(`type:${t}`) === 'pos');
   const negTypes = filterTypes.filter(t => modeOf(`type:${t}`) === 'neg');
-  const posDiffs = filterDiffs.filter(d => modeOf(`diff:${d}`) === 'pos');
-  const negDiffs = filterDiffs.filter(d => modeOf(`diff:${d}`) === 'neg');
+  const posChapters = filterChapters.filter(c => modeOf(`chapter:${c}`) === 'pos');
+  const negChapters = filterChapters.filter(c => modeOf(`chapter:${c}`) === 'neg');
   const posExams = filterExams.filter(e => modeOf(`exam:${e}`) === 'pos');
   const negExams = filterExams.filter(e => modeOf(`exam:${e}`) === 'neg');
-  const posAnswer = filterAnswer.filter(a => modeOf(`answer:${a}`) === 'pos');
-  const negAnswer = filterAnswer.filter(a => modeOf(`answer:${a}`) === 'neg');
 
   let filtered = questions.filter(q => {
     const qPools = new Set(q.pools);
     const qExamIds = new Set(q.examIds);
-    const qDiff = q.difficulty.enabled ? q.difficulty.value : NO_DIFFICULTY;
+    const qChapters = chaptersOfQuestion(q);
     const neverExam = q.examIds.length === 0;
-    const noAnswer = hasNoAnswer(q);
 
     if (filterQTypes.length && !filterQTypes.includes(q.questionType)) return false;
     if (posPools.length && !posPools.some(p => qPools.has(p))) return false;
     if (negPools.length && negPools.some(p => qPools.has(p))) return false;
     if (posTypes.length && !posTypes.some(t => t === q.responseType)) return false;
     if (negTypes.length && negTypes.some(t => t === q.responseType)) return false;
-    if (posDiffs.length && !posDiffs.some(d => d === qDiff)) return false;
-    if (negDiffs.length && negDiffs.some(d => d === qDiff)) return false;
+    if (posChapters.length && !posChapters.some(c => qChapters.has(c))) return false;
+    if (negChapters.length && negChapters.some(c => qChapters.has(c))) return false;
     if (posExams.length && !posExams.some(f => f === NEVER_EXAM_ID ? neverExam : qExamIds.has(f))) return false;
     if (negExams.length && negExams.some(f => f === NEVER_EXAM_ID ? neverExam : qExamIds.has(f))) return false;
-    if (posAnswer.length && !posAnswer.some(f => f === NO_ANSWER_ID ? noAnswer : true)) return false;
-    if (negAnswer.length && negAnswer.some(f => f === NO_ANSWER_ID ? noAnswer : false)) return false;
     if (search.trim() && !(q.title + ' ' + q.content + ' ' + q.answer).toLowerCase().includes(search.trim().toLowerCase())) return false;
     return true;
   });
@@ -220,8 +221,6 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
   filtered = [...filtered].sort((a, b) => {
     const dir = sortDir === 'asc' ? 1 : -1;
     switch (sortBy) {
-      case 'difficulty':
-        return dir * ((a.difficulty.enabled ? a.difficulty.value : -1) - (b.difficulty.enabled ? b.difficulty.value : -1));
       case 'name':
         return dir * (a.title.trim() || a.content).localeCompare(b.title.trim() || b.content);
       case 'type':
@@ -242,109 +241,73 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
     const open = openId === q.id;
     const hasParts = q.parts.length > 0;
     const inDraft = draftIds.includes(q.id);
+    // Question déjà ouverte dans le formulaire en ligne : le crayon devient le
+    // bouton d'annulation de cette modification (icône et liseré verts).
+    const isEditing = editingQuestionId === q.id;
     return (
-      <div
+      <ListCard
         key={q.id}
-        onClick={() => onSendOne(q.id)}
-        style={{
-          cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', borderRadius: 12,
-          background: inDraft ? withAlpha(palette.green, 0.08) : palette.surfaceRaised,
-          border: inDraft ? `1px solid ${palette.greenSoft}` : `1px solid ${palette.line}`,
-        }}
+        onClick={() => onToggleInExam(q.id)}
+        tint={inDraft ? CARD_DRAFT_TINT : undefined}
+        borderColor={inDraft ? palette.greenSoft : undefined}
+        title={q.title.trim() || q.content || tr('noStatement')}
+        /* Les icônes tiennent sur la hauteur d'une ligne et ne décalent que la
+           première (`indent`), donc la deuxième repart au ras du bord gauche. */
+        indent={hasParts ? 2 * CARD_LINE + 10 : CARD_LINE + 6}
+        leading={
+          <>
+            <TypeIcon type={q.responseType} size={CARD_LINE - 8} />
+            {hasParts && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setOpenId(open ? null : q.id); }}
+                title={open ? tr('bank.hideParts') : tr('bank.showParts', { count: q.parts.length + 1 })}
+                style={{ flexShrink: 0, width: CARD_LINE, height: CARD_LINE, borderRadius: 7, border: 'none', background: open ? ink(0.08) : 'transparent', color: open ? palette.inkSoft : palette.inkFaint, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+              >
+                <Link2 size={14} strokeWidth={1.75} />
+              </button>
+            )}
+          </>
+        }
+        meta={q.pools.map(pid => {
+          const p = pools.find(pp => pp.id === pid);
+          if (!p) return null;
+          return <span key={pid} style={{ flexShrink: 0, fontSize: 10, padding: '2px 8px', borderRadius: 999, background: palette.surfaceSunken, color: palette.inkMuted }}>#{p.name}</span>;
+        })}
+        actions={
+          <>
+            <IconBtn size={CARD_ACTION_BTN} active={isEditing} title={isEditing ? tr('cancelEditQuestion') : tr('bank.editQuestion')} onClick={() => onEditQuestion(q)}>
+              <Pencil size={14} strokeWidth={1.75} />
+            </IconBtn>
+            <IconBtn size={CARD_ACTION_BTN} title={tr('bank.deleteQuestion')} onClick={() => setPendingDeleteQuestion(q)}>
+              <Trash2 size={14} strokeWidth={1.75} />
+            </IconBtn>
+          </>
+        }
       >
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-          {/* Titre tronqué à deux lignes (T48) : sans plafond, une question longue
-              produisait une carte de huit lignes qui écrasait le reste de la
-              liste. La maquette n'en montre qu'une, deux laissent respirer les
-              énoncés réels sans casser le rythme de la colonne. Le titre complet
-              reste accessible au survol. */}
-          <div
-            title={q.title.trim() || q.content || tr('noStatement')}
-            style={{
-              flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: palette.ink, lineHeight: 1.4,
-              display: '-webkit-box', WebkitBoxOrient: 'vertical' as const, WebkitLineClamp: 2, overflow: 'hidden',
-            }}
-          >
-            {q.title.trim() || q.content || tr('noStatement')}
-          </div>
-          {inDraft && (
-            <span title={tr('bank.sendToEditor')} style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 999, background: palette.green, color: palette.onGreen, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Check size={12} strokeWidth={2.5} />
-            </span>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <TypePill type={q.responseType} />
-          {hasParts && (
-            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 999, border: `1px solid ${palette.gold}`, background: withAlpha(palette.gold, 0.14), color: palette.amberLight }}>
-              {tr('bank.parts', { count: q.parts.length + 1 })}
-            </span>
-          )}
-          {q.pools.map(pid => {
-            const p = pools.find(pp => pp.id === pid);
-            if (!p) return null;
-            return <span key={pid} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 999, background: palette.surfaceSunken, color: palette.inkMuted }}>#{p.name}</span>;
-          })}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }} onClick={(e) => e.stopPropagation()}>
-          <button
-            onClick={() => setOpenId(open ? null : q.id)}
-            title={open ? tr('bank.hideDetail') : tr('bank.showDetail')}
-            style={{ width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', color: palette.inkFaint, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginRight: 'auto' }}
-          >
-            {open ? <ChevronUp size={15} strokeWidth={1.75} /> : <ChevronDown size={15} strokeWidth={1.75} />}
-          </button>
-          <IconBtn title={tr('bank.editQuestion')} onClick={() => onEditQuestion(q)}>
-            <Pencil size={14} strokeWidth={1.75} />
-          </IconBtn>
-          <IconBtn title={tr('bank.duplicateQuestion')} onClick={() => onDuplicateQuestion(q)}>
-            <Copy size={14} strokeWidth={1.75} />
-          </IconBtn>
-          <IconBtn title={tr('bank.deleteQuestion')} onClick={() => setPendingDeleteQuestion(q)}>
-            <Trash2 size={14} strokeWidth={1.75} />
-          </IconBtn>
-        </div>
-
+        {/* Déplié : rien que les énoncés de chaque partie, chacun précédé de son
+            type de réponse. Ni difficulté, ni durée, ni réponse attendue — le
+            détail complet se lit dans l'éditeur de question. */}
         {open && (
-          <div onClick={(e) => e.stopPropagation()} style={{ borderTop: `1px solid ${palette.line}`, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 8, cursor: 'default' }}>
-            <div style={{ padding: '8px 10px', borderRadius: 8, background: palette.surfaceSunken, border: `1px solid ${palette.line}` }}>
-              <div style={{ fontSize: 11, color: palette.amberLight, marginBottom: 4 }}>{tr('bank.part', { n: 1 })}</div>
-              <div style={{ fontSize: 12.5, color: palette.ink, marginBottom: 6 }}>{q.content || tr('noStatement')}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                <TypePill type={q.responseType} />
-                {q.difficulty.enabled && <Diff n={q.difficulty.value} />}
-                {q.duration.enabled && <span style={{ fontSize: 10.5, color: palette.inkSoft }}>{q.duration.minutes}min {(q.duration.seconds ?? 0).toString().padStart(2, '0')}s</span>}
-              </div>
-              <div style={{ fontSize: 12, color: palette.ink }}><span style={{ fontWeight: 600, color: palette.amberLight }}>{tr('answer.prefix')}</span>{answerSummary(q)}</div>
-            </div>
-            {q.parts.map((part, i) => (
-              <div key={i} style={{ padding: '8px 10px', borderRadius: 8, background: palette.surfaceSunken, border: `1px solid ${palette.line}` }}>
-                <div style={{ fontSize: 11, color: palette.amberLight, marginBottom: 4 }}>{tr('bank.part', { n: i + 2 })}</div>
-                <div style={{ fontSize: 12.5, color: palette.ink, marginBottom: 6 }}>{part.content || tr('noStatement')}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                  <TypePill type={part.responseType} />
-                  {part.difficulty.enabled && <Diff n={part.difficulty.value} />}
-                  {part.duration.enabled && <span style={{ fontSize: 10.5, color: palette.inkSoft }}>{part.duration.minutes}min {(part.duration.seconds ?? 0).toString().padStart(2, '0')}s</span>}
-                </div>
-                <div style={{ fontSize: 12, color: palette.ink }}><span style={{ fontWeight: 600, color: palette.amberLight }}>{tr('answer.prefix')}</span>{answerSummary(part)}</div>
+          <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8, borderTop: `1px solid ${palette.line}`, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 8, cursor: 'default' }}>
+            {[{ responseType: q.responseType, content: q.content }, ...q.parts.map(p => ({ responseType: p.responseType, content: p.content }))].map((part, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <TypeIcon type={part.responseType} size={13} />
+                <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: palette.ink, lineHeight: 1.45 }}>{part.content || tr('noStatement')}</div>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </ListCard>
     );
   }
 
-  type ActiveFilter = { key: string; category: 'qtype' | 'pool' | 'type' | 'diff' | 'exam' | 'answer'; value: string | number; label: string; color?: string };
+  type ActiveFilter = { key: string; category: 'qtype' | 'pool' | 'type' | 'chapter' | 'exam'; value: string; label: string; color?: string };
   const activeFilters: ActiveFilter[] = [
     ...filterQTypes.map(qt => ({ key: `qtype:${qt}`, category: 'qtype' as const, value: qt, label: qTypeLabel(qt) })),
     ...filterPools.map(id => ({ key: `pool:${id}`, category: 'pool' as const, value: id, label: pools.find(p => p.id === id)?.name ?? id, color: pools.find(p => p.id === id)?.color })),
     ...filterTypes.map(ty => ({ key: `type:${ty}`, category: 'type' as const, value: ty, label: tr(`responseType.${ty}`) })),
-    ...filterDiffs.map(d => ({ key: `diff:${d}`, category: 'diff' as const, value: d, label: d === NO_DIFFICULTY ? tr('bank.filterNoDifficulty') : tr('bank.filterDifficulty', { n: d }) })),
+    ...filterChapters.map(cid => ({ key: `chapter:${cid}`, category: 'chapter' as const, value: cid, label: cid === NO_CHAPTER_ID ? tr('bank.noChapter') : (chapters.find(c => c.id === cid)?.name ?? cid) })),
     ...filterExams.map(eid => ({ key: `exam:${eid}`, category: 'exam' as const, value: eid, label: eid === NEVER_EXAM_ID ? tr('bank.statusNew') : (exams.find(ex => ex.id === eid)?.title ?? eid) })),
-    ...filterAnswer.map(aid => ({ key: `answer:${aid}`, category: 'answer' as const, value: aid, label: tr('bank.statusIncomplete') })),
   ];
   const positiveFilters = activeFilters.filter(f => modeOf(f.key) === 'pos');
   const negativeFilters = activeFilters.filter(f => modeOf(f.key) === 'neg');
@@ -354,24 +317,16 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
       case 'qtype': toggleQTypeFilter(f.value as string); break;
       case 'pool': togglePoolFilter(f.value as string); break;
       case 'type': toggleTypeFilter(f.value as ResponseType); break;
-      case 'diff': toggleDiffFilter(f.value as number); break;
-      case 'exam': toggleExamFilter(f.value as string); break;
-      case 'answer': toggleAnswerFilter(f.value as string); break;
+      case 'chapter': toggleChapterFilter(f.value); break;
+      case 'exam': toggleExamFilter(f.value); break;
     }
   }
 
   return (
-    <div style={{ padding: '16px 16px 20px' }}>
-      {/* Titre + génération par IA (placeholder désactivé, absent de la maquette
-          mais conservé depuis T36) — sortie de la barre d'outils pour que
-          celle-ci tienne sur une seule rangée, comme la maquette. */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-        <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{tr('bank.title')}</div>
-        <button disabled title={tr('bank.generateAI')} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 9px', borderRadius: 8, background: 'transparent', color: palette.inkFaint, border: `1px solid ${palette.line}`, fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, cursor: 'not-allowed', flexShrink: 0 }}>
-          <Sparkles size={13} strokeWidth={1.75} /> {tr('bank.generateAI')}
-        </button>
-      </div>
-
+    <div style={{ padding: '16px 16px 28px' }}>
+      {/* Ni titre ni bouton « générer par IA » : l'onglet au-dessus de la liste
+          dit déjà où l'on est, et la maquette ne montre que la barre d'outils
+          (recherche · tri · filtre · nouvelle). */}
       {activeFilterCount > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
           <div
@@ -403,26 +358,33 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
         </div>
       )}
 
-      {/* Barre d'outils — recherche, filtres, tri et action primaire sur une
-          seule rangée (T48), comme la maquette. Filtres et tri sont réduits à
-          des boutons-icônes pour tenir dans la colonne. */}
-      <div style={{ display: 'flex', alignItems: 'stretch', gap: 6, marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0, background: palette.surfaceInput, border: `1px solid ${palette.line}`, borderRadius: 10, padding: '0 10px' }}>
-          <Search size={15} strokeWidth={1.75} color={palette.inkFaint} style={{ flexShrink: 0 }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={tr('bank.searchPlaceholder')} style={{ flex: 1, minWidth: 0, fontSize: 13, color: palette.ink, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'inherit' }} />
-        </div>
-
-        <div ref={filterRef} style={{ position: 'relative', flexShrink: 0 }}>
-          <button onClick={() => setFilterOpen(o => !o)} title={tr('bank.filters')} style={{ position: 'relative', height: '100%', minHeight: 34, width: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, borderRadius: 9, border: activeFilterCount > 0 ? `1px solid ${palette.greenSoft}` : `1px solid ${palette.lineStrong}`, background: activeFilterCount > 0 ? withAlpha(palette.green, 0.12) : palette.surfaceRaised, color: activeFilterCount > 0 ? palette.greenBrand : palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>
-            <Filter size={15} strokeWidth={1.75} />
-            {activeFilterCount > 0 && (
-              <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 15, height: 15, padding: '0 3px', borderRadius: 999, background: palette.green, color: palette.onGreen, fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-          {filterOpen && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, width: 290, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg, zIndex: 20, display: 'flex', flexDirection: 'column', maxHeight: 'min(520px, calc(100vh - 200px))' }}>
+      {/* Barre d'outils commune aux deux listes (`ListToolbar`) : la banque n'y
+          met que ce qui lui est propre — sa recherche, ses critères de tri, son
+          panneau de filtres et son action « nouvelle question ». */}
+      <ListToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder={tr('bank.searchPlaceholder')}
+        sortOptions={BANK_SORTS}
+        sortBy={sortBy}
+        onSortByChange={changeSortBy}
+        sortDir={sortDir}
+        onToggleSortDir={() => setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')}
+        actionLabel={tr('bank.newShort')}
+        actionTitle={tr('bank.newQuestion')}
+        onAction={onNewQuestion}
+        filter={
+          <FilterButton
+            title={tr('bank.filters')}
+            count={activeFilterCount}
+            open={filterOpen}
+            onToggle={() => setFilterOpen(o => !o)}
+            containerRef={filterRef}
+          >
+            {/* Le cadre du panneau (surface, largeur, position, hauteur max)
+                appartient à `FilterButton` : il le pose en `position: fixed`
+                pour ne pas être rogné par la colonne. Ici, uniquement son
+                contenu. */}
             <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px 10px', flexShrink: 0 }}>
                 <span style={{ fontSize: 13, fontWeight: 500, color: palette.ink }}>{tr('bank.filtersTitle')}</span>
@@ -468,14 +430,6 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
                       </button>
                     );
                   })()}
-                  {(() => {
-                    const active = filterAnswer.includes(NO_ANSWER_ID);
-                    return (
-                      <button onClick={() => toggleAnswerFilter(NO_ANSWER_ID)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? `1px solid ${palette.ink}` : `1px solid ${palette.line}`, background: active ? palette.ink : palette.surfaceSunken, color: active ? palette.onInk : palette.inkMuted }}>
-                        {tr('bank.statusIncomplete')}
-                      </button>
-                    );
-                  })()}
                 </div>
                 {/* Libellés */}
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.labelsSection')}</div>
@@ -485,8 +439,12 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
                     const displayName = l.name.length > 18 ? l.name.slice(0, 18) + '…' : l.name;
                     return (
                       <span key={l.id} style={{ position: 'relative', display: 'inline-flex' }}>
-                        <button onClick={() => togglePoolFilter(l.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? `1px solid ${palette.ink}` : `1px solid ${palette.line}`, background: active ? palette.ink : palette.surfaceSunken, color: active ? palette.onInk : palette.inkMuted }}>
-                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: l.color, display: 'inline-block' }} />{displayName}
+                        {/* La couleur du libellé EST le fond de la pilule (elle
+                            ne se réduit plus à une pastille) : l'encre s'adapte
+                            à sa luminance, et l'état actif se lit au liseré
+                            d'encre plutôt qu'à un changement de fond. */}
+                        <button onClick={() => togglePoolFilter(l.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${active ? palette.ink : withAlpha(l.color, 0.55)}`, boxShadow: active ? `0 0 0 2px ${ink(0.25)}` : 'none', background: l.color, color: inkOn(l.color), fontWeight: active ? 600 : 400 }}>
+                          {displayName}
                         </button>
                         <button onClick={() => editingLabel === l.id ? setEditingLabel(null) : openEditLabel(l)} title={tr('bank.editLabelTitle')} style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', border: `1px solid ${palette.lineStrong}`, background: palette.surfaceRaised, color: palette.inkFaint, cursor: 'pointer', fontSize: 10, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <Pencil size={7} strokeWidth={2} />
@@ -504,26 +462,32 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
                     <button onClick={() => setCreatingLabel(true)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1.5px dashed ${palette.lineStrong}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>{tr('bank.newLabel')}</button>
                   )}
                 </div>
-                {/* Difficulté */}
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.difficultySection')}</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {[1, 2, 3, 4, 5].map(d => {
-                    const active = filterDiffs.includes(d);
-                    return (
-                      <button key={d} onClick={() => toggleDiffFilter(d)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? `1px solid ${palette.ink}` : `1px solid ${palette.line}`, background: active ? palette.ink : palette.surfaceSunken, color: active ? palette.onInk : palette.inkMuted }}>
-                        <DiffDots level={d} />{d}/5
-                      </button>
-                    );
-                  })}
-                  {(() => {
-                    const active = filterDiffs.includes(NO_DIFFICULTY);
-                    return (
-                      <button onClick={() => toggleDiffFilter(NO_DIFFICULTY)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? `1px solid ${palette.ink}` : `1px solid ${palette.line}`, background: active ? palette.ink : palette.surfaceSunken, color: active ? palette.onInk : palette.inkMuted }}>
-                        <DiffDots level={0} />{tr('bank.noDifficulty')}
-                      </button>
-                    );
-                  })()}
-                </div>
+                {/* Chapitre — une question n'en porte pas directement : elle
+                    hérite de ceux de ses notions associées. Section masquée
+                    tant que l'atelier n'a aucun chapitre. */}
+                {chapters.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.chapterSection')}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {chapters.map(c => {
+                        const active = filterChapters.includes(c.id);
+                        return (
+                          <button key={c.id} onClick={() => toggleChapterFilter(c.id)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? `1px solid ${palette.ink}` : `1px solid ${palette.line}`, background: active ? palette.ink : palette.surfaceSunken, color: active ? palette.onInk : palette.inkMuted }}>
+                            {c.name}
+                          </button>
+                        );
+                      })}
+                      {(() => {
+                        const active = filterChapters.includes(NO_CHAPTER_ID);
+                        return (
+                          <button onClick={() => toggleChapterFilter(NO_CHAPTER_ID)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? `1px solid ${palette.ink}` : `1px solid ${palette.line}`, background: active ? palette.ink : palette.surfaceSunken, color: active ? palette.onInk : palette.inkMuted }}>
+                            {tr('bank.noChapter')}
+                          </button>
+                        );
+                      })()}
+                    </div>
+                  </>
+                )}
               </div>
               {editingLabel && (() => {
                 const label = pools.find(p => p.id === editingLabel);
@@ -548,29 +512,9 @@ function BankContent({ questions, pools, exams, draftIds, openId, setOpenId, onE
                 );
               })()}
             </div>
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', borderRadius: 9, border: `1px solid ${palette.lineStrong}`, background: palette.surfaceRaised, overflow: 'hidden', flexShrink: 0 }}>
-          <button type="button" title={sortDir === 'asc' ? tr('bank.sortAsc') : tr('bank.sortDesc')} onClick={() => setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')} style={{ width: 28, minHeight: 34, alignSelf: 'stretch', border: 'none', borderRight: `1px solid ${palette.line}`, background: 'transparent', color: palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
-            {sortDir === 'asc' ? <ChevronUp size={14} strokeWidth={1.75} /> : <ChevronDown size={14} strokeWidth={1.75} />}
-          </button>
-          {/* Le `select` natif garde son libellé : c'est le seul contrôle de la
-              barre dont la valeur courante doit rester lisible d'un coup d'œil. */}
-          <select value={sortBy} onChange={e => changeSortBy(e.target.value as SortBy)} title={tr('bank.sortBy')} style={{ fontSize: 11.5, maxWidth: 74, padding: '8px 2px', border: 'none', background: 'transparent', color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit', outline: 'none' }}>
-            <option value="recent">{tr('bank.sortRecent')}</option>
-            <option value="name">{tr('bank.sortName')}</option>
-            <option value="type">{tr('bank.sortType')}</option>
-            <option value="difficulty">{tr('bank.sortDifficulty')}</option>
-            <option value="label">{tr('bank.sortLabel')}</option>
-          </select>
-        </div>
-
-        {/* Seule action primaire de la colonne (T48) — la maquette la met en vert. */}
-        <button onClick={onNewQuestion} title={tr('bank.newQuestion')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, minHeight: 34, padding: '0 11px', borderRadius: 9, background: palette.green, color: palette.onGreen, border: 'none', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-          <Plus size={15} strokeWidth={2.25} /> {tr('bank.newShort')}
-        </button>
-      </div>
+          </FilterButton>
+        }
+      />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {filtered.map(q => renderQuestionCard(q))}

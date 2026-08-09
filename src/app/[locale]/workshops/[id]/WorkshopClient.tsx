@@ -57,7 +57,7 @@ export default function WorkshopClient({ workshopId, workshopName, currentUserRo
           </button>
           <WorkshopSwitcher open={mobileSwitcherOpen} onClose={() => setMobileSwitcherOpen(false)} currentWorkshopId={workshopId} />
         </div>
-        <WorkshopActionsMenu workshopId={workshopId} workshopName={workshopName} role={currentUserRole} size={30} />
+        <WorkshopActionsMenu workshopId={workshopId} size={30} />
       </div>
 
       {/* Aucun chrome au-dessus du contenu (T43) : la maquette ne répète ni le

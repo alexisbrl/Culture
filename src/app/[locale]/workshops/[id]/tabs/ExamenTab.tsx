@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, ArrowRight, FileText, Search, X } from 'lucide-react';
 import { palette, ink, radius, shadow, withAlpha, categoryTones } from '@/lib/theme';
-import QuestionEditor, { type Question, emptyQuestion } from './QuestionEditor';
+import { type Question, emptyQuestion } from './QuestionEditor';
 import {
   getExamBankData, saveQuestion, createPool as createPoolAction, updatePool as updatePoolAction,
   deletePool as deletePoolAction, deleteQuestion as deleteQuestionAction, saveGeneratedExam,
@@ -14,6 +14,7 @@ import {
 import {
   type Exam, type Pool, type ExamConfig,
   defaultExamConfig, normalizeExamConfig, configQuestionIds, formatDuration, clearWeightingFor,
+  toggleQuestionInSections, isPageBreakId, pruneUnknownQuestions,
 } from './examen/examShared';
 import HistoryContent from './examen/HistoryContent';
 import BankContent from './examen/BankContent';
@@ -34,11 +35,16 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const [exams, setExams] = useState<Exam[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [pools, setPools] = useState<Pool[]>([]);
-  const [notions, setNotions] = useState<{ id: string; title: string }[]>([]);
+  // `chapterId` sur la notion + la liste des chapitres : de quoi filtrer la
+  // banque par chapitre, qu'une question ne porte pas elle-même (elle en hérite
+  // par ses notions associées).
+  const [notions, setNotions] = useState<{ id: string; title: string; chapterId: string | null }[]>([]);
+  const [chapters, setChapters] = useState<{ id: string; name: string }[]>([]);
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [editing, setEditing] = useState<Exam | null>(null);
   const [pendingDeleteExam, setPendingDeleteExam] = useState<Exam | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [newQuestionId, setNewQuestionId] = useState<string | null>(null);
   const [draftIds, setDraftIds] = useState<string[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [examConfig, setExamConfig] = useState<ExamConfig>(defaultExamConfig());
@@ -65,15 +71,22 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    Promise.all([getExamBankData(workshopId), getExamDraft(workshopId)]).then(([{ questions, pools, exams, notions }, draft]) => {
+    Promise.all([getExamBankData(workshopId), getExamDraft(workshopId)]).then(([{ questions, pools, exams, notions, chapters }, draft]) => {
       const mappedExams = exams.map(e => ({ id: e.id, title: e.title, date: e.date, q: e.q, dur: e.dur, avg: e.avg, status: e.status, taken: e.taken, questionIds: e.questionIds, config: e.config }));
       setQuestions(questions);
       setPools(pools);
       setNotions(notions);
+      setChapters(chapters);
       setExams(mappedExams);
       if (draft) {
-        setDraftIds(draft.draftIds);
-        setExamConfig(draft.config?.sections ? normalizeExamConfig(draft.config) : defaultExamConfig());
+        // Filet : un brouillon peut référencer une question qui n'existe plus
+        // (supprimée ailleurs, ou création abandonnée par une fermeture d'onglet
+        // avant enregistrement). Ces identifiants ne s'affichent nulle part mais
+        // compteraient dans le barème — on les écarte à la lecture.
+        const known = new Set(questions.map(q => q.id));
+        const keep = (id: string) => isPageBreakId(id) || known.has(id);
+        setDraftIds(draft.draftIds.filter(keep));
+        setExamConfig(draft.config?.sections ? pruneUnknownQuestions(normalizeExamConfig(draft.config), keep) : defaultExamConfig());
         if (draft.editingId) {
           const found = mappedExams.find(e => e.id === draft.editingId);
           if (found) setEditing(found);
@@ -83,15 +96,22 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       .finally(() => { draftLoaded.current = true; });
   }, [workshopId]);
 
-  // sauvegarde du brouillon de l'éditeur d'examen (reprise après reconnexion / le lendemain)
+  // Sauvegarde du brouillon de l'éditeur d'examen (reprise après reconnexion /
+  // le lendemain). Une question en cours de création n'existe qu'en mémoire tant
+  // qu'elle n'est pas enregistrée : la persister ici laisserait un identifiant
+  // fantôme dans l'examen, invisible sur la feuille mais compté dans le barème.
   useEffect(() => {
     if (!draftLoaded.current) return;
     if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
+    const pendingId = newQuestionId;
+    const keep = (id: string) => id !== pendingId;
+    const config = pendingId ? pruneUnknownQuestions(examConfig, keep) : examConfig;
+    const ids = pendingId ? draftIds.filter(keep) : draftIds;
     draftSaveTimer.current = setTimeout(() => {
-      saveExamDraft(workshopId, { draftIds, config: examConfig, editingId: editing?.id ?? null }).catch(err => console.error('sauvegarde du brouillon échouée', err));
+      saveExamDraft(workshopId, { draftIds: ids, config, editingId: editing?.id ?? null }).catch(err => console.error('sauvegarde du brouillon échouée', err));
     }, 800);
     return () => { if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current); };
-  }, [workshopId, draftIds, examConfig, editing]);
+  }, [workshopId, draftIds, examConfig, editing, newQuestionId]);
 
   function handleClearEditor() {
     setEditing(null);
@@ -144,16 +164,65 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     deleteGeneratedExam(workshopId, exam.id).catch(err => console.error('suppression de l\'examen échouée', err));
   }
 
+  // Ouvre le formulaire en ligne sur la feuille. Une seule question à la fois :
+  // deux formulaires ouverts, ce serait deux brouillons concurrents pour un même
+  // examen. Rappuyer sur le bouton de la question déjà ouverte referme le
+  // formulaire — même effet que son bouton « annuler ».
   function handleOpenQuestion(id: string) {
     const q = questions.find(p => p.id === id);
     if (!q) return;
-    if (editingQuestion && editingQuestion.id !== id) {
+    if (editingQuestion) {
+      if (editingQuestion.id === id) { handleCancelQuestion(); return; }
       setOpenQuestionBlocked(true);
       setTimeout(() => setOpenQuestionBlocked(false), 2200);
       return;
     }
     setEditingQuestion(q);
-    focus('bank');
+  }
+
+  // Crayon de la banque : l'édition se fait sur la feuille, donc une question qui
+  // n'est pas encore dans l'examen l'y rejoint (fin de la dernière partie).
+  function requestEditQuestion(q: Question) {
+    if (editingQuestion) {
+      if (editingQuestion.id === q.id) { handleCancelQuestion(); return; }
+      setOpenQuestionBlocked(true);
+      setTimeout(() => setOpenQuestionBlocked(false), 2200);
+      return;
+    }
+    if (!configQuestionIds(examConfig).includes(q.id)) handleToggleQuestionInExam(q.id);
+    setEditingQuestion(q);
+  }
+
+  // « nouvelle » : la question n'existe qu'en mémoire tant qu'elle n'est pas
+  // enregistrée, mais la feuille ne sait afficher que des questions connues —
+  // on l'insère donc tout de suite, et l'annulation la retire partout.
+  function handleNewQuestion() {
+    if (editingQuestion) {
+      setOpenQuestionBlocked(true);
+      setTimeout(() => setOpenQuestionBlocked(false), 2200);
+      return;
+    }
+    const q = emptyQuestion();
+    setQuestions(prev => [q, ...prev]);
+    setExamConfig(prev => ({ ...prev, sections: toggleQuestionInSections(prev.sections, q.id) }));
+    setDraftIds(prev => [...prev, q.id]);
+    setNewQuestionId(q.id);
+    setEditingQuestion(q);
+  }
+
+  function handleCancelQuestion() {
+    const id = newQuestionId;
+    if (id) {
+      setQuestions(prev => prev.filter(p => p.id !== id));
+      setExamConfig(prev => ({
+        ...prev,
+        sections: prev.sections.map(sec => ({ ...sec, questionIds: sec.questionIds.filter(qid => qid !== id) })),
+        weighting: clearWeightingFor(prev.weighting, id),
+      }));
+      setDraftIds(prev => prev.filter(qid => qid !== id));
+    }
+    setNewQuestionId(null);
+    setEditingQuestion(null);
   }
 
   function handleSaveQuestion(q: Question) {
@@ -164,13 +233,9 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       return [withCreatedAt, ...prev];
     });
     setEditingQuestion(null);
-    saveQuestion(workshopId, q).catch(err => console.error('enregistrement question échoué', err));
-  }
-
-  function handleDuplicateQuestion(q: Question) {
-    const copy: Question = { ...q, id: 'q' + Date.now() + Math.random().toString(36).slice(2, 7), examIds: [] };
-    setQuestions(prev => [copy, ...prev]);
-    saveQuestion(workshopId, copy).catch(err => console.error('duplication de la question échouée', err));
+    setNewQuestionId(null);
+    const toSave = q.createdAt ? q : { ...q, createdAt: new Date().toISOString() };
+    saveQuestion(workshopId, toSave).catch(err => console.error('enregistrement question échoué', err));
   }
 
   function handleDeleteQuestion(deleted: Question) {
@@ -225,8 +290,20 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     deletePoolAction(workshopId, id, affected).catch(err => console.error('suppression libellé échouée', err));
   }
 
-  function handleSendOne(id: string) {
-    setDraftIds(prev => prev.includes(id) ? prev : [id, ...prev]);
+  // Un clic sur une carte de la banque met la question dans l'examen, un second
+  // l'en retire (comportement de la maquette). Il n'y a plus de liste
+  // intermédiaire « questions envoyées » : `draftIds` suit exactement les
+  // questions de l'examen — c'est lui qui allume la pastille verte de la carte,
+  // et il reste la clé de la reprise du brouillon.
+  function handleToggleQuestionInExam(id: string) {
+    const sections = toggleQuestionInSections(examConfig.sections, id);
+    const included = configQuestionIds({ ...examConfig, sections }).includes(id);
+    setExamConfig({
+      ...examConfig,
+      sections,
+      weighting: included ? examConfig.weighting : clearWeightingFor(examConfig.weighting, id),
+    });
+    setDraftIds(prev => (included ? (prev.includes(id) ? prev : [...prev, id]) : prev.filter(qid => qid !== id)));
   }
 
   function handleRemoveFromDraft(ids: string[]) {
@@ -255,10 +332,44 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       {/* Coquille côte à côte (« banqueOngletsLarge ») : colonne gauche à onglets
-          pleine largeur (mes examens / questions) à 360px fixes, feuille A4
-          toujours visible à droite (flex:1) — empilées en dessous de 768px. */}
-      <div className="flex flex-col md:flex-row" style={{ flex: 1, minHeight: 0, gap: 20, margin: '22px 22px 20px', overflow: 'auto' }}>
-        <div className="w-full md:w-[360px]" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 420 }}>
+          pleine largeur (mes examens / questions) à 440px fixes, feuille A4
+          toujours visible à droite (largeur fixe du bloc A4) — empilées en
+          dessous de 768px. */}
+      {/* Répartition du vide horizontal : les deux colonnes ont une largeur
+          fixe, tout le reste est distribué par trois cales flex dans un rapport
+          1 : 2 : 3 — marge de page à gauche, écart banque↔feuille (deux fois la
+          marge), puis vide à droite de la feuille (inchangé : la moitié du vide
+          total, comme dans le rapport 1:1:2 d'origine). Les marges
+          négatives de la colonne de droite (-60 / -120) retirent de ce calcul
+          tout ce qui sépare son bord du papier : les vides se mesurent alors
+          exactement bord à bord de la feuille. Largeur 1236 = les 1188 du bloc
+          A4 (TOOLBAR_WIDTH) + les 48 de padding de GeneratorContent (24 à
+          gauche, 12 à droite, 12 de plus sur le panneau défilant) — sans quoi
+          le bloc déborde et la barre d'outils ne s'aligne plus sur le bord du
+          papier. 60 = 24 de padding gauche + 26 de gouttière + 10 d'espace ;
+          120 = 12 + 12 de padding droit + 10 d'espace + 86 de gouttière. */}
+      {/* `split-shell` (globals.css) borne la hauteur au viewport à partir de
+          768px : c'est ce qui rend les deux colonnes indépendantes — la page ne
+          défile plus, chaque panneau fait défiler son propre contenu, et la
+          marge basse de 28px laisse la bande de crème visible sous les
+          panneaux. En dessous de 768px les colonnes s'empilent et c'est la page
+          qui défile, comme avant. */}
+      {/* Pas de `flex: 1` ici : en tant qu'élément flex, un `flex-basis: 0` fait
+          gagner la répartition flex sur la hauteur déclarée et la coquille
+          reprendrait la hauteur de son contenu. */}
+      <div className="split-shell flex flex-col gap-5 mx-[22px] overflow-auto md:mx-0 md:flex-row md:gap-0" style={{ minHeight: 0, marginTop: 22, marginBottom: 28 }}>
+        {/* `minWidth` : sur un écran trop étroit pour le bloc A4 (moins de
+            ~1500px), il ne reste rien à répartir — les cales gardent alors la
+            marge de page et l'écart minimum d'avant, et c'est la feuille qui
+            est rognée à droite comme elle l'était déjà.
+            `pointerEvents: 'none'` sur les trois cales : les marges négatives de
+            la colonne de droite (-60 / -120) les font chevaucher les gouttières
+            de la feuille, et une cale placée APRÈS dans le DOM capte alors les
+            clics de la gouttière qu'elle recouvre (les croix de retrait étaient
+            devenues inertes). Ce sont des blocs vides, ils n'ont aucune raison
+            de recevoir un clic. */}
+        <div className="hidden md:block" style={{ flex: '1 1 0', minWidth: 22, pointerEvents: 'none' }} />
+        <div className="w-full md:w-[440px]" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 420 }}>
           <div style={{ display: 'flex', flexShrink: 0, border: `1px solid ${palette.lineStrong}`, borderBottom: 'none', borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, overflow: 'hidden' }}>
             <button onClick={() => setLeftTab('history')} style={tabButtonStyle(leftTab === 'history', 'left')}>
               <FileText size={15} strokeWidth={1.75} />
@@ -273,44 +384,57 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             {/* Montage permanent des deux onglets (display none/block) — préserve
                 la recherche/le tri en cours quand on bascule d'onglet, comme le
                 fait déjà SettingsClient pour ses sections. */}
-            <div style={{ display: leftTab === 'history' ? 'block' : 'none', height: '100%', overflowY: 'auto' }}>
+            <div className="scroll-panel" style={{ display: leftTab === 'history' ? 'block' : 'none', height: '100%' }}>
               <HistoryContent exams={exams} justAddedId={justAdded} onEdit={requestEditExam} onNew={() => setIntroOpen(true)} onDelete={e => setPendingDeleteExam(e)} />
             </div>
-            <div style={{ display: leftTab === 'bank' ? 'block' : 'none', height: '100%', overflowY: 'auto', position: 'relative' }}>
+            <div className="scroll-panel" style={{ display: leftTab === 'bank' ? 'block' : 'none', height: '100%', position: 'relative' }}>
               <BankContent
                 questions={questions}
                 pools={pools}
                 exams={exams}
+                notions={notions}
+                chapters={chapters}
                 draftIds={draftIds}
+                editingQuestionId={editingQuestion?.id ?? null}
                 openId={openId}
                 setOpenId={setOpenId}
-                onEditQuestion={q => setEditingQuestion(q)}
-                onNewQuestion={() => setEditingQuestion(emptyQuestion())}
-                onSendOne={handleSendOne}
+                onEditQuestion={requestEditQuestion}
+                onNewQuestion={handleNewQuestion}
+                onToggleInExam={handleToggleQuestionInExam}
                 onCreatePool={handleCreatePool}
                 onUpdatePool={handleUpdatePool}
                 onDeletePool={handleDeletePool}
-                onDuplicateQuestion={handleDuplicateQuestion}
                 onDeleteQuestion={handleDeleteQuestion}
               />
-              {editingQuestion && (
-                <QuestionEditor
-                  question={editingQuestion}
-                  allQuestions={questions}
-                  pools={pools}
-                  notions={notions}
-                  onCreatePool={handleCreatePool}
-                  onSave={handleSaveQuestion}
-                  onCancel={() => setEditingQuestion(null)}
-                />
-              )}
             </div>
           </div>
         </div>
 
-        <div style={{ flex: 1, minWidth: 0, minHeight: 420, display: 'flex', flexDirection: 'column', border: `1px solid ${palette.line}`, borderRadius: radius.lg, background: palette.surfaceRaised, boxShadow: shadow.sm, overflow: 'hidden' }}>
-          <GeneratorContent questions={questions} draftIds={draftIds} config={examConfig} onConfigChange={setExamConfig} editing={editing} onCancelEdit={() => setEditing(null)} onGenerate={handleGenerate} onOpenQuestion={handleOpenQuestion} onRemoveFromDraft={handleRemoveFromDraft} onClearEditor={handleClearEditor} />
+        {/* Pas de carte autour de la feuille : le seul cadre visible doit être
+            celui du papier lui-même (bordure + ombre du bloc A4), comme dans la
+            maquette. Un panneau blanc de plus créait un encadré dans l'encadré. */}
+        <div className="hidden md:block" style={{ flex: '2 1 0', minWidth: 20, pointerEvents: 'none' }} />
+        <div className="w-full md:w-[1236px] md:flex-none md:-ml-[60px] md:-mr-[120px]" style={{ minWidth: 0, minHeight: 420, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <GeneratorContent
+            questions={questions}
+            config={examConfig}
+            onConfigChange={setExamConfig}
+            editing={editing}
+            onCancelEdit={() => setEditing(null)}
+            onGenerate={handleGenerate}
+            onOpenQuestion={handleOpenQuestion}
+            onRemoveFromDraft={handleRemoveFromDraft}
+            onClearEditor={handleClearEditor}
+            editingQuestion={editingQuestion}
+            newQuestionId={newQuestionId}
+            pools={pools}
+            notions={notions}
+            onCreatePool={handleCreatePool}
+            onSaveQuestion={handleSaveQuestion}
+            onCancelQuestion={handleCancelQuestion}
+          />
         </div>
+        <div className="hidden md:block" style={{ flex: '3 1 0', minWidth: 22, pointerEvents: 'none' }} />
       </div>
       {pendingDeleteExam && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

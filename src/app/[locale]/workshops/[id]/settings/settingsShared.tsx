@@ -183,14 +183,14 @@ export function SectionCard({
   children,
 }: {
   title: string;
-  description: string;
+  description?: string;
   children: React.ReactNode;
 }) {
   return (
     <div style={{ marginBottom: 36 }}>
       <div style={{ marginBottom: 10 }}>
         <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink, marginBottom: 3 }}>{title}</div>
-        <div style={{ fontSize: 12.5, color: palette.inkFaint }}>{description}</div>
+        {description && <div style={{ fontSize: 12.5, color: palette.inkFaint }}>{description}</div>}
       </div>
       <div
         style={{
