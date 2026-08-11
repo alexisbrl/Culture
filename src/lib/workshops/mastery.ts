@@ -81,31 +81,31 @@ function percentOf(scores: number[]): number {
 }
 
 /**
- * Crédite les notions reliées à une question après une bonne réponse.
- * Retourne `true` si au moins un score a bougé (l'appelant revalide alors le
- * cache de l'atelier pour que les barres se mettent à jour).
+ * Crédite les notions d'une question après une bonne réponse. Retourne `true`
+ * si au moins un score a bougé (l'appelant revalide alors le cache de l'atelier
+ * pour que les barres se mettent à jour).
+ *
+ * Les notions et le niveau de Bloom sont fournis par l'appelant, qui les a lus
+ * côté serveur (`gradeParcoursAnswer`) — jamais reçus du client. Chaque question
+ * d'un groupe a les siennes, la principale comme les liées : il n'y a plus de
+ * relecture par identifiant de question ici, la correction connaît déjà tout.
  */
-export async function rewardCorrectAnswer(
+export async function rewardAnsweredQuestion(
   workshopId: string,
   userId: string,
-  questionId: string
+  target: { notionIds: string[]; bloomLevel: number }
+): Promise<boolean> {
+  return await creditNotions(workshopId, userId, target.notionIds, target.bloomLevel);
+}
+
+async function creditNotions(
+  workshopId: string,
+  userId: string,
+  linkedIds: string[],
+  bloomLevel: number
 ): Promise<boolean> {
   const supabase = getSupabaseServerClient();
 
-  const [{ data: question }, { data: links }] = await Promise.all([
-    supabase
-      .from('exam_questions')
-      .select('bloom_level')
-      .eq('id', questionId)
-      .eq('workshop_id', workshopId)
-      .maybeSingle(),
-    // table de jonction encore nommée bricks en base — renommage différé, voir docs/backlog.md
-    supabase.from('exam_question_bricks').select('brick_id').eq('question_id', questionId),
-  ]);
-
-  if (!question) return false;
-
-  const linkedIds = (links ?? []).map((l) => l.brick_id as string);
   if (linkedIds.length === 0) return false;
 
   // Les notions reliées sont re-filtrées sur l'atelier : la jonction ne porte
@@ -134,7 +134,7 @@ export async function rewardCorrectAnswer(
   const scores = new Map<string, number>();
   for (const row of existing ?? []) scores.set(row.brick_id as string, row.score as number);
 
-  const target = questionTarget((question.bloom_level as number) ?? 1);
+  const target = questionTarget(bloomLevel);
   const rows = brickIds
     .map((brickId) => {
       const score = scores.get(brickId) ?? 0;

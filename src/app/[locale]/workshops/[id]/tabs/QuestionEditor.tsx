@@ -4,6 +4,8 @@ import { palette, ink, withAlpha } from '@/lib/theme';
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { AudioLines, ImageIcon } from 'lucide-react';
+import { MediaAttachment, useQuestionMediaDrop } from './examen/questionMedia';
 
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -12,44 +14,27 @@ import { useTranslations } from 'next-intl';
 // des types de domaine (persistés en base, consommés par les server actions),
 // pas des types d'UI. Ré-exportés ici pour ne pas casser les nombreux imports
 // existants (`from './QuestionEditor'`) dans le reste de l'onglet examen.
-import type { QuestionType, ResponseType, QuestionPart, Question, BloomLevel } from '@/lib/workshops/examTypes';
+import type { ResponseType, QuestionPart, Question, BloomLevel } from '@/lib/workshops/examTypes';
 import { BLOOM_LEVELS, DEFAULT_BLOOM_LEVEL } from '@/lib/workshops/examTypes';
-export type { QuestionType, ResponseType, QuestionPart, Question, BloomLevel };
+export type { ResponseType, QuestionPart, Question, BloomLevel };
 
-export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
-  textuel: 'Textuel',
-  visuel: 'Visuel',
-  audio: 'Audio',
-};
-
-// Ces constantes et les briques de formulaire plus bas sont partagées avec
-// l'éditeur en ligne de la feuille d'examen (`examen/InlineQuestionEditor`) :
-// une seule définition des types, des règles et du rendu des champs.
-//
-// `qcs` est volontairement absent de l'ordre du menu : c'est la variante
-// « réponse unique » de `qcm`, basculée par une pilule (voir `ResponseType`).
-export const RESPONSE_TYPE_ORDER: ResponseType[] = [
-  'qcm', 'textuelle', 'liste', 'tableau', 'matching', 'dessin', 'fichier', 'audio', 'sans_reponse',
-];
-
-export const CHOICE_BASED: ResponseType[] = ['qcs', 'qcm', 'matching'];
-
-// Types disponibles en V2 uniquement — affichés mais désactivés (badge V2)
-export const QUESTION_TYPE_V2: QuestionType[] = ['visuel', 'audio'];
-// Plus aucun type n'est différé : les neuf entrées du menu ont toutes leur bloc
-// d'édition et leur espace de réponse sur la copie (09/08/2026). La constante
-// reste pour ne pas casser ses consommateurs et pour un futur type différé.
-export const RESPONSE_TYPE_V2: ResponseType[] = [];
-
-export function emptyPart(): QuestionPart {
-  return { content: '', responseType: 'sans_reponse', answer: '', choices: [], correctChoices: [], shuffleChoices: false, textLines: 4, answerOptional: false, difficulty: { enabled: false, value: 3 }, duration: { enabled: false, minutes: 2, seconds: 0 } };
-}
+// Constantes de types de réponse, briques de formulaire et corps d'édition
+// d'un énoncé : une seule définition, dans `examen/questionFields`, partagée
+// avec l'éditeur en ligne de la feuille d'examen. Ré-exportées ici pour ne pas
+// casser d'éventuels imports existants (`from './QuestionEditor'`).
+import {
+  CHOICE_BASED, RESPONSE_TYPE_ORDER, RESPONSE_TYPE_V2,
+  ChoiceListEditor, QuestionFields, TextField, emptyPart,
+} from './examen/questionFields';
+export {
+  CHOICE_BASED, RESPONSE_TYPE_ORDER, RESPONSE_TYPE_V2,
+  ChoiceListEditor, TextField, emptyPart,
+} from './examen/questionFields';
 
 export function emptyQuestion(): Question {
   return {
     id: 'q' + Date.now(),
     title: '',
-    questionType: 'textuel',
     responseType: 'textuelle',
     content: '',
     answer: '',
@@ -128,18 +113,6 @@ export function MiniSwitch({ value, onChange }: { value: boolean; onChange: (v: 
   );
 }
 
-export function TextField({ value, onChange, placeholder, multiline, rows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; multiline?: boolean; rows?: number }) {
-  const style: React.CSSProperties = {
-    width: '100%', fontSize: 13, color: palette.ink, border: `1px solid ${ink(0.12)}`,
-    borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none',
-    fontFamily: 'inherit', boxSizing: 'border-box', resize: 'vertical' as const,
-  };
-  if (multiline) {
-    return <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows} style={style} />;
-  }
-  return <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={style} />;
-}
-
 export function DifficultyDurationFields({
   difficulty,
   duration,
@@ -193,112 +166,10 @@ function SectionDivider({ title }: { title: string }) {
   );
 }
 
-// ─── Choice list editor (QCM, variante « réponse unique » comprise, et matching) ─
-//
-// `hideAddButton` : l'éditeur en ligne de la feuille d'examen place son propre
-// « + ajouter une réponse » sur la même rangée que les pilules de réglage
-// (maquette, l.1113-1119). Le popup du Parcours garde le bouton intégré.
-//
-// Pas de réordonnancement des réponses (09/08/2026) : la poignée de glisser-
-// déposer a été retirée. L'ordre d'affichage sur la copie relève de « ordre
-// aléatoire », pas d'un classement fixé à la main dans l'éditeur.
-export function ChoiceListEditor({
-  responseType,
-  choices,
-  correctChoices,
-  onChange,
-  hideAddButton = false,
-}: {
-  responseType: ResponseType;
-  choices: string[];
-  correctChoices: number[];
-  onChange: (choices: string[], correctChoices: number[]) => void;
-  hideAddButton?: boolean;
-}) {
-  const t = useTranslations('examen');
-
-  function updateChoice(i: number, value: string) {
-    const next = [...choices];
-    next[i] = value;
-    onChange(next, correctChoices);
-  }
-
-  function addChoice() {
-    onChange([...choices, ''], correctChoices);
-  }
-
-  function removeChoice(i: number) {
-    const next = choices.filter((_, idx) => idx !== i);
-    const nextCorrect = correctChoices.filter((c) => c !== i).map((c) => (c > i ? c - 1 : c));
-    onChange(next, nextCorrect);
-  }
-
-  function toggleCorrect(i: number) {
-    if (responseType === 'qcs') {
-      onChange(choices, correctChoices.includes(i) ? [] : [i]);
-    } else if (responseType === 'qcm') {
-      const has = correctChoices.includes(i);
-      onChange(choices, has ? correctChoices.filter((c) => c !== i) : [...correctChoices, i]);
-    }
-  }
-
-  const showPairs = responseType === 'matching';
-  const showCorrectMarker = responseType === 'qcs' || responseType === 'qcm';
-
-  return (
-    <div>
-      {choices.length === 0 && (
-        <div style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: palette.amber, padding: '4px 0 10px' }}>
-          {t('choices.prompt', { what: showPairs ? t('choices.promptPairs') : t('choices.promptOptions') })}
-        </div>
-      )}
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {choices.map((c, i) => (
-          <div key={i} style={{ marginBottom: 7 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {showCorrectMarker && (
-              /* Exactement la case du type « tableau » : 22px, pastille pleine
-                 par ombre interne, ronde quand une seule réponse est permise. */
-              <button
-                onClick={() => toggleCorrect(i)}
-                title={responseType === 'qcs' ? t('choices.correctUnique') : t('choices.correct')}
-                style={{
-                  width: 22, height: 22, flexShrink: 0, boxSizing: 'border-box' as const,
-                  borderRadius: responseType === 'qcs' ? 999 : 6, cursor: 'pointer', padding: 0,
-                  border: correctChoices.includes(i) ? 'none' : `1.5px solid ${palette.lineStrong}`,
-                  boxShadow: correctChoices.includes(i) ? `inset 0 0 0 7px ${palette.green}` : 'none',
-                  background: palette.surfaceRaised,
-                }}
-              />
-            )}
-            {showPairs ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
-                <TextField value={c.split(' :: ')[0] ?? ''} onChange={(v) => updateChoice(i, `${v} :: ${c.split(' :: ')[1] ?? ''}`)} placeholder={t('choices.pairLeft', { n: i + 1 })} />
-                <span style={{ fontSize: 12, color: palette.inkFaint }}>→</span>
-                <TextField value={c.split(' :: ')[1] ?? ''} onChange={(v) => updateChoice(i, `${c.split(' :: ')[0] ?? ''} :: ${v}`)} placeholder={t('choices.pairRight')} />
-              </div>
-            ) : (
-              <div style={{ flex: 1 }}>
-                <TextField value={c} onChange={(v) => updateChoice(i, v)} placeholder={t('choices.option', { n: i + 1 })} />
-              </div>
-            )}
-            <button onClick={() => removeChoice(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: palette.danger, fontSize: 16, padding: '0 2px', lineHeight: 1 }}>×</button>
-          </div>
-          </div>
-        ))}
-      </div>
-      {!hideAddButton && (
-        <button onClick={addChoice} style={{ marginTop: 10, fontSize: 12, padding: '7px 12px', borderRadius: 8, border: `1px dashed ${ink(0.20)}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>
-          {showPairs ? t('choices.addPair') : t('choices.addOption')}
-        </button>
-      )}
-    </div>
-  );
-}
-
 // ─── Question editor panel ───────────────────────────────────────────────
 
 export default function QuestionEditor({
+  workshopId,
   question,
   allQuestions,
   pools,
@@ -307,6 +178,7 @@ export default function QuestionEditor({
   onSave,
   onCancel,
 }: {
+  workshopId: string;
   question: Question;
   allQuestions: Question[];
   pools: { id: string; name: string; color: string }[];
@@ -325,6 +197,10 @@ export default function QuestionEditor({
   });
   const [newPoolName, setNewPoolName] = useState('');
   const [creatingPool, setCreatingPool] = useState(false);
+  // Le popup n'a pas l'interrupteur global de l'éditeur en ligne : les réglages
+  // secondaires des questions liées (attendus, notions, barème étendu) se
+  // révèlent par ce bouton, sous la liste.
+  const [partsAdvanced, setPartsAdvanced] = useState(false);
 
   const isNew = !allQuestions.some((q) => q.id === question.id);
   const canSave = draft.content.trim().length > 0;
@@ -361,13 +237,25 @@ export default function QuestionEditor({
     patch({ parts: draft.parts.filter((_, i) => i !== idx) });
   }
 
+  // Glisser-déposer un fichier n'importe où sur le panneau : reconnu comme
+  // image ou audio et rangé au bon endroit (voir examen/questionMedia.tsx).
+  const { dragOver, dropError, dropHandlers } = useQuestionMediaDrop(workshopId, (kind, media) => patch({ [kind]: media }));
+
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       {/* backdrop */}
       <div onClick={onCancel} style={{ position: 'absolute', inset: 0, background: ink(0.42), backdropFilter: 'blur(2px)' }} />
 
       {/* panel */}
-      <div style={{ position: 'relative', width: 640, maxWidth: '100%', maxHeight: '100%', borderRadius: 18, background: palette.cream, boxShadow: `0 24px 64px ${ink(0.24)}`, display: 'flex', flexDirection: 'column', fontFamily: 'var(--font-sans)', overflow: 'hidden' }}>
+      <div
+        {...dropHandlers}
+        style={{
+          position: 'relative', width: 640, maxWidth: '100%', maxHeight: '100%', borderRadius: 18,
+          background: palette.cream, boxShadow: `0 24px 64px ${ink(0.24)}`, display: 'flex', flexDirection: 'column',
+          fontFamily: 'var(--font-sans)', overflow: 'hidden',
+          outline: dragOver ? `2px dashed ${palette.green}` : 'none', outlineOffset: -2,
+        }}
+      >
         {/* header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: `1px solid ${ink(0.08)}`, flexShrink: 0 }}>
           <div>
@@ -376,6 +264,7 @@ export default function QuestionEditor({
           </div>
           <button onClick={onCancel} style={{ width: 30, height: 30, borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.7), color: palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontFamily: 'inherit' }}>×</button>
         </div>
+        {dropError && <div style={{ padding: '10px 22px 0', fontSize: 12.5, color: palette.danger, flexShrink: 0 }}>{dropError}</div>}
 
         {/* body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px 24px' }}>
@@ -385,28 +274,30 @@ export default function QuestionEditor({
             <TextField value={draft.title} onChange={(v) => patch({ title: v })} placeholder={t('editor.titlePlaceholder')} />
           </div>
 
-          {/* type de question */}
-          <FieldLabel hint={t('editor.qTypeHint')}>{t('editor.qTypeLabel')}</FieldLabel>
-          <Segmented value={draft.questionType} onChange={(v) => patch({ questionType: v })} options={(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((k) => ({ value: k, label: t(`questionType.${k}`), soon: QUESTION_TYPE_V2.includes(k) }))} />
-
-          {draft.questionType === 'visuel' && (
-            <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 10, border: `1px dashed ${ink(0.18)}`, background: withAlpha(palette.paper, 0.6), fontSize: 12, color: palette.inkSoft }}>
-              <div style={{ marginBottom: 6 }}>{t('editor.visualAttach')}</div>
-              <button disabled style={{ fontSize: 11.5, padding: '6px 11px', borderRadius: 7, border: `1px solid ${ink(0.10)}`, background: ink(0.04), color: palette.inkFaint, cursor: 'not-allowed', fontFamily: 'inherit' }}>
-                {t('editor.visualEdit')}
-              </button>
+          {/* contenu + pièces jointes */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <FieldLabel>{t('editor.contentLabel')}</FieldLabel>
+              <TextField value={draft.content} onChange={(v) => patch({ content: v })} placeholder={t('editor.contentPlaceholder')} multiline rows={4} />
             </div>
-          )}
-          {draft.questionType === 'audio' && (
-            <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 10, border: `1px dashed ${ink(0.18)}`, background: withAlpha(palette.paper, 0.6), fontSize: 12, color: palette.inkSoft }}>
-              {t('editor.audioComing')}
+            <div style={{ display: 'flex', gap: 6, marginTop: 22 }}>
+              <MediaAttachment
+                workshopId={workshopId}
+                kind="image"
+                media={draft.image}
+                onChange={(image) => patch({ image })}
+                label={t('inline.attachImage')}
+                icon={<ImageIcon size={18} strokeWidth={1.75} />}
+              />
+              <MediaAttachment
+                workshopId={workshopId}
+                kind="audio"
+                media={draft.audio}
+                onChange={(audio) => patch({ audio })}
+                label={t('inline.attachAudio')}
+                icon={<AudioLines size={18} strokeWidth={1.75} />}
+              />
             </div>
-          )}
-
-          {/* contenu */}
-          <div style={{ marginTop: 18 }}>
-            <FieldLabel>{t('editor.contentLabel')}</FieldLabel>
-            <TextField value={draft.content} onChange={(v) => patch({ content: v })} placeholder={t('editor.contentPlaceholder')} multiline rows={4} />
           </div>
 
           {/* type de réponse */}
@@ -445,12 +336,11 @@ export default function QuestionEditor({
           )}
 
           {hasAnswerField && (
-            <div style={{ marginTop: draft.questionType === 'visuel' || draft.questionType === 'audio' ? 14 : 14 }}>
+            <div style={{ marginTop: 14 }}>
               {!(draft.responseType === 'textuelle' && draft.answerOptional) && (
                 <>
                   <FieldLabel hint={
                     draft.responseType === 'dessin' ? t('editor.answerHintDessin') :
-                    draft.responseType === 'audio' ? t('editor.answerHintAudio') :
                     t('editor.answerHintDefault')
                   }>
                     {t('editor.answerLabelDefault')}
@@ -489,79 +379,49 @@ export default function QuestionEditor({
             onDurationChange={(duration) => patch({ duration })}
           />
 
-          {/* parties supplémentaires */}
+          {/* questions liées — exactement le formulaire d'une question standard
+              (`QuestionFields`, partagé avec l'éditeur en ligne de la feuille),
+              privé des seuls éléments communs : image, audio et libellés restent
+              saisis une fois pour toute la grappe. Séparées par un simple filet,
+              sans encadré. */}
           <SectionDivider title={t('editor.partsDivider')} />
           <div style={{ fontSize: 12, color: palette.inkSoft, marginBottom: 10 }}>
             {t('editor.partsIntro')}
           </div>
-          {draft.parts.map((part, idx) => {
-            const partChoiceBased = CHOICE_BASED.includes(part.responseType);
-            const partHasAnswer = part.responseType !== 'sans_reponse' && !partChoiceBased;
-            return (
-              <div key={idx} style={{ marginBottom: 14, padding: '14px 16px', borderRadius: 12, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.55) }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 500, color: palette.inkMuted }}>{t('editor.part', { n: idx + 2 })}</span>
-                  <button onClick={() => removePart(idx)} style={{ border: 'none', background: 'none', color: palette.danger, cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 2px' }}>×</button>
-                </div>
-                <FieldLabel>{t('editor.partStatement')}</FieldLabel>
-                <TextField value={part.content} onChange={(v) => patchPart(idx, { content: v })} placeholder={t('editor.partStatementPlaceholder')} multiline rows={3} />
-                <div style={{ marginTop: 12 }}>
-                  <FieldLabel>{t('editor.rTypeLabel')}</FieldLabel>
-                  <Segmented
-                    value={part.responseType}
-                    onChange={(v) => patchPart(idx, { responseType: v, choices: CHOICE_BASED.includes(v) ? (part.choices.length ? part.choices : ['', '']) : part.choices, correctChoices: [] })}
-                    options={RESPONSE_TYPE_ORDER.map((k) => ({ value: k, label: t(`responseType.${k}`), soon: RESPONSE_TYPE_V2.includes(k) }))}
-                  />
-                </div>
-                {partChoiceBased && (
-                  <div style={{ marginTop: 12 }}>
-                    <FieldLabel>{part.responseType === 'matching' ? t('editor.choicesPairs') : t('editor.choicesOptions')}</FieldLabel>
-                    <ChoiceListEditor responseType={part.responseType} choices={part.choices} correctChoices={part.correctChoices} onChange={(choices, correctChoices) => patchPart(idx, { choices, correctChoices })} />
-                    {(part.responseType === 'qcs' || part.responseType === 'qcm') && (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
-                        <FieldLabel hint={t('editor.shuffleHint')}>{t('editor.shuffleLabel')}</FieldLabel>
-                        <MiniSwitch value={part.shuffleChoices} onChange={(v) => patchPart(idx, { shuffleChoices: v })} />
-                      </div>
-                    )}
-                  </div>
-                )}
-                {partHasAnswer && (
-                  <div style={{ marginTop: 12 }}>
-                    {!(part.responseType === 'textuelle' && part.answerOptional) && (
-                      <>
-                        <FieldLabel>{t('editor.answerLabelDefault')}</FieldLabel>
-                        <TextField value={part.answer} onChange={(v) => patchPart(idx, { answer: v })} placeholder={t('editor.answerPlaceholder')} multiline rows={2} />
-                      </>
-                    )}
-                    {part.responseType === 'textuelle' && (
-                      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <FieldLabel hint={t('editor.freeAnswerHintShort')}>{t('editor.freeAnswerLabel')}</FieldLabel>
-                          <MiniSwitch value={part.answerOptional} onChange={(v) => patchPart(idx, { answerOptional: v })} />
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                          <FieldLabel hint={t('editor.linesHintShort')}>{t('editor.linesLabel')}</FieldLabel>
-                          <input type="number" min={1} value={part.textLines} onChange={(e) => patchPart(idx, { textLines: Math.max(1, Number(e.target.value) || 1) })} style={{ width: 70, flexShrink: 0, fontSize: 13, color: palette.ink, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <DifficultyDurationFields
-                  difficulty={part.difficulty}
-                  duration={part.duration}
-                  onDifficultyChange={(difficulty) => patchPart(idx, { difficulty })}
-                  onDurationChange={(duration) => patchPart(idx, { duration })}
-                />
-              </div>
-            );
-          })}
-          <button
-            onClick={() => patch({ parts: [...draft.parts, emptyPart()] })}
-            style={{ width: '100%', padding: '9px 14px', borderRadius: 10, border: `1px dashed ${ink(0.18)}`, background: 'transparent', color: palette.inkSoft, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 4 }}
-          >
-            {t('editor.addPart')}
-          </button>
+          {draft.parts.map((part, idx) => (
+            <div
+              key={idx}
+              style={{ paddingTop: 14, marginBottom: 14, borderTop: `1px solid ${ink(0.10)}`, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}
+            >
+              <QuestionFields
+                values={part}
+                onChange={(p) => patchPart(idx, p as Partial<QuestionPart>)}
+                // Le popup n'a pas de copie sous les yeux : la question
+                // principale y est la 1, ses questions liées suivent.
+                number={idx + 2}
+                advancedOpen={partsAdvanced}
+                notions={notions}
+                onRemove={() => removePart(idx)}
+                statementPlaceholder={t('inline.linkedStatementPlaceholder')}
+              />
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+            <button
+              onClick={() => patch({ parts: [...draft.parts, emptyPart()] })}
+              style={{ flex: 1, padding: '9px 14px', borderRadius: 10, border: `1px dashed ${ink(0.18)}`, background: 'transparent', color: palette.inkSoft, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              {t('editor.addPart')}
+            </button>
+            {draft.parts.length > 0 && (
+              <button
+                onClick={() => setPartsAdvanced((v) => !v)}
+                style={{ padding: '9px 14px', borderRadius: 10, border: `1px solid ${partsAdvanced ? palette.greenSoft : ink(0.14)}`, background: partsAdvanced ? withAlpha(palette.green, 0.12) : 'transparent', color: partsAdvanced ? palette.green : palette.inkSoft, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                {t('inline.advanced')}
+              </button>
+            )}
+          </div>
 
           {/* options avancées */}
           <SectionDivider title={t('editor.optionsDivider')} />

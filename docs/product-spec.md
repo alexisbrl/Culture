@@ -279,7 +279,7 @@ Chaque question de parcours se rattache en plus à **un chapitre** (`exam_questi
 `/{locale}/workshops/{id}/exercise/{chapterId}`, ouverte par le bouton du pot et accessible à **tout membre**. Elle tire au hasard une question du chapitre, affiche l'énoncé et une zone de réponse, puis la correction après validation :
 
 - **QCS / QCM** → choix cliquables, correction automatique (bonne/mauvaise réponse, bonnes options mises en évidence).
-- **Autres types de réponse** (texte, dessin, audio…) → saisie libre, pas de verdict automatique : la validation affiche seulement la réponse attendue.
+- **Autres types de réponse** (texte, dessin, fichier…) → saisie libre, pas de verdict automatique : la validation affiche seulement la réponse attendue.
 - Après correction, « question suivante » retire du tirage celle qu'on vient de faire (sauf s'il n'en reste qu'une).
 
 Sécurité : le client ne reçoit **jamais** `answer` ni `correctChoices` au tirage — le serveur renvoie un `ExercisePrompt` épuré et calcule la correction (`gradeExercise`). Les options peuvent donc être mélangées côté serveur sans mémoriser de permutation, chaque option portant son index d'origine. Un membre qui soumet n'importe quoi peut obtenir la réponse : c'est assumé pour un parcours d'entraînement individuel, contrairement à un examen noté.
@@ -304,7 +304,7 @@ gain = floor( min( T − score , (T − score) × 0,4 + 1,5 ) )   si score < T, 
 
 C'est un **rattrapage exponentiel plafonné**. Le terme proportionnel fait qu'une question difficile rapporte beaucoup quand on part de bas (13 points à score 0 pour une cible 30) et plus rien une fois dépassée ; le bonus fixe garantit qu'on atteint la cible en un nombre fini de réponses (3 pour une cible 10, 5 pour une cible 30) au lieu de s'en approcher indéfiniment. Le `floor` garde des scores entiers.
 
-- Une **mauvaise réponse ne retire rien** : le score est monotone, une notion travaillée ne régresse jamais. Idem pour les questions sans correction automatique (texte libre, dessin, audio) : `correct: null`, donc score inchangé.
+- Une **mauvaise réponse ne retire rien** : le score est monotone, une notion travaillée ne régresse jamais. Idem pour les questions sans correction automatique (texte libre, dessin, fichier) : `correct: null`, donc score inchangé.
 - Le **plafond par cible** est structurant : une question « mémoriser » ne peut pas prouver qu'on sait analyser. Un chapitre qui n'a que des questions de Bloom 1 plafonne ses notions à 10 points, donc à 33 % d'avancement.
 - Une question n'alimente que les notions qui lui sont **explicitement reliées** (`exam_question_bricks`). Une question sans notion reliée ne fait progresser aucune barre.
 - **Avancement affiché** — calculé sur le score exact, pas sur le niveau, et saturé à 30 (les 3 premiers niveaux valent 100 %, le 4e est du bonus) : notion = `min(score, 30) / 30`, chapitre = `Σ min(score, 30) / (30 × nombre de notions)`, atelier = même formule sur toutes ses notions.
@@ -349,7 +349,11 @@ C'est un **rattrapage exponentiel plafonné**. Le terme proportionnel fait qu'un
 2. Manuellement par un gestionnaire
 3. Automatiquement à partir d'un examen existant partagé par un gestionnaire
 
-Chaque question est associée à une réponse. Une même question peut appartenir à plusieurs pools (« libellés » dans l'UI). Les questions générées automatiquement n'ont pas de libellé par défaut. Une question peut être composée de plusieurs **parties** indépendantes (énoncé/type de réponse/réponse propres à chacune).
+Chaque question est associée à une réponse. Une même question peut appartenir à plusieurs pools (« libellés » dans l'UI). Les questions générées automatiquement n'ont pas de libellé par défaut.
+
+**Questions liées.** Une question peut en porter d'autres, dites **liées** (`parts` dans le modèle et en base). Une question liée est une **question à part entière** — même formulaire, même menu de types de réponse, mêmes réglages de type, son propre barème, ses propres attendus, ses propres notions et son propre niveau de Bloom. Seuls trois éléments restent **communs** à toute la grappe, saisis une seule fois sur la question principale : l'**image**, l'**audio** et les **libellés**. Sur la copie comme dans l'éditeur, les questions liées sont numérotées à plat (1., 2., 3. — pas de 1.a/1.b) et séparées par un simple filet, sans encadré. Elles suivent toujours leur question principale : elles ne sont ni tirées, ni déplacées, ni supprimées séparément.
+
+**Modèle.** Ce que l'utilisateur manipule est donc un **groupe** — les éléments communs, puis une liste de questions (au moins une). C'est aussi la forme exposée à l'extérieur : le type `QuestionGroup` (`src/lib/workshops/questionGroup.ts`), `{ image, audio, labels, questions: [...] }`, est le contrat de la génération par IA et d'une future API — aucun cas particulier pour la première question. En base, `exam_questions` porte le groupe et `exam_question_items` porte chaque question (`sort_order` 0 = principale), les notions couvertes étant reliées à la question et non au groupe.
 
 **Options par question**
 
@@ -361,9 +365,9 @@ Chaque question est associée à une réponse. Une même question peut apparteni
 | Discussion IA | Discuter avec l'IA pour générer ou retravailler des questions spécifiques |
 | Durée | Durée allouée à cette question, réglable par partie (uniquement pour les examens projetés) [base : off] |
 
-**Types de question :** Textuel `[base]` / Visuel (image, graphique) / Audio
+**Type de question :** toujours textuel — une question peut porter en plus une image et/ou un audio en pièce jointe, indépendamment l'un de l'autre (pas un type exclusif). Voir `QuestionMedia` dans `src/lib/workshops/examTypes.ts`.
 
-**Types de réponse :** Sans réponse `[base]` / QCS / QCM / Textuelle (avec option « réponse libre / sans correction ») / Dessin (fond blanc ou calque) / Audio / Sondage (sans correction) / Fill in the blank / Matching / Trier dans l'ordre
+**Types de réponse :** Sans réponse `[base]` / QCS / QCM / Textuelle (avec option « réponse libre / sans correction ») / Liste / Tableau / Matching / Dessin (fond blanc ou calque) / Fichier (dépôt, y compris un fichier audio)
 
 **Génération d'examens**
 Un gestionnaire génère autant d'examens que souhaité, organisés en sections, à partir des questions de la banque. Les examens générés sont modifiables librement dans un éditeur avec aperçu A4 en direct.

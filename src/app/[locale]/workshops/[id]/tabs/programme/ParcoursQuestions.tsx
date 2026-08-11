@@ -137,6 +137,7 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
       <div style={{ padding: '18px 22px 22px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
         {error && <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 10 }}>{error}</div>}
         <QuestionEditor
+          workshopId={workshopId}
           question={editing}
           allQuestions={questions}
           pools={pools}

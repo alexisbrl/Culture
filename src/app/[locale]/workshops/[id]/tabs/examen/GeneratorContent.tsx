@@ -9,7 +9,7 @@ import InlineQuestionEditor from './InlineQuestionEditor';
 import { type Question } from '../QuestionEditor';
 import {
   type Exam, type ExamConfig, type ExamPresentation, type ExamSection, type QuestionWeight,
-  type IdentitySide, type CandidateIdentity,
+  type IdentitySide, type CandidateIdentity, type SheetFocus, type PageBlock,
   IDENTITY_KEY_SET, BAREME_KEY,
   A4_TITLE_BLOCK_HEIGHT, A4_IDENTITY_ROW_HEIGHT, A4_MARGIN_PX, A4_PAGE_HEIGHT,
   A4_PAGE_BREAK_HEIGHT, A4_ROW_FALLBACK_HEIGHT, A4_SECTION_HEADER_HEIGHT, A4_BLOCK_WIDTH,
@@ -17,7 +17,7 @@ import {
   configQuestionIds, defaultWeight, partWeightKey, flattenSections, isPageBreakId,
   computePagination, defaultPresentation, getFavoritePresentation, saveFavoritePresentation, isSamePresentation,
   moveSectionRow, clearWeightingFor,
-  EditQuestionButton, renderAnswerSpace,
+  EditQuestionButton, renderAnswerSpace, partAsQuestion, QuestionImagePreview, QuestionAudioNote,
 } from './examShared';
 
 /** Champ de la feuille A4 qui passe à la ligne au lieu de rogner : un
@@ -67,6 +67,34 @@ const LEFT_GUTTER = 36;  // 26 + l'espace
 const RIGHT_GUTTER = 96; // 86 + l'espace
 const TOOLBAR_WIDTH = A4_BLOCK_WIDTH + LEFT_GUTTER + RIGHT_GUTTER;
 
+/** Une ligne de la copie, dans l'ordre où elle est posée sur les pages.
+ *
+ *  Une question liée est une ligne à part entière (`qpart`), pas un morceau du
+ *  bloc de sa question principale (`qhead`) : c'est ce qui lui permet de basculer
+ *  seule sur la page suivante quand la grappe ne tient plus, sans jamais changer
+ *  de place dans la liste. Une question **en cours de modification** redevient
+ *  une ligne unique (`editor`) : le formulaire couvre toute la grappe.
+ *
+ *  Deux index cohabitent, et ils ne mesurent pas la même chose :
+ *  - `bi` indexe les blocs paginables (une question liée compte pour un) — c'est
+ *    l'index des sauts de page rendus par `computePagination` ;
+ *  - `gi` indexe les questions de `flat` (`flattenSections`) — c'est l'index du
+ *    glisser-déposer, qui déplace toujours une grappe entière. Toutes les lignes
+ *    d'une même grappe partagent donc le même `gi`. */
+type SheetRow =
+  | { kind: 'header'; key: string; sectionIdx: number }
+  | { kind: 'empty'; key: string; sectionIdx: number }
+  | { kind: 'pagebreak'; key: string; bi: number; gi: number; sectionIdx: number; id: string }
+  | { kind: 'editor'; key: string; bi: number; gi: number; sectionIdx: number; number: number; q: Question }
+  | { kind: 'qhead'; key: string; bi: number; gi: number; sectionIdx: number; number: number; q: Question; last: boolean }
+  | { kind: 'qpart'; key: string; bi: number; gi: number; sectionIdx: number; number: number; q: Question; partIdx: number; last: boolean };
+
+/** Les lignes de la copie portent un `bi` sauf les titres de partie et les
+ *  cales « partie vide », qui ne sont pas des blocs paginables. */
+function isBlockRow(row: SheetRow): row is Extract<SheetRow, { bi: number }> {
+  return row.kind !== 'header' && row.kind !== 'empty';
+}
+
 // Tout ce qui accompagne la feuille (barre d'outils, zone d'en-tête, boutons du
 // pied) prend la largeur totale du bloc pour se centrer comme lui, mais réserve
 // les gouttières en marge intérieure : le contenu s'aligne alors exactement sur
@@ -81,7 +109,8 @@ const SHEET_ALIGNED: React.CSSProperties = {
 };
 
 // ---- GENERATOR / APERÇU EN DIRECT ----
-function GeneratorContent({ questions, config, onConfigChange, editing, onCancelEdit, onGenerate, onOpenQuestion, onRemoveFromDraft, onClearEditor, editingQuestion, newQuestionId, pools, notions, onCreatePool, onSaveQuestion, onCancelQuestion }: {
+function GeneratorContent({ workshopId, questions, config, onConfigChange, editing, onCancelEdit, onGenerate, onOpenQuestion, onRemoveFromDraft, onClearEditor, editingQuestion, newQuestionId, focusRequest, onRequestFocus, pools, notions, onCreatePool, onSaveQuestion, onCancelQuestion }: {
+  workshopId: string;
   questions: Question[];
   config: ExamConfig;
   onConfigChange: (config: ExamConfig) => void;
@@ -95,6 +124,10 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
   editingQuestion: Question | null;
   /** Id de la question tout juste créée — l'annulation la retire de la feuille. */
   newQuestionId: string | null;
+  /** Ligne sur laquelle recadrer la feuille (voir `SheetFocus`). */
+  focusRequest: SheetFocus | null;
+  /** Demande de recadrage émise par la feuille elle-même (+ partie, + saut de page). */
+  onRequestFocus: (key: string) => void;
   pools: { id: string; name: string; color: string }[];
   notions: { id: string; title: string }[];
   onCreatePool: (name: string) => string;
@@ -157,6 +190,48 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
     return r;
   });
 
+  // Lignes de la copie et blocs paginables, construits d'un seul tenant (voir
+  // `SheetRow`) : la pagination et le rendu partagent ainsi exactement la même
+  // découpe, jusqu'à la question liée.
+  const sheetRows: SheetRow[] = [];
+  const pageBlocks: PageBlock[] = [];
+  {
+    let gi = 0;
+    const addBlock = (key: string, sectionIdx: number, fallbackHeight: number, forcesBreakAfter = false) => {
+      pageBlocks.push({ key, sectionIdx, fallbackHeight, forcesBreakAfter });
+      return pageBlocks.length - 1;
+    };
+    config.sections.forEach((section, sIdx) => {
+      sheetRows.push({ kind: 'header', key: `h-${section.id}`, sectionIdx: sIdx });
+      let pushedAny = false;
+      let number = 1;
+      section.questionIds.forEach(id => {
+        if (isPageBreakId(id)) {
+          sheetRows.push({ kind: 'pagebreak', key: id, bi: addBlock(id, sIdx, A4_PAGE_BREAK_HEIGHT, true), gi, sectionIdx: sIdx, id });
+          gi++;
+          pushedAny = true;
+          return;
+        }
+        const q = questions.find(p => p.id === id);
+        if (!q) return;
+        const bi = addBlock(q.id, sIdx, A4_ROW_FALLBACK_HEIGHT);
+        if (editingQuestion && editingQuestion.id === q.id) {
+          sheetRows.push({ kind: 'editor', key: q.id, bi, gi, sectionIdx: sIdx, number, q });
+        } else {
+          sheetRows.push({ kind: 'qhead', key: q.id, bi, gi, sectionIdx: sIdx, number, q, last: q.parts.length === 0 });
+          q.parts.forEach((_part, pi) => {
+            const key = partWeightKey(q.id, pi);
+            sheetRows.push({ kind: 'qpart', key, bi: addBlock(key, sIdx, A4_ROW_FALLBACK_HEIGHT), gi, sectionIdx: sIdx, number: number + 1 + pi, q, partIdx: pi, last: pi === q.parts.length - 1 });
+          });
+        }
+        number += 1 + q.parts.length;
+        gi++;
+        pushedAny = true;
+      });
+      if (!pushedAny) sheetRows.push({ kind: 'empty', key: `e-${section.id}`, sectionIdx: sIdx });
+    });
+  }
+
   // mesure la hauteur réelle de chaque bloc de question pour calculer les sauts de page A4
   const qRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [rowHeights, setRowHeights] = useState<Record<string, number>>({});
@@ -177,10 +252,17 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
     if (changed) setRowHeights(next);
   });
 
-  // Ouverture du formulaire en ligne (modification d'une question ou création
-  // d'une nouvelle) : la feuille se recadre dessus. Sans ça, le formulaire
-  // s'ouvre hors écran dès que la question est loin dans la copie — et une
-  // nouvelle question est toujours ajoutée tout à la fin.
+  // Recadrage de la feuille sur la ligne qui vient de bouger : ouverture du
+  // formulaire en ligne, mais aussi question envoyée depuis la banque, nouvelle
+  // partie, nouveau saut de page. Sans ça, l'ajout se fait hors écran — tout
+  // arrive à la fin de la copie, qui peut faire plusieurs pages — et rien ne
+  // signale que le clic a produit quelque chose.
+  //
+  // Un seul canal pour les quatre cas : `focusRequest`, posé par ExamenTab (qui
+  // sait quand une question entre dans l'examen ou passe en édition) ou par la
+  // feuille elle-même via `onRequestFocus` (+ partie, + saut de page). Faire
+  // dépendre l'effet de `editingQuestion` en plus rejouerait le recadrage sur
+  // une demande périmée à la fermeture du formulaire.
   //
   // On ne peut pas défiler dès le rendu suivant : le montage du formulaire
   // change la hauteur de sa ligne, donc la mesure (`useLayoutEffect` ci-dessus)
@@ -193,9 +275,9 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
   // arrière-plan ne reçoit aucune trame d'animation, le recadrage n'aurait
   // jamais lieu si la question était ouverte juste avant de changer d'onglet.
   const panelRef = useRef<HTMLDivElement>(null);
-  const editingId = editingQuestion?.id ?? null;
   useEffect(() => {
-    if (!editingId) return;
+    if (!focusRequest) return;
+    const focusKey = focusRequest.key;
     const STEP_MS = 50;
     const MAX_STEPS = 14; // ~700ms de sursis avant de recadrer quoi qu'il arrive
     let timer = 0;
@@ -211,7 +293,7 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
     // défilement que si l'écart est visible, pour ne pas reprendre la main sur
     // un utilisateur qui aurait fait défiler lui-même entre-temps.
     function center(last: boolean) {
-      const el = qRefs.current[editingId!];
+      const el = qRefs.current[focusKey];
       const panel = panelRef.current;
       if (!el) return;
       // sous 768px la coquille ne borne plus la hauteur : c'est la page qui
@@ -224,13 +306,18 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
       // aligne alors son haut juste sous la barre d'outils collante (STICKY_GAP),
       // sinon son premier champ passerait dessous.
       const STICKY_GAP = 56;
-      const top = Math.max(0, contentTop(el, panel) - Math.max(STICKY_GAP, (panel.clientHeight - el.offsetHeight) / 2));
+      // Hauteur lue sur le rectangle et non sur `offsetHeight` : la feuille est
+      // mise à l'échelle (`zoom`), or `offsetHeight` reste en unités locales
+      // (non zoomées) alors que `clientHeight` et les rectangles sont dans le
+      // repère de la fenêtre — les mélanger décentrerait le recadrage à toute
+      // échelle autre que 100 %.
+      const top = Math.max(0, contentTop(el, panel) - Math.max(STICKY_GAP, (panel.clientHeight - el.getBoundingClientRect().height) / 2));
       if (last && Math.abs(panel.scrollTop - top) <= 24) return;
       panel.scrollTo({ top, behavior: 'smooth' });
       if (!last) timer = window.setTimeout(() => center(true), 700);
     }
     function tick() {
-      const el = qRefs.current[editingId!];
+      const el = qRefs.current[focusKey];
       const panel = panelRef.current;
       steps++;
       if (el && panel) {
@@ -243,7 +330,7 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
     }
     timer = window.setTimeout(tick, STEP_MS);
     return () => clearTimeout(timer);
-  }, [editingId]);
+  }, [focusRequest]);
   // Le titre et le sous-titre s'écrivent directement sur la feuille, et leurs
   // champs y sont **toujours** présents, vides comme remplis, personnalisation
   // ouverte ou non : c'est là qu'on clique pour les saisir, il n'y a pas d'autre
@@ -317,10 +404,10 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
     ? A4_IDENTITY_ROW_HEIGHT * Math.max(identityLeftKeys.length, identityRightKeys.length, 1) + 24
     : 0;
   const headerBlockHeight = rowHeights['__page1_header__'] ?? (titleBlockHeight + identityBlockHeight);
-  const { pageStarts, pageCount } = computePagination(flat, rowHeights, headerBlockHeight);
-  function pageNumberOf(gi: number): number {
+  const { pageStarts, pageCount } = computePagination(pageBlocks, rowHeights, headerBlockHeight);
+  function pageNumberOf(bi: number): number {
     let n = 1;
-    pageStarts.forEach(p => { if (p <= gi) n++; });
+    pageStarts.forEach(p => { if (p <= bi) n++; });
     return n;
   }
 
@@ -343,7 +430,11 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
     patchConfig({ sections: config.sections.map((s, i) => i === idx ? { ...s, ...patch } : s) });
   }
   function addSection() {
-    patchConfig({ sections: [...config.sections, { id: 'sec' + Date.now(), title: `Partie ${config.sections.length + 1}`, questionIds: [] }] });
+    const id = 'sec' + Date.now();
+    patchConfig({ sections: [...config.sections, { id, title: `Partie ${config.sections.length + 1}`, questionIds: [] }] });
+    // `h-<id>` : clé de la ligne du titre de partie (voir la construction de
+    // `rows` plus bas) — c'est elle qu'on ramène au centre, pas la partie vide.
+    onRequestFocus(`h-${id}`);
   }
   function removeSection(idx: number) {
     if (config.sections.length <= 1) return;
@@ -365,6 +456,22 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
     const current = config.weighting[id] ?? defaultWeight();
     patchConfig({ weighting: { ...config.weighting, [id]: { ...current, ...patch } } });
   }
+  /** Retrait d'une question liée : les pondérations sont indexées par position
+   *  (`partWeightKey`), donc toutes celles qui la suivent remontent d'un cran —
+   *  sans quoi la question liée suivante hériterait du barème de celle qu'on
+   *  vient de retirer. */
+  function shiftPartWeights(questionId: string, removedIdx: number) {
+    const weighting = { ...config.weighting };
+    let i = removedIdx;
+    for (;;) {
+      const next = weighting[partWeightKey(questionId, i + 1)];
+      if (!next) break;
+      weighting[partWeightKey(questionId, i)] = next;
+      i += 1;
+    }
+    delete weighting[partWeightKey(questionId, i)];
+    patchConfig({ weighting });
+  }
   function handleDrop(targetFlatIdx: number, targetSectionIdx: number) {
     if (dragFlatIdx === null) return;
     patchConfig({ sections: moveSectionRow(config.sections, questions, dragFlatIdx, targetFlatIdx, targetSectionIdx) });
@@ -377,6 +484,7 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
     if (next.length === 0) next = [{ id: 'sec' + Date.now(), title: 'Partie 1', questionIds: [] }];
     next[next.length - 1] = { ...next[next.length - 1], questionIds: [...next[next.length - 1].questionIds, id] };
     patchConfig({ sections: next });
+    onRequestFocus(id);
   }
   function removePageBreak(id: string) {
     patchConfig({ sections: config.sections.map(s => ({ ...s, questionIds: s.questionIds.filter(qid => qid !== id) })) });
@@ -436,8 +544,14 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
   // où s'arrête la carte de la banque de questions, à gauche. Le blanc de fin
   // de course reste, mais à l'intérieur du défilement (padding bas de
   // `.scroll-panel`).
+  // Marges latérales du panneau exprimées en `calc(… * var(--exam-scale))` :
+  // elles font partie de la largeur de référence du bloc (1236 = 1188 de bloc A4
+  // + 48 de marges), donc elles suivent l'échelle comme lui. Sans ça, la largeur
+  // laissée au contenu zoomé ne vaudrait plus exactement 1188 unités locales et
+  // la feuille déborderait (échelle < 1) ou flotterait (échelle > 1).
+  const SCALED_PAD_RIGHT = 'calc(12px * var(--exam-scale, 1))';
   return (
-    <div style={{ padding: '8px 12px 0 24px', height: '100%', boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ padding: `8px ${SCALED_PAD_RIGHT} 0 calc(24px * var(--exam-scale, 1))`, height: '100%', boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column' }}>
       {editing && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: withAlpha(palette.amberGlow, 0.18), border: `1px solid ${withAlpha(palette.amber, 0.35)}`, marginBottom: 14, flexShrink: 0 }}>
           <PenLine size={14} strokeWidth={1.75} color={palette.amber} />
@@ -449,7 +563,17 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
           une question entre dans l'examen d'un clic sur sa carte dans la banque, à
           gauche (`bq.toggle` de la maquette), et en ressort du même clic ou par la
           croix de la gouttière droite. */}
-      <div ref={panelRef} className="scroll-panel" style={{ flex: 1, minWidth: 0, minHeight: 0, paddingRight: 12, paddingBottom: 28, boxSizing: 'border-box' as const }}>
+      <div ref={panelRef} className="scroll-panel" style={{ flex: 1, minWidth: 0, minHeight: 0, paddingRight: SCALED_PAD_RIGHT, paddingBottom: 28, boxSizing: 'border-box' as const }}>
+      {/* Mise à l'échelle de toute la feuille et de ce qui l'accompagne (barre
+          d'outils, bandeau de personnalisation, boutons du pied) : le contenu
+          garde ses dimensions de référence en unités locales — un bloc de
+          1188px, une page de 1494px de haut — et c'est `zoom` qui le rend de
+          75 % à 140 %. Le panneau défilant, lui, reste hors du zoom : ses
+          `scrollTop`/`clientHeight` restent dans le même repère que les
+          `getBoundingClientRect()` du recadrage automatique.
+          `--exam-scale` est posé par `.exam-shell` (globals.css) ; le repli à 1
+          couvre un montage hors de cette coquille. */}
+      <div style={{ zoom: 'var(--exam-scale, 1)' }}>
         {/* Barre d'outils de la feuille — alignée sur la largeur totale
             (gouttière gauche + feuille + gouttière droite) pour tomber pile
             au-dessus du bloc A4. Elle reste collée en haut du panneau défilant
@@ -578,40 +702,11 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
 
 
           {(() => {
-            type Row =
-              | { kind: 'header'; key: string; sectionIdx: number }
-              | { kind: 'empty'; key: string; sectionIdx: number }
-              | { kind: 'pagebreak'; key: string; gi: number; sectionIdx: number; id: string }
-              | { kind: 'question'; key: string; gi: number; sectionIdx: number; subStart: number; q: Question };
-
-            const rows: Row[] = [];
-            let flatCursor = 0;
-            config.sections.forEach((section, sIdx) => {
-              rows.push({ kind: 'header', key: `h-${section.id}`, sectionIdx: sIdx });
-              let pushedAny = false;
-              let subCursor = 1;
-              section.questionIds.forEach(id => {
-                if (isPageBreakId(id)) {
-                  rows.push({ kind: 'pagebreak', key: id, gi: flatCursor, sectionIdx: sIdx, id });
-                  flatCursor++;
-                  pushedAny = true;
-                  return;
-                }
-                const q = questions.find(p => p.id === id);
-                if (!q) return;
-                rows.push({ kind: 'question', key: q.id, gi: flatCursor, sectionIdx: sIdx, subStart: subCursor, q });
-                subCursor += 1 + q.parts.length;
-                flatCursor++;
-                pushedAny = true;
-              });
-              if (!pushedAny) rows.push({ kind: 'empty', key: `e-${section.id}`, sectionIdx: sIdx });
-            });
-
-            const chunks: Row[][] = [];
-            let current: Row[] = [];
-            rows.forEach(row => {
-              if ((row.kind === 'question' || row.kind === 'pagebreak') && row.gi > 0 && pageStarts.has(row.gi)) {
-                const carryOver: Row[] = [];
+            const chunks: SheetRow[][] = [];
+            let current: SheetRow[] = [];
+            sheetRows.forEach(row => {
+              if (isBlockRow(row) && row.bi > 0 && pageStarts.has(row.bi)) {
+                const carryOver: SheetRow[] = [];
                 while (current.length > 0 && (current[current.length - 1].kind === 'header' || current[current.length - 1].kind === 'empty') && current[current.length - 1].sectionIdx === row.sectionIdx) {
                   carryOver.unshift(current.pop()!);
                 }
@@ -638,8 +733,18 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
             });
 
             return chunks.map((chunk, chunkIdx) => {
-              const firstQuestionRow = chunk.find(r => r.kind === 'question' || r.kind === 'pagebreak') as (Row & { kind: 'question' | 'pagebreak' }) | undefined;
-              const pageNumber = firstQuestionRow ? pageNumberOf(firstQuestionRow.gi) : chunkIdx + 1;
+              const firstBlockRow = chunk.find(isBlockRow);
+              const pageNumber = firstBlockRow ? pageNumberOf(firstBlockRow.bi) : chunkIdx + 1;
+              // Page qui porte le formulaire en ligne : elle cesse d'être bornée
+              // à la hauteur d'un A4 le temps de la modification. Un formulaire
+              // de question à plusieurs questions liées dépasse largement une
+              // feuille, et la page le rognait — on ne voyait plus ni les
+              // derniers champs ni les boutons enregistrer/annuler. La feuille
+              // s'étire donc jusqu'au bas du formulaire (`minHeight` garde le
+              // format A4 comme plancher), et la pagination normale reprend la
+              // main dès que la modification est terminée : le formulaire rendu
+              // à sa hauteur de question redevient une ligne comme une autre.
+              const growsForEditor = chunk.some(r => r.kind === 'editor');
               return (
                 <div key={chunkIdx} style={{ marginBottom: 14 }}>
                   {/* centrage via margin:auto plutôt que justifyContent:center — quand le contenu dépasse,
@@ -663,6 +768,14 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
                             </div>
                           );
                         }
+                        // Une question liée n'a ni poignée ni crayon : c'est la
+                        // grappe entière qui se déplace et qui s'ouvre dans le
+                        // formulaire. Sa cale garde seulement sa hauteur, pour
+                        // que la ligne suivante reste en face de la bonne
+                        // question quand la grappe est coupée entre deux pages.
+                        if (row.kind === 'qpart') {
+                          return <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, opacity: dragFlatIdx === row.gi ? 0.4 : 1 }} />;
+                        }
                         return (
                           <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, paddingTop: 20, boxSizing: 'border-box' as const, opacity: dragFlatIdx === row.gi ? 0.4 : 1 }}>
                             <span draggable onDragStart={() => setDragFlatIdx(row.gi)} onDragEnd={() => { setDragFlatIdx(null); setDropIndicator(null); }} onMouseEnter={() => setHoveredRowKey(row.key)} onMouseLeave={() => setHoveredRowKey(null)} title={t('generator.dragReorder')} style={{ cursor: 'grab', color: palette.lineStrong, fontSize: 13, lineHeight: 1, userSelect: 'none' as const }}>⠿</span>
@@ -673,7 +786,7 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
                     </div>
 
                     {/* colonne centrale : la feuille A4 elle-même (fond blanc, bordure, ombre) */}
-                    <div style={{ width: A4_BLOCK_WIDTH, height: A4_PAGE_HEIGHT, flexShrink: 0, position: 'relative' as const, background: palette.paper, border: `1px solid ${ink(0.08)}`, borderRadius: 4, boxShadow: `0 2px 14px ${ink(0.06)}`, overflow: 'hidden' }}>
+                    <div style={{ width: A4_BLOCK_WIDTH, height: growsForEditor ? undefined : A4_PAGE_HEIGHT, minHeight: growsForEditor ? A4_PAGE_HEIGHT : undefined, flexShrink: 0, position: 'relative' as const, background: palette.paper, border: `1px solid ${ink(0.08)}`, borderRadius: 4, boxShadow: `0 2px 14px ${ink(0.06)}`, overflow: 'hidden' }}>
                       <div style={{ height: A4_MARGIN_PX, flexShrink: 0 }} />
                       {/* En-tête de la copie. En mode « personnaliser », les deux
                           zones deviennent les cibles de dépôt des pilules et le
@@ -781,24 +894,31 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
                             </div>
                           );
                         }
-                        const { gi, subStart, q } = row;
+                        const { gi, q } = row;
                         const showLineBefore = dragFlatIdx !== null && dragFlatIdx !== gi && dragFlatIdx !== gi - 1 && dropIndicator === gi;
-                        const hovered = hoveredRowKey === row.key;
+                        // Survol : c'est la grappe entière qui s'éclaire, même
+                        // coupée entre deux pages — la poignée déplace la grappe.
+                        const hovered = hoveredRowKey === q.id;
                         // La question en cours d'édition cède sa place au
                         // formulaire, à l'endroit exact qu'elle occupe sur la
-                        // copie. Le `ref` reste posé : la hauteur du formulaire
-                        // entre dans le calcul de pagination comme le reste.
-                        if (editingQuestion && editingQuestion.id === q.id) {
+                        // copie, questions liées comprises (le formulaire les
+                        // porte toutes). Le `ref` reste posé : la hauteur du
+                        // formulaire entre dans le calcul de pagination comme le reste.
+                        if (row.kind === 'editor') {
                           return (
                             <div key={row.key} ref={el => { qRefs.current[row.key] = el; }}>
                               <InlineQuestionEditor
-                                question={editingQuestion}
-                                number={subStart}
+                                workshopId={workshopId}
+                                question={editingQuestion!}
+                                number={row.number}
                                 isNew={newQuestionId === q.id}
                                 pools={pools}
                                 notions={notions}
                                 weight={config.weighting[q.id] ?? defaultWeight()}
                                 onWeightChange={patch => updateWeight(q.id, patch)}
+                                partWeight={idx => config.weighting[partWeightKey(q.id, idx)] ?? defaultWeight()}
+                                onPartWeightChange={(idx, patch) => updateWeight(partWeightKey(q.id, idx), patch)}
+                                onRemovePart={idx => shiftPartWeights(q.id, idx)}
                                 onCreatePool={onCreatePool}
                                 onSave={onSaveQuestion}
                                 onCancel={onCancelQuestion}
@@ -806,32 +926,49 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
                             </div>
                           );
                         }
-                        return (
-                          <div key={row.key}>
-                            <div {...dragOverPropsFor(gi, row.sectionIdx)} ref={el => { qRefs.current[row.key] = el; }} style={{ background: hovered ? withAlpha(palette.amber, 0.08) : 'transparent', transition: 'background 0.1s' }}>
-                              <div style={{ height: showLineBefore ? 3 : 0, background: palette.amber, transition: 'all 0.1s' }} />
-                              <div style={{ padding: '20px 34px' }}>
-                                <div ref={el => { qRefs.current[`${q.id}::head`] = el; }}>
-                                  <div style={{ fontSize: 14, color: palette.ink, lineHeight: 1.6 }}>
-                                    <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{subStart}.</span>
-                                    {q.content || t('noStatement')}
-                                  </div>
-                                  {renderAnswerSpace(q, t('answerSpace.audio'))}
+                        // Question liée : une ligne comme une autre sur la copie.
+                        // L'écart de 40px qui la sépare de la précédente est un
+                        // `padding` et non une marge — il doit entrer dans la
+                        // hauteur mesurée, sinon la pagination le perd et le bloc
+                        // déborde de la page.
+                        if (row.kind === 'qpart') {
+                          const part = q.parts[row.partIdx];
+                          if (!part) return null;
+                          return (
+                            <div key={row.key} {...dragOverPropsFor(gi, row.sectionIdx)} ref={el => { qRefs.current[row.key] = el; }} style={{ background: hovered ? withAlpha(palette.amber, 0.08) : 'transparent', transition: 'background 0.1s' }}>
+                              <div style={{ padding: row.last ? '40px 34px 20px' : '40px 34px 0' }}>
+                                <div style={{ fontSize: 14, color: palette.ink, lineHeight: 1.6 }}>
+                                  <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{row.number}.</span>
+                                  {part.content || t('noStatement')}
                                 </div>
-                                {q.parts.map((part, pi) => (
-                                  <div key={pi} ref={el => { qRefs.current[partWeightKey(q.id, pi)] = el; }} style={{ marginTop: 40 }}>
-                                    <div style={{ fontSize: 14, color: palette.ink, lineHeight: 1.6 }}>
-                                      <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{subStart + pi + 1}.</span>
-                                      {part.content || t('noStatement')}
-                                    </div>
-                                    {renderAnswerSpace({ ...q, responseType: part.responseType, answer: part.answer, choices: part.choices, correctChoices: part.correctChoices, textLines: part.textLines }, t('answerSpace.audio'))}
-                                  </div>
-                                ))}
+                                {/* `partAsQuestion` porte aussi les réglages
+                                    du type (liste, tableau, paires, fichier) :
+                                    sans eux, une question liée d'un de ces
+                                    types retombait sur trois lignes vides. */}
+                                {renderAnswerSpace(partAsQuestion(q, part))}
                               </div>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div key={row.key} {...dragOverPropsFor(gi, row.sectionIdx)} ref={el => { qRefs.current[row.key] = el; }} style={{ background: hovered ? withAlpha(palette.amber, 0.08) : 'transparent', transition: 'background 0.1s' }}>
+                            <div style={{ height: showLineBefore ? 3 : 0, background: palette.amber, transition: 'all 0.1s' }} />
+                            <div style={{ padding: row.last ? '20px 34px' : '20px 34px 0' }}>
+                              <QuestionImagePreview workshopId={workshopId} image={q.image} />
+                              <QuestionAudioNote audio={q.audio} />
+                              <div style={{ fontSize: 14, color: palette.ink, lineHeight: 1.6 }}>
+                                <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{row.number}.</span>
+                                {q.content || t('noStatement')}
+                              </div>
+                              {renderAnswerSpace(q)}
                             </div>
                           </div>
                         );
                       })}
+                      {/* Marge basse de la feuille, à réserver explicitement
+                          seulement quand la page s'étire : à hauteur fixe, le
+                          vide sous la dernière ligne s'en charge tout seul. */}
+                      {growsForEditor && <div style={{ height: A4_MARGIN_PX }} />}
                       {pageCount > 1 && pageFooter(pageNumber)}
                     </div>
 
@@ -860,24 +997,19 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
                             </div>
                           );
                         }
-                        const { gi, q } = row;
-                        const mainHeadKey = `${q.id}::head`;
+                        // Une question liée ne se retire pas seule de l'examen
+                        // (elle appartient à sa grappe) : sa cale ne porte rien,
+                        // elle réserve juste sa hauteur pour que la ligne
+                        // suivante reste en face de la bonne question.
+                        if (row.kind === 'qpart') {
+                          return <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT }} />;
+                        }
+                        // La croix retire la grappe entière : elle est posée en
+                        // face de son premier bloc, le seul dont on est certain
+                        // qu'il est sur la même page que le début de la question.
                         return (
-                          <div key={row.key} {...dragOverPropsFor(gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 20, boxSizing: 'border-box' as const }}>
-                            {/* réserve la hauteur réelle de l'énoncé principal (mesurée sur `${q.id}::head`) quand la question a des parties, sinon les pondérations des parties suivantes remontent dès que l'énoncé principal grandit (QCM à plusieurs choix, question ouverte avec beaucoup de lignes) */}
-                            <div style={q.parts.length > 0 ? { height: rowHeights[mainHeadKey] ?? A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, boxSizing: 'border-box' as const } : undefined} />
-                            {/* Une cale par partie, sans libellé : la gouttière
-                                n'affiche plus « part. n » (le numéro figure déjà
-                                devant l'énoncé sur la copie), mais la hauteur de
-                                chaque partie reste réservée pour que la croix de
-                                retrait tombe en face de la bonne question. */}
-                            {q.parts.map((_part, pi) => {
-                              const key = partWeightKey(q.id, pi);
-                              return (
-                                <div key={pi} style={{ height: rowHeights[key] ?? A4_ROW_FALLBACK_HEIGHT, marginTop: 40, paddingTop: 14, boxSizing: 'border-box' as const }} />
-                              );
-                            })}
-                            <span onClick={() => removeFromExam(q.id)} title={t('generator.removeFromExam')} style={{ fontSize: 15, color: palette.danger, cursor: 'pointer' }}>×</span>
+                          <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 20, boxSizing: 'border-box' as const }}>
+                            <span onClick={() => removeFromExam(row.q.id)} title={t('generator.removeFromExam')} style={{ fontSize: 15, color: palette.danger, cursor: 'pointer' }}>×</span>
                           </div>
                         );
                       })}
@@ -921,6 +1053,7 @@ function GeneratorContent({ questions, config, onConfigChange, editing, onCancel
               {t('generator.pageBreak')}
             </button>
           </div>
+      </div>
       </div>
       {pendingRemoveSectionIdx !== null && (() => {
         const section = config.sections[pendingRemoveSectionIdx];

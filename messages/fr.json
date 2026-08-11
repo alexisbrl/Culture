@@ -354,13 +354,7 @@
       "tableau": "tableau",
       "matching": "paire",
       "dessin": "dessin",
-      "fichier": "fichier",
-      "audio": "audio"
-    },
-    "questionType": {
-      "textuel": "Textuel",
-      "visuel": "Visuel",
-      "audio": "Audio"
+      "fichier": "fichier"
     },
     "identity": {
       "nom": "Nom",
@@ -371,7 +365,7 @@
       "bareme": "Barème"
     },
     "answerSpace": {
-      "audio": "🎙 espace de réponse audio"
+      "audioNote": "Un enregistrement audio accompagne cette question."
     },
     "editQuestion": "modifier la question",
     "cancelEditQuestion": "annuler la modification",
@@ -382,11 +376,6 @@
       "titleLabel": "Titre",
       "titleHint": "optionnel — s'il est rempli, remplace l'énoncé comme titre affiché dans la banque de questions",
       "titlePlaceholder": "Titre court (optionnel)…",
-      "qTypeLabel": "Type de question",
-      "qTypeHint": "Textuel par défaut · Visuel (image, graphique) et Audio disponibles",
-      "visualAttach": "📎 joindre une image ou un graphique",
-      "visualEdit": "éditer l'image — outil basique à venir",
-      "audioComing": "🎙️ enregistrement / import audio — outil à venir",
       "contentLabel": "Énoncé de la question",
       "contentPlaceholder": "Écris ou colle l'énoncé de la question…",
       "rTypeLabel": "Type de réponse",
@@ -399,7 +388,6 @@
       "shuffleLabel": "Ordre aléatoire",
       "shuffleHint": "mélange l'ordre des options pour chaque étudiant",
       "answerHintDessin": "description ou image de référence pour la correction (outil dessin à venir)",
-      "answerHintAudio": "transcription ou éléments attendus dans la réponse audio",
       "answerHintDefault": "utilisée pour la correction assistée par IA",
       "answerLabelDefault": "Réponse associée",
       "answerPlaceholder": "Réponse de référence…",
@@ -416,8 +404,8 @@
       "durationHint": "off par défaut — durée allouée, uniquement pour les examens projetés",
       "minutes": "minutes",
       "seconds": "secondes",
-      "partsDivider": "Parties supplémentaires",
-      "partsIntro": "Une question peut avoir plusieurs parties indépendantes (énoncés et types de réponse distincts).",
+      "partsDivider": "Questions liées",
+      "partsIntro": "Une question liée est une question à part entière : elle a son énoncé, son type de réponse et ses réglages. Seuls l’image, l’audio et les libellés restent communs.",
       "part": "Partie {n}",
       "partStatement": "Énoncé",
       "partStatementPlaceholder": "Énoncé de cette partie…",
@@ -478,7 +466,6 @@
       "filters": "filtres",
       "filtersReset": "réinitialiser",
       "filtersTitle": "filtres",
-      "qTypeSection": "type de question",
       "rTypeSection": "type de réponse",
       "statusSection": "statut",
       "statusNew": "Nouveau",
@@ -570,6 +557,8 @@
       "newQuestion": "nouvelle question",
       "editQuestion": "modifier la question",
       "statementPlaceholder": "intitulé de la question…",
+      "linkedStatementPlaceholder": "intitulé de la question liée…",
+      "removeLinked": "retirer la question liée",
       "attachImage": "ajouter une image intégrée",
       "pointsTitle": "barème de la question",
       "points": "pts",
@@ -580,7 +569,13 @@
       "save": "enregistrer →",
       "statementRequired": "l’intitulé de la question est obligatoire",
       "attachAudio": "ajouter un audio",
-      "soon": "bientôt",
+      "removeMedia": "retirer la pièce jointe",
+      "unsupportedFormat": "Format de fichier non pris en charge.",
+      "play": "lire",
+      "pause": "mettre en pause",
+      "skipBack": "reculer de 10 secondes",
+      "skipForward": "avancer de 10 secondes",
+      "volume": "volume",
       "scoreLabel": "barème",
       "penaltyLabel": "mauvaise réponse",
       "penaltyTitle": "malus appliqué à une mauvaise réponse",

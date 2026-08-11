@@ -2,7 +2,7 @@
 
 > Repères chronologiques de haut niveau sur les décisions structurantes du projet. **Ce n'est pas un journal détaillé** : pour le détail exact d'une évolution (avant/après, itérations intermédiaires), `git log`/`git blame` sur les fichiers concernés font foi. Les patterns de code qui ont émergé de ces décisions vivent dans `.claude/rules/` (chargés automatiquement quand pertinent) ; l'état actuel du produit vit dans `docs/product-spec.md`. Pas chargé automatiquement — à lire seulement pour comprendre le contexte historique d'une zone avant de la modifier en profondeur.
 >
-> Dernière mise à jour : 06/08/2026
+> Dernière mise à jour : 11/08/2026
 
 - **31/05/2026 — Migration de marque Evalia → Culture.** Thème violet → vert/crème, nouveau logo (germe/arbre), typographie Inter Tight × Caveat. Terminée.
 
@@ -59,3 +59,49 @@ Nouveauté d'organisation : `docs/migrations/EN-ATTENTE-DEPLOIEMENT.md` devient 
 ## 10/08/2026 — Migration Bloom 4 niveaux appliquée en production
 
 La branche `feat/progression-parcours` (PR #32 — refonte UI, progression du parcours, refonte des types de réponse de l'éditeur d'examen) est mergée dans `main` et déployée sur Vercel. La migration *contract* `2026-08-09-bloom-4-niveaux.sql` a ensuite été appliquée : contraintes `exam_questions_bloom_level_check` resserrée à 1..4 et `brick_mastery_bloom_level_check` à 0..4, aucune ligne à migrer. Premier cycle complet du circuit `EN-ATTENTE-DEPLOIEMENT.md` (déployer d'abord, contracter ensuite) — la section « À appliquer » est revenue à `AUCUN`.
+
+## 11/08/2026 — Retrait du type de réponse « audio », remplacement du type de question par des pièces jointes
+
+Le type de réponse `audio` (l'élève enregistre/importe un audio comme réponse) est retiré de `ResponseType` — le dépôt d'un fichier audio reste possible via le type `fichier` (`FILE_TYPE_KEYS` inchangé). Le « type de question » (`textuel`/`visuel`/`audio`, jamais construit au-delà de boutons désactivés) est supprimé à son tour : une question est désormais toujours textuelle, avec deux pièces jointes optionnelles et indépendantes (`image`, `audio`, type `QuestionMedia` dans `src/lib/workshops/examTypes.ts`). Upload réel branché (ticket signé → PUT direct client → clé stockée sur la question, `src/lib/storage.ts`) dans les deux éditeurs (`InlineQuestionEditor`, popup `QuestionEditor` du Parcours) et affiché en lecture seule dans la banque, la feuille A4 et l'écran d'exercice élève. Migration additive `exam_questions.image_key`/`audio_key` appliquée directement ; la colonne `question_type`, désormais morte, attend le déploiement de ce code avant suppression (voir `docs/migrations/EN-ATTENTE-DEPLOIEMENT.md`).
+
+## 11/08/2026 — Les questions liées deviennent de vraies questions
+
+Une « partie » de question (`QuestionPart`) n'était qu'un sous-ensemble appauvri d'une question : énoncé, type de réponse, choix, réponse — sans `typeOptions`, donc les types liste/tableau/paires/fichier/dessin y étaient inéditables (et retombaient sur trois lignes vides sur la copie), sans attendus, sans notions, sans niveau de Bloom. Elle était éditée par un formulaire à part, dans un encadré plus clair, avec un `<select>` natif.
+
+Désormais une **question liée** est une question standard privée des seuls **éléments communs** — image, audio et libellés, saisis une fois pour toute la grappe. Elle porte son type de réponse et ses réglages, son barème, ses attendus, **ses notions et son propre niveau de Bloom** (décision produit : deux sous-questions d'un même énoncé ne visent pas forcément la même chose). Le corps du formulaire est extrait dans `tabs/examen/questionFields.tsx` (`QuestionFields`) et sert **une seule implémentation** à la question principale, aux questions liées, à l'éditeur en ligne de la feuille et au popup du Parcours ; l'encadré disparaît au profit d'un simple filet de séparation.
+
+Modèle : toujours le tableau jsonb `exam_questions.parts`, avec **exactement les mêmes noms de champs que `Question`** — une question liée n'existant jamais seule, une table à `parent_id` n'aurait rien apporté et aurait cassé le tirage, les clés de pondération et la jonction notions. Contrat unique pour la future génération par IA : un objet question + un tableau `parts` d'objets de même forme moins les champs communs. Conséquence : les notions d'une question liée vivent dans le jsonb et **pas** dans `exam_question_bricks` (qui reste l'index de la seule question principale) — la banque et le crédit de maîtrise en font l'union eux-mêmes. Champs morts retirés du format (`answerOptional`, `difficulty`, `duration` des parties) : ignorés à la lecture, disparaissent au premier enregistrement. **Aucune migration** — lecture et écriture normalisent (`normalizePart`).
+
+Côté candidat, l'écran d'exercice du parcours présente enfin les questions liées : un énoncé commun (image/audio non répétés), une zone de réponse par question liée, une correction par question liée, et chacune crédite ses propres notions avec son propre niveau de Bloom (`rewardLinkedAnswer`). La signature de `gradeExercise` passe de `number[]` à `number[][]` (indice 0 = question principale).
+
+## 11/08/2026 — Un groupe, des questions : le stockage devient symétrique
+
+Suite immédiate de l'entrée précédente. Une question restait asymétrique en base : la ligne `exam_questions` portait à la fois les éléments **communs** du groupe (image, audio, libellés, chapitre) et le contenu de sa **première** question, les suivantes vivant dans le jsonb `parts`. La première question n'avait donc pas la même forme que les autres — un piège pour la future génération par IA, à qui il aurait fallu expliquer « la première à la racine, les autres dans `parts` ».
+
+Deux étapes, dans cet ordre :
+
+1. **Façade `QuestionGroup`** (`src/lib/workshops/questionGroup.ts`) : la vue symétrique `{ image, audio, labels, questions: [...] }` avec l'invariant « au moins une question », `toGroup`/`fromGroup`, et `normalizeGroupInput` qui ramène une entrée non fiable (IA, import) sur un groupe valide sans jamais lui faire confiance. C'est le contrat destiné à l'IA et à une future API.
+
+2. **Stockage symétrique** : `exam_questions` devient le groupe, chaque question — la principale comprise — est une ligne de `exam_question_items` (`sort_order` 0 = principale), avec ses colonnes typées et ses contraintes (`bloom_level` 1..4, unicité `(group_id, sort_order)`, `on delete cascade`). Les notions sont reliées à la question (`exam_question_item_bricks`) et non plus au groupe. La question principale **reprend l'identifiant du groupe** : les clés de barème, les sections d'examen et les brouillons déjà enregistrés restent valides. Les écritures sont différentielles (`syncQuestionItems`), une question liée gardant sa ligne et ses liens d'une édition à l'autre.
+
+Choix de calendrier assumé : la restructuration a été faite **maintenant, sur des données de test jetables**, plutôt que déléguée à la V2. Le même changement avec de vrais clients aurait imposé backfill, double écriture et vérification sans perte possible — la fenêtre où il est gratuit se referme au premier utilisateur réel.
+
+Le type `Question` (« principale + liées ») reste la vue de l'interface : la conversion est confinée à `exam.ts`, aucun composant n'a bougé. Migration *expand* appliquée (106 groupes → 109 questions, 0 orphelin) ; la phase *contract* — 14 colonnes + `exam_question_bricks` — attend le déploiement, voir `docs/migrations/EN-ATTENTE-DEPLOIEMENT.md`. Vérification de bout en bout de la persistance faite hors UI (round-trip réel sur la base : écriture, relecture ordonnée, retrait différentiel, cascades, contraintes).
+
+## 11/08/2026 — La feuille d'examen s'adapte à la largeur de l'écran
+
+Le bloc A4 de l'éditeur d'examen avait une largeur figée (1056px de papier, 1236px avec ses gouttières) : rogné sur un portable — au point que les croix de retrait de la gouttière droite étaient invisibles sous ~1610px, donc y compris à 100 % sur un 1512 ou un 1600 —, et perdu au milieu du vide sur un grand écran.
+
+Il se met désormais à l'échelle par paliers, de **55 % à 105 %** d'une feuille (`--exam-scale` : 0,55 / 0,65 / 0,75 / 0,9 / 1,05 selon la largeur de la fenêtre), et la colonne de gauche (mes examens / banque) suit avec sa propre largeur, de 519px au palier le plus serré à 810px au plus large — elle ne zoome pas, elle laisse son contenu se reflower. Un palier ne se déclenche qu'à la largeur qui affiche la feuille **et ses deux gouttières** en entier.
+
+Le premier jeu d'échelles (0,75 → 1,4, liste de 308 à 440px) donnait une feuille trop large en face de la liste à tous les paliers : chaque échelle a été baissée de 25 % le jour même, et la liste a reçu exactement les pixels ainsi libérés (1056px × la baisse d'échelle). Les seuils, eux, n'ont pas bougé — à largeur d'écran donnée, c'est la répartition qui change, pas le palier.
+
+Choix technique : `zoom` sur le contenu du panneau plutôt que `transform: scale()` (mise en page réelle, pas de compensation de hauteur, `position: fixed` des menus préservé) et media queries CSS plutôt qu'un `ResizeObserver` (pas d'état, pas de saut après hydratation). La pagination A4 n'a rien eu à corriger : elle mesure en `offsetHeight`, resté en unités non zoomées. Détail du pattern : `.claude/rules/frontend-patterns.md`.
+
+## 11/08/2026 — La question liée devient une ligne à part entière sur la copie
+
+L'aperçu A4 de l'éditeur d'examen paginait à la grappe : une question et ses questions liées formaient un bloc insécable. Une grappe un peu longue sautait donc la page entière (grands blancs en bas de page), et une grappe plus haute qu'une feuille débordait sans recours.
+
+La pagination descend d'un cran : son unité (`PageBlock`, `examShared.tsx`) est désormais **la question**, liée ou principale. Deux questions d'une même grappe peuvent tomber sur deux pages différentes ; leur **ordre**, lui, reste fixé par la liste des blocs, et le glisser-déposer continue de déplacer la grappe entière (deux index cohabitent dans `GeneratorContent` : `bi` pour les blocs paginables, `gi` pour les questions déplaçables). Conséquences dans les gouttières : la poignée, le crayon et la croix de retrait ne sont posés que sur le premier bloc de la grappe — le seul dont on sait qu'il est sur la même page que le début de la question.
+
+Deux exceptions au découpage, l'une et l'autre volontaires : le titre de partie n'est pas un bloc (sa hauteur est portée par le premier bloc de la partie, ce qui interdit de le laisser seul en bas d'une page), et une question **en cours de modification** redevient un bloc unique — le formulaire en ligne couvre toute la grappe, et sa page s'étire au-delà du format A4 le temps de la saisie (voir `growsForEditor`).

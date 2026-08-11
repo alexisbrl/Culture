@@ -33,12 +33,46 @@ et l'incident du 22/06/2026 dans `docs/changelog.md`.
 
 ## À appliquer
 
-AUCUN
+- **11/08/2026 — Groupes de questions, phase contract** (`2026-08-11-groupes-de-questions-contract.sql`) :
+  supprime les 14 colonnes de contenu de `exam_questions` (`content`,
+  `response_type`, `answer`, `choices`, `correct_choices`, `shuffle_choices`,
+  `text_lines`, `type_options`, `expectations`, `bloom_level`, `parts`,
+  `answer_optional`, `difficulty`, `duration`) et l'ancienne table de jonction
+  `exam_question_bricks`. La ligne `exam_questions` ne porte plus que le GROUPE
+  (titre, image, audio, libellés, chapitre) ; chaque question est une ligne de
+  `exam_question_items`, reprise par la phase expand déjà appliquée.
+  **Le plus destructif du lot** : tant que scellow.com sert l'ancien code, ces
+  colonnes sont sa seule source de vérité. Vérifier le prérequis inscrit en tête
+  du fichier SQL (0 groupe sans question principale) avant d'appliquer, puis
+  régénérer `src/lib/database.types.ts`.
+
+- **11/08/2026 — Retrait de `exam_questions.question_type`** (`2026-08-11-drop-question-type.sql`) :
+  colonne devenue morte — le type de question a été remplacé par deux pièces
+  jointes indépendantes (`image_key`, `audio_key`, voir `QuestionMedia` dans
+  `src/lib/workshops/examTypes.ts`). Migration de suppression (contract) : à
+  appliquer seulement une fois `feat/...` mergée dans `main` et déployée sur
+  Vercel — pas avant.
 
 ---
 
 ## Appliqué / sans objet
 
+- **11/08/2026 — Groupes de questions, phase expand**
+  (`2026-08-11-groupes-de-questions-expand.sql`) : additive, appliquée
+  directement. Crée `exam_question_items` (une ligne par question, `sort_order`
+  0 = principale, contrainte `bloom_level` 1..4 et unicité `(group_id,
+  sort_order)`) et `exam_question_item_bricks` (notions par question), puis
+  reprend l'existant : 106 groupes → 109 questions, 0 groupe sans question
+  principale, 1 lien de notion repris. Le code en ligne ignore ces tables et
+  continue de lire les anciennes colonnes ; leur suppression est la phase
+  contract ci-dessus.
+
+- **11/08/2026 — `exam_questions.image_key` / `audio_key`** (pièces jointes
+  d'énoncé, `2026-08-11-add-question-media-keys.sql`) : additive, appliquée
+  directement. Remplace le concept de « type de question »
+  (`textuel`/`visuel`/`audio`) par deux pièces jointes indépendantes — voir
+  l'entrée « À appliquer » ci-dessus pour le nettoyage de la colonne
+  `question_type`, désormais morte.
 - **10/08/2026 — Bloom ramené à 4 niveaux** (`2026-08-09-bloom-4-niveaux.sql`) :
   appliquée après le merge de `feat/progression-parcours` (PR #32) et le
   déploiement production Vercel. Contraintes `exam_questions_bloom_level_check`

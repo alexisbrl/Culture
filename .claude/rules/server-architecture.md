@@ -41,6 +41,18 @@ Toute la base est accédée **exclusivement côté serveur** via la service role
 
 **Généré** (MCP Supabase `generate_typescript_types` ou `supabase gen types typescript --project-id hhkmrejjksjpfetwefju`) — ne jamais l'éditer à la main, le régénérer après chaque migration. Les types métier de `src/lib/supabase.ts` (`Workshop`, `WorkshopMember`…) en dérivent (`Tables<'workshops'>`…) pour ne pas diverger des colonnes réelles. Le client Supabase lui-même reste non typé (`createClient` sans generic) — voir `docs/backlog.md` pour le chantier de typage complet.
 
+## Questions d'examen : groupe, questions, vues
+
+Trois formes coexistent volontairement — ne pas les confondre ni en réintroduire une quatrième :
+
+- **En base** : `exam_questions` = le GROUPE (titre, image, audio, libellés, chapitre) ; `exam_question_items` = une ligne par question, ordonnée par `sort_order` (0 = principale), avec ses contraintes ; `exam_question_item_bricks` = les notions, reliées à la QUESTION. La question principale reprend l'identifiant de son groupe — c'est ce qui garde valides les clés de barème (`ExamConfig.weighting`), les sections d'examen et les brouillons.
+- **Vers l'extérieur** (IA, future API) : `QuestionGroup` (`src/lib/workshops/questionGroup.ts`), symétrique — `{ …commun…, questions: [...] }`, au moins une. Toute entrée non fiable passe par `normalizeGroupInput`.
+- **Dans l'interface** : `Question` (question principale + `parts`), la vue qu'édite l'éditeur.
+
+La conversion entre la forme stockée et `Question` est **confinée à `src/lib/workshops/exam.ts`** (`rowToQuestion`, `questionToRow`, `itemRowsOf`, `syncQuestionItems`). Aucun composant, aucune autre fonction de `lib/` ne doit lire ou écrire les tables directement : c'est ce qui a permis de changer le stockage sans toucher à l'UI, et ce qui permettra de le refaire.
+
+Les écritures de questions sont **différentielles** (upsert des lignes voulues, suppression des seules lignes disparues) : une question liée garde sa ligne et ses liens de notions d'une édition à l'autre. Ne pas revenir à un « tout effacer puis tout réinsérer », qui perdrait les liens et pourrait laisser un groupe sans question.
+
 ## Éviter les requêtes N+1
 
 Ne jamais boucler un appel réseau (Clerk `getUser`, envoi d'email…) dans une server action — utiliser un appel batch (`clerkClient().users.getUserList({ userId: [...] })`) ou `Promise.all`. Regrouper les requêtes Supabase indépendantes en `Promise.all` (voir `getExamBankData`, `getUserWorkshops`).

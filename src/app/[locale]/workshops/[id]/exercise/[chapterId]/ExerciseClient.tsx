@@ -25,7 +25,7 @@ import { palette, radius, withAlpha, shadow } from '@/lib/theme';
 import { Button } from '@/components/ui/button';
 import LinkButton from '@/components/LinkButton';
 import { drawExercise, gradeExercise } from '@/app/actions/parcoursExercise';
-import type { ExercisePrompt, ExerciseResult } from '@/lib/workshops/examTypes';
+import type { ExercisePart, ExercisePrompt, ExerciseResult } from '@/lib/workshops/examTypes';
 
 type Props = {
   locale: string;
@@ -47,8 +47,10 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
 
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState<ExercisePrompt | null>(null);
-  const [selected, setSelected] = useState<number[]>([]);
-  const [freeText, setFreeText] = useState('');
+  // Un tableau par énoncé de la grappe : l'indice 0 est la question principale,
+  // les suivants ses questions liées, dans l'ordre de `prompt.parts`.
+  const [selected, setSelected] = useState<number[][]>([[]]);
+  const [freeText, setFreeText] = useState<string[]>(['']);
   const [result, setResult] = useState<ExerciseResult | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
@@ -61,11 +63,16 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
       setLoading(true);
       setError('');
       setResult(null);
-      setSelected([]);
-      setFreeText('');
+      setSelected([[]]);
+      setFreeText(['']);
       const res = await drawExercise(workshopId, chapterId, excludeId);
       if (res.error) setError(res.error);
       setPrompt(res.prompt);
+      // Une case de réponse par énoncé : la question principale et chacune de
+      // ses questions liées.
+      const slots = 1 + (res.prompt?.parts.length ?? 0);
+      setSelected(Array.from({ length: slots }, () => []));
+      setFreeText(Array.from({ length: slots }, () => ''));
       setLoading(false);
     },
     [workshopId, chapterId]
@@ -88,50 +95,41 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     setResult(res.result);
     const answeredSoFar = answeredCount + 1;
     setAnsweredCount(answeredSoFar);
-    if (res.result.correct === true) setCorrectCount((c) => c + 1);
+    // Une grappe compte pour une : elle est réussie si aucun de ses énoncés
+    // n'est faux et qu'au moins un a pu être corrigé automatiquement (une
+    // question entièrement libre ne prouve rien, voir `ExerciseResult`).
+    const outcomes = [res.result, ...(res.result.parts ?? [])];
+    if (outcomes.some((o) => o.correct !== null) && outcomes.every((o) => o.correct !== false)) {
+      setCorrectCount((c) => c + 1);
+    }
     if (answeredSoFar >= EXERCISE_SESSION_LENGTH) setDone(true);
   }
 
-  const isChoice = prompt?.responseType === 'qcs' || prompt?.responseType === 'qcm';
-  const isFreeText = !!prompt && !isChoice && prompt.responseType !== 'sans_reponse';
+  /** Énoncés de la grappe, dans l'ordre d'affichage et de correction : la
+   *  question principale puis ses questions liées. */
+  const statements = prompt
+    ? [
+        { content: prompt.content, responseType: prompt.responseType, choices: prompt.choices, textLines: prompt.textLines },
+        ...prompt.parts,
+      ]
+    : [];
 
-  function toggleChoice(index: number) {
-    if (result) return;
-    // QCS : un seul choix — sélectionner remplace. QCM : bascule.
-    if (prompt?.responseType === 'qcs') setSelected([index]);
-    else setSelected((prev) => (prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]));
+  function setChoicesAt(idx: number, next: number[]) {
+    setSelected((prev) => prev.map((v, i) => (i === idx ? next : v)));
+  }
+  function setTextAt(idx: number, next: string) {
+    setFreeText((prev) => prev.map((v, i) => (i === idx ? next : v)));
   }
 
-  // Une réponse est requise pour valider, sauf pour les questions sans réponse
-  // attendue (où le bouton sert juste à afficher la correction).
+  // Une réponse est requise sur CHAQUE énoncé qui en attend une, sauf ceux sans
+  // réponse attendue (où le bouton sert juste à afficher la correction).
   const canValidate =
-    !!prompt && !result && !checking && (isChoice ? selected.length > 0 : isFreeText ? freeText.trim().length > 0 : true);
-
-  function choiceStyle(index: number): React.CSSProperties {
-    const picked = selected.includes(index);
-    const correct = result?.correctChoices.includes(index) ?? false;
-
-    let border: string = palette.lineStrong;
-    let background: string = palette.surfaceInput;
-    if (result) {
-      if (correct) { border = palette.green; background = withAlpha(palette.green, 0.1); }
-      else if (picked) { border = palette.danger; background = withAlpha(palette.danger, 0.1); }
-    } else if (picked) {
-      border = palette.green;
-      background = withAlpha(palette.green, 0.08);
-    }
-
-    return {
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%',
-      textAlign: 'left' as const, padding: '15px 17px', borderRadius: 12, border: `1.5px solid ${border}`,
-      background, color: palette.ink, fontSize: 15, fontWeight: 600, fontFamily: 'inherit',
-      cursor: result ? 'default' : 'pointer', marginBottom: 9, boxShadow: shadow.sm,
-      transition: 'border-color 120ms ease, background 120ms ease',
-    };
-  }
-
-  const verdictTone =
-    result?.correct === true ? palette.green : result?.correct === false ? palette.danger : palette.inkMuted;
+    !!prompt && !result && !checking &&
+    statements.every((s, i) => {
+      if (s.responseType === 'qcs' || s.responseType === 'qcm') return (selected[i] ?? []).length > 0;
+      if (s.responseType === 'sans_reponse') return true;
+      return (freeText[i] ?? '').trim().length > 0;
+    });
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 40, display: 'flex', flexDirection: 'column', background: palette.cream }}>
@@ -195,49 +193,51 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
                   </span>
                 </div>
 
-                {isChoice && prompt.choices.map((choice) => (
-                  <button key={choice.index} onClick={() => toggleChoice(choice.index)} style={choiceStyle(choice.index)} disabled={!!result}>
-                    <span style={{ flex: 1 }}>{choice.text}</span>
-                    {result?.correctChoices.includes(choice.index) && <Check size={18} color={palette.green} />}
-                    {result && selected.includes(choice.index) && !result.correctChoices.includes(choice.index) && <X size={18} color={palette.danger} />}
-                  </button>
-                ))}
-
-                {isFreeText && (
-                  <textarea
-                    value={freeText}
-                    onChange={(e) => setFreeText(e.target.value)}
-                    readOnly={!!result}
-                    rows={prompt.textLines}
-                    placeholder={t('answerPlaceholder')}
-                    style={{ width: '100%', padding: '13px 15px', borderRadius: 12, border: `1px solid ${palette.lineStrong}`, background: palette.surfaceInput, color: palette.ink, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
-                  />
+                {prompt.imageUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element -- aperçu d'un fichier privé (URL signée éphémère), pas un asset next/image
+                  <img src={prompt.imageUrl} alt="" style={{ maxWidth: '100%', maxHeight: 320, borderRadius: 12, border: `1px solid ${palette.line}`, marginBottom: 18 }} />
+                )}
+                {prompt.audioUrl && (
+                  <audio controls src={prompt.audioUrl} style={{ width: '100%', marginBottom: 18 }} />
                 )}
 
-                {result && (
-                  <div style={{ marginTop: 18, padding: '14px 16px', borderRadius: 12, border: `1px solid ${withAlpha(verdictTone, 0.35)}`, background: withAlpha(verdictTone, 0.08) }}>
-                    {/* Verdict masqué quand il n'y a pas de correction
-                        automatique ET qu'une réponse attendue est affichée : les
-                        deux lignes diraient la même chose. */}
-                    {(result.correct !== null || !result.answer.trim()) && (
-                      <div style={{ fontSize: 13.5, fontWeight: 500, color: verdictTone }}>
-                        {result.correct === true ? t('verdictCorrect') : result.correct === false ? t('verdictWrong') : t('verdictNeutral')}
-                      </div>
-                    )}
-                    {result.answer.trim() && (
-                      <div style={{ fontSize: 13.5, color: palette.ink, whiteSpace: 'pre-wrap', marginTop: result.correct !== null ? 8 : 0 }}>
-                        <span style={{ color: palette.inkFaint }}>{t('expectedAnswer')} </span>
-                        {result.answer}
-                      </div>
-                    )}
+                {/* Zone de réponse de la question principale, puis chaque
+                    question liée avec son propre énoncé et sa correction.
+                    L'image et l'audio ne sont pas répétés : ce sont les
+                    éléments communs de la grappe. */}
+                <AnswerZone
+                  statement={statements[0]}
+                  selected={selected[0] ?? []}
+                  freeText={freeText[0] ?? ''}
+                  result={result}
+                  onChoices={(next) => setChoicesAt(0, next)}
+                  onText={(next) => setTextAt(0, next)}
+                />
+
+                {prompt.parts.map((part, i) => (
+                  <div key={i} style={{ marginTop: 26, paddingTop: 22, borderTop: `1px solid ${palette.line}` }}>
+                    <div style={{ fontSize: 16.5, fontWeight: 700, color: palette.ink, lineHeight: 1.4, marginBottom: 16, whiteSpace: 'pre-wrap' }}>
+                      {part.content.trim() || tExam('noStatement')}
+                    </div>
+                    <AnswerZone
+                      statement={part}
+                      selected={selected[i + 1] ?? []}
+                      freeText={freeText[i + 1] ?? ''}
+                      result={result?.parts?.[i] ?? null}
+                      onChoices={(next) => setChoicesAt(i + 1, next)}
+                      onText={(next) => setTextAt(i + 1, next)}
+                    />
                   </div>
-                )}
+                ))}
 
                 <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
                   {!result ? (
                     <Button variant="primary" onClick={handleValidate} disabled={!canValidate}>
                       {checking && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-                      {prompt.responseType === 'sans_reponse' ? t('revealAnswer') : t('validate')}
+                      {/* « Voir la réponse » seulement si AUCUN énoncé de la
+                          grappe n'attend de réponse : dès qu'il y en a un, le
+                          bouton valide bien quelque chose. */}
+                      {statements.every((s) => s.responseType === 'sans_reponse') ? t('revealAnswer') : t('validate')}
                     </Button>
                   ) : (
                     <Button variant="primary" onClick={() => draw(prompt.id)}>
@@ -252,5 +252,100 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
         )}
       </div>
     </div>
+  );
+}
+
+/** Zone de réponse d'UN énoncé : les choix à cocher ou le champ libre, puis sa
+ *  correction une fois validé. Le même bloc sert la question principale et
+ *  chaque question liée — elles se répondent et se corrigent à l'identique,
+ *  seuls les éléments communs (énoncé illustré, audio) ne sont pas répétés.
+ *  Définie au niveau module : une fonction composant recréée à chaque rendu
+ *  remonterait tout son sous-arbre (et ferait perdre le focus à la saisie). */
+function AnswerZone({ statement, selected, freeText, result, onChoices, onText }: {
+  statement: ExercisePart;
+  selected: number[];
+  freeText: string;
+  result: ExerciseResult | null;
+  onChoices: (next: number[]) => void;
+  onText: (next: string) => void;
+}) {
+  const t = useTranslations('exercise');
+
+  const isChoice = statement.responseType === 'qcs' || statement.responseType === 'qcm';
+  const isFreeText = !isChoice && statement.responseType !== 'sans_reponse';
+
+  function toggleChoice(index: number) {
+    if (result) return;
+    // QCS : un seul choix — sélectionner remplace. QCM : bascule.
+    if (statement.responseType === 'qcs') onChoices([index]);
+    else onChoices(selected.includes(index) ? selected.filter((i) => i !== index) : [...selected, index]);
+  }
+
+  function choiceStyle(index: number): React.CSSProperties {
+    const picked = selected.includes(index);
+    const correct = result?.correctChoices.includes(index) ?? false;
+
+    let border: string = palette.lineStrong;
+    let background: string = palette.surfaceInput;
+    if (result) {
+      if (correct) { border = palette.green; background = withAlpha(palette.green, 0.1); }
+      else if (picked) { border = palette.danger; background = withAlpha(palette.danger, 0.1); }
+    } else if (picked) {
+      border = palette.green;
+      background = withAlpha(palette.green, 0.08);
+    }
+
+    return {
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%',
+      textAlign: 'left' as const, padding: '15px 17px', borderRadius: 12, border: `1.5px solid ${border}`,
+      background, color: palette.ink, fontSize: 15, fontWeight: 600, fontFamily: 'inherit',
+      cursor: result ? 'default' : 'pointer', marginBottom: 9, boxShadow: shadow.sm,
+      transition: 'border-color 120ms ease, background 120ms ease',
+    };
+  }
+
+  const verdictTone =
+    result?.correct === true ? palette.green : result?.correct === false ? palette.danger : palette.inkMuted;
+
+  return (
+    <>
+      {isChoice && statement.choices.map((choice) => (
+        <button key={choice.index} onClick={() => toggleChoice(choice.index)} style={choiceStyle(choice.index)} disabled={!!result}>
+          <span style={{ flex: 1 }}>{choice.text}</span>
+          {result?.correctChoices.includes(choice.index) && <Check size={18} color={palette.green} />}
+          {result && selected.includes(choice.index) && !result.correctChoices.includes(choice.index) && <X size={18} color={palette.danger} />}
+        </button>
+      ))}
+
+      {isFreeText && (
+        <textarea
+          value={freeText}
+          onChange={(e) => onText(e.target.value)}
+          readOnly={!!result}
+          rows={statement.textLines}
+          placeholder={t('answerPlaceholder')}
+          style={{ width: '100%', padding: '13px 15px', borderRadius: 12, border: `1px solid ${palette.lineStrong}`, background: palette.surfaceInput, color: palette.ink, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+        />
+      )}
+
+      {result && (
+        <div style={{ marginTop: 18, padding: '14px 16px', borderRadius: 12, border: `1px solid ${withAlpha(verdictTone, 0.35)}`, background: withAlpha(verdictTone, 0.08) }}>
+          {/* Verdict masqué quand il n'y a pas de correction automatique ET
+              qu'une réponse attendue est affichée : les deux lignes diraient la
+              même chose. */}
+          {(result.correct !== null || !result.answer.trim()) && (
+            <div style={{ fontSize: 13.5, fontWeight: 500, color: verdictTone }}>
+              {result.correct === true ? t('verdictCorrect') : result.correct === false ? t('verdictWrong') : t('verdictNeutral')}
+            </div>
+          )}
+          {result.answer.trim() && (
+            <div style={{ fontSize: 13.5, color: palette.ink, whiteSpace: 'pre-wrap', marginTop: result.correct !== null ? 8 : 0 }}>
+              <span style={{ color: palette.inkFaint }}>{t('expectedAnswer')} </span>
+              {result.answer}
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }
