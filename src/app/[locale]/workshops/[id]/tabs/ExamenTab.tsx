@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, ArrowRight, FileText, Search, X } from 'lucide-react';
-import { palette, ink, radius, shadow, withAlpha, categoryTones } from '@/lib/theme';
+import { palette, ink, radius, withAlpha, categoryTones } from '@/lib/theme';
 import { type Question, emptyQuestion } from './QuestionEditor';
 import {
   getExamBankData, saveQuestion, createPool as createPoolAction, updatePool as updatePoolAction,
@@ -12,7 +12,7 @@ import {
   deleteGeneratedExam, getExamDraft, saveExamDraft,
 } from '@/app/actions/examQuestions';
 import {
-  type Exam, type Pool, type ExamConfig,
+  type Exam, type Pool, type ExamConfig, type SheetFocus,
   defaultExamConfig, normalizeExamConfig, configQuestionIds, formatDuration, clearWeightingFor,
   toggleQuestionInSections, isPageBreakId, pruneUnknownQuestions,
 } from './examen/examShared';
@@ -51,6 +51,16 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const [pendingEditExam, setPendingEditExam] = useState<Exam | null>(null);
   const [openQuestionBlocked, setOpenQuestionBlocked] = useState(false);
   const [introOpen, setIntroOpen] = useState(false);
+  // Ligne de la feuille à ramener au centre du panneau de droite. Tout ce qui
+  // ajoute ou ouvre quelque chose sur la copie passe par là : la question
+  // envoyée depuis la banque, le formulaire en ligne, « + partie » et « + saut
+  // de page » (ces deux-là depuis la feuille, via `onRequestFocus`). Le jeton
+  // rejoue le recadrage quand la même ligne est visée deux fois de suite.
+  const [sheetFocus, setSheetFocus] = useState<SheetFocus | null>(null);
+
+  function requestSheetFocus(key: string) {
+    setSheetFocus(prev => ({ key, token: (prev?.token ?? 0) + 1 }));
+  }
 
   function isEditorEmpty() {
     return editing === null && draftIds.length === 0 && examConfig.title.trim() === '' && configQuestionIds(examConfig).length === 0;
@@ -178,6 +188,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       return;
     }
     setEditingQuestion(q);
+    requestSheetFocus(id);
   }
 
   // Crayon de la banque : l'édition se fait sur la feuille, donc une question qui
@@ -191,6 +202,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     }
     if (!configQuestionIds(examConfig).includes(q.id)) handleToggleQuestionInExam(q.id);
     setEditingQuestion(q);
+    requestSheetFocus(q.id);
   }
 
   // « nouvelle » : la question n'existe qu'en mémoire tant qu'elle n'est pas
@@ -208,6 +220,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     setDraftIds(prev => [...prev, q.id]);
     setNewQuestionId(q.id);
     setEditingQuestion(q);
+    requestSheetFocus(q.id);
   }
 
   function handleCancelQuestion() {
@@ -304,6 +317,10 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       weighting: included ? examConfig.weighting : clearWeightingFor(examConfig.weighting, id),
     });
     setDraftIds(prev => (included ? (prev.includes(id) ? prev : [...prev, id]) : prev.filter(qid => qid !== id)));
+    // La question entre toujours à la fin de la dernière partie : sans
+    // recadrage, un clic dans la banque n'a aucun effet visible dès que la copie
+    // dépasse une page. Au retrait, rien à recadrer — la ligne n'existe plus.
+    if (included) requestSheetFocus(id);
   }
 
   function handleRemoveFromDraft(ids: string[]) {
@@ -332,9 +349,14 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       {/* Coquille côte à côte (« banqueOngletsLarge ») : colonne gauche à onglets
-          pleine largeur (mes examens / questions) à 440px fixes, feuille A4
-          toujours visible à droite (largeur fixe du bloc A4) — empilées en
-          dessous de 768px. */}
+          pleine largeur (mes examens / questions), feuille A4 toujours visible à
+          droite — empilées en dessous de 768px.
+          Les deux largeurs ne sont plus figées : elles suivent les paliers
+          d'échelle de `.exam-shell` (globals.css) — la feuille de 75 % à 140 %
+          d'un A4 selon la place disponible, la liste de 308 à 440px. Les valeurs
+          de référence citées plus bas (440 pour la liste, 1236/60/120 pour la
+          feuille) sont celles du palier 100 %, toutes multipliées par
+          `--exam-scale` aux autres paliers. */}
       {/* Répartition du vide horizontal : les deux colonnes ont une largeur
           fixe, tout le reste est distribué par trois cales flex dans un rapport
           1 : 2 : 3 — marge de page à gauche, écart banque↔feuille (deux fois la
@@ -357,11 +379,15 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       {/* Pas de `flex: 1` ici : en tant qu'élément flex, un `flex-basis: 0` fait
           gagner la répartition flex sur la hauteur déclarée et la coquille
           reprendrait la hauteur de son contenu. */}
-      <div className="split-shell flex flex-col gap-5 mx-[22px] overflow-auto md:mx-0 md:flex-row md:gap-0" style={{ minHeight: 0, marginTop: 22, marginBottom: 28 }}>
-        {/* `minWidth` : sur un écran trop étroit pour le bloc A4 (moins de
-            ~1500px), il ne reste rien à répartir — les cales gardent alors la
-            marge de page et l'écart minimum d'avant, et c'est la feuille qui
-            est rognée à droite comme elle l'était déjà.
+      <div className="split-shell exam-shell flex flex-col gap-5 mx-[22px] overflow-auto md:mx-0 md:flex-row md:gap-0" style={{ minHeight: 0, marginTop: 22, marginBottom: 28 }}>
+        {/* `minWidth` : sur un écran trop étroit même pour le palier à 75 %
+            (moins de ~1260px), il ne reste rien à répartir — les cales tombent
+            sur leur minimum et c'est la feuille qui est rognée à droite comme
+            elle l'était déjà. Ce minimum vaut, pour la cale du milieu, la
+            largeur de la gouttière gauche (36px × échelle) : c'est exactement ce
+            que la marge négative de la colonne de droite fait déborder dessus,
+            et en dessous le fond crème de la barre d'outils collante mordait sur
+            la carte de la banque de questions.
             `pointerEvents: 'none'` sur les trois cales : les marges négatives de
             la colonne de droite (-60 / -120) les font chevaucher les gouttières
             de la feuille, et une cale placée APRÈS dans le DOM capte alors les
@@ -369,8 +395,18 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             devenues inertes). Ce sont des blocs vides, ils n'ont aucune raison
             de recevoir un clic. */}
         <div className="hidden md:block" style={{ flex: '1 1 0', minWidth: 22, pointerEvents: 'none' }} />
-        <div className="w-full md:w-[440px]" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 420 }}>
-          <div style={{ display: 'flex', flexShrink: 0, border: `1px solid ${palette.lineStrong}`, borderBottom: 'none', borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, overflow: 'hidden' }}>
+        <div className="exam-list-col" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 420 }}>
+          {/* Colonne sans cadre : ni bordure ni panneau autour de la liste, la
+              séparation se fait par le fond (cartes en `surfaceRaised` posées
+              sur le crème de la page). Il ne reste que le filet sous les
+              onglets, qui pose la barre. */}
+          {/* `zoom` : la colonne suit sa propre échelle de texte et d'icônes
+              (`--exam-list-zoom`, globals.css), distincte de celle de la
+              feuille. Il est posé sur les contenus et jamais sur `.exam-list-col`
+              lui-même : sa largeur est fixée en px par le palier, un zoom
+              dessus la multiplierait. Le panneau défilant reste hors du zoom,
+              comme côté feuille — c'est le contenu qui est mis à l'échelle. */}
+          <div style={{ display: 'flex', flexShrink: 0, borderBottom: `1px solid ${palette.line}`, zoom: 'var(--exam-list-zoom, 1)' }}>
             <button onClick={() => setLeftTab('history')} style={tabButtonStyle(leftTab === 'history', 'left')}>
               <FileText size={15} strokeWidth={1.75} />
               {t('tab.tabHistory')}
@@ -380,14 +416,17 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
               {t('tab.tabBank')}
             </button>
           </div>
-          <div style={{ flex: 1, minHeight: 0, position: 'relative', border: `1px solid ${palette.lineStrong}`, borderRadius: `0 0 ${radius.lg}px ${radius.lg}px`, background: palette.surfaceRaised, boxShadow: shadow.sm, overflow: 'hidden' }}>
+          <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
             {/* Montage permanent des deux onglets (display none/block) — préserve
                 la recherche/le tri en cours quand on bascule d'onglet, comme le
                 fait déjà SettingsClient pour ses sections. */}
             <div className="scroll-panel" style={{ display: leftTab === 'history' ? 'block' : 'none', height: '100%' }}>
-              <HistoryContent exams={exams} justAddedId={justAdded} onEdit={requestEditExam} onNew={() => setIntroOpen(true)} onDelete={e => setPendingDeleteExam(e)} />
+              <div style={{ zoom: 'var(--exam-list-zoom, 1)' }}>
+                <HistoryContent exams={exams} justAddedId={justAdded} onEdit={requestEditExam} onNew={() => setIntroOpen(true)} onDelete={e => setPendingDeleteExam(e)} />
+              </div>
             </div>
             <div className="scroll-panel" style={{ display: leftTab === 'bank' ? 'block' : 'none', height: '100%', position: 'relative' }}>
+              <div style={{ zoom: 'var(--exam-list-zoom, 1)' }}>
               <BankContent
                 questions={questions}
                 pools={pools}
@@ -406,6 +445,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 onDeletePool={handleDeletePool}
                 onDeleteQuestion={handleDeleteQuestion}
               />
+              </div>
             </div>
           </div>
         </div>
@@ -413,9 +453,10 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         {/* Pas de carte autour de la feuille : le seul cadre visible doit être
             celui du papier lui-même (bordure + ombre du bloc A4), comme dans la
             maquette. Un panneau blanc de plus créait un encadré dans l'encadré. */}
-        <div className="hidden md:block" style={{ flex: '2 1 0', minWidth: 20, pointerEvents: 'none' }} />
-        <div className="w-full md:w-[1236px] md:flex-none md:-ml-[60px] md:-mr-[120px]" style={{ minWidth: 0, minHeight: 420, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="hidden md:block" style={{ flex: '2 1 0', minWidth: 'calc(36px * var(--exam-scale, 1) + 8px)', pointerEvents: 'none' }} />
+        <div className="exam-sheet-col" style={{ minWidth: 0, minHeight: 420, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <GeneratorContent
+            workshopId={workshopId}
             questions={questions}
             config={examConfig}
             onConfigChange={setExamConfig}
@@ -427,6 +468,8 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             onClearEditor={handleClearEditor}
             editingQuestion={editingQuestion}
             newQuestionId={newQuestionId}
+            focusRequest={sheetFocus}
+            onRequestFocus={requestSheetFocus}
             pools={pools}
             notions={notions}
             onCreatePool={handleCreatePool}
