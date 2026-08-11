@@ -5,6 +5,7 @@ import { revalidateWorkshop } from '@/lib/revalidate';
 import * as examLib from '@/lib/workshops/exam';
 import * as notionsLib from '@/lib/workshops/notions';
 import * as chaptersLib from '@/lib/workshops/chapters';
+import { buildWorkshopFileKey, createUploadTicket, deleteObject, type UploadTicket } from '@/lib/storage';
 // Types de domaine (audit §5.3) : voir @/lib/workshops/examTypes — plus de
 // dépendance vers des composants UI (QuestionEditor.tsx/ExamenTab.tsx).
 // Redéclarés en alias locaux (un fichier `'use server'` ne peut pas réexporter
@@ -114,4 +115,57 @@ export async function deleteGeneratedExam(workshopId: string, examId: string): P
 export async function saveExamDraft(workshopId: string, draft: ExamDraft): Promise<void> {
   const ctx = await assertManager(workshopId);
   await examLib.saveExamDraft(workshopId, ctx.userId, draft);
+}
+
+// ─── Pièce jointe d'énoncé (image / audio) ───────────────────────────────────
+//
+// Même mécanique en deux temps que `workshopFiles.ts` (ticket signé → PUT
+// direct par le client → la clé est enregistrée avec le reste de la question
+// via `saveQuestion(s)`, pas d'appel de finalisation séparé : il n'y a pas de
+// catalogue de fichiers à tenir à jour ici, juste une clé sur la question).
+
+const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const AUDIO_MIME_TYPES = ['audio/mpeg', 'audio/wav', 'audio/webm', 'audio/ogg', 'audio/mp4', 'audio/x-m4a', 'audio/aac'];
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const AUDIO_MAX_BYTES = 20 * 1024 * 1024;
+
+export async function createQuestionMediaUploadTicket(
+  workshopId: string,
+  kind: 'image' | 'audio',
+  fileName: string,
+  fileSize: number,
+  mimeType: string
+): Promise<{ success: boolean; ticket?: UploadTicket; key?: string; error?: string }> {
+  try {
+    if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+
+    const allowedTypes = kind === 'image' ? IMAGE_MIME_TYPES : AUDIO_MIME_TYPES;
+    const maxBytes = kind === 'image' ? IMAGE_MAX_BYTES : AUDIO_MAX_BYTES;
+    if (!allowedTypes.includes(mimeType)) return { success: false, error: 'Format non supporté' };
+    if (fileSize > maxBytes) return { success: false, error: 'Fichier trop lourd' };
+
+    const key = buildWorkshopFileKey(workshopId, fileName);
+    const ticket = await createUploadTicket(key, mimeType);
+    if (!ticket) return { success: false, error: 'Erreur serveur' };
+
+    return { success: true, ticket, key };
+  } catch (err) {
+    console.error('createQuestionMediaUploadTicket error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
+// Résolution en lot pour l'affichage (bloc gestionnaire : banque + feuille A4) —
+// voir `resolveMediaUrls` (règle N+1).
+export async function getQuestionMediaUrls(workshopId: string, keys: string[]): Promise<Record<string, string>> {
+  if (!(await requireManager(workshopId))) return {};
+  return await examLib.resolveMediaUrls(keys);
+}
+
+// Suppression de l'objet de stockage (remplacement ou retrait d'une pièce
+// jointe). La question elle-même est enregistrée séparément via saveQuestion —
+// cet appel ne touche que le stockage.
+export async function deleteQuestionMedia(workshopId: string, key: string): Promise<void> {
+  if (!(await requireManager(workshopId))) return;
+  await deleteObject(key);
 }

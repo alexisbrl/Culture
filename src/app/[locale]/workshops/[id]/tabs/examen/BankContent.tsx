@@ -52,8 +52,6 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
   onDeleteQuestion: (q: Question) => void;
 }) {
   const tr = useTranslations('examen');
-  const qTypeLabel = (qt: string): string => qt === 'textuel' ? tr('questionType.textuel') : qt === 'visuel' ? tr('questionType.visuel') : qt === 'audio' ? tr('questionType.audio') : qt;
-  const [filterQTypes, setFilterQTypes] = useState<string[]>([]);
   const [filterPools, setFilterPools] = useState<string[]>([]);
   const [filterTypes, setFilterTypes] = useState<ResponseType[]>([]);
   const [filterChapters, setFilterChapters] = useState<string[]>([]);
@@ -78,9 +76,8 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
   const [pendingDeleteQuestion, setPendingDeleteQuestion] = useState<Question | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
 
-  const allQTypes = Array.from(new Set(questions.map(q => q.questionType)));
   const allTypes = Array.from(new Set(questions.map(q => q.responseType)));
-  const activeFilterCount = filterQTypes.length + filterPools.length + filterTypes.length + filterChapters.length + filterExams.length;
+  const activeFilterCount = filterPools.length + filterTypes.length + filterChapters.length + filterExams.length;
 
   // Chapitre(s) d'une question = ceux de ses notions associées. La table de
   // correspondance est construite une fois pour toutes les questions plutôt
@@ -88,7 +85,12 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
   const chapterOfNotion = new Map(notions.map(n => [n.id, n.chapterId]));
   const chaptersOfQuestion = (q: Question): Set<string> => {
     const set = new Set<string>();
-    for (const nid of q.notionIds ?? []) {
+    // Les notions des questions liées comptent autant que celles de la question
+    // principale : une grappe se range dans le chapitre de tout ce qu'elle
+    // couvre. Elles vivent dans le jsonb `parts` et pas dans la table de
+    // jonction, d'où l'union faite ici (voir `QuestionPart`).
+    const allNotionIds = [...(q.notionIds ?? []), ...(q.parts ?? []).flatMap(p => p.notionIds ?? [])];
+    for (const nid of allNotionIds) {
       const cid = chapterOfNotion.get(nid);
       if (cid) set.add(cid);
     }
@@ -137,9 +139,6 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
     setFilterExams(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
     clearMode(`exam:${id}`);
   }
-  function toggleQTypeFilter(qt: string) {
-    setFilterQTypes(prev => prev.includes(qt) ? prev.filter(x => x !== qt) : [...prev, qt]);
-  }
   function setFilterMode(key: string, mode: FilterMode) {
     setFilterModes(prev => ({ ...prev, [key]: mode }));
   }
@@ -151,7 +150,6 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
     setDragOverZone(null);
   }
   function resetFilters() {
-    setFilterQTypes([]);
     setFilterPools([]);
     setFilterTypes([]);
     setFilterChapters([]);
@@ -205,7 +203,6 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
     const qChapters = chaptersOfQuestion(q);
     const neverExam = q.examIds.length === 0;
 
-    if (filterQTypes.length && !filterQTypes.includes(q.questionType)) return false;
     if (posPools.length && !posPools.some(p => qPools.has(p))) return false;
     if (negPools.length && negPools.some(p => qPools.has(p))) return false;
     if (posTypes.length && !posTypes.some(t => t === q.responseType)) return false;
@@ -255,6 +252,11 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
            première (`indent`), donc la deuxième repart au ras du bord gauche. */
         indent={hasParts ? 2 * CARD_LINE + 10 : CARD_LINE + 6}
         leading={
+          /* Pas de pictogramme d'image ni de son ici : `indent` ne réserve de
+             place que pour le type de réponse et le lien de grappe, deux
+             largeurs connues. Les pastilles de pièce jointe, elles, apparaissent
+             et disparaissent selon la question — l'énoncé leur passait dessous
+             dès qu'il y en avait une (11/08/2026). */
           <>
             <TypeIcon type={q.responseType} size={CARD_LINE - 8} />
             {hasParts && (
@@ -301,9 +303,8 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
     );
   }
 
-  type ActiveFilter = { key: string; category: 'qtype' | 'pool' | 'type' | 'chapter' | 'exam'; value: string; label: string; color?: string };
+  type ActiveFilter = { key: string; category: 'pool' | 'type' | 'chapter' | 'exam'; value: string; label: string; color?: string };
   const activeFilters: ActiveFilter[] = [
-    ...filterQTypes.map(qt => ({ key: `qtype:${qt}`, category: 'qtype' as const, value: qt, label: qTypeLabel(qt) })),
     ...filterPools.map(id => ({ key: `pool:${id}`, category: 'pool' as const, value: id, label: pools.find(p => p.id === id)?.name ?? id, color: pools.find(p => p.id === id)?.color })),
     ...filterTypes.map(ty => ({ key: `type:${ty}`, category: 'type' as const, value: ty, label: tr(`responseType.${ty}`) })),
     ...filterChapters.map(cid => ({ key: `chapter:${cid}`, category: 'chapter' as const, value: cid, label: cid === NO_CHAPTER_ID ? tr('bank.noChapter') : (chapters.find(c => c.id === cid)?.name ?? cid) })),
@@ -314,7 +315,6 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
 
   function removeFilter(f: ActiveFilter) {
     switch (f.category) {
-      case 'qtype': toggleQTypeFilter(f.value as string); break;
       case 'pool': togglePoolFilter(f.value as string); break;
       case 'type': toggleTypeFilter(f.value as ResponseType); break;
       case 'chapter': toggleChapterFilter(f.value); break;
@@ -393,20 +393,6 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
                 )}
               </div>
               <div style={{ overflowY: 'auto', padding: '0 14px 14px', flex: 1, minHeight: 0 }}>
-                {/* Type de question — visible seulement si plusieurs types présents dans la banque */}
-                {allQTypes.length > 1 && <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.qTypeSection')}</div>}
-                {allQTypes.length > 1 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-                    {allQTypes.map(qt => {
-                      const active = filterQTypes.includes(qt);
-                      return (
-                        <button key={qt} onClick={() => toggleQTypeFilter(qt)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? `1px solid ${palette.ink}` : `1px solid ${palette.line}`, background: active ? palette.ink : palette.surfaceSunken, color: active ? palette.onInk : palette.inkMuted }}>
-                          {qTypeLabel(qt)}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
                 {/* Type de réponse */}
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.rTypeSection')}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>

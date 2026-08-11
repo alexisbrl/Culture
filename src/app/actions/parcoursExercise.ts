@@ -2,7 +2,7 @@
 
 import { requireMember } from '@/lib/authz';
 import * as examLib from '@/lib/workshops/exam';
-import { rewardCorrectAnswer } from '@/lib/workshops/mastery';
+import { rewardAnsweredQuestion } from '@/lib/workshops/mastery';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import type { ExercisePrompt, ExerciseResult } from '@/lib/workshops/examTypes';
 
@@ -34,26 +34,33 @@ export async function drawExercise(
   }
 }
 
+// `selections[0]` = choix cochés sur la question principale, `selections[i+1]` =
+// ceux de la question liée `i` (même ordre que `ExercisePrompt.parts`). Chaque
+// énoncé est corrigé et crédite ses propres notions : une question liée juste
+// fait progresser les siennes même si la principale est ratée.
 export async function gradeExercise(
   workshopId: string,
   questionId: string,
-  selectedChoices: number[]
+  selections: number[][]
 ): Promise<{ result: ExerciseResult | null; error?: string }> {
   try {
     const ctx = await requireMember(workshopId);
     if (!ctx) return { result: null, error: 'Accès refusé' };
 
-    const result = await examLib.gradeParcoursAnswer(workshopId, questionId, selectedChoices);
+    const graded = await examLib.gradeParcoursAnswer(workshopId, questionId, selections);
+    if (!graded) return { result: null };
 
     // Seule une bonne réponse vérifiée par le serveur fait progresser. Les
-    // types sans correction automatique (texte libre, dessin, audio…) ont
+    // types sans correction automatique (texte libre, dessin, fichier…) ont
     // `correct: null` : rien ne prouve la maîtrise, le score reste inchangé.
-    if (result?.correct === true) {
-      const changed = await rewardCorrectAnswer(workshopId, ctx.userId, questionId);
-      if (changed) revalidateWorkshop();
-    }
+    // `rewards` ne contient que les énoncés justes, avec leurs notions et leur
+    // niveau de Bloom lus en base — jamais ce que le client prétend.
+    const changes = await Promise.all(
+      graded.rewards.map((target) => rewardAnsweredQuestion(workshopId, ctx.userId, target)),
+    );
+    if (changes.some(Boolean)) revalidateWorkshop();
 
-    return { result };
+    return { result: graded.result };
   } catch (err) {
     console.error('gradeExercise error:', err);
     return { result: null, error: 'Erreur lors de la correction' };

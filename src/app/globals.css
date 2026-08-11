@@ -419,6 +419,120 @@
       overflow: hidden;
     }
   }
+  /* Échelle de la feuille d'examen (onglet examen). Le bloc A4 a une largeur de
+     référence fixe (1056px de papier, 1236px avec ses gouttières et les marges
+     internes du panneau) : plutôt que de le laisser rogné sur un portable et
+     perdu au milieu du vide sur un grand écran, on le met à l'échelle par
+     paliers — 41 % à 105 % d'une feuille — via `--exam-scale`, appliqué en
+     `zoom` sur le contenu du panneau (GeneratorContent) et en `calc()` sur la
+     largeur/les marges négatives de sa colonne (ExamenTab).
+     `zoom` et pas `transform: scale()` : il agit sur la mise en page (la colonne
+     occupe exactement la place du contenu mis à l'échelle, sans compensation de
+     hauteur), il divise la largeur disponible des enfants (donc le bloc de
+     1188px continue de tomber pile dans le panneau à toutes les échelles), et
+     `offsetHeight` y reste exprimé en unités non zoomées — c'est ce que mesure
+     la pagination A4, qui n'a donc rien à corriger.
+     La colonne de gauche (banque / mes examens) suit avec sa propre largeur, de
+     255px au palier le plus serré à 810px au plus large, et son propre zoom
+     (`--exam-list-zoom`) pour le texte et les icônes. Le palier ≥1290px (liste
+     de 450px) est la **référence, à 1** — taille validée sur la maquette — et
+     elle ne bouge plus au-dessus : les paliers plus larges gagnent des lignes
+     plus longues, pas des caractères plus gros. En dessous seulement, le zoom
+     descend (~√(largeur / 450)) pour ne pas étouffer la colonne quand elle se
+     resserre. Corollaire utile : la largeur en unités locales ne descend jamais
+     sous ~340px (255 ÷ 0,75), le minimum pour que la barre d'outils de la liste
+     tienne sur une rangée.
+     Les neuf couples (échelle, largeur de liste) ci-dessous sont **arrêtés à la
+     main** (11/08/2026) après plusieurs allers-retours sur la maquette : ce ne
+     sont pas des valeurs calculées, ne pas les « régulariser ». L'échelle est la
+     largeur de papier voulue divisée par 1056 (la largeur de référence du bloc),
+     d'où les décimales — le commentaire de chaque palier rappelle la largeur de
+     papier en pixels, qui est la vraie grandeur de réglage.
+     Ce qu'il faut vérifier en touchant un palier : le vide à droite de la
+     feuille (la moitié de ce qui reste, cf. le rapport 1:2:3 d'ExamenTab) doit
+     laisser voir la croix de retrait, posée à ~57px × échelle du bord droit du
+     papier — la marge négative de la colonne fait déborder la gouttière sur ce
+     vide, et ce qui dépasse passe sous le bord de la coquille (`overflow:
+     hidden`). C'est ce qui rendait les croix invisibles avant les paliers, sur
+     tout écran de moins de ~1610px. */
+  .exam-shell {
+    --exam-scale: 0.406; /* 429px de papier */
+    --exam-list-w: 255px;
+    --exam-list-zoom: 0.75;
+  }
+  @media (min-width: 900px) {
+    .exam-shell {
+      --exam-scale: 0.467; /* 493px */
+      --exam-list-w: 290px;
+      --exam-list-zoom: 0.8;
+    }
+  }
+  @media (min-width: 1030px) {
+    .exam-shell {
+      --exam-scale: 0.531; /* 561px */
+      --exam-list-w: 340px;
+      --exam-list-zoom: 0.87;
+    }
+  }
+  @media (min-width: 1160px) {
+    .exam-shell {
+      --exam-scale: 0.588; /* 621px */
+      --exam-list-w: 400px;
+      --exam-list-zoom: 0.94;
+    }
+  }
+  @media (min-width: 1290px) {
+    .exam-shell {
+      --exam-scale: 0.652; /* 689px */
+      --exam-list-w: 450px;
+      --exam-list-zoom: 1; /* référence : taille de texte et d'icônes de la maquette */
+    }
+  }
+  @media (min-width: 1410px) {
+    .exam-shell {
+      --exam-scale: 0.696; /* 735px */
+      --exam-list-w: 490px;
+      --exam-list-zoom: 1;
+    }
+  }
+  @media (min-width: 1620px) {
+    .exam-shell {
+      --exam-scale: 0.819; /* 865px */
+      --exam-list-w: 550px;
+      --exam-list-zoom: 1;
+    }
+  }
+  @media (min-width: 1900px) {
+    .exam-shell {
+      --exam-scale: 0.947; /* 1000px */
+      --exam-list-w: 766px;
+      --exam-list-zoom: 1;
+    }
+  }
+  @media (min-width: 2200px) {
+    .exam-shell {
+      --exam-scale: 1.05; /* 1109px */
+      --exam-list-w: 810px;
+      --exam-list-zoom: 1;
+    }
+  }
+  /* Sous 768px les deux colonnes s'empilent : chacune prend toute la largeur et
+     seule l'échelle de la feuille (zoom) continue de s'appliquer. */
+  .exam-list-col,
+  .exam-sheet-col {
+    width: 100%;
+  }
+  @media (min-width: 768px) {
+    .exam-list-col {
+      width: var(--exam-list-w);
+    }
+    .exam-sheet-col {
+      width: calc(1236px * var(--exam-scale));
+      flex: none;
+      margin-left: calc(-60px * var(--exam-scale));
+      margin-right: calc(-120px * var(--exam-scale));
+    }
+  }
   /* Coquille des Paramètres d'atelier : même principe que .split-shell mais
      directement sous la barre du haut (61px). La navigation de gauche tient
      sans défiler ; seule la colonne de droite défile (via .scroll-panel, sans

@@ -5,9 +5,14 @@
 // présentationnels réutilisés par HistoryContent / BankContent / GeneratorContent / ExamenTab.
 import { Fragment, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { AlignLeft, ArrowDown, ArrowUp, CheckSquare, File, Filter, Link2, List, Mic, Palette, Paperclip, Plus, Search, Settings2, Table, type LucideIcon } from 'lucide-react';
+import { AlignLeft, ArrowDown, ArrowUp, CheckSquare, File, Filter, Link2, List, Palette, Paperclip, Plus, Search, Settings2, Table, type LucideIcon } from 'lucide-react';
 import { palette, ink, withAlpha, categoryTones, shadow } from '@/lib/theme';
-import { type Question, type ResponseType } from '../QuestionEditor';
+import { type Question, type QuestionPart, type ResponseType } from '../QuestionEditor';
+// Pièce jointe média (image/audio) : voir questionMedia.tsx pour l'explication
+// du cycle d'import évité. Réexporté ici pour ne pas casser les imports
+// existants (GeneratorContent importe QuestionImagePreview/QuestionAudioNote
+// depuis ce fichier).
+export { useQuestionMediaUrl, uploadQuestionMedia, useQuestionMediaDrop, MediaAttachment, QuestionImagePreview, QuestionAudioNote } from './questionMedia';
 
 // ---- shared data ----
 //
@@ -43,7 +48,6 @@ export const RESPONSE_TYPE_COLORS: Record<ResponseType, string> = {
   matching: categoryTones.mauve,
   dessin: categoryTones.mauve,
   fichier: categoryTones.rust,
-  audio: categoryTones.mauve,
 };
 
 // La difficulté a été retirée des critères de tri le 09/08/2026 (elle reste un
@@ -260,6 +264,13 @@ export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter,
   );
 }
 
+/** Demande de recadrage de la feuille sur une ligne : `key` est la clé de la
+ *  ligne dans `qRefs` (identifiant de question, de saut de page, ou
+ *  `h-<id de partie>` pour un titre de partie). Le jeton ne sert qu'à
+ *  redéclencher le recadrage sur une ligne déjà visée juste avant — sans lui,
+ *  renvoyer deux fois la même question sur la feuille ne bougerait plus rien. */
+export type SheetFocus = { key: string; token: number };
+
 export const NEVER_EXAM_ID = '__never__';
 export const NO_DIFFICULTY = 0;
 
@@ -311,7 +322,6 @@ export const RESPONSE_TYPE_ICONS: Record<ResponseType, LucideIcon> = {
   matching: Link2,
   dessin: Palette,
   fichier: Paperclip,
-  audio: Mic,
   sans_reponse: File,
 };
 
@@ -333,8 +343,8 @@ export function TypeIcon({ type, size = 14 }: { type: ResponseType; size?: numbe
 
 // Le statut « réponse incomplète » (pastille d'alerte sur la feuille, filtre de
 // la banque, garde-fou avant enregistrement) a été retiré le 09/08/2026 : avec
-// neuf types de réponse dont plusieurs sans correction automatique (dessin,
-// audio, fichier, vide), « incomplet » ne voulait plus rien dire d'utile.
+// huit types de réponse dont plusieurs sans correction automatique (dessin,
+// fichier, vide), « incomplet » ne voulait plus rien dire d'utile.
 
 // une entrée aplatie est soit une vraie question, soit un repère « saut de page » (pseudo-question
 // déplaçable comme une question mais jamais affichée/imprimée dans l'examen final)
@@ -344,38 +354,54 @@ export function flatEntryId(entry: FlatEntry): string {
   return entry.kind === 'pagebreak' ? entry.id : entry.q.id;
 }
 
-// calcule les sauts de page A4 : pour chaque indice (gi) dans la liste aplatie, indique si une nouvelle
-// page commence à cet indice, et si l'en-tête de section affiché à cet endroit est une « (suite) »
-// (saut au milieu d'une section). Un bloc de question n'est jamais coupé entre 2 pages. Un repère
-// « saut de page » force toujours le passage à la page suivante juste après lui.
+/** Bloc paginable de la copie : l'unité que la pagination pose sur une page ou
+ *  renvoie à la suivante, et qu'elle ne coupe jamais en deux.
+ *
+ *  Une **question liée** est un bloc à part entière, au même titre que la
+ *  question principale de sa grappe : une grappe trop longue s'étale donc sur
+ *  deux pages au lieu de sauter la page en bloc (ou de déborder). Leur ordre,
+ *  lui, ne bouge pas — il est fixé par la liste des blocs, et le glisser-déposer
+ *  continue de déplacer la grappe entière (voir `flattenSections`). */
+export type PageBlock = {
+  /** clé de mesure dans `rowHeights` */
+  key: string;
+  sectionIdx: number;
+  /** hauteur estimée tant que le bloc n'a pas été mesuré */
+  fallbackHeight: number;
+  /** repère « saut de page » : force le passage à la page suivante juste après lui */
+  forcesBreakAfter?: boolean;
+};
+
+// calcule les sauts de page A4 : pour chaque indice de bloc, indique si une nouvelle page commence
+// à cet indice, et si l'en-tête de section affiché à cet endroit est une « (suite) » (saut au milieu
+// d'une section).
 export type PaginationInfo = { pageStarts: Set<number>; continuationStarts: Set<number>; pageCount: number };
 
-export function computePagination(flat: FlatEntry[], rowHeights: Record<string, number>, firstPageReservedHeight = 0): PaginationInfo {
+export function computePagination(blocks: PageBlock[], rowHeights: Record<string, number>, firstPageReservedHeight = 0): PaginationInfo {
   const pageStarts = new Set<number>();
   const continuationStarts = new Set<number>();
   const maxUsable = A4_PAGE_HEIGHT - A4_MARGIN_PX; // marge basse non imprimable réservée sur chaque page
   let used = A4_MARGIN_PX + firstPageReservedHeight; // marge haute non imprimable réservée sur chaque page
   let curSection = -1;
   let forceBreakNext = false;
-  flat.forEach((entry, gi) => {
+  blocks.forEach((block, bi) => {
+    // Le titre de partie n'est pas un bloc : sa hauteur est portée par le
+    // premier bloc de la partie, ce qui interdit de le laisser seul en bas d'une page.
     let extra = 0;
-    if (entry.sectionIdx !== curSection) {
+    if (block.sectionIdx !== curSection) {
       extra += A4_SECTION_HEADER_HEIGHT;
-      curSection = entry.sectionIdx;
+      curSection = block.sectionIdx;
     }
-    const h = entry.kind === 'pagebreak'
-      ? (rowHeights[entry.id] ?? A4_PAGE_BREAK_HEIGHT)
-      : (rowHeights[entry.q.id] ?? A4_ROW_FALLBACK_HEIGHT) + A4_ROW_GAP;
-    const total = extra + h;
-    if (gi > 0 && (forceBreakNext || used + total > maxUsable)) {
-      pageStarts.add(gi);
+    const total = extra + (rowHeights[block.key] ?? block.fallbackHeight) + A4_ROW_GAP;
+    if (bi > 0 && (forceBreakNext || used + total > maxUsable)) {
+      pageStarts.add(bi);
       used = A4_MARGIN_PX;
       if (extra === 0) {
-        continuationStarts.add(gi);
+        continuationStarts.add(bi);
         used += A4_SECTION_HEADER_HEIGHT;
       }
     }
-    forceBreakNext = entry.kind === 'pagebreak';
+    forceBreakNext = block.forcesBreakAfter === true;
     used += total;
   });
   return { pageStarts, continuationStarts, pageCount: pageStarts.size + 1 };
@@ -399,9 +425,31 @@ export function clearWeightingFor(weighting: Record<string, QuestionWeight>, id:
   return next;
 }
 
+// Vue « question » d'une question liée, pour réutiliser tels quels les rendus
+// qui prennent une `Question` (espace de réponse sur la copie, aperçu de la
+// banque). Tout ce qui est propre à l'énoncé est repris de la question liée ;
+// seuls les éléments communs (image, audio, libellés) restent ceux de la
+// question principale. Voir `QuestionPart`.
+export function partAsQuestion(q: Question, part: QuestionPart): Question {
+  return {
+    ...q,
+    content: part.content,
+    responseType: part.responseType,
+    answer: part.answer,
+    choices: part.choices,
+    correctChoices: part.correctChoices,
+    shuffleChoices: part.shuffleChoices,
+    textLines: part.textLines,
+    typeOptions: part.typeOptions,
+    expectations: part.expectations,
+    bloomLevel: part.bloomLevel,
+    notionIds: part.notionIds,
+    parts: [],
+  };
+}
+
 // espace de réponse générique affiché dans l'aperçu A4 — proportionné/structuré selon le type de réponse.
-// `audioLabel` est passé par l'appelant (la traduction next-intl ne peut pas être lue dans une fonction pure).
-export function renderAnswerSpace(q: Question, audioLabel: string) {
+export function renderAnswerSpace(q: Question) {
   const blankLines = (n: number) => (
     <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: A4_ANSWER_LINE_GAP }}>
       {Array.from({ length: n }, (_, i) => <div key={i} style={{ height: A4_ANSWER_LINE_HEIGHT, borderBottom: `1px solid ${ink(0.18)}` }} />)}
@@ -509,8 +557,6 @@ export function renderAnswerSpace(q: Question, audioLabel: string) {
     }
     case 'dessin':
       return <div style={{ marginTop: 14, height: 180, border: `1px dashed ${ink(0.22)}`, borderRadius: 6 }} />;
-    case 'audio':
-      return <div style={{ marginTop: 14, height: 60, border: `1px dashed ${ink(0.22)}`, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, color: palette.inkFaint }}>{audioLabel}</div>;
     // Fichier : le dépôt se fait hors de la copie — une seule ligne pour noter
     // le nom du fichier rendu ou le lien.
     case 'fichier':
@@ -709,6 +755,16 @@ const CARD_PAD_Y = 9;
 const CARD_ACTION_GAP = 8;
 // gouttière réservée à droite des lignes 2 et 3 : 2 boutons + leur écart + une marge
 const CARD_ACTIONS_W = 2 * CARD_ACTION_BTN + CARD_ACTION_GAP + 6;
+/** Hauteur laissée libre en haut de la cale flottante des boutons : c'est ce qui
+ *  permet à la PREMIÈRE ligne du titre de passer devant eux (ils ne descendent
+ *  qu'à partir de la deuxième). `CARD_LINE + 2` et non `CARD_LINE` tout rond :
+ *  la colonne est mise à l'échelle (`--exam-list-zoom`), et à certaines échelles
+ *  — 0,87 exactement, mesuré — l'arrondi sous-pixel plaçait le haut de la forme
+ *  juste au-dessus du bas de la première ligne, qui se faisait alors repousser
+ *  comme la seconde : le texte s'arrêtait au milieu de la carte. Les 2px de jeu
+ *  restent très en deçà de la deuxième ligne, qui continue de contourner la
+ *  cale à toutes les échelles. */
+const CARD_ACTIONS_SHAPE_TOP = CARD_LINE + 2;
 
 /** Énoncé/titre de la carte, coupé à deux lignes avec « … » quand il déborde.
  *
@@ -756,7 +812,7 @@ function ClampedTitle({ text, indent }: { text: string; indent: number }) {
       `letter-spacing:${cs.letterSpacing}`, `text-indent:${indent}px`, 'white-space:normal', 'overflow-wrap:anywhere',
     ].join(';');
     const spacer = document.createElement('span');
-    spacer.style.cssText = `float:right;width:${CARD_ACTIONS_W}px;height:${2 * CARD_LINE}px;shape-outside:inset(${CARD_LINE}px 0 0 0)`;
+    spacer.style.cssText = `float:right;width:${CARD_ACTIONS_W}px;height:${2 * CARD_LINE}px;shape-outside:inset(${CARD_ACTIONS_SHAPE_TOP}px 0 0 0)`;
     const node = document.createTextNode('');
     probe.append(spacer, node);
     document.body.appendChild(probe);
@@ -802,7 +858,7 @@ function ClampedTitle({ text, indent }: { text: string; indent: number }) {
           donc la 1re ligne était raccourcie elle aussi. `shape-outside` limite
           l'exclusion à la moitié basse — la 1re ligne court jusqu'au bord de la
           carte, seule la 2e s'arrête avant les boutons. */}
-      <span style={{ float: 'right' as const, width: CARD_ACTIONS_W, height: 2 * CARD_LINE, shapeOutside: `inset(${CARD_LINE}px 0 0 0)` }} />
+      <span style={{ float: 'right' as const, width: CARD_ACTIONS_W, height: 2 * CARD_LINE, shapeOutside: `inset(${CARD_ACTIONS_SHAPE_TOP}px 0 0 0)` }} />
       {display}
     </div>
   );
@@ -836,7 +892,12 @@ export function ListCard({ onClick, tint, borderColor, leading, indent = 0, titl
       style={{
         cursor: onClick ? 'pointer' : 'default', display: 'flex', flexDirection: 'column', padding: `${CARD_PAD_Y}px ${CARD_PAD_X}px`, borderRadius: 12,
         background: tint ?? palette.surfaceRaised,
-        border: `1px solid ${borderColor ?? palette.line}`,
+        // Carte sans contour : c'est son fond, plus clair que le crème de la
+        // page, qui la détache — la colonne n'a plus ni cadre ni panneau. La
+        // bordure ne sert plus qu'aux états qui en demandent un (carte déjà
+        // posée sur la feuille), et reste transparente sinon pour que les deux
+        // états gardent exactement la même géométrie.
+        border: `1px solid ${borderColor ?? 'transparent'}`,
       }}
     >
       <div style={{ position: 'relative' as const, height: 3 * CARD_LINE }}>

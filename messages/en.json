@@ -354,13 +354,7 @@
       "tableau": "table",
       "matching": "matching",
       "dessin": "drawing",
-      "fichier": "file",
-      "audio": "audio"
-    },
-    "questionType": {
-      "textuel": "Text",
-      "visuel": "Visual",
-      "audio": "Audio"
+      "fichier": "file"
     },
     "identity": {
       "nom": "Last name",
@@ -371,7 +365,7 @@
       "bareme": "Marks"
     },
     "answerSpace": {
-      "audio": "🎙 audio response space"
+      "audioNote": "An audio recording accompanies this question."
     },
     "editQuestion": "edit question",
     "cancelEditQuestion": "cancel editing",
@@ -382,11 +376,6 @@
       "titleLabel": "Title",
       "titleHint": "optional — if filled, replaces the statement as the title shown in the question bank",
       "titlePlaceholder": "Short title (optional)…",
-      "qTypeLabel": "Question type",
-      "qTypeHint": "Text by default · Visual (image, chart) and Audio available",
-      "visualAttach": "📎 attach an image or chart",
-      "visualEdit": "edit image — basic tool coming soon",
-      "audioComing": "🎙️ audio recording / import — tool coming soon",
       "contentLabel": "Question statement",
       "contentPlaceholder": "Write or paste the question statement…",
       "rTypeLabel": "Response type",
@@ -399,7 +388,6 @@
       "shuffleLabel": "Random order",
       "shuffleHint": "shuffles the option order for each student",
       "answerHintDessin": "description or reference image for grading (drawing tool coming soon)",
-      "answerHintAudio": "transcript or expected elements in the audio answer",
       "answerHintDefault": "used for AI-assisted grading",
       "answerLabelDefault": "Attached answer",
       "answerPlaceholder": "Reference answer…",
@@ -416,8 +404,8 @@
       "durationHint": "off by default — allotted time, only for projected exams",
       "minutes": "minutes",
       "seconds": "seconds",
-      "partsDivider": "Additional parts",
-      "partsIntro": "A question can have several independent parts (distinct statements and response types).",
+      "partsDivider": "Linked questions",
+      "partsIntro": "A linked question is a full question of its own: it has its statement, its response type and its settings. Only the image, audio and labels stay shared.",
       "part": "Part {n}",
       "partStatement": "Statement",
       "partStatementPlaceholder": "Statement for this part…",
@@ -478,7 +466,6 @@
       "filters": "filters",
       "filtersReset": "reset",
       "filtersTitle": "filters",
-      "qTypeSection": "question type",
       "rTypeSection": "response type",
       "statusSection": "status",
       "statusNew": "New",
@@ -570,6 +557,8 @@
       "newQuestion": "new question",
       "editQuestion": "edit question",
       "statementPlaceholder": "question wording…",
+      "linkedStatementPlaceholder": "linked question wording…",
+      "removeLinked": "remove linked question",
       "attachImage": "attach an embedded image",
       "pointsTitle": "marks for this question",
       "points": "pts",
@@ -580,7 +569,13 @@
       "save": "save →",
       "statementRequired": "the question wording is required",
       "attachAudio": "add an audio clip",
-      "soon": "coming soon",
+      "removeMedia": "remove attachment",
+      "unsupportedFormat": "Unsupported file format.",
+      "play": "play",
+      "pause": "pause",
+      "skipBack": "back 10 seconds",
+      "skipForward": "forward 10 seconds",
+      "volume": "volume",
       "scoreLabel": "points",
       "penaltyLabel": "wrong answer",
       "penaltyTitle": "penalty applied to a wrong answer",

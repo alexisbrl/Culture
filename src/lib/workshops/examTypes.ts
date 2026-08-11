@@ -12,7 +12,12 @@
 // internes (BankContent, GeneratorContent, HistoryContent) — ne pas dupliquer
 // ces définitions ailleurs, toujours les faire dériver d'ici.
 
-export type QuestionType = 'textuel' | 'visuel' | 'audio';
+// Pièce jointe optionnelle sur l'énoncé d'une question — image et audio sont
+// indépendants (une question peut porter les deux, l'un, l'autre ou aucun) :
+// il n'y a PLUS de « type de question » exclusif (retiré le 11/08/2026, voir
+// docs/changelog.md). `key` est la clé de stockage (`storage.ts`), jamais une
+// URL — l'URL signée est résolue à la demande, côté serveur uniquement.
+export type QuestionMedia = { key: string };
 
 // Une question vit soit dans la banque d'examen, soit dans le parcours
 // pédagogique (colonne `exam_questions.context`). Même table, même éditeur,
@@ -20,19 +25,21 @@ export type QuestionType = 'textuel' | 'visuel' | 'audio';
 export type QuestionContext = 'exam' | 'parcours';
 
 // Types de réponse — liste arrêtée le 09/08/2026 sur la maquette
-// (`App-Culture.dc.html`, `_typeDefs`). Neuf entrées visibles dans le menu :
-// QCM, texte, liste, tableau, matching, dessin, fichier, audio, vide.
+// (`App-Culture.dc.html`, `_typeDefs`), huit entrées depuis le retrait du type
+// « audio » le 11/08/2026 : QCM, texte, liste, tableau, matching, dessin,
+// fichier, vide.
 //
 // `qcs` n'est PAS une entrée du menu : c'est la variante « réponse unique » de
 // `qcm`, basculée par une pilule dans l'éditeur. La distinction reste stockée
 // telle quelle (elle porte une vraie différence de correction : une seule case
 // cochable), mais l'utilisateur ne choisit que « QCM ».
 //
-// Disparus : `sondage` (absorbé par QCM), `ordre` (trier dans l'ordre) et
-// `fill_blank` (texte à trous). Les lignes déjà en base portant ces valeurs
-// sont ramenées à la volée par `toResponseType()` — aucune migration
-// destructive, la normalisation se fait à la lecture et la nouvelle valeur est
-// réécrite au premier enregistrement.
+// Disparus : `sondage` (absorbé par QCM), `ordre` (trier dans l'ordre),
+// `fill_blank` (texte à trous) et `audio` (retiré au profit d'un dépôt de
+// fichier audio via `fichier`, voir FILE_TYPE_KEYS). Les lignes déjà en base
+// portant ces valeurs sont ramenées à la volée par `toResponseType()` —
+// aucune migration destructive, la normalisation se fait à la lecture et la
+// nouvelle valeur est réécrite au premier enregistrement.
 export type ResponseType =
   | 'sans_reponse'
   | 'qcs'
@@ -42,8 +49,7 @@ export type ResponseType =
   | 'tableau'
   | 'matching'
   | 'dessin'
-  | 'fichier'
-  | 'audio';
+  | 'fichier';
 
 /** Ramène n'importe quelle valeur stockée (y compris les types supprimés) sur un type valide. */
 export function toResponseType(value: unknown): ResponseType {
@@ -55,13 +61,16 @@ export function toResponseType(value: unknown): ResponseType {
     case 'texte': return 'textuelle';
     case 'vide': return 'sans_reponse';
     case 'match': return 'matching';
+    // type de réponse « audio » retiré (11/08/2026) : le dépôt d'un fichier
+    // audio en réponse reste possible via `fichier` (voir FILE_TYPE_KEYS).
+    case 'audio': return 'fichier';
     default:
       return RESPONSE_TYPES.includes(value as ResponseType) ? (value as ResponseType) : 'textuelle';
   }
 }
 
 const RESPONSE_TYPES: ResponseType[] = [
-  'sans_reponse', 'qcs', 'qcm', 'textuelle', 'liste', 'tableau', 'matching', 'dessin', 'fichier', 'audio',
+  'sans_reponse', 'qcs', 'qcm', 'textuelle', 'liste', 'tableau', 'matching', 'dessin', 'fichier',
 ];
 
 // Réglages propres à un type de réponse. Regroupés dans un seul objet (colonne
@@ -128,7 +137,42 @@ export function toBloomLevel(value: unknown): BloomLevel {
   return BLOOM_LEVELS.includes(n as BloomLevel) ? (n as BloomLevel) : DEFAULT_BLOOM_LEVEL;
 }
 
+// ─── Question liée ───────────────────────────────────────────────────────────
+//
+// Une « question liée » (nommée `part` dans le modèle et en base) est une
+// question à part entière, PRIVÉE DES SEULS ÉLÉMENTS COMMUNS : image, audio et
+// libellés restent portés une seule fois par la question principale et valent
+// pour toute la grappe. Tout le reste (énoncé, type de réponse, réglages du
+// type, attendus, notions, niveau de Bloom) lui est propre — refonte du
+// 11/08/2026, voir docs/changelog.md.
+//
+// Les noms de champs sont volontairement IDENTIQUES à ceux de `Question` :
+//   - un seul composant d'édition sert les deux (`QuestionFields`) ;
+//   - un seul rendu d'espace de réponse sur la copie (`renderAnswerSpace`) ;
+//   - pour l'IA, un contrat unique et sans surprise — un objet question, puis un
+//     tableau `parts` d'objets de même forme moins les champs communs.
+//
+// Stockage : tableau jsonb `exam_questions.parts` sur la ligne de la question
+// principale (pas de table ni de ligne par question liée). Une question liée
+// n'existe jamais seule, n'est jamais tirée seule et suit toujours le sort de sa
+// question principale — la lire coûte donc zéro jointure. Conséquence assumée :
+// `notionIds` d'une question liée vit dans le jsonb et PAS dans la table de
+// jonction `exam_question_bricks`, qui reste l'index des notions de la seule
+// question principale (voir `syncQuestionNotions` dans exam.ts). Les
+// consommateurs qui ont besoin de l'ensemble des notions d'une grappe font
+// l'union eux-mêmes (banque de questions, crédit de maîtrise).
+//
+// Champs retirés le 11/08/2026 (jamais exposés par l'éditeur, valeurs mortes en
+// base) : `answerOptional`, `difficulty`, `duration`. Les clés déjà présentes
+// dans le jsonb sont simplement ignorées à la lecture et disparaissent au
+// premier enregistrement — aucune migration.
 export type QuestionPart = {
+  /** Identifiant stable, propre à cette question liée et conservé d'une
+   *  édition à l'autre. Il sert de clé de ligne dans `exam_question_items` et
+   *  de cible à ses notions : sans lui, chaque enregistrement effacerait puis
+   *  recréerait les lignes (et leurs liens) au lieu de les mettre à jour.
+   *  La question principale, elle, utilise l'identifiant du groupe. */
+  id: string;
   content: string;
   responseType: ResponseType;
   answer: string;
@@ -136,17 +180,25 @@ export type QuestionPart = {
   correctChoices: number[];
   shuffleChoices: boolean;
   textLines: number;
-  answerOptional: boolean;
-  difficulty: { enabled: boolean; value: number };
-  duration: { enabled: boolean; minutes: number; seconds: number };
+  /** Réglages propres au type de réponse — mêmes clés que sur `Question`. */
+  typeOptions: QuestionTypeOptions;
+  /** Attendus de correction, propres à cette question liée. */
+  expectations: string;
+  /** Niveau de Bloom visé par cette question liée, indépendant du principal. */
+  bloomLevel: BloomLevel;
+  /** Notions couvertes par cette question liée (stockées dans le jsonb, voir
+   *  plus haut — pas dans `exam_question_bricks`). */
+  notionIds: string[];
 };
 
 export type Question = {
   id: string;
   title: string;
-  questionType: QuestionType;
   responseType: ResponseType;
   content: string;
+  // Pièce jointe sur l'énoncé — indépendantes l'une de l'autre, voir QuestionMedia.
+  image?: QuestionMedia | null;
+  audio?: QuestionMedia | null;
   answer: string;
   choices: string[];
   correctChoices: number[];
@@ -155,6 +207,7 @@ export type Question = {
   answerOptional: boolean;
   difficulty: { enabled: boolean; value: number };
   duration: { enabled: boolean; minutes: number; seconds: number };
+  /** Questions liées, dans l'ordre d'affichage — voir `QuestionPart`. */
   parts: QuestionPart[];
   examIds: string[];
   createdAt?: string;
@@ -193,22 +246,40 @@ export type ExerciseChoice = {
   text: string;
 };
 
-export type ExercisePrompt = {
-  id: string;
-  title: string;
+// Une question liée telle qu'un candidat la reçoit : mêmes garanties que
+// `ExercisePrompt` (ni `answer` ni `correctChoices`), sans les champs communs
+// (image, audio, titre) qui restent portés par la question principale.
+export type ExercisePart = {
   content: string;
-  questionType: QuestionType;
   responseType: ResponseType;
   choices: ExerciseChoice[];
   textLines: number;
 };
 
+export type ExercisePrompt = {
+  id: string;
+  title: string;
+  content: string;
+  // URLs signées déjà résolues côté serveur (jamais la clé de stockage brute) :
+  // ce type est la vue « sans réponse » envoyée à un simple membre, voir plus haut.
+  imageUrl?: string | null;
+  audioUrl?: string | null;
+  responseType: ResponseType;
+  choices: ExerciseChoice[];
+  textLines: number;
+  /** Questions liées à traiter dans la foulée, dans l'ordre. */
+  parts: ExercisePart[];
+};
+
 export type ExerciseResult = {
   // `null` quand la correction automatique ne s'applique pas (réponse libre,
-  // dessin, audio…) : on se contente alors d'afficher la réponse attendue.
+  // dessin, fichier…) : on se contente alors d'afficher la réponse attendue.
   correct: boolean | null;
   answer: string;
   correctChoices: number[];
+  /** Correction de chaque question liée, dans le même ordre que
+   *  `ExercisePrompt.parts`. Absent (ou vide) quand la question n'en a pas. */
+  parts?: ExerciseResult[];
 };
 
 export type IdentitySide = 'left' | 'right' | 'hidden';

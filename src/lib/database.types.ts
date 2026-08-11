@@ -244,10 +244,106 @@ export type Database = {
           },
         ]
       }
+      exam_question_item_bricks: {
+        Row: {
+          brick_id: string
+          created_at: string
+          item_id: string
+        }
+        Insert: {
+          brick_id: string
+          created_at?: string
+          item_id: string
+        }
+        Update: {
+          brick_id?: string
+          created_at?: string
+          item_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_question_item_bricks_brick_id_fkey"
+            columns: ["brick_id"]
+            isOneToOne: false
+            referencedRelation: "workshop_bricks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_question_item_bricks_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "exam_question_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exam_question_items: {
+        Row: {
+          answer: string
+          bloom_level: number
+          choices: Json
+          content: string
+          correct_choices: Json
+          created_at: string
+          expectations: string
+          group_id: string
+          id: string
+          response_type: string
+          shuffle_choices: boolean
+          sort_order: number
+          text_lines: number
+          type_options: Json
+          updated_at: string
+        }
+        Insert: {
+          answer?: string
+          bloom_level?: number
+          choices?: Json
+          content?: string
+          correct_choices?: Json
+          created_at?: string
+          expectations?: string
+          group_id: string
+          id: string
+          response_type?: string
+          shuffle_choices?: boolean
+          sort_order: number
+          text_lines?: number
+          type_options?: Json
+          updated_at?: string
+        }
+        Update: {
+          answer?: string
+          bloom_level?: number
+          choices?: Json
+          content?: string
+          correct_choices?: Json
+          created_at?: string
+          expectations?: string
+          group_id?: string
+          id?: string
+          response_type?: string
+          shuffle_choices?: boolean
+          sort_order?: number
+          text_lines?: number
+          type_options?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_question_items_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "exam_questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exam_questions: {
         Row: {
           answer: string
           answer_optional: boolean
+          audio_key: string | null
           bloom_level: number
           chapter_id: string | null
           choices: Json
@@ -258,7 +354,9 @@ export type Database = {
           difficulty: Json
           duration: Json
           exam_ids: Json
+          expectations: string
           id: string
+          image_key: string | null
           parts: Json
           pools: Json
           question_type: string
@@ -266,12 +364,14 @@ export type Database = {
           shuffle_choices: boolean
           text_lines: number
           title: string
+          type_options: Json
           updated_at: string
           workshop_id: string
         }
         Insert: {
           answer?: string
           answer_optional?: boolean
+          audio_key?: string | null
           bloom_level?: number
           chapter_id?: string | null
           choices?: Json
@@ -282,7 +382,9 @@ export type Database = {
           difficulty?: Json
           duration?: Json
           exam_ids?: Json
+          expectations?: string
           id: string
+          image_key?: string | null
           parts?: Json
           pools?: Json
           question_type?: string
@@ -290,12 +392,14 @@ export type Database = {
           shuffle_choices?: boolean
           text_lines?: number
           title?: string
+          type_options?: Json
           updated_at?: string
           workshop_id: string
         }
         Update: {
           answer?: string
           answer_optional?: boolean
+          audio_key?: string | null
           bloom_level?: number
           chapter_id?: string | null
           choices?: Json
@@ -306,7 +410,9 @@ export type Database = {
           difficulty?: Json
           duration?: Json
           exam_ids?: Json
+          expectations?: string
           id?: string
+          image_key?: string | null
           parts?: Json
           pools?: Json
           question_type?: string
@@ -314,6 +420,7 @@ export type Database = {
           shuffle_choices?: boolean
           text_lines?: number
           title?: string
+          type_options?: Json
           updated_at?: string
           workshop_id?: string
         }
