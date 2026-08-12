@@ -3,14 +3,32 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link2, Pencil, Trash2 } from 'lucide-react';
-import { palette, shadow, withAlpha, ink, inkOn } from '@/lib/theme';
+import { palette, withAlpha, ink } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { type Question, type ResponseType } from '../QuestionEditor';
+import { RESPONSE_TYPE_ORDER } from './questionFields';
 import {
   type Pool, type Exam, type SortBy, type SortDir,
-  DEFAULT_SORT_DIR, NEVER_EXAM_ID, LABEL_COLORS, CARD_LINE, CARD_ACTION_BTN,
-  TypeIcon, IconBtn, ActiveChip, ListToolbar, FilterButton, ListCard,
+  DEFAULT_SORT_DIR, NEVER_EXAM_ID, CARD_LINE, CARD_ACTION_BTN,
+  RESPONSE_TYPE_ICONS, RESPONSE_TYPE_COLORS,
+  TypeIcon, IconBtn, ActiveChip, ListToolbar, FilterButton, ListCard, LabelPill, LabelEditor,
+  useDismissOnOutsideClick,
 } from './examShared';
+
+// Le filtre « QCM » couvre aussi les questions à réponse unique : `qcs` est la
+// variante de `qcm`, elle partage son libellé et son pictogramme et n'a jamais
+// sa propre entrée (voir `RESPONSE_TYPE_ORDER`). Sans ça, une question
+// enregistrée en `qcs` ne serait atteignable par aucun filtre.
+const typeMatches = (filter: ResponseType, actual: ResponseType) =>
+  filter === actual || (filter === 'qcm' && actual === 'qcs');
+
+// Une grappe se filtre comme un tout, à l'image de `chaptersOfQuestion` : la
+// banque n'affiche qu'une carte par grappe, donc le type de réponse de chaque
+// question liée compte autant que celui de la question principale. Sans ça, une
+// grappe dont seule la deuxième question est un tableau restait introuvable par
+// le filtre « tableau ».
+const typesOfQuestion = (q: Question): ResponseType[] =>
+  [q.responseType, ...q.parts.map(p => p.responseType)];
 
 // Filtre « sans chapitre » : les questions dont aucune notion associée n'est
 // rattachée à un chapitre (y compris celles sans notion du tout).
@@ -70,13 +88,9 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
   const [creatingLabel, setCreatingLabel] = useState(false);
   const [newLabelName, setNewLabelName] = useState('');
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
-  const [editLabelName, setEditLabelName] = useState('');
-  const [editLabelColor, setEditLabelColor] = useState('');
-  const [pendingDeleteLabel, setPendingDeleteLabel] = useState<string | null>(null);
   const [pendingDeleteQuestion, setPendingDeleteQuestion] = useState<Question | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
 
-  const allTypes = Array.from(new Set(questions.map(q => q.responseType)));
   const activeFilterCount = filterPools.length + filterTypes.length + filterChapters.length + filterExams.length;
 
   // Chapitre(s) d'une question = ceux de ses notions associées. La table de
@@ -98,15 +112,39 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
     return set;
   };
 
+  // Clic en dehors du panneau : il le referme, avec l'éditeur de libellé s'il
+  // était ouvert — chaque couche se prononce sur le même geste — et il ne fait
+  // rien d'autre. Voir `useDismissOnOutsideClick`.
+  useDismissOnOutsideClick(filterOpen, filterRef, () => setFilterOpen(false));
+
   useEffect(() => {
     if (!filterOpen) return;
-    function handleClick(e: MouseEvent) {
-      if (pendingDeleteLabel) return;
-      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
+    // Le défilement referme le panneau, exactement comme un clic à côté — avec
+    // l'éditeur de libellé s'il était ouvert, l'effet ci-dessous s'en chargeant
+    // dès que le panneau se ferme.
+    //
+    // Mais seul le défilement d'un conteneur qui **porte** le panneau compte.
+    // C'est là toute la raison de le fermer : posé en `position: fixed` pour
+    // échapper au rognage de la colonne (voir `FilterButton`), il suit son
+    // bouton vers le haut de l'écran et finit par passer par-dessus la barre de
+    // navigation. Défiler la feuille d'examen, à côté, ne le déplace pas d'un
+    // pixel — ça n'a donc pas à le fermer. Le test « la cible contient le
+    // panneau » dit exactement ça, et écarte du même coup le défilement de la
+    // liste *interne* du panneau, qui n'est pas un geste pour en sortir.
+    //
+    // Écoute en capture : ce qui défile est la colonne, pas la fenêtre, et les
+    // événements `scroll` ne remontent pas.
+    function handleScroll(e: Event) {
+      // Modale ouverte au-dessus : elle a la main, rien ne se ferme derrière
+      // elle. Même exception que pour le clic (`useDismissOnOutsideClick`).
+      if (document.querySelector('[data-modal-layer]')) return;
+      const target = e.target as Node | null;
+      if (!target || !filterRef.current || !target.contains(filterRef.current)) return;
+      setFilterOpen(false);
     }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [filterOpen, pendingDeleteLabel]);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
+  }, [filterOpen]);
 
   useEffect(() => {
     if (!filterOpen) {
@@ -163,28 +201,12 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
     setNewLabelName('');
     setCreatingLabel(false);
   }
-  function openEditLabel(pool: Pool) {
-    setEditingLabel(pool.id);
-    setEditLabelName(pool.name);
-    setEditLabelColor(pool.color);
-    setCreatingLabel(false);
-  }
-  function saveEditLabel() {
-    if (!editingLabel) return;
-    const pool = pools.find(p => p.id === editingLabel);
-    if (!pool) return;
-    const name = editLabelName.trim();
-    onUpdatePool({ ...pool, name: name || pool.name, color: editLabelColor || pool.color });
-    setEditingLabel(null);
-  }
-  function confirmDeleteLabel() {
-    if (!pendingDeleteLabel) return;
-    const id = pendingDeleteLabel;
+  // Suppression d'un libellé : la banque a en plus à oublier le filtre qui le
+  // visait, sans quoi la liste resterait filtrée sur un libellé disparu.
+  function deleteLabel(id: string) {
     onDeletePool(id);
     setFilterPools(prev => prev.filter(p => p !== id));
     clearMode(`pool:${id}`);
-    setPendingDeleteLabel(null);
-    if (editingLabel === id) setEditingLabel(null);
   }
 
   const modeOf = (key: string): FilterMode => filterModes[key] ?? 'pos';
@@ -201,17 +223,24 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
     const qPools = new Set(q.pools);
     const qExamIds = new Set(q.examIds);
     const qChapters = chaptersOfQuestion(q);
+    const qTypes = typesOfQuestion(q);
     const neverExam = q.examIds.length === 0;
 
     if (posPools.length && !posPools.some(p => qPools.has(p))) return false;
     if (negPools.length && negPools.some(p => qPools.has(p))) return false;
-    if (posTypes.length && !posTypes.some(t => t === q.responseType)) return false;
-    if (negTypes.length && negTypes.some(t => t === q.responseType)) return false;
+    if (posTypes.length && !posTypes.some(t => qTypes.some(a => typeMatches(t, a)))) return false;
+    if (negTypes.length && negTypes.some(t => qTypes.some(a => typeMatches(t, a)))) return false;
     if (posChapters.length && !posChapters.some(c => qChapters.has(c))) return false;
     if (negChapters.length && negChapters.some(c => qChapters.has(c))) return false;
     if (posExams.length && !posExams.some(f => f === NEVER_EXAM_ID ? neverExam : qExamIds.has(f))) return false;
     if (negExams.length && negExams.some(f => f === NEVER_EXAM_ID ? neverExam : qExamIds.has(f))) return false;
-    if (search.trim() && !(q.title + ' ' + q.content + ' ' + q.answer).toLowerCase().includes(search.trim().toLowerCase())) return false;
+    // La recherche balaie la grappe entière, pour la même raison que les filtres
+    // ci-dessus : l'énoncé d'une question liée n'a pas d'autre carte que celle
+    // de sa grappe, il serait sinon impossible de le retrouver au texte.
+    if (search.trim()) {
+      const haystack = [q.title, q.content, q.answer, ...q.parts.flatMap(p => [p.content, p.answer])].join(' ').toLowerCase();
+      if (!haystack.includes(search.trim().toLowerCase())) return false;
+    }
     return true;
   });
 
@@ -263,9 +292,13 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
               <button
                 onClick={(e) => { e.stopPropagation(); setOpenId(open ? null : q.id); }}
                 title={open ? tr('bank.hideParts') : tr('bank.showParts', { count: q.parts.length + 1 })}
-                style={{ flexShrink: 0, width: CARD_LINE, height: CARD_LINE, borderRadius: 7, border: 'none', background: open ? ink(0.08) : 'transparent', color: open ? palette.inkSoft : palette.inkFaint, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+                /* Même gabarit que `TypeIcon` (carré `CARD_LINE`, rayon 7) mais en
+                   contour seul, sans aplat : les deux pictogrammes se lisent comme
+                   une paire sans que le lien de grappe se fasse passer pour un
+                   type de réponse. Le groupe déplié renforce le contour et l'encre. */
+                style={{ flexShrink: 0, width: CARD_LINE, height: CARD_LINE, borderRadius: 7, border: `1px solid ${open ? ink(0.32) : ink(0.16)}`, background: 'transparent', color: open ? palette.inkSoft : palette.inkFaint, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
               >
-                <Link2 size={14} strokeWidth={1.75} />
+                <Link2 size={CARD_LINE - 8} strokeWidth={1.75} />
               </button>
             )}
           </>
@@ -273,7 +306,7 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
         meta={q.pools.map(pid => {
           const p = pools.find(pp => pp.id === pid);
           if (!p) return null;
-          return <span key={pid} style={{ flexShrink: 0, fontSize: 10, padding: '2px 8px', borderRadius: 999, background: palette.surfaceSunken, color: palette.inkMuted }}>#{p.name}</span>;
+          return <LabelPill key={pid} name={p.name} color={p.color} size="xs" />;
         })}
         actions={
           <>
@@ -396,12 +429,17 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
                 {/* Type de réponse */}
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.rTypeSection')}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-                  {allTypes.map(ty => {
-                    const active = filterTypes.includes(ty);
+                  {RESPONSE_TYPE_ORDER.map(ty => {
+                    const Icon = RESPONSE_TYPE_ICONS[ty];
                     return (
-                      <button key={ty} onClick={() => toggleTypeFilter(ty)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? `1px solid ${palette.ink}` : `1px solid ${palette.line}`, background: active ? palette.ink : palette.surfaceSunken, color: active ? palette.onInk : palette.inkMuted }}>
-                        {tr(`responseType.${ty}`)}
-                      </button>
+                      <LabelPill
+                        key={ty}
+                        name={tr(`responseType.${ty}`)}
+                        color={RESPONSE_TYPE_COLORS[ty]}
+                        icon={<Icon size={11} strokeWidth={1.75} />}
+                        active={filterTypes.includes(ty)}
+                        onClick={() => toggleTypeFilter(ty)}
+                      />
                     );
                   })}
                 </div>
@@ -420,24 +458,17 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
                 {/* Libellés */}
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.labelsSection')}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-                  {pools.map(l => {
-                    const active = filterPools.includes(l.id);
-                    const displayName = l.name.length > 18 ? l.name.slice(0, 18) + '…' : l.name;
-                    return (
-                      <span key={l.id} style={{ position: 'relative', display: 'inline-flex' }}>
-                        {/* La couleur du libellé EST le fond de la pilule (elle
-                            ne se réduit plus à une pastille) : l'encre s'adapte
-                            à sa luminance, et l'état actif se lit au liseré
-                            d'encre plutôt qu'à un changement de fond. */}
-                        <button onClick={() => togglePoolFilter(l.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${active ? palette.ink : withAlpha(l.color, 0.55)}`, boxShadow: active ? `0 0 0 2px ${ink(0.25)}` : 'none', background: l.color, color: inkOn(l.color), fontWeight: active ? 600 : 400 }}>
-                          {displayName}
-                        </button>
-                        <button onClick={() => editingLabel === l.id ? setEditingLabel(null) : openEditLabel(l)} title={tr('bank.editLabelTitle')} style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', border: `1px solid ${palette.lineStrong}`, background: palette.surfaceRaised, color: palette.inkFaint, cursor: 'pointer', fontSize: 10, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <Pencil size={7} strokeWidth={2} />
-                        </button>
-                      </span>
-                    );
-                  })}
+                  {pools.map(l => (
+                    <LabelPill
+                      key={l.id}
+                      name={l.name}
+                      color={l.color}
+                      active={filterPools.includes(l.id)}
+                      onClick={() => togglePoolFilter(l.id)}
+                      onEdit={() => setEditingLabel(editingLabel === l.id ? null : l.id)}
+                      editTitle={tr('bank.editLabelTitle')}
+                    />
+                  ))}
                   {creatingLabel ? (
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <input autoFocus value={newLabelName} onChange={e => setNewLabelName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addLabel(); if (e.key === 'Escape') { setCreatingLabel(false); setNewLabelName(''); } }} placeholder={tr('editor.labelNamePlaceholder')} style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, border: `1px solid ${palette.lineStrong}`, outline: 'none', fontFamily: 'inherit', width: 110, background: palette.surfaceInput, color: palette.ink }} />
@@ -479,22 +510,13 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
                 const label = pools.find(p => p.id === editingLabel);
                 if (!label) return null;
                 return (
-                  <>
-                  <div onClick={() => setEditingLabel(null)} style={{ position: 'absolute', inset: 0, zIndex: 29, background: withAlpha(palette.cream, 0.7), borderRadius: 12 }} />
-                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 30, width: 190, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg, padding: 10 }}>
-                    <input autoFocus value={editLabelName} onChange={e => setEditLabelName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveEditLabel(); if (e.key === 'Escape') setEditingLabel(null); }} style={{ width: '100%', fontSize: 11.5, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box' as const, background: palette.surfaceInput, color: palette.ink }} />
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                      {LABEL_COLORS.map(c => (
-                        <button key={c} onClick={() => setEditLabelColor(c)} title={c} style={{ width: 16, height: 16, borderRadius: '50%', background: c, border: editLabelColor === c ? `2px solid ${palette.ink}` : `1px solid ${palette.lineStrong}`, cursor: 'pointer', padding: 0 }} />
-                      ))}
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                      <button onClick={saveEditLabel} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: 'none', background: palette.ink, color: palette.onInk, cursor: 'pointer', fontFamily: 'inherit' }}>{tr('bank.saveLabel')}</button>
-                      <button onClick={() => setEditingLabel(null)} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>{tr('cancelLower')}</button>
-                    </div>
-                    <button onClick={() => setPendingDeleteLabel(label.id)} style={{ width: '100%', fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${withAlpha(palette.danger, 0.30)}`, background: withAlpha(palette.danger, 0.08), color: palette.danger, cursor: 'pointer', fontFamily: 'inherit' }}>{tr('bank.deleteLabel')}</button>
-                  </div>
-                  </>
+                  <LabelEditor
+                    label={label}
+                    usageCount={questions.filter(q => q.pools.includes(label.id)).length}
+                    onSave={onUpdatePool}
+                    onDelete={() => deleteLabel(label.id)}
+                    onClose={() => setEditingLabel(null)}
+                  />
                 );
               })()}
             </div>
@@ -530,22 +552,6 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
               </div>
             )}
           </ConfirmDialog>
-        );
-      })()}
-      {pendingDeleteLabel && (() => {
-        const label = pools.find(p => p.id === pendingDeleteLabel);
-        if (!label) return null;
-        const count = questions.filter(q => q.pools.includes(label.id)).length;
-        return (
-          <ConfirmDialog
-            portal
-            width={380}
-            title={tr('bank.deleteLabelTitle', { name: label.name })}
-            description={`${count > 0 ? tr('bank.deleteLabelCount', { count }) : ''}${tr('irreversible')}`}
-            confirmLabel={tr('delete')}
-            onCancel={() => setPendingDeleteLabel(null)}
-            onConfirm={confirmDeleteLabel}
-          />
         );
       })()}
     </div>

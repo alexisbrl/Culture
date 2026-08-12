@@ -101,6 +101,32 @@ type Props = {
   statementPlaceholder: string;
 };
 
+/** Retrait d'une question liée. L'action est destructive : la croix est rouge
+ *  en permanence, et le cadre entier bascule au rouge au survol pour qu'on voie
+ *  ce qu'on s'apprête à faire avant de cliquer. Composant à part plutôt qu'un
+ *  état de survol dans `QuestionFields` : sinon chaque passage de souris
+ *  re-rendrait tout le bloc d'édition de l'énoncé. */
+function RemoveLinkedButton({ onClick, title }: { onClick: () => void; title: string }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        flex: 'none', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderRadius: 9, cursor: 'pointer', color: palette.danger,
+        border: `1px solid ${hovered ? withAlpha(palette.danger, 0.45) : palette.lineStrong}`,
+        background: hovered ? palette.dangerTint : 'transparent',
+      }}
+    >
+      <X size={16} strokeWidth={2} />
+    </button>
+  );
+}
+
 export function QuestionFields({
   values, onChange, number, advancedOpen, notions, weight, onWeightChange, media, onRemove, statementPlaceholder,
 }: Props) {
@@ -597,20 +623,7 @@ export function QuestionFields({
           <AutoTextarea value={values.content} onChange={v => patch({ content: v })} placeholder={statementPlaceholder} />
         </div>
         {media}
-        {onRemove && (
-          <button
-            type="button"
-            onClick={onRemove}
-            title={t('inline.removeLinked')}
-            style={{
-              flex: 'none', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: 9, border: `1px solid ${palette.lineStrong}`, background: 'transparent',
-              color: palette.inkFaint, cursor: 'pointer',
-            }}
-          >
-            <X size={16} strokeWidth={2} />
-          </button>
-        )}
+        {onRemove && <RemoveLinkedButton onClick={onRemove} title={t('inline.removeLinked')} />}
       </div>
 
       {/* type de réponse + barème */}

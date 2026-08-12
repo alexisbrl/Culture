@@ -27,7 +27,13 @@ type ModalProps = {
 
 export default function Modal({ onClose, width = 420, portal = false, children }: ModalProps) {
   const node = (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    /* `data-modal-layer` : repère lu par les panneaux qui se ferment au clic
+       extérieur (`useDismissOnOutsideClick`). Une modale se pose au-dessus
+       d'eux et gère elle-même sa sortie (fond cliquable) ; sans ce repère, un
+       clic sur « confirmer » — rendu dans un portail, donc hors de leur arbre —
+       passerait pour un clic ailleurs, refermerait le panneau et serait avalé
+       avant d'atteindre le bouton. */
+    <div data-modal-layer="" style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: ink(0.42), backdropFilter: 'blur(2px)' }} />
       <div style={{ position: 'relative', width, maxWidth: '90vw', background: palette.surfaceRaised, borderRadius: radius.lg, padding: 24, boxShadow: shadow.lg, fontFamily: 'var(--font-sans)', textAlign: 'center' as const }}>
         {children}

@@ -3,10 +3,11 @@
 // Boîte à outils partagée de l'onglet « Génération d'examen » : types de domaine,
 // constantes (pagination A4, couleurs), fonctions utilitaires pures et petits composants
 // présentationnels réutilisés par HistoryContent / BankContent / GeneratorContent / ExamenTab.
-import { Fragment, useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { AlignLeft, ArrowDown, ArrowUp, CheckSquare, File, Filter, Link2, List, Palette, Paperclip, Plus, Search, Settings2, Table, type LucideIcon } from 'lucide-react';
+import { AlignLeft, ArrowDown, ArrowUp, CheckSquare, File, Filter, List, Palette, Paperclip, Pencil, Plus, Route, Search, Settings2, Table, X, type LucideIcon } from 'lucide-react';
 import { palette, ink, withAlpha, categoryTones, shadow } from '@/lib/theme';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import { type Question, type QuestionPart, type ResponseType } from '../QuestionEditor';
 // Pièce jointe média (image/audio) : voir questionMedia.tsx pour l'explication
 // du cycle d'import évité. Réexporté ici pour ne pas casser les imports
@@ -298,6 +299,228 @@ export function isPageBreakId(id: string): boolean {
 
 export const LABEL_COLORS = [categoryTones.blueGray, categoryTones.mauve, palette.greenSoft, palette.amberLight, palette.danger, palette.greenBrand, palette.amber, palette.inkFaint, categoryTones.steelBlue, categoryTones.rust];
 
+// Trois tailles pour un seul et même rendu de pastille : `xs` sur les cartes de
+// la banque (la ligne de métadonnées est serrée), `sm` dans le panneau de
+// filtres, `md` dans les éditeurs de question.
+const LABEL_PILL_SIZES = {
+  xs: { fontSize: 10.5, padding: '3px 9px', gap: 5, affordance: 13, icon: 8 },
+  sm: { fontSize: 11, padding: '4px 8px', gap: 5, affordance: 15, icon: 9 },
+  md: { fontSize: 12, padding: '5px 9px', gap: 6, affordance: 17, icon: 10 },
+} as const;
+
+/** Aplat sobre dérivé de la couleur d'un libellé. La couleur brute en fond plein
+ *  jurait avec le crème de la page (12/08/2026) — et la corriger en changeant
+ *  `LABEL_COLORS` n'aurait rien réglé pour les libellés déjà enregistrés, qui
+ *  portent leur hex en base. On garde donc la couleur telle quelle comme
+ *  identité et on l'atténue à l'affichage, exactement comme `TypeIcon`. */
+export const labelTint = (color: string) => withAlpha(color, 0.22);
+
+/** Pastille de libellé — rendu unique de la banque, des filtres et des deux
+ *  éditeurs de question. Le fond est l'aplat atténué du libellé (`labelTint`),
+ *  l'encre reste celle de la page : la couleur identifie, elle ne crie pas. Elle
+ *  ne se réduit pas non plus à une pastille de 7 px (rendu abandonné le même
+ *  jour : illisible et incohérent d'un écran à l'autre). L'état actif se lit au
+ *  liseré d'encre, jamais à un changement de fond — sinon la couleur du libellé
+ *  n'est plus une information fiable.
+ *
+ *  Les deux affordances vivent DANS la pastille, chacune de son côté et chacune
+ *  conditionnée à ce qui est réellement possible sur l'écran courant :
+ *  - `onEdit` → crayon à gauche : modifier le libellé lui-même (filtres et
+ *    éditeur de question) ; ouvre `LabelEditor`.
+ *  - `onRemove` → croix à droite : détacher le libellé de la question (éditeur
+ *    de question seulement). Elle ne supprime jamais le libellé de l'atelier —
+ *    ça, c'est le bouton « supprimer » de `LabelEditor`.
+ *  Sur les cartes de la banque, la pastille n'a ni l'un ni l'autre.
+ *
+ *  Le fond coloré est un `span`, pas un `button` : `onClick` (bascule de filtre)
+ *  est porté par le libellé lui-même, pour que le crayon et la croix restent des
+ *  boutons frères — un `<button>` imbriqué dans un `<button>` est invalide.
+ *
+ *  `icon` : pictogramme collé à gauche du texte, pour les filtres de type de
+ *  réponse qui reprennent la même pastille (voir `RESPONSE_TYPE_ICONS`). */
+export function LabelPill({ name, color, size = 'sm', active = false, icon, onClick, onEdit, onRemove, editTitle, removeTitle }: {
+  name: string;
+  color: string;
+  size?: keyof typeof LABEL_PILL_SIZES;
+  active?: boolean;
+  icon?: ReactNode;
+  onClick?: () => void;
+  onEdit?: () => void;
+  onRemove?: () => void;
+  editTitle?: string;
+  removeTitle?: string;
+}) {
+  const s = LABEL_PILL_SIZES[size];
+  const displayName = name.length > 18 ? name.slice(0, 18) + '…' : name;
+  const affordance: CSSProperties = {
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    width: s.affordance, height: s.affordance, borderRadius: '50%', padding: 0,
+    border: 'none', background: ink(0.07), color: palette.inkSoft, cursor: 'pointer',
+  };
+  return (
+    <span
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: s.gap, flexShrink: 0,
+        fontSize: s.fontSize, padding: s.padding, borderRadius: 999, fontFamily: 'inherit',
+        // Aucun liseré au repos : sur une pastille l'entourage ne se voit qu'aux
+        // deux extrémités arrondies, où il lit comme un défaut de rendu plutôt
+        // que comme une bordure. Seul l'état actif en porte un, c'est son signal.
+        border: `1px solid ${active ? palette.ink : 'transparent'}`,
+        boxShadow: active ? `0 0 0 2px ${ink(0.25)}` : 'none',
+        background: labelTint(color), color: palette.ink, fontWeight: active ? 600 : 400,
+      }}
+    >
+      {icon && <span style={{ display: 'flex', flexShrink: 0, color: palette.inkSoft }}>{icon}</span>}
+      {onEdit && (
+        <button type="button" onClick={onEdit} title={editTitle} style={affordance}>
+          <Pencil size={s.icon} strokeWidth={2} />
+        </button>
+      )}
+      {onClick
+        ? <button type="button" onClick={onClick} style={{ border: 'none', background: 'none', color: 'inherit', font: 'inherit', padding: 0, cursor: 'pointer' }}>{displayName}</button>
+        : displayName}
+      {onRemove && (
+        <button type="button" onClick={onRemove} title={removeTitle} style={affordance}>
+          <X size={s.icon} strokeWidth={2.2} />
+        </button>
+      )}
+    </span>
+  );
+}
+
+/** Panneau d'édition d'un libellé (nom, couleur, suppression), ouvert par le
+ *  crayon d'une `LabelPill`. Partagé par le panneau de filtres et l'éditeur de
+ *  question pour que « modifier un libellé » veuille dire la même chose des deux
+ *  côtés — suppression comprise, avec sa confirmation qui annonce le nombre de
+ *  questions concernées.
+ *
+ *  ⚠️ Se positionne en `absolute` au centre de son ancêtre positionné le plus
+ *  proche : le conteneur appelant doit porter `position: relative`.
+ *
+ *  `usageCount` est le nombre de questions qui portent le libellé, calculé par
+ *  l'appelant (lui seul connaît la liste complète). */
+/** Ferme un panneau au clic en dehors de lui — et **ce clic ne fait que ça**.
+ *
+ *  Deux règles, qui vont ensemble :
+ *
+ *  1. *Le clic est avalé.* Il ne parvient pas à ce qu'il y avait dessous : ni
+ *     le bouton visé, ni le focus, ni la sélection de texte. Un panneau ouvert
+ *     capture donc le premier clic, et il en faut un second pour agir — ce qui
+ *     est le comportement attendu d'un panneau qu'on quitte.
+ *  2. *Toutes les couches concernées se ferment dans le même geste.* Chaque
+ *     panneau juge de son propre côté : un clic hors de l'éditeur de libellé
+ *     mais dans le panneau de filtres ne ferme que le premier ; un clic hors
+ *     des deux les ferme tous les deux. Auparavant le panneau de filtres se
+ *     mettait en retrait tant qu'un libellé était en cours d'édition, si bien
+ *     qu'il fallait autant de clics que de couches ouvertes.
+ *
+ *  Écoute en capture sur `document` : elle passe avant React (qui pose ses
+ *  écouteurs sur la racine de l'application, plus bas dans l'arbre), et
+ *  `stopPropagation` n'empêche pas les autres couches de se prononcer — les
+ *  écouteurs d'un même nœud s'exécutent tous, seule la descente est coupée.
+ *
+ *  Le `click` est un événement distinct du `mousedown` : l'empêcher demande de
+ *  l'avaler à part. L'écouteur d'un coup se retire sur le clic qu'il avale, et à
+ *  défaut au tour de boucle qui suit le `mouseup` — un `mousedown` ne produit
+ *  pas toujours un `click` (glissement, menu contextuel), et un écouteur oublié
+ *  avalerait un clic sans rapport.
+ *
+ *  Les modales (`data-modal-layer`) sont hors du jeu : elles se posent au-dessus
+ *  et gèrent leur propre sortie. */
+export function useDismissOnOutsideClick(
+  active: boolean,
+  ref: React.RefObject<HTMLElement | null>,
+  onDismiss: () => void,
+) {
+  // Rappel gardé dans une référence tenue à jour après chaque rendu : l'appelant
+  // le redéfinit à chaque fois (fonction fléchée), et le mettre en dépendance de
+  // l'effet ferait poser et retirer l'écouteur à chaque rendu.
+  const dismissRef = useRef(onDismiss);
+  useEffect(() => { dismissRef.current = onDismiss; });
+
+  useEffect(() => {
+    if (!active) return;
+    function onMouseDown(e: MouseEvent) {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (ref.current?.contains(target)) return;
+      if (target.closest?.('[data-modal-layer]')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const swallowClick = (ev: MouseEvent) => { ev.preventDefault(); ev.stopPropagation(); cleanup(); };
+      const armCleanup = () => { window.setTimeout(cleanup, 0); };
+      function cleanup() {
+        document.removeEventListener('click', swallowClick, true);
+        document.removeEventListener('mouseup', armCleanup, true);
+      }
+      document.addEventListener('click', swallowClick, true);
+      document.addEventListener('mouseup', armCleanup, true);
+      dismissRef.current();
+    }
+    document.addEventListener('mousedown', onMouseDown, true);
+    return () => document.removeEventListener('mousedown', onMouseDown, true);
+  }, [active, ref]);
+}
+
+export function LabelEditor({ label, usageCount, onSave, onDelete, onClose }: {
+  label: Pool;
+  usageCount: number;
+  onSave: (next: Pool) => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const t = useTranslations('examen');
+  const [name, setName] = useState(label.name);
+  const [color, setColor] = useState(label.color);
+  const [confirming, setConfirming] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  function save() {
+    onSave({ ...label, name: name.trim() || label.name, color: color || label.color });
+    onClose();
+  }
+
+  // N'importe quel clic hors du panneau l'abandonne (modifications perdues) :
+  // un panneau qui reste ouvert pendant qu'on travaille ailleurs finit par
+  // enregistrer sur un libellé qu'on ne regarde plus. Le voile ne couvre que
+  // l'ancêtre positionné, d'où l'écoute au niveau du document. La confirmation
+  // de suppression, elle, est une modale : `useDismissOnOutsideClick` l'ignore
+  // d'office, il n'y a pas de cas particulier à tenir ici.
+  useDismissOnOutsideClick(true, cardRef, onClose);
+
+  return (
+    <>
+      <div style={{ position: 'absolute', inset: 0, zIndex: 29, background: withAlpha(palette.cream, 0.7), borderRadius: 12 }} />
+      <div ref={cardRef} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 30, width: 190, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg, padding: 10 }}>
+        <input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') onClose(); }} style={{ width: '100%', fontSize: 11.5, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box' as const, background: palette.surfaceInput, color: palette.ink }} />
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          {/* Les témoins montrent l'aplat réellement obtenu, pas la couleur
+              brute : on choisit ce qu'on verra sur la pastille. */}
+          {LABEL_COLORS.map(c => (
+            <button key={c} type="button" onClick={() => setColor(c)} title={c} style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c), border: color === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }} />
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+          <button type="button" onClick={save} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: 'none', background: palette.ink, color: palette.onInk, cursor: 'pointer', fontFamily: 'inherit' }}>{t('bank.saveLabel')}</button>
+          <button type="button" onClick={onClose} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>{t('cancelLower')}</button>
+        </div>
+        <button type="button" onClick={() => setConfirming(true)} style={{ width: '100%', fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${withAlpha(palette.danger, 0.30)}`, background: withAlpha(palette.danger, 0.08), color: palette.danger, cursor: 'pointer', fontFamily: 'inherit' }}>{t('bank.deleteLabel')}</button>
+      </div>
+      {confirming && (
+        <ConfirmDialog
+          portal
+          width={380}
+          title={t('bank.deleteLabelTitle', { name: label.name })}
+          description={`${usageCount > 0 ? t('bank.deleteLabelCount', { count: usageCount }) : ''}${t('irreversible')}`}
+          confirmLabel={t('delete')}
+          onCancel={() => setConfirming(false)}
+          onConfirm={() => { setConfirming(false); onDelete(); onClose(); }}
+        />
+      )}
+    </>
+  );
+}
+
 export function DiffDots({ level }: { level: number }) {
   return (
     <span style={{ display: 'inline-flex', gap: 3 }}>
@@ -313,13 +536,16 @@ export function DiffDots({ level }: { level: number }) {
 // (09/08/2026) — la pilule textuelle mangeait une ligne entière pour une
 // information que le pictogramme donne d'un coup d'œil ; le libellé complet reste
 // au survol.
+// `matching` prend `Route` et non `Link2` (12/08/2026) : le maillon servait déjà
+// au lien de grappe (bouton « questions liées » des cartes de la banque), les deux
+// pictogrammes se confondaient sur la même ligne.
 export const RESPONSE_TYPE_ICONS: Record<ResponseType, LucideIcon> = {
   qcm: CheckSquare,
   qcs: CheckSquare,
   textuelle: AlignLeft,
   liste: List,
   tableau: Table,
-  matching: Link2,
+  matching: Route,
   dessin: Palette,
   fichier: Paperclip,
   sans_reponse: File,
@@ -370,6 +596,18 @@ export type PageBlock = {
   fallbackHeight: number;
   /** repère « saut de page » : force le passage à la page suivante juste après lui */
   forcesBreakAfter?: boolean;
+  /** Bloc qui ne peut pas ouvrir une page de son propre fait (il en ouvre quand
+   *  même une si un saut de page le précède).
+   *
+   *  Réservé à la ligne en cours de modification : sa page s'étire pour porter le
+   *  formulaire, elle n'a donc jamais besoin d'être renvoyée à la suivante. Sans
+   *  ça, la hauteur du formulaire décide de sa propre page — et le moindre champ
+   *  qui apparaît ou disparaît (une pénalité masquée par « éliminatoire », un
+   *  énoncé qui passe à la ligne) la fait basculer d'une page à l'autre. Or
+   *  changer de page, c'est changer de parent dans l'arbre React : le formulaire
+   *  est démonté puis remonté, et repart de zéro — paramètres avancés refermés,
+   *  et saisie en cours perdue. */
+  neverStartsPage?: boolean;
 };
 
 // calcule les sauts de page A4 : pour chaque indice de bloc, indique si une nouvelle page commence
@@ -393,7 +631,10 @@ export function computePagination(blocks: PageBlock[], rowHeights: Record<string
       curSection = block.sectionIdx;
     }
     const total = extra + (rowHeights[block.key] ?? block.fallbackHeight) + A4_ROW_GAP;
-    if (bi > 0 && (forceBreakNext || used + total > maxUsable)) {
+    // Le saut forcé reste honoré même pour un bloc `neverStartsPage` : il ne
+    // dépend d'aucune hauteur, donc il ne peut pas osciller.
+    const overflows = used + total > maxUsable && !block.neverStartsPage;
+    if (bi > 0 && (forceBreakNext || overflows)) {
       pageStarts.add(bi);
       used = A4_MARGIN_PX;
       if (extra === 0) {
@@ -593,6 +834,11 @@ export function normalizeExamConfig(config: ExamConfig): ExamConfig {
     ...config,
     subtitle: config.subtitle ?? '',
     titleIncluded: config.titleIncluded ?? true,
+    // Les copies enregistrées avant l'ajout du barème l'affichent : c'est la
+    // mise en page attendue d'un sujet d'examen, et les deux réglages se
+    // décochent d'un clic dans « personnaliser ».
+    showQuestionPoints: config.showQuestionPoints ?? true,
+    showSectionPoints: config.showSectionPoints ?? true,
     presentation: {
       identity: {
         nom: normalizeIdentitySide(rawIdentity.nom, 'left'),
@@ -627,6 +873,8 @@ export function defaultExamConfig(title?: string): ExamConfig {
     subtitle: '',
     titleIncluded: true,
     durationMinutes: 120,
+    showQuestionPoints: true,
+    showSectionPoints: true,
     presentation: defaultPresentation(),
     sections: [{ id: 'sec' + Date.now(), title: 'Partie 1', questionIds: [] }],
     weighting: {},
@@ -902,7 +1150,11 @@ export function ListCard({ onClick, tint, borderColor, leading, indent = 0, titl
     >
       <div style={{ position: 'relative' as const, height: 3 * CARD_LINE }}>
         {leading && (
-          <div style={{ position: 'absolute' as const, top: 0, left: 0, height: CARD_LINE, display: 'flex', alignItems: 'center', gap: 4 }}>{leading}</div>
+          /* `zIndex` obligatoire : `ClampedTitle` est en `position: relative` et
+             vient après dans le DOM, donc il se peint par-dessus les icônes et
+             avalait leurs clics (le bouton « questions liées » basculait la carte
+             dans le brouillon au lieu de déplier la grappe). */
+          <div style={{ position: 'absolute' as const, zIndex: 1, top: 0, left: 0, height: CARD_LINE, display: 'flex', alignItems: 'center', gap: 4 }}>{leading}</div>
         )}
         <ClampedTitle text={title} indent={indent} />
         <div style={{ height: CARD_LINE, paddingRight: CARD_ACTIONS_W, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>{meta}</div>
