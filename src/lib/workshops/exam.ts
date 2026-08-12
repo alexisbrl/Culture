@@ -78,7 +78,44 @@ type ItemRow = {
 /** Colonnes du groupe, sans les colonnes historiques désormais mortes. */
 const GROUP_COLUMNS = 'id, workshop_id, chapter_id, title, image_key, audio_key, pools, exam_ids, created_at';
 
+// Le groupe, ses questions et leurs notions en UN aller-retour : PostgREST suit
+// les clés étrangères (`exam_question_items.group_id`, puis
+// `exam_question_item_bricks.item_id`) et renvoie le tout imbriqué. Sans ça il
+// faudrait trois étapes séquentielles — les identifiants des questions étant
+// nécessaires pour aller chercher leurs notions — soit trois fois la latence
+// réseau sur le rendu de l'onglet examen. Ça évite aussi un `in(...)` de plus de
+// cent identifiants dans l'URL, qui finirait par buter sur sa limite de
+// longueur.
+//
+// ⚠️ Cette chaîne n'est vérifiée ni par TypeScript ni par le build : elle
+// désigne des tables et des colonnes par leur nom. Toute modification doit être
+// rejouée contre la base (voir les contrôles de bout en bout du chantier).
+const GROUP_WITH_ITEMS = `${GROUP_COLUMNS}, exam_question_items(*, exam_question_item_bricks(brick_id))`;
+
 type NotionLinkMap = Record<string, string[]>;
+
+type EmbeddedItemRow = ItemRow & { exam_question_item_bricks: { brick_id: string }[] | null };
+type EmbeddedGroupRow = GroupRow & { exam_question_items: EmbeddedItemRow[] | null };
+
+/** Questions d'un groupe **triées par position**, et leurs notions. Le tri se
+ *  fait ici plutôt que dans la requête : l'ordre des ressources imbriquées se
+ *  demande par une option qui a changé de nom d'une version à l'autre du client
+ *  Supabase, alors qu'une poignée de questions se trie sans coût mesurable. */
+function unpackGroup(row: EmbeddedGroupRow): { items: ItemRow[]; notionsByItem: NotionLinkMap } {
+  const embedded = row.exam_question_items ?? [];
+  const notionsByItem: NotionLinkMap = {};
+  for (const item of embedded) {
+    notionsByItem[item.id] = (item.exam_question_item_bricks ?? []).map((link) => link.brick_id);
+  }
+  const items = [...embedded].sort((a, b) => a.sort_order - b.sort_order);
+  return { items, notionsByItem };
+}
+
+/** Un groupe tel qu'il sort de la base → la question telle que l'UI l'attend. */
+function embeddedToQuestion(row: EmbeddedGroupRow): Question {
+  const { items, notionsByItem } = unpackGroup(row);
+  return rowToQuestion(row, items, notionsByItem);
+}
 
 function itemToPart(row: ItemRow, notionIds: string[]): QuestionPart {
   return {
@@ -208,34 +245,13 @@ function itemRowsOf(q: Question) {
 }
 
 // ─── Lecture ─────────────────────────────────────────────────────────────────
+//
+// Toutes les lectures passent par `GROUP_WITH_ITEMS` : un seul aller-retour
+// rapporte les groupes, leurs questions et les notions de chacune, quel que
+// soit le nombre de groupes (règle N+1).
 
-/** Charge les questions de plusieurs groupes et les notions de chacune : deux
- *  requêtes au total quel que soit le nombre de groupes affichés (règle N+1). */
-async function loadItems(groupIds: string[]): Promise<{ byGroup: Record<string, ItemRow[]>; notionsByItem: NotionLinkMap }> {
-  if (groupIds.length === 0) return { byGroup: {}, notionsByItem: {} };
-
-  const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('exam_question_items')
-    .select('*')
-    .in('group_id', groupIds)
-    .order('group_id', { ascending: true })
-    .order('sort_order', { ascending: true });
-  if (error) throw new Error(error.message);
-
-  const items = (data ?? []) as ItemRow[];
-  const byGroup: Record<string, ItemRow[]> = {};
-  for (const item of items) (byGroup[item.group_id] ??= []).push(item);
-
-  return { byGroup, notionsByItem: await loadNotionLinks(items.map((i) => i.id)) };
-}
-
-/** Un seul groupe, avec ses questions — pour le tirage et la correction. */
-async function loadQuestion(row: GroupRow): Promise<Question> {
-  const { byGroup, notionsByItem } = await loadItems([row.id]);
-  return rowToQuestion(row, byGroup[row.id] ?? [], notionsByItem);
-}
-
+/** Notions d'un lot de questions. Ne sert plus qu'à l'ÉCRITURE (calcul du
+ *  différentiel) : en lecture, elles arrivent imbriquées avec leur question. */
 async function loadNotionLinks(itemIds: string[]): Promise<NotionLinkMap> {
   if (itemIds.length === 0) return {};
 
@@ -337,14 +353,13 @@ export async function getExamBankData(workshopId: string): Promise<{
     // vivent dans la même table, distinguées par `context`.
     // `.order('id')` en second critère : voir getParcoursData (ex æquo sur
     // `created_at` → ordre arbitraire, la banque se réordonnait toute seule).
-    supabase.from('exam_questions').select(GROUP_COLUMNS).eq('workshop_id', workshopId).eq('context', 'exam').order('created_at', { ascending: true }).order('id', { ascending: true }),
+    supabase.from('exam_questions').select(GROUP_WITH_ITEMS).eq('workshop_id', workshopId).eq('context', 'exam').order('created_at', { ascending: true }).order('id', { ascending: true }),
     supabase.from('exam_pools').select('id, name, color').eq('workshop_id', workshopId).order('created_at', { ascending: true }),
     supabase.from('exam_generated').select('id, title, date, q, dur, avg, status, taken, question_ids, config').eq('workshop_id', workshopId).order('created_at', { ascending: false }),
   ]);
 
-  const bankRows = (questionsRes.data ?? []) as unknown as GroupRow[];
-  const { byGroup, notionsByItem } = await loadItems(bankRows.map((r) => r.id));
-  const questions = bankRows.map((row) => rowToQuestion(row, byGroup[row.id] ?? [], notionsByItem));
+  if (questionsRes.error) throw new Error(questionsRes.error.message);
+  const questions = ((questionsRes.data ?? []) as unknown as EmbeddedGroupRow[]).map(embeddedToQuestion);
   const pools = (poolsRes.data ?? []) as ExamPool[];
   const exams = (examsRes.data ?? []).map((e) => ({
     id: e.id,
@@ -388,15 +403,14 @@ export async function getParcoursData(workshopId: string): Promise<{
     // `created_at` à la microseconde près, et sans second critère Postgres rend
     // les ex æquo dans un ordre arbitraire — la liste se réordonnait sous les
     // yeux de l'utilisateur à chaque enregistrement.
-    supabase.from('exam_questions').select(GROUP_COLUMNS).eq('workshop_id', workshopId).eq('context', 'parcours').order('created_at', { ascending: true }).order('id', { ascending: true }),
+    supabase.from('exam_questions').select(GROUP_WITH_ITEMS).eq('workshop_id', workshopId).eq('context', 'parcours').order('created_at', { ascending: true }).order('id', { ascending: true }),
     supabase.from('exam_pools').select('id, name, color').eq('workshop_id', workshopId).order('created_at', { ascending: true }),
   ]);
 
-  const rows = (questionsRes.data ?? []) as unknown as GroupRow[];
-  const { byGroup, notionsByItem } = await loadItems(rows.map((r) => r.id));
+  if (questionsRes.error) throw new Error(questionsRes.error.message);
 
   return {
-    questions: rows.map((row) => rowToQuestion(row, byGroup[row.id] ?? [], notionsByItem)),
+    questions: ((questionsRes.data ?? []) as unknown as EmbeddedGroupRow[]).map(embeddedToQuestion),
     pools: (poolsRes.data ?? []) as ExamPool[],
   };
 }
@@ -496,7 +510,7 @@ export async function drawParcoursQuestion(
 
   const { data: row, error: rowError } = await supabase
     .from('exam_questions')
-    .select(GROUP_COLUMNS)
+    .select(GROUP_WITH_ITEMS)
     .eq('workshop_id', workshopId)
     .eq('id', picked)
     .maybeSingle();
@@ -504,7 +518,7 @@ export async function drawParcoursQuestion(
   if (rowError) throw new Error(rowError.message);
   if (!row) return null;
 
-  return await toPrompt(await loadQuestion(row as unknown as GroupRow));
+  return await toPrompt(embeddedToQuestion(row as unknown as EmbeddedGroupRow));
 }
 
 function sameChoiceSet(a: number[], b: number[]): boolean {
@@ -548,7 +562,7 @@ export async function gradeParcoursAnswer(
 
   const { data: row, error } = await supabase
     .from('exam_questions')
-    .select(GROUP_COLUMNS)
+    .select(GROUP_WITH_ITEMS)
     .eq('workshop_id', workshopId)
     .eq('context', 'parcours')
     .eq('id', questionId)
@@ -557,7 +571,7 @@ export async function gradeParcoursAnswer(
   if (error) throw new Error(error.message);
   if (!row) return null;
 
-  const q = await loadQuestion(row as unknown as GroupRow);
+  const q = embeddedToQuestion(row as unknown as EmbeddedGroupRow);
   const parts = q.parts ?? [];
 
   const main = gradeOne(q, selections[0] ?? []);
