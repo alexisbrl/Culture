@@ -322,6 +322,18 @@ export type ExamConfig = {
   subtitle: string;
   titleIncluded: boolean;
   durationMinutes: number;
+  /** Barème imprimé dans la marge droite de la copie, en face de chaque question
+   *  et de chacune de ses questions liées. Réglage de mise en page de la
+   *  feuille, au même titre que `durationMinutes` — et comme lui hors de
+   *  `presentation`, qui ne décrit que l'en-tête (voir `presentationSignature`,
+   *  qui sert de clé au favori). */
+  showQuestionPoints: boolean;
+  /** Sous-total imprimé en face du titre de chaque partie. Indépendant de
+   *  `showQuestionPoints` : on peut vouloir le détail sans les sous-totaux, ou
+   *  l'inverse. Rien d'autre ne le conditionne — une copie qui n'a qu'une partie
+   *  l'affiche aussi si l'option est active, quitte à répéter le total de
+   *  l'en-tête. */
+  showSectionPoints: boolean;
   presentation: ExamPresentation;
   sections: ExamSection[];
   weighting: Record<string, QuestionWeight>;

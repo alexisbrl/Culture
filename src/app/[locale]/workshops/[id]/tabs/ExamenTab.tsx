@@ -309,6 +309,11 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   // questions de l'examen — c'est lui qui allume la pastille verte de la carte,
   // et il reste la clé de la reprise du brouillon.
   function handleToggleQuestionInExam(id: string) {
+    // La question ouverte dans l'éditeur ne peut pas quitter la copie : elle y a
+    // un formulaire posé, avec des modifications en cours qui partiraient avec
+    // elle. Un clic sur sa carte se contente donc de recadrer la feuille dessus,
+    // comme le fait « modifier » — l'édition continue.
+    if (editingQuestion?.id === id) { requestSheetFocus(id); return; }
     const sections = toggleQuestionInSections(examConfig.sections, id);
     const included = configQuestionIds({ ...examConfig, sections }).includes(id);
     setExamConfig({
@@ -473,6 +478,8 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             pools={pools}
             notions={notions}
             onCreatePool={handleCreatePool}
+            onUpdatePool={handleUpdatePool}
+            onDeletePool={handleDeletePool}
             onSaveQuestion={handleSaveQuestion}
             onCancelQuestion={handleCancelQuestion}
           />

@@ -33,13 +33,14 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { AudioLines, ImageIcon, Link2, SlidersHorizontal, X } from 'lucide-react';
+import { AudioLines, ImageIcon, Link2, SlidersHorizontal } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
 import {
   DEFAULT_BLOOM_LEVEL, type Question, type QuestionPart, type QuestionWeight,
 } from '@/lib/workshops/examTypes';
 import { QuestionFields, TextField, emptyPart } from './questionFields';
 import { MediaAttachment, useQuestionMediaDrop } from './questionMedia';
+import { type Pool, LabelPill, LabelEditor } from './examShared';
 
 type Props = {
   workshopId: string;
@@ -63,13 +64,21 @@ type Props = {
    *  (elles sont indexées par position, voir `partWeightKey`). */
   onRemovePart: (idx: number) => void;
   onCreatePool: (name: string) => string;
+  /** Modification/suppression d'un libellé depuis l'éditeur — même panneau et
+   *  mêmes conséquences que depuis les filtres de la banque (`LabelEditor`). */
+  onUpdatePool: (pool: Pool) => void;
+  onDeletePool: (id: string) => void;
+  /** Nombre de questions portant un libellé, pour la confirmation de suppression
+   *  (seul l'appelant connaît la banque complète). */
+  poolUsageCount: (poolId: string) => number;
   onSave: (q: Question) => void;
   onCancel: () => void;
 };
 
 export default function InlineQuestionEditor({
   workshopId, question, number, isNew, pools, notions, weight, onWeightChange,
-  partWeight, onPartWeightChange, onRemovePart, onCreatePool, onSave, onCancel,
+  partWeight, onPartWeightChange, onRemovePart, onCreatePool, onUpdatePool,
+  onDeletePool, poolUsageCount, onSave, onCancel,
 }: Props) {
   const t = useTranslations('examen');
   const [draft, setDraft] = useState<Question>({
@@ -82,6 +91,7 @@ export default function InlineQuestionEditor({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [newPoolName, setNewPoolName] = useState('');
   const [creatingPool, setCreatingPool] = useState(false);
+  const [editingPool, setEditingPool] = useState<string | null>(null);
 
   // Glisser-déposer un fichier n'importe où sur la carte : reconnu comme
   // image ou audio et rangé au bon endroit (voir questionMedia.tsx).
@@ -198,7 +208,8 @@ export default function InlineQuestionEditor({
 
       {/* libellés : communs à la question et à toutes ses questions liées */}
       {advancedOpen && (
-        <div style={{ paddingTop: 14, borderTop: `1px solid ${ink(0.10)}`, display: 'flex', flexDirection: 'column', gap: 9 }}>
+        /* `position: relative` : `LabelEditor` se centre sur cet ancêtre. */
+        <div style={{ position: 'relative', paddingTop: 14, borderTop: `1px solid ${ink(0.10)}`, display: 'flex', flexDirection: 'column', gap: 9 }}>
           <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: palette.inkFaint }}>
             {t('inline.labelsTitle').toUpperCase()}
           </span>
@@ -231,16 +242,35 @@ export default function InlineQuestionEditor({
               const p = pools.find(pp => pp.id === pid);
               if (!p) return null;
               return (
-                <span key={pid} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, padding: '5px 10px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: palette.ink, color: palette.parchment }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
-                  {p.name}
-                  <button type="button" onClick={() => togglePool(pid)} style={{ display: 'flex', border: 'none', background: 'none', color: palette.parchment, cursor: 'pointer', padding: 0, opacity: 0.7 }}>
-                    <X size={11} strokeWidth={2.2} />
-                  </button>
-                </span>
+                <LabelPill
+                  key={pid}
+                  name={p.name}
+                  color={p.color}
+                  size="md"
+                  onEdit={() => setEditingPool(pid)}
+                  editTitle={t('bank.editLabelTitle')}
+                  onRemove={() => togglePool(pid)}
+                  removeTitle={t('inline.removeLabel')}
+                />
               );
             })}
           </div>
+          {editingPool && (() => {
+            const p = pools.find(pp => pp.id === editingPool);
+            if (!p) return null;
+            return (
+              <LabelEditor
+                label={p}
+                usageCount={poolUsageCount(p.id)}
+                onSave={onUpdatePool}
+                // Le libellé disparaît de l'atelier : le retirer aussi du
+                // brouillon en cours, sinon la question serait enregistrée avec
+                // une référence morte.
+                onDelete={() => { onDeletePool(p.id); patch({ pools: draft.pools.filter(x => x !== p.id) }); }}
+                onClose={() => setEditingPool(null)}
+              />
+            );
+          })()}
         </div>
       )}
 

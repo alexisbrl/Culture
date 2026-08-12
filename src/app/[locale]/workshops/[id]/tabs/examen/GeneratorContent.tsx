@@ -6,10 +6,11 @@ import { Clock, Star, RefreshCw, SeparatorHorizontal, SlidersHorizontal, PenLine
 import { palette, ink, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import InlineQuestionEditor from './InlineQuestionEditor';
+import { PillToggle } from './questionFields';
 import { type Question } from '../QuestionEditor';
 import {
   type Exam, type ExamConfig, type ExamPresentation, type ExamSection, type QuestionWeight,
-  type IdentitySide, type CandidateIdentity, type SheetFocus, type PageBlock,
+  type IdentitySide, type CandidateIdentity, type SheetFocus, type PageBlock, type Pool,
   IDENTITY_KEY_SET, BAREME_KEY,
   A4_TITLE_BLOCK_HEIGHT, A4_IDENTITY_ROW_HEIGHT, A4_MARGIN_PX, A4_PAGE_HEIGHT,
   A4_PAGE_BREAK_HEIGHT, A4_ROW_FALLBACK_HEIGHT, A4_SECTION_HEADER_HEIGHT, A4_BLOCK_WIDTH,
@@ -67,6 +68,17 @@ const LEFT_GUTTER = 36;  // 26 + l'espace
 const RIGHT_GUTTER = 96; // 86 + l'espace
 const TOOLBAR_WIDTH = A4_BLOCK_WIDTH + LEFT_GUTTER + RIGHT_GUTTER;
 
+// Hauteur de la première ligne de texte des deux sortes de lignes de la copie —
+// énoncé (14px × 1.6) et titre de partie (16px, interlignage normal). Le barème
+// imprimé dans la marge et la croix de la gouttière s'y calent tous les deux :
+// c'est ce qui les met sur la même ligne que le texte qu'ils accompagnent, sans
+// dépendre de la hauteur totale de la ligne (qui varie avec l'espace de réponse).
+const STATEMENT_LINE_H = 22.4;
+const SECTION_TITLE_LINE_H = 20;
+// Retrait haut du texte dans sa ligne, repris tel quel par la gouttière.
+const STATEMENT_PAD_TOP = 20;
+const SECTION_TITLE_PAD_TOP = 14;
+
 /** Une ligne de la copie, dans l'ordre où elle est posée sur les pages.
  *
  *  Une question liée est une ligne à part entière (`qpart`), pas un morceau du
@@ -109,7 +121,7 @@ const SHEET_ALIGNED: React.CSSProperties = {
 };
 
 // ---- GENERATOR / APERÇU EN DIRECT ----
-function GeneratorContent({ workshopId, questions, config, onConfigChange, editing, onCancelEdit, onGenerate, onOpenQuestion, onRemoveFromDraft, onClearEditor, editingQuestion, newQuestionId, focusRequest, onRequestFocus, pools, notions, onCreatePool, onSaveQuestion, onCancelQuestion }: {
+function GeneratorContent({ workshopId, questions, config, onConfigChange, editing, onCancelEdit, onGenerate, onOpenQuestion, onRemoveFromDraft, onClearEditor, editingQuestion, newQuestionId, focusRequest, onRequestFocus, pools, notions, onCreatePool, onUpdatePool, onDeletePool, onSaveQuestion, onCancelQuestion }: {
   workshopId: string;
   questions: Question[];
   config: ExamConfig;
@@ -131,6 +143,8 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   pools: { id: string; name: string; color: string }[];
   notions: { id: string; title: string }[];
   onCreatePool: (name: string) => string;
+  onUpdatePool: (pool: Pool) => void;
+  onDeletePool: (id: string) => void;
   onSaveQuestion: (q: Question) => void;
   onCancelQuestion: () => void;
 }) {
@@ -169,13 +183,28 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
     };
   }, [draggingIdentityKey]);
 
-  const includedIds = configQuestionIds(config);
-  const totalPoints = includedIds.reduce((sum, id) => {
+  // Barème : chaque ligne de la copie a sa propre pondération, la question
+  // principale sous son identifiant, chacune de ses questions liées sous la clé
+  // dérivée (`partWeightKey`). Trois lectures en découlent — la ligne, la
+  // grappe, la partie — et le total de l'en-tête est la somme des parties.
+  const pointsOf = (key: string) => config.weighting[key]?.points ?? defaultWeight().points;
+  const clusterPoints = (id: string) => {
     const q = questions.find(p => p.id === id);
-    const mainPoints = config.weighting[id]?.points ?? defaultWeight().points;
-    const partsPoints = q ? q.parts.reduce((s, _part, pi) => s + (config.weighting[partWeightKey(id, pi)]?.points ?? defaultWeight().points), 0) : 0;
-    return sum + mainPoints + partsPoints;
-  }, 0);
+    return pointsOf(id) + (q ? q.parts.reduce((s, _part, pi) => s + pointsOf(partWeightKey(id, pi)), 0) : 0);
+  };
+  const sectionPoints = (sectionIdx: number) => (config.sections[sectionIdx]?.questionIds ?? [])
+    .filter(id => !isPageBreakId(id))
+    .reduce((sum, id) => sum + clusterPoints(id), 0);
+
+  const includedIds = configQuestionIds(config);
+  const totalPoints = includedIds.reduce((sum, id) => sum + clusterPoints(id), 0);
+
+  // Le barème imprimé dans la marge droite est un réglage de mise en page, pas
+  // une donnée de question : il s'allume et s'éteint pour toute la copie depuis
+  // « personnaliser ». Deux commandes séparées, le détail et les sous-totaux
+  // n'allant pas forcément ensemble.
+  const showQuestionPoints = config.showQuestionPoints ?? true;
+  const showSectionPoints = config.showSectionPoints ?? true;
 
   function handleGenerateClick() {
     onGenerate();
@@ -216,6 +245,11 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
         if (!q) return;
         const bi = addBlock(q.id, sIdx, A4_ROW_FALLBACK_HEIGHT);
         if (editingQuestion && editingQuestion.id === q.id) {
+          // Le formulaire ne décide pas de sa page : sa hauteur change à chaque
+          // champ qui s'ouvre ou se ferme, et changer de page le démonterait
+          // (voir `neverStartsPage`). Sa page s'étire de toute façon pour le
+          // porter — `growsForEditor` plus bas.
+          pageBlocks[bi].neverStartsPage = true;
           sheetRows.push({ kind: 'editor', key: q.id, bi, gi, sectionIdx: sIdx, number, q });
         } else {
           sheetRows.push({ kind: 'qhead', key: q.id, bi, gi, sectionIdx: sIdx, number, q, last: q.parts.length === 0 });
@@ -235,6 +269,13 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   // mesure la hauteur réelle de chaque bloc de question pour calculer les sauts de page A4
   const qRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [rowHeights, setRowHeights] = useState<Record<string, number>>({});
+  // Position du barème dans sa ligne, mesurée et non calculée : le retrait haut
+  // d'un énoncé n'est constant que s'il n'a rien au-dessus de lui. Une question
+  // qui porte une image ou une note audio pousse son énoncé — et donc son barème
+  // — d'une hauteur qu'on ne connaît qu'une fois l'image chargée. C'est ce
+  // décalage que la croix de la gouttière reprend pour tomber pile en face.
+  const markRefs = useRef<Record<string, HTMLSpanElement | null>>({});
+  const [markTops, setMarkTops] = useState<Record<string, number>>({});
   useLayoutEffect(() => {
     const next: Record<string, number> = {};
     let changed = false;
@@ -250,6 +291,30 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
       }
     }
     if (changed) setRowHeights(next);
+
+    // Écart barème ↔ haut de sa ligne, ramené en unités locales : les
+    // rectangles sont dans le repère de la fenêtre (donc mis à l'échelle par
+    // `zoom`) alors que la gouttière s'exprime, comme tout le bloc A4, en unités
+    // non zoomées. Le rapport est relevé sur la ligne elle-même plutôt que lu
+    // dans la variable CSS — il reste juste quel que soit le palier d'échelle.
+    const nextTops: Record<string, number> = {};
+    let topsChanged = false;
+    for (const [key, mark] of Object.entries(markRefs.current)) {
+      const row = qRefs.current[key];
+      if (!mark || !row || !row.offsetHeight) continue;
+      const rowRect = row.getBoundingClientRect();
+      const scale = rowRect.height / row.offsetHeight;
+      if (!scale) continue;
+      const top = (mark.getBoundingClientRect().top - rowRect.top) / scale;
+      nextTops[key] = top;
+      if (Math.abs((markTops[key] ?? -1) - top) > 0.5) topsChanged = true;
+    }
+    if (!topsChanged) {
+      for (const key of Object.keys(markTops)) {
+        if (!(key in nextTops)) { topsChanged = true; break; }
+      }
+    }
+    if (topsChanged) setMarkTops(nextTops);
   });
 
   // Recadrage de la feuille sur la ligne qui vient de bouger : ouverture du
@@ -355,6 +420,28 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   // copie et n'a donc pas de ligne de pointillés.
   function baremeLabel(): string {
     return `…… / ${t('generator.points', { count: totalPoints, plural: totalPoints === 1 ? '' : 's' })}`;
+  }
+  // Barème d'une ligne : même formule que le total de l'en-tête, sans les
+  // pointillés (il n'y a rien à y écrire, la note se met en face de la réponse).
+  function pointsLabel(n: number): string {
+    return `/ ${t('generator.points', { count: n, plural: n === 1 ? '' : 's' })}`;
+  }
+  /** Barème imprimé au bout d'une ligne de la copie, calé sur sa première ligne
+   *  de texte (`lineHeight`) pour que l'énoncé et son nombre de points se lisent
+   *  sur la même ligne, quelle que soit la longueur de l'énoncé. `rowKey` est la
+   *  clé de la ligne : elle sert à la gouttière à poser sa croix en face.
+   *
+   *  L'affichage se décide au point d'appel : chaque sorte de ligne a sa propre
+   *  commande dans « personnaliser ». */
+  function sheetPoints(points: number, lineHeight: number, rowKey: string) {
+    return (
+      <span
+        ref={el => { markRefs.current[rowKey] = el; }}
+        style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, color: palette.inkMuted, whiteSpace: 'nowrap' as const, lineHeight: `${lineHeight}px` }}
+      >
+        {pointsLabel(points)}
+      </span>
+    );
   }
   // Clic = alternative au glisser-déposer : la pilule entre dans l'en-tête ou en
   // sort, point. Elle faisait auparavant le tour des trois emplacements
@@ -617,6 +704,20 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
         {hdrOpen && (
           <>
             <div style={{ ...SHEET_ALIGNED, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
+              {/* Premiers réglages du bandeau : ce qui se voit sur toute la copie
+                  passe avant ce qui ne touche que l'en-tête. */}
+              <PillToggle
+                on={showQuestionPoints}
+                onClick={() => patchConfig({ showQuestionPoints: !showQuestionPoints })}
+                label={t('generator.showQuestionPoints')}
+                title={t('generator.showQuestionPointsHint')}
+              />
+              <PillToggle
+                on={showSectionPoints}
+                onClick={() => patchConfig({ showSectionPoints: !showSectionPoints })}
+                label={t('generator.showSectionPoints')}
+                title={t('generator.showSectionPointsHint')}
+              />
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: palette.inkMuted, background: palette.surfaceRaised, border: `1px solid ${palette.lineStrong}`, borderRadius: 999, padding: '4px 13px' }}>
                 <Clock size={14} strokeWidth={1.75} />
                 {t('generator.duration')}
@@ -854,7 +955,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                         const section = config.sections[row.sectionIdx];
                         if (row.kind === 'header') {
                           return (
-                            <div key={row.key} ref={el => { qRefs.current[row.key] = el; }}>
+                            <div key={row.key} ref={el => { qRefs.current[row.key] = el; }} style={{ display: 'flex', alignItems: 'baseline', gap: 12, paddingRight: 34 }}>
                               {/* Pas d'icône crayon sur la feuille : le titre de
                                   partie reste éditable au clic, mais la copie doit
                                   rester une copie, sans affordance imprimée. */}
@@ -863,21 +964,32 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                 onChange={e => updateSection(row.sectionIdx, { title: e.target.value })}
                                 onFocus={() => setFocusedSectionIdx(row.sectionIdx)}
                                 onBlur={() => setFocusedSectionIdx(null)}
-                                style={{ width: '100%', fontSize: 16, fontWeight: 600, color: palette.tanStrong, background: focusedSectionIdx === row.sectionIdx ? withAlpha(palette.amber, 0.06) : 'transparent', border: 'none', padding: '14px 34px 10px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const }}
+                                style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 600, color: palette.tanStrong, background: focusedSectionIdx === row.sectionIdx ? withAlpha(palette.amber, 0.06) : 'transparent', border: 'none', padding: `${SECTION_TITLE_PAD_TOP}px 0 10px 34px`, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const }}
                               />
+                              {/* Sous-total de la partie — sa propre commande,
+                                  sans condition cachée : avec une seule partie il
+                                  répète le total de l'en-tête, c'est alors à
+                                  l'auteur de l'éteindre. */}
+                              {showSectionPoints && sheetPoints(sectionPoints(row.sectionIdx), SECTION_TITLE_LINE_H, row.key)}
                             </div>
                           );
                         }
                         if (row.kind === 'empty') {
                           const start = sectionRanges[row.sectionIdx].start;
                           return (
+                            /* Retrait porté par le bloc mesuré et non par la
+                               cale elle-même, pour la même raison que le saut de
+                               page ci-dessous : une marge ne compte pas dans
+                               `offsetHeight`. */
                             <div
                               key={row.key}
                               ref={el => { qRefs.current[row.key] = el; }}
                               {...emptyDropPropsFor(start, row.sectionIdx)}
-                              style={{ margin: '0 34px 14px', fontSize: 11.5, color: palette.inkGhost, padding: '14px', textAlign: 'center' as const, border: `1px dashed ${ink(0.12)}`, borderRadius: 9, background: dropIndicator === start && dragFlatIdx !== null ? withAlpha(palette.amber, 0.08) : 'transparent' }}
+                              style={{ padding: '0 34px 14px' }}
                             >
-                              {t('generator.emptySection')}
+                              <div style={{ fontSize: 11.5, color: palette.inkGhost, padding: '14px', textAlign: 'center' as const, border: `1px dashed ${ink(0.12)}`, borderRadius: 9, background: dropIndicator === start && dragFlatIdx !== null ? withAlpha(palette.amber, 0.08) : 'transparent' }}>
+                                {t('generator.emptySection')}
+                              </div>
                             </div>
                           );
                         }
@@ -885,9 +997,18 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                           const gi = row.gi;
                           const showLineBefore = dragFlatIdx !== null && dragFlatIdx !== gi && dragFlatIdx !== gi - 1 && dropIndicator === gi;
                           return (
-                            <div key={row.key} {...dragOverPropsFor(gi, row.sectionIdx)} ref={el => { qRefs.current[row.key] = el; }}>
+                            /* L'air autour de la bande est un `padding` du bloc
+                               mesuré, jamais une marge sur la bande elle-même :
+                               une marge sort de `offsetHeight` (et se fusionne
+                               avec celle de la ligne voisine), si bien que la
+                               pagination et la gouttière comptaient 20px de
+                               moins que ce que la feuille occupe réellement —
+                               tout ce qui suit un saut de page se décalait
+                               d'autant. Même règle que l'écart de 40px d'une
+                               question liée. */
+                            <div key={row.key} {...dragOverPropsFor(gi, row.sectionIdx)} ref={el => { qRefs.current[row.key] = el; }} style={{ padding: '10px 34px' }}>
                               <div style={{ height: showLineBefore ? 3 : 0, background: palette.amber, transition: 'all 0.1s' }} />
-                              <div style={{ margin: '10px 34px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: `1px dashed ${ink(0.20)}`, borderRadius: 8, background: ink(0.045), color: palette.inkFaint, fontSize: 11.5 }}>
+                              <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: `1px dashed ${ink(0.20)}`, borderRadius: 8, background: ink(0.045), color: palette.inkFaint, fontSize: 11.5 }}>
                                 <SeparatorHorizontal size={14} strokeWidth={1.75} />
                                 {t('generator.pageBreak')}
                               </div>
@@ -920,6 +1041,9 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                 onPartWeightChange={(idx, patch) => updateWeight(partWeightKey(q.id, idx), patch)}
                                 onRemovePart={idx => shiftPartWeights(q.id, idx)}
                                 onCreatePool={onCreatePool}
+                                onUpdatePool={onUpdatePool}
+                                onDeletePool={onDeletePool}
+                                poolUsageCount={pid => questions.filter(qq => qq.pools.includes(pid)).length}
                                 onSave={onSaveQuestion}
                                 onCancel={onCancelQuestion}
                               />
@@ -937,9 +1061,15 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                           return (
                             <div key={row.key} {...dragOverPropsFor(gi, row.sectionIdx)} ref={el => { qRefs.current[row.key] = el; }} style={{ background: hovered ? withAlpha(palette.amber, 0.08) : 'transparent', transition: 'background 0.1s' }}>
                               <div style={{ padding: row.last ? '40px 34px 20px' : '40px 34px 0' }}>
-                                <div style={{ fontSize: 14, color: palette.ink, lineHeight: 1.6 }}>
-                                  <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{row.number}.</span>
-                                  {part.content || t('noStatement')}
+                                {/* Une question liée a son propre barème, à sa
+                                    propre ligne : c'est bien la ligne de la copie
+                                    qui porte des points, pas la grappe. */}
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6 }}>
+                                    <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{row.number}.</span>
+                                    {part.content || t('noStatement')}
+                                  </div>
+                                  {showQuestionPoints && sheetPoints(pointsOf(row.key), STATEMENT_LINE_H, row.key)}
                                 </div>
                                 {/* `partAsQuestion` porte aussi les réglages
                                     du type (liste, tableau, paires, fichier) :
@@ -956,9 +1086,15 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                             <div style={{ padding: row.last ? '20px 34px' : '20px 34px 0' }}>
                               <QuestionImagePreview workshopId={workshopId} image={q.image} />
                               <QuestionAudioNote audio={q.audio} />
-                              <div style={{ fontSize: 14, color: palette.ink, lineHeight: 1.6 }}>
-                                <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{row.number}.</span>
-                                {q.content || t('noStatement')}
+                              {/* Le barème de la question principale seule : ses
+                                  questions liées portent le leur, sur leur propre
+                                  ligne. */}
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                                <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6 }}>
+                                  <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{row.number}.</span>
+                                  {q.content || t('noStatement')}
+                                </div>
+                                {showQuestionPoints && sheetPoints(pointsOf(q.id), STATEMENT_LINE_H, row.key)}
                               </div>
                               {renderAnswerSpace(q)}
                             </div>
@@ -972,7 +1108,13 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                       {pageCount > 1 && pageFooter(pageNumber)}
                     </div>
 
-                    {/* gouttière droite : numéro, pondération, bouton de suppression */}
+                    {/* Gouttière droite : les croix de retrait, et rien d'autre.
+                        Elles se tiennent contre le bord de la feuille
+                        (`justifyContent: flex-start`) et sur la ligne du barème
+                        qu'elles accompagnent — même retrait haut, même hauteur de
+                        ligne que le texte d'en face. Au milieu de la gouttière,
+                        elles flottaient sans rapport visible avec la ligne
+                        qu'elles retirent. */}
                     <div style={{ width: 86, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
                       <div style={{ height: A4_MARGIN_PX, flexShrink: 0 }} />
                       {chunkIdx === 0 && headerBlockHeight > 0 && <div style={{ height: headerBlockHeight, flexShrink: 0 }} />}
@@ -980,9 +1122,9 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                         const rh = rowHeights[row.key];
                         if (row.kind === 'header') {
                           return (
-                            <div key={row.key} style={{ height: rh, minHeight: rh ? undefined : A4_SECTION_HEADER_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div key={row.key} style={{ height: rh, minHeight: rh ? undefined : A4_SECTION_HEADER_HEIGHT, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: markTops[row.key] ?? SECTION_TITLE_PAD_TOP, boxSizing: 'border-box' as const }}>
                               {config.sections.length > 1 && (
-                                <button type="button" onClick={() => removeSection(row.sectionIdx)} title={t('generator.removeSection')} style={{ fontSize: 15, color: palette.danger, background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>×</button>
+                                <button type="button" onClick={() => removeSection(row.sectionIdx)} title={t('generator.removeSection')} style={{ display: 'flex', alignItems: 'center', height: SECTION_TITLE_LINE_H, fontSize: 15, lineHeight: 1, color: palette.danger, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>×</button>
                               )}
                             </div>
                           );
@@ -992,8 +1134,13 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                         }
                         if (row.kind === 'pagebreak') {
                           return (
-                            <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_PAGE_BREAK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <span onClick={() => removePageBreak(row.id)} title={t('generator.removePageBreak')} style={{ fontSize: 15, color: palette.danger, cursor: 'pointer' }}>×</span>
+                            /* Le saut de page n'a pas de barème : sa croix n'a
+                               aucune ligne de texte à rejoindre, elle reste donc
+                               centrée sur le bandeau (dont les marges haute et
+                               basse sont symétriques), simplement ramenée contre
+                               la feuille comme les autres. */
+                            <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_PAGE_BREAK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+                              <span onClick={() => removePageBreak(row.id)} title={t('generator.removePageBreak')} style={{ fontSize: 15, lineHeight: 1, color: palette.danger, cursor: 'pointer' }}>×</span>
                             </div>
                           );
                         }
@@ -1004,12 +1151,19 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                         if (row.kind === 'qpart') {
                           return <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT }} />;
                         }
+                        // Même chose en face du formulaire d'édition : la
+                        // question ouverte ne peut pas quitter la copie, ses
+                        // modifications en cours partiraient avec elle. On sort
+                        // de l'éditeur par « annuler » ou « enregistrer ».
+                        if (row.kind === 'editor') {
+                          return <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT }} />;
+                        }
                         // La croix retire la grappe entière : elle est posée en
                         // face de son premier bloc, le seul dont on est certain
                         // qu'il est sur la même page que le début de la question.
                         return (
-                          <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 20, boxSizing: 'border-box' as const }}>
-                            <span onClick={() => removeFromExam(row.q.id)} title={t('generator.removeFromExam')} style={{ fontSize: 15, color: palette.danger, cursor: 'pointer' }}>×</span>
+                          <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: markTops[row.key] ?? STATEMENT_PAD_TOP, boxSizing: 'border-box' as const }}>
+                            <span onClick={() => removeFromExam(row.q.id)} title={t('generator.removeFromExam')} style={{ display: 'flex', alignItems: 'center', height: STATEMENT_LINE_H, fontSize: 15, lineHeight: 1, color: palette.danger, cursor: 'pointer' }}>×</span>
                           </div>
                         );
                       })}

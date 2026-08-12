@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { AudioLines, ImageIcon } from 'lucide-react';
 import { MediaAttachment, useQuestionMediaDrop } from './examen/questionMedia';
+import { LabelPill } from './examen/examShared';
 
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -475,15 +476,21 @@ export default function QuestionEditor({
             <FieldLabel hint={t('editor.labelsHint')}>{t('editor.labelsLabel')}</FieldLabel>
             {draft.pools.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                {/* Pas de crayon ici, contrairement à l'éditeur de l'onglet
+                    examen : le parcours ne sait que créer un libellé
+                    (`createParcoursPool`), pas le modifier ni le supprimer. */}
                 {draft.pools.map((pid) => {
                   const p = pools.find((pp) => pp.id === pid);
                   if (!p) return null;
                   return (
-                    <span key={pid} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 10px', borderRadius: 999, border: `1px solid ${ink(0.10)}`, background: palette.ink, color: palette.parchment }}>
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
-                      {p.name}
-                      <button onClick={() => togglePool(pid)} style={{ border: 'none', background: 'none', color: palette.parchment, cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: 0.7 }}>×</button>
-                    </span>
+                    <LabelPill
+                      key={pid}
+                      name={p.name}
+                      color={p.color}
+                      size="md"
+                      onRemove={() => togglePool(pid)}
+                      removeTitle={t('inline.removeLabel')}
+                    />
                   );
                 })}
               </div>
