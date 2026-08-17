@@ -969,6 +969,9 @@
     "notionCount": "{count, plural, =0 {no notions} one {# notion} other {# notions}}",
     "chapterIndicator": "chapter {from}–{to} / {total}",
     "progressPercent": "{pct}%",
+    "resetProgress": "reset my progress",
+    "resetProgressBusy": "resetting…",
+    "resetProgressHint": "temporary testing tool — clears your notion mastery for this workshop, for you only",
     "currentChapterEyebrow": "current chapter",
     "allChaptersEyebrow": "all chapters",
     "emptyTitle": "no chapters yet",
@@ -995,7 +998,8 @@
   },
   "exercise": {
     "back": "back to {workshop}",
-    "chapterLabel": "exercise",
+    "progressTitle": "{done} of {total} questions",
+    "dropletsTitle": "droplets earned this session",
     "drawing": "drawing a question…",
     "emptyTitle": "No question in this chapter",
     "emptyDesc": "A manager must first create programme questions and link them to this chapter.",
@@ -1010,7 +1014,12 @@
     "gradeError": "Error while grading",
     "doneTitle": "great harvest.",
     "doneScore": "{count, plural, =0 {no correct answers} one {# correct answer} other {# correct answers}}",
-    "backToParcours": "back to path"
+    "backToParcours": "back to path",
+    "matchHint": "tap 2 items to link them · tap one again to undo",
+    "drawHint": "draw with your finger or mouse",
+    "drawClear": "clear",
+    "fileDrop": "drop your file",
+    "fileRemove": "remove file"
   },
   "accountPricing": {
     "tagline": "from seed to tree —",

@@ -45,40 +45,57 @@ import { type Pool, LabelPill, LabelEditor } from './examShared';
 type Props = {
   workshopId: string;
   question: Question;
-  /** Numéro affiché sur la copie (« 2. »), pour rester aligné sur le rendu figé. */
-  number: number;
+  /** Numéro affiché sur la copie (« 2. »), pour rester aligné sur le rendu figé.
+   *  Omis côté parcours : hors feuille, une question n'a pas de rang. */
+  number?: number;
   /** Vrai si la question vient d'être créée : le libellé et l'annulation changent. */
   isNew: boolean;
-  pools: { id: string; name: string; color: string }[];
+  /** Libellés de l'atelier. Le bloc entier est masqué côté parcours
+   *  (`showLabels={false}`) : ce sont les étiquettes de la banque d'EXAMEN, les
+   *  voir ici prêterait à confusion, et le parcours n'en a pas besoin — c'est
+   *  le chapitre qui y range les questions. */
+  pools?: { id: string; name: string; color: string }[];
+  showLabels?: boolean;
   notions: { id: string; title: string }[];
   /** Pondération de la question — elle appartient à l'examen, pas à la question. */
-  weight: QuestionWeight;
-  onWeightChange: (patch: Partial<QuestionWeight>) => void;
+  /** Barème — il appartient à l'EXAMEN, pas à la question. Absent côté parcours,
+   *  qui n'a pas de copie : `QuestionFields` n'affiche alors aucun barème (le
+   *  socle partagé le prévoit déjà). */
+  weight?: QuestionWeight;
+  onWeightChange?: (patch: Partial<QuestionWeight>) => void;
+  /** Cadre du bloc. `sheet` : posé sur la feuille A4, teinté et cerné de vert
+   *  pour se détacher du rendu figé des autres questions. `plain` : hors feuille
+   *  (parcours), où il n'y a rien dont se détacher — un simple cadre neutre. */
+  frame?: 'sheet' | 'plain';
   /** Pondération d'une question liée. Lue par index et non passée en tableau :
    *  l'éditeur peut en ajouter au brouillon avant enregistrement, donc réclamer
    *  un index que l'examen ne connaît pas encore (l'appelant retombe alors sur
    *  le barème par défaut). */
-  partWeight: (idx: number) => QuestionWeight;
-  onPartWeightChange: (idx: number, patch: Partial<QuestionWeight>) => void;
+  partWeight?: (idx: number) => QuestionWeight;
+  onPartWeightChange?: (idx: number, patch: Partial<QuestionWeight>) => void;
   /** Retrait d'une question liée : l'appelant décale les pondérations suivantes
    *  (elles sont indexées par position, voir `partWeightKey`). */
-  onRemovePart: (idx: number) => void;
-  onCreatePool: (name: string) => string;
+  onRemovePart?: (idx: number) => void;
+  onCreatePool?: (name: string) => string;
   /** Modification/suppression d'un libellé depuis l'éditeur — même panneau et
-   *  mêmes conséquences que depuis les filtres de la banque (`LabelEditor`). */
-  onUpdatePool: (pool: Pool) => void;
-  onDeletePool: (id: string) => void;
+   *  mêmes conséquences que depuis les filtres de la banque (`LabelEditor`).
+   *  Optionnels : sans eux, les libellés restent attachables mais non éditables
+   *  (la suppression a besoin de connaître TOUTES les questions portant le
+   *  libellé, les deux contextes confondus — voir ParcoursQuestions). */
+  onUpdatePool?: (pool: Pool) => void;
+  onDeletePool?: (id: string) => void;
   /** Nombre de questions portant un libellé, pour la confirmation de suppression
    *  (seul l'appelant connaît la banque complète). */
-  poolUsageCount: (poolId: string) => number;
+  poolUsageCount?: (poolId: string) => number;
   onSave: (q: Question) => void;
   onCancel: () => void;
 };
 
 export default function InlineQuestionEditor({
-  workshopId, question, number, isNew, pools, notions, weight, onWeightChange,
+  workshopId, question, number, isNew, notions, weight, onWeightChange,
   partWeight, onPartWeightChange, onRemovePart, onCreatePool, onUpdatePool,
-  onDeletePool, poolUsageCount, onSave, onCancel,
+  onDeletePool, poolUsageCount, onSave, onCancel, frame = 'sheet',
+  pools = [], showLabels = true,
 }: Props) {
   const t = useTranslations('examen');
   const [draft, setDraft] = useState<Question>({
@@ -107,14 +124,18 @@ export default function InlineQuestionEditor({
   }
   function removePart(idx: number) {
     setDraft(d => ({ ...d, parts: d.parts.filter((_, i) => i !== idx) }));
-    onRemovePart(idx);
+    // Côté examen, l'appelant décale les pondérations suivantes. Côté parcours
+    // il n'y a pas de barème, donc rien à décaler.
+    onRemovePart?.(idx);
   }
   function togglePool(id: string) {
     patch({ pools: draft.pools.includes(id) ? draft.pools.filter(p => p !== id) : [...draft.pools, id] });
   }
   function addPool() {
     const name = newPoolName.trim();
-    if (!name) return;
+    // `onCreatePool` n'est fourni que là où les libellés sont affichés : ce
+    // chemin est injoignable côté parcours, la garde n'est là que pour le typage.
+    if (!name || !onCreatePool) return;
     patch({ pools: [...draft.pools, onCreatePool(name)] });
     setNewPoolName('');
     setCreatingPool(false);
@@ -134,9 +155,13 @@ export default function InlineQuestionEditor({
     <div
       {...dropHandlers}
       style={{
-        margin: '10px 26px', padding: '14px 16px', borderRadius: 14,
-        border: dragOver ? `1.5px dashed ${palette.green}` : `1px solid ${palette.greenSoft}`,
-        background: dragOver ? withAlpha(palette.green, 0.12) : withAlpha(palette.green, 0.06),
+        margin: frame === 'sheet' ? '10px 26px' : 0, padding: '14px 16px', borderRadius: 14,
+        border: dragOver
+          ? `1.5px dashed ${palette.green}`
+          : `1px solid ${frame === 'sheet' ? palette.greenSoft : palette.line}`,
+        background: dragOver
+          ? withAlpha(palette.green, 0.12)
+          : frame === 'sheet' ? withAlpha(palette.green, 0.06) : palette.surfaceRaised,
         display: 'flex', flexDirection: 'column', gap: 12, boxSizing: 'border-box', minWidth: 0,
         transition: 'background 0.1s, border-color 0.1s',
       }}
@@ -194,20 +219,24 @@ export default function InlineQuestionEditor({
             onChange={p => patchPart(idx, p as Partial<QuestionPart>)}
             // Les questions liées comptent comme des questions à part entière
             // dans la numérotation de la copie : la principale porte `number`,
-            // la première liée `number + 1`, etc.
-            number={number + idx + 1}
+            // la première liée `number + 1`, etc. Sans numérotation (parcours),
+            // les liées n'en reçoivent pas non plus — surtout pas `NaN`.
+            number={number === undefined ? undefined : number + idx + 1}
             advancedOpen={advancedOpen}
             notions={notions}
-            weight={partWeight(idx)}
-            onWeightChange={p => onPartWeightChange(idx, p)}
+            // Sans barème (parcours), les questions liées n'en affichent pas
+            // non plus : `QuestionFields` masque le bloc quand `weight` manque.
+            weight={partWeight?.(idx)}
+            onWeightChange={onPartWeightChange ? (p) => onPartWeightChange(idx, p) : undefined}
             onRemove={() => removePart(idx)}
             statementPlaceholder={t('inline.linkedStatementPlaceholder')}
           />
         </div>
       ))}
 
-      {/* libellés : communs à la question et à toutes ses questions liées */}
-      {advancedOpen && (
+      {/* libellés : communs à la question et à toutes ses questions liées.
+          Masqués côté parcours — voir le prop `showLabels`. */}
+      {showLabels && advancedOpen && (
         /* `position: relative` : `LabelEditor` se centre sur cet ancêtre. */
         <div style={{ position: 'relative', paddingTop: 14, borderTop: `1px solid ${ink(0.10)}`, display: 'flex', flexDirection: 'column', gap: 9 }}>
           <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: palette.inkFaint }}>
@@ -247,7 +276,10 @@ export default function InlineQuestionEditor({
                   name={p.name}
                   color={p.color}
                   size="md"
-                  onEdit={() => setEditingPool(pid)}
+                  // Pas de crayon quand l'appelant ne sait pas éditer un libellé
+                  // (parcours) : un bouton qui n'aboutit à rien vaut moins que
+                  // pas de bouton.
+                  onEdit={onUpdatePool ? () => setEditingPool(pid) : undefined}
                   editTitle={t('bank.editLabelTitle')}
                   onRemove={() => togglePool(pid)}
                   removeTitle={t('inline.removeLabel')}
@@ -255,13 +287,13 @@ export default function InlineQuestionEditor({
               );
             })}
           </div>
-          {editingPool && (() => {
+          {editingPool && onUpdatePool && onDeletePool && (() => {
             const p = pools.find(pp => pp.id === editingPool);
             if (!p) return null;
             return (
               <LabelEditor
                 label={p}
-                usageCount={poolUsageCount(p.id)}
+                usageCount={poolUsageCount?.(p.id) ?? 0}
                 onSave={onUpdatePool}
                 // Le libellé disparaît de l'atelier : le retirer aussi du
                 // brouillon en cours, sinon la question serait enregistrée avec

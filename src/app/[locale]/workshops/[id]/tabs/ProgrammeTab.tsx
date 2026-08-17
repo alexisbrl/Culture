@@ -2,10 +2,13 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTranslations, useLocale } from 'next-intl';
-import { ListChecks, Play, ArrowRight, Sprout } from 'lucide-react';
+import { ListChecks, Play, ArrowRight, RotateCcw, Sprout } from 'lucide-react';
 import type { Chapter } from '@/app/actions/workshopChapters';
 import type { ParcoursProgress } from '@/app/actions/parcoursProgress';
+// ⚠️ TEMPORAIRE — voir le commentaire du bouton de remise à zéro.
+import { resetMyParcoursProgress } from '@/app/actions/parcoursProgress';
 import ParcoursQuestions from './programme/ParcoursQuestions';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ProgressBar } from '@/components/ui/progress-bar';
@@ -36,7 +39,19 @@ type Props = {
 export default function ProgrammeTab({ chapters, workshopId, workshopName, canManage, progress }: Props) {
   const t = useTranslations('programme');
   const locale = useLocale();
+  const router = useRouter();
   const [showQuestions, setShowQuestions] = useState(false);
+
+  // ⚠️ TEMPORAIRE — voir le commentaire du bouton plus bas.
+  const [resetting, setResetting] = useState(false);
+  async function handleReset() {
+    setResetting(true);
+    await resetMyParcoursProgress(workshopId);
+    setResetting(false);
+    // Les barres viennent du rendu serveur : sans rafraîchissement, elles
+    // resteraient à leur ancienne valeur jusqu'à la prochaine navigation.
+    router.refresh();
+  }
 
   if (showQuestions) {
     return <ParcoursQuestions workshopId={workshopId} chapters={chapters} onBack={() => setShowQuestions(false)} />;
@@ -73,6 +88,23 @@ export default function ProgrammeTab({ chapters, workshopId, workshopName, canMa
             <span className="hidden xl:inline">{t('questions.open')}</span>
           </button>
         )}
+
+        {/* ⚠️ MÉCANISME DE TEST TEMPORAIRE — à retirer avant la mise en service.
+            Remet à zéro la progression du membre connecté sur CET atelier, pour
+            rejouer les mêmes questions pendant la mise au point du parcours.
+            Volontairement discret et d'un seul tenant (bouton + handler + clé
+            i18n `resetProgress`), pour se supprimer sans laisser de trace.
+            Voir `resetUserMastery` dans @/lib/workshops/mastery. */}
+        <button
+          type="button"
+          onClick={handleReset}
+          disabled={resetting}
+          title={t('resetProgressHint')}
+          className="mt-3 flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--ink-faint)] transition-colors hover:text-[var(--danger)] disabled:opacity-50"
+        >
+          <RotateCcw size={12} strokeWidth={1.75} />
+          {resetting ? t('resetProgressBusy') : t('resetProgress')}
+        </button>
 
         {!hero ? (
           <EmptyState icon={Sprout} title={t('emptyTitle')} description={t('emptyDesc')} className="mt-8" />

@@ -221,3 +221,54 @@ export async function getParcoursProgress(workshopId: string, userId: string): P
     chapterPercent,
   };
 }
+
+// ⚠️ MÉCANISME DE TEST TEMPORAIRE — à retirer avant la mise en service.
+//
+// Remet à zéro la progression d'UN utilisateur sur UN atelier, pour pouvoir
+// rejouer indéfiniment les mêmes questions pendant la mise au point du parcours
+// sans avoir à en créer de nouvelles. Même esprit que l'allowlist Premium de
+// `core.ts` : un bloc isolé, facile à supprimer d'un seul tenant.
+//
+// Périmètre volontairement étroit : les seules lignes touchées sont celles de
+// CET utilisateur sur les notions de CET atelier. Un `delete` sur `user_id`
+// seul effacerait sa progression sur tous ses autres ateliers.
+//
+// Quand le tirage « jamais deux fois la même question » existera, c'est ici
+// qu'il faudra aussi purger l'historique des questions posées — la fonction est
+// déjà le point d'entrée unique de la remise à zéro.
+export async function resetUserMastery(
+  workshopId: string,
+  userId: string
+): Promise<{ success: boolean; cleared: number; error?: string }> {
+  const supabase = getSupabaseServerClient();
+
+  // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
+  const { data: notions, error } = await supabase
+    .from('workshop_bricks')
+    .select('id')
+    .eq('workshop_id', workshopId);
+
+  if (error) {
+    console.error('resetUserMastery notions error:', error);
+    return { success: false, cleared: 0, error: error.message };
+  }
+
+  const ids = (notions ?? []).map((n) => n.id as string);
+  // Aucune notion dans l'atelier : rien à effacer, et surtout pas de `in()` vide
+  // — PostgREST le traduirait par un filtre qui ne restreint rien.
+  if (ids.length === 0) return { success: true, cleared: 0 };
+
+  const { data: deleted, error: deleteError } = await supabase
+    .from('brick_mastery')
+    .delete()
+    .eq('user_id', userId)
+    .in('brick_id', ids)
+    .select('id');
+
+  if (deleteError) {
+    console.error('resetUserMastery delete error:', deleteError);
+    return { success: false, cleared: 0, error: deleteError.message };
+  }
+
+  return { success: true, cleared: (deleted ?? []).length };
+}

@@ -59,7 +59,9 @@ export async function getExamBankData(workshopId: string): Promise<{
 
 export async function saveQuestion(workshopId: string, question: Question): Promise<void> {
   await assertManager(workshopId);
-  await examLib.saveQuestion(workshopId, question);
+  // Contexte explicite, comme côté parcours : on ne s'en remet plus au `DEFAULT`
+  // de la colonne pour ranger la question du bon côté.
+  await examLib.saveQuestion(workshopId, question, 'exam');
   revalidateWorkshop();
 }
 
