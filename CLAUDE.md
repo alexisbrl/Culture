@@ -17,6 +17,9 @@ Si tu n'es pas certain d'une information (API, comportement d'une lib, structure
 ### Icônes : Lucide React uniquement
 Toujours utiliser exclusivement les icônes de `lucide-react`. Ne jamais créer d'icônes SVG inline custom, ne jamais utiliser d'autres librairies d'icônes. Si une icône Lucide ne correspond pas exactement au besoin, prendre la plus proche ou un emoji texte — jamais du SVG personnalisé.
 
+### Infobulles : composant `Tooltip` uniquement
+Toute infobulle passe par `<Tooltip content={…}>` (`src/components/ui/tooltip.tsx`). L'attribut `title` du HTML est interdit sur toute balise DOM — il est dessiné par le système d'exploitation, hors du DOM, donc impossible à mettre à l'esthétique du site. La règle est tenue par ESLint (`no-restricted-syntax`, en `error`, donc bloquante en CI), et c'est elle qui fait foi pour recenser les infobulles existantes. Détail et pièges (nom accessible, bouton désactivé, infobulles imbriquées) : `.claude/rules/frontend-patterns.md`.
+
 ### Lexique : notion (produit, code) = brick (base)
 Ce que l'utilisateur voit et ce que le code nomme est **« notion »** (renommé depuis « brique de connaissance » lors du chantier de refonte UI, 08/2026, voir `docs/changelog.md`). Les tables Supabase, elles, restent nommées `workshop_bricks`, `brick_mastery`, `exam_question_bricks` et leurs colonnes `brick_id` — un renommage en base est une migration destructive, différée (voir `docs/backlog.md`). Ne jamais introduire de nouveau code ou de nouvelle chaîne visible utilisant « brique »/« brick » ; les rares points de contact avec les noms de table Supabase portent un commentaire `// table encore nommée bricks en base…`.
 

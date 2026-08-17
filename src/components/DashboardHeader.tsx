@@ -10,6 +10,7 @@ import { setUserLocale } from '@/app/actions/profile';
 import { getWorkshop, getLastVisitedWorkshop } from '@/app/actions/workshops';
 import { clearLastWorkshop, saveLastWorkshop, type CachedWorkshop } from '@/lib/lastWorkshopCache';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip } from '@/components/ui/tooltip';
 import WorkshopSwitcher from '@/components/WorkshopSwitcher';
 import WorkshopActionsMenu from '@/components/WorkshopActionsMenu';
 import NotificationBell from '@/components/NotificationBell';
@@ -203,14 +204,16 @@ export default function DashboardHeader({ userId, initialWorkshop }: Props) {
         {workshopId && activeWorkshop && (
           <div className="relative flex min-w-0 items-center gap-2 text-[13px] text-[var(--ink-muted)]">
             <span className="truncate font-semibold text-[var(--ink)]">{activeWorkshop.name}</span>
-            <button
-              type="button"
-              title={t('changeWorkshop')}
-              onClick={() => setSwitcherOpen((v) => !v)}
-              className="flex size-[22px] shrink-0 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface-page)] text-[var(--ink-muted)] outline-none focus-visible:shadow-[var(--shadow-focus)]"
-            >
-              <ChevronDown size={12} strokeWidth={2} />
-            </button>
+            <Tooltip content={t('changeWorkshop')}>
+              <button
+                type="button"
+                aria-label={t('changeWorkshop')}
+                onClick={() => setSwitcherOpen((v) => !v)}
+                className="flex size-[22px] shrink-0 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface-page)] text-[var(--ink-muted)] outline-none focus-visible:shadow-[var(--shadow-focus)]"
+              >
+                <ChevronDown size={12} strokeWidth={2} />
+              </button>
+            </Tooltip>
             <WorkshopSwitcher open={switcherOpen} onClose={() => setSwitcherOpen(false)} currentWorkshopId={workshopId} />
           </div>
         )}
@@ -243,9 +246,10 @@ export default function DashboardHeader({ userId, initialWorkshop }: Props) {
                 {t('tabExamens')}
               </Link>
             ) : null}
+            {/* Pas d'infobulle : elle répétait mot pour mot le texte de l'onglet,
+                juste sous le curseur. */}
             <span
               aria-disabled="true"
-              title={t('tabCours')}
               className="flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-[var(--ink-faint)]"
               style={{ pointerEvents: 'none' }}
             >

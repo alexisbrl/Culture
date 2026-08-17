@@ -5,6 +5,7 @@ import { palette } from '@/lib/theme';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Sprout, Check, Hammer, Maximize2, Move, Package, ArrowLeftRight, X, Sparkles, Blocks, Eraser, Droplets } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   PAL,
   TILE_W,
@@ -949,14 +950,16 @@ type ItemGroup = { sig: string; kind: AnyKind; plant: Plant | null; count: numbe
 function ItemCard({ g, armed, onArm }: { g: ItemGroup; armed: boolean; onArm: (sig: string) => void }) {
   const t = useTranslations('garden');
   return (
-    <button
-      onClick={() => onArm(g.sig)}
-      title={g.plant ? t(`species.${g.plant.species}`) : t(`kind.${g.kind}`)}
-      className={`relative aspect-square rounded-xl border flex items-center justify-center transition-colors ${armed ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
-    >
-      <ItemThumb kind={g.kind} plant={g.plant} />
-      <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#3a4a2a] text-white text-[10px] font-semibold flex items-center justify-center">{g.count === Infinity ? '∞' : g.count}</span>
-    </button>
+    <Tooltip content={g.plant ? t(`species.${g.plant.species}`) : t(`kind.${g.kind}`)}>
+      <button
+        onClick={() => onArm(g.sig)}
+        aria-label={g.plant ? t(`species.${g.plant.species}`) : t(`kind.${g.kind}`)}
+        className={`relative aspect-square rounded-xl border flex items-center justify-center transition-colors ${armed ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
+      >
+        <ItemThumb kind={g.kind} plant={g.plant} />
+        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#3a4a2a] text-white text-[10px] font-semibold flex items-center justify-center">{g.count === Infinity ? '∞' : g.count}</span>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -964,14 +967,16 @@ function ItemCard({ g, armed, onArm }: { g: ItemGroup; armed: boolean; onArm: (s
 function SpeciesCard({ species, stage, sig, armed, onArm }: { species: Species; stage: Stage; sig: string; armed: boolean; onArm: (sig: string) => void }) {
   const t = useTranslations('garden');
   return (
-    <button
-      onClick={() => onArm(sig)}
-      title={`${t(`species.${species}`)} · ${t('panel.stage')} ${stage}`}
-      className={`relative aspect-square rounded-xl border flex items-center justify-center transition-colors ${armed ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
-    >
-      <ItemThumb kind="tree" plant={{ species, stage }} />
-      <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#3a4a2a] text-white text-[10px] font-semibold flex items-center justify-center">∞</span>
-    </button>
+    <Tooltip content={`${t(`species.${species}`)} · ${t('panel.stage')} ${stage}`}>
+      <button
+        onClick={() => onArm(sig)}
+        aria-label={`${t(`species.${species}`)} · ${t('panel.stage')} ${stage}`}
+        className={`relative aspect-square rounded-xl border flex items-center justify-center transition-colors ${armed ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
+      >
+        <ItemThumb kind="tree" plant={{ species, stage }} />
+        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#3a4a2a] text-white text-[10px] font-semibold flex items-center justify-center">∞</span>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -1009,14 +1014,16 @@ function Panel({
             <div className="max-h-[56vh] overflow-y-auto overflow-x-hidden pr-2 pt-1">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5d6b4a]/70 mb-1.5 px-0.5">{t('panel.surfaces')}</p>
               <div className="grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => onArmItem('grass')}
-                  title={t('panel.resetGrass')}
-                  className={`relative aspect-square rounded-xl border flex items-center justify-center ${armedSig === 'grass' ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
-                >
-                  <ItemThumb kind="grass" plant={null} />
-                  <span className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-green-brand text-white flex items-center justify-center"><Eraser className="w-2.5 h-2.5" /></span>
-                </button>
+                <Tooltip content={t('panel.resetGrass')}>
+                  <button
+                    onClick={() => onArmItem('grass')}
+                    aria-label={t('panel.resetGrass')}
+                    className={`relative aspect-square rounded-xl border flex items-center justify-center ${armedSig === 'grass' ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}
+                  >
+                    <ItemThumb kind="grass" plant={null} />
+                    <span className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-green-brand text-white flex items-center justify-center"><Eraser className="w-2.5 h-2.5" /></span>
+                  </button>
+                </Tooltip>
                 {surfaceGroups.map((g) => <ItemCard key={g.sig} g={g} armed={armedSig === g.sig} onArm={onArmItem} />)}
               </div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5d6b4a]/70 mt-3 mb-1.5 px-0.5">{t('panel.objects')}</p>
@@ -1053,9 +1060,11 @@ function Panel({
               </div>
               <div className="grid grid-cols-3 gap-2">
                 {COSMETICS.map((cos) => (
-                  <button key={cos} onClick={() => onArmCos(cos)} title={t(`cosmetic.${cos}`)} className={`aspect-square rounded-xl border flex items-center justify-center ${armedCos === cos ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}>
-                    <svg width="34" height="34" viewBox="-17 -22 34 30"><CosmeticGlyph cos={cos} /></svg>
-                  </button>
+                  <Tooltip key={cos} content={t(`cosmetic.${cos}`)}>
+                    <button onClick={() => onArmCos(cos)} aria-label={t(`cosmetic.${cos}`)} className={`aspect-square rounded-xl border flex items-center justify-center ${armedCos === cos ? 'border-green-brand bg-[#eef3e2] ring-2 ring-green-brand/30' : 'border-black/5 bg-[#f7f9f1] hover:bg-[#eef3e2]'}`}>
+                      <svg width="34" height="34" viewBox="-17 -22 34 30"><CosmeticGlyph cos={cos} /></svg>
+                    </button>
+                  </Tooltip>
                 ))}
               </div>
             </>

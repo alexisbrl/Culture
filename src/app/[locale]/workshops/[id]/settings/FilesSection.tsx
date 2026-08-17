@@ -12,6 +12,7 @@ import {
 } from '@/app/actions/workshopFiles';
 import type { UploadTicket } from '@/lib/storage';
 import { FileCategoryIcon, formatFileSize } from './settingsShared';
+import { Tooltip } from '@/components/ui/tooltip';
 
 export default function FilesSection({ workshopId, initialFiles }: { workshopId: string; initialFiles: WorkshopFile[] }) {
   const t = useTranslations('settings');
@@ -280,20 +281,24 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                           {extension && (
                             <span style={{ fontSize: 13, color: palette.inkFaint, flexShrink: 0 }}>{extension}</span>
                           )}
-                          <button
-                            onClick={() => handleRenameFile(file.id)}
-                            title={t('files.saveTitle')}
-                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 9, background: withAlpha(palette.green, 0.10), border: `1px solid ${withAlpha(palette.green, 0.30)}`, color: palette.greenBrand, cursor: 'pointer', flexShrink: 0 }}
-                          >
-                            <Check size={15} />
-                          </button>
-                          <button
-                            onClick={cancelEditingFile}
-                            title={t('files.cancelTitle')}
-                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 9, background: 'transparent', border: `1px solid ${palette.lineStrong}`, color: palette.inkMuted, cursor: 'pointer', flexShrink: 0 }}
-                          >
-                            <X size={15} />
-                          </button>
+                          <Tooltip content={t('files.saveTitle')}>
+                            <button
+                              onClick={() => handleRenameFile(file.id)}
+                              aria-label={t('files.saveTitle')}
+                              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 9, background: withAlpha(palette.green, 0.10), border: `1px solid ${withAlpha(palette.green, 0.30)}`, color: palette.greenBrand, cursor: 'pointer', flexShrink: 0 }}
+                            >
+                              <Check size={15} />
+                            </button>
+                          </Tooltip>
+                          <Tooltip content={t('files.cancelTitle')}>
+                            <button
+                              onClick={cancelEditingFile}
+                              aria-label={t('files.cancelTitle')}
+                              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 9, background: 'transparent', border: `1px solid ${palette.lineStrong}`, color: palette.inkMuted, cursor: 'pointer', flexShrink: 0 }}
+                            >
+                              <X size={15} />
+                            </button>
+                          </Tooltip>
                         </div>
                       ) : (
                         <div
@@ -315,28 +320,34 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                     </div>
                     {!isEditing && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                        <button
-                          onClick={() => startEditingFile(file)}
-                          title={t('files.renameTitle')}
-                          className="flex size-[34px] cursor-pointer items-center justify-center rounded-[10px] border-none bg-transparent p-0 text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-body)]"
-                        >
-                          <Pencil size={16} strokeWidth={1.75} />
-                        </button>
-                        <button
-                          onClick={() => handleDownloadFile(file.id)}
-                          disabled={downloadingFileId === file.id}
-                          title={t('files.downloadTitle')}
-                          className="flex size-[34px] cursor-pointer items-center justify-center rounded-[10px] border-none bg-transparent p-0 text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-body)]"
-                        >
-                          {downloadingFileId === file.id ? <Loader2 size={16} strokeWidth={1.75} className="animate-spin" /> : <Download size={16} strokeWidth={1.75} />}
-                        </button>
-                        <button
-                          onClick={() => setPendingDeleteFile(file)}
-                          title={t('files.deleteTitle')}
-                          className="flex size-[34px] cursor-pointer items-center justify-center rounded-[10px] border-none bg-transparent p-0 text-[var(--ink-muted)] hover:bg-[var(--danger-tint)] hover:text-[var(--danger)]"
-                        >
-                          <Trash2 size={16} strokeWidth={1.75} />
-                        </button>
+                        <Tooltip content={t('files.renameTitle')}>
+                          <button
+                            onClick={() => startEditingFile(file)}
+                            aria-label={t('files.renameTitle')}
+                            className="flex size-[34px] cursor-pointer items-center justify-center rounded-[10px] border-none bg-transparent p-0 text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-body)]"
+                          >
+                            <Pencil size={16} strokeWidth={1.75} />
+                          </button>
+                        </Tooltip>
+                        <Tooltip content={t('files.downloadTitle')}>
+                          <button
+                            onClick={() => handleDownloadFile(file.id)}
+                            disabled={downloadingFileId === file.id}
+                            aria-label={t('files.downloadTitle')}
+                            className="flex size-[34px] cursor-pointer items-center justify-center rounded-[10px] border-none bg-transparent p-0 text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-body)]"
+                          >
+                            {downloadingFileId === file.id ? <Loader2 size={16} strokeWidth={1.75} className="animate-spin" /> : <Download size={16} strokeWidth={1.75} />}
+                          </button>
+                        </Tooltip>
+                        <Tooltip content={t('files.deleteTitle')}>
+                          <button
+                            onClick={() => setPendingDeleteFile(file)}
+                            aria-label={t('files.deleteTitle')}
+                            className="flex size-[34px] cursor-pointer items-center justify-center rounded-[10px] border-none bg-transparent p-0 text-[var(--ink-muted)] hover:bg-[var(--danger-tint)] hover:text-[var(--danger)]"
+                          >
+                            <Trash2 size={16} strokeWidth={1.75} />
+                          </button>
+                        </Tooltip>
                       </div>
                     )}
                   </div>

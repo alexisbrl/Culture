@@ -6,6 +6,7 @@ import { Mail, UserPlus, Pencil, Plus, Trash2 } from 'lucide-react';
 import { palette, ink, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   inviteMemberByTag, getWorkshopInvitations, cancelInvitation, setMemberRole, removeMember,
   getJoinRequests, approveJoinRequest, rejectJoinRequest, type PendingInvite,
@@ -387,9 +388,9 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                 const active = filterGroupId === g.id;
                 return (
                   <span key={g.id} style={{ position: 'relative', display: 'inline-flex' }}>
+                    <Tooltip content={t('groups.viewTitle')}>
                     <button
                       onClick={() => setFilterGroupId(active ? null : g.id)}
-                      title={t('groups.viewTitle')}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, padding: '7px 14px', borderRadius: 999, whiteSpace: 'nowrap',
                         cursor: 'pointer', fontFamily: 'inherit',
@@ -401,13 +402,16 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: g.color, display: 'inline-block' }} />
                       {g.name}
                     </button>
-                    <button
-                      onClick={() => (editingGroup === g.id ? setEditingGroup(null) : openEditGroup(g))}
-                      title={t('groups.editTitle')}
-                      style={{ position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: '50%', border: `1px solid ${palette.lineStrong}`, background: palette.surfaceRaised, color: palette.inkFaint, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    >
-                      <Pencil size={8} />
-                    </button>
+                    </Tooltip>
+                    <Tooltip content={t('groups.editTitle')}>
+                      <button
+                        onClick={() => (editingGroup === g.id ? setEditingGroup(null) : openEditGroup(g))}
+                        aria-label={t('groups.editTitle')}
+                        style={{ position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: '50%', border: `1px solid ${palette.lineStrong}`, background: palette.surfaceRaised, color: palette.inkFaint, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        <Pencil size={8} />
+                      </button>
+                    </Tooltip>
                     {editingGroup === g.id && (
                       <>
                         <div onClick={() => setEditingGroup(null)} style={{ position: 'fixed', inset: 0, zIndex: 29 }} />
@@ -421,12 +425,13 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                           />
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
                             {LABEL_COLORS.map((c) => (
-                              <button
-                                key={c}
-                                onClick={() => setEditGroupColor(c)}
-                                title={c}
-                                style={{ width: 16, height: 16, borderRadius: '50%', background: c, border: editGroupColor === c ? `2px solid ${palette.ink}` : `1px solid ${palette.lineStrong}`, cursor: 'pointer', padding: 0 }}
-                              />
+                              <Tooltip key={c} content={c}>
+                                <button
+                                  onClick={() => setEditGroupColor(c)}
+                                  aria-label={c}
+                                  style={{ width: 16, height: 16, borderRadius: '50%', background: c, border: editGroupColor === c ? `2px solid ${palette.ink}` : `1px solid ${palette.lineStrong}`, cursor: 'pointer', padding: 0 }}
+                                />
+                              </Tooltip>
                             ))}
                           </div>
                           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>

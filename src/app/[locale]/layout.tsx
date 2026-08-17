@@ -14,6 +14,7 @@ import Navbar from '@/components/Navbar';
 import DashboardHeader from '@/components/DashboardHeader';
 import Footer from '@/components/Footer';
 import SessionWatcher from '@/components/SessionWatcher';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { LAST_WORKSHOP_COOKIE, parseLastWorkshop } from '@/lib/lastWorkshopCache';
 
 const hankenGrotesk = Hanken_Grotesk({
@@ -63,7 +64,11 @@ export default async function LocaleLayout({ children, params }: Props) {
     <ClerkProvider localization={clerkLocalization}>
       <html lang={locale} className={`${hankenGrotesk.variable} ${geistMono.variable} h-full`}>
         <body className="min-h-full flex flex-col bg-white">
+          {/* `TooltipProvider` : délai d'ouverture partagé par toutes les
+              infobulles de l'app (voir `components/ui/tooltip.tsx`). Monté une
+              fois ici, comme le provider next-intl. */}
           <NextIntlClientProvider messages={messages}>
+            <TooltipProvider>
             <SessionWatcher />
             {isLoggedIn ? (
               <Suspense fallback={<div style={{ height: 60, borderBottom: '1px solid var(--line)', background: 'var(--surface-raised)' }} className="hidden md:block" />}>
@@ -78,6 +83,7 @@ export default async function LocaleLayout({ children, params }: Props) {
             )}
             <main className={`flex-1 ${isLoggedIn ? 'pb-[78px] md:pb-0' : ''}`}>{children}</main>
             {!isLoggedIn && <Footer />}
+            </TooltipProvider>
           </NextIntlClientProvider>
         </body>
       </html>

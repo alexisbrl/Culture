@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { Sprout, Plus } from 'lucide-react';
 import { getUserWorkshops, type WorkshopCardData } from '@/app/actions/workshops';
+import { Tooltip } from '@/components/ui/tooltip';
 
 type Props = {
   open: boolean;
@@ -65,13 +66,14 @@ export default function WorkshopSwitcher({ open, onClose, currentWorkshopId }: P
                 className="absolute top-[13px] bottom-[13px] left-[6px] w-[3px] rounded-full"
                 style={{ background: active ? 'var(--green)' : 'transparent' }}
               />
-              <span
-                title={w.is_premium ? t('premiumWorkshop') : undefined}
-                className="flex size-8 flex-none items-center justify-center rounded-[10px] bg-[var(--green-tint)] text-[var(--green)]"
-                style={{ border: w.is_premium ? '1.5px solid var(--gold)' : '1.5px solid transparent' }}
-              >
-                <Sprout size={15} strokeWidth={1.75} />
-              </span>
+              <Tooltip content={w.is_premium ? t('premiumWorkshop') : undefined}>
+                <span
+                  className="flex size-8 flex-none items-center justify-center rounded-[10px] bg-[var(--green-tint)] text-[var(--green)]"
+                  style={{ border: w.is_premium ? '1.5px solid var(--gold)' : '1.5px solid transparent' }}
+                >
+                  <Sprout size={15} strokeWidth={1.75} />
+                </span>
+              </Tooltip>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13.5px] font-semibold text-[var(--ink)]">{w.name}</span>
                 <span className="mt-0.5 block text-[11.5px] text-[var(--ink-muted)]">

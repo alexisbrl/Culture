@@ -35,6 +35,7 @@ import {
 } from '@/lib/workshops/examTypes';
 // Les icônes de types de réponse sont partagées avec la banque de questions.
 import { RESPONSE_TYPE_ICONS as TYPE_ICONS, useDismissOnOutsideClick, SHEET_PANEL_Z } from './examShared';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // `qcs` est volontairement absent de l'ordre du menu : c'est la variante
 // « réponse unique » de `qcm`, basculée par une pilule (voir `ResponseType`).
@@ -111,21 +112,23 @@ type Props = {
 function RemoveLinkedButton({ onClick, title }: { onClick: () => void; title: string }) {
   const [hovered, setHovered] = useState(false);
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        flex: 'none', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        borderRadius: 9, cursor: 'pointer', color: palette.danger,
-        border: `1px solid ${hovered ? withAlpha(palette.danger, 0.45) : palette.lineStrong}`,
-        background: hovered ? palette.dangerTint : 'transparent',
-      }}
-    >
-      <X size={16} strokeWidth={2} />
-    </button>
+    <Tooltip content={title}>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={title}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          flex: 'none', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          borderRadius: 9, cursor: 'pointer', color: palette.danger,
+          border: `1px solid ${hovered ? withAlpha(palette.danger, 0.45) : palette.lineStrong}`,
+          background: hovered ? palette.dangerTint : 'transparent',
+        }}
+      >
+        <X size={16} strokeWidth={2} />
+      </button>
+    </Tooltip>
   );
 }
 
@@ -258,18 +261,19 @@ export function QuestionFields({
   );
 
   const attendusButton = advancedOpen ? (
-    <button
-      type="button"
-      onClick={() => setExpectationsOpen(v => !v)}
-      title={t('inline.expectationsTitle')}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600,
-        color: palette.tanStrong, background: 'transparent', border: `1px dashed ${palette.lineStrong}`,
-        borderRadius: 8, padding: '6px 11px', cursor: 'pointer', fontFamily: 'inherit', flex: 'none',
-      }}
-    >
-      {expectationsOpen ? t('inline.expectationsHide') : (hasExpectations ? t('inline.expectationsShow') : t('inline.expectationsAdd'))}
-    </button>
+    <Tooltip content={t('inline.expectationsTitle')}>
+      <button
+        type="button"
+        onClick={() => setExpectationsOpen(v => !v)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600,
+          color: palette.tanStrong, background: 'transparent', border: `1px dashed ${palette.lineStrong}`,
+          borderRadius: 8, padding: '6px 11px', cursor: 'pointer', fontFamily: 'inherit', flex: 'none',
+        }}
+      >
+        {expectationsOpen ? t('inline.expectationsHide') : (hasExpectations ? t('inline.expectationsShow') : t('inline.expectationsAdd'))}
+      </button>
+    </Tooltip>
   ) : null;
 
   // ─── Blocs d'édition par type ──────────────────────────────────────────────
@@ -367,9 +371,11 @@ export function QuestionFields({
                   style={{ ...cardField, flex: 1, minWidth: 0, padding: '9px 12px', fontSize: 13 }}
                 />
                 {items.length > 1 ? (
-                  <button type="button" onClick={() => commit(items.filter((_, j) => j !== i), -1)} title={t('inline.removeRow')} style={rowRemove}>
-                    <X size={13} strokeWidth={2.2} />
-                  </button>
+                  <Tooltip content={t('inline.removeRow')}>
+                    <button type="button" onClick={() => commit(items.filter((_, j) => j !== i), -1)} aria-label={t('inline.removeRow')} style={rowRemove}>
+                      <X size={13} strokeWidth={2.2} />
+                    </button>
+                  </Tooltip>
                 ) : <span style={{ flex: 'none', width: 19 }} />}
               </div>
             ))}
@@ -449,24 +455,28 @@ export function QuestionFields({
                   const on = checked.includes(cellKey(ri, ci));
                   return (
                     <div key={ci} style={{ flex: '1 1 0', minWidth: 0, display: 'flex', justifyContent: 'center' }}>
-                      <button
-                        type="button"
-                        onClick={() => toggleCell(ri, ci)}
-                        title={t('inline.tableCheckHint')}
-                        style={{
-                          width: 22, height: 22, flex: 'none', boxSizing: 'border-box', cursor: 'pointer',
-                          borderRadius: unique ? 999 : 6, background: palette.surfaceRaised,
-                          border: on ? 'none' : `1.5px solid ${palette.lineStrong}`,
-                          boxShadow: on ? `inset 0 0 0 7px ${palette.green}` : 'none',
-                        }}
-                      />
+                      <Tooltip content={t('inline.tableCheckHint')}>
+                        <button
+                          type="button"
+                          onClick={() => toggleCell(ri, ci)}
+                          aria-label={t('inline.tableCheckHint')}
+                          style={{
+                            width: 22, height: 22, flex: 'none', boxSizing: 'border-box', cursor: 'pointer',
+                            borderRadius: unique ? 999 : 6, background: palette.surfaceRaised,
+                            border: on ? 'none' : `1.5px solid ${palette.lineStrong}`,
+                            boxShadow: on ? `inset 0 0 0 7px ${palette.green}` : 'none',
+                          }}
+                        />
+                      </Tooltip>
                     </div>
                   );
                 })}
                 {rows.length > 1 ? (
-                  <button type="button" onClick={() => patchOptions({ tableRows: rows.filter((_, j) => j !== ri) })} title={t('inline.removeRow')} style={{ ...rowRemove, width: 24 }}>
-                    <X size={13} strokeWidth={2.2} />
-                  </button>
+                  <Tooltip content={t('inline.removeRow')}>
+                    <button type="button" onClick={() => patchOptions({ tableRows: rows.filter((_, j) => j !== ri) })} aria-label={t('inline.removeRow')} style={{ ...rowRemove, width: 24 }}>
+                      <X size={13} strokeWidth={2.2} />
+                    </button>
+                  </Tooltip>
                 ) : <div style={{ flex: '0 0 24px' }} />}
               </div>
             ))}
@@ -476,9 +486,11 @@ export function QuestionFields({
                 <div style={{ flex: '0 0 110px' }} />
                 {cols.map((_c, ci) => (
                   <div key={ci} style={{ flex: '1 1 0', minWidth: 0, display: 'flex', justifyContent: 'center' }}>
-                    <button type="button" onClick={() => patchOptions({ tableCols: cols.filter((_, j) => j !== ci) })} title={t('inline.removeColumn')} style={{ ...rowRemove, width: 'auto' }}>
-                      <X size={13} strokeWidth={2.2} />
-                    </button>
+                    <Tooltip content={t('inline.removeColumn')}>
+                      <button type="button" onClick={() => patchOptions({ tableCols: cols.filter((_, j) => j !== ci) })} aria-label={t('inline.removeColumn')} style={{ ...rowRemove, width: 'auto' }}>
+                        <X size={13} strokeWidth={2.2} />
+                      </button>
+                    </Tooltip>
                   </div>
                 ))}
                 <div style={{ flex: '0 0 24px' }} />
@@ -654,16 +666,17 @@ export function QuestionFields({
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px 24px', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 11, flex: 'none', minWidth: 0 }}>
         <div style={{ position: 'relative' }}>
-          <button
-            type="button"
-            onClick={() => setTypeMenuOpen(v => !v)}
-            title={t('editor.rTypeLabel')}
-            style={{ ...selectStyle, display: 'inline-flex', alignItems: 'center', gap: 9 }}
-          >
-            <span style={{ display: 'flex', color: palette.green }}><CurrentIcon size={16} strokeWidth={1.75} /></span>
-            {t(`responseType.${rt}`)}
-            <ChevronDown size={16} strokeWidth={1.75} style={{ color: palette.inkMuted, marginLeft: 2 }} />
-          </button>
+          <Tooltip content={t('editor.rTypeLabel')}>
+            <button
+              type="button"
+              onClick={() => setTypeMenuOpen(v => !v)}
+              style={{ ...selectStyle, display: 'inline-flex', alignItems: 'center', gap: 9 }}
+            >
+              <span style={{ display: 'flex', color: palette.green }}><CurrentIcon size={16} strokeWidth={1.75} /></span>
+              {t(`responseType.${rt}`)}
+              <ChevronDown size={16} strokeWidth={1.75} style={{ color: palette.inkMuted, marginLeft: 2 }} />
+            </button>
+          </Tooltip>
           {typeMenuOpen && (
             <>
               {/* capte le clic extérieur sans piéger le focus */}
@@ -715,15 +728,17 @@ export function QuestionFields({
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               {advancedOpen && <span style={groupLabel}>{t('inline.scoreLabel').toUpperCase()}</span>}
               {!advancedOpen && <span style={{ fontSize: 14, fontWeight: 600, color: palette.inkMuted }}>/</span>}
-              <input
-                type="number"
-                min={0}
-                step={0.5}
-                value={weight.points}
-                onChange={e => onWeightChange({ points: Math.max(0, Number(e.target.value) || 0) })}
-                title={t('inline.pointsTitle')}
-                style={numInput}
-              />
+              <Tooltip content={t('inline.pointsTitle')}>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={weight.points}
+                  onChange={e => onWeightChange({ points: Math.max(0, Number(e.target.value) || 0) })}
+                  aria-label={t('inline.pointsTitle')}
+                  style={numInput}
+                />
+              </Tooltip>
               <span style={{ fontSize: 10.5, color: palette.inkFaint }}>{t('inline.points')}</span>
               {advancedOpen && (
                 <IconToggle
@@ -742,18 +757,20 @@ export function QuestionFields({
                 {!weight.eliminatory && (
                   <>
                     <span style={{ fontSize: 12, fontWeight: 700, color: palette.danger }}>−</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.5}
-                      value={weight.negative.value}
-                      onChange={e => {
-                        const v = Math.max(0, Number(e.target.value) || 0);
-                        onWeightChange({ negative: { enabled: v > 0, value: v } });
-                      }}
-                      title={t('inline.penaltyTitle')}
-                      style={{ ...numInput, color: weight.negative.value > 0 ? palette.danger : palette.ink }}
-                    />
+                    <Tooltip content={t('inline.penaltyTitle')}>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.5}
+                        value={weight.negative.value}
+                        onChange={e => {
+                          const v = Math.max(0, Number(e.target.value) || 0);
+                          onWeightChange({ negative: { enabled: v > 0, value: v } });
+                        }}
+                        aria-label={t('inline.penaltyTitle')}
+                        style={{ ...numInput, color: weight.negative.value > 0 ? palette.danger : palette.ink }}
+                      />
+                    </Tooltip>
                     <span style={{ fontSize: 10.5, color: palette.inkFaint }}>{t('inline.points')}</span>
                   </>
                 )}
@@ -840,23 +857,26 @@ export function QuestionFields({
               return (
                 <div key={nid} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0, maxWidth: 240, background: palette.tanTint, border: `1px solid ${palette.line}`, borderRadius: 999, padding: '4px 6px 4px 14px' }}>
                   <span style={{ flex: '1 1 auto', minWidth: 0, fontSize: 12.5, fontWeight: 600, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</span>
-                  <button
-                    type="button"
-                    onClick={cycleBloom}
-                    title={t('editor.bloomLabel')}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: palette.green, background: withAlpha(palette.green, 0.14), border: 'none', borderRadius: 999, padding: '3px 10px', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit' }}
-                  >
-                    {t(`bloom.${values.bloomLevel}`)}
-                    <ChevronDown size={10} strokeWidth={2.2} style={{ opacity: 0.65 }} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => toggleNotion(nid)}
-                    title={t('inline.removeNotion')}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, flex: 'none', border: 'none', background: 'transparent', color: palette.inkFaint, borderRadius: 999, cursor: 'pointer' }}
-                  >
-                    <X size={12} strokeWidth={2.2} />
-                  </button>
+                  <Tooltip content={t('editor.bloomLabel')}>
+                    <button
+                      type="button"
+                      onClick={cycleBloom}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: palette.green, background: withAlpha(palette.green, 0.14), border: 'none', borderRadius: 999, padding: '3px 10px', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      {t(`bloom.${values.bloomLevel}`)}
+                      <ChevronDown size={10} strokeWidth={2.2} style={{ opacity: 0.65 }} />
+                    </button>
+                  </Tooltip>
+                  <Tooltip content={t('inline.removeNotion')}>
+                    <button
+                      type="button"
+                      onClick={() => toggleNotion(nid)}
+                      aria-label={t('inline.removeNotion')}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, flex: 'none', border: 'none', background: 'transparent', color: palette.inkFaint, borderRadius: 999, cursor: 'pointer' }}
+                    >
+                      <X size={12} strokeWidth={2.2} />
+                    </button>
+                  </Tooltip>
                 </div>
               );
             })}
@@ -947,17 +967,19 @@ export function ChoiceListEditor({
             {showCorrectMarker && (
               /* Exactement la case du type « tableau » : 22px, pastille pleine
                  par ombre interne, ronde quand une seule réponse est permise. */
-              <button
-                onClick={() => toggleCorrect(i)}
-                title={responseType === 'qcs' ? t('choices.correctUnique') : t('choices.correct')}
-                style={{
-                  width: 22, height: 22, flexShrink: 0, boxSizing: 'border-box' as const,
-                  borderRadius: responseType === 'qcs' ? 999 : 6, cursor: 'pointer', padding: 0,
-                  border: correctChoices.includes(i) ? 'none' : `1.5px solid ${palette.lineStrong}`,
-                  boxShadow: correctChoices.includes(i) ? `inset 0 0 0 7px ${palette.green}` : 'none',
-                  background: palette.surfaceRaised,
-                }}
-              />
+              <Tooltip content={responseType === 'qcs' ? t('choices.correctUnique') : t('choices.correct')}>
+                <button
+                  onClick={() => toggleCorrect(i)}
+                  aria-label={responseType === 'qcs' ? t('choices.correctUnique') : t('choices.correct')}
+                  style={{
+                    width: 22, height: 22, flexShrink: 0, boxSizing: 'border-box' as const,
+                    borderRadius: responseType === 'qcs' ? 999 : 6, cursor: 'pointer', padding: 0,
+                    border: correctChoices.includes(i) ? 'none' : `1.5px solid ${palette.lineStrong}`,
+                    boxShadow: correctChoices.includes(i) ? `inset 0 0 0 7px ${palette.green}` : 'none',
+                    background: palette.surfaceRaised,
+                  }}
+                />
+              </Tooltip>
             )}
             {showPairs ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
@@ -1036,21 +1058,22 @@ function ControlRow({ children, trailing }: { children?: React.ReactNode; traili
  *  types de fichiers, calque de dessin) — un seul habillage pour toutes. */
 export function PillToggle({ on, onClick, label, title }: { on: boolean; onClick: () => void; label: string; title?: string }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600,
-        padding: '6px 11px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit',
-        border: `1px solid ${on ? palette.green : palette.lineStrong}`,
-        background: on ? withAlpha(palette.green, 0.12) : palette.surfaceRaised,
-        color: on ? palette.green : palette.inkMuted,
-      }}
-    >
-      <span style={{ width: 8, height: 8, borderRadius: 999, flex: 'none', background: on ? palette.green : palette.lineStrong }} />
-      {label}
-    </button>
+    <Tooltip content={title}>
+      <button
+        type="button"
+        onClick={onClick}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600,
+          padding: '6px 11px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit',
+          border: `1px solid ${on ? palette.green : palette.lineStrong}`,
+          background: on ? withAlpha(palette.green, 0.12) : palette.surfaceRaised,
+          color: on ? palette.green : palette.inkMuted,
+        }}
+      >
+        <span style={{ width: 8, height: 8, borderRadius: 999, flex: 'none', background: on ? palette.green : palette.lineStrong }} />
+        {label}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -1089,21 +1112,24 @@ function MatchPairRow({
       <div style={{ flex: `${split} 1 0`, minWidth: 0 }}>
         <textarea ref={leftRef} rows={1} value={left} onChange={e => onLeftChange(e.target.value)} placeholder={leftPlaceholder} style={cell} />
       </div>
-      <span
-        onMouseDown={onSplitDrag}
-        title={splitTitle}
-        style={{ flex: 'none', width: 18, alignSelf: 'stretch', cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-      >
-        <span style={{ alignSelf: 'stretch', borderLeft: `1.5px dashed ${palette.amber}` }} />
-        <span style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: 6, height: 22, borderRadius: 999, background: palette.tanTint, border: `1px solid ${palette.amber}` }} />
-      </span>
+      <Tooltip content={splitTitle}>
+        <span
+          onMouseDown={onSplitDrag}
+          style={{ flex: 'none', width: 18, alignSelf: 'stretch', cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+        >
+          <span style={{ alignSelf: 'stretch', borderLeft: `1.5px dashed ${palette.amber}` }} />
+          <span style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: 6, height: 22, borderRadius: 999, background: palette.tanTint, border: `1px solid ${palette.amber}` }} />
+        </span>
+      </Tooltip>
       <div style={{ flex: `${1 - split} 1 0`, minWidth: 0 }}>
         <textarea ref={rightRef} rows={1} value={right} onChange={e => onRightChange(e.target.value)} placeholder={rightPlaceholder} style={{ ...cell, textAlign: 'right' }} />
       </div>
       {onRemove ? (
-        <button type="button" onClick={onRemove} title={removeTitle} style={{ flex: 'none', width: 19, marginLeft: 6, border: 'none', background: 'transparent', color: palette.inkFaint, cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <X size={13} strokeWidth={2.2} />
-        </button>
+        <Tooltip content={removeTitle}>
+          <button type="button" onClick={onRemove} aria-label={removeTitle} style={{ flex: 'none', width: 19, marginLeft: 6, border: 'none', background: 'transparent', color: palette.inkFaint, cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={13} strokeWidth={2.2} />
+          </button>
+        </Tooltip>
       ) : <span style={{ flex: 'none', width: 25 }} />}
     </div>
   );
@@ -1117,19 +1143,21 @@ function IconToggle({ active = false, activeTone = 'green', title, onClick, chil
 }) {
   const accent = activeTone === 'danger' ? palette.danger : palette.green;
   return (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      style={{
-        width: 30, height: 30, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        borderRadius: 8, cursor: 'pointer',
-        background: active ? accent : palette.surfaceRaised,
-        border: `1px solid ${active ? accent : palette.lineStrong}`,
-        color: active ? palette.parchment : palette.inkMuted,
-      }}
-    >
-      {children}
-    </button>
+    <Tooltip content={title}>
+      <button
+        type="button"
+        aria-label={title}
+        onClick={onClick}
+        style={{
+          width: 30, height: 30, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          borderRadius: 8, cursor: 'pointer',
+          background: active ? accent : palette.surfaceRaised,
+          border: `1px solid ${active ? accent : palette.lineStrong}`,
+          color: active ? palette.parchment : palette.inkMuted,
+        }}
+      >
+        {children}
+      </button>
+    </Tooltip>
   );
 }

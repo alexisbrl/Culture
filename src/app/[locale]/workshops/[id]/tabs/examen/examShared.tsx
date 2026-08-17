@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl';
 import { AlignLeft, ArrowDown, ArrowUp, Check, CheckSquare, File, Filter, Info, List, Palette, Paperclip, Pencil, Plus, Route, Search, Table, X, type LucideIcon } from 'lucide-react';
 import { palette, ink, withAlpha, categoryTones, shadow } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { Tooltip } from '@/components/ui/tooltip';
 import { type Question, type QuestionPart, type ResponseType } from '../QuestionEditor';
 // Pièce jointe média (image/audio) : voir questionMedia.tsx pour l'explication
 // du cycle d'import évité. Réexporté ici pour ne pas casser les imports
@@ -108,9 +109,11 @@ function SortControl({ options, value, onChange, dir, onToggleDir }: {
   const t = useTranslations('examen');
   return (
     <div style={{ display: 'flex', alignItems: 'center', borderRadius: 9, border: `1px solid ${palette.lineStrong}`, background: palette.surfaceRaised, overflow: 'hidden', flexShrink: 0 }}>
-      <button type="button" title={dir === 'asc' ? t('sort.asc') : t('sort.desc')} onClick={onToggleDir} style={{ width: 30, minHeight: TOOLBAR_H, alignSelf: 'stretch', border: 'none', borderRight: `1px solid ${palette.line}`, background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
-        <SortDirIcon dir={dir} />
-      </button>
+      <Tooltip content={dir === 'asc' ? t('sort.asc') : t('sort.desc')}>
+        <button type="button" aria-label={dir === 'asc' ? t('sort.asc') : t('sort.desc')} onClick={onToggleDir} style={{ width: 30, minHeight: TOOLBAR_H, alignSelf: 'stretch', border: 'none', borderRight: `1px solid ${palette.line}`, background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
+          <SortDirIcon dir={dir} />
+        </button>
+      </Tooltip>
       <SelectMenu
         items={options.map(opt => ({ value: opt, label: t(`sort.${opt}`) }))}
         value={value}
@@ -281,9 +284,13 @@ export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, titl
     // Le clic-dehors fonctionne dans les deux cas, il ne regarde que
     // l'appartenance dans le DOM.
     <div ref={wrapRef} style={floating ? { display: 'contents' } : { position: 'relative', minWidth: 0, ...wrapperStyle }}>
-      <button ref={btnRef} type="button" title={title} onClick={() => setOpen(v => !v)} style={triggerStyle}>
-        {children}
-      </button>
+      <Tooltip content={title}>
+        {/* Pas d'`aria-label` : le déclencheur porte déjà son texte visible
+            (`children`), qui est son nom accessible. */}
+        <button ref={btnRef} type="button" onClick={() => setOpen(v => !v)} style={triggerStyle}>
+          {children}
+        </button>
+      </Tooltip>
       {open && (floating ? pos !== null : true) && (
         <div
           ref={panelEl}
@@ -399,26 +406,28 @@ export function FilterButton({ title, count = 0, open = false, disabled = false,
 
   return (
     <div ref={containerRef} style={{ position: 'relative', flexShrink: 0 }}>
-      <button
-        ref={btnRef}
-        onClick={onToggle}
-        disabled={disabled}
-        title={title}
-        style={{
-          position: 'relative', height: '100%', minHeight: TOOLBAR_H, width: TOOLBAR_H, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, borderRadius: 9, fontFamily: 'inherit',
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          border: `1px solid ${disabled ? palette.line : active ? palette.greenSoft : palette.lineStrong}`,
-          background: disabled ? palette.surfaceSunken : active ? withAlpha(palette.green, 0.12) : palette.surfaceRaised,
-          color: disabled ? palette.inkGhost : active ? palette.greenBrand : palette.inkMuted,
-        }}
-      >
-        <Filter size={15} strokeWidth={1.75} />
-        {active && (
-          <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 15, height: 15, padding: '0 3px', borderRadius: 999, background: palette.green, color: palette.onGreen, fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {count}
-          </span>
-        )}
-      </button>
+      <Tooltip content={title}>
+        <button
+          ref={btnRef}
+          onClick={onToggle}
+          disabled={disabled}
+          aria-label={title}
+          style={{
+            position: 'relative', height: '100%', minHeight: TOOLBAR_H, width: TOOLBAR_H, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, borderRadius: 9, fontFamily: 'inherit',
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            border: `1px solid ${disabled ? palette.line : active ? palette.greenSoft : palette.lineStrong}`,
+            background: disabled ? palette.surfaceSunken : active ? withAlpha(palette.green, 0.12) : palette.surfaceRaised,
+            color: disabled ? palette.inkGhost : active ? palette.greenBrand : palette.inkMuted,
+          }}
+        >
+          <Filter size={15} strokeWidth={1.75} />
+          {active && (
+            <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 15, height: 15, padding: '0 3px', borderRadius: 999, background: palette.green, color: palette.onGreen, fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {count}
+            </span>
+          )}
+        </button>
+      </Tooltip>
       {open && panelPos && (
         <div
           style={{
@@ -463,9 +472,13 @@ export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter,
       {filter}
       <SortControl options={sortOptions} value={sortBy} onChange={onSortByChange} dir={sortDir} onToggleDir={onToggleSortDir} />
       {/* Seule action primaire de la colonne (T48) — la maquette la met en vert. */}
-      <button onClick={onAction} title={actionTitle} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, minHeight: TOOLBAR_H, padding: '0 11px', borderRadius: 9, background: palette.green, color: palette.onGreen, border: 'none', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-        <Plus size={15} strokeWidth={2.25} /> {actionLabel}
-      </button>
+      {/* Pas d'`aria-label` : `actionLabel` est visible dans le bouton, c'est
+          lui le nom accessible. L'infobulle ne fait que le préciser. */}
+      <Tooltip content={actionTitle}>
+        <button onClick={onAction} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, minHeight: TOOLBAR_H, padding: '0 11px', borderRadius: 9, background: palette.green, color: palette.onGreen, border: 'none', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+          <Plus size={15} strokeWidth={2.25} /> {actionLabel}
+        </button>
+      </Tooltip>
     </div>
   );
 }
@@ -616,10 +629,13 @@ export function LabelPill({ name, color, size = 'sm', active = false, excluded =
     border: 'none', background: ink(0.07), color: palette.inkSoft, cursor: 'pointer',
   };
   return (
+    // L'infobulle explicite (`title`) couvre la pastille entière ; le nom
+    // complet, lui, est posé plus bas sur le TEXTE seul. Sinon, survoler le
+    // crayon en ouvrirait deux à la fois : le crayon est dans la pastille, et
+    // entrer dans un enfant ne fait pas sortir du parent.
+    // `content` vide ⇒ `Tooltip` s'efface et rend la pastille telle quelle.
+    <Tooltip content={title}>
     <span
-      // Le nom complet, mais seulement s'il est coupé (voir la mesure) : une
-      // infobulle qui répète mot pour mot ce qu'on lit déjà n'apprend rien.
-      title={title ?? (clipped ? name : undefined)}
       // Le rôle et le focus ne sont posés que si la pastille fait réellement
       // quelque chose au clic : sur une carte de la banque, elle n'est qu'un
       // témoin et n'a rien à faire dans l'ordre de tabulation.
@@ -667,19 +683,31 @@ export function LabelPill({ name, color, size = 'sm', active = false, excluded =
           cliquable, ils doivent donc l'empêcher de se déclencher derrière eux.
           Sans ça, modifier un libellé basculerait aussi son filtre. */}
       {onEdit && (
-        <button type="button" onClick={e => { e.stopPropagation(); onEdit(); }} title={editTitle} style={affordance}>
-          <Pencil size={s.icon} strokeWidth={2} />
-        </button>
+        <Tooltip content={editTitle}>
+          <button type="button" aria-label={editTitle} onClick={e => { e.stopPropagation(); onEdit(); }} style={affordance}>
+            <Pencil size={s.icon} strokeWidth={2} />
+          </button>
+        </Tooltip>
       )}
-      {/* `minWidth: 0` : sans lui, un élément de flex refuse de se réduire
-          sous la largeur de son contenu et le « … » ne se déclenche jamais. */}
-      <span ref={textRef} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+      {/* Le nom complet, seulement s'il est coupé (voir la mesure plus haut) :
+          une infobulle qui répète mot pour mot ce qu'on lit déjà n'apprend rien.
+          Elle est posée ici, sur le texte, et non sur la pastille : voir le
+          commentaire de la pastille. Rien si l'appelant a déjà donné un `title`,
+          qui couvre alors toute la pastille.
+          `minWidth: 0` : sans lui, un élément de flex refuse de se réduire sous
+          la largeur de son contenu et le « … » ne se déclenche jamais. */}
+      <Tooltip content={!title && clipped ? name : undefined}>
+        <span ref={textRef} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+      </Tooltip>
       {onRemove && (
-        <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }} title={removeTitle} style={affordance}>
-          <X size={s.icon} strokeWidth={2.2} />
-        </button>
+        <Tooltip content={removeTitle}>
+          <button type="button" aria-label={removeTitle} onClick={e => { e.stopPropagation(); onRemove(); }} style={affordance}>
+            <X size={s.icon} strokeWidth={2.2} />
+          </button>
+        </Tooltip>
       )}
     </span>
+    </Tooltip>
   );
 }
 
@@ -911,7 +939,9 @@ export function LabelEditor({ label, usageCount, onSave, onDelete, onClose }: {
           {/* Les témoins montrent l'aplat réellement obtenu, pas la couleur
               brute : on choisit ce qu'on verra sur la pastille. */}
           {LABEL_COLORS.map(c => (
-            <button key={c} type="button" onClick={() => setColor(c)} title={c} style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c), border: color === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }} />
+            <Tooltip key={c} content={c}>
+              <button type="button" aria-label={c} onClick={() => setColor(c)} style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c), border: color === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }} />
+            </Tooltip>
           ))}
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
@@ -970,9 +1000,11 @@ export function TypeIcon({ type, size = 14 }: { type: ResponseType; size?: numbe
   const Icon = RESPONSE_TYPE_ICONS[type] ?? File;
   const c = RESPONSE_TYPE_COLORS[type] || palette.inkSoft;
   return (
-    <span title={t(`responseType.${type}`)} style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: size + 8, height: size + 8, borderRadius: 7, background: withAlpha(c, 0.22), color: palette.inkMuted }}>
-      <Icon size={size} strokeWidth={1.75} />
-    </span>
+    <Tooltip content={t(`responseType.${type}`)}>
+      <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: size + 8, height: size + 8, borderRadius: 7, background: withAlpha(c, 0.22), color: palette.inkMuted }}>
+        <Icon size={size} strokeWidth={1.75} />
+      </span>
+    </Tooltip>
   );
 }
 
@@ -1521,9 +1553,10 @@ function ClampedTitle({ text, indent }: { text: string; indent: number }) {
   });
 
   return (
+    // Le texte entier au survol : ce bloc n'en montre que deux lignes.
+    <Tooltip content={display === text ? undefined : text}>
     <div
       ref={ref}
-      title={text}
       style={{
         position: 'relative' as const, fontSize: 13, fontWeight: 600, color: palette.ink,
         lineHeight: `${CARD_LINE}px`, height: 2 * CARD_LINE, textIndent: indent, overflow: 'hidden',
@@ -1538,6 +1571,7 @@ function ClampedTitle({ text, indent }: { text: string; indent: number }) {
       <span style={{ float: 'right' as const, width: CARD_ACTIONS_W, height: 2 * CARD_LINE, shapeOutside: `inset(${CARD_ACTIONS_SHAPE_TOP}px 0 0 0)` }} />
       {display}
     </div>
+    </Tooltip>
   );
 }
 
@@ -1600,7 +1634,11 @@ export function ListCard({ onClick, tint, borderColor, leading, indent = 0, titl
  *  modification) — l'icône et le liseré passent au vert, jamais le fond. */
 export function IconBtn({ children, title, onClick, size = 32, active = false }: { children: React.ReactNode; title: string; onClick?: (e: React.MouseEvent) => void; size?: number; active?: boolean }) {
   return (
-    <button title={title} onClick={onClick} style={{ width: size, height: size, borderRadius: 9, border: `1px solid ${active ? palette.green : palette.lineStrong}`, background: palette.surfaceRaised, color: active ? palette.greenBrand : palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>{children}</button>
+    // Bouton-icône : `title` sert d'infobulle ET de nom accessible, l'icône
+    // n'apportant aucun texte. D'où l'`aria-label` en plus de l'infobulle.
+    <Tooltip content={title}>
+      <button aria-label={title} onClick={onClick} style={{ width: size, height: size, borderRadius: 9, border: `1px solid ${active ? palette.green : palette.lineStrong}`, background: palette.surfaceRaised, color: active ? palette.greenBrand : palette.inkMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>{children}</button>
+    </Tooltip>
   );
 }
 
@@ -1619,14 +1657,15 @@ export function IconBtn({ children, title, onClick, size = 32, active = false }:
 export function ShuffleNoticeIcon({ title }: { title: string }) {
   const [hovered, setHovered] = useState(false);
   return (
-    <span
-      title={title}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, flexShrink: 0, color: hovered ? palette.greenBrand : palette.inkFaint, transition: 'color 0.12s' }}
-    >
-      <Info size={13} strokeWidth={1.85} />
-    </span>
+    <Tooltip content={title}>
+      <span
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, flexShrink: 0, color: hovered ? palette.greenBrand : palette.inkFaint, transition: 'color 0.12s' }}
+      >
+        <Info size={13} strokeWidth={1.85} />
+      </span>
+    </Tooltip>
   );
 }
 

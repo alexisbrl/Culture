@@ -39,6 +39,22 @@ const eslintConfig = defineConfig([
       "react-hooks/purity": "warn",
     },
   },
+  {
+    // Infobulles : `<Tooltip>` uniquement, jamais l'attribut `title` du HTML.
+    // Ce dernier est dessiné par le système d'exploitation, hors du DOM : aucun
+    // CSS ne l'atteint, et la même infobulle n'a donc pas la même apparence d'un
+    // poste à l'autre. Le sélecteur ne vise que les balises DOM (nom en
+    // minuscule) : `title` reste une prop légitime de NOS composants
+    // (`<Modal title=…>`, `<ListCard title=…>`), qui sont en PascalCase.
+    // C'est cette règle, et non un `grep`, qui fait foi pour recenser les
+    // infobulles restantes — elle lit l'AST, pas du texte.
+    rules: {
+      "no-restricted-syntax": ["error", {
+        selector: "JSXOpeningElement[name.name=/^[a-z]/] > JSXAttribute[name.name='title']",
+        message: "L'attribut `title` n'est pas stylable : envelopper l'élément dans <Tooltip content={…}> (src/components/ui/tooltip.tsx). Pour nommer un bouton-icône, utiliser `aria-label`.",
+      }],
+    },
+  },
 ]);
 
 export default eslintConfig;
