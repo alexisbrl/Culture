@@ -611,18 +611,24 @@ export function LabelPill({ name, color, size = 'sm', active = false, excluded =
   // écarte les faux positifs d'arrondi sous-pixel.
   const textRef = useRef<HTMLSpanElement>(null);
   const [clipped, setClipped] = useState(false);
+  const measure = useCallback(() => {
+    const el = textRef.current;
+    if (!el) return;
+    const next = el.scrollWidth > el.clientWidth + 1;
+    setClipped(prev => prev === next ? prev : next);
+  }, []);
+  // Rejouée à CHAQUE rendu, sans tableau de dépendances : le nom, la place
+  // disponible ou l'entourage de la pastille ont pu changer sans que ce
+  // composant sache lequel. Même parti pris que `ClampedTitle` plus bas.
+  useLayoutEffect(measure);
+  // Et à chaque changement de largeur, qui lui n'entraîne aucun rendu ici.
   useLayoutEffect(() => {
     const el = textRef.current;
     if (!el) return;
-    const measure = () => {
-      const next = el.scrollWidth > el.clientWidth + 1;
-      setClipped(prev => prev === next ? prev : next);
-    };
-    // `observe()` déclenche déjà un premier appel avec la taille initiale
-    const obs = new ResizeObserver(measure);
+    const obs = new ResizeObserver(measure);   // `observe()` mesure déjà une fois
     obs.observe(el);
     return () => obs.disconnect();
-  }, [name]);
+  }, [measure]);
   const affordance: CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     width: s.affordance, height: s.affordance, borderRadius: '50%', padding: 0,

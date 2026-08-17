@@ -18,10 +18,19 @@ import { cn } from '@/lib/utils';
  *        <button …><Pencil /></button>
  *      </Tooltip>
  *
- *  **`content` vide (`undefined`/`''`) ⇒ aucune infobulle et aucun composant monté** :
- *  l'enfant est rendu tel quel. C'est ce qui permet les infobulles conditionnelles
+ *  **`content` vide (`undefined`/`''`) ⇒ aucune infobulle**, mais l'arbre React ne
+ *  change pas pour autant : le déclencheur est simplement désactivé et la bulle
+ *  n'est pas rendue. C'est ce qui permet les infobulles conditionnelles
  *  (`LabelPill` n'affiche le nom complet que s'il est coupé) sans que l'appelant
  *  ait à écrire deux branches de JSX.
+ *
+ *  **L'arbre stable n'est pas un détail d'implémentation.** La première version
+ *  renvoyait l'enfant nu quand `content` était vide : l'élément changeait alors
+ *  de place dans l'arbre en gagnant son infobulle, React le démontait et le
+ *  remontait, et tout ce qui était accroché à l'ancien nœud tombait — dont la
+ *  mesure de débordement de `LabelPill`, qui décide justement du contenu de
+ *  l'infobulle. Les noms de pastille coupés n'en avaient donc plus (18/08/2026).
+ *  Toute condition portée par `content` doit rester sans effet sur le DOM rendu.
  *
  *  **Une infobulle n'est pas un nom accessible.** Elle décrit, elle ne nomme pas :
  *  Base UI la relie au déclencheur par `aria-describedby`. Un bouton sans texte
@@ -36,7 +45,10 @@ import { cn } from '@/lib/utils';
 function Tooltip({
   content,
   children,
-  side = 'top',
+  // Sous l'élément par défaut : au-dessus, la bulle couvre ce qu'on vient de
+  // survoler et la ligne qui le précède — souvent le libellé qui l'explique.
+  // Base UI la retourne d'elle-même si le bas de la fenêtre manque de place.
+  side = 'bottom',
   sideOffset = 6,
   delay = 350,
   className,
@@ -52,10 +64,12 @@ function Tooltip({
   /** Pour ajuster la bulle elle-même (largeur, alignement du texte). */
   className?: string;
 }) {
-  if (content === undefined || content === null || content === '') return children;
+  const hasContent = content !== undefined && content !== null && content !== '';
 
   return (
-    <BaseTooltip.Root>
+    // `disabled` plutôt qu'un retour anticipé : le déclencheur reste le même
+    // nœud, sans écouteur ni `aria-describedby` (voir plus haut).
+    <BaseTooltip.Root disabled={!hasContent}>
       {/* `render` : le déclencheur EST l'enfant, aucun nœud ne s'intercale — une
           mise en page en flex/grid n'est donc jamais perturbée par l'ajout d'une
           infobulle. Base UI n'y pose que ses écouteurs, `id` et
@@ -70,14 +84,24 @@ function Tooltip({
             en `zoom` : sans lui, la bulle grossirait avec la feuille. */}
         <BaseTooltip.Positioner side={side} sideOffset={sideOffset} className="z-[90]">
           <BaseTooltip.Popup
+            // L'ombre en `style` et non en classe : `shadow-[var(--shadow-lg)]`
+            // passe par la composition d'ombres de Tailwind v4, qui perd la
+            // couleur du token et rend une ombre transparente. Or c'est elle
+            // qui détache la bulle, crème sur crème.
+            style={{ boxShadow: 'var(--shadow-lg)' }}
             className={cn(
-              'max-w-[260px] rounded-[var(--radius-sm)] bg-[var(--surface-ink)] px-2.5 py-1.5',
-              'font-sans text-[12px] leading-[1.35] font-medium text-balance break-words text-[var(--on-ink)]',
-              'shadow-[var(--shadow-lg)]',
-              // L'apparition est franche mais pas sèche : la bulle monte de 2px
-              // en se révélant, et s'efface sans bouger.
+              // Une surface de plus, pas un contraste : la bulle est du même
+              // crème que les panneaux et les cartes, posée sur un filet et une
+              // ombre. L'aplat d'encre des premiers essais (18/08/2026) tranchait
+              // trop avec la page — le regard allait à la bulle avant d'aller à
+              // ce qu'elle explique.
+              'max-w-[260px] rounded-[var(--radius-sm)] bg-[var(--surface-raised)] px-2.5 py-1.5',
+              'border border-[var(--line)]',
+              'font-sans text-[12px] leading-[1.35] font-medium text-balance break-words text-[var(--ink-body)]',
+              // L'apparition est franche mais pas sèche : la bulle descend de
+              // 2px en se révélant, et s'efface sans bouger.
               'transition-[opacity,translate] duration-[var(--dur-fast)] ease-[var(--ease-soft)]',
-              'data-[starting-style]:translate-y-[2px] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0',
+              'data-[starting-style]:-translate-y-[2px] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0',
               className,
             )}
           >
