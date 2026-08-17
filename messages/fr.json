@@ -458,6 +458,8 @@
     "bank": {
       "include": "inclus",
       "exclude": "exclu",
+      "includeHint": "les questions qui portent ce filtre sont gardées, les autres écartées. Un clic sur une pastille l'inclut, un deuxième l'exclut, un troisième l'annule.",
+      "excludeHint": "les questions qui portent ce filtre sont écartées. Un clic sur une pastille l'inclut, un deuxième l'exclut, un troisième l'annule.",
       "statusLinked": "questions liées",
       "newQuestion": "nouvelle question",
       "newShort": "nouvelle",

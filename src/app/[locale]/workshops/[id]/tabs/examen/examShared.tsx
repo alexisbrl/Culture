@@ -508,6 +508,11 @@ export const LABEL_COLORS = [categoryTones.blueGray, categoryTones.mauve, palett
 // Trois tailles pour un seul et même rendu de pastille : `xs` sur les cartes de
 // la banque (la ligne de métadonnées est serrée), `sm` dans le panneau de
 // filtres, `md` dans les éditeurs de question.
+/** Longueur maximale d'un nom sur une pastille, toutes pastilles confondues.
+ *  Généreux (un libellé ou un chapitre y tient presque toujours en entier) mais
+ *  borné : c'est la largeur du panneau de filtres, la plus étroite des surfaces
+ *  qui en portent, qui fixe le plafond. */
+const PILL_MAX_CHARS = 30;
 const LABEL_PILL_SIZES = {
   xs: { fontSize: 10.5, padding: '3px 9px', gap: 5, affordance: 13, icon: 8 },
   sm: { fontSize: 11, padding: '4px 8px', gap: 5, affordance: 15, icon: 9 },
@@ -538,9 +543,16 @@ export const labelTint = (color: string) => withAlpha(color, 0.22);
  *    ça, c'est le bouton « supprimer » de `LabelEditor`.
  *  Sur les cartes de la banque, la pastille n'a ni l'un ni l'autre.
  *
- *  Le fond coloré est un `span`, pas un `button` : `onClick` (bascule de filtre)
- *  est porté par le libellé lui-même, pour que le crayon et la croix restent des
- *  boutons frères — un `<button>` imbriqué dans un `<button>` est invalide.
+ *  **Toute la pastille est cliquable**, pictogramme et retraits compris : c'est
+ *  la pastille entière qu'on vise du regard, pas son texte. Elle ne peut pas
+ *  être un `<button>` pour autant — le crayon et la croix en sont, et un
+ *  `<button>` dans un `<button>` est invalide — d'où un `span` porteur de
+ *  `role="button"`, du focus clavier et d'Entrée/Espace. Le crayon et la croix
+ *  gardent la priorité en arrêtant la propagation : cliquer le crayon modifie le
+ *  libellé, il ne bascule pas le filtre au passage.
+ *
+ *  Jusqu'au 18/08/2026 seul le TEXTE était cliquable : viser le pictogramme d'un
+ *  type de réponse, ou le retrait à gauche d'un libellé, ne faisait rien.
  *
  *  `icon` : pictogramme collé à gauche du texte, pour les filtres de type de
  *  réponse qui reprennent la même pastille (voir `RESPONSE_TYPE_ICONS`).
@@ -552,11 +564,11 @@ export const labelTint = (color: string) => withAlpha(color, 0.22);
  *  cohabitaient donc dans le même panneau, l'une criarde et l'autre discrète.
  *  Il n'y en a plus qu'une, celle-ci, et elle vit ici seule.
  *
- *  `truncate` : le nom est coupé à 18 caractères par défaut, pour que les
- *  pastilles restent lisibles en file sur une carte de la banque. Les filtres de
- *  chapitre s'en dispensent — un titre de chapitre coupé ne se reconnaît plus, et
- *  le panneau les laisse passer à la ligne. */
-export function LabelPill({ name, color, size = 'sm', active = false, excluded = false, icon, truncate = true, onClick, onEdit, onRemove, editTitle, removeTitle }: {
+ *  Le nom est coupé à `PILL_MAX_CHARS`, sans exception : un seul nom un peu long
+ *  — un titre de chapitre, typiquement — élargissait sinon le panneau de filtres
+ *  au-delà de sa colonne, qui se mettait à défiler horizontalement. Le nom
+ *  complet reste lisible au survol. */
+export function LabelPill({ name, color, size = 'sm', active = false, excluded = false, icon, title, onClick, onEdit, onRemove, editTitle, removeTitle }: {
   name: string;
   /** Absent = pastille neutre (voir plus haut). */
   color?: string;
@@ -569,7 +581,8 @@ export function LabelPill({ name, color, size = 'sm', active = false, excluded =
    *  18/08/2026 : c'est déjà la couleur que « exclu » avait dans l'onglet. */
   excluded?: boolean;
   icon?: ReactNode;
-  truncate?: boolean;
+  /** Infobulle de la pastille. Par défaut le nom complet, quand il a été coupé. */
+  title?: string;
   onClick?: () => void;
   onEdit?: () => void;
   onRemove?: () => void;
@@ -577,7 +590,8 @@ export function LabelPill({ name, color, size = 'sm', active = false, excluded =
   removeTitle?: string;
 }) {
   const s = LABEL_PILL_SIZES[size];
-  const displayName = truncate && name.length > 18 ? name.slice(0, 18) + '…' : name;
+  const cut = name.length > PILL_MAX_CHARS;
+  const displayName = cut ? name.slice(0, PILL_MAX_CHARS) + '…' : name;
   const affordance: CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     width: s.affordance, height: s.affordance, borderRadius: '50%', padding: 0,
@@ -585,9 +599,24 @@ export function LabelPill({ name, color, size = 'sm', active = false, excluded =
   };
   return (
     <span
+      title={title ?? (cut ? name : undefined)}
+      // Le rôle et le focus ne sont posés que si la pastille fait réellement
+      // quelque chose au clic : sur une carte de la banque, elle n'est qu'un
+      // témoin et n'a rien à faire dans l'ordre de tabulation.
+      {...(onClick ? {
+        role: 'button' as const,
+        tabIndex: 0,
+        onClick,
+        onKeyDown: (e: React.KeyboardEvent) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();   // Espace ferait défiler la page
+          onClick();
+        },
+      } : {})}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: s.gap, flexShrink: 0,
         fontSize: s.fontSize, padding: s.padding, borderRadius: 999, fontFamily: 'inherit',
+        cursor: onClick ? 'pointer' : undefined,
         // Sur une pastille colorée, l'entourage au repos ne se voit qu'aux deux
         // extrémités arrondies, où il lit comme un défaut de rendu plutôt que
         // comme une bordure : elle n'en porte donc qu'une fois sélectionnée,
@@ -607,16 +636,17 @@ export function LabelPill({ name, color, size = 'sm', active = false, excluded =
       }}
     >
       {icon && <span style={{ display: 'flex', flexShrink: 0, color: palette.inkSoft }}>{icon}</span>}
+      {/* `stopPropagation` : le crayon et la croix sont posés SUR une surface
+          cliquable, ils doivent donc l'empêcher de se déclencher derrière eux.
+          Sans ça, modifier un libellé basculerait aussi son filtre. */}
       {onEdit && (
-        <button type="button" onClick={onEdit} title={editTitle} style={affordance}>
+        <button type="button" onClick={e => { e.stopPropagation(); onEdit(); }} title={editTitle} style={affordance}>
           <Pencil size={s.icon} strokeWidth={2} />
         </button>
       )}
-      {onClick
-        ? <button type="button" onClick={onClick} style={{ border: 'none', background: 'none', color: 'inherit', font: 'inherit', padding: 0, cursor: 'pointer' }}>{displayName}</button>
-        : displayName}
+      {displayName}
       {onRemove && (
-        <button type="button" onClick={onRemove} title={removeTitle} style={affordance}>
+        <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }} title={removeTitle} style={affordance}>
           <X size={s.icon} strokeWidth={2.2} />
         </button>
       )}

@@ -39,6 +39,13 @@ const NO_CHAPTER_ID = '__nochapter__';
 // cycle inclus/exclu sans code particulier, et « exclu » veut alors dire
 // « seulement les questions seules ».
 const LINKED_ID = '__linked__';
+// Hauteur réservée à la ligne « filtres » du panneau — mesurée, pas déduite :
+// une pastille `xs` y fait 24px de haut (interlignage compris) contre 20px pour
+// le titre seul, et les retraits de la ligne en ajoutent 22. Sans cette réserve
+// la ligne passait de 42 à 46px à l'apparition de la légende, poussant tout le
+// panneau de 4px vers le bas — au moment précis où l'on vise une pastille.
+// `box-sizing: border-box` étant global, la valeur inclut les retraits.
+const LEGEND_ROW_H = 46;
 
 // critères de tri proposés par la banque de questions
 const BANK_SORTS: readonly SortBy[] = ['recent', 'name', 'type', 'label'];
@@ -403,25 +410,27 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
                 pour ne pas être rogné par la colonne. Ici, uniquement son
                 contenu. */}
             <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px 10px', flexShrink: 0 }}>
-                <span style={{ fontSize: 13, fontWeight: 500, color: palette.ink }}>{tr('bank.filtersTitle')}</span>
+              {/* Légende posée SUR la ligne du titre, et cette ligne a une
+                  hauteur réservée (`minHeight`) : les deux mots peuvent
+                  apparaître et disparaître au fil des clics sans que rien ne
+                  bouge sous eux. Sur leur propre ligne, ils poussaient tout le
+                  panneau vers le bas en s'affichant — au moment précis où l'on
+                  vise une pastille.
+
+                  Un mot par état, dans la couleur exacte de la sélection qu'il
+                  décrit : c'est une vraie `LabelPill` qui sert de témoin, elle
+                  ne peut donc pas mentir sur ce qu'on voit en dessous. Chaque
+                  mot n'apparaît qu'une fois son état utilisé — au premier clic
+                  on découvre « inclus », au deuxième « exclu » — et son
+                  infobulle dit le cycle en entier. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: LEGEND_ROW_H, padding: '12px 14px 10px', flexShrink: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, color: palette.ink, flexShrink: 0 }}>{tr('bank.filtersTitle')}</span>
+                {hasIncluded && <LabelPill size="xs" name={tr('bank.include')} title={tr('bank.includeHint')} active />}
+                {hasExcluded && <LabelPill size="xs" name={tr('bank.exclude')} title={tr('bank.excludeHint')} excluded />}
                 {activeFilterCount > 0 && (
-                  <button onClick={resetFilters} style={{ fontSize: 11.5, color: palette.greenBrand, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>{tr('bank.filtersReset')}</button>
+                  <button onClick={resetFilters} style={{ marginLeft: 'auto', fontSize: 11.5, color: palette.greenBrand, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, flexShrink: 0 }}>{tr('bank.filtersReset')}</button>
                 )}
               </div>
-              {/* Légende — un mot par état, dans la couleur exacte de la
-                  sélection qu'il décrit : c'est la pastille elle-même qui sert
-                  de témoin, donc la légende ne peut pas mentir sur ce qu'on voit
-                  en dessous. Un seul rappel pour tout le panneau, tous types de
-                  filtres confondus, et chaque mot n'apparaît qu'une fois son
-                  état utilisé — au premier clic on découvre « inclus », au
-                  deuxième « exclu ». */}
-              {(hasIncluded || hasExcluded) && (
-                <div style={{ display: 'flex', gap: 6, padding: '0 14px 10px', flexShrink: 0 }}>
-                  {hasIncluded && <LabelPill name={tr('bank.include')} active />}
-                  {hasExcluded && <LabelPill name={tr('bank.exclude')} excluded />}
-                </div>
-              )}
               <div style={{ overflowY: 'auto', padding: '0 14px 14px', flex: 1, minHeight: 0 }}>
                 {/* Type de réponse */}
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.rTypeSection')}</div>
@@ -492,14 +501,10 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
                   <>
                     <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.chapterSection')}</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {/* `truncate={false}` : un titre de chapitre coupé à 18
-                          caractères ne se reconnaît plus, et rien ici n'oblige à
-                          tenir sur une ligne. */}
                       {chapters.map(c => (
                         <LabelPill
                           key={c.id}
                           name={c.name}
-                          truncate={false}
                           {...pillState(`chapter:${c.id}`, filterChapters.includes(c.id))}
                           onClick={() => toggleChapterFilter(c.id)}
                         />

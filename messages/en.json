@@ -458,6 +458,8 @@
     "bank": {
       "include": "included",
       "exclude": "excluded",
+      "includeHint": "questions carrying this filter are kept, the others are left out. One click on a pill includes it, a second excludes it, a third clears it.",
+      "excludeHint": "questions carrying this filter are left out. One click on a pill includes it, a second excludes it, a third clears it.",
       "statusLinked": "linked questions",
       "newQuestion": "new question",
       "newShort": "new",
