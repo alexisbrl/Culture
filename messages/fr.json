@@ -458,6 +458,7 @@
     "bank": {
       "include": "inclus",
       "exclude": "exclu",
+      "statusLinked": "questions liées",
       "newQuestion": "nouvelle question",
       "newShort": "nouvelle",
       "searchPlaceholder": "chercher une question…",

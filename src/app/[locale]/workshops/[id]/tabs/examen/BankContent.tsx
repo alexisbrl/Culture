@@ -33,6 +33,12 @@ const typesOfQuestion = (q: Question): ResponseType[] =>
 // Filtre « sans chapitre » : les questions dont aucune notion associée n'est
 // rattachée à un chapitre (y compris celles sans notion du tout).
 const NO_CHAPTER_ID = '__nochapter__';
+// Filtre « questions liées » : une grappe, c'est une question qui porte au moins
+// une question liée (`parts`). Une seule valeur possible, mais rangée dans une
+// liste comme les autres familles de filtres — c'est ce qui lui donne le même
+// cycle inclus/exclu sans code particulier, et « exclu » veut alors dire
+// « seulement les questions seules ».
+const LINKED_ID = '__linked__';
 
 // critères de tri proposés par la banque de questions
 const BANK_SORTS: readonly SortBy[] = ['recent', 'name', 'type', 'label'];
@@ -74,6 +80,7 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
   const [filterTypes, setFilterTypes] = useState<ResponseType[]>([]);
   const [filterChapters, setFilterChapters] = useState<string[]>([]);
   const [filterExams, setFilterExams] = useState<string[]>([]);
+  const [filterLinked, setFilterLinked] = useState<string[]>([]);
   // Côté de chaque filtre actif — inclusion par défaut, exclusion au clic
   // suivant (voir `cycleFilter`). Indexé par clé « catégorie:valeur », les
   // quatre familles de filtres se partageant le même registre.
@@ -92,7 +99,7 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
   const [pendingDeleteQuestion, setPendingDeleteQuestion] = useState<Question | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
 
-  const activeFilterCount = filterPools.length + filterTypes.length + filterChapters.length + filterExams.length;
+  const activeFilterCount = filterPools.length + filterTypes.length + filterChapters.length + filterExams.length + filterLinked.length;
 
   // Chapitre(s) d'une question = ceux de ses notions associées. La table de
   // correspondance est construite une fois pour toutes les questions plutôt
@@ -195,11 +202,13 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
   function toggleTypeFilter(t: ResponseType) { cycleFilter(t, `type:${t}`, filterTypes, setFilterTypes); }
   function toggleChapterFilter(id: string) { cycleFilter(id, `chapter:${id}`, filterChapters, setFilterChapters); }
   function toggleExamFilter(id: string) { cycleFilter(id, `exam:${id}`, filterExams, setFilterExams); }
+  function toggleLinkedFilter() { cycleFilter(LINKED_ID, `linked:${LINKED_ID}`, filterLinked, setFilterLinked); }
   function resetFilters() {
     setFilterPools([]);
     setFilterTypes([]);
     setFilterChapters([]);
     setFilterExams([]);
+    setFilterLinked([]);
     setFilterModes({});
   }
   function addLabel() {
@@ -226,6 +235,7 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
   const negChapters = filterChapters.filter(c => modeOf(`chapter:${c}`) === 'neg');
   const posExams = filterExams.filter(e => modeOf(`exam:${e}`) === 'pos');
   const negExams = filterExams.filter(e => modeOf(`exam:${e}`) === 'neg');
+  const linkedMode = filterLinked.length > 0 ? modeOf(`linked:${LINKED_ID}`) : null;
 
   /** État d'une pastille de filtre, à étaler sur `LabelPill`. */
   const pillState = (key: string, selected: boolean) => ({
@@ -234,8 +244,8 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
   });
   // La légende du panneau ne montre que les états réellement en jeu : tant que
   // rien n'est exclu, « exclu » n'a rien à expliquer et ne prend pas de place.
-  const hasIncluded = posPools.length + posTypes.length + posChapters.length + posExams.length > 0;
-  const hasExcluded = negPools.length + negTypes.length + negChapters.length + negExams.length > 0;
+  const hasIncluded = posPools.length + posTypes.length + posChapters.length + posExams.length > 0 || linkedMode === 'pos';
+  const hasExcluded = negPools.length + negTypes.length + negChapters.length + negExams.length > 0 || linkedMode === 'neg';
 
   let filtered = questions.filter(q => {
     const qPools = new Set(q.pools);
@@ -252,6 +262,9 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
     if (negChapters.length && negChapters.some(c => qChapters.has(c))) return false;
     if (posExams.length && !posExams.some(f => f === NEVER_EXAM_ID ? neverExam : qExamIds.has(f))) return false;
     if (negExams.length && negExams.some(f => f === NEVER_EXAM_ID ? neverExam : qExamIds.has(f))) return false;
+    // Inclus = seulement les grappes, exclu = seulement les questions seules.
+    if (linkedMode === 'pos' && q.parts.length === 0) return false;
+    if (linkedMode === 'neg' && q.parts.length > 0) return false;
     // La recherche balaie la grappe entière, pour la même raison que les filtres
     // ci-dessus : l'énoncé d'une question liée n'a pas d'autre carte que celle
     // de sa grappe, il serait sinon impossible de le retrouver au texte.
@@ -437,6 +450,15 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
                     name={tr('bank.statusNew')}
                     {...pillState(`exam:${NEVER_EXAM_ID}`, filterExams.includes(NEVER_EXAM_ID))}
                     onClick={() => toggleExamFilter(NEVER_EXAM_ID)}
+                  />
+                  {/* Le seul filtre dont l'exclusion dit quelque chose d'utile
+                      en soi : « exclu » isole les questions seules, ce qu'aucun
+                      autre filtre ne sait faire. */}
+                  <LabelPill
+                    name={tr('bank.statusLinked')}
+                    icon={<Link2 size={11} strokeWidth={1.75} />}
+                    {...pillState(`linked:${LINKED_ID}`, filterLinked.length > 0)}
+                    onClick={toggleLinkedFilter}
                   />
                 </div>
                 {/* Libellés */}

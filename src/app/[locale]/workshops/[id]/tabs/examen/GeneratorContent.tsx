@@ -454,6 +454,37 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   // arrière-plan ne reçoit aucune trame d'animation, le recadrage n'aurait
   // jamais lieu si la question était ouverte juste avant de changer d'onglet.
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // La feuille change d'échelle par paliers de largeur de fenêtre
+  // (`--exam-scale`, globals.css) : au franchissement d'un palier, toute la copie
+  // change de hauteur alors que la position de défilement, elle, ne bouge pas —
+  // la question qu'on avait sous les yeux se retrouve donc plus haut ou plus bas.
+  // Rien n'a bougé sur la feuille, c'est la vue qui a glissé. On remet la
+  // position à la même échelle que le contenu, et le regard reste au même endroit.
+  //
+  // Le facteur suffit : la copie commence en haut du panneau, il n'y a donc pas
+  // d'origine à retrancher. Seul le cas où c'est le panneau qui défile est
+  // traité — sous 768px c'est la page entière, avec l'en-tête au-dessus, et la
+  // règle de trois ne s'y applique plus.
+  useEffect(() => {
+    const shell = panelRef.current?.closest('.exam-shell');
+    if (!shell) return;
+    const readScale = () => parseFloat(getComputedStyle(shell).getPropertyValue('--exam-scale')) || 1;
+    let previous = readScale();
+    const onResize = () => {
+      const next = readScale();
+      // Redimensionnement à l'intérieur d'un même palier : l'échelle est
+      // inchangée, la copie aussi, il n'y a rien à rattraper.
+      if (next === previous || !Number.isFinite(next)) return;
+      const ratio = next / previous;
+      previous = next;
+      const panel = panelRef.current;
+      if (panel && panel.scrollHeight > panel.clientHeight + 1) panel.scrollTop *= ratio;
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   useEffect(() => {
     if (dragFlatIdx === null && dragSectionIdx === null) return;
     let raf = 0;
