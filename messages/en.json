@@ -456,9 +456,11 @@
       "label": "tag"
     },
     "bank": {
-      "include": "include",
-      "exclude": "exclude",
-      "dropFilterHere": "drop a filter here",
+      "include": "included",
+      "exclude": "excluded",
+      "includeHint": "questions carrying this filter are kept, the others are left out. One click on a pill includes it, a second excludes it, a third clears it.",
+      "excludeHint": "questions carrying this filter are left out. One click on a pill includes it, a second excludes it, a third clears it.",
+      "statusLinked": "linked questions",
       "newQuestion": "new question",
       "newShort": "new",
       "searchPlaceholder": "search for a question…",
@@ -527,7 +529,7 @@
       "saveExam": "save the exam",
       "pageNumber": "{n} / {total}",
       "removeSectionTitle": "Delete section « {title} »?",
-      "removeSectionDesc": "The {count} question(s) in this section will no longer be in the exam and will return to the sent questions list.",
+      "removeSectionDesc": "The {count} question(s) in this section will leave the exam. They stay in the question bank.",
       "cancelEditsTitle": "Cancel changes?",
       "clearTitle": "Clear the exam editor?",
       "clearDescEditing": "Your current changes will be discarded. The already saved exam is not affected.",

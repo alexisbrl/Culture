@@ -38,9 +38,9 @@ import { palette, ink, withAlpha } from '@/lib/theme';
 import {
   DEFAULT_BLOOM_LEVEL, type Question, type QuestionPart, type QuestionWeight,
 } from '@/lib/workshops/examTypes';
-import { QuestionFields, TextField, emptyPart } from './questionFields';
+import { QuestionFields, emptyPart } from './questionFields';
 import { MediaAttachment, useQuestionMediaDrop } from './questionMedia';
-import { type Pool, LabelPill, LabelEditor, SelectMenu } from './examShared';
+import { type Pool, LabelPill, LabelEditor, LabelPicker } from './examShared';
 
 type Props = {
   workshopId: string;
@@ -106,8 +106,6 @@ export default function InlineQuestionEditor({
     typeOptions: question.typeOptions ?? {},
   });
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [newPoolName, setNewPoolName] = useState('');
-  const [creatingPool, setCreatingPool] = useState(false);
   const [editingPool, setEditingPool] = useState<string | null>(null);
 
   // Glisser-déposer un fichier n'importe où sur la carte : reconnu comme
@@ -131,14 +129,11 @@ export default function InlineQuestionEditor({
   function togglePool(id: string) {
     patch({ pools: draft.pools.includes(id) ? draft.pools.filter(p => p !== id) : [...draft.pools, id] });
   }
-  function addPool() {
-    const name = newPoolName.trim();
+  function addPool(name: string) {
     // `onCreatePool` n'est fourni que là où les libellés sont affichés : ce
     // chemin est injoignable côté parcours, la garde n'est là que pour le typage.
-    if (!name || !onCreatePool) return;
+    if (!onCreatePool) return;
     patch({ pools: [...draft.pools, onCreatePool(name)] });
-    setNewPoolName('');
-    setCreatingPool(false);
   }
 
   const selectStyle: React.CSSProperties = {
@@ -243,33 +238,19 @@ export default function InlineQuestionEditor({
             {t('inline.labelsTitle').toUpperCase()}
           </span>
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-            {creatingPool ? (
-              <div style={{ display: 'flex', gap: 6, width: 300, maxWidth: '100%' }}>
-                <div style={{ flex: 1 }}>
-                  <TextField value={newPoolName} onChange={setNewPoolName} placeholder={t('editor.labelNamePlaceholder')} />
-                </div>
-                <button type="button" onClick={addPool} style={{ fontSize: 12, padding: '0 14px', borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.7), color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>{t('add')}</button>
-                <button type="button" onClick={() => { setCreatingPool(false); setNewPoolName(''); }} style={{ fontSize: 12, padding: '0 14px', borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>{t('cancelLower')}</button>
-              </div>
-            ) : (
-              // Menu maison et non `<select>` : le déroulé natif est peint par
-              // le système et jurait avec le reste de la feuille. La pastille de
-              // couleur de chaque libellé se lit maintenant dans la liste.
-              <SelectMenu
-                items={[
-                  ...pools.filter(p => !draft.pools.includes(p.id)).map(p => ({ value: p.id, label: p.name, color: p.color })),
-                  { value: '__new__', label: t('editor.newLabelOption') },
-                ]}
-                onSelect={v => { if (v === '__new__') setCreatingPool(true); else togglePool(v); }}
-                panelWidth="auto"
-                variant="pills"
-                onScroll="clip"
-                wrapperStyle={{ display: 'inline-flex' }}
-                triggerStyle={{ ...selectStyle, fontWeight: 500, fontSize: 12.5, color: palette.inkMuted, borderRadius: 999, padding: '6px 12px' }}
-              >
-                {t('editor.addLabelOption')}
-              </SelectMenu>
-            )}
+            {/* Choisir, modifier et créer un libellé se font tous les trois dans
+                le panneau du menu — voir `LabelPicker`. */}
+            <LabelPicker
+              pools={pools}
+              selected={draft.pools}
+              onToggle={togglePool}
+              onCreate={onCreatePool ? addPool : undefined}
+              onEdit={onUpdatePool ? setEditingPool : undefined}
+              wrapperStyle={{ display: 'inline-flex' }}
+              triggerStyle={{ ...selectStyle, fontWeight: 500, fontSize: 12.5, color: palette.inkMuted, borderRadius: 999, padding: '6px 12px' }}
+            >
+              {t('editor.addLabelOption')}
+            </LabelPicker>
             {draft.pools.map(pid => {
               const p = pools.find(pp => pp.id === pid);
               if (!p) return null;

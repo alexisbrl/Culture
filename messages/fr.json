@@ -456,9 +456,11 @@
       "label": "tag"
     },
     "bank": {
-      "include": "inclure",
-      "exclude": "exclure",
-      "dropFilterHere": "glisse un filtre ici",
+      "include": "inclus",
+      "exclude": "exclu",
+      "includeHint": "les questions qui portent ce filtre sont gardées, les autres écartées. Un clic sur une pastille l'inclut, un deuxième l'exclut, un troisième l'annule.",
+      "excludeHint": "les questions qui portent ce filtre sont écartées. Un clic sur une pastille l'inclut, un deuxième l'exclut, un troisième l'annule.",
+      "statusLinked": "questions liées",
       "newQuestion": "nouvelle question",
       "newShort": "nouvelle",
       "searchPlaceholder": "chercher une question…",
@@ -527,7 +529,7 @@
       "saveExam": "enregistrer l'examen",
       "pageNumber": "{n} / {total}",
       "removeSectionTitle": "Supprimer la partie « {title} » ?",
-      "removeSectionDesc": "Les {count} question(s) de cette partie ne seront plus dans l'examen et retourneront dans la liste des questions envoyées.",
+      "removeSectionDesc": "Les {count} question(s) de cette partie quitteront l'examen. Elles restent dans la banque de questions.",
       "cancelEditsTitle": "Annuler les modifications ?",
       "clearTitle": "Effacer l'éditeur d'examen ?",
       "clearDescEditing": "Les modifications en cours seront abandonnées. L'examen déjà enregistré n'est pas affecté.",

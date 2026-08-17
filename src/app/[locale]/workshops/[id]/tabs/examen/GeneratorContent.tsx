@@ -454,6 +454,37 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   // arrière-plan ne reçoit aucune trame d'animation, le recadrage n'aurait
   // jamais lieu si la question était ouverte juste avant de changer d'onglet.
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // La feuille change d'échelle par paliers de largeur de fenêtre
+  // (`--exam-scale`, globals.css) : au franchissement d'un palier, toute la copie
+  // change de hauteur alors que la position de défilement, elle, ne bouge pas —
+  // la question qu'on avait sous les yeux se retrouve donc plus haut ou plus bas.
+  // Rien n'a bougé sur la feuille, c'est la vue qui a glissé. On remet la
+  // position à la même échelle que le contenu, et le regard reste au même endroit.
+  //
+  // Le facteur suffit : la copie commence en haut du panneau, il n'y a donc pas
+  // d'origine à retrancher. Seul le cas où c'est le panneau qui défile est
+  // traité — sous 768px c'est la page entière, avec l'en-tête au-dessus, et la
+  // règle de trois ne s'y applique plus.
+  useEffect(() => {
+    const shell = panelRef.current?.closest('.exam-shell');
+    if (!shell) return;
+    const readScale = () => parseFloat(getComputedStyle(shell).getPropertyValue('--exam-scale')) || 1;
+    let previous = readScale();
+    const onResize = () => {
+      const next = readScale();
+      // Redimensionnement à l'intérieur d'un même palier : l'échelle est
+      // inchangée, la copie aussi, il n'y a rien à rattraper.
+      if (next === previous || !Number.isFinite(next)) return;
+      const ratio = next / previous;
+      previous = next;
+      const panel = panelRef.current;
+      if (panel && panel.scrollHeight > panel.clientHeight + 1) panel.scrollTop *= ratio;
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   useEffect(() => {
     if (dragFlatIdx === null && dragSectionIdx === null) return;
     let raf = 0;
@@ -709,20 +740,38 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
     // `rows` plus bas) — c'est elle qu'on ramène au centre, pas la partie vide.
     onRequestFocus(`h-${id}`);
   }
+  /** Retire une partie ET les questions qu'elle porte. Le parent doit être
+   *  prévenu de ces dernières exactement comme dans `removeFromExam` : c'est
+   *  `draftIds` qui allume la pastille verte de la carte dans la banque, et lui
+   *  seul est repris au rechargement du brouillon. Sans ça, les questions d'une
+   *  partie supprimée restaient sélectionnées dans la banque en face d'une copie
+   *  vide — un état que même un rechargement ne rattrapait pas, puisqu'il est
+   *  enregistré tel quel, et dont on ne sortait qu'en cliquant deux fois chaque
+   *  carte ou en réinitialisant l'éditeur.
+   *
+   *  Les sauts de page sont écartés : ce sont des identifiants de position dans
+   *  la partie, pas des questions de la banque. */
+  function dropSection(idx: number) {
+    const removedQuestionIds = config.sections[idx].questionIds.filter(id => !isPageBreakId(id));
+    onConfigChange({
+      ...config,
+      sections: config.sections.filter((_, i) => i !== idx),
+      weighting: removedQuestionIds.reduce(clearWeightingFor, config.weighting),
+    });
+    if (removedQuestionIds.length > 0) onRemoveFromDraft(removedQuestionIds);
+  }
   function removeSection(idx: number) {
     if (config.sections.length <= 1) return;
+    // Une partie vide part sans confirmation : il n'y a rien à perdre.
     if (config.sections[idx].questionIds.length === 0) {
-      patchConfig({ sections: config.sections.filter((_, i) => i !== idx) });
+      dropSection(idx);
       return;
     }
     setPendingRemoveSectionIdx(idx);
   }
   function confirmRemoveSection() {
     if (pendingRemoveSectionIdx === null) return;
-    const idx = pendingRemoveSectionIdx;
-    if (config.sections.length > 1) {
-      patchConfig({ sections: config.sections.filter((_, i) => i !== idx) });
-    }
+    if (config.sections.length > 1) dropSection(pendingRemoveSectionIdx);
     setPendingRemoveSectionIdx(null);
   }
   function updateWeight(id: string, patch: Partial<QuestionWeight>) {

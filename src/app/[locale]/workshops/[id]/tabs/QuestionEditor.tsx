@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { AudioLines, ImageIcon } from 'lucide-react';
 import { MediaAttachment, useQuestionMediaDrop } from './examen/questionMedia';
-import { LabelPill, SelectMenu } from './examen/examShared';
+import { LabelPill, LabelPicker, SelectMenu } from './examen/examShared';
 
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -199,8 +199,6 @@ export default function QuestionEditor({
     bloomLevel: question.bloomLevel ?? DEFAULT_BLOOM_LEVEL,
     notionIds: question.notionIds ?? [],
   });
-  const [newPoolName, setNewPoolName] = useState('');
-  const [creatingPool, setCreatingPool] = useState(false);
   // Le popup n'a pas l'interrupteur global de l'éditeur en ligne : les réglages
   // secondaires des questions liées (attendus, notions, barème étendu) se
   // révèlent par ce bouton, sous la liste.
@@ -223,13 +221,8 @@ export default function QuestionEditor({
     patch({ pools: draft.pools.includes(id) ? draft.pools.filter((p) => p !== id) : [...draft.pools, id] });
   }
 
-  function addPool() {
-    const name = newPoolName.trim();
-    if (!name) return;
-    const id = onCreatePool(name);
-    patch({ pools: [...draft.pools, id] });
-    setNewPoolName('');
-    setCreatingPool(false);
+  function addPool(name: string) {
+    patch({ pools: [...draft.pools, onCreatePool(name)] });
   }
 
   function patchPart(idx: number, p: Partial<QuestionPart>) {
@@ -497,29 +490,22 @@ export default function QuestionEditor({
                 })}
               </div>
             )}
-            {creatingPool ? (
-              <div style={{ display: 'flex', gap: 6 }}>
-                <div style={{ flex: 1 }}>
-                  <TextField value={newPoolName} onChange={setNewPoolName} placeholder={t('editor.labelNamePlaceholder')} />
-                </div>
-                <button onClick={addPool} style={{ fontSize: 12, padding: '0 14px', borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: withAlpha(palette.paper, 0.7), color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit' }}>{t('add')}</button>
-                <button onClick={() => { setCreatingPool(false); setNewPoolName(''); }} style={{ fontSize: 12, padding: '0 14px', borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>{t('cancelLower')}</button>
-              </div>
-            ) : (
-              <SelectMenu
-                items={[
-                  ...pools.filter((p) => !draft.pools.includes(p.id)).map((p) => ({ value: p.id, label: p.name, color: p.color })),
-                  { value: '__new__', label: t('editor.newLabelOption') },
-                ]}
-                onSelect={(v) => { if (v === '__new__') setCreatingPool(true); else togglePool(v); }}
-                variant="pills"
-                onScroll="clip"
-                wrapperStyle={{ display: 'block', width: '100%' }}
-                triggerStyle={{ width: '100%', textAlign: 'left', fontSize: 13, color: palette.inkMuted, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', cursor: 'pointer' }}
-              >
-                {t('editor.addLabelOption')}
-              </SelectMenu>
-            )}
+            {/* Même menu que l'éditeur posé sur la feuille (`LabelPicker`) :
+                choisir et créer se font dans le panneau. Pas de crayon ici pour
+                la même raison qu'au-dessus — cet éditeur ne sait pas modifier un
+                libellé. Le panneau prolonge le bouton, qui fait toute la largeur
+                de la colonne. */}
+            <LabelPicker
+              pools={pools}
+              selected={draft.pools}
+              onToggle={togglePool}
+              onCreate={addPool}
+              panelWidth="trigger"
+              wrapperStyle={{ display: 'block', width: '100%' }}
+              triggerStyle={{ width: '100%', textAlign: 'left', fontSize: 13, color: palette.inkMuted, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', cursor: 'pointer' }}
+            >
+              {t('editor.addLabelOption')}
+            </LabelPicker>
           </div>
 
         </div>

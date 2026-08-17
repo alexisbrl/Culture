@@ -178,7 +178,13 @@ const FILTER_PANEL_MARGIN = 8;  // écart minimum conservé avec le bord de la f
  *
  *  `variant: 'pills'` rend les entrées comme les pastilles de libellé de la
  *  liste de questions (`LabelPill`), teinte comprise ; les entrées sans couleur
- *  (« + nouveau libellé… ») restent des lignes de texte, en bas du panneau. */
+ *  restent des lignes de texte, en bas du panneau.
+ *
+ *  `footer` est rendu tout en bas du panneau et reçoit de quoi le fermer. Il sert
+ *  aux commandes qui appartiennent au menu sans être des entrées à choisir
+ *  (créer un libellé, par exemple). Il est monté avec le panneau et démonté avec
+ *  lui : un état de saisie qu'il porte repart donc de zéro à chaque ouverture,
+ *  sans que le menu ait à s'en occuper. */
 const MENU_AUTO_MIN = 120;
 const MENU_AUTO_MAX = 240;
 /** Plan des panneaux posés SUR la feuille (menus de l'éditeur en ligne, liste de
@@ -189,12 +195,19 @@ const MENU_AUTO_MAX = 240;
  *  propre. */
 export const SHEET_PANEL_Z = 3;
 
-export function SelectMenu({ items, value, onSelect, title, triggerStyle, wrapperStyle, panelWidth = 'trigger', align = 'left', onScroll = 'close', variant = 'list', children }: {
+export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, title, triggerStyle, wrapperStyle, panelWidth = 'trigger', align = 'left', onScroll = 'close', variant = 'list', footer, children }: {
   items: readonly { value: string; label: string; color?: string }[];
   /** Entrée à marquer comme courante. Absent = menu d'action (« ajouter… »), où
    *  aucune entrée n'est « la » valeur. */
   value?: string;
   onSelect: (value: string) => void;
+  /** `variant: 'pills'` seulement — crayon sur chaque pastille, qui modifie
+   *  l'entrée au lieu de la choisir. Le menu se ferme avant de rappeler :
+   *  l'éditeur qu'il ouvre se pose sur le bloc qui porte le menu, donc en
+   *  dehors du panneau, et deux couches superposées se disputeraient le
+   *  clic-dehors (voir `.claude/rules/frontend-patterns.md`). */
+  onEditItem?: (value: string) => void;
+  editTitle?: string;
   title?: string;
   triggerStyle?: CSSProperties;
   /** Mode `clip` seulement : style du conteneur, qui devient le référentiel de
@@ -205,6 +218,8 @@ export function SelectMenu({ items, value, onSelect, title, triggerStyle, wrappe
   align?: 'left' | 'right';
   onScroll?: 'close' | 'clip';
   variant?: 'list' | 'pills';
+  /** Bas du panneau, sous les entrées. Reçoit de quoi fermer le menu. */
+  footer?: (close: () => void) => ReactNode;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -288,13 +303,22 @@ export function SelectMenu({ items, value, onSelect, title, triggerStyle, wrappe
           {pillItems.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '5px 5px 7px' }}>
               {pillItems.map(item => (
-                <LabelPill key={item.value} name={item.label} color={item.color!} active={item.value === value} onClick={() => { setOpen(false); onSelect(item.value); }} />
+                <LabelPill
+                  key={item.value}
+                  name={item.label}
+                  color={item.color!}
+                  active={item.value === value}
+                  onClick={() => { setOpen(false); onSelect(item.value); }}
+                  onEdit={onEditItem ? () => { setOpen(false); onEditItem(item.value); } : undefined}
+                  editTitle={editTitle}
+                />
               ))}
             </div>
           )}
           {rowItems.map(item => (
             <MenuItem key={item.value} item={item} current={item.value === value} wrap={panelWidth === 'auto'} onPick={() => { setOpen(false); onSelect(item.value); }} />
           ))}
+          {footer?.(() => setOpen(false))}
         </div>
       )}
     </div>
@@ -484,6 +508,11 @@ export const LABEL_COLORS = [categoryTones.blueGray, categoryTones.mauve, palett
 // Trois tailles pour un seul et même rendu de pastille : `xs` sur les cartes de
 // la banque (la ligne de métadonnées est serrée), `sm` dans le panneau de
 // filtres, `md` dans les éditeurs de question.
+/** Longueur maximale d'un nom sur une pastille, toutes pastilles confondues.
+ *  Généreux (un libellé ou un chapitre y tient presque toujours en entier) mais
+ *  borné : c'est la largeur du panneau de filtres, la plus étroite des surfaces
+ *  qui en portent, qui fixe le plafond. */
+const PILL_MAX_CHARS = 30;
 const LABEL_PILL_SIZES = {
   xs: { fontSize: 10.5, padding: '3px 9px', gap: 5, affordance: 13, icon: 8 },
   sm: { fontSize: 11, padding: '4px 8px', gap: 5, affordance: 15, icon: 9 },
@@ -514,18 +543,46 @@ export const labelTint = (color: string) => withAlpha(color, 0.22);
  *    ça, c'est le bouton « supprimer » de `LabelEditor`.
  *  Sur les cartes de la banque, la pastille n'a ni l'un ni l'autre.
  *
- *  Le fond coloré est un `span`, pas un `button` : `onClick` (bascule de filtre)
- *  est porté par le libellé lui-même, pour que le crayon et la croix restent des
- *  boutons frères — un `<button>` imbriqué dans un `<button>` est invalide.
+ *  **Toute la pastille est cliquable**, pictogramme et retraits compris : c'est
+ *  la pastille entière qu'on vise du regard, pas son texte. Elle ne peut pas
+ *  être un `<button>` pour autant — le crayon et la croix en sont, et un
+ *  `<button>` dans un `<button>` est invalide — d'où un `span` porteur de
+ *  `role="button"`, du focus clavier et d'Entrée/Espace. Le crayon et la croix
+ *  gardent la priorité en arrêtant la propagation : cliquer le crayon modifie le
+ *  libellé, il ne bascule pas le filtre au passage.
+ *
+ *  Jusqu'au 18/08/2026 seul le TEXTE était cliquable : viser le pictogramme d'un
+ *  type de réponse, ou le retrait à gauche d'un libellé, ne faisait rien.
  *
  *  `icon` : pictogramme collé à gauche du texte, pour les filtres de type de
- *  réponse qui reprennent la même pastille (voir `RESPONSE_TYPE_ICONS`). */
-export function LabelPill({ name, color, size = 'sm', active = false, icon, onClick, onEdit, onRemove, editTitle, removeTitle }: {
+ *  réponse qui reprennent la même pastille (voir `RESPONSE_TYPE_ICONS`).
+ *
+ *  `color` est **facultatif** : sans lui, la pastille est neutre (fond en creux,
+ *  liseré au repos). C'est le cas des filtres qui ne portent pas de couleur —
+ *  statut, chapitre. Ils avaient jusqu'au 18/08/2026 leur propre état
+ *  sélectionné, en aplat d'encre pleine : deux façons de dire « sélectionné »
+ *  cohabitaient donc dans le même panneau, l'une criarde et l'autre discrète.
+ *  Il n'y en a plus qu'une, celle-ci, et elle vit ici seule.
+ *
+ *  Le nom est coupé à `PILL_MAX_CHARS`, sans exception : un seul nom un peu long
+ *  — un titre de chapitre, typiquement — élargissait sinon le panneau de filtres
+ *  au-delà de sa colonne, qui se mettait à défiler horizontalement. Le nom
+ *  complet reste lisible au survol. */
+export function LabelPill({ name, color, size = 'sm', active = false, excluded = false, icon, title, onClick, onEdit, onRemove, editTitle, removeTitle }: {
   name: string;
-  color: string;
+  /** Absent = pastille neutre (voir plus haut). */
+  color?: string;
   size?: keyof typeof LABEL_PILL_SIZES;
+  /** Sélectionné : liseré d'encre. */
   active?: boolean;
+  /** Sélectionné en négatif : même liseré, en rouge. Exclusif de `active` — un
+   *  filtre est inclus ou exclu, jamais les deux (voir le cycle de clic de
+   *  `BankContent`). Le rouge est celui des chips d'exclusion d'avant le
+   *  18/08/2026 : c'est déjà la couleur que « exclu » avait dans l'onglet. */
+  excluded?: boolean;
   icon?: ReactNode;
+  /** Infobulle de la pastille. Par défaut le nom complet, quand il a été coupé. */
+  title?: string;
   onClick?: () => void;
   onEdit?: () => void;
   onRemove?: () => void;
@@ -533,7 +590,8 @@ export function LabelPill({ name, color, size = 'sm', active = false, icon, onCl
   removeTitle?: string;
 }) {
   const s = LABEL_PILL_SIZES[size];
-  const displayName = name.length > 18 ? name.slice(0, 18) + '…' : name;
+  const cut = name.length > PILL_MAX_CHARS;
+  const displayName = cut ? name.slice(0, PILL_MAX_CHARS) + '…' : name;
   const affordance: CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     width: s.affordance, height: s.affordance, borderRadius: '50%', padding: 0,
@@ -541,32 +599,172 @@ export function LabelPill({ name, color, size = 'sm', active = false, icon, onCl
   };
   return (
     <span
+      title={title ?? (cut ? name : undefined)}
+      // Le rôle et le focus ne sont posés que si la pastille fait réellement
+      // quelque chose au clic : sur une carte de la banque, elle n'est qu'un
+      // témoin et n'a rien à faire dans l'ordre de tabulation.
+      {...(onClick ? {
+        role: 'button' as const,
+        tabIndex: 0,
+        onClick,
+        onKeyDown: (e: React.KeyboardEvent) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();   // Espace ferait défiler la page
+          onClick();
+        },
+      } : {})}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: s.gap, flexShrink: 0,
         fontSize: s.fontSize, padding: s.padding, borderRadius: 999, fontFamily: 'inherit',
-        // Aucun liseré au repos : sur une pastille l'entourage ne se voit qu'aux
-        // deux extrémités arrondies, où il lit comme un défaut de rendu plutôt
-        // que comme une bordure. Seul l'état actif en porte un, c'est son signal.
-        border: `1px solid ${active ? palette.ink : 'transparent'}`,
-        boxShadow: active ? `0 0 0 2px ${ink(0.25)}` : 'none',
-        background: labelTint(color), color: palette.ink, fontWeight: active ? 600 : 400,
+        cursor: onClick ? 'pointer' : undefined,
+        // Sur une pastille colorée, l'entourage au repos ne se voit qu'aux deux
+        // extrémités arrondies, où il lit comme un défaut de rendu plutôt que
+        // comme une bordure : elle n'en porte donc qu'une fois sélectionnée,
+        // c'est son signal. Une pastille neutre n'a pas ce luxe — sans fond
+        // coloré, il ne resterait rien pour dire où elle commence : elle garde un
+        // filet clair au repos, qui prend la couleur de la sélection ensuite.
+        // Le fond, lui, ne bouge jamais : c'est l'identité du libellé, elle ne
+        // peut pas servir en même temps d'état.
+        border: `1px solid ${excluded ? palette.danger : active ? palette.ink : color ? 'transparent' : palette.line}`,
+        boxShadow: excluded ? `0 0 0 2px ${withAlpha(palette.danger, 0.25)}`
+          : active ? `0 0 0 2px ${ink(0.25)}` : 'none',
+        background: color ? labelTint(color) : palette.surfaceSunken,
+        // L'encre pleine est réservée à la sélection : au repos, une pastille
+        // neutre reste en retrait, là où la colorée est déjà portée par son fond.
+        color: excluded ? palette.danger : active || color ? palette.ink : palette.inkMuted,
+        fontWeight: active || excluded ? 600 : 400,
       }}
     >
       {icon && <span style={{ display: 'flex', flexShrink: 0, color: palette.inkSoft }}>{icon}</span>}
+      {/* `stopPropagation` : le crayon et la croix sont posés SUR une surface
+          cliquable, ils doivent donc l'empêcher de se déclencher derrière eux.
+          Sans ça, modifier un libellé basculerait aussi son filtre. */}
       {onEdit && (
-        <button type="button" onClick={onEdit} title={editTitle} style={affordance}>
+        <button type="button" onClick={e => { e.stopPropagation(); onEdit(); }} title={editTitle} style={affordance}>
           <Pencil size={s.icon} strokeWidth={2} />
         </button>
       )}
-      {onClick
-        ? <button type="button" onClick={onClick} style={{ border: 'none', background: 'none', color: 'inherit', font: 'inherit', padding: 0, cursor: 'pointer' }}>{displayName}</button>
-        : displayName}
+      {displayName}
       {onRemove && (
-        <button type="button" onClick={onRemove} title={removeTitle} style={affordance}>
+        <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }} title={removeTitle} style={affordance}>
           <X size={s.icon} strokeWidth={2.2} />
         </button>
       )}
     </span>
+  );
+}
+
+/** Le menu « ajouter un libellé » des deux éditeurs de question. Tout ce qui
+ *  concerne les libellés de l'atelier tient dans le panneau, comme dans les
+ *  filtres de la banque : choisir (clic sur la pastille), modifier (crayon de la
+ *  pastille), créer (rangée du bas). Rien ne se pose plus à côté du bouton —
+ *  la rangée de création occupait auparavant la place du menu dans le
+ *  formulaire, si bien qu'on ne voyait plus les libellés existants au moment
+ *  précis où l'on décidait d'en créer un.
+ *
+ *  Les pastilles listées sont celles qui ne sont PAS déjà sur la question : le
+ *  menu propose, il ne bascule pas. Le détachement se fait à la croix de la
+ *  pastille posée sous le bouton (`onRemove` de `LabelPill`).
+ *
+ *  `onCreate` et `onEdit` sont optionnels et commandent chacun leur affordance :
+ *  sans eux, pas de rangée de création ni de crayon. Le parcours passe par là
+ *  (voir `showLabels`/`onUpdatePool` de `InlineQuestionEditor`) — un bouton qui
+ *  n'aboutit à rien vaut moins que pas de bouton. */
+export function LabelPicker({ pools, selected, onToggle, onCreate, onEdit, panelWidth = 'auto', triggerStyle, wrapperStyle, children }: {
+  pools: readonly Pool[];
+  /** Libellés déjà portés par la question — retirés de la liste proposée. */
+  selected: readonly string[];
+  onToggle: (id: string) => void;
+  /** Crée le libellé ET l'attache : c'est l'appelant qui sait faire les deux. */
+  onCreate?: (name: string) => void;
+  onEdit?: (id: string) => void;
+  panelWidth?: number | 'trigger' | 'auto';
+  triggerStyle?: CSSProperties;
+  wrapperStyle?: CSSProperties;
+  children: ReactNode;
+}) {
+  const t = useTranslations('examen');
+  return (
+    <SelectMenu
+      items={pools.filter(p => !selected.includes(p.id)).map(p => ({ value: p.id, label: p.name, color: p.color }))}
+      onSelect={onToggle}
+      onEditItem={onEdit}
+      editTitle={t('bank.editLabelTitle')}
+      variant="pills"
+      // Posé sur la feuille d'examen comme dans le panneau de la banque : le
+      // conteneur défilant le rogne plutôt que de le laisser flotter.
+      onScroll="clip"
+      panelWidth={panelWidth}
+      triggerStyle={triggerStyle}
+      wrapperStyle={wrapperStyle}
+      footer={onCreate ? close => <LabelCreateRow onCreate={name => { onCreate(name); close(); }} /> : undefined}
+    >
+      {children}
+    </SelectMenu>
+  );
+}
+
+/** Rangée de création du bas du `LabelPicker`. Repliée, c'est une entrée de menu
+ *  ordinaire ; dépliée, un champ et ses deux boutons.
+ *
+ *  Son état de saisie vit ici et nulle part ailleurs : le composant est monté par
+ *  le panneau, donc démonté à sa fermeture, et une saisie abandonnée ne réapparaît
+ *  pas à l'ouverture suivante. */
+function LabelCreateRow({ onCreate }: { onCreate: (name: string) => void }) {
+  const t = useTranslations('examen');
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState('');
+
+  function submit() {
+    const value = name.trim();
+    if (!value) return;
+    onCreate(value);
+  }
+
+  if (!creating) {
+    return (
+      <MenuItem
+        item={{ value: '__new__', label: t('editor.newLabelOption') }}
+        current={false}
+        wrap
+        onPick={() => setCreating(true)}
+      />
+    );
+  }
+
+  const actionBtn: CSSProperties = {
+    fontSize: 11.5, padding: '5px 12px', borderRadius: 999, cursor: 'pointer',
+    fontFamily: 'inherit', flex: 1,
+  };
+  return (
+    // Champ au-dessus des boutons plutôt qu'en rangée : le panneau est étroit
+    // (`MENU_AUTO_MAX`), une rangée de trois y passerait à la ligne d'elle-même,
+    // en moins lisible.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 5px 3px', width: 190 }}>
+      <input
+        autoFocus
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') submit();
+          if (e.key === 'Escape') { setCreating(false); setName(''); }
+        }}
+        placeholder={t('editor.labelNamePlaceholder')}
+        style={{
+          width: '100%', boxSizing: 'border-box', fontSize: 12, padding: '6px 11px',
+          borderRadius: 999, border: `1px solid ${palette.lineStrong}`, outline: 'none',
+          fontFamily: 'inherit', background: palette.surfaceInput, color: palette.ink,
+        }}
+      />
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button type="button" onClick={submit} style={{ ...actionBtn, border: `1px solid ${palette.ink}`, background: palette.ink, color: palette.onInk }}>
+          {t('add')}
+        </button>
+        <button type="button" onClick={() => { setCreating(false); setName(''); }} style={{ ...actionBtn, border: `1px solid ${palette.line}`, background: 'transparent', color: palette.inkFaint }}>
+          {t('cancelLower')}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1403,17 +1601,9 @@ export function ShuffleNoticeIcon({ title }: { title: string }) {
   );
 }
 
-export function ActiveChip({ label, color, negative, filterKey, onRemove, setDraggedKey }: { label: string; color?: string; negative: boolean; filterKey: string; onRemove: () => void; setDraggedKey: (key: string | null) => void }) {
-  return (
-    <span
-      draggable
-      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', filterKey); setDraggedKey(filterKey); }}
-      onDragEnd={() => setDraggedKey(null)}
-      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 6px 5px 11px', borderRadius: 999, border: negative ? `1px solid ${withAlpha(palette.danger, 0.45)}` : `1px solid ${ink(0.30)}`, background: negative ? palette.danger : palette.ink, color: palette.parchment, fontFamily: 'inherit', cursor: 'grab', clipPath: 'inset(0 round 999px)' }}
-    >
-      {color && <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, display: 'inline-block' }} />}
-      {label}
-      <button onClick={onRemove} style={{ border: 'none', background: 'none', color: palette.parchment, cursor: 'pointer', fontSize: 13, padding: '0 4px', lineHeight: 1, opacity: 0.7 }}>×</button>
-    </span>
-  );
-}
+// `ActiveChip` vivait ici : la reprise d'un filtre actif au-dessus de la liste,
+// glissable d'une zone « inclure » vers une zone « exclure ». Les deux zones ont
+// disparu le 18/08/2026 au profit du cycle de clic dans le panneau lui-même
+// (voir `cycleFilter` dans BankContent) — un filtre se lit et se règle
+// désormais au même endroit, et le compteur du bouton « filtres » dit combien
+// sont actifs.
