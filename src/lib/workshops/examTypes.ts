@@ -246,6 +246,25 @@ export type ExerciseChoice = {
   text: string;
 };
 
+// Vue « sans réponse » des réglages de type, telle qu'un candidat la reçoit
+// pendant un exercice. Sans elle, la page d'exercice ne peut pas dessiner une
+// grille (elle en ignore les lignes et colonnes) ni une liste au bon nombre de
+// champs — d'où le repli historique de tous ces types sur un simple champ
+// texte.
+//
+// ⚠️ `tableChecked` en est exclu : les cases justes de la grille sont une
+// correction, au même titre que `correctChoices`. La construction se fait en
+// LISTE BLANCHE (`toExerciseTypeOptions` dans @/lib/workshops/exam), pas en
+// retirant la clé sensible : un futur réglage qui porterait la réponse ne
+// fuiterait pas par simple oubli.
+export type ExerciseTypeOptions = Omit<QuestionTypeOptions, 'tableChecked'> & {
+  /** matching — colonne de droite, MÉLANGÉE et détachée de la gauche. Les paires
+   *  sont stockées « gauche :: droite » dans une même entrée de `choices` ; les
+   *  envoyer telles quelles livrerait la correction. `choices` ne porte donc que
+   *  la gauche, et l'ordre d'ici ne dit rien de l'appariement attendu. */
+  matchRight?: string[];
+};
+
 // Une question liée telle qu'un candidat la reçoit : mêmes garanties que
 // `ExercisePrompt` (ni `answer` ni `correctChoices`), sans les champs communs
 // (image, audio, titre) qui restent portés par la question principale.
@@ -254,6 +273,7 @@ export type ExercisePart = {
   responseType: ResponseType;
   choices: ExerciseChoice[];
   textLines: number;
+  typeOptions: ExerciseTypeOptions;
 };
 
 export type ExercisePrompt = {
@@ -267,6 +287,7 @@ export type ExercisePrompt = {
   responseType: ResponseType;
   choices: ExerciseChoice[];
   textLines: number;
+  typeOptions: ExerciseTypeOptions;
   /** Questions liées à traiter dans la foulée, dans l'ordre. */
   parts: ExercisePart[];
 };

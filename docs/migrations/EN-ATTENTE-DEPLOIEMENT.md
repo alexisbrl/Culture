@@ -33,6 +33,16 @@ et l'incident du 22/06/2026 dans `docs/changelog.md`.
 
 ## À appliquer
 
+- **15/08/2026 — `exam_questions.context` : défaut à `'parcours'`** (`2026-08-15-context-defaut-parcours.sql`) :
+  bascule le `DEFAULT` de la colonne de `'exam'` à `'parcours'`. Règle métier :
+  un groupe est toujours d'un côté ou de l'autre, et à défaut il va dans le
+  parcours. Non destructif, aucune ligne existante touchée.
+  **Prérequis** : le code qui passe le contexte explicitement des deux côtés
+  (`saveQuestion(..., 'exam')` côté banque, paramètre `context` devenu
+  obligatoire dans `lib/workshops/exam.ts`) doit être **déployé**. Avant ça, la
+  banque d'examen en production s'en remet encore à ce `DEFAULT` et créerait des
+  questions de parcours sans aucune erreur.
+
 - **11/08/2026 — Groupes de questions, phase contract** (`2026-08-11-groupes-de-questions-contract.sql`) :
   supprime les 14 colonnes de contenu de `exam_questions` (`content`,
   `response_type`, `answer`, `choices`, `correct_choices`, `shuffle_choices`,

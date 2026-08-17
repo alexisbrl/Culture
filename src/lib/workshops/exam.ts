@@ -22,6 +22,7 @@ import type {
   ExercisePrompt,
   ExerciseChoice,
   ExerciseResult,
+  ExerciseTypeOptions,
   ResponseType,
 } from '@/lib/workshops/examTypes';
 import { toBloomLevel, toResponseType, type QuestionTypeOptions } from '@/lib/workshops/examTypes';
@@ -182,6 +183,11 @@ function rowToQuestion(row: GroupRow, items: ItemRow[], notionsByItem: NotionLin
 // mise à jour, une colonne absente du payload garde sa valeur — c'est ce qui
 // permet aux ré-écritures de masse (nettoyage de libellé, suppression) de ne pas
 // requalifier silencieusement une question de parcours en question d'examen.
+//
+// Seul `saveQuestions` (masse) use de cette omission. `saveQuestion`, qui est le
+// chemin de CRÉATION, exige désormais un contexte explicite : sans lui, une
+// nouvelle ligne se rangeait selon le `DEFAULT` de la colonne (`'exam'`) sans
+// qu'aucune erreur ne le signale.
 // `chapter_id` suit la même règle et n'est écrit que dans le contexte
 // « parcours » : la banque d'examen ne connaît pas les chapitres.
 function questionToRow(workshopId: string, q: Question, context?: QuestionContext) {
@@ -377,7 +383,16 @@ export async function getExamBankData(workshopId: string): Promise<{
   return { questions, pools, exams };
 }
 
-export async function saveQuestion(workshopId: string, question: Question, context?: QuestionContext): Promise<void> {
+// `context` est OBLIGATOIRE : l'enregistrement d'une question isolée est le seul
+// chemin de création, et laisser le `DEFAULT` de la colonne trancher rangeait la
+// question du mauvais côté sans la moindre erreur (ni au build, ni à
+// l'exécution — `'exam'` est une valeur légale du CHECK). Chaque appelant
+// déclare donc son côté, et le compilateur signale tout oubli.
+//
+// La ré-écriture de masse (`saveQuestions`), elle, n'en prend toujours pas : son
+// rôle est justement de ne PAS requalifier les lignes existantes (voir
+// `questionToRow`).
+export async function saveQuestion(workshopId: string, question: Question, context: QuestionContext): Promise<void> {
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_questions').upsert(questionToRow(workshopId, question, context));
   if (error) throw new Error(error.message);
@@ -438,9 +453,53 @@ function shuffled<T>(items: T[]): T[] {
 // le temps de répondre, contrairement à un téléchargement ponctuel.
 const MEDIA_URL_TTL_SECONDS = 3600;
 
-function toChoices(source: { choices?: string[]; shuffleChoices?: boolean }): ExerciseChoice[] {
-  const choices: ExerciseChoice[] = (source.choices ?? []).map((text, index) => ({ index, text }));
+// Les paires d'un « matching » sont stockées « gauche :: droite » dans UNE
+// entrée de `choices` (voir l'éditeur, tabs/examen/questionFields.tsx). Les
+// transmettre telles quelles livrerait la correction avec l'énoncé : le
+// candidat n'a plus qu'à lire. On ne garde donc que la colonne de gauche dans
+// `choices`, la droite partant mélangée et détachée dans `matchRight`.
+const MATCH_SEPARATOR = ' :: ';
+
+function matchSides(choices: string[]): { left: string[]; right: string[] } {
+  const pairs = choices.map((entry) => entry.split(MATCH_SEPARATOR));
+  return {
+    left: pairs.map((pair) => (pair[0] ?? '').trim()),
+    right: pairs.map((pair) => (pair[1] ?? '').trim()),
+  };
+}
+
+type ChoiceSource = { choices?: string[]; shuffleChoices?: boolean; responseType: ResponseType };
+
+function toChoices(source: ChoiceSource): ExerciseChoice[] {
+  const raw = source.choices ?? [];
+  const labels = source.responseType === 'matching' ? matchSides(raw).left : raw;
+  const choices: ExerciseChoice[] = labels.map((text, index) => ({ index, text }));
   return source.shuffleChoices ? shuffled(choices) : choices;
+}
+
+// Réglages de type envoyés au candidat. LISTE BLANCHE volontaire : on énumère
+// ce qui sort, on ne retire pas ce qui doit rester. `tableChecked` (cases
+// justes de la grille) est une correction et n'a rien à faire ici — l'oublier
+// reviendrait à livrer la réponse avec l'énoncé. Tout nouveau réglage est donc
+// invisible du candidat tant qu'il n'est pas ajouté ici sciemment.
+function toExerciseTypeOptions(source: ChoiceSource & { typeOptions?: QuestionTypeOptions }): ExerciseTypeOptions {
+  const options = source.typeOptions ?? {};
+  return {
+    // Mélangée : à rangs égaux, la droite se lirait en face de sa gauche.
+    matchRight:
+      source.responseType === 'matching'
+        ? shuffled(matchSides(source.choices ?? []).right)
+        : undefined,
+    listNumbered: options.listNumbered,
+    listExpected: options.listExpected,
+    tableRows: options.tableRows,
+    tableCols: options.tableCols,
+    tableUnique: options.tableUnique,
+    matchSplit: options.matchSplit,
+    fileTypes: options.fileTypes,
+    fileUrl: options.fileUrl,
+    drawOnImage: options.drawOnImage,
+  };
 }
 
 async function toPrompt(q: Question): Promise<ExercisePrompt> {
@@ -457,6 +516,7 @@ async function toPrompt(q: Question): Promise<ExercisePrompt> {
     responseType: q.responseType,
     choices: toChoices(q),
     textLines: q.textLines ?? 4,
+    typeOptions: toExerciseTypeOptions(q),
     // Les questions liées suivent la principale dans le même écran : l'image et
     // l'audio ne sont pas répétés (éléments communs), le reste leur est propre.
     parts: (q.parts ?? []).map((part) => ({
@@ -464,6 +524,7 @@ async function toPrompt(q: Question): Promise<ExercisePrompt> {
       responseType: part.responseType,
       choices: toChoices(part),
       textLines: part.textLines ?? 4,
+      typeOptions: toExerciseTypeOptions(part),
     })),
   };
 }

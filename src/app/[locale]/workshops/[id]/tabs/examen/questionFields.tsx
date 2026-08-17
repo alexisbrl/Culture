@@ -85,8 +85,9 @@ export type QuestionFieldValues = {
 type Props = {
   values: QuestionFieldValues;
   onChange: (patch: Partial<QuestionFieldValues>) => void;
-  /** Numéro affiché devant l'énoncé (« 2. »), aligné sur le rendu de la copie. */
-  number: number;
+  /** Numéro affiché devant l'énoncé (« 2. »), aligné sur le rendu de la copie.
+   *  Absent hors feuille (éditeur du parcours) : rien n'est numéroté. */
+  number?: number;
   /** Révèle les réglages secondaires à leur place naturelle (voir InlineQuestionEditor). */
   advancedOpen: boolean;
   notions: { id: string; title: string }[];
@@ -618,7 +619,12 @@ export function QuestionFields({
     <>
       {/* énoncé + médias (question principale) ou retrait (question liée) */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-        <span style={{ flex: 'none', fontSize: 14, fontWeight: 600, color: palette.ink, paddingTop: 10 }}>{number}.</span>
+        {/* Le numéro n'existe que sur une copie, où il repère l'énoncé. Hors
+            feuille (parcours), il n'y a rien à numéroter : la question n'a pas
+            de rang, elle est tirée au hasard. */}
+        {number !== undefined && (
+          <span style={{ flex: 'none', fontSize: 14, fontWeight: 600, color: palette.ink, paddingTop: 10 }}>{number}.</span>
+        )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <AutoTextarea value={values.content} onChange={v => patch({ content: v })} placeholder={statementPlaceholder} />
         </div>

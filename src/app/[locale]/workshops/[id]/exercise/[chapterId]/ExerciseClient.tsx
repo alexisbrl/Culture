@@ -20,7 +20,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { ArrowRight, Check, Leaf, Loader2, RotateCw, Sprout, X } from 'lucide-react';
+import { ArrowRight, Check, Droplet, FileText, Leaf, Loader2, RotateCw, Sprout, Upload, X } from 'lucide-react';
 import { palette, radius, withAlpha, shadow } from '@/lib/theme';
 import { Button } from '@/components/ui/button';
 import LinkButton from '@/components/LinkButton';
@@ -41,7 +41,52 @@ type Props = {
 // progression (docs/backlog.md). Voir docs/chantiers/2026-08-05-refonte-ui-design-system.md, T23.
 const EXERCISE_SESSION_LENGTH = 10;
 
-export default function ExerciseClient({ locale, workshopId, workshopName, chapterId, chapterName }: Props) {
+// Réponses des types que la correction serveur ne sait pas encore consommer
+// (`gradeExercise` ne prend que des index de choix) : elles vivent côté client
+// le temps de la question, pour que la zone de réponse soit celle du type et
+// non un champ texte de repli. Regroupées en UN objet par énoncé plutôt qu'en
+// cinq tableaux parallèles, qu'il faudrait tous réindexer à chaque tirage.
+type ExtraAnswer = {
+  /** liste — une entrée par ligne attendue. */
+  list: string[];
+  /** tableau — cases cochées, en clés « ligne-colonne » (même forme que `tableChecked`). */
+  table: string[];
+  /** matching — index de l'élément de gauche → index de sa correspondance à droite. */
+  match: Record<number, number>;
+  /** dessin — une polyligne par trait, en points « x,y » du repère 0-100. */
+  strokes: string[];
+  /** fichier — nom du fichier déposé (le dépôt réel reste à brancher, voir plus bas). */
+  fileName: string;
+};
+
+const emptyExtra = (): ExtraAnswer => ({ list: [], table: [], match: {}, strokes: [], fileName: '' });
+
+/** Nombre de lignes attendues d'une liste — au moins une, sinon la zone de
+ *  réponse serait vide et l'énoncé invalidable. */
+function listRowCount(statement: ExercisePart): number {
+  return Math.max(1, statement.typeOptions.listExpected ?? statement.textLines ?? 3);
+}
+
+/** Un énoncé attend-il une réponse saisie par l'élève ? `sans_reponse` est le
+ *  seul type où le bouton ne fait qu'afficher la correction. */
+function isAnswered(statement: ExercisePart, choices: number[], text: string, extra: ExtraAnswer): boolean {
+  switch (statement.responseType) {
+    case 'sans_reponse': return true;
+    case 'qcs':
+    case 'qcm': return choices.length > 0;
+    case 'liste': return extra.list.some((v) => v.trim().length > 0);
+    case 'tableau': return extra.table.length > 0;
+    case 'matching': return Object.keys(extra.match).length > 0;
+    case 'dessin': return extra.strokes.length > 0;
+    case 'fichier': return extra.fileName.length > 0;
+    default: return text.trim().length > 0;
+  }
+}
+
+// `chapterName` n'est plus affiché : la maquette réserve l'en-tête de la coque à
+// la progression et aux gouttes. La prop reste au contrat de la page, qui la
+// résout déjà pour son `notFound()`.
+export default function ExerciseClient({ locale, workshopId, workshopName, chapterId }: Props) {
   const t = useTranslations('exercise');
   const tExam = useTranslations('examen');
 
@@ -51,6 +96,7 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
   // les suivants ses questions liées, dans l'ordre de `prompt.parts`.
   const [selected, setSelected] = useState<number[][]>([[]]);
   const [freeText, setFreeText] = useState<string[]>(['']);
+  const [extra, setExtra] = useState<ExtraAnswer[]>([emptyExtra()]);
   const [result, setResult] = useState<ExerciseResult | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
@@ -65,6 +111,7 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
       setResult(null);
       setSelected([[]]);
       setFreeText(['']);
+      setExtra([emptyExtra()]);
       const res = await drawExercise(workshopId, chapterId, excludeId);
       if (res.error) setError(res.error);
       setPrompt(res.prompt);
@@ -73,6 +120,7 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
       const slots = 1 + (res.prompt?.parts.length ?? 0);
       setSelected(Array.from({ length: slots }, () => []));
       setFreeText(Array.from({ length: slots }, () => ''));
+      setExtra(Array.from({ length: slots }, emptyExtra));
       setLoading(false);
     },
     [workshopId, chapterId]
@@ -107,9 +155,15 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
 
   /** Énoncés de la grappe, dans l'ordre d'affichage et de correction : la
    *  question principale puis ses questions liées. */
-  const statements = prompt
+  const statements: ExercisePart[] = prompt
     ? [
-        { content: prompt.content, responseType: prompt.responseType, choices: prompt.choices, textLines: prompt.textLines },
+        {
+          content: prompt.content,
+          responseType: prompt.responseType,
+          choices: prompt.choices,
+          textLines: prompt.textLines,
+          typeOptions: prompt.typeOptions,
+        },
         ...prompt.parts,
       ]
     : [];
@@ -120,16 +174,15 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
   function setTextAt(idx: number, next: string) {
     setFreeText((prev) => prev.map((v, i) => (i === idx ? next : v)));
   }
+  function setExtraAt(idx: number, patch: Partial<ExtraAnswer>) {
+    setExtra((prev) => prev.map((v, i) => (i === idx ? { ...v, ...patch } : v)));
+  }
 
   // Une réponse est requise sur CHAQUE énoncé qui en attend une, sauf ceux sans
   // réponse attendue (où le bouton sert juste à afficher la correction).
   const canValidate =
     !!prompt && !result && !checking &&
-    statements.every((s, i) => {
-      if (s.responseType === 'qcs' || s.responseType === 'qcm') return (selected[i] ?? []).length > 0;
-      if (s.responseType === 'sans_reponse') return true;
-      return (freeText[i] ?? '').trim().length > 0;
-    });
+    statements.every((s, i) => isAnswered(s, selected[i] ?? [], freeText[i] ?? '', extra[i] ?? emptyExtra()));
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 40, display: 'flex', flexDirection: 'column', background: palette.cream }}>
@@ -141,13 +194,32 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
         >
           <X size={16} strokeWidth={1.75} />
         </Link>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: palette.inkFaint, textTransform: 'uppercase' }}>
-            {t('chapterLabel')}
-          </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {chapterName}
-          </div>
+        {/* Barre d'avancement de la session (maquette : `exProgressW`). Le
+            tirage serveur pioche indéfiniment ; la longueur de session est une
+            règle client (`EXERCISE_SESSION_LENGTH`), c'est donc elle qui donne
+            le dénominateur. */}
+        <div
+          title={t('progressTitle', { done: answeredCount, total: EXERCISE_SESSION_LENGTH })}
+          style={{ flex: 1, height: 10, borderRadius: radius.pill, background: palette.surfaceSunken, boxShadow: shadow.inset, overflow: 'hidden' }}
+        >
+          <div
+            style={{
+              height: '100%', borderRadius: radius.pill, background: palette.green,
+              width: `${Math.min(100, (answeredCount / EXERCISE_SESSION_LENGTH) * 100)}%`,
+              transition: 'width 360ms cubic-bezier(0.22, 1, 0.36, 1)',
+            }}
+          />
+        </div>
+        {/* Gouttes gagnées dans CETTE session — une par grappe réussie, comme
+            l'annonce l'écran de fin. La maquette affiche un total d'arrosoir,
+            qui n'existe pas encore côté serveur : afficher le compte de la
+            session est la seule valeur vraie dont dispose cet écran. */}
+        <div
+          title={t('dropletsTitle')}
+          style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 700, color: palette.greenBrand, background: withAlpha(palette.green, 0.12), borderRadius: radius.pill, padding: '6px 12px' }}
+        >
+          <Droplet size={14} strokeWidth={1.75} />
+          {correctCount}
         </div>
       </div>
 
@@ -166,10 +238,20 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
             </div>
           </div>
         ) : (
-        <div style={{ maxWidth: 680, margin: '0 auto', width: '100%' }}>
+        // `margin: auto` et non `justifyContent: center` : sur un conteneur
+        // défilant, le centrage flex rend inatteignable la partie qui dépasse
+        // (les navigateurs refusent un défilement négatif). La marge auto, elle,
+        // se résout à 0 dès que le contenu est plus haut que la zone — l'énoncé
+        // est centré quand il est court, aligné en haut et défilable quand il
+        // est long. Voir .claude/rules/frontend-patterns.md.
+        <div style={{ maxWidth: 680, margin: 'auto', width: '100%' }}>
           {error && <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 12 }}>{error}</div>}
 
-          <div style={{ background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 16, padding: '22px 24px', boxShadow: shadow.sm }}>
+          {/* Pas de carte autour de l'énoncé actif : la maquette le pose
+              directement sur le fond de la coque. Seuls les énoncés DÉJÀ
+              corrigés prennent une carte (voir la pile plus bas), ce qui donne
+              au regard le repère « ce qui est fait / ce qui reste ». */}
+          <div style={{ paddingTop: 8 }}>
             {loading ? (
               <div style={{ padding: '30px 0', textAlign: 'center', fontSize: 13, color: palette.inkSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> {t('drawing')}
@@ -209,9 +291,11 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
                   statement={statements[0]}
                   selected={selected[0] ?? []}
                   freeText={freeText[0] ?? ''}
+                  extra={extra[0] ?? emptyExtra()}
                   result={result}
                   onChoices={(next) => setChoicesAt(0, next)}
                   onText={(next) => setTextAt(0, next)}
+                  onExtra={(patch) => setExtraAt(0, patch)}
                 />
 
                 {prompt.parts.map((part, i) => (
@@ -223,34 +307,45 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
                       statement={part}
                       selected={selected[i + 1] ?? []}
                       freeText={freeText[i + 1] ?? ''}
+                      extra={extra[i + 1] ?? emptyExtra()}
                       result={result?.parts?.[i] ?? null}
                       onChoices={(next) => setChoicesAt(i + 1, next)}
                       onText={(next) => setTextAt(i + 1, next)}
+                      onExtra={(patch) => setExtraAt(i + 1, patch)}
                     />
                   </div>
                 ))}
 
-                <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-                  {!result ? (
-                    <Button variant="primary" onClick={handleValidate} disabled={!canValidate}>
-                      {checking && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-                      {/* « Voir la réponse » seulement si AUCUN énoncé de la
-                          grappe n'attend de réponse : dès qu'il y en a un, le
-                          bouton valide bien quelque chose. */}
-                      {statements.every((s) => s.responseType === 'sans_reponse') ? t('revealAnswer') : t('validate')}
-                    </Button>
-                  ) : (
-                    <Button variant="primary" onClick={() => draw(prompt.id)}>
-                      <RotateCw size={14} strokeWidth={1.75} /> {t('next')}
-                    </Button>
-                  )}
-                </div>
               </>
             )}
           </div>
         </div>
         )}
       </div>
+
+      {/* Bande de décision, ancrée en bas de la coque (maquette : bloc
+          `exBandRef`). Elle sort du flux défilant : le bouton reste atteignable
+          quel que soit la longueur de l'énoncé — une grille de tableau ou une
+          liste de six lignes le repoussait auparavant hors de l'écran. */}
+      {!done && prompt && !loading && (
+        <div style={{ flex: 'none', borderTop: `1px solid ${palette.line}`, background: palette.surfaceRaised, boxShadow: `0 -8px 24px -12px ${withAlpha(palette.ink, 0.28)}`, padding: '14px 20px' }}>
+          <div style={{ maxWidth: 680, margin: '0 auto', width: '100%', display: 'flex', justifyContent: 'flex-end' }}>
+            {!result ? (
+              <Button variant="primary" size="lg" onClick={handleValidate} disabled={!canValidate}>
+                {checking && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
+                {/* « Voir la réponse » seulement si AUCUN énoncé de la grappe
+                    n'attend de réponse : dès qu'il y en a un, le bouton valide
+                    bien quelque chose. */}
+                {statements.every((s) => s.responseType === 'sans_reponse') ? t('revealAnswer') : t('validate')}
+              </Button>
+            ) : (
+              <Button variant="primary" size="lg" onClick={() => draw(prompt.id)}>
+                <RotateCw size={14} strokeWidth={1.75} /> {t('next')}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -261,18 +356,22 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
  *  seuls les éléments communs (énoncé illustré, audio) ne sont pas répétés.
  *  Définie au niveau module : une fonction composant recréée à chaque rendu
  *  remonterait tout son sous-arbre (et ferait perdre le focus à la saisie). */
-function AnswerZone({ statement, selected, freeText, result, onChoices, onText }: {
+function AnswerZone({ statement, selected, freeText, extra, result, onChoices, onText, onExtra }: {
   statement: ExercisePart;
   selected: number[];
   freeText: string;
+  extra: ExtraAnswer;
   result: ExerciseResult | null;
   onChoices: (next: number[]) => void;
   onText: (next: string) => void;
+  onExtra: (patch: Partial<ExtraAnswer>) => void;
 }) {
   const t = useTranslations('exercise');
 
   const isChoice = statement.responseType === 'qcs' || statement.responseType === 'qcm';
-  const isFreeText = !isChoice && statement.responseType !== 'sans_reponse';
+  // Le champ texte n'est plus le repli de tous les types non-QCM : chaque type
+  // a désormais sa zone. Il ne sert plus qu'à la réponse rédigée.
+  const isFreeText = statement.responseType === 'textuelle';
 
   function toggleChoice(index: number) {
     if (result) return;
@@ -328,6 +427,22 @@ function AnswerZone({ statement, selected, freeText, result, onChoices, onText }
         />
       )}
 
+      {statement.responseType === 'liste' && (
+        <ListAnswer statement={statement} extra={extra} readOnly={!!result} onExtra={onExtra} />
+      )}
+      {statement.responseType === 'tableau' && (
+        <TableAnswer statement={statement} extra={extra} readOnly={!!result} onExtra={onExtra} />
+      )}
+      {statement.responseType === 'matching' && (
+        <MatchAnswer statement={statement} extra={extra} readOnly={!!result} onExtra={onExtra} />
+      )}
+      {statement.responseType === 'dessin' && (
+        <DrawAnswer extra={extra} readOnly={!!result} onExtra={onExtra} />
+      )}
+      {statement.responseType === 'fichier' && (
+        <FileAnswer statement={statement} extra={extra} readOnly={!!result} onExtra={onExtra} />
+      )}
+
       {result && (
         <div style={{ marginTop: 18, padding: '14px 16px', borderRadius: 12, border: `1px solid ${withAlpha(verdictTone, 0.35)}`, background: withAlpha(verdictTone, 0.08) }}>
           {/* Verdict masqué quand il n'y a pas de correction automatique ET
@@ -347,5 +462,409 @@ function AnswerZone({ statement, selected, freeText, result, onChoices, onText }
         </div>
       )}
     </>
+  );
+}
+
+// ─── Zones de réponse par type ────────────────────────────────────────────────
+//
+// Un composant par type, tous au niveau module pour la même raison qu'
+// `AnswerZone` : recréés à chaque rendu du parent, ils remonteraient leur
+// sous-arbre et feraient perdre le focus à la saisie en cours.
+//
+// ⚠️ Ces réponses ne sont PAS encore corrigées : `gradeExercise` ne prend que
+// des index de choix (`selections: number[][]`), donc ces types ressortent en
+// `correct: null` — exactement comme avant, quand ils tombaient tous dans un
+// champ texte de repli. Ce qui change ici est la zone de saisie, pas la
+// correction ; l'étendre demande d'élargir le contrat de `gradeParcoursAnswer`.
+
+/** liste — autant de champs que la question attend de réponses. */
+function ListAnswer({ statement, extra, readOnly, onExtra }: {
+  statement: ExercisePart;
+  extra: ExtraAnswer;
+  readOnly: boolean;
+  onExtra: (patch: Partial<ExtraAnswer>) => void;
+}) {
+  const t = useTranslations('exercise');
+  const rows = listRowCount(statement);
+  // Numérotation activée par défaut : sans réglage explicite, une liste se lit
+  // numérotée (c'est le cas de la maquette).
+  const numbered = statement.typeOptions.listNumbered ?? true;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {Array.from({ length: rows }, (_, row) => (
+        <div key={row} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {numbered && (
+            <span style={{ flex: 'none', width: 20, fontSize: 14, fontWeight: 700, color: palette.inkFaint }}>
+              {row + 1}
+            </span>
+          )}
+          <input
+            value={extra.list[row] ?? ''}
+            onChange={(e) => {
+              // On repart d'un tableau de la bonne longueur : `extra.list` est
+              // vide au premier rendu, une écriture directe à l'index laisserait
+              // des trous.
+              const next = Array.from({ length: rows }, (_, i) => extra.list[i] ?? '');
+              next[row] = e.target.value;
+              onExtra({ list: next });
+            }}
+            readOnly={readOnly}
+            placeholder={t('answerPlaceholder')}
+            style={{ flex: 1, minWidth: 0, padding: '13px 15px', borderRadius: 12, border: `1.5px solid ${palette.lineStrong}`, background: palette.surfaceInput, color: palette.ink, fontSize: 15, fontFamily: 'inherit', boxShadow: shadow.sm, boxSizing: 'border-box' }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** tableau — grille à cocher, une case par croisement ligne/colonne. */
+function TableAnswer({ statement, extra, readOnly, onExtra }: {
+  statement: ExercisePart;
+  extra: ExtraAnswer;
+  readOnly: boolean;
+  onExtra: (patch: Partial<ExtraAnswer>) => void;
+}) {
+  const rows = statement.typeOptions.tableRows ?? [];
+  const cols = statement.typeOptions.tableCols ?? [];
+  // `tableUnique` : une seule case par LIGNE (comportement « radio »).
+  const unique = statement.typeOptions.tableUnique ?? false;
+  const template = `minmax(0,1.4fr) repeat(${Math.max(cols.length, 1)}, minmax(0,1fr))`;
+
+  function toggle(key: string, rowIndex: number) {
+    if (readOnly) return;
+    const has = extra.table.includes(key);
+    if (unique) {
+      // Une seule case par ligne : on retire les autres cases de CETTE ligne.
+      const others = extra.table.filter((k) => !k.startsWith(`${rowIndex}-`));
+      onExtra({ table: has ? others : [...others, key] });
+      return;
+    }
+    onExtra({ table: has ? extra.table.filter((k) => k !== key) : [...extra.table, key] });
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowX: 'auto' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: template, gap: 8, alignItems: 'center' }}>
+        <span />
+        {cols.map((col, i) => (
+          <span key={i} style={{ textAlign: 'center', fontSize: 14.5, fontWeight: 600, color: palette.inkMuted }}>{col}</span>
+        ))}
+      </div>
+      {rows.map((row, rowIndex) => (
+        <div key={rowIndex} style={{ display: 'grid', gridTemplateColumns: template, gap: 8, alignItems: 'center' }}>
+          <span style={{ fontSize: 14.5, fontWeight: 600, color: palette.ink }}>{row}</span>
+          {cols.map((_, colIndex) => {
+            const key = `${rowIndex}-${colIndex}`;
+            const checked = extra.table.includes(key);
+            return (
+              <button
+                key={colIndex}
+                onClick={() => toggle(key, rowIndex)}
+                disabled={readOnly}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 0',
+                  borderRadius: 12, border: `1.5px solid ${checked ? palette.green : palette.lineStrong}`,
+                  background: checked ? withAlpha(palette.green, 0.1) : palette.surfaceInput,
+                  cursor: readOnly ? 'default' : 'pointer', boxShadow: shadow.sm,
+                  transition: 'border-color 120ms ease, background 120ms ease',
+                }}
+              >
+                <span style={{
+                  width: 20, height: 20, borderRadius: unique ? 999 : 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: `1.5px solid ${checked ? palette.green : palette.lineStrong}`,
+                  background: checked ? palette.green : 'transparent',
+                }}>
+                  {checked && <Check size={13} color={palette.onGreen} strokeWidth={3} />}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** matching — on touche deux éléments pour les relier, dans n'importe quel
+ *  ordre et depuis n'importe quel côté ; recliquer un encadré DÉJÀ RELIÉ le
+ *  délie. Les deux colonnes obéissent exactement à la même règle : c'est ce
+ *  qu'annonce la consigne affichée sous la grille, et rien dans l'interface ne
+ *  doit donc être inerte au clic.
+ *
+ *  La colonne de droite arrive mélangée et détachée de la gauche (voir
+ *  `matchRight` dans examTypes) : rien ici ne trahit l'appariement attendu.
+ *
+ *  L'association est matérialisée par un rang chiffré des deux côtés, là où la
+ *  maquette trace un trait en SVG — même information, sans mesurer la position
+ *  de chaque ligne à chaque rendu. */
+function MatchAnswer({ statement, extra, readOnly, onExtra }: {
+  statement: ExercisePart;
+  extra: ExtraAnswer;
+  readOnly: boolean;
+  onExtra: (patch: Partial<ExtraAnswer>) => void;
+}) {
+  const t = useTranslations('exercise');
+  // L'élément en attente porte SON CÔTÉ : une paire se commence indifféremment
+  // à gauche ou à droite (« touche 2 éléments pour les relier »). Un simple
+  // index ne suffisait pas — il obligeait à toujours partir de la gauche.
+  const [pending, setPending] = useState<{ side: 'left' | 'right'; index: number } | null>(null);
+  const left = statement.choices;
+  const right = statement.typeOptions.matchRight ?? [];
+  const split = Math.min(Math.max(statement.typeOptions.matchSplit ?? 0.5, 0.1), 0.9);
+
+  /** Index de gauche apparié à cette correspondance, s'il y en a un. */
+  function leftPairedTo(rightIndex: number): number | null {
+    const entry = Object.entries(extra.match).find(([, r]) => r === rightIndex);
+    return entry ? Number(entry[0]) : null;
+  }
+
+  /** Défait la paire portée par cet index de gauche. */
+  function unlink(leftIndex: number) {
+    const next = { ...extra.match };
+    delete next[leftIndex];
+    onExtra({ match: next });
+    setPending(null);
+  }
+
+  /** Relie les deux côtés. Une correspondance ne sert qu'une fois : sa paire
+   *  précédente est libérée, sans quoi deux éléments de gauche pointeraient sur
+   *  la même. */
+  function link(leftIndex: number, rightIndex: number) {
+    const next: Record<number, number> = {};
+    for (const [l, r] of Object.entries(extra.match)) {
+      if (r !== rightIndex && Number(l) !== leftIndex) next[Number(l)] = r;
+    }
+    next[leftIndex] = rightIndex;
+    onExtra({ match: next });
+    setPending(null);
+  }
+
+  // Les deux côtés obéissent à la même règle, dans cet ordre : un encadré DÉJÀ
+  // RELIÉ se délie, sinon il se relie à l'élément en attente d'en face, sinon
+  // il devient lui-même l'élément en attente.
+  function pickLeft(index: number) {
+    if (readOnly) return;
+    if (extra.match[index] !== undefined) return unlink(index);
+    if (pending?.side === 'right') return link(index, pending.index);
+    setPending(pending?.side === 'left' && pending.index === index ? null : { side: 'left', index });
+  }
+
+  function pickRight(index: number) {
+    if (readOnly) return;
+    // Délier depuis la droite : la paire est stockée par index de GAUCHE, il
+    // faut donc remonter à celui qui pointe sur cette correspondance.
+    const pairedLeft = leftPairedTo(index);
+    if (pairedLeft !== null) return unlink(pairedLeft);
+    if (pending?.side === 'left') return link(pending.index, index);
+    setPending(pending?.side === 'right' && pending.index === index ? null : { side: 'right', index });
+  }
+
+  // Les tirets ne sont PAS un état permanent d'une colonne : ils désignent les
+  // cibles atteignables pendant une sélection. Tant que rien n'est en attente,
+  // tout reste en trait plein — rien n'est « à prendre ».
+  function sideStyle(active: boolean, paired: boolean, dashed: boolean): React.CSSProperties {
+    return {
+      display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+      textAlign: 'left', padding: '13px 15px', borderRadius: 12,
+      border: `1.5px ${dashed ? 'dashed' : 'solid'} ${active ? palette.green : paired ? withAlpha(palette.green, 0.5) : dashed ? withAlpha(palette.green, 0.45) : palette.lineStrong}`,
+      background: active ? withAlpha(palette.green, 0.12) : paired ? withAlpha(palette.green, 0.06) : palette.surfaceInput,
+      color: palette.ink, fontSize: 14.5, fontWeight: 600, fontFamily: 'inherit',
+      cursor: readOnly ? 'default' : 'pointer', boxShadow: shadow.sm,
+      transition: 'border-color 120ms ease, background 120ms ease',
+    };
+  }
+
+  /** Pastille d'accroche, sur le bord intérieur de l'encadré : pleine dès que
+   *  l'élément est relié ou sélectionné, creuse sinon. C'est elle que le trait
+   *  vient rejoindre. */
+  function dot(on: boolean) {
+    return (
+      <span style={{ flex: 'none', width: 11, height: 11, borderRadius: 999, border: `1.5px solid ${on ? palette.green : palette.lineStrong}`, background: on ? palette.green : 'transparent', transition: 'background 120ms ease, border-color 120ms ease' }} />
+    );
+  }
+
+  // Traits reliant les paires, tracés dans la gouttière centrale. Les positions
+  // se DÉDUISENT du rang de chaque ligne au lieu d'être mesurées : les lignes
+  // d'une colonne ont toutes la même hauteur, donc le centre de la ligne `i`
+  // tombe à `(i + 0.5) / n` de la hauteur totale. Un `viewBox` de 0 à 100 avec
+  // `preserveAspectRatio="none"` laisse le SVG s'étirer exactement sur la
+  // hauteur des colonnes — pas de `ResizeObserver`, pas de mesure à chaque
+  // rendu, donc rien qui puisse se désynchroniser pendant une animation.
+  // Côté où se trouvent les cibles de la sélection en cours : c'est l'AUTRE
+  // colonne que celle de l'élément en attente. Ses encadrés encore libres se
+  // mettent en pointillé pour montrer où le trait peut aboutir ; un encadré
+  // déjà relié n'en fait pas partie (le recliquer le délie, ça ne le prend pas).
+  const targetSide: 'left' | 'right' | null =
+    pending === null ? null : pending.side === 'left' ? 'right' : 'left';
+
+  const links = Object.entries(extra.match).map(([l, r]) => {
+    const leftRow = left.findIndex((c) => c.index === Number(l));
+    const y1 = ((leftRow + 0.5) / Math.max(left.length, 1)) * 100;
+    const y2 = ((r + 0.5) / Math.max(right.length, 1)) * 100;
+    return { key: `${l}-${r}`, d: `M 0 ${y1} C 50 ${y1}, 50 ${y2}, 100 ${y2}` };
+  });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `${split}fr 54px ${1 - split}fr`, alignItems: 'stretch' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {left.map((choice) => {
+            const active = pending?.side === 'left' && pending.index === choice.index;
+            const paired = extra.match[choice.index] !== undefined;
+            return (
+              <button key={choice.index} onClick={() => pickLeft(choice.index)} disabled={readOnly} style={sideStyle(active, paired, targetSide === 'left' && !paired)}>
+                <span style={{ flex: 1, minWidth: 0 }}>{choice.text}</span>
+                {dot(active || paired)}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Gouttière des traits. `overflow: visible` : une courbe entre deux
+            lignes très écartées déborde du cadre, et serait rognée sinon. */}
+        <div style={{ position: 'relative' }}>
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none' }}>
+            {links.map((link) => (
+              // `vector-effect` : sans lui, l'étirement non uniforme du viewBox
+              // écraserait l'épaisseur du trait à l'horizontale.
+              <path key={link.key} d={link.d} fill="none" stroke={palette.green} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
+            ))}
+          </svg>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {right.map((label, index) => {
+            const active = pending?.side === 'right' && pending.index === index;
+            const paired = leftPairedTo(index) !== null;
+            return (
+              <button key={index} onClick={() => pickRight(index)} disabled={readOnly} style={sideStyle(active, paired, targetSide === 'right' && !paired)}>
+                {dot(active || paired)}
+                <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <span style={{ fontSize: 12, color: palette.inkFaint }}>{t('matchHint')}</span>
+    </div>
+  );
+}
+
+/** dessin — tracé libre à la souris ou au doigt, en coordonnées 0-100 pour
+ *  rester indépendant de la taille réelle du cadre. */
+function DrawAnswer({ extra, readOnly, onExtra }: {
+  extra: ExtraAnswer;
+  readOnly: boolean;
+  onExtra: (patch: Partial<ExtraAnswer>) => void;
+}) {
+  const t = useTranslations('exercise');
+  const [drawing, setDrawing] = useState(false);
+
+  function pointAt(e: React.PointerEvent<HTMLDivElement>): string {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }
+
+  function down(e: React.PointerEvent<HTMLDivElement>) {
+    if (readOnly) return;
+    setDrawing(true);
+    onExtra({ strokes: [...extra.strokes, pointAt(e)] });
+  }
+
+  function move(e: React.PointerEvent<HTMLDivElement>) {
+    if (readOnly || !drawing) return;
+    const strokes = [...extra.strokes];
+    strokes[strokes.length - 1] = `${strokes[strokes.length - 1]} ${pointAt(e)}`;
+    onExtra({ strokes });
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div
+        onPointerDown={down}
+        onPointerMove={move}
+        onPointerUp={() => setDrawing(false)}
+        onPointerLeave={() => setDrawing(false)}
+        style={{ position: 'relative', height: 260, borderRadius: 12, border: `1.5px dashed ${palette.lineStrong}`, background: palette.surfaceRaised, cursor: readOnly ? 'default' : 'crosshair', touchAction: 'none', overflow: 'hidden' }}
+      >
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+          {extra.strokes.map((points, i) => (
+            <polyline key={i} points={points} fill="none" stroke={palette.ink} strokeWidth={2.5} vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+          ))}
+        </svg>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, color: palette.inkFaint }}>{t('drawHint')}</span>
+        {extra.strokes.length > 0 && !readOnly && (
+          <button
+            onClick={() => onExtra({ strokes: [] })}
+            style={{ cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: palette.inkMuted, background: palette.surfaceInput, border: `1px solid ${palette.lineStrong}`, borderRadius: 999, padding: '6px 12px' }}
+          >
+            {t('drawClear')}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** fichier — le dépôt réel n'est pas branché : on retient le nom choisi pour
+ *  que l'énoncé soit validable, l'envoi vers le stockage restant à faire
+ *  (`storage.ts`, même chemin que les pièces jointes d'énoncé). */
+function FileAnswer({ statement, extra, readOnly, onExtra }: {
+  statement: ExercisePart;
+  extra: ExtraAnswer;
+  readOnly: boolean;
+  onExtra: (patch: Partial<ExtraAnswer>) => void;
+}) {
+  const t = useTranslations('exercise');
+  const accept = (statement.typeOptions.fileTypes ?? []).join(', ');
+
+  // La zone de dépôt reste montée en permanence, y compris une fois un fichier
+  // choisi : elle sert alors à le REMPLACER. La masquer obligeait à retirer le
+  // fichier d'abord pour pouvoir en déposer un autre — un aller-retour inutile,
+  // et rien n'indiquait que le remplacement était possible.
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <label style={{ cursor: readOnly ? 'default' : 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, height: 150, border: `1.5px dashed ${palette.lineStrong}`, borderRadius: 12, color: palette.inkMuted }}>
+        <Upload size={24} color={palette.tanStrong} strokeWidth={1.75} />
+        <span style={{ fontSize: 14.5, fontWeight: 600, color: palette.ink }}>{t('fileDrop')}</span>
+        {accept && <span style={{ fontSize: 12, color: palette.inkFaint }}>{accept}</span>}
+        <input
+          type="file"
+          disabled={readOnly}
+          // `value` remis à zéro : sans ça, redéposer le MÊME fichier ne
+          // déclenche pas `change` (la valeur de l'input n'a pas varié) et le
+          // remplacement passerait pour un clic sans effet.
+          onChange={(e) => {
+            onExtra({ fileName: e.target.files?.[0]?.name ?? '' });
+            e.target.value = '';
+          }}
+          style={{ display: 'none' }}
+        />
+      </label>
+
+      {extra.fileName && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, border: `1.5px solid ${palette.green}`, background: withAlpha(palette.green, 0.1), borderRadius: 12, padding: '14px 16px' }}>
+          <FileText size={20} color={palette.green} strokeWidth={1.75} />
+          <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: palette.green, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {extra.fileName}
+          </span>
+          {!readOnly && (
+            <button
+              onClick={() => onExtra({ fileName: '' })}
+              aria-label={t('fileRemove')}
+              style={{ flex: 'none', width: 28, height: 28, borderRadius: 999, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
+            >
+              <X size={14} strokeWidth={2} />
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

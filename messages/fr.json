@@ -969,6 +969,9 @@
     "notionCount": "{count, plural, =0 {aucune notion} one {# notion} other {# notions}}",
     "chapterIndicator": "chapitre {from}–{to} / {total}",
     "progressPercent": "{pct} %",
+    "resetProgress": "réinitialiser ma progression",
+    "resetProgressBusy": "réinitialisation…",
+    "resetProgressHint": "outil de test temporaire — efface ta maîtrise des notions de cet atelier, pour toi seul",
     "currentChapterEyebrow": "chapitre en cours",
     "allChaptersEyebrow": "tous les chapitres",
     "emptyTitle": "aucun chapitre pour l'instant",
@@ -995,7 +998,8 @@
   },
   "exercise": {
     "back": "retour à {workshop}",
-    "chapterLabel": "exercice",
+    "progressTitle": "{done} question(s) sur {total}",
+    "dropletsTitle": "gouttes gagnées dans cette session",
     "drawing": "tirage d'une question…",
     "emptyTitle": "Aucune question dans ce chapitre",
     "emptyDesc": "Un gestionnaire doit d'abord créer des questions de parcours et les rattacher à ce chapitre.",
@@ -1010,7 +1014,12 @@
     "gradeError": "Erreur lors de la correction",
     "doneTitle": "belle récolte.",
     "doneScore": "{count, plural, =0 {aucune bonne réponse} one {# bonne réponse} other {# bonnes réponses}}",
-    "backToParcours": "retour au parcours"
+    "backToParcours": "retour au parcours",
+    "matchHint": "touche 2 éléments pour les relier · reclique sur l'un d'eux pour annuler",
+    "drawHint": "dessine au doigt ou à la souris",
+    "drawClear": "effacer",
+    "fileDrop": "dépose ton fichier",
+    "fileRemove": "retirer le fichier"
   },
   "accountPricing": {
     "tagline": "de la graine à l'arbre —",

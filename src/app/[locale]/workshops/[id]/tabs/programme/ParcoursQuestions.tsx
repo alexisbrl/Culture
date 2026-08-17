@@ -16,15 +16,20 @@ import { palette, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import type { Chapter } from '@/app/actions/workshopChapters';
-import QuestionEditor, { type Question, emptyQuestion } from '../QuestionEditor';
+// Le parcours utilise le MÊME éditeur que la banque d'examen. Il exposait
+// auparavant un second éditeur en popup (`QuestionEditor`), qui avait dérivé :
+// il éditait encore un titre, une difficulté et une durée que le stockage
+// n'enregistre plus (voir `rowToQuestion`), présentait les notions comme une
+// propriété du groupe alors qu'elles appartiennent à chaque question, et
+// n'offrait aucun réglage pour les types liste/tableau/paire/fichier/dessin.
+// Une seule implémentation : une correction profite désormais aux deux côtés.
+import { type Question, emptyQuestion } from '../QuestionEditor';
+import InlineQuestionEditor from '../examen/InlineQuestionEditor';
 import {
   getParcoursQuestions,
   saveParcoursQuestion,
   deleteParcoursQuestion,
-  createParcoursPool,
 } from '@/app/actions/parcoursQuestions';
-
-type Pool = { id: string; name: string; color: string };
 
 export default function ParcoursQuestions({ workshopId, chapters, onBack }: { workshopId: string; chapters: Chapter[]; onBack: () => void }) {
   const t = useTranslations('programme');
@@ -32,7 +37,8 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
 
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [pools, setPools] = useState<Pool[]>([]);
+  // Pas d'état de libellés : ils ne sont pas affichés côté parcours (ce sont
+  // les étiquettes de la banque d'examen — voir `showLabels` sur l'éditeur).
   const [notions, setNotions] = useState<{ id: string; title: string }[]>([]);
   const [editing, setEditing] = useState<Question | null>(null);
   // Le chapitre s'affecte depuis la liste, pas depuis l'éditeur (partagé avec
@@ -50,7 +56,6 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
       .then((data) => {
         if (cancelled) return;
         setQuestions(data.questions);
-        setPools(data.pools);
         setNotions(data.notions);
         setLoading(false);
       })
@@ -118,31 +123,21 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
     if (editing?.id === target.id) setEditing(null);
   }
 
-  // QuestionEditor attend un identifiant de pool en retour synchrone : on crée
-  // le pool localement puis on l'enregistre, en annulant l'ajout si ça échoue.
-  function handleCreatePool(name: string): string {
-    const pool: Pool = { id: 'p' + Date.now(), name, color: palette.inkFaint };
-    setPools((prev) => [...prev, pool]);
-    createParcoursPool(workshopId, pool).then((result) => {
-      if (!result.success) {
-        setPools((prev) => prev.filter((p) => p.id !== pool.id));
-        setError(result.error ?? t('questions.saveError'));
-      }
-    });
-    return pool.id;
-  }
-
   if (editing) {
     return (
       <div style={{ padding: '18px 22px 22px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
         {error && <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 10 }}>{error}</div>}
-        <QuestionEditor
+        {/* MÊME éditeur que la banque d'examen — voir la note d'import. Les
+            props omis sont ceux qui n'ont pas de sens ici : le barème
+            (`weight`) appartient à l'examen, et l'édition d'un libellé demande
+            de connaître les questions des DEUX contextes. */}
+        <InlineQuestionEditor
           workshopId={workshopId}
           question={editing}
-          allQuestions={questions}
-          pools={pools}
+          isNew={!questions.some((q) => q.id === editing.id)}
+          frame="plain"
+          showLabels={false}
           notions={notions}
-          onCreatePool={handleCreatePool}
           onSave={handleSave}
           onCancel={() => setEditing(null)}
         />
