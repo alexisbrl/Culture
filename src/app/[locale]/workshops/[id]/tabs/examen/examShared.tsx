@@ -508,11 +508,6 @@ export const LABEL_COLORS = [categoryTones.blueGray, categoryTones.mauve, palett
 // Trois tailles pour un seul et même rendu de pastille : `xs` sur les cartes de
 // la banque (la ligne de métadonnées est serrée), `sm` dans le panneau de
 // filtres, `md` dans les éditeurs de question.
-/** Longueur maximale d'un nom sur une pastille, toutes pastilles confondues.
- *  Généreux (un libellé ou un chapitre y tient presque toujours en entier) mais
- *  borné : c'est la largeur du panneau de filtres, la plus étroite des surfaces
- *  qui en portent, qui fixe le plafond. */
-const PILL_MAX_CHARS = 30;
 const LABEL_PILL_SIZES = {
   xs: { fontSize: 10.5, padding: '3px 9px', gap: 5, affordance: 13, icon: 8 },
   sm: { fontSize: 11, padding: '4px 8px', gap: 5, affordance: 15, icon: 9 },
@@ -564,10 +559,15 @@ export const labelTint = (color: string) => withAlpha(color, 0.22);
  *  cohabitaient donc dans le même panneau, l'une criarde et l'autre discrète.
  *  Il n'y en a plus qu'une, celle-ci, et elle vit ici seule.
  *
- *  Le nom est coupé à `PILL_MAX_CHARS`, sans exception : un seul nom un peu long
- *  — un titre de chapitre, typiquement — élargissait sinon le panneau de filtres
- *  au-delà de sa colonne, qui se mettait à défiler horizontalement. Le nom
- *  complet reste lisible au survol. */
+ *  **Le nom n'est borné que par la place disponible.** La pastille ne dépasse
+ *  jamais la largeur de sa colonne (`maxWidth`) et le nom s'y coupe en « … » ;
+ *  le nom complet reste lisible au survol. Il n'y a plus de plafond en nombre de
+ *  caractères (30, retiré le 18/08/2026) : il ne réglait pas le problème qu'on
+ *  lui demandait de régler — il compte des caractères, pas des pixels,
+ *  alors que ce qu'on veut éviter est un débordement en pixels (le panneau de
+ *  filtres, 290px, se mettait à défiler horizontalement, précédent du
+ *  17/08/2026). Une fois la garde en largeur posée, il ne faisait plus que
+ *  couper des noms qui avaient la place de tenir. */
 export function LabelPill({ name, color, size = 'sm', active = false, excluded = false, icon, title, onClick, onEdit, onRemove, editTitle, removeTitle }: {
   name: string;
   /** Absent = pastille neutre (voir plus haut). */
@@ -590,8 +590,26 @@ export function LabelPill({ name, color, size = 'sm', active = false, excluded =
   removeTitle?: string;
 }) {
   const s = LABEL_PILL_SIZES[size];
-  const cut = name.length > PILL_MAX_CHARS;
-  const displayName = cut ? name.slice(0, PILL_MAX_CHARS) + '…' : name;
+  // Infobulle seulement quand le nom est réellement coupé. La coupe se décide à
+  // la largeur disponible et ne se déduit donc pas du nom : on mesure son
+  // débordement, et on le remesure quand la pastille change de largeur
+  // (`ResizeObserver`) — un simple rendu ne suffirait pas. La comparaison
+  // explicite garde l'état contre la boucle de mesure. La tolérance d'un pixel
+  // écarte les faux positifs d'arrondi sous-pixel.
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [clipped, setClipped] = useState(false);
+  useLayoutEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+    const measure = () => {
+      const next = el.scrollWidth > el.clientWidth + 1;
+      setClipped(prev => prev === next ? prev : next);
+    };
+    // `observe()` déclenche déjà un premier appel avec la taille initiale
+    const obs = new ResizeObserver(measure);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [name]);
   const affordance: CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     width: s.affordance, height: s.affordance, borderRadius: '50%', padding: 0,
@@ -599,7 +617,9 @@ export function LabelPill({ name, color, size = 'sm', active = false, excluded =
   };
   return (
     <span
-      title={title ?? (cut ? name : undefined)}
+      // Le nom complet, mais seulement s'il est coupé (voir la mesure) : une
+      // infobulle qui répète mot pour mot ce qu'on lit déjà n'apprend rien.
+      title={title ?? (clipped ? name : undefined)}
       // Le rôle et le focus ne sont posés que si la pastille fait réellement
       // quelque chose au clic : sur une carte de la banque, elle n'est qu'un
       // témoin et n'a rien à faire dans l'ordre de tabulation.
@@ -615,6 +635,13 @@ export function LabelPill({ name, color, size = 'sm', active = false, excluded =
       } : {})}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: s.gap, flexShrink: 0,
+        // La pastille ne déborde jamais de la colonne qui la porte — c'est la
+        // seule limite que le nom rencontre, et la seule qui compte : aucune
+        // surface n'a à défiler horizontalement pour un nom long (le panneau de
+        // filtres, 290px, est la plus étroite). Au-delà, c'est le nom qui cède,
+        // en « … » (voir le span ci-dessous) ; le crayon et la croix, eux,
+        // restent entiers — ce sont des cibles de clic, pas du texte.
+        maxWidth: '100%', boxSizing: 'border-box',
         fontSize: s.fontSize, padding: s.padding, borderRadius: 999, fontFamily: 'inherit',
         cursor: onClick ? 'pointer' : undefined,
         // Sur une pastille colorée, l'entourage au repos ne se voit qu'aux deux
@@ -644,7 +671,9 @@ export function LabelPill({ name, color, size = 'sm', active = false, excluded =
           <Pencil size={s.icon} strokeWidth={2} />
         </button>
       )}
-      {displayName}
+      {/* `minWidth: 0` : sans lui, un élément de flex refuse de se réduire
+          sous la largeur de son contenu et le « … » ne se déclenche jamais. */}
+      <span ref={textRef} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
       {onRemove && (
         <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }} title={removeTitle} style={affordance}>
           <X size={s.icon} strokeWidth={2.2} />

@@ -34,6 +34,12 @@ Référence : `src/app/[locale]/workshops/[id]/settings/SettingsClient.tsx`.
 
 Carte crème `borderRadius: 20`, icône d'avertissement, titre/description centrés, actions en bas (« Confirmer » / « Annuler », ou 3 actions type « Enregistrer et quitter » / « Annuler » / « Quitter sans enregistrer »). À utiliser pour toute action destructive ou décision à conséquence (suppression, navigation avec perte de données).
 
+## Borner un texte qui pourrait déborder : en largeur, pas en caractères
+
+Un plafond du type `name.slice(0, 30)` compte des caractères là où le débordement se mesure en pixels : il coupe des noms qui avaient la place de tenir, et laisse passer les caractères larges (majuscules, « m ») qui débordent quand même. Poser la borne sur l'élément : `maxWidth: '100%'` (+ `boxSizing: 'border-box'`) sur le bloc, et `minWidth: 0` + `overflow: hidden` + `textOverflow: 'ellipsis'` + `whiteSpace: 'nowrap'` sur le texte lui-même. **`minWidth: 0` est indispensable** dès que le texte est un élément de flex : sans lui, un élément de flex refuse de se réduire sous la largeur de son contenu et le « … » ne se déclenche jamais. Les cibles de clic voisines (boutons, pictogrammes) gardent leur `flexShrink: 0` — c'est le texte qui cède, pas elles.
+
+**L'infobulle de secours ne se déduit alors plus du texte** : la coupe se décide au rendu. La mesurer (`scrollWidth > clientWidth + 1`, la tolérance d'un pixel écartant les arrondis sous-pixel) dans un `useLayoutEffect` + `ResizeObserver` sur l'élément de texte, gardée par une comparaison explicite (voir plus bas). Sans cette mesure, il ne reste que deux mauvaises options : une infobulle sur tout, y compris ce qui se lit déjà en entier, ou aucune sur ce qui est coupé. Référence : `LabelPill` (`examen/examShared.tsx`, 18/08/2026).
+
 ## Fermeture des panneaux au clic extérieur — `useDismissOnOutsideClick`
 
 Point d'entrée unique pour tout panneau flottant qui se ferme quand on clique ailleurs (`examen/examShared.tsx`). Deux règles indissociables, décidées le 12/08/2026 :
