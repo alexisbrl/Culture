@@ -456,9 +456,8 @@
       "label": "tag"
     },
     "bank": {
-      "include": "include",
-      "exclude": "exclude",
-      "dropFilterHere": "drop a filter here",
+      "include": "included",
+      "exclude": "excluded",
       "newQuestion": "new question",
       "newShort": "new",
       "searchPlaceholder": "search for a question…",

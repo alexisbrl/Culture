@@ -543,13 +543,33 @@ export const labelTint = (color: string) => withAlpha(color, 0.22);
  *  boutons frères — un `<button>` imbriqué dans un `<button>` est invalide.
  *
  *  `icon` : pictogramme collé à gauche du texte, pour les filtres de type de
- *  réponse qui reprennent la même pastille (voir `RESPONSE_TYPE_ICONS`). */
-export function LabelPill({ name, color, size = 'sm', active = false, icon, onClick, onEdit, onRemove, editTitle, removeTitle }: {
+ *  réponse qui reprennent la même pastille (voir `RESPONSE_TYPE_ICONS`).
+ *
+ *  `color` est **facultatif** : sans lui, la pastille est neutre (fond en creux,
+ *  liseré au repos). C'est le cas des filtres qui ne portent pas de couleur —
+ *  statut, chapitre. Ils avaient jusqu'au 18/08/2026 leur propre état
+ *  sélectionné, en aplat d'encre pleine : deux façons de dire « sélectionné »
+ *  cohabitaient donc dans le même panneau, l'une criarde et l'autre discrète.
+ *  Il n'y en a plus qu'une, celle-ci, et elle vit ici seule.
+ *
+ *  `truncate` : le nom est coupé à 18 caractères par défaut, pour que les
+ *  pastilles restent lisibles en file sur une carte de la banque. Les filtres de
+ *  chapitre s'en dispensent — un titre de chapitre coupé ne se reconnaît plus, et
+ *  le panneau les laisse passer à la ligne. */
+export function LabelPill({ name, color, size = 'sm', active = false, excluded = false, icon, truncate = true, onClick, onEdit, onRemove, editTitle, removeTitle }: {
   name: string;
-  color: string;
+  /** Absent = pastille neutre (voir plus haut). */
+  color?: string;
   size?: keyof typeof LABEL_PILL_SIZES;
+  /** Sélectionné : liseré d'encre. */
   active?: boolean;
+  /** Sélectionné en négatif : même liseré, en rouge. Exclusif de `active` — un
+   *  filtre est inclus ou exclu, jamais les deux (voir le cycle de clic de
+   *  `BankContent`). Le rouge est celui des chips d'exclusion d'avant le
+   *  18/08/2026 : c'est déjà la couleur que « exclu » avait dans l'onglet. */
+  excluded?: boolean;
   icon?: ReactNode;
+  truncate?: boolean;
   onClick?: () => void;
   onEdit?: () => void;
   onRemove?: () => void;
@@ -557,7 +577,7 @@ export function LabelPill({ name, color, size = 'sm', active = false, icon, onCl
   removeTitle?: string;
 }) {
   const s = LABEL_PILL_SIZES[size];
-  const displayName = name.length > 18 ? name.slice(0, 18) + '…' : name;
+  const displayName = truncate && name.length > 18 ? name.slice(0, 18) + '…' : name;
   const affordance: CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     width: s.affordance, height: s.affordance, borderRadius: '50%', padding: 0,
@@ -568,12 +588,22 @@ export function LabelPill({ name, color, size = 'sm', active = false, icon, onCl
       style={{
         display: 'inline-flex', alignItems: 'center', gap: s.gap, flexShrink: 0,
         fontSize: s.fontSize, padding: s.padding, borderRadius: 999, fontFamily: 'inherit',
-        // Aucun liseré au repos : sur une pastille l'entourage ne se voit qu'aux
-        // deux extrémités arrondies, où il lit comme un défaut de rendu plutôt
-        // que comme une bordure. Seul l'état actif en porte un, c'est son signal.
-        border: `1px solid ${active ? palette.ink : 'transparent'}`,
-        boxShadow: active ? `0 0 0 2px ${ink(0.25)}` : 'none',
-        background: labelTint(color), color: palette.ink, fontWeight: active ? 600 : 400,
+        // Sur une pastille colorée, l'entourage au repos ne se voit qu'aux deux
+        // extrémités arrondies, où il lit comme un défaut de rendu plutôt que
+        // comme une bordure : elle n'en porte donc qu'une fois sélectionnée,
+        // c'est son signal. Une pastille neutre n'a pas ce luxe — sans fond
+        // coloré, il ne resterait rien pour dire où elle commence : elle garde un
+        // filet clair au repos, qui prend la couleur de la sélection ensuite.
+        // Le fond, lui, ne bouge jamais : c'est l'identité du libellé, elle ne
+        // peut pas servir en même temps d'état.
+        border: `1px solid ${excluded ? palette.danger : active ? palette.ink : color ? 'transparent' : palette.line}`,
+        boxShadow: excluded ? `0 0 0 2px ${withAlpha(palette.danger, 0.25)}`
+          : active ? `0 0 0 2px ${ink(0.25)}` : 'none',
+        background: color ? labelTint(color) : palette.surfaceSunken,
+        // L'encre pleine est réservée à la sélection : au repos, une pastille
+        // neutre reste en retrait, là où la colorée est déjà portée par son fond.
+        color: excluded ? palette.danger : active || color ? palette.ink : palette.inkMuted,
+        fontWeight: active || excluded ? 600 : 400,
       }}
     >
       {icon && <span style={{ display: 'flex', flexShrink: 0, color: palette.inkSoft }}>{icon}</span>}
@@ -1541,17 +1571,9 @@ export function ShuffleNoticeIcon({ title }: { title: string }) {
   );
 }
 
-export function ActiveChip({ label, color, negative, filterKey, onRemove, setDraggedKey }: { label: string; color?: string; negative: boolean; filterKey: string; onRemove: () => void; setDraggedKey: (key: string | null) => void }) {
-  return (
-    <span
-      draggable
-      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', filterKey); setDraggedKey(filterKey); }}
-      onDragEnd={() => setDraggedKey(null)}
-      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, padding: '5px 6px 5px 11px', borderRadius: 999, border: negative ? `1px solid ${withAlpha(palette.danger, 0.45)}` : `1px solid ${ink(0.30)}`, background: negative ? palette.danger : palette.ink, color: palette.parchment, fontFamily: 'inherit', cursor: 'grab', clipPath: 'inset(0 round 999px)' }}
-    >
-      {color && <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, display: 'inline-block' }} />}
-      {label}
-      <button onClick={onRemove} style={{ border: 'none', background: 'none', color: palette.parchment, cursor: 'pointer', fontSize: 13, padding: '0 4px', lineHeight: 1, opacity: 0.7 }}>×</button>
-    </span>
-  );
-}
+// `ActiveChip` vivait ici : la reprise d'un filtre actif au-dessus de la liste,
+// glissable d'une zone « inclure » vers une zone « exclure ». Les deux zones ont
+// disparu le 18/08/2026 au profit du cycle de clic dans le panneau lui-même
+// (voir `cycleFilter` dans BankContent) — un filtre se lit et se règle
+// désormais au même endroit, et le compteur du bouton « filtres » dit combien
+// sont actifs.

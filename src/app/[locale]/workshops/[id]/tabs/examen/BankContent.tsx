@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type Dispatch, type SetStateAction } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link2, Pencil, Trash2 } from 'lucide-react';
 import { palette, withAlpha, ink } from '@/lib/theme';
@@ -11,7 +11,7 @@ import {
   type Pool, type Exam, type SortBy, type SortDir,
   DEFAULT_SORT_DIR, NEVER_EXAM_ID, CARD_LINE, CARD_ACTION_BTN, LIST_INSET_X,
   RESPONSE_TYPE_ICONS, RESPONSE_TYPE_COLORS,
-  TypeIcon, IconBtn, ActiveChip, ListToolbar, FilterButton, ListCard, LabelPill, LabelEditor,
+  TypeIcon, IconBtn, ListToolbar, FilterButton, ListCard, LabelPill, LabelEditor,
   useDismissOnOutsideClick,
 } from './examShared';
 
@@ -74,9 +74,10 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
   const [filterTypes, setFilterTypes] = useState<ResponseType[]>([]);
   const [filterChapters, setFilterChapters] = useState<string[]>([]);
   const [filterExams, setFilterExams] = useState<string[]>([]);
+  // Côté de chaque filtre actif — inclusion par défaut, exclusion au clic
+  // suivant (voir `cycleFilter`). Indexé par clé « catégorie:valeur », les
+  // quatre familles de filtres se partageant le même registre.
   const [filterModes, setFilterModes] = useState<Record<string, FilterMode>>({});
-  const [draggedKey, setDraggedKey] = useState<string | null>(null);
-  const [dragOverZone, setDragOverZone] = useState<FilterMode | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>('recent');
   const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_SORT_DIR.recent);
 
@@ -161,32 +162,39 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
       return next;
     });
   }
-  function togglePoolFilter(id: string) {
-    setFilterPools(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
-    clearMode(`pool:${id}`);
-  }
-  function toggleTypeFilter(t: ResponseType) {
-    setFilterTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
-    clearMode(`type:${t}`);
-  }
-  function toggleChapterFilter(id: string) {
-    setFilterChapters(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-    clearMode(`chapter:${id}`);
-  }
-  function toggleExamFilter(id: string) {
-    setFilterExams(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-    clearMode(`exam:${id}`);
-  }
   function setFilterMode(key: string, mode: FilterMode) {
     setFilterModes(prev => ({ ...prev, [key]: mode }));
   }
-  function handleDropOnZone(e: React.DragEvent, mode: FilterMode) {
-    e.preventDefault();
-    const key = e.dataTransfer.getData('text/plain') || draggedKey;
-    if (key) setFilterMode(key, mode);
-    setDraggedKey(null);
-    setDragOverZone(null);
+  /** Cycle d'un filtre, au clic sur sa pastille : absent → inclus → exclu →
+   *  absent. Un seul geste, au même endroit que la liste des valeurs — il n'y a
+   *  plus rien à glisser ni à viser ailleurs.
+   *
+   *  Ce cycle a remplacé (18/08/2026) les deux zones de dépôt « inclure » et
+   *  « exclure » posées au-dessus de la liste : elles obligeaient à sélectionner
+   *  dans le panneau, puis à ressortir glisser la pastille dans la bonne zone
+   *  pour exclure, et occupaient deux lignes en permanence dès qu'un filtre
+   *  était actif. Le modèle de filtrage, lui, n'a pas bougé (`filterModes`).
+   *
+   *  Les deux états ne sont **pas** symétriques dans la liste des filtres : un
+   *  filtre exclu reste dans sa liste (`filterPools`…) et n'en sort qu'au
+   *  troisième clic ; c'est `filterModes` qui dit de quel côté il joue. */
+  function cycleFilter<T extends string>(value: T, key: string, list: T[], setList: Dispatch<SetStateAction<T[]>>) {
+    if (!list.includes(value)) {
+      setList(prev => [...prev, value]);
+      setFilterMode(key, 'pos');
+      return;
+    }
+    if ((filterModes[key] ?? 'pos') === 'pos') {
+      setFilterMode(key, 'neg');
+      return;
+    }
+    setList(prev => prev.filter(v => v !== value));
+    clearMode(key);
   }
+  function togglePoolFilter(id: string) { cycleFilter(id, `pool:${id}`, filterPools, setFilterPools); }
+  function toggleTypeFilter(t: ResponseType) { cycleFilter(t, `type:${t}`, filterTypes, setFilterTypes); }
+  function toggleChapterFilter(id: string) { cycleFilter(id, `chapter:${id}`, filterChapters, setFilterChapters); }
+  function toggleExamFilter(id: string) { cycleFilter(id, `exam:${id}`, filterExams, setFilterExams); }
   function resetFilters() {
     setFilterPools([]);
     setFilterTypes([]);
@@ -218,6 +226,16 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
   const negChapters = filterChapters.filter(c => modeOf(`chapter:${c}`) === 'neg');
   const posExams = filterExams.filter(e => modeOf(`exam:${e}`) === 'pos');
   const negExams = filterExams.filter(e => modeOf(`exam:${e}`) === 'neg');
+
+  /** État d'une pastille de filtre, à étaler sur `LabelPill`. */
+  const pillState = (key: string, selected: boolean) => ({
+    active: selected && modeOf(key) === 'pos',
+    excluded: selected && modeOf(key) === 'neg',
+  });
+  // La légende du panneau ne montre que les états réellement en jeu : tant que
+  // rien n'est exclu, « exclu » n'a rien à expliquer et ne prend pas de place.
+  const hasIncluded = posPools.length + posTypes.length + posChapters.length + posExams.length > 0;
+  const hasExcluded = negPools.length + negTypes.length + negChapters.length + negExams.length > 0;
 
   let filtered = questions.filter(q => {
     const qPools = new Set(q.pools);
@@ -336,60 +354,13 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
     );
   }
 
-  type ActiveFilter = { key: string; category: 'pool' | 'type' | 'chapter' | 'exam'; value: string; label: string; color?: string };
-  const activeFilters: ActiveFilter[] = [
-    ...filterPools.map(id => ({ key: `pool:${id}`, category: 'pool' as const, value: id, label: pools.find(p => p.id === id)?.name ?? id, color: pools.find(p => p.id === id)?.color })),
-    ...filterTypes.map(ty => ({ key: `type:${ty}`, category: 'type' as const, value: ty, label: tr(`responseType.${ty}`) })),
-    ...filterChapters.map(cid => ({ key: `chapter:${cid}`, category: 'chapter' as const, value: cid, label: cid === NO_CHAPTER_ID ? tr('bank.noChapter') : (chapters.find(c => c.id === cid)?.name ?? cid) })),
-    ...filterExams.map(eid => ({ key: `exam:${eid}`, category: 'exam' as const, value: eid, label: eid === NEVER_EXAM_ID ? tr('bank.statusNew') : (exams.find(ex => ex.id === eid)?.title ?? eid) })),
-  ];
-  const positiveFilters = activeFilters.filter(f => modeOf(f.key) === 'pos');
-  const negativeFilters = activeFilters.filter(f => modeOf(f.key) === 'neg');
-
-  function removeFilter(f: ActiveFilter) {
-    switch (f.category) {
-      case 'pool': togglePoolFilter(f.value as string); break;
-      case 'type': toggleTypeFilter(f.value as ResponseType); break;
-      case 'chapter': toggleChapterFilter(f.value); break;
-      case 'exam': toggleExamFilter(f.value); break;
-    }
-  }
-
   return (
     <div style={{ padding: `16px ${LIST_INSET_X}px 28px` }}>
       {/* Ni titre ni bouton « générer par IA » : l'onglet au-dessus de la liste
           dit déjà où l'on est, et la maquette ne montre que la barre d'outils
-          (recherche · tri · filtre · nouvelle). */}
-      {activeFilterCount > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-          <div
-            onDragEnter={e => e.preventDefault()}
-            onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverZone('pos'); }}
-            onDragLeave={() => setDragOverZone(prev => prev === 'pos' ? null : prev)}
-            onDrop={e => handleDropOnZone(e, 'pos')}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '4px 6px', borderRadius: 8, border: dragOverZone === 'pos' ? `1px dashed ${palette.greenSoft}` : '1px dashed transparent', background: dragOverZone === 'pos' ? withAlpha(palette.greenSoft, 0.10) : 'transparent' }}
-          >
-            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint }}>{tr('bank.include')}</span>
-            {positiveFilters.map(f => (
-              <ActiveChip key={f.key} filterKey={f.key} label={f.label} color={f.color} negative={false} onRemove={() => removeFilter(f)} setDraggedKey={setDraggedKey} />
-            ))}
-            {positiveFilters.length === 0 && <span style={{ fontSize: 11, color: palette.inkGhost, fontStyle: 'italic' }}>{tr('bank.dropFilterHere')}</span>}
-          </div>
-          <div
-            onDragEnter={e => e.preventDefault()}
-            onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverZone('neg'); }}
-            onDragLeave={() => setDragOverZone(prev => prev === 'neg' ? null : prev)}
-            onDrop={e => handleDropOnZone(e, 'neg')}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '4px 6px', borderRadius: 8, border: dragOverZone === 'neg' ? `1px dashed ${palette.danger}` : '1px dashed transparent', background: dragOverZone === 'neg' ? withAlpha(palette.danger, 0.10) : 'transparent' }}
-          >
-            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint }}>{tr('bank.exclude')}</span>
-            {negativeFilters.map(f => (
-              <ActiveChip key={f.key} filterKey={f.key} label={f.label} color={f.color} negative={true} onRemove={() => removeFilter(f)} setDraggedKey={setDraggedKey} />
-            ))}
-            {negativeFilters.length === 0 && <span style={{ fontSize: 11, color: palette.inkGhost, fontStyle: 'italic' }}>{tr('bank.dropFilterHere')}</span>}
-          </div>
-        </div>
-      )}
+          (recherche · tri · filtre · nouvelle). Les filtres actifs ne sont plus
+          repris ici non plus : ils se lisent et se règlent dans leur panneau,
+          d'où le compteur porté par le bouton « filtres ». */}
 
       {/* Barre d'outils commune aux deux listes (`ListToolbar`) : la banque n'y
           met que ce qui lui est propre — sa recherche, ses critères de tri, son
@@ -425,6 +396,19 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
                   <button onClick={resetFilters} style={{ fontSize: 11.5, color: palette.greenBrand, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>{tr('bank.filtersReset')}</button>
                 )}
               </div>
+              {/* Légende — un mot par état, dans la couleur exacte de la
+                  sélection qu'il décrit : c'est la pastille elle-même qui sert
+                  de témoin, donc la légende ne peut pas mentir sur ce qu'on voit
+                  en dessous. Un seul rappel pour tout le panneau, tous types de
+                  filtres confondus, et chaque mot n'apparaît qu'une fois son
+                  état utilisé — au premier clic on découvre « inclus », au
+                  deuxième « exclu ». */}
+              {(hasIncluded || hasExcluded) && (
+                <div style={{ display: 'flex', gap: 6, padding: '0 14px 10px', flexShrink: 0 }}>
+                  {hasIncluded && <LabelPill name={tr('bank.include')} active />}
+                  {hasExcluded && <LabelPill name={tr('bank.exclude')} excluded />}
+                </div>
+              )}
               <div style={{ overflowY: 'auto', padding: '0 14px 14px', flex: 1, minHeight: 0 }}>
                 {/* Type de réponse */}
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.rTypeSection')}</div>
@@ -437,7 +421,7 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
                         name={tr(`responseType.${ty}`)}
                         color={RESPONSE_TYPE_COLORS[ty]}
                         icon={<Icon size={11} strokeWidth={1.75} />}
-                        active={filterTypes.includes(ty)}
+                        {...pillState(`type:${ty}`, filterTypes.includes(ty))}
                         onClick={() => toggleTypeFilter(ty)}
                       />
                     );
@@ -446,14 +430,14 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
                 {/* Statut */}
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.statusSection')}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-                  {(() => {
-                    const active = filterExams.includes(NEVER_EXAM_ID);
-                    return (
-                      <button onClick={() => toggleExamFilter(NEVER_EXAM_ID)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? `1px solid ${palette.ink}` : `1px solid ${palette.line}`, background: active ? palette.ink : palette.surfaceSunken, color: active ? palette.onInk : palette.inkMuted }}>
-                        {tr('bank.statusNew')}
-                      </button>
-                    );
-                  })()}
+                  {/* Pastille neutre : même composant et donc même état
+                      sélectionné que les libellés et les types de réponse
+                      au-dessus (voir `LabelPill`). */}
+                  <LabelPill
+                    name={tr('bank.statusNew')}
+                    {...pillState(`exam:${NEVER_EXAM_ID}`, filterExams.includes(NEVER_EXAM_ID))}
+                    onClick={() => toggleExamFilter(NEVER_EXAM_ID)}
+                  />
                 </div>
                 {/* Libellés */}
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.labelsSection')}</div>
@@ -463,7 +447,7 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
                       key={l.id}
                       name={l.name}
                       color={l.color}
-                      active={filterPools.includes(l.id)}
+                      {...pillState(`pool:${l.id}`, filterPools.includes(l.id))}
                       onClick={() => togglePoolFilter(l.id)}
                       onEdit={() => setEditingLabel(editingLabel === l.id ? null : l.id)}
                       editTitle={tr('bank.editLabelTitle')}
@@ -486,22 +470,23 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
                   <>
                     <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.chapterSection')}</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {chapters.map(c => {
-                        const active = filterChapters.includes(c.id);
-                        return (
-                          <button key={c.id} onClick={() => toggleChapterFilter(c.id)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? `1px solid ${palette.ink}` : `1px solid ${palette.line}`, background: active ? palette.ink : palette.surfaceSunken, color: active ? palette.onInk : palette.inkMuted }}>
-                            {c.name}
-                          </button>
-                        );
-                      })}
-                      {(() => {
-                        const active = filterChapters.includes(NO_CHAPTER_ID);
-                        return (
-                          <button onClick={() => toggleChapterFilter(NO_CHAPTER_ID)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', border: active ? `1px solid ${palette.ink}` : `1px solid ${palette.line}`, background: active ? palette.ink : palette.surfaceSunken, color: active ? palette.onInk : palette.inkMuted }}>
-                            {tr('bank.noChapter')}
-                          </button>
-                        );
-                      })()}
+                      {/* `truncate={false}` : un titre de chapitre coupé à 18
+                          caractères ne se reconnaît plus, et rien ici n'oblige à
+                          tenir sur une ligne. */}
+                      {chapters.map(c => (
+                        <LabelPill
+                          key={c.id}
+                          name={c.name}
+                          truncate={false}
+                          {...pillState(`chapter:${c.id}`, filterChapters.includes(c.id))}
+                          onClick={() => toggleChapterFilter(c.id)}
+                        />
+                      ))}
+                      <LabelPill
+                        name={tr('bank.noChapter')}
+                        {...pillState(`chapter:${NO_CHAPTER_ID}`, filterChapters.includes(NO_CHAPTER_ID))}
+                        onClick={() => toggleChapterFilter(NO_CHAPTER_ID)}
+                      />
                     </div>
                   </>
                 )}
