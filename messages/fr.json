@@ -367,7 +367,6 @@
     "answerSpace": {
       "audioNote": "Un enregistrement audio accompagne cette question."
     },
-    "editQuestion": "modifier la question",
     "cancelEditQuestion": "annuler la modification",
     "editor": {
       "new": "Nouvelle question",
@@ -512,6 +511,7 @@
       "points": "{count} pt{plural}",
       "showQuestionPoints": "barème des questions",
       "showQuestionPointsHint": "imprimer le nombre de points en face de chaque question et de chaque question liée",
+      "eliminatoryMark": "éliminatoire",
       "showSectionPoints": "barème des parties",
       "showSectionPointsHint": "imprimer le sous-total de points en face du titre de chaque partie",
       "duration": "durée",
@@ -521,6 +521,8 @@
       "removePageBreak": "retirer le saut de page",
       "removeFromExam": "retirer de l'examen",
       "dragReorder": "glisser pour réorganiser",
+      "dragSection": "glisser pour déplacer la partie et ses questions",
+      "shuffleNotice": "ordre aléatoire : les éléments de réponse de cette question seront mélangés d'une copie à l'autre lors de l'examen",
       "saveChanges": "enregistrer les modifications",
       "saveExam": "enregistrer l'examen",
       "pageNumber": "{n} / {total}",
@@ -545,6 +547,7 @@
       "editorBusyDesc": "L'éditeur d'examen contient déjà des modifications en cours. Termine ou efface l'éditeur avant de modifier {target}.",
       "editorBusyGo": "Aller à l'éditeur",
       "questionEditing": "question déjà en cours d'édition",
+      "questionEditingSave": "terminez la modification de la question avant d'enregistrer l'examen",
       "introTitle": "Comment fonctionne le générateur d'examen",
       "introSubtitle": "Trois étapes pour passer de votre banque de questions à un examen prêt à être donné.",
       "introStep1Title": "Constituez votre banque de questions",
@@ -607,6 +610,7 @@
       "tableColPlaceholder": "colonne…",
       "tableCheckHint": "coche la bonne case",
       "tableUniqueHint": "une seule bonne case peut être cochée par ligne",
+      "tableShuffleHint": "mélange l'ordre des lignes pour chaque étudiant (les colonnes gardent le leur)",
       "addTableRow": "+ ligne",
       "addTableCol": "+ colonne",
       "matchLeft": "élément…",

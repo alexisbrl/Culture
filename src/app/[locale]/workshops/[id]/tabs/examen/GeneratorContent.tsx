@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { Clock, Star, RefreshCw, SeparatorHorizontal, SlidersHorizontal, PenLine } from 'lucide-react';
 import { palette, ink, shadow, withAlpha } from '@/lib/theme';
@@ -13,13 +13,14 @@ import {
   type IdentitySide, type CandidateIdentity, type SheetFocus, type PageBlock, type Pool,
   IDENTITY_KEY_SET, BAREME_KEY,
   A4_TITLE_BLOCK_HEIGHT, A4_IDENTITY_ROW_HEIGHT, A4_MARGIN_PX, A4_PAGE_HEIGHT,
-  A4_PAGE_BREAK_HEIGHT, A4_ROW_FALLBACK_HEIGHT, A4_SECTION_HEADER_HEIGHT, A4_BLOCK_WIDTH,
+  A4_PAGE_BREAK_HEIGHT, A4_ROW_FALLBACK_HEIGHT, A4_SECTION_HEADER_HEIGHT, A4_EMPTY_SECTION_HEIGHT, A4_BLOCK_WIDTH,
   PAGE_BREAK_PREFIX,
   configQuestionIds, defaultWeight, partWeightKey, flattenSections, isPageBreakId,
   computePagination, defaultPresentation, getFavoritePresentation, saveFavoritePresentation, isSamePresentation,
   moveSectionRow, clearWeightingFor,
-  EditQuestionButton, renderAnswerSpace, partAsQuestion, QuestionImagePreview, QuestionAudioNote,
+  ShuffleNoticeIcon, renderAnswerSpace, partAsQuestion, QuestionImagePreview, QuestionAudioNote,
 } from './examShared';
+import { shufflesAnswerItems } from '@/lib/workshops/examTypes';
 
 /** Champ de la feuille A4 qui passe à la ligne au lieu de rogner : un
  *  `textarea` d'une ligne qui grandit avec son contenu. Un `<input>` ne sait pas
@@ -48,8 +49,11 @@ function SheetAutoText({ value, onChange, placeholder, title, style }: {
       ref={ref}
       rows={1}
       value={value}
-      onChange={e => onChange(e.target.value.replace(/\n/g, ''))}
-      onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }}
+      // Les retours à la ligne sont conservés : un intitulé d'examen tient
+      // rarement sur une ligne, et l'auteur doit pouvoir décider où il coupe.
+      // La hauteur suit toute seule (`scrollHeight` ci-dessus), et le bloc
+      // d'en-tête de la copie est mesuré, pas estimé — la pagination suit.
+      onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
       title={title}
       style={{
@@ -74,10 +78,18 @@ const TOOLBAR_WIDTH = A4_BLOCK_WIDTH + LEFT_GUTTER + RIGHT_GUTTER;
 // c'est ce qui les met sur la même ligne que le texte qu'ils accompagnent, sans
 // dépendre de la hauteur totale de la ligne (qui varie avec l'espace de réponse).
 const STATEMENT_LINE_H = 22.4;
+// Blanc réservé devant « / N pts » : c'est là que le correcteur écrit la note
+// obtenue. Le bloc A4 fait 1056px pour 21cm, donc ces 44px valent ~9mm — de quoi
+// écrire « 12,5 » à la main sans mordre sur l'énoncé.
+const MARK_SPACE = 44;
 const SECTION_TITLE_LINE_H = 20;
 // Retrait haut du texte dans sa ligne, repris tel quel par la gouttière.
 const STATEMENT_PAD_TOP = 20;
 const SECTION_TITLE_PAD_TOP = 14;
+// Une question liée est séparée de la ligne précédente par 40px (voir son rendu
+// plus bas) : c'est son retrait haut de repli, avant que le barème de sa ligne
+// n'ait été mesuré.
+const LINKED_PAD_TOP = 40;
 
 /** Une ligne de la copie, dans l'ordre où elle est posée sur les pages.
  *
@@ -95,16 +107,53 @@ const SECTION_TITLE_PAD_TOP = 14;
  *    d'une même grappe partagent donc le même `gi`. */
 type SheetRow =
   | { kind: 'header'; key: string; sectionIdx: number }
-  | { kind: 'empty'; key: string; sectionIdx: number }
+  // La cale « partie vide » est un bloc paginable (`bi`) comme une ligne de
+  // question, mais sans `gi` : elle occupe de la place sur la page, alors qu'elle
+  // ne se déplace pas. Sans ce `bi` elle était invisible à la pagination — voir
+  // la construction de `sheetRows`.
+  | { kind: 'empty'; key: string; bi: number; sectionIdx: number }
   | { kind: 'pagebreak'; key: string; bi: number; gi: number; sectionIdx: number; id: string }
   | { kind: 'editor'; key: string; bi: number; gi: number; sectionIdx: number; number: number; q: Question }
   | { kind: 'qhead'; key: string; bi: number; gi: number; sectionIdx: number; number: number; q: Question; last: boolean }
   | { kind: 'qpart'; key: string; bi: number; gi: number; sectionIdx: number; number: number; q: Question; partIdx: number; last: boolean };
 
-/** Les lignes de la copie portent un `bi` sauf les titres de partie et les
- *  cales « partie vide », qui ne sont pas des blocs paginables. */
+/** Position de dépôt visée pendant un glisser.
+ *
+ *  - `gi` : rang d'insertion dans la liste aplatie (`flat`) ;
+ *  - `sectionIdx` : partie d'accueil. **Indissociable de `gi`** — un même rang
+ *    est à la fois la fin d'une partie et le début de la suivante, et c'est ce
+ *    couple, pas le rang seul, qui décrit un déplacement ;
+ *  - `rowKey` + `edge` : sur quelle ligne et de quel côté dessiner le repère.
+ *    Ce n'est pas forcément la ligne survolée : viser la fin d'une grappe
+ *    renvoie le repère sur sa dernière question liée. */
+type DropTarget = { gi: number; sectionIdx: number; rowKey: string; edge: 'before' | 'after' };
+
+/** Clé de la zone de dépôt de fin de copie, sous la dernière page — elle ne
+ *  correspond à aucune ligne. */
+const TAIL_KEY = '__tail__';
+
+// ─── Défilement automatique pendant un glisser ───────────────────────────────
+// Une copie fait plusieurs pages : sans ça, déplacer une question de la page 4
+// vers la page 1 est impossible d'un seul geste — la molette est inopérante
+// pendant un glisser HTML5 et le panneau ne bouge pas tout seul.
+// Une seule vitesse, franche : deux paliers donnaient un défilement en à-coups
+// dès que le curseur passait du papier à une marge. La bande de déclenchement se
+// mesure depuis le bord haut ou bas du panneau et n'a pas de borne au-delà : au
+// -dessus du panneau (barre d'outils, en-tête de l'app) ou en dessous, on
+// continue de défiler. Aucune contrainte horizontale non plus — le geste marche
+// aussi au-dessus de la colonne des questions, dont les états de survol sont de
+// toute façon suspendus pendant un glisser.
+const AUTO_SCROLL_BAND = 130;
+const AUTO_SCROLL_SPEED = 600; // px/s
+// Sans nouvel événement pendant ce délai, le curseur a quitté la fenêtre : on
+// coupe le défilement plutôt que de le laisser filer sur la dernière consigne.
+const AUTO_SCROLL_STALE_MS = 500;
+
+/** Les lignes de la copie portent toutes un `bi` sauf les titres de partie, dont
+ *  la hauteur est portée par le premier bloc de leur partie (voir
+ *  `computePagination`). */
 function isBlockRow(row: SheetRow): row is Extract<SheetRow, { bi: number }> {
-  return row.kind !== 'header' && row.kind !== 'empty';
+  return row.kind !== 'header';
 }
 
 // Tout ce qui accompagne la feuille (barre d'outils, zone d'en-tête, boutons du
@@ -121,7 +170,7 @@ const SHEET_ALIGNED: React.CSSProperties = {
 };
 
 // ---- GENERATOR / APERÇU EN DIRECT ----
-function GeneratorContent({ workshopId, questions, config, onConfigChange, editing, onCancelEdit, onGenerate, onOpenQuestion, onRemoveFromDraft, onClearEditor, editingQuestion, newQuestionId, focusRequest, onRequestFocus, pools, notions, onCreatePool, onUpdatePool, onDeletePool, onSaveQuestion, onCancelQuestion }: {
+function GeneratorContent({ workshopId, questions, config, onConfigChange, editing, onCancelEdit, onGenerate, onOpenQuestion, onRemoveFromDraft, onClearEditor, editingQuestion, newQuestionId, focusRequest, onRequestFocus, pools, notions, onCreatePool, onUpdatePool, onDeletePool, onSaveQuestion, onCancelQuestion, onDragActiveChange }: {
   workshopId: string;
   questions: Question[];
   config: ExamConfig;
@@ -147,12 +196,41 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   onDeletePool: (id: string) => void;
   onSaveQuestion: (q: Question) => void;
   onCancelQuestion: () => void;
+  /** Un glisser est en cours sur la copie (ligne ou partie). La coquille s'en
+   *  sert pour figer le défilement de la colonne des questions : le navigateur
+   *  fait défiler tout seul, pendant un glisser, le conteneur défilant survolé —
+   *  la liste partait donc en même temps que la feuille dès qu'on approchait de
+   *  son bord. */
+  onDragActiveChange?: (active: boolean) => void;
 }) {
   const t = useTranslations('examen');
   const [dragFlatIdx, setDragFlatIdx] = useState<number | null>(null);
   const [hoveredRowKey, setHoveredRowKey] = useState<string | null>(null);
   const [draggingIdentityKey, setDraggingIdentityKey] = useState<string | null>(null);
-  const [dropIndicator, setDropIndicator] = useState<number | null>(null);
+  // Où la grappe en cours de glisser se posera si on lâche maintenant. Le rang
+  // dans la liste aplatie ne suffit pas : la partie d'accueil en fait partie
+  // (un même rang appartient à la fin d'une partie comme au début de la
+  // suivante), et `rowKey`/`edge` disent sur quelle ligne et de quel côté
+  // dessiner le repère.
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  // Glisser d'une partie entière — indépendant de `dragFlatIdx`, qui déplace une
+  // grappe de questions. Tant qu'il dure, la copie se replie sur ses seuls
+  // titres de partie (voir la construction de `sheetRows`) : c'est ce qui montre
+  // que les questions suivent leur partie au lieu de se déplacer une à une.
+  // `sectionDropIdx` est un rang d'insertion PARMI LES PARTIES, donc de 0 à
+  // `sections.length` — pas un index de partie.
+  const [dragSectionIdx, setDragSectionIdx] = useState<number | null>(null);
+  const [sectionDropIdx, setSectionDropIdx] = useState<number | null>(null);
+  // Le repli est un état à part de `dragSectionIdx`, et volontairement en
+  // retard d'un tour de boucle sur lui : masquer la ligne source dans le
+  // `dragstart` lui-même **annule le glisser** — Chrome n'a alors ni pris son
+  // instantané ni démarré l'opération, et un nœud non rendu ne peut pas en être
+  // la source. C'est ce qui a cassé le déplacement de toutes les parties d'un
+  // coup. Repoussé au tour suivant, le glisser est déjà en cours et le repli
+  // n'a plus de prise dessus. La logique de dépôt, elle, continue de lire
+  // `dragSectionIdx`, posé tout de suite.
+  const [sectionCollapsed, setSectionCollapsed] = useState(false);
+  const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [newFieldName, setNewFieldName] = useState('');
   const [creatingCustomField, setCreatingCustomField] = useState(false);
   const [pendingRemoveSectionIdx, setPendingRemoveSectionIdx] = useState<number | null>(null);
@@ -188,6 +266,9 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   // dérivée (`partWeightKey`). Trois lectures en découlent — la ligne, la
   // grappe, la partie — et le total de l'en-tête est la somme des parties.
   const pointsOf = (key: string) => config.weighting[key]?.points ?? defaultWeight().points;
+  // Mention « éliminatoire » de la copie : indexée par la même clé que les
+  // points, donc disponible pour une question comme pour une question liée.
+  const isEliminatory = (key: string) => config.weighting[key]?.eliminatory ?? defaultWeight().eliminatory;
   const clusterPoints = (id: string) => {
     const q = questions.find(p => p.id === id);
     return pointsOf(id) + (q ? q.parts.reduce((s, _part, pi) => s + pointsOf(partWeightKey(id, pi)), 0) : 0);
@@ -262,7 +343,16 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
         gi++;
         pushedAny = true;
       });
-      if (!pushedAny) sheetRows.push({ kind: 'empty', key: `e-${section.id}`, sectionIdx: sIdx });
+      // Une partie vide occupe bel et bien de la place sur la copie : son titre
+      // et sa cale « glisse une question ici ». Tant qu'elle n'était pas un bloc
+      // paginable, la pagination ne la voyait pas — plusieurs parties vides
+      // d'affilée débordaient sous le bas de la page, et un saut de page qui les
+      // précédait ne trouvait aucun bloc suivant à qui s'appliquer, donc ne
+      // faisait rien.
+      if (!pushedAny) {
+        const key = `e-${section.id}`;
+        sheetRows.push({ kind: 'empty', key, bi: addBlock(key, sIdx, A4_EMPTY_SECTION_HEIGHT), sectionIdx: sIdx });
+      }
     });
   }
 
@@ -276,7 +366,31 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   // décalage que la croix de la gouttière reprend pour tomber pile en face.
   const markRefs = useRef<Record<string, HTMLSpanElement | null>>({});
   const [markTops, setMarkTops] = useState<Record<string, number>>({});
+  /** Compteur incrémenté à chaque image d'énoncé réellement peinte. Il ne sert
+   *  qu'à provoquer un rendu, donc une nouvelle passe de mesure : l'effet
+   *  ci-dessous n'a pas de tableau de dépendances et se rejoue à chaque rendu,
+   *  mais le chargement d'une image n'en déclenche aucun de lui-même. Sans lui,
+   *  la ligne restait mesurée à sa hauteur d'avant l'image et la page débordait
+   *  jusqu'à ce qu'un rendu venu d'ailleurs (un survol, une frappe) remette les
+   *  choses d'aplomb. Un compteur et non un booléen : plusieurs images se
+   *  chargent, chacune doit compter. */
+  const [mediaTick, setMediaTick] = useState(0);
+  const noteMediaLoaded = useCallback(() => setMediaTick(n => n + 1), []);
   useLayoutEffect(() => {
+    // Pendant un glisser, aucun contenu ne change : seul l'indicateur de dépôt
+    // se déplace, et il est posé en absolu pour ne rien peser dans la mise en
+    // page. On saute donc la mesure — elle relit un `getBoundingClientRect()`
+    // par ligne ET par barème à chaque survol, ce qui suffisait à rendre le
+    // glisser saccadé dès que la copie dépassait une page (et pouvait même
+    // déplacer la ligne visée sous le curseur en repaginant). Elle reprend au
+    // relâchement, quand la copie a réellement changé. Idem pendant le glisser
+    // d'une partie : la copie repliée ne montre que des titres, dont la hauteur
+    // vient d'être mesurée — les relire n'apprendrait rien.
+    if (dragFlatIdx !== null || dragSectionIdx !== null) return;
+    // Lecture volontaire : `mediaTick` n'a pas d'autre rôle que de faire
+    // repasser cet effet quand une image d'énoncé vient de finir de se charger
+    // (voir sa déclaration).
+    void mediaTick;
     const next: Record<string, number> = {};
     let changed = false;
     for (const [key, el] of Object.entries(qRefs.current)) {
@@ -340,6 +454,66 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   // arrière-plan ne reçoit aucune trame d'animation, le recadrage n'aurait
   // jamais lieu si la question était ouverte juste avant de changer d'onglet.
   const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (dragFlatIdx === null && dragSectionIdx === null) return;
+    let raf = 0;
+    let lastTs = 0;
+    let lastMove = 0;
+    let velocity = 0; // px/s, négatif vers le haut
+    // Sous 768px la coquille ne borne plus la hauteur : c'est la page qui
+    // défile, pas le panneau — le repère devient alors la fenêtre.
+    const scroller = () => {
+      const panel = panelRef.current;
+      return panel && panel.scrollHeight > panel.clientHeight + 1 ? panel : null;
+    };
+    const viewportRect = () => {
+      const panel = scroller();
+      return panel ? panel.getBoundingClientRect() : new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+    };
+    const onDragOver = (e: DragEvent) => {
+      lastMove = performance.now();
+      const rect = viewportRect();
+      // Seule l'ordonnée compte : la bande du haut et celle du bas traversent
+      // tout l'écran, colonne des questions comprise, et débordent au-delà des
+      // bords du panneau. On peut donc remonter la copie en glissant vers le
+      // haut de la fenêtre, quelle que soit la colonne survolée.
+      const dir = e.clientY < rect.top + AUTO_SCROLL_BAND ? -1 : e.clientY > rect.bottom - AUTO_SCROLL_BAND ? 1 : 0;
+      velocity = dir * AUTO_SCROLL_SPEED;
+    };
+    const step = (ts: number) => {
+      raf = requestAnimationFrame(step);
+      // Écart plafonné : un onglet revenu au premier plan après une pause
+      // rendrait un `dt` énorme, donc un saut de plusieurs écrans d'un coup.
+      const dt = lastTs ? Math.min((ts - lastTs) / 1000, 0.05) : 0;
+      lastTs = ts;
+      if (!velocity || !dt) return;
+      if (performance.now() - lastMove > AUTO_SCROLL_STALE_MS) { velocity = 0; return; }
+      const panel = scroller();
+      if (panel) panel.scrollTop += velocity * dt;
+      else window.scrollBy(0, velocity * dt);
+    };
+    window.addEventListener('dragover', onDragOver);
+    raf = requestAnimationFrame(step);
+    return () => {
+      window.removeEventListener('dragover', onDragOver);
+      cancelAnimationFrame(raf);
+    };
+  }, [dragFlatIdx, dragSectionIdx]);
+  /** Filet de sécurité du glisser de partie : la copie se replie au démarrage,
+   *  donc la ligne qui a lancé le geste peut changer de page et être remontée
+   *  par React — son `dragend` n'arriverait alors jamais et la copie resterait
+   *  repliée. On écoute aussi la fin du glisser sur `window`, qui la reçoit quoi
+   *  qu'il arrive. */
+  useEffect(() => {
+    if (dragSectionIdx === null) return;
+    const stop = () => endSectionDrag();
+    window.addEventListener('dragend', stop);
+    window.addEventListener('drop', stop);
+    return () => {
+      window.removeEventListener('dragend', stop);
+      window.removeEventListener('drop', stop);
+    };
+  }, [dragSectionIdx]);
   useEffect(() => {
     if (!focusRequest) return;
     const focusKey = focusRequest.key;
@@ -421,8 +595,9 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   function baremeLabel(): string {
     return `…… / ${t('generator.points', { count: totalPoints, plural: totalPoints === 1 ? '' : 's' })}`;
   }
-  // Barème d'une ligne : même formule que le total de l'en-tête, sans les
-  // pointillés (il n'y a rien à y écrire, la note se met en face de la réponse).
+  // Barème d'une ligne : même formule que le total de l'en-tête, sans ses
+  // pointillés — la place où le correcteur écrit la note est ici un blanc
+  // réservé devant la barre (`MARK_SPACE`), pas une ligne de points.
   function pointsLabel(n: number): string {
     return `/ ${t('generator.points', { count: n, plural: n === 1 ? '' : 's' })}`;
   }
@@ -433,11 +608,22 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
    *
    *  L'affichage se décide au point d'appel : chaque sorte de ligne a sa propre
    *  commande dans « personnaliser ». */
+  /** Mention accolée à la fin de l'énoncé : une mauvaise réponse à cette
+   *  question annule la question. Elle vit dans le texte, pas dans la colonne de
+   *  droite — celle-ci reste celle du barème, dont l'alignement d'une ligne à
+   *  l'autre est ce que suit la gouttière d'en face (`markRefs`). */
+  function eliminatoryMark() {
+    return (
+      <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: palette.danger, whiteSpace: 'nowrap' as const }}>
+        {t('generator.eliminatoryMark')}
+      </span>
+    );
+  }
   function sheetPoints(points: number, lineHeight: number, rowKey: string) {
     return (
       <span
         ref={el => { markRefs.current[rowKey] = el; }}
-        style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, color: palette.inkMuted, whiteSpace: 'nowrap' as const, lineHeight: `${lineHeight}px` }}
+        style={{ flexShrink: 0, paddingLeft: MARK_SPACE, fontSize: 12, fontWeight: 600, color: palette.inkMuted, whiteSpace: 'nowrap' as const, lineHeight: `${lineHeight}px` }}
       >
         {pointsLabel(points)}
       </span>
@@ -559,11 +745,77 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
     delete weighting[partWeightKey(questionId, i)];
     patchConfig({ weighting });
   }
-  function handleDrop(targetFlatIdx: number, targetSectionIdx: number) {
-    if (dragFlatIdx === null) return;
-    patchConfig({ sections: moveSectionRow(config.sections, questions, dragFlatIdx, targetFlatIdx, targetSectionIdx) });
+  /** Vise une position de dépôt. L'objet est reconstruit à chaque `dragover`
+   *  (des dizaines par seconde) : on renvoie le précédent à l'identique quand
+   *  rien n'a changé, sinon React re-rendrait toute la copie à chaque pixel
+   *  parcouru. */
+  function aimAt(next: DropTarget) {
+    setDropTarget(prev => (prev && prev.rowKey === next.rowKey && prev.edge === next.edge && prev.gi === next.gi && prev.sectionIdx === next.sectionIdx ? prev : next));
+  }
+  /** Les quatre points d'entrée du glisser passent par ces deux fonctions, pour
+   *  que la coquille soit prévenue à chaque fois — un `dragstart` oublié laisse
+   *  la colonne des questions défiler avec la feuille. */
+  function beginRowDrag(gi: number) {
+    setDragFlatIdx(gi);
+    onDragActiveChange?.(true);
+  }
+  function beginSectionDrag(idx: number) {
+    setDragSectionIdx(idx);
+    setSectionDropIdx(idx);
+    onDragActiveChange?.(true);
+    if (collapseTimer.current) clearTimeout(collapseTimer.current);
+    collapseTimer.current = setTimeout(() => {
+      collapseTimer.current = null;
+      setSectionCollapsed(true);
+      // La copie repliée tient sur une seule page, bien plus courte que celle
+      // qu'on était en train de lire : sans ce recadrage, une partie prise en
+      // bas de la copie laissait le panneau sur une position de défilement qui
+      // n'existe plus — ramenée au maximum par le navigateur, elle ne montrait
+      // que du blanc sous les bandeaux, et il n'y avait plus rien à viser.
+      if (panelRef.current) panelRef.current.scrollTop = 0;
+    }, 0);
+  }
+  function endDrag() {
     setDragFlatIdx(null);
-    setDropIndicator(null);
+    setDropTarget(null);
+    onDragActiveChange?.(false);
+  }
+  /** Dépose là où le dernier survol a visé — jamais d'après la ligne qui reçoit
+   *  l'événement `drop` : celle du dessous quand on lâche entre deux lignes
+   *  n'est pas forcément celle qu'on visait. */
+  function dropHere() {
+    if (dragFlatIdx !== null && dropTarget) {
+      patchConfig({ sections: moveSectionRow(config.sections, questions, dragFlatIdx, dropTarget.gi, dropTarget.sectionIdx) });
+    }
+    endDrag();
+  }
+  function endSectionDrag() {
+    if (collapseTimer.current) { clearTimeout(collapseTimer.current); collapseTimer.current = null; }
+    setDragSectionIdx(null);
+    setSectionDropIdx(null);
+    setSectionCollapsed(false);
+    onDragActiveChange?.(false);
+  }
+  /** Vise un rang d'insertion parmi les parties (voir `sectionDropIdx`). Même
+   *  précaution que `aimAt` : on renvoie le précédent à l'identique quand rien
+   *  n'a changé, sinon la copie se re-rendrait à chaque pixel parcouru. */
+  function aimSectionAt(idx: number) {
+    setSectionDropIdx(prev => (prev === idx ? prev : idx));
+  }
+  /** Repose la partie déplacée au rang visé. Le rang est celui de la liste
+   *  d'origine : retirer la partie avant de l'insérer décale d'un cran tout ce
+   *  qui la suivait, d'où la correction sur `to`. */
+  function dropSectionHere() {
+    if (dragSectionIdx !== null && sectionDropIdx !== null) {
+      const to = sectionDropIdx > dragSectionIdx ? sectionDropIdx - 1 : sectionDropIdx;
+      if (to !== dragSectionIdx) {
+        const next = [...config.sections];
+        const [moved] = next.splice(dragSectionIdx, 1);
+        next.splice(to, 0, moved);
+        patchConfig({ sections: next });
+      }
+    }
+    endSectionDrag();
   }
   function addPageBreak() {
     const id = PAGE_BREAK_PREFIX + Date.now();
@@ -802,6 +1054,25 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
         )}
 
 
+          {/* Copie repliée pendant le glisser d'une partie : les questions
+              disparaissent pour montrer qu'elles suivent leur partie, et il ne
+              reste qu'un bandeau par partie, déplaçable comme une liste
+              ordinaire.
+
+              Les pages sont **masquées, jamais démontées**. Le nœud qui a
+              démarré le glisser vit dedans : le retirer de l'arbre coupait le
+              geste — Chrome émet alors son `dragend` sur un nœud détaché, donc
+              hors de portée de React comme de l'écouteur de secours sur
+              `window`, et la copie restait repliée après le relâchement. Seules
+              les parties de la première page y échappaient (leur ligne ne
+              changeait pas de page à la construction), d'où un déplacement qui
+              ne marchait que pour la première partie. `display: none` conserve
+              le nœud dans le document : la fin du glisser remonte normalement.
+
+              Le masquage attend en revanche le tour de boucle suivant
+              (`sectionCollapsed`) : appliqué dans le `dragstart`, il annulait le
+              glisser lui-même. */}
+          <div style={{ display: sectionCollapsed ? 'none' : undefined }}>
           {(() => {
             const chunks: SheetRow[][] = [];
             let current: SheetRow[] = [];
@@ -824,13 +1095,106 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
             // propre .map() sur `chunk` — une ligne ne change jamais de colonne, seulement de position.
             // Les mêmes handlers de drag (calcul avant/après identique) sont attachés aux 3 cellules d'une
             // même ligne, pour pouvoir déposer en survolant n'importe laquelle des 3 zones.
-            const dragOverPropsFor = (gi: number, sectionIdx: number) => ({
-              onDragOver: (e: React.DragEvent) => { e.preventDefault(); if (dragFlatIdx === null) return; const rect = e.currentTarget.getBoundingClientRect(); const before = (e.clientY - rect.top) < rect.height / 2; setDropIndicator(before ? gi : gi + 1); },
-              onDrop: (e: React.DragEvent) => { e.preventDefault(); if (dropIndicator !== null) handleDrop(dropIndicator, sectionIdx); else setDragFlatIdx(null); },
+            // Survol d'une ligne pendant un glisser. La moitié haute vise le bord
+            // AVANT la grappe, la moitié basse le bord APRÈS elle — et le repère
+            // est renvoyé sur la ligne qui porte réellement ce bord
+            // (`firstKey`/`lastKey`), pas sur celle qu'on survole. Sans ça, viser
+            // la fin d'une partie dessinait le trait sous le titre de la partie
+            // SUIVANTE : le geste faisait pourtant ce qu'il fallait, mais
+            // l'aperçu annonçait le contraire.
+            const dragOverPropsFor = (gi: number, sectionIdx: number, firstKey: string, lastKey: string) => ({
+              onDragOver: (e: React.DragEvent) => {
+                e.preventDefault();
+                if (dragFlatIdx === null) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const before = (e.clientY - rect.top) < rect.height / 2;
+                aimAt(before
+                  ? { gi, sectionIdx, rowKey: firstKey, edge: 'before' }
+                  : { gi: gi + 1, sectionIdx, rowKey: lastKey, edge: 'after' });
+              },
+              onDrop: (e: React.DragEvent) => { e.preventDefault(); dropHere(); },
             });
-            const emptyDropPropsFor = (start: number, sectionIdx: number) => ({
-              onDragOver: (e: React.DragEvent) => { e.preventDefault(); if (dragFlatIdx !== null) setDropIndicator(start); },
-              onDrop: (e: React.DragEvent) => { e.preventDefault(); handleDrop(start, sectionIdx); },
+            // La ligne de question est elle-même la poignée : maintenir le clic
+            // dessus la fait glisser, un double-clic l'ouvre en modification.
+            // Les deux gestes cohabitent sans arbitrage de notre part — le
+            // navigateur n'amorce un glisser qu'au déplacement du curseur, et un
+            // double-clic sans déplacement n'en démarre aucun. La gouttière n'a
+            // plus ni ⠿ ni bouton de modification : ils ne faisaient que doubler
+            // ces deux gestes, au prix d'une colonne de boutons le long de la
+            // copie. Même chose pour la bande « saut de page », déplaçable
+            // directement (elle n'a pas de double-clic : rien à y modifier).
+            const questionRowProps = (gi: number, sectionIdx: number, qid: string, firstKey: string, lastKey: string) => ({
+              draggable: true,
+              onDragStart: (e: React.DragEvent) => {
+                e.dataTransfer.effectAllowed = 'move';
+                // Firefox n'amorce aucun glisser sans donnée transportée.
+                e.dataTransfer.setData('text/plain', qid);
+                beginRowDrag(gi);
+              },
+              onDragEnd: endDrag,
+              onDoubleClick: () => onOpenQuestion(qid),
+              onMouseEnter: () => setHoveredRowKey(qid),
+              onMouseLeave: () => setHoveredRowKey(null),
+              ...dragOverPropsFor(gi, sectionIdx, firstKey, lastKey),
+            });
+            /** Bords visibles d'une grappe : son premier bloc est toujours la
+             *  question principale, son dernier est sa dernière question liée
+             *  quand elle en a. C'est là que le repère de dépôt doit tomber. */
+            const clusterKeys = (q: Question) => ({
+              firstKey: q.id,
+              lastKey: q.parts.length > 0 ? partWeightKey(q.id, q.parts.length - 1) : q.id,
+            });
+            /** Les cales des deux gouttières sont des cibles de dépôt au même
+             *  titre que la ligne qu'elles accompagnent : on peut déposer en
+             *  survolant l'une des trois colonnes, et toutes visent les mêmes
+             *  bords. */
+            // `gi` et non `bi` : la cale « partie vide » est un bloc paginable
+            // mais ne se déplace pas — elle a sa propre cible de dépôt
+            // (`emptyDropPropsFor`), qui vise le début de sa partie.
+            const gutterDropProps = (row: Extract<SheetRow, { gi: number }>) => {
+              if (row.kind === 'pagebreak') return dragOverPropsFor(row.gi, row.sectionIdx, row.key, row.key);
+              const { firstKey, lastKey } = clusterKeys(row.q);
+              return dragOverPropsFor(row.gi, row.sectionIdx, firstKey, lastKey);
+            };
+            // Repère de dépôt : posé EN ABSOLU sur la ligne visée, jamais dans
+            // son flux. Un filet qui prend 3px de hauteur change la hauteur
+            // mesurée du bloc, donc la pagination, donc la position de la ligne
+            // sous le curseur — le repère se déplaçait lui-même en s'affichant.
+            // `pointerEvents: none` pour qu'il ne devienne pas à son tour une
+            // cible de survol, ce qui le faisait clignoter.
+            const dropLine = (edge: 'before' | 'after') => (
+              <div style={{ position: 'absolute' as const, [edge === 'before' ? 'top' : 'bottom']: 0, left: 34, right: 34, height: 3, borderRadius: 2, background: palette.amber, pointerEvents: 'none' as const }} />
+            );
+            /** Repère à dessiner sur cette ligne, s'il y en a un. Rien n'est
+             *  montré quand le dépôt ne changerait rien (mêmes deux conditions
+             *  que `moveSectionRow`) : un trait qui promet un déplacement sans
+             *  effet est pire que pas de trait du tout. */
+            const dropLineFor = (rowKey: string) => {
+              if (!dropTarget || dropTarget.rowKey !== rowKey || dragFlatIdx === null) return null;
+              const from = flat[dragFlatIdx];
+              const sameSection = from?.sectionIdx === dropTarget.sectionIdx;
+              if (sameSection && (dropTarget.gi === dragFlatIdx || dropTarget.gi === dragFlatIdx + 1)) return null;
+              return dropLine(dropTarget.edge);
+            };
+            // Surface d'une ligne de question. Le survol pose un voile ambré
+            // très léger — de quoi savoir sur quelle question on se trouve, pas
+            // de quoi faire cesser la copie de ressembler à une copie. Il
+            // s'éteint pendant un glisser : c'est le repère de dépôt qui parle
+            // alors, un second surlignage sous le curseur ne ferait que le
+            // brouiller. `position: relative` porte ce repère, `cursor: grab`
+            // annonce que la ligne se déplace, et `userSelect: none` évite que
+            // le double-clic d'ouverture sélectionne un mot au passage.
+            const rowSurface = (hovered: boolean, gi: number): React.CSSProperties => ({
+              position: 'relative',
+              background: hovered && dragFlatIdx === null ? withAlpha(palette.amber, 0.05) : 'transparent',
+              opacity: dragFlatIdx === gi ? 0.4 : 1,
+              cursor: 'grab',
+              userSelect: 'none',
+              transition: 'background 0.1s',
+            });
+            const emptyDropPropsFor = (start: number, sectionIdx: number, rowKey: string) => ({
+              onDragOver: (e: React.DragEvent) => { e.preventDefault(); if (dragFlatIdx !== null) aimAt({ gi: start, sectionIdx, rowKey, edge: 'before' }); },
+              onDrop: (e: React.DragEvent) => { e.preventDefault(); dropHere(); },
             });
 
             return chunks.map((chunk, chunkIdx) => {
@@ -853,34 +1217,46 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                       inaccessible ; avec margin:auto la marge se résout à 0 en cas de dépassement, donc
                       tout reste atteignable en scrollant (le bord gauche est alors immédiatement visible). */}
                   <div style={{ display: 'flex', gap: COLUMN_GAP, alignItems: 'flex-start', width: 'fit-content', margin: '0 auto' }}>
-                    {/* gouttière gauche : poignée de glisser-déposer + icône (⚠ incomplète / ⚙ éditer) */}
+                    {/* gouttière gauche : plus aucun bouton, seulement le repère
+                        « ordre aléatoire » des lignes concernées. Elle garde sa
+                        largeur et ses cales, qui restent des cibles de dépôt et
+                        tiennent l'alignement ligne à ligne avec la copie. */}
                     <div style={{ width: 26, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
                       <div style={{ height: A4_MARGIN_PX, flexShrink: 0 }} />
                       {chunkIdx === 0 && headerBlockHeight > 0 && <div style={{ height: headerBlockHeight, flexShrink: 0 }} />}
                       {chunk.map(row => {
                         const rh = rowHeights[row.key];
                         if (row.kind === 'header' || row.kind === 'empty') {
-                          return <div key={row.key} style={{ height: rh, minHeight: rh ? undefined : A4_SECTION_HEADER_HEIGHT }} />;
+                          return <div key={row.key} style={{ height: rh, minHeight: rh ? undefined : (row.kind === 'empty' ? A4_EMPTY_SECTION_HEIGHT : A4_SECTION_HEADER_HEIGHT) }} />;
                         }
                         if (row.kind === 'pagebreak') {
-                          return (
-                            <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_PAGE_BREAK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' as const, opacity: dragFlatIdx === row.gi ? 0.4 : 1 }}>
-                              <span draggable onDragStart={() => setDragFlatIdx(row.gi)} onDragEnd={() => { setDragFlatIdx(null); setDropIndicator(null); }} title={t('generator.dragReorder')} style={{ cursor: 'grab', color: palette.lineStrong, fontSize: 13, lineHeight: 1, userSelect: 'none' as const }}>⠿</span>
-                            </div>
-                          );
+                          return <div key={row.key} {...gutterDropProps(row)} style={{ height: rh, minHeight: rh ? undefined : A4_PAGE_BREAK_HEIGHT, boxSizing: 'border-box' as const, opacity: dragFlatIdx === row.gi ? 0.4 : 1 }} />;
                         }
                         // Une question liée n'a ni poignée ni crayon : c'est la
                         // grappe entière qui se déplace et qui s'ouvre dans le
-                        // formulaire. Sa cale garde seulement sa hauteur, pour
-                        // que la ligne suivante reste en face de la bonne
-                        // question quand la grappe est coupée entre deux pages.
+                        // formulaire. Sa cale garde sa hauteur, pour que la
+                        // ligne suivante reste en face de la bonne question
+                        // quand la grappe est coupée entre deux pages — et porte
+                        // le seul repère qui lui soit propre : l'ordre aléatoire,
+                        // qu'une question liée règle pour elle-même. Il se cale
+                        // sur son énoncé par le retrait mesuré de son barème,
+                        // comme les croix de la gouttière d'en face.
                         if (row.kind === 'qpart') {
-                          return <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, opacity: dragFlatIdx === row.gi ? 0.4 : 1 }} />;
+                          const part = row.q.parts[row.partIdx];
+                          return (
+                            <div key={row.key} {...gutterDropProps(row)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', paddingTop: markTops[row.key] ?? LINKED_PAD_TOP, boxSizing: 'border-box' as const, opacity: dragFlatIdx === row.gi ? 0.4 : 1 }}>
+                              {part && shufflesAnswerItems(part) && <ShuffleNoticeIcon title={t('generator.shuffleNotice')} />}
+                            </div>
+                          );
                         }
+                        // Le repère d'ordre aléatoire est masqué pendant la
+                        // modification : le formulaire porte sa propre pilule, et
+                        // la question connue ici est la version enregistrée — le
+                        // repère contredirait la case qu'on vient de cocher.
+                        const showShuffleNotice = row.kind === 'qhead' && shufflesAnswerItems(row.q);
                         return (
-                          <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, paddingTop: 20, boxSizing: 'border-box' as const, opacity: dragFlatIdx === row.gi ? 0.4 : 1 }}>
-                            <span draggable onDragStart={() => setDragFlatIdx(row.gi)} onDragEnd={() => { setDragFlatIdx(null); setDropIndicator(null); }} onMouseEnter={() => setHoveredRowKey(row.key)} onMouseLeave={() => setHoveredRowKey(null)} title={t('generator.dragReorder')} style={{ cursor: 'grab', color: palette.lineStrong, fontSize: 13, lineHeight: 1, userSelect: 'none' as const }}>⠿</span>
-                            <EditQuestionButton id={row.q.id} onOpenQuestion={onOpenQuestion} active={editingQuestion?.id === row.q.id} />
+                          <div key={row.key} {...gutterDropProps(row)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 20, boxSizing: 'border-box' as const, opacity: dragFlatIdx === row.gi ? 0.4 : 1 }}>
+                            {showShuffleNotice && <ShuffleNoticeIcon title={t('generator.shuffleNotice')} />}
                           </div>
                         );
                       })}
@@ -954,18 +1330,45 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                       {chunk.map(row => {
                         const section = config.sections[row.sectionIdx];
                         if (row.kind === 'header') {
+                          const editingTitle = focusedSectionIdx === row.sectionIdx;
+                          const titleStyle: React.CSSProperties = {
+                            flex: 1, minWidth: 0, fontSize: 16, fontWeight: 600, color: palette.tanStrong,
+                            fontFamily: 'inherit', boxSizing: 'border-box' as const,
+                            padding: `${SECTION_TITLE_PAD_TOP}px 0 10px 34px`, lineHeight: `${SECTION_TITLE_LINE_H}px`,
+                          };
                           return (
-                            <div key={row.key} ref={el => { qRefs.current[row.key] = el; }} style={{ display: 'flex', alignItems: 'baseline', gap: 12, paddingRight: 34 }}>
+                            <div
+                              key={row.key}
+                              ref={el => { qRefs.current[row.key] = el; }}
+                              // Toute la ligne de titre est la poignée de la
+                              // partie — sauf pendant qu'on renomme : un champ de
+                              // saisie dans un parent `draggable` ne laisse plus
+                              // sélectionner son texte, d'où le titre rendu en
+                              // `<span>` au repos et en `<input>` seulement une
+                              // fois cliqué.
+                              draggable={!editingTitle}
+                              onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', row.key); beginSectionDrag(row.sectionIdx); }}
+                              onDragEnd={endSectionDrag}
+                              title={editingTitle ? undefined : t('generator.dragSection')}
+                              style={{ display: 'flex', alignItems: 'baseline', gap: 12, paddingRight: 34, cursor: editingTitle ? 'default' : 'grab' }}
+                            >
                               {/* Pas d'icône crayon sur la feuille : le titre de
                                   partie reste éditable au clic, mais la copie doit
                                   rester une copie, sans affordance imprimée. */}
-                              <input
-                                value={section.title}
-                                onChange={e => updateSection(row.sectionIdx, { title: e.target.value })}
-                                onFocus={() => setFocusedSectionIdx(row.sectionIdx)}
-                                onBlur={() => setFocusedSectionIdx(null)}
-                                style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 600, color: palette.tanStrong, background: focusedSectionIdx === row.sectionIdx ? withAlpha(palette.amber, 0.06) : 'transparent', border: 'none', padding: `${SECTION_TITLE_PAD_TOP}px 0 10px 34px`, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const }}
-                              />
+                              {editingTitle ? (
+                                <input
+                                  autoFocus
+                                  value={section.title}
+                                  onChange={e => updateSection(row.sectionIdx, { title: e.target.value })}
+                                  onBlur={() => setFocusedSectionIdx(null)}
+                                  style={{ ...titleStyle, background: withAlpha(palette.amber, 0.06), border: 'none', outline: 'none' }}
+                                />
+                              ) : (
+                                // Espace insécable de repli : un titre vide ferait
+                                // retomber la ligne à la hauteur de ses seuls
+                                // retraits, et la gouttière d'en face décrocherait.
+                                <span onClick={() => setFocusedSectionIdx(row.sectionIdx)} style={{ ...titleStyle, background: 'transparent' }}>{section.title || ' '}</span>
+                              )}
                               {/* Sous-total de la partie — sa propre commande,
                                   sans condition cachée : avec une seule partie il
                                   répète le total de l'en-tête, c'est alors à
@@ -984,10 +1387,13 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                             <div
                               key={row.key}
                               ref={el => { qRefs.current[row.key] = el; }}
-                              {...emptyDropPropsFor(start, row.sectionIdx)}
+                              {...emptyDropPropsFor(start, row.sectionIdx, row.key)}
                               style={{ padding: '0 34px 14px' }}
                             >
-                              <div style={{ fontSize: 11.5, color: palette.inkGhost, padding: '14px', textAlign: 'center' as const, border: `1px dashed ${ink(0.12)}`, borderRadius: 9, background: dropIndicator === start && dragFlatIdx !== null ? withAlpha(palette.amber, 0.08) : 'transparent' }}>
+                              {/* La cale d'une partie vide n'a pas de bord à
+                                  souligner : elle s'allume en entier, c'est elle
+                                  la position de dépôt. */}
+                              <div style={{ fontSize: 11.5, color: palette.inkGhost, padding: '14px', textAlign: 'center' as const, border: `1px dashed ${ink(0.12)}`, borderRadius: 9, background: dropTarget?.rowKey === row.key && dragFlatIdx !== null ? withAlpha(palette.amber, 0.08) : 'transparent' }}>
                                 {t('generator.emptySection')}
                               </div>
                             </div>
@@ -995,7 +1401,6 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                         }
                         if (row.kind === 'pagebreak') {
                           const gi = row.gi;
-                          const showLineBefore = dragFlatIdx !== null && dragFlatIdx !== gi && dragFlatIdx !== gi - 1 && dropIndicator === gi;
                           return (
                             /* L'air autour de la bande est un `padding` du bloc
                                mesuré, jamais une marge sur la bande elle-même :
@@ -1006,8 +1411,17 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                tout ce qui suit un saut de page se décalait
                                d'autant. Même règle que l'écart de 40px d'une
                                question liée. */
-                            <div key={row.key} {...dragOverPropsFor(gi, row.sectionIdx)} ref={el => { qRefs.current[row.key] = el; }} style={{ padding: '10px 34px' }}>
-                              <div style={{ height: showLineBefore ? 3 : 0, background: palette.amber, transition: 'all 0.1s' }} />
+                            <div
+                              key={row.key}
+                              draggable
+                              onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', row.key); beginRowDrag(gi); }}
+                              onDragEnd={endDrag}
+                              title={t('generator.dragReorder')}
+                              {...dragOverPropsFor(gi, row.sectionIdx, row.key, row.key)}
+                              ref={el => { qRefs.current[row.key] = el; }}
+                              style={{ position: 'relative' as const, padding: '10px 34px', cursor: 'grab', opacity: dragFlatIdx === gi ? 0.4 : 1 }}
+                            >
+                              {dropLineFor(row.key)}
                               <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: `1px dashed ${ink(0.20)}`, borderRadius: 8, background: ink(0.045), color: palette.inkFaint, fontSize: 11.5 }}>
                                 <SeparatorHorizontal size={14} strokeWidth={1.75} />
                                 {t('generator.pageBreak')}
@@ -1016,7 +1430,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                           );
                         }
                         const { gi, q } = row;
-                        const showLineBefore = dragFlatIdx !== null && dragFlatIdx !== gi && dragFlatIdx !== gi - 1 && dropIndicator === gi;
+                        const { firstKey, lastKey } = clusterKeys(q);
                         // Survol : c'est la grappe entière qui s'éclaire, même
                         // coupée entre deux pages — la poignée déplace la grappe.
                         const hovered = hoveredRowKey === q.id;
@@ -1059,15 +1473,17 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                           const part = q.parts[row.partIdx];
                           if (!part) return null;
                           return (
-                            <div key={row.key} {...dragOverPropsFor(gi, row.sectionIdx)} ref={el => { qRefs.current[row.key] = el; }} style={{ background: hovered ? withAlpha(palette.amber, 0.08) : 'transparent', transition: 'background 0.1s' }}>
+                            <div key={row.key} {...questionRowProps(gi, row.sectionIdx, q.id, firstKey, lastKey)} ref={el => { qRefs.current[row.key] = el; }} style={rowSurface(hovered, gi)}>
+                              {dropLineFor(row.key)}
                               <div style={{ padding: row.last ? '40px 34px 20px' : '40px 34px 0' }}>
                                 {/* Une question liée a son propre barème, à sa
                                     propre ligne : c'est bien la ligne de la copie
                                     qui porte des points, pas la grappe. */}
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6 }}>
+                                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap' as const }}>
                                     <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{row.number}.</span>
                                     {part.content || t('noStatement')}
+                                    {isEliminatory(row.key) && eliminatoryMark()}
                                   </div>
                                   {showQuestionPoints && sheetPoints(pointsOf(row.key), STATEMENT_LINE_H, row.key)}
                                 </div>
@@ -1081,18 +1497,30 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                           );
                         }
                         return (
-                          <div key={row.key} {...dragOverPropsFor(gi, row.sectionIdx)} ref={el => { qRefs.current[row.key] = el; }} style={{ background: hovered ? withAlpha(palette.amber, 0.08) : 'transparent', transition: 'background 0.1s' }}>
-                            <div style={{ height: showLineBefore ? 3 : 0, background: palette.amber, transition: 'all 0.1s' }} />
+                          <div key={row.key} {...questionRowProps(gi, row.sectionIdx, q.id, firstKey, lastKey)} ref={el => { qRefs.current[row.key] = el; }} style={rowSurface(hovered, gi)}>
+                            {dropLineFor(row.key)}
                             <div style={{ padding: row.last ? '20px 34px' : '20px 34px 0' }}>
-                              <QuestionImagePreview workshopId={workshopId} image={q.image} />
+                              <QuestionImagePreview workshopId={workshopId} image={q.image} onLoaded={noteMediaLoaded} />
                               <QuestionAudioNote audio={q.audio} />
                               {/* Le barème de la question principale seule : ses
                                   questions liées portent le leur, sur leur propre
-                                  ligne. */}
+                                  ligne.
+
+                                  `pre-wrap` sur l'énoncé (ici comme sur celui
+                                  d'une question liée) : les retours à la ligne
+                                  saisis dans le formulaire sont conservés en
+                                  base mais l'affichage HTML les réduisait à une
+                                  espace. `pre-wrap` et non `pre` — le retour à
+                                  la ligne automatique en fin de ligne doit
+                                  continuer de fonctionner. Aucun risque de voir
+                                  l'indentation du JSX : les lignes qui ne
+                                  contiennent que des blancs et un saut de ligne
+                                  sont supprimées à la compilation. */}
                               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                                <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6 }}>
+                                <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap' as const }}>
                                   <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{row.number}.</span>
                                   {q.content || t('noStatement')}
+                                  {isEliminatory(q.id) && eliminatoryMark()}
                                 </div>
                                 {showQuestionPoints && sheetPoints(pointsOf(q.id), STATEMENT_LINE_H, row.key)}
                               </div>
@@ -1130,7 +1558,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                           );
                         }
                         if (row.kind === 'empty') {
-                          return <div key={row.key} style={{ height: rh, minHeight: rh ? undefined : A4_SECTION_HEADER_HEIGHT }} />;
+                          return <div key={row.key} style={{ height: rh, minHeight: rh ? undefined : A4_EMPTY_SECTION_HEIGHT }} />;
                         }
                         if (row.kind === 'pagebreak') {
                           return (
@@ -1139,7 +1567,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                centrée sur le bandeau (dont les marges haute et
                                basse sont symétriques), simplement ramenée contre
                                la feuille comme les autres. */
-                            <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_PAGE_BREAK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+                            <div key={row.key} {...gutterDropProps(row)} style={{ height: rh, minHeight: rh ? undefined : A4_PAGE_BREAK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
                               <span onClick={() => removePageBreak(row.id)} title={t('generator.removePageBreak')} style={{ fontSize: 15, lineHeight: 1, color: palette.danger, cursor: 'pointer' }}>×</span>
                             </div>
                           );
@@ -1149,20 +1577,20 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                         // elle réserve juste sa hauteur pour que la ligne
                         // suivante reste en face de la bonne question.
                         if (row.kind === 'qpart') {
-                          return <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT }} />;
+                          return <div key={row.key} {...gutterDropProps(row)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT }} />;
                         }
                         // Même chose en face du formulaire d'édition : la
                         // question ouverte ne peut pas quitter la copie, ses
                         // modifications en cours partiraient avec elle. On sort
                         // de l'éditeur par « annuler » ou « enregistrer ».
                         if (row.kind === 'editor') {
-                          return <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT }} />;
+                          return <div key={row.key} {...gutterDropProps(row)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT }} />;
                         }
                         // La croix retire la grappe entière : elle est posée en
                         // face de son premier bloc, le seul dont on est certain
                         // qu'il est sur la même page que le début de la question.
                         return (
-                          <div key={row.key} {...dragOverPropsFor(row.gi, row.sectionIdx)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: markTops[row.key] ?? STATEMENT_PAD_TOP, boxSizing: 'border-box' as const }}>
+                          <div key={row.key} {...gutterDropProps(row)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: markTops[row.key] ?? STATEMENT_PAD_TOP, boxSizing: 'border-box' as const }}>
                             <span onClick={() => removeFromExam(row.q.id)} title={t('generator.removeFromExam')} style={{ display: 'flex', alignItems: 'center', height: STATEMENT_LINE_H, fontSize: 15, lineHeight: 1, color: palette.danger, cursor: 'pointer' }}>×</span>
                           </div>
                         );
@@ -1173,12 +1601,51 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
               );
             });
           })()}
+          </div>
+
+          {sectionCollapsed && dragSectionIdx !== null && (
+            <div style={{ ...SHEET_ALIGNED, marginBottom: 14 }}>
+              <div style={{ background: palette.paper, border: `1px solid ${ink(0.08)}`, borderRadius: 4, boxShadow: `0 2px 14px ${ink(0.06)}`, padding: '24px 34px' }}>
+                {config.sections.map((sec, sIdx) => {
+                  const isSource = dragSectionIdx === sIdx;
+                  const last = sIdx === config.sections.length - 1;
+                  // Un repère qui promettrait un déplacement sans effet
+                  // (reposer la partie là où elle est déjà) n'est pas dessiné —
+                  // même règle que `dropLineFor` pour les questions.
+                  const inert = (at: number) => at === dragSectionIdx || at === dragSectionIdx + 1;
+                  const showBefore = sectionDropIdx === sIdx && !inert(sIdx);
+                  const showAfter = last && sectionDropIdx === sIdx + 1 && !inert(sIdx + 1);
+                  return (
+                    <div
+                      key={sec.id}
+                      draggable
+                      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', `h-${sec.id}`); beginSectionDrag(sIdx); }}
+                      onDragEnd={endSectionDrag}
+                      onDragOver={e => {
+                        e.preventDefault();
+                        const r = e.currentTarget.getBoundingClientRect();
+                        aimSectionAt(e.clientY - r.top < r.height / 2 ? sIdx : sIdx + 1);
+                      }}
+                      onDrop={e => { e.preventDefault(); dropSectionHere(); }}
+                      style={{ position: 'relative' as const, padding: '5px 0', cursor: 'grab', opacity: isSource ? 0.4 : 1, userSelect: 'none' as const }}
+                    >
+                      {showBefore && <div style={{ position: 'absolute' as const, top: 0, left: 0, right: 0, height: 3, borderRadius: 2, background: palette.amber, pointerEvents: 'none' as const }} />}
+                      {showAfter && <div style={{ position: 'absolute' as const, bottom: 0, left: 0, right: 0, height: 3, borderRadius: 2, background: palette.amber, pointerEvents: 'none' as const }} />}
+                      <div style={{ padding: '12px 14px', border: `1px solid ${ink(0.14)}`, borderRadius: 9, background: ink(0.03), fontSize: 15, fontWeight: 600, color: palette.tanStrong }}>
+                        {sec.title || ' '}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {dragFlatIdx !== null && (
             <div
-              onDragOver={e => { e.preventDefault(); setDropIndicator(flat.length); }}
-              onDrop={e => { e.preventDefault(); handleDrop(flat.length, config.sections.length - 1); }}
-              style={{ height: 18, marginTop: -8, marginBottom: 14, borderRadius: 6, background: dropIndicator === flat.length ? withAlpha(palette.amber, 0.12) : 'transparent', border: dropIndicator === flat.length ? `1px dashed ${withAlpha(palette.amber, 0.4)}` : '1px dashed transparent' }}
+              onDragOver={e => { e.preventDefault(); aimAt({ gi: flat.length, sectionIdx: config.sections.length - 1, rowKey: TAIL_KEY, edge: 'after' }); }}
+              onDrop={e => { e.preventDefault(); dropHere(); }}
+              style={{ height: 18, marginTop: -8, marginBottom: 14, borderRadius: 6, background: dropTarget?.rowKey === TAIL_KEY ? withAlpha(palette.amber, 0.12) : 'transparent', border: dropTarget?.rowKey === TAIL_KEY ? `1px dashed ${withAlpha(palette.amber, 0.4)}` : '1px dashed transparent' }}
             />
           )}
 

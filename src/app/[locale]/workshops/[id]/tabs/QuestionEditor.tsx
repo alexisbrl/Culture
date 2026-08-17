@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { AudioLines, ImageIcon } from 'lucide-react';
 import { MediaAttachment, useQuestionMediaDrop } from './examen/questionMedia';
-import { LabelPill } from './examen/examShared';
+import { LabelPill, SelectMenu } from './examen/examShared';
 
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -32,14 +32,17 @@ export {
   ChoiceListEditor, TextField, emptyPart,
 } from './examen/questionFields';
 
+// Une question neuve s'ouvre en QCM, le type de très loin le plus posé — avec
+// les deux propositions vides que produit déjà le menu de type (`selectType`,
+// `questionFields`), pour n'avoir plus qu'à les remplir.
 export function emptyQuestion(): Question {
   return {
     id: 'q' + Date.now(),
     title: '',
-    responseType: 'textuelle',
+    responseType: 'qcm',
     content: '',
     answer: '',
-    choices: [],
+    choices: ['', ''],
     correctChoices: [],
     shuffleChoices: false,
     pools: [],
@@ -458,16 +461,15 @@ export default function QuestionEditor({
             {notions.length === 0 ? (
               <div style={{ fontSize: 11.5, color: palette.inkFaint }}>{t('editor.noNotions')}</div>
             ) : (
-              <select
-                value=""
-                onChange={(e) => { if (e.target.value) toggleNotion(e.target.value); }}
-                style={{ width: '100%', fontSize: 13, color: palette.inkMuted, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', cursor: 'pointer' }}
+              <SelectMenu
+                items={notions.filter((n) => !draft.notionIds.includes(n.id)).map((n) => ({ value: n.id, label: n.title }))}
+                onSelect={toggleNotion}
+                onScroll="clip"
+                wrapperStyle={{ display: 'block', width: '100%' }}
+                triggerStyle={{ width: '100%', textAlign: 'left', fontSize: 13, color: palette.inkMuted, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', cursor: 'pointer' }}
               >
-                <option value="">{t('editor.addNotionOption')}</option>
-                {notions.filter((n) => !draft.notionIds.includes(n.id)).map((n) => (
-                  <option key={n.id} value={n.id}>{n.title}</option>
-                ))}
-              </select>
+                {t('editor.addNotionOption')}
+              </SelectMenu>
             )}
           </div>
 
@@ -504,20 +506,19 @@ export default function QuestionEditor({
                 <button onClick={() => { setCreatingPool(false); setNewPoolName(''); }} style={{ fontSize: 12, padding: '0 14px', borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>{t('cancelLower')}</button>
               </div>
             ) : (
-              <select
-                value=""
-                onChange={(e) => {
-                  if (e.target.value === '__new__') setCreatingPool(true);
-                  else if (e.target.value) togglePool(e.target.value);
-                }}
-                style={{ width: '100%', fontSize: 13, color: palette.inkMuted, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', cursor: 'pointer' }}
+              <SelectMenu
+                items={[
+                  ...pools.filter((p) => !draft.pools.includes(p.id)).map((p) => ({ value: p.id, label: p.name, color: p.color })),
+                  { value: '__new__', label: t('editor.newLabelOption') },
+                ]}
+                onSelect={(v) => { if (v === '__new__') setCreatingPool(true); else togglePool(v); }}
+                variant="pills"
+                onScroll="clip"
+                wrapperStyle={{ display: 'block', width: '100%' }}
+                triggerStyle={{ width: '100%', textAlign: 'left', fontSize: 13, color: palette.inkMuted, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', cursor: 'pointer' }}
               >
-                <option value="">{t('editor.addLabelOption')}</option>
-                {pools.filter((p) => !draft.pools.includes(p.id)).map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-                <option value="__new__">{t('editor.newLabelOption')}</option>
-              </select>
+                {t('editor.addLabelOption')}
+              </SelectMenu>
             )}
           </div>
 

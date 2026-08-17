@@ -6,7 +6,7 @@ import { Download, Trash2 } from 'lucide-react';
 import { palette, withAlpha } from '@/lib/theme';
 import {
   type Exam, type SortBy, type SortDir,
-  DEFAULT_SORT_DIR, CARD_ACTION_BTN,
+  DEFAULT_SORT_DIR, CARD_ACTION_BTN, LIST_INSET_X,
   IconBtn, ListToolbar, FilterButton, ListCard,
 } from './examShared';
 
@@ -49,7 +49,7 @@ function HistoryContent({ exams, justAddedId, onEdit, onNew, onDelete }: { exams
   else if (sortDir === 'asc') filtered = [...filtered].reverse();
 
   return (
-    <div style={{ padding: '16px 16px 28px' }}>
+    <div style={{ padding: `16px ${LIST_INSET_X}px 28px` }}>
       {/* Ni titre ni décompte : l'onglet au-dessus de la liste dit déjà où l'on est. */}
       <ListToolbar
         search={search}

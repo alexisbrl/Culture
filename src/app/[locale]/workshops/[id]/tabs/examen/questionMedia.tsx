@@ -304,9 +304,17 @@ export function MediaAttachment({ workshopId, kind, media, onChange, label, icon
  *  bornent la taille sans jamais déformer), et le conteneur n'est
  *  volontairement PAS un flex (l'étirement `align-items: stretch` d'un flex
  *  en colonne forçait la largeur de l'`<img>` et la déformait). */
-export function QuestionImagePreview({ workshopId, image }: {
+export function QuestionImagePreview({ workshopId, image, onLoaded }: {
   workshopId: string;
   image?: QuestionMedia | null;
+  /** Prévenu quand l'image est réellement peinte, donc quand la ligne qui la
+   *  porte a sa hauteur définitive. Indispensable à la feuille A4, dont la
+   *  pagination travaille sur des hauteurs mesurées : l'image arrive en deux
+   *  temps (URL signée, puis téléchargement) et le chargement d'une image ne
+   *  provoque aucun rendu React — la mesure restait donc celle d'avant l'image,
+   *  et la page débordait jusqu'au premier rendu venu d'ailleurs. Facultatif :
+   *  les autres appelants n'ont rien à recalculer. */
+  onLoaded?: () => void;
 }) {
   const imageUrl = useQuestionMediaUrl(workshopId, image);
   if (!image || !imageUrl) return null;
@@ -315,6 +323,14 @@ export function QuestionImagePreview({ workshopId, image }: {
     <img
       src={imageUrl}
       alt=""
+      // Une image est glissable par défaut : sur la feuille d'examen, où la
+      // ligne entière est la poignée de réorganisation, attraper la question
+      // par son illustration démarrerait un glisser d'image à la place.
+      draggable={false}
+      // `onError` autant que `onLoad` : une image illisible laisse elle aussi la
+      // ligne à une hauteur qui n'est plus celle mesurée.
+      onLoad={onLoaded}
+      onError={onLoaded}
       style={{ display: 'block', width: 'auto', height: 'auto', maxWidth: 320, maxHeight: 260, objectFit: 'contain', borderRadius: 8, border: `1px solid ${palette.line}`, marginBottom: 10 }}
     />
   );
