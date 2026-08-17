@@ -709,20 +709,38 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
     // `rows` plus bas) — c'est elle qu'on ramène au centre, pas la partie vide.
     onRequestFocus(`h-${id}`);
   }
+  /** Retire une partie ET les questions qu'elle porte. Le parent doit être
+   *  prévenu de ces dernières exactement comme dans `removeFromExam` : c'est
+   *  `draftIds` qui allume la pastille verte de la carte dans la banque, et lui
+   *  seul est repris au rechargement du brouillon. Sans ça, les questions d'une
+   *  partie supprimée restaient sélectionnées dans la banque en face d'une copie
+   *  vide — un état que même un rechargement ne rattrapait pas, puisqu'il est
+   *  enregistré tel quel, et dont on ne sortait qu'en cliquant deux fois chaque
+   *  carte ou en réinitialisant l'éditeur.
+   *
+   *  Les sauts de page sont écartés : ce sont des identifiants de position dans
+   *  la partie, pas des questions de la banque. */
+  function dropSection(idx: number) {
+    const removedQuestionIds = config.sections[idx].questionIds.filter(id => !isPageBreakId(id));
+    onConfigChange({
+      ...config,
+      sections: config.sections.filter((_, i) => i !== idx),
+      weighting: removedQuestionIds.reduce(clearWeightingFor, config.weighting),
+    });
+    if (removedQuestionIds.length > 0) onRemoveFromDraft(removedQuestionIds);
+  }
   function removeSection(idx: number) {
     if (config.sections.length <= 1) return;
+    // Une partie vide part sans confirmation : il n'y a rien à perdre.
     if (config.sections[idx].questionIds.length === 0) {
-      patchConfig({ sections: config.sections.filter((_, i) => i !== idx) });
+      dropSection(idx);
       return;
     }
     setPendingRemoveSectionIdx(idx);
   }
   function confirmRemoveSection() {
     if (pendingRemoveSectionIdx === null) return;
-    const idx = pendingRemoveSectionIdx;
-    if (config.sections.length > 1) {
-      patchConfig({ sections: config.sections.filter((_, i) => i !== idx) });
-    }
+    if (config.sections.length > 1) dropSection(pendingRemoveSectionIdx);
     setPendingRemoveSectionIdx(null);
   }
   function updateWeight(id: string, patch: Partial<QuestionWeight>) {

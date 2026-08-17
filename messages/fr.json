@@ -527,7 +527,7 @@
       "saveExam": "enregistrer l'examen",
       "pageNumber": "{n} / {total}",
       "removeSectionTitle": "Supprimer la partie « {title} » ?",
-      "removeSectionDesc": "Les {count} question(s) de cette partie ne seront plus dans l'examen et retourneront dans la liste des questions envoyées.",
+      "removeSectionDesc": "Les {count} question(s) de cette partie quitteront l'examen. Elles restent dans la banque de questions.",
       "cancelEditsTitle": "Annuler les modifications ?",
       "clearTitle": "Effacer l'éditeur d'examen ?",
       "clearDescEditing": "Les modifications en cours seront abandonnées. L'examen déjà enregistré n'est pas affecté.",

@@ -112,8 +112,17 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         // compteraient dans le barème — on les écarte à la lecture.
         const known = new Set(questions.map(q => q.id));
         const keep = (id: string) => isPageBreakId(id) || known.has(id);
-        setDraftIds(draft.draftIds.filter(keep));
-        setExamConfig(draft.config?.sections ? pruneUnknownQuestions(normalizeExamConfig(draft.config), keep) : defaultExamConfig());
+        const config = draft.config?.sections ? pruneUnknownQuestions(normalizeExamConfig(draft.config), keep) : defaultExamConfig();
+        setExamConfig(config);
+        // Second filet : `draftIds` doit être exactement la liste des questions
+        // posées sur la copie (voir `handleToggleQuestionInExam`) — il ne dit
+        // rien de plus, il sert seulement à allumer la pastille verte des cartes
+        // de la banque. On le relit donc des parties plutôt que de faire
+        // confiance à la liste enregistrée : un brouillon écrit avant le
+        // correctif du 17/08/2026 (retrait d'une partie qui oubliait ses
+        // questions) porte des identifiants que la copie ne montre plus, et
+        // rien ne l'en sortait — le rechargement réenregistrait l'écart tel quel.
+        setDraftIds(configQuestionIds(config));
         if (draft.editingId) {
           const found = mappedExams.find(e => e.id === draft.editingId);
           if (found) setEditing(found);

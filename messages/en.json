@@ -527,7 +527,7 @@
       "saveExam": "save the exam",
       "pageNumber": "{n} / {total}",
       "removeSectionTitle": "Delete section « {title} »?",
-      "removeSectionDesc": "The {count} question(s) in this section will no longer be in the exam and will return to the sent questions list.",
+      "removeSectionDesc": "The {count} question(s) in this section will leave the exam. They stay in the question bank.",
       "cancelEditsTitle": "Cancel changes?",
       "clearTitle": "Clear the exam editor?",
       "clearDescEditing": "Your current changes will be discarded. The already saved exam is not affected.",
