@@ -9,7 +9,7 @@ import { type Question, type ResponseType } from '../QuestionEditor';
 import { RESPONSE_TYPE_ORDER } from './questionFields';
 import {
   type Pool, type Exam, type SortBy, type SortDir,
-  DEFAULT_SORT_DIR, NEVER_EXAM_ID, CARD_LINE, CARD_ACTION_BTN,
+  DEFAULT_SORT_DIR, NEVER_EXAM_ID, CARD_LINE, CARD_ACTION_BTN, LIST_INSET_X,
   RESPONSE_TYPE_ICONS, RESPONSE_TYPE_COLORS,
   TypeIcon, IconBtn, ActiveChip, ListToolbar, FilterButton, ListCard, LabelPill, LabelEditor,
   useDismissOnOutsideClick,
@@ -356,7 +356,7 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
   }
 
   return (
-    <div style={{ padding: '16px 16px 28px' }}>
+    <div style={{ padding: `16px ${LIST_INSET_X}px 28px` }}>
       {/* Ni titre ni bouton « générer par IA » : l'onglet au-dessus de la liste
           dit déjà où l'on est, et la maquette ne montre que la barre d'outils
           (recherche · tri · filtre · nouvelle). */}

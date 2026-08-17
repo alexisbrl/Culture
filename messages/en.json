@@ -367,7 +367,6 @@
     "answerSpace": {
       "audioNote": "An audio recording accompanies this question."
     },
-    "editQuestion": "edit question",
     "cancelEditQuestion": "cancel editing",
     "editor": {
       "new": "New question",
@@ -512,6 +511,7 @@
       "points": "{count} pt{plural}",
       "showQuestionPoints": "question marks",
       "showQuestionPointsHint": "print the number of points next to each question and each linked question",
+      "eliminatoryMark": "eliminatory",
       "showSectionPoints": "section marks",
       "showSectionPointsHint": "print the points subtotal next to each section title",
       "duration": "duration",
@@ -521,6 +521,8 @@
       "removePageBreak": "remove page break",
       "removeFromExam": "remove from exam",
       "dragReorder": "drag to reorder",
+      "dragSection": "drag to move the part and its questions",
+      "shuffleNotice": "random order: this question's answer items will be shuffled from one paper to the next during the exam",
       "saveChanges": "save changes",
       "saveExam": "save the exam",
       "pageNumber": "{n} / {total}",
@@ -545,6 +547,7 @@
       "editorBusyDesc": "The exam editor already has changes in progress. Finish or clear the editor before editing {target}.",
       "editorBusyGo": "Go to the editor",
       "questionEditing": "question already being edited",
+      "questionEditingSave": "finish editing the question before saving the exam",
       "introTitle": "How the exam generator works",
       "introSubtitle": "Three steps to go from your question bank to a ready-to-give exam.",
       "introStep1Title": "Build your question bank",
@@ -607,6 +610,7 @@
       "tableColPlaceholder": "column…",
       "tableCheckHint": "tick the correct cell",
       "tableUniqueHint": "only one cell can be ticked per row",
+      "tableShuffleHint": "shuffles the row order for each student (columns keep theirs)",
       "addTableRow": "+ row",
       "addTableCol": "+ column",
       "matchLeft": "item…",

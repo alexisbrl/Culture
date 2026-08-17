@@ -34,7 +34,7 @@ import {
   type BloomLevel, type QuestionPart, type QuestionTypeOptions, type QuestionWeight, type ResponseType,
 } from '@/lib/workshops/examTypes';
 // Les icônes de types de réponse sont partagées avec la banque de questions.
-import { RESPONSE_TYPE_ICONS as TYPE_ICONS } from './examShared';
+import { RESPONSE_TYPE_ICONS as TYPE_ICONS, useDismissOnOutsideClick, SHEET_PANEL_Z } from './examShared';
 
 // `qcs` est volontairement absent de l'ordre du menu : c'est la variante
 // « réponse unique » de `qcm`, basculée par une pilule (voir `ResponseType`).
@@ -49,13 +49,14 @@ export const CHOICE_BASED: ResponseType[] = ['qcs', 'qcm', 'matching'];
 // pas casser ses consommateurs et pour un futur type différé.
 export const RESPONSE_TYPE_V2: ResponseType[] = [];
 
-/** Une question liée naît vide, en « texte » comme une question neuve — pas en
- *  « sans réponse » : neuf fois sur dix on ajoute une question liée pour poser
- *  une sous-question qui appelle une réponse. */
+/** Une question liée naît vide, en QCM comme une question neuve (voir
+ *  `emptyQuestion`) — pas en « sans réponse » : neuf fois sur dix on ajoute une
+ *  question liée pour poser une sous-question qui appelle une réponse. Ses deux
+ *  propositions vides reprennent ce que produit le menu de type (`selectType`). */
 export function emptyPart(): QuestionPart {
   return {
     id: crypto.randomUUID(),
-    content: '', responseType: 'textuelle', answer: '', choices: [], correctChoices: [],
+    content: '', responseType: 'qcm', answer: '', choices: ['', ''], correctChoices: [],
     shuffleChoices: false, textLines: 4, typeOptions: {}, expectations: '',
     bloomLevel: DEFAULT_BLOOM_LEVEL, notionIds: [],
   };
@@ -137,6 +138,11 @@ export function QuestionFields({
   const [notionQuery, setNotionQuery] = useState('');
   /** Bloc des paires — sert de référentiel de largeur au curseur de partage. */
   const matchRowsRef = useRef<HTMLDivElement>(null);
+  /** Champ de recherche de notions + sa liste de résultats. Le clic-dehors la
+   *  referme, comme tous les autres panneaux flottants de l'onglet — sans quoi
+   *  elle restait ouverte tant qu'on n'avait pas vidé la recherche. */
+  const notionBoxRef = useRef<HTMLDivElement>(null);
+  useDismissOnOutsideClick(notionQuery.trim() !== '', notionBoxRef, () => setNotionQuery(''));
 
   const rt = values.responseType;
   const isQcm = rt === 'qcm' || rt === 'qcs';
@@ -484,6 +490,18 @@ export function QuestionFields({
                 <button type="button" onClick={() => patchOptions({ tableCols: [...cols, ''] })} style={addLink}>{t('inline.addTableCol')}</button>
               )}
               <PillToggle on={unique} onClick={setUnique} label={t('inline.uniqueAnswer')} title={t('inline.tableUniqueHint')} />
+              {/* Pendant de l'ordre aléatoire du QCM, à la même place (paramètres
+                  avancés) et sous le même libellé. Il ne mélange que les LIGNES :
+                  les colonnes sont le repère de lecture de la grille, les
+                  intervertir rendrait chaque copie illisible à la correction. */}
+              {advancedOpen && (
+                <PillToggle
+                  on={opts.tableShuffleRows ?? false}
+                  onClick={() => patchOptions({ tableShuffleRows: !(opts.tableShuffleRows ?? false) })}
+                  label={t('inline.shuffle')}
+                  title={t('inline.tableShuffleHint')}
+                />
+              )}
             </ControlRow>
           </div>
         );
@@ -786,7 +804,7 @@ export function QuestionFields({
             {t('inline.notionsTitle').toUpperCase()}
           </span>
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, minWidth: 0 }}>
-            <div style={{ position: 'relative', width: 240, maxWidth: '100%' }}>
+            <div ref={notionBoxRef} style={{ position: 'relative', width: 240, maxWidth: '100%' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, boxSizing: 'border-box', background: palette.surfaceRaised, border: `1px solid ${palette.lineStrong}`, borderRadius: 999, padding: '6px 12px' }}>
                 <Search size={14} strokeWidth={1.75} style={{ flex: 'none', color: palette.inkFaint }} />
                 <input
@@ -797,8 +815,12 @@ export function QuestionFields({
                   style={{ flex: 1, minWidth: 0, fontFamily: 'inherit', fontSize: 12.5, color: palette.ink, background: 'transparent', border: 'none', outline: 'none' }}
                 />
               </div>
+              {/* `SHEET_PANEL_Z` : la liste passe SOUS la barre d'outils
+                  collante de la feuille, qui la masque quand on défile, au lieu
+                  de flotter par-dessus « personnaliser ». Elle reste au-dessus
+                  du contenu de la copie, qui n'a pas de plan propre. */}
               {notionQuery.trim() !== '' && notionMatches.length > 0 && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 40, maxHeight: 200, overflow: 'auto', background: palette.surfaceRaised, border: `1px solid ${palette.lineStrong}`, borderRadius: 12, boxShadow: `0 8px 24px ${ink(0.10)}`, padding: 5 }}>
+                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: SHEET_PANEL_Z, maxHeight: 200, overflow: 'auto', background: palette.surfaceRaised, border: `1px solid ${palette.lineStrong}`, borderRadius: 12, boxShadow: `0 8px 24px ${ink(0.10)}`, padding: 5 }}>
                   {notionMatches.map(n => (
                     <button
                       key={n.id}

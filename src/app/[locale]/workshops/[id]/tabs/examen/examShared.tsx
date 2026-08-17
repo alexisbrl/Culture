@@ -5,7 +5,7 @@
 // présentationnels réutilisés par HistoryContent / BankContent / GeneratorContent / ExamenTab.
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { AlignLeft, ArrowDown, ArrowUp, CheckSquare, File, Filter, List, Palette, Paperclip, Pencil, Plus, Route, Search, Settings2, Table, X, type LucideIcon } from 'lucide-react';
+import { AlignLeft, ArrowDown, ArrowUp, Check, CheckSquare, File, Filter, Info, List, Palette, Paperclip, Pencil, Plus, Route, Search, Table, X, type LucideIcon } from 'lucide-react';
 import { palette, ink, withAlpha, categoryTones, shadow } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { type Question, type QuestionPart, type ResponseType } from '../QuestionEditor';
@@ -95,10 +95,9 @@ export function SortDirIcon({ dir, size = 13 }: { dir: SortDir; size?: number })
  *
  *  Le critère courant reste écrit en clair — c'est le seul contrôle de la barre
  *  dont la valeur doit se lire d'un coup d'œil — mais sans chevron ni largeur
- *  fixe : le `select` natif est rendu transparent et posé par-dessus un simple
- *  libellé, qui donne au bloc la largeur exacte du texte affiché. On garde le
- *  déroulé natif au clic (et au clavier) sans hériter de sa décoration ni de sa
- *  largeur intrinsèque, qui se cale sur l'option la plus longue. */
+ *  fixe : le bouton se cale sur le texte affiché, pas sur l'option la plus
+ *  longue. Le déroulé passe par `SelectMenu` et non par un `<select>` natif,
+ *  dont la liste était peinte par le système (fond blanc, surlignage bleu). */
 function SortControl({ options, value, onChange, dir, onToggleDir }: {
   options: readonly SortBy[];
   value: SortBy;
@@ -112,17 +111,17 @@ function SortControl({ options, value, onChange, dir, onToggleDir }: {
       <button type="button" title={dir === 'asc' ? t('sort.asc') : t('sort.desc')} onClick={onToggleDir} style={{ width: 30, minHeight: TOOLBAR_H, alignSelf: 'stretch', border: 'none', borderRight: `1px solid ${palette.line}`, background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
         <SortDirIcon dir={dir} />
       </button>
-      <span style={{ position: 'relative', alignSelf: 'stretch', display: 'inline-flex', alignItems: 'center', padding: '0 9px', flexShrink: 0 }}>
-        <span aria-hidden style={{ fontSize: 11.5, color: palette.inkMuted, whiteSpace: 'nowrap' as const }}>{t(`sort.${value}`)}</span>
-        <select
-          value={value}
-          onChange={e => onChange(e.target.value as SortBy)}
-          title={t('sort.by')}
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, border: 'none', padding: 0 }}
-        >
-          {options.map(opt => <option key={opt} value={opt}>{t(`sort.${opt}`)}</option>)}
-        </select>
-      </span>
+      <SelectMenu
+        items={options.map(opt => ({ value: opt, label: t(`sort.${opt}`) }))}
+        value={value}
+        onSelect={v => onChange(v as SortBy)}
+        title={t('sort.by')}
+        panelWidth="auto"
+        align="right"
+        triggerStyle={{ alignSelf: 'stretch', display: 'inline-flex', alignItems: 'center', padding: '0 9px', flexShrink: 0, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, color: palette.inkMuted, whiteSpace: 'nowrap' as const }}
+      >
+        {t(`sort.${value}`)}
+      </SelectMenu>
     </div>
   );
 }
@@ -144,6 +143,188 @@ function SortControl({ options, value, onChange, dir, onToggleDir }: {
  *  Il reste dans le DOM du conteneur, donc le clic-dehors de l'appelant, qui
  *  teste `containerRef.contains`, continue de fonctionner. */
 const FILTER_PANEL_MARGIN = 8;  // écart minimum conservé avec le bord de la fenêtre
+
+/** Menu déroulant maison, à substituer au `<select>` natif partout où la liste
+ *  déroulée est visible par l'utilisateur : le déroulé natif est peint par le
+ *  système (fond blanc franc, surlignage bleu, police de l'OS) et n'a aucun
+ *  rapport avec la palette — c'est le seul morceau d'interface qui trahissait
+ *  encore le navigateur.
+ *
+ *  Le panneau reprend exactement la mise en forme des autres surfaces flottantes
+ *  de l'onglet (recherche de notions, menu de type de réponse) : crème surélevé,
+ *  filet, coins à 12, ombre portée, entrées à 8 de rayon qui s'ambrent au
+ *  survol, entrée courante en vert avec sa coche.
+ *
+ *  Deux modes de pose, parce que les deux familles d'appelants n'attendent pas
+ *  la même chose du défilement :
+ *  - `onScroll: 'close'` (barres d'outils) — panneau en `position: fixed` aux
+ *    coordonnées du bouton, pour les mêmes raisons que `FilterButton` (en
+ *    `absolute` il serait rogné par le panneau défilant de la colonne), et il se
+ *    ferme au défilement, comme le panneau de filtres à côté duquel il vit. Un
+ *    menu de barre d'outils qui suivrait son bouton finirait par flotter seul au
+ *    milieu de la liste.
+ *  - `onScroll: 'clip'` (menus posés sur la feuille) — panneau en
+ *    `position: absolute` **dans le flux**, sous un `zIndex` inférieur à celui
+ *    de la barre d'outils collante de la feuille (`SHEET_PANEL_Z`). Il suit donc
+ *    son bouton sans rien calculer, le conteneur défilant le rogne à ses bords,
+ *    et il glisse proprement SOUS « personnaliser » au lieu de passer par-dessus.
+ *    C'est le comportement de la recherche de notions, dont il reprend la
+ *    mécanique à l'identique. L'appelant fournit `wrapperStyle` pour donner au
+ *    conteneur le référentiel de position attendu (in-line ou pleine largeur).
+ *
+ *  `panelWidth` : un nombre, `'trigger'` (largeur du bouton, pour les menus qui
+ *  prolongent un champ de pleine largeur) ou `'auto'` (largeur du contenu, entre
+ *  `minWidth` et `maxWidth` — au-delà, les entrées passent à la ligne).
+ *
+ *  `variant: 'pills'` rend les entrées comme les pastilles de libellé de la
+ *  liste de questions (`LabelPill`), teinte comprise ; les entrées sans couleur
+ *  (« + nouveau libellé… ») restent des lignes de texte, en bas du panneau. */
+const MENU_AUTO_MIN = 120;
+const MENU_AUTO_MAX = 240;
+/** Plan des panneaux posés SUR la feuille (menus de l'éditeur en ligne, liste de
+ *  recherche de notions, panneau de modification d'un libellé). Il doit rester
+ *  sous celui de la barre d'outils collante de la feuille (`position: sticky`,
+ *  z-index 6 dans `GeneratorContent`) pour que le défilement les fasse passer
+ *  proprement dessous, et au-dessus du contenu de la copie, qui n'a pas de plan
+ *  propre. */
+export const SHEET_PANEL_Z = 3;
+
+export function SelectMenu({ items, value, onSelect, title, triggerStyle, wrapperStyle, panelWidth = 'trigger', align = 'left', onScroll = 'close', variant = 'list', children }: {
+  items: readonly { value: string; label: string; color?: string }[];
+  /** Entrée à marquer comme courante. Absent = menu d'action (« ajouter… »), où
+   *  aucune entrée n'est « la » valeur. */
+  value?: string;
+  onSelect: (value: string) => void;
+  title?: string;
+  triggerStyle?: CSSProperties;
+  /** Mode `clip` seulement : style du conteneur, qui devient le référentiel de
+   *  position du panneau. Reçoit `position: relative` d'office. */
+  wrapperStyle?: CSSProperties;
+  panelWidth?: number | 'trigger' | 'auto';
+  /** Bord du bouton sur lequel aligner le panneau quand il est plus large. */
+  align?: 'left' | 'right';
+  onScroll?: 'close' | 'clip';
+  variant?: 'list' | 'pills';
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const panelEl = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; width: number | undefined; maxHeight: number } | null>(null);
+  useDismissOnOutsideClick(open, wrapRef, () => setOpen(false));
+
+  const floating = onScroll === 'close';
+
+  const place = useCallback(() => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    // En largeur automatique on ne connaît la largeur qu'une fois le panneau
+    // peint : on la relit sur le nœud, et le replacement du rendu suivant la
+    // prend en compte (l'effet tourne à chaque rendu, il converge en une passe).
+    const width = panelWidth === 'trigger' ? Math.max(r.width, 140)
+      : panelWidth === 'auto' ? (panelEl.current?.offsetWidth ?? MENU_AUTO_MIN)
+      : panelWidth;
+    const top = r.bottom + 6;
+    const wanted = align === 'right' ? r.right - width : r.left;
+    const next = {
+      left: Math.max(FILTER_PANEL_MARGIN, Math.min(wanted, window.innerWidth - width - FILTER_PANEL_MARGIN)),
+      top,
+      width: panelWidth === 'auto' ? undefined : width,
+      maxHeight: Math.max(96, window.innerHeight - top - 16),
+    };
+    // Même précaution que `FilterButton` : l'effet tourne à chaque rendu, une
+    // écriture systématique boucherait.
+    setPos(prev => (prev && prev.left === next.left && prev.top === next.top && prev.width === next.width && prev.maxHeight === next.maxHeight) ? prev : next);
+  }, [panelWidth, align]);
+
+  useLayoutEffect(() => { if (open && floating) place(); });
+  useLayoutEffect(() => {
+    if (!open || !floating) return;
+    const close = () => setOpen(false);
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [open, place, floating]);
+
+  const pillItems = variant === 'pills' ? items.filter(i => i.color) : [];
+  const rowItems = variant === 'pills' ? items.filter(i => !i.color) : items;
+  const panelSkin: CSSProperties = {
+    overflowY: 'auto', background: palette.surfaceRaised, border: `1px solid ${palette.line}`,
+    borderRadius: 12, boxShadow: shadow.lg, padding: 5,
+  };
+  const autoWidth = panelWidth === 'auto' ? { width: 'max-content' as const, minWidth: MENU_AUTO_MIN, maxWidth: MENU_AUTO_MAX } : null;
+
+  return (
+    // En mode flottant, `display: contents` : le conteneur ne dessine rien et ne
+    // casse donc pas la mise en page de l'appelant — c'est le bouton qui reste
+    // l'élément visible, avec le style qu'on lui donne. En mode `clip` il faut au
+    // contraire une boîte, qui sert de référentiel au panneau posé en `absolute`.
+    // Le clic-dehors fonctionne dans les deux cas, il ne regarde que
+    // l'appartenance dans le DOM.
+    <div ref={wrapRef} style={floating ? { display: 'contents' } : { position: 'relative', minWidth: 0, ...wrapperStyle }}>
+      <button ref={btnRef} type="button" title={title} onClick={() => setOpen(v => !v)} style={triggerStyle}>
+        {children}
+      </button>
+      {open && (floating ? pos !== null : true) && (
+        <div
+          ref={panelEl}
+          style={floating ? {
+            position: 'fixed', left: pos!.left, top: pos!.top, maxHeight: pos!.maxHeight,
+            width: pos!.width, ...autoWidth, ...panelSkin,
+            // au-dessus de la barre du haut collante (z-50), sous les modales
+            zIndex: 60,
+          } : {
+            position: 'absolute', top: 'calc(100% + 6px)', maxHeight: 260,
+            ...(align === 'right' ? { right: 0 } : { left: 0 }),
+            ...(panelWidth === 'auto' ? autoWidth : panelWidth === 'trigger' ? { width: '100%' } : { width: panelWidth }),
+            ...panelSkin,
+            zIndex: SHEET_PANEL_Z,
+          }}
+        >
+          {pillItems.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '5px 5px 7px' }}>
+              {pillItems.map(item => (
+                <LabelPill key={item.value} name={item.label} color={item.color!} active={item.value === value} onClick={() => { setOpen(false); onSelect(item.value); }} />
+              ))}
+            </div>
+          )}
+          {rowItems.map(item => (
+            <MenuItem key={item.value} item={item} current={item.value === value} wrap={panelWidth === 'auto'} onPick={() => { setOpen(false); onSelect(item.value); }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MenuItem({ item, current, wrap = false, onPick }: { item: { value: string; label: string; color?: string }; current: boolean; wrap?: boolean; onPick: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left' as const,
+        fontFamily: 'inherit', fontSize: 12.5, fontWeight: current ? 700 : 500,
+        color: current ? palette.greenBrand : palette.ink,
+        background: hovered ? withAlpha(palette.amber, 0.10) : 'transparent',
+        border: 'none', borderRadius: 8, padding: '7px 10px', cursor: 'pointer',
+      }}
+    >
+      {item.color && <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, flexShrink: 0 }} />}
+      {/* En largeur automatique, une entrée trop longue passe à la ligne plutôt
+          que d'être coupée : c'est le maximum du panneau qui décide. */}
+      <span style={{ flex: 1, minWidth: 0, ...(wrap ? { whiteSpace: 'normal' as const } : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }) }}>{item.label}</span>
+      {current && <Check size={13} strokeWidth={2.5} style={{ flexShrink: 0 }} />}
+    </button>
+  );
+}
 
 export function FilterButton({ title, count = 0, open = false, disabled = false, onToggle, containerRef, panelWidth = 290, children }: {
   title: string;
@@ -285,6 +466,7 @@ export const A4_ROW_FALLBACK_HEIGHT = 396; // hauteur estimée avant la premièr
 export const A4_BLOCK_WIDTH = 1056; // largeur du bloc question au format A4 dans l'aperçu
 export const A4_MARGIN_PX = Math.round(A4_BLOCK_WIDTH / 21 * 1); // marge non imprimable de 1cm en haut et en bas de chaque page (1056px ≈ 21cm de large)
 export const A4_PAGE_BREAK_HEIGHT = 56; // hauteur approx. du repère « saut de page » dans l'aperçu
+export const A4_EMPTY_SECTION_HEIGHT = 60; // hauteur approx. de la cale « partie vide — glisse une question ici »
 // Pas des lignes à remplir sur la copie. Référence : la ligne d'une liste
 // numérotée (hauteur du numéro + gouttière) — toute réponse lignée (texte,
 // liste sans numéros, repli des autres types) utilise le même pas, sinon ses
@@ -490,8 +672,13 @@ export function LabelEditor({ label, usageCount, onSave, onDelete, onClose }: {
 
   return (
     <>
-      <div style={{ position: 'absolute', inset: 0, zIndex: 29, background: withAlpha(palette.cream, 0.7), borderRadius: 12 }} />
-      <div ref={cardRef} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 30, width: 190, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg, padding: 10 }}>
+      {/* Même plan que les autres panneaux posés sur la feuille
+          (`SHEET_PANEL_Z`) : au-dessus du contenu de la copie, mais sous la barre
+          d'outils collante, pour glisser proprement dessous au défilement. Dans
+          le panneau de filtres de la banque, qui a son propre plan (`fixed`,
+          z-60), l'ordre relatif est inchangé — ses frères n'ont pas de z-index. */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: SHEET_PANEL_Z - 1, background: withAlpha(palette.cream, 0.7), borderRadius: 12 }} />
+      <div ref={cardRef} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: SHEET_PANEL_Z, width: 190, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg, padding: 10 }}>
         <input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') onClose(); }} style={{ width: '100%', fontSize: 11.5, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box' as const, background: palette.surfaceInput, color: palette.ink }} />
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
           {/* Les témoins montrent l'aplat réellement obtenu, pas la couleur
@@ -960,10 +1147,19 @@ export function flattenSections(sections: ExamSection[], allQuestions: Question[
 // déplace une question (ou un saut de page) d'une position à une autre dans la liste aplatie,
 // vers la section `targetSectionIdx`, puis reconstruit les questionIds de chaque section
 export function moveSectionRow(sections: ExamSection[], allQuestions: Question[], fromFlatIdx: number, toFlatIdx: number, targetSectionIdx: number): ExamSection[] {
-  if (fromFlatIdx === toFlatIdx) return sections;
   const flat = flattenSections(sections, allQuestions);
   const moving = flat[fromFlatIdx];
   if (!moving) return sections;
+  // Une position de dépôt a DEUX composantes : le rang dans la liste aplatie et
+  // la partie d'accueil. Les deux tests ci-dessous n'écartent donc un
+  // déplacement que si les deux sont inchangées. Ne tester que le rang — ce que
+  // faisait le premier, qui sortait dès `fromFlatIdx === toFlatIdx` — rendait
+  // impossibles les deux dépôts où seule la partie change : poser la première
+  // question d'une partie dans la partie vide qui la précède, et poser une
+  // question à la FIN de la partie précédente (les deux visent le rang que la
+  // question occupe déjà). Le glisser semblait alors « ne pas marcher », sans
+  // qu'aucun autre déplacement ne soit affecté.
+  if (fromFlatIdx === toFlatIdx && moving.sectionIdx === targetSectionIdx) return sections;
   if (fromFlatIdx + 1 === toFlatIdx && moving.sectionIdx === targetSectionIdx) return sections;
   const withoutMoving = flat.filter((_, i) => i !== fromFlatIdx);
   let insertAt = 0;
@@ -998,6 +1194,12 @@ export function toggleQuestionInSections(sections: ExamSection[], id: string): E
 // les listes passent par `ListCard`, qui est le seul point d'entrée. ----
 export const CARD_LINE = 20;
 export const CARD_ACTION_BTN = 30;
+/** Retrait horizontal de la colonne de gauche : c'est lui qui pose le bord des
+ *  cartes, dans la banque comme dans l'historique. La barre d'onglets qui les
+ *  surmonte s'y aligne aussi — sans quoi elle et son filet dépassent des cartes
+ *  des deux côtés (visible depuis que le fond des panneaux n'est plus blanc,
+ *  donc que ce débord ne se confond plus avec la carte). */
+export const LIST_INSET_X = 16;
 const CARD_PAD_X = 11;
 const CARD_PAD_Y = 9;
 const CARD_ACTION_GAP = 8;
@@ -1175,23 +1377,29 @@ export function IconBtn({ children, title, onClick, size = 32, active = false }:
   );
 }
 
-// bouton « modifier la question » dans l'aperçu de l'éditeur d'examen — le cercle
-// n'apparaît qu'au survol, pour indiquer que le bouton est cliquable. Quand la
-// question est ouverte dans le formulaire en ligne (`active`), seule l'icône
-// passe au vert (pas le fond) et le bouton annule la modification.
-export function EditQuestionButton({ id, onOpenQuestion, active = false }: { id: string; onOpenQuestion: (id: string) => void; active?: boolean }) {
-  const t = useTranslations('examen');
+/** Repère « ordre aléatoire » de la gouttière gauche de la copie : la ligne
+ *  qu'il accompagne verra ses éléments de réponse mélangés d'une copie à
+ *  l'autre. Il se pose en haut de la cale pour la question principale, et en
+ *  face de son énoncé pour une question liée (voir `shufflesAnswerItems`, qui
+ *  décide seul de son affichage).
+ *
+ *  Purement informatif : rien à cliquer, le réglage se change dans le
+ *  formulaire. D'où un `<span>` et non un `<button>` — c'est désormais le seul
+ *  occupant de cette gouttière, qui n'a plus aucun bouton. Le curseur reste
+ *  celui du document (pas de `cursor: help`, qui laisserait croire à une
+ *  interaction) :
+ *  le survol passe seulement l'icône au vert et laisse venir l'infobulle. */
+export function ShuffleNoticeIcon({ title }: { title: string }) {
   const [hovered, setHovered] = useState(false);
   return (
-    <button
-      onClick={() => onOpenQuestion(id)}
+    <span
+      title={title}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      title={active ? t('cancelEditQuestion') : t('editQuestion')}
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', border: hovered ? `1px solid ${ink(0.14)}` : '1px solid transparent', background: hovered ? ink(0.045) : 'transparent', color: active ? palette.greenBrand : hovered ? palette.inkSoft : palette.inkFaint, cursor: 'pointer', padding: 0, flexShrink: 0, transition: 'background 0.12s, border-color 0.12s' }}
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, flexShrink: 0, color: hovered ? palette.greenBrand : palette.inkFaint, transition: 'color 0.12s' }}
     >
-      <Settings2 size={14} strokeWidth={1.85} />
-    </button>
+      <Info size={13} strokeWidth={1.85} />
+    </span>
   );
 }
 

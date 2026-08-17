@@ -40,7 +40,7 @@ import {
 } from '@/lib/workshops/examTypes';
 import { QuestionFields, TextField, emptyPart } from './questionFields';
 import { MediaAttachment, useQuestionMediaDrop } from './questionMedia';
-import { type Pool, LabelPill, LabelEditor } from './examShared';
+import { type Pool, LabelPill, LabelEditor, SelectMenu } from './examShared';
 
 type Props = {
   workshopId: string;
@@ -252,20 +252,23 @@ export default function InlineQuestionEditor({
                 <button type="button" onClick={() => { setCreatingPool(false); setNewPoolName(''); }} style={{ fontSize: 12, padding: '0 14px', borderRadius: 9, border: `1px solid ${ink(0.10)}`, background: 'transparent', color: palette.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>{t('cancelLower')}</button>
               </div>
             ) : (
-              <select
-                value=""
-                onChange={e => {
-                  if (e.target.value === '__new__') setCreatingPool(true);
-                  else if (e.target.value) togglePool(e.target.value);
-                }}
-                style={{ ...selectStyle, fontWeight: 500, fontSize: 12.5, color: palette.inkMuted, borderRadius: 999, padding: '6px 12px' }}
+              // Menu maison et non `<select>` : le déroulé natif est peint par
+              // le système et jurait avec le reste de la feuille. La pastille de
+              // couleur de chaque libellé se lit maintenant dans la liste.
+              <SelectMenu
+                items={[
+                  ...pools.filter(p => !draft.pools.includes(p.id)).map(p => ({ value: p.id, label: p.name, color: p.color })),
+                  { value: '__new__', label: t('editor.newLabelOption') },
+                ]}
+                onSelect={v => { if (v === '__new__') setCreatingPool(true); else togglePool(v); }}
+                panelWidth="auto"
+                variant="pills"
+                onScroll="clip"
+                wrapperStyle={{ display: 'inline-flex' }}
+                triggerStyle={{ ...selectStyle, fontWeight: 500, fontSize: 12.5, color: palette.inkMuted, borderRadius: 999, padding: '6px 12px' }}
               >
-                <option value="">{t('editor.addLabelOption')}</option>
-                {pools.filter(p => !draft.pools.includes(p.id)).map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-                <option value="__new__">{t('editor.newLabelOption')}</option>
-              </select>
+                {t('editor.addLabelOption')}
+              </SelectMenu>
             )}
             {draft.pools.map(pid => {
               const p = pools.find(pp => pp.id === pid);

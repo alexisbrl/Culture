@@ -14,7 +14,7 @@ import {
 import {
   type Exam, type Pool, type ExamConfig, type SheetFocus,
   defaultExamConfig, normalizeExamConfig, configQuestionIds, formatDuration, clearWeightingFor,
-  toggleQuestionInSections, isPageBreakId, pruneUnknownQuestions,
+  toggleQuestionInSections, isPageBreakId, pruneUnknownQuestions, LIST_INSET_X,
 } from './examen/examShared';
 import HistoryContent from './examen/HistoryContent';
 import BankContent from './examen/BankContent';
@@ -32,6 +32,9 @@ function newExamId() { return 'e' + Date.now(); }
 export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const t = useTranslations('examen');
   const [leftTab, setLeftTab] = useState<LeftTab>('bank');
+  // Un glisser est en cours sur la feuille (voir `onDragActiveChange` de
+  // `GeneratorContent`) : la colonne des questions cesse alors de défiler.
+  const [sheetDragging, setSheetDragging] = useState(false);
   const [exams, setExams] = useState<Exam[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [pools, setPools] = useState<Pool[]>([]);
@@ -49,7 +52,12 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [examConfig, setExamConfig] = useState<ExamConfig>(defaultExamConfig());
   const [pendingEditExam, setPendingEditExam] = useState<Exam | null>(null);
-  const [openQuestionBlocked, setOpenQuestionBlocked] = useState(false);
+  // Geste refusé parce qu'un formulaire de question est ouvert sur la feuille —
+  // `null` quand il n'y en a pas. Deux gestes distincts sont concernés, et le
+  // toast ne dit pas la même chose pour l'un et pour l'autre : ouvrir une
+  // seconde question, ou enregistrer l'examen.
+  const [blockedAction, setBlockedAction] = useState<'open' | 'save' | null>(null);
+  const blockedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [introOpen, setIntroOpen] = useState(false);
   // Ligne de la feuille à ramener au centre du panneau de droite. Tout ce qui
   // ajoute ou ouvre quelque chose sur la copie passe par là : la question
@@ -60,6 +68,15 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
 
   function requestSheetFocus(key: string) {
     setSheetFocus(prev => ({ key, token: (prev?.token ?? 0) + 1 }));
+  }
+
+  /** Refus d'un geste tant qu'une question est ouverte sur la feuille. Le timer
+   *  est gardé en ref : sans ça, deux gestes refusés coup sur coup feraient
+   *  disparaître le second toast au bout du délai du premier. */
+  function blockForOpenQuestion(action: 'open' | 'save') {
+    if (blockedTimer.current) clearTimeout(blockedTimer.current);
+    setBlockedAction(action);
+    blockedTimer.current = setTimeout(() => setBlockedAction(null), 2200);
   }
 
   function isEditorEmpty() {
@@ -123,7 +140,15 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     return () => { if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current); };
   }, [workshopId, draftIds, examConfig, editing, newQuestionId]);
 
+  // Réinitialiser jette toute la copie : le formulaire ouvert part avec elle, et
+  // la question neuve qu'il portait éventuellement — qui n'existe qu'en mémoire
+  // tant qu'elle n'est pas enregistrée — est retirée de la banque par
+  // `handleCancelQuestion`. Sans cette fermeture, `editingQuestion` survivait à
+  // une copie vidée : le formulaire n'était plus rendu nulle part (sa ligne
+  // avait disparu de la feuille) mais bloquait encore l'ouverture de toute autre
+  // question. Le geste a déjà sa confirmation, il n'y a rien à demander de plus.
   function handleClearEditor() {
+    handleCancelQuestion();
     setEditing(null);
     setDraftIds([]);
     setExamConfig(defaultExamConfig());
@@ -139,6 +164,18 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   }
 
   function handleGenerate() {
+    // Une question ouverte interdit l'enregistrement : son formulaire porte des
+    // modifications non enregistrées, et si elle vient d'être créée elle n'existe
+    // qu'en mémoire — l'examen partirait en base avec l'identifiant d'une
+    // question absente, faussant son compte de questions et son barème total. Il
+    // laisserait en plus `editingQuestion` ouvert sur une copie vidée, ce qui
+    // bloquait toute édition ultérieure jusqu'au rechargement de la page. On
+    // renvoie donc au formulaire, à terminer par « enregistrer » ou « annuler ».
+    if (editingQuestion) {
+      blockForOpenQuestion('save');
+      requestSheetFocus(editingQuestion.id);
+      return;
+    }
     const id = newExamId();
     const title = examConfig.title;
     const questionIds = configQuestionIds(examConfig);
@@ -166,11 +203,10 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   function handleDeleteExam(exam: Exam) {
     setExams(prev => prev.filter(e => e.id !== exam.id));
     setPendingDeleteExam(null);
-    if (editing?.id === exam.id) {
-      setEditing(null);
-      setDraftIds([]);
-      setExamConfig(defaultExamConfig());
-    }
+    // L'examen supprimé était celui qu'on modifiait : la copie se vide, donc
+    // exactement la même remise à zéro que « réinitialiser » — formulaire de
+    // question ouvert compris, sans quoi il resterait à bloquer l'édition.
+    if (editing?.id === exam.id) handleClearEditor();
     deleteGeneratedExam(workshopId, exam.id).catch(err => console.error('suppression de l\'examen échouée', err));
   }
 
@@ -183,8 +219,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     if (!q) return;
     if (editingQuestion) {
       if (editingQuestion.id === id) { handleCancelQuestion(); return; }
-      setOpenQuestionBlocked(true);
-      setTimeout(() => setOpenQuestionBlocked(false), 2200);
+      blockForOpenQuestion('open');
       return;
     }
     setEditingQuestion(q);
@@ -196,8 +231,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   function requestEditQuestion(q: Question) {
     if (editingQuestion) {
       if (editingQuestion.id === q.id) { handleCancelQuestion(); return; }
-      setOpenQuestionBlocked(true);
-      setTimeout(() => setOpenQuestionBlocked(false), 2200);
+      blockForOpenQuestion('open');
       return;
     }
     if (!configQuestionIds(examConfig).includes(q.id)) handleToggleQuestionInExam(q.id);
@@ -210,8 +244,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   // on l'insère donc tout de suite, et l'annulation la retire partout.
   function handleNewQuestion() {
     if (editingQuestion) {
-      setOpenQuestionBlocked(true);
-      setTimeout(() => setOpenQuestionBlocked(false), 2200);
+      blockForOpenQuestion('open');
       return;
     }
     const q = emptyQuestion();
@@ -411,7 +444,11 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
               lui-même : sa largeur est fixée en px par le palier, un zoom
               dessus la multiplierait. Le panneau défilant reste hors du zoom,
               comme côté feuille — c'est le contenu qui est mis à l'échelle. */}
-          <div style={{ display: 'flex', flexShrink: 0, borderBottom: `1px solid ${palette.line}`, zoom: 'var(--exam-list-zoom, 1)' }}>
+          {/* Même retrait horizontal que les cartes des deux listes
+              (`LIST_INSET_X`) : la barre et son filet s'arrêtent pile sur leur
+              bord. Le retrait est en `margin` et non en `padding` pour que le
+              filet du bas s'arrête lui aussi. */}
+          <div style={{ display: 'flex', flexShrink: 0, marginLeft: LIST_INSET_X, marginRight: LIST_INSET_X, borderBottom: `1px solid ${palette.line}`, zoom: 'var(--exam-list-zoom, 1)' }}>
             <button onClick={() => setLeftTab('history')} style={tabButtonStyle(leftTab === 'history', 'left')}>
               <FileText size={15} strokeWidth={1.75} />
               {t('tab.tabHistory')}
@@ -425,12 +462,20 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             {/* Montage permanent des deux onglets (display none/block) — préserve
                 la recherche/le tri en cours quand on bascule d'onglet, comme le
                 fait déjà SettingsClient pour ses sections. */}
-            <div className="scroll-panel" style={{ display: leftTab === 'history' ? 'block' : 'none', height: '100%' }}>
+            {/* `overflowY: hidden` pendant un glisser sur la copie : le
+                navigateur fait défiler de lui-même le conteneur défilant qu'on
+                survole, et la liste partait donc avec la feuille dès qu'on
+                approchait de son bord haut ou bas. Un conteneur non défilant
+                n'est pas concerné. Aucun effet de bord visible : les barres de
+                défilement de `.scroll-panel` sont déjà masquées (globals.css),
+                leur disparition ne décale rien — et la position de défilement
+                est conservée. */}
+            <div className="scroll-panel" style={{ display: leftTab === 'history' ? 'block' : 'none', height: '100%', overflowY: sheetDragging ? 'hidden' : undefined }}>
               <div style={{ zoom: 'var(--exam-list-zoom, 1)' }}>
                 <HistoryContent exams={exams} justAddedId={justAdded} onEdit={requestEditExam} onNew={() => setIntroOpen(true)} onDelete={e => setPendingDeleteExam(e)} />
               </div>
             </div>
-            <div className="scroll-panel" style={{ display: leftTab === 'bank' ? 'block' : 'none', height: '100%', position: 'relative' }}>
+            <div className="scroll-panel" style={{ display: leftTab === 'bank' ? 'block' : 'none', height: '100%', position: 'relative', overflowY: sheetDragging ? 'hidden' : undefined }}>
               <div style={{ zoom: 'var(--exam-list-zoom, 1)' }}>
               <BankContent
                 questions={questions}
@@ -482,6 +527,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             onDeletePool={handleDeletePool}
             onSaveQuestion={handleSaveQuestion}
             onCancelQuestion={handleCancelQuestion}
+            onDragActiveChange={setSheetDragging}
           />
         </div>
         <div className="hidden md:block" style={{ flex: '3 1 0', minWidth: 22, pointerEvents: 'none' }} />
@@ -521,10 +567,10 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         </div>,
         document.body
       )}
-      {openQuestionBlocked && createPortal(
+      {blockedAction && createPortal(
         <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', zIndex: 90, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 999, background: palette.ink, color: palette.parchment, fontFamily: 'var(--font-sans)', fontSize: 12.5, boxShadow: `0 12px 32px ${ink(0.30)}` }}>
           <AlertTriangle size={14} strokeWidth={2} color={palette.amberGlow} />
-          {t('tab.questionEditing')}
+          {blockedAction === 'save' ? t('tab.questionEditingSave') : t('tab.questionEditing')}
         </div>,
         document.body
       )}
@@ -574,7 +620,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
 
                 <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${FOOTER_PCT}%`, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 32px', borderTop: `1px solid ${ink(0.08)}` }}>
                   <button
-                    onClick={() => { setIntroOpen(false); setEditing(null); setExamConfig(defaultExamConfig()); focus('bank'); }}
+                    onClick={() => { setIntroOpen(false); handleClearEditor(); focus('bank'); }}
                     style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 10, border: 'none', background: palette.green, color: palette.paper, fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}
                   >
                     {t('tab.introStart')}

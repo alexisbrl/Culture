@@ -89,6 +89,11 @@ export type QuestionTypeOptions = {
   tableChecked?: string[];
   /** tableau — une seule case cochable par ligne. */
   tableUnique?: boolean;
+  /** tableau — l'ordre des LIGNES change d'une copie à l'autre (les colonnes
+   *  gardent le leur : elles servent de repère de lecture et de correction).
+   *  Pendant exact de `shuffleChoices` pour le QCM, d'où le même libellé
+   *  « ordre aléatoire » dans l'éditeur. */
+  tableShuffleRows?: boolean;
   /** paire — largeur de la colonne de gauche, de 0,1 à 0,9 (0,5 par défaut).
    *  Une seule valeur pour toute la question : tous les éléments ont la même
    *  largeur, toutes les correspondances aussi. */
@@ -107,6 +112,40 @@ export type FileTypeKey = (typeof FILE_TYPE_KEYS)[number];
 /** Tous les formats sont acceptés par défaut : c'est à l'enseignant de
  *  restreindre s'il le souhaite, pas d'ouvrir au cas par cas. */
 export const DEFAULT_FILE_TYPES: string[] = [...FILE_TYPE_KEYS];
+
+/** Vrai si les éléments de réponse de CET énoncé (question principale ou
+ *  question liée) changeront d'ordre d'une copie à l'autre. Trois cas, et
+ *  seulement trois :
+ *  - les paires, toujours — les imprimer alignées donnerait la réponse ;
+ *  - le QCM (et sa variante « réponse unique »), si `shuffleChoices` ;
+ *  - le tableau, si `tableShuffleRows`.
+ *  Les autres types n'ont pas d'éléments interchangeables.
+ *
+ *  Un énoncé qui n'a qu'un seul élément (ou aucun) est exclu : il n'y a rien à
+ *  mélanger, et l'annoncer sur la copie serait un repère qui ne veut rien dire.
+ *
+ *  Prédicat partagé plutôt que trois conditions recopiées : l'éditeur, la
+ *  feuille et — le jour où il existera — l'export imprimable doivent tous avoir
+ *  la même définition du mélange (voir docs/backlog.md). */
+export function shufflesAnswerItems(source: {
+  responseType: ResponseType;
+  choices?: string[];
+  shuffleChoices?: boolean;
+  typeOptions?: QuestionTypeOptions | null;
+}): boolean {
+  const choiceCount = source.choices?.length ?? 0;
+  switch (source.responseType) {
+    case 'matching':
+      return choiceCount > 1;
+    case 'qcm':
+    case 'qcs':
+      return source.shuffleChoices === true && choiceCount > 1;
+    case 'tableau':
+      return source.typeOptions?.tableShuffleRows === true && (source.typeOptions?.tableRows?.length ?? 0) > 1;
+    default:
+      return false;
+  }
+}
 
 export const MATCH_SPLIT_MIN = 0.05;
 export const MATCH_SPLIT_MAX = 0.95;
