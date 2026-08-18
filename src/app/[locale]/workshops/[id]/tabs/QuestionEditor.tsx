@@ -398,6 +398,9 @@ export default function QuestionEditor({
                 number={idx + 2}
                 advancedOpen={partsAdvanced}
                 notions={notions}
+                // L'image est celle de la grappe, saisie plus haut sur la
+                // question principale.
+                hasImage={!!draft.image}
                 onRemove={() => removePart(idx)}
                 statementPlaceholder={t('inline.linkedStatementPlaceholder')}
               />

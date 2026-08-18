@@ -14,6 +14,7 @@ import {
   TypeIcon, IconBtn, ListToolbar, FilterButton, ListCard, LabelPill, LabelEditor,
   useDismissOnOutsideClick,
 } from './examShared';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // Le filtre « QCM » couvre aussi les questions à réponse unique : `qcs` est la
 // variante de `qcm`, elle partage son libellé et son pictogramme et n'a jamais
@@ -327,9 +328,10 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
           <>
             <TypeIcon type={q.responseType} size={CARD_LINE - 8} />
             {hasParts && (
+              <Tooltip content={open ? tr('bank.hideParts') : tr('bank.showParts', { count: q.parts.length + 1 })}>
               <button
                 onClick={(e) => { e.stopPropagation(); setOpenId(open ? null : q.id); }}
-                title={open ? tr('bank.hideParts') : tr('bank.showParts', { count: q.parts.length + 1 })}
+                aria-label={open ? tr('bank.hideParts') : tr('bank.showParts', { count: q.parts.length + 1 })}
                 /* Même gabarit que `TypeIcon` (carré `CARD_LINE`, rayon 7) mais en
                    contour seul, sans aplat : les deux pictogrammes se lisent comme
                    une paire sans que le lien de grappe se fasse passer pour un
@@ -338,6 +340,7 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
               >
                 <Link2 size={CARD_LINE - 8} strokeWidth={1.75} />
               </button>
+              </Tooltip>
             )}
           </>
         }

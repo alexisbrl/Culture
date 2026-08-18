@@ -15,6 +15,7 @@ import { ArrowLeft, Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
 import { palette, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import type { Chapter } from '@/app/actions/workshopChapters';
 // Le parcours utilise le MÊME éditeur que la banque d'examen. Il exposait
 // auparavant un second éditeur en popup (`QuestionEditor`), qui avait dérivé :
@@ -196,10 +197,11 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
               </div>
               {/* Chapitre de rattachement : c'est lui qui détermine dans quel
                   pot la question peut être tirée. Sans chapitre, jamais tirée. */}
+              <Tooltip content={t('questions.chapter')}>
               <select
                 value={q.chapterId ?? ''}
                 onChange={(e) => handleChapterChange(q, e.target.value || null)}
-                title={t('questions.chapter')}
+                aria-label={t('questions.chapter')}
                 style={{ flexShrink: 0, width: 190, height: 32, padding: '0 10px', borderRadius: 9, border: `1px solid ${q.chapterId ? palette.lineStrong : withAlpha(palette.danger, 0.45)}`, background: palette.surfaceInput, color: q.chapterId ? palette.ink : palette.inkFaint, fontSize: 12.5, fontFamily: 'inherit', cursor: 'pointer' }}
               >
                 <option value="">{t('questions.noChapter')}</option>
@@ -207,21 +209,26 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
+              </Tooltip>
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                <button
-                  onClick={() => openEditor(q)}
-                  title={t('questions.edit')}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 9, background: 'transparent', border: `1px solid ${palette.lineStrong}`, color: palette.inkMuted, cursor: 'pointer' }}
-                >
-                  <Pencil size={14} strokeWidth={1.75} />
-                </button>
-                <button
-                  onClick={() => setDeleteTarget(q)}
-                  title={t('questions.delete')}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 9, background: withAlpha(palette.danger, 0.10), border: `1px solid ${withAlpha(palette.danger, 0.30)}`, color: palette.danger, cursor: 'pointer' }}
-                >
-                  <Trash2 size={14} strokeWidth={1.75} />
-                </button>
+                <Tooltip content={t('questions.edit')}>
+                  <button
+                    onClick={() => openEditor(q)}
+                    aria-label={t('questions.edit')}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 9, background: 'transparent', border: `1px solid ${palette.lineStrong}`, color: palette.inkMuted, cursor: 'pointer' }}
+                  >
+                    <Pencil size={14} strokeWidth={1.75} />
+                  </button>
+                </Tooltip>
+                <Tooltip content={t('questions.delete')}>
+                  <button
+                    onClick={() => setDeleteTarget(q)}
+                    aria-label={t('questions.delete')}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 9, background: withAlpha(palette.danger, 0.10), border: `1px solid ${withAlpha(palette.danger, 0.30)}`, color: palette.danger, cursor: 'pointer' }}
+                  >
+                    <Trash2 size={14} strokeWidth={1.75} />
+                  </button>
+                </Tooltip>
               </div>
             </div>
           ))

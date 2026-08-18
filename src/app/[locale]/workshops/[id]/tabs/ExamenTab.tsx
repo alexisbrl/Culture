@@ -16,6 +16,7 @@ import {
   defaultExamConfig, normalizeExamConfig, configQuestionIds, formatDuration, clearWeightingFor,
   toggleQuestionInSections, isPageBreakId, pruneUnknownQuestions, LIST_INSET_X,
 } from './examen/examShared';
+import { Tooltip } from '@/components/ui/tooltip';
 import HistoryContent from './examen/HistoryContent';
 import BankContent from './examen/BankContent';
 import GeneratorContent from './examen/GeneratorContent';
@@ -599,9 +600,11 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             <div style={{ position: 'relative', height: '90vh', width: 'calc(90vh * 0.75)', maxWidth: '92vw' }}>
               {/* carte : fond, texte, bouton — clippée pour les coins arrondis */}
               <div style={{ position: 'absolute', inset: 0, borderRadius: 28, overflow: 'hidden', background: `linear-gradient(160deg, ${palette.creamAlt} 0%, ${palette.tanTint} 100%)`, boxShadow: `0 28px 70px ${ink(0.32)}` }}>
-                <button onClick={() => setIntroOpen(false)} title={t('tab.introClose')} style={{ position: 'absolute', top: 18, right: 18, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: '50%', border: `1px solid ${ink(0.12)}`, background: palette.paper, color: palette.ink, cursor: 'pointer' }}>
-                  <X size={17} strokeWidth={2} />
-                </button>
+                <Tooltip content={t('tab.introClose')}>
+                  <button onClick={() => setIntroOpen(false)} aria-label={t('tab.introClose')} style={{ position: 'absolute', top: 18, right: 18, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: '50%', border: `1px solid ${ink(0.12)}`, background: palette.paper, color: palette.ink, cursor: 'pointer' }}>
+                    <X size={17} strokeWidth={2} />
+                  </button>
+                </Tooltip>
 
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: `${HEADER_PCT}%`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 70px', textAlign: 'center' }}>
                   <div style={{ fontSize: 23, fontWeight: 600, color: palette.ink }}>{t('tab.introTitle')}</div>

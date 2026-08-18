@@ -32,6 +32,7 @@
 
 import {
   DEFAULT_BLOOM_LEVEL,
+  normalizeTypeOptions,
   toBloomLevel,
   toResponseType,
   type BloomLevel,
@@ -222,7 +223,7 @@ function normalizeItem(raw: unknown, groupId: string, index: number): QuestionIt
     correctChoices: asNumberArray(r.correctChoices),
     shuffleChoices: r.shuffleChoices === true,
     textLines: typeof r.textLines === 'number' && r.textLines >= 1 ? Math.round(r.textLines) : 4,
-    typeOptions: (r.typeOptions && typeof r.typeOptions === 'object' ? r.typeOptions : {}) as QuestionTypeOptions,
+    typeOptions: normalizeTypeOptions(r.typeOptions),
     expectations: asString(r.expectations),
     bloomLevel: toBloomLevel(r.bloomLevel),
     notionIds: asStringArray(r.notionIds),

@@ -23,6 +23,7 @@ import { useTranslations } from 'next-intl';
 import { ArrowRight, Check, Droplet, FileText, Leaf, Loader2, RotateCw, Sprout, Upload, X } from 'lucide-react';
 import { palette, radius, withAlpha, shadow } from '@/lib/theme';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import LinkButton from '@/components/LinkButton';
 import { drawExercise, gradeExercise } from '@/app/actions/parcoursExercise';
 import type { ExercisePart, ExercisePrompt, ExerciseResult } from '@/lib/workshops/examTypes';
@@ -187,19 +188,21 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 40, display: 'flex', flexDirection: 'column', background: palette.cream }}>
       <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 14, padding: '18px 20px' }}>
-        <Link
-          href={`/${locale}/workshops/${workshopId}`}
-          title={t('back', { workshop: workshopName })}
-          style={{ width: 36, height: 36, borderRadius: 12, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, flexShrink: 0 }}
-        >
-          <X size={16} strokeWidth={1.75} />
-        </Link>
+        <Tooltip content={t('back', { workshop: workshopName })}>
+          <Link
+            href={`/${locale}/workshops/${workshopId}`}
+            aria-label={t('back', { workshop: workshopName })}
+            style={{ width: 36, height: 36, borderRadius: 12, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, flexShrink: 0 }}
+          >
+            <X size={16} strokeWidth={1.75} />
+          </Link>
+        </Tooltip>
         {/* Barre d'avancement de la session (maquette : `exProgressW`). Le
             tirage serveur pioche indéfiniment ; la longueur de session est une
             règle client (`EXERCISE_SESSION_LENGTH`), c'est donc elle qui donne
             le dénominateur. */}
+        <Tooltip content={t('progressTitle', { done: answeredCount, total: EXERCISE_SESSION_LENGTH })}>
         <div
-          title={t('progressTitle', { done: answeredCount, total: EXERCISE_SESSION_LENGTH })}
           style={{ flex: 1, height: 10, borderRadius: radius.pill, background: palette.surfaceSunken, boxShadow: shadow.inset, overflow: 'hidden' }}
         >
           <div
@@ -210,17 +213,19 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
             }}
           />
         </div>
+        </Tooltip>
         {/* Gouttes gagnées dans CETTE session — une par grappe réussie, comme
             l'annonce l'écran de fin. La maquette affiche un total d'arrosoir,
             qui n'existe pas encore côté serveur : afficher le compte de la
             session est la seule valeur vraie dont dispose cet écran. */}
+        <Tooltip content={t('dropletsTitle')}>
         <div
-          title={t('dropletsTitle')}
           style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 700, color: palette.greenBrand, background: withAlpha(palette.green, 0.12), borderRadius: radius.pill, padding: '6px 12px' }}
         >
           <Droplet size={14} strokeWidth={1.75} />
           {correctCount}
         </div>
+        </Tooltip>
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 20px 40px', display: 'flex' }}>

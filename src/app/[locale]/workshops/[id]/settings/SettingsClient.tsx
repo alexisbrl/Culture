@@ -15,6 +15,7 @@ import type { Notion } from '@/app/actions/workshopNotions';
 import type { Chapter } from '@/app/actions/workshopChapters';
 import { COVER_GRADIENTS, COVER_GRADIENT_KEYS, COVER_EMOJIS, coverGradientFor, emojiFor } from '@/lib/workshopCover';
 import ShareQRModal from '@/components/ShareQRModal';
+import { Tooltip } from '@/components/ui/tooltip';
 import { NAV_ITEMS, Row, Switch, SmallBtn, SectionCard, type WorkshopRole, type Member, type NavSection } from './settingsShared';
 import MembersSection from './MembersSection';
 import FilesSection from './FilesSection';
@@ -372,13 +373,15 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 <ChevronDown size={11} strokeWidth={2.25} />
               </span>
             </button>
-            <Link
-              href={`/${locale}/workshops/${workshopId}`}
-              title={t('closeSettings')}
-              style={{ flexShrink: 0, marginRight: 20, width: 30, height: 30, borderRadius: 999, border: `1px solid ${palette.line}`, background: palette.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted }}
-            >
-              <X size={14} strokeWidth={2.25} />
-            </Link>
+            <Tooltip content={t('closeSettings')}>
+              <Link
+                href={`/${locale}/workshops/${workshopId}`}
+                aria-label={t('closeSettings')}
+                style={{ flexShrink: 0, marginRight: 20, width: 30, height: 30, borderRadius: 999, border: `1px solid ${palette.line}`, background: palette.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted }}
+              >
+                <X size={14} strokeWidth={2.25} />
+              </Link>
+            </Tooltip>
           </div>
           {mobileNavOpen && (
             <div style={{ position: 'absolute', top: '100%', left: 16, width: 300, maxWidth: 'calc(100% - 32px)', zIndex: 60, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 14, boxShadow: shadow.lg, overflow: 'hidden', boxSizing: 'border-box' }}>

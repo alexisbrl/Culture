@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { AudioLines, Loader2, Pause, Play, Volume2, VolumeX, X } from 'lucide-react';
 import { palette } from '@/lib/theme';
+import { Tooltip } from '@/components/ui/tooltip';
 import type { QuestionMedia } from '@/lib/workshops/examTypes';
 import { createQuestionMediaUploadTicket, getQuestionMediaUrls } from '@/app/actions/examQuestions';
 
@@ -172,18 +173,22 @@ function AudioAttachment({ workshopId, media, onRemove }: {
 
   // Bouton retrait — même croix nue que celle de l'image, jamais le menu ⋮.
   const removeButton = (
-    <button type="button" onClick={onRemove} title={t('inline.removeMedia')} style={{ flex: 'none', border: 'none', background: 'transparent', color: palette.inkFaint, cursor: 'pointer', padding: 2, display: 'flex' }}>
-      <X size={14} strokeWidth={2.2} />
-    </button>
+    <Tooltip content={t('inline.removeMedia')}>
+      <button type="button" onClick={onRemove} aria-label={t('inline.removeMedia')} style={{ flex: 'none', border: 'none', background: 'transparent', color: palette.inkFaint, cursor: 'pointer', padding: 2, display: 'flex' }}>
+        <X size={14} strokeWidth={2.2} />
+      </button>
+    </Tooltip>
   );
 
   if (!playing) {
     return (
       <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
         {audioEl}
-        <button type="button" onClick={togglePlay} disabled={!url} title={t('inline.play')} style={mediaButtonStyle(false)}>
-          <Play size={16} strokeWidth={1.75} fill={palette.inkMuted} color={palette.inkMuted} />
-        </button>
+        <Tooltip content={t('inline.play')}>
+          <button type="button" onClick={togglePlay} disabled={!url} aria-label={t('inline.play')} style={mediaButtonStyle(false)}>
+            <Play size={16} strokeWidth={1.75} fill={palette.inkMuted} color={palette.inkMuted} />
+          </button>
+        </Tooltip>
         {removeButton}
       </div>
     );
@@ -196,18 +201,28 @@ function AudioAttachment({ workshopId, media, onRemove }: {
   return (
     <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 4, height: 38, padding: '0 8px', border: `1px solid ${palette.lineStrong}`, background: palette.surfaceRaised, borderRadius: 8 }}>
       {audioEl}
-      <button type="button" onClick={togglePlay} title={t('inline.pause')} style={controlBtnStyle}>
-        <Pause size={16} strokeWidth={1.75} fill={palette.inkMuted} color={palette.inkMuted} />
-      </button>
-      <button type="button" onClick={() => skip(-10)} title={t('inline.skipBack')} style={{ ...controlBtnStyle, fontSize: 10.5, fontWeight: 600 }}>
-        -10s
-      </button>
-      <button type="button" onClick={() => skip(10)} title={t('inline.skipForward')} style={{ ...controlBtnStyle, fontSize: 10.5, fontWeight: 600 }}>
-        +10s
-      </button>
-      <button type="button" onClick={toggleMute} title={t('inline.volume')} style={controlBtnStyle}>
-        {muted ? <VolumeX size={15} strokeWidth={1.75} /> : <Volume2 size={15} strokeWidth={1.75} />}
-      </button>
+      <Tooltip content={t('inline.pause')}>
+        <button type="button" onClick={togglePlay} aria-label={t('inline.pause')} style={controlBtnStyle}>
+          <Pause size={16} strokeWidth={1.75} fill={palette.inkMuted} color={palette.inkMuted} />
+        </button>
+      </Tooltip>
+      {/* « -10s » / « +10s » sont écrits dans le bouton : c'est déjà leur nom
+          accessible, l'infobulle ne fait que le dire en toutes lettres. */}
+      <Tooltip content={t('inline.skipBack')}>
+        <button type="button" onClick={() => skip(-10)} style={{ ...controlBtnStyle, fontSize: 10.5, fontWeight: 600 }}>
+          -10s
+        </button>
+      </Tooltip>
+      <Tooltip content={t('inline.skipForward')}>
+        <button type="button" onClick={() => skip(10)} style={{ ...controlBtnStyle, fontSize: 10.5, fontWeight: 600 }}>
+          +10s
+        </button>
+      </Tooltip>
+      <Tooltip content={t('inline.volume')}>
+        <button type="button" onClick={toggleMute} aria-label={t('inline.volume')} style={controlBtnStyle}>
+          {muted ? <VolumeX size={15} strokeWidth={1.75} /> : <Volume2 size={15} strokeWidth={1.75} />}
+        </button>
+      </Tooltip>
       <input
         type="range"
         min={0}
@@ -221,9 +236,11 @@ function AudioAttachment({ workshopId, media, onRemove }: {
         }}
         style={{ width: 48 }}
       />
-      <button type="button" onClick={onRemove} title={t('inline.removeMedia')} style={{ ...controlBtnStyle, color: palette.inkFaint }}>
-        <X size={14} strokeWidth={2.2} />
-      </button>
+      <Tooltip content={t('inline.removeMedia')}>
+        <button type="button" onClick={onRemove} aria-label={t('inline.removeMedia')} style={{ ...controlBtnStyle, color: palette.inkFaint }}>
+          <X size={14} strokeWidth={2.2} />
+        </button>
+      </Tooltip>
     </div>
   );
 }
@@ -267,9 +284,11 @@ export function MediaAttachment({ workshopId, kind, media, onChange, label, icon
           ) : (
             <div style={{ width: 38, height: 38, borderRadius: 8, border: `1px solid ${palette.lineStrong}`, background: palette.surfaceRaised }} />
           )}
-          <button type="button" onClick={() => onChange(null)} title={t('inline.removeMedia')} style={{ flex: 'none', border: 'none', background: 'transparent', color: palette.inkFaint, cursor: 'pointer', padding: 2, display: 'flex' }}>
-            <X size={14} strokeWidth={2.2} />
-          </button>
+          <Tooltip content={t('inline.removeMedia')}>
+            <button type="button" onClick={() => onChange(null)} aria-label={t('inline.removeMedia')} style={{ flex: 'none', border: 'none', background: 'transparent', color: palette.inkFaint, cursor: 'pointer', padding: 2, display: 'flex' }}>
+              <X size={14} strokeWidth={2.2} />
+            </button>
+          </Tooltip>
         </div>
         {error && <span style={{ fontSize: 11, color: palette.danger }}>{error}</span>}
       </div>
@@ -289,9 +308,11 @@ export function MediaAttachment({ workshopId, kind, media, onChange, label, icon
           if (file) handleFile(file);
         }}
       />
-      <button type="button" disabled={uploading} onClick={() => inputRef.current?.click()} title={label} style={mediaButtonStyle(uploading)}>
-        {uploading ? <Loader2 size={16} strokeWidth={1.75} style={{ animation: 'spin 1s linear infinite' }} /> : icon}
-      </button>
+      <Tooltip content={label}>
+        <button type="button" disabled={uploading} onClick={() => inputRef.current?.click()} aria-label={label} style={mediaButtonStyle(uploading)}>
+          {uploading ? <Loader2 size={16} strokeWidth={1.75} style={{ animation: 'spin 1s linear infinite' }} /> : icon}
+        </button>
+      </Tooltip>
       {error && <span style={{ fontSize: 11, color: palette.danger }}>{error}</span>}
     </div>
   );

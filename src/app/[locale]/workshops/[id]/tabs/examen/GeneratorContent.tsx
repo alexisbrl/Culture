@@ -21,6 +21,7 @@ import {
   ShuffleNoticeIcon, renderAnswerSpace, partAsQuestion, QuestionImagePreview, QuestionAudioNote,
 } from './examShared';
 import { shufflesAnswerItems } from '@/lib/workshops/examTypes';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /** Champ de la feuille A4 qui passe à la ligne au lieu de rogner : un
  *  `textarea` d'une ligne qui grandit avec son contenu. Un `<input>` ne sait pas
@@ -45,17 +46,18 @@ function SheetAutoText({ value, onChange, placeholder, title, style }: {
     el.style.height = `${el.scrollHeight}px`;
   });
   return (
+    <Tooltip content={title}>
     <textarea
       ref={ref}
       rows={1}
       value={value}
+      aria-label={title}
       // Les retours à la ligne sont conservés : un intitulé d'examen tient
       // rarement sur une ligne, et l'auteur doit pouvoir décider où il coupe.
       // La hauteur suit toute seule (`scrollHeight` ci-dessus), et le bloc
       // d'en-tête de la copie est mesuré, pas estimé — la pagination suit.
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
-      title={title}
       style={{
         width: '100%', textAlign: 'center' as const, fontFamily: 'inherit', background: 'transparent',
         border: 'none', borderRadius: 6, outline: 'none', padding: '2px 0', boxSizing: 'border-box' as const,
@@ -63,6 +65,7 @@ function SheetAutoText({ value, onChange, placeholder, title, style }: {
         ...style,
       }}
     />
+    </Tooltip>
   );
 }
 
@@ -675,15 +678,14 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
     const removable = !IDENTITY_KEY_SET.has(id);
     const label = id === BAREME_KEY ? baremeLabel() : labelOfItem(id);
     return (
+      <Tooltip key={id} content={placed ? t('generator.pillPlacedHint') : t('generator.pillHiddenHint')}>
       <span
-        key={id}
         draggable
         onDragStart={() => setDraggingIdentityKey(id)}
         onDragEnd={() => setDraggingIdentityKey(null)}
         onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (draggingIdentityKey && draggingIdentityKey !== id && sideOfItem(draggingIdentityKey) === side) moveIdentity(draggingIdentityKey, side, id); }}
         onDrop={e => { e.preventDefault(); e.stopPropagation(); if (draggingIdentityKey && draggingIdentityKey !== id) moveIdentity(draggingIdentityKey, side, id); }}
         onClick={() => toggleIdentity(id)}
-        title={placed ? t('generator.pillPlacedHint') : t('generator.pillHiddenHint')}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 5, flex: 'none',
           fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-sans)',
@@ -700,6 +702,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
           <button onClick={e => { e.stopPropagation(); removeCustomField(id); }} style={{ border: 'none', background: 'none', color: 'inherit', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: 0.7 }}>×</button>
         )}
       </span>
+      </Tooltip>
     );
   }
   const identityLeftKeys = identityOrder.filter(id => sideOfItem(id) === 'left');
@@ -1068,33 +1071,37 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                   favori », et le bouton d'enregistrement reparaît. */}
               <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
                 {!headerIsFavorite && (
+                  <Tooltip content={t('generator.replaceFavorite')}>
                   <button
                     type="button"
                     onClick={() => setConfirmSaveFavoriteOpen(true)}
-                    title={t('generator.replaceFavorite')}
                     style={{ fontSize: 12, fontWeight: 600, color: palette.green, background: 'transparent', border: `1px solid ${palette.lineStrong}`, borderRadius: 999, padding: '4px 12px', cursor: 'pointer', fontFamily: 'inherit' }}
                   >
                     {t('generator.saveFavorite')}
                   </button>
+                  </Tooltip>
                 )}
                 {headerIsFavorite ? (
-                  <span
-                    role="img"
-                    aria-label={t('generator.isFavorite')}
-                    title={t('generator.isFavorite')}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, color: palette.green }}
-                  >
-                    <Star size={16} strokeWidth={1.75} fill={palette.green} />
-                  </span>
+                  <Tooltip content={t('generator.isFavorite')}>
+                    <span
+                      role="img"
+                      aria-label={t('generator.isFavorite')}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, color: palette.green }}
+                    >
+                      <Star size={16} strokeWidth={1.75} fill={palette.green} />
+                    </span>
+                  </Tooltip>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmApplyFavoriteOpen(true)}
-                    title={t('generator.applyFavorite')}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'transparent', color: palette.green, cursor: 'pointer', padding: 0 }}
-                  >
-                    <Star size={16} strokeWidth={1.75} />
-                  </button>
+                  <Tooltip content={t('generator.applyFavorite')}>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmApplyFavoriteOpen(true)}
+                      aria-label={t('generator.applyFavorite')}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'transparent', color: palette.green, cursor: 'pointer', padding: 0 }}
+                    >
+                      <Star size={16} strokeWidth={1.75} />
+                    </button>
+                  </Tooltip>
                 )}
               </div>
             </div>
@@ -1386,8 +1393,8 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                             padding: `${SECTION_TITLE_PAD_TOP}px 0 10px 34px`, lineHeight: `${SECTION_TITLE_LINE_H}px`,
                           };
                           return (
+                            <Tooltip key={row.key} content={editingTitle ? undefined : t('generator.dragSection')}>
                             <div
-                              key={row.key}
                               ref={el => { qRefs.current[row.key] = el; }}
                               // Toute la ligne de titre est la poignée de la
                               // partie — sauf pendant qu'on renomme : un champ de
@@ -1398,7 +1405,6 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                               draggable={!editingTitle}
                               onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', row.key); beginSectionDrag(row.sectionIdx); }}
                               onDragEnd={endSectionDrag}
-                              title={editingTitle ? undefined : t('generator.dragSection')}
                               style={{ display: 'flex', alignItems: 'baseline', gap: 12, paddingRight: 34, cursor: editingTitle ? 'default' : 'grab' }}
                             >
                               {/* Pas d'icône crayon sur la feuille : le titre de
@@ -1424,6 +1430,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                   l'auteur de l'éteindre. */}
                               {showSectionPoints && sheetPoints(sectionPoints(row.sectionIdx), SECTION_TITLE_LINE_H, row.key)}
                             </div>
+                            </Tooltip>
                           );
                         }
                         if (row.kind === 'empty') {
@@ -1460,12 +1467,11 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                tout ce qui suit un saut de page se décalait
                                d'autant. Même règle que l'écart de 40px d'une
                                question liée. */
+                            <Tooltip key={row.key} content={t('generator.dragReorder')}>
                             <div
-                              key={row.key}
                               draggable
                               onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', row.key); beginRowDrag(gi); }}
                               onDragEnd={endDrag}
-                              title={t('generator.dragReorder')}
                               {...dragOverPropsFor(gi, row.sectionIdx, row.key, row.key)}
                               ref={el => { qRefs.current[row.key] = el; }}
                               style={{ position: 'relative' as const, padding: '10px 34px', cursor: 'grab', opacity: dragFlatIdx === gi ? 0.4 : 1 }}
@@ -1476,6 +1482,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                 {t('generator.pageBreak')}
                               </div>
                             </div>
+                            </Tooltip>
                           );
                         }
                         const { gi, q } = row;
@@ -1601,7 +1608,9 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                           return (
                             <div key={row.key} style={{ height: rh, minHeight: rh ? undefined : A4_SECTION_HEADER_HEIGHT, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: markTops[row.key] ?? SECTION_TITLE_PAD_TOP, boxSizing: 'border-box' as const }}>
                               {config.sections.length > 1 && (
-                                <button type="button" onClick={() => removeSection(row.sectionIdx)} title={t('generator.removeSection')} style={{ display: 'flex', alignItems: 'center', height: SECTION_TITLE_LINE_H, fontSize: 15, lineHeight: 1, color: palette.danger, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>×</button>
+                                <Tooltip content={t('generator.removeSection')}>
+                                  <button type="button" onClick={() => removeSection(row.sectionIdx)} aria-label={t('generator.removeSection')} style={{ display: 'flex', alignItems: 'center', height: SECTION_TITLE_LINE_H, fontSize: 15, lineHeight: 1, color: palette.danger, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>×</button>
+                                </Tooltip>
                               )}
                             </div>
                           );
@@ -1617,7 +1626,9 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                basse sont symétriques), simplement ramenée contre
                                la feuille comme les autres. */
                             <div key={row.key} {...gutterDropProps(row)} style={{ height: rh, minHeight: rh ? undefined : A4_PAGE_BREAK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
-                              <span onClick={() => removePageBreak(row.id)} title={t('generator.removePageBreak')} style={{ fontSize: 15, lineHeight: 1, color: palette.danger, cursor: 'pointer' }}>×</span>
+                              <Tooltip content={t('generator.removePageBreak')}>
+                                <span onClick={() => removePageBreak(row.id)} style={{ fontSize: 15, lineHeight: 1, color: palette.danger, cursor: 'pointer' }}>×</span>
+                              </Tooltip>
                             </div>
                           );
                         }
@@ -1640,7 +1651,9 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                         // qu'il est sur la même page que le début de la question.
                         return (
                           <div key={row.key} {...gutterDropProps(row)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: markTops[row.key] ?? STATEMENT_PAD_TOP, boxSizing: 'border-box' as const }}>
-                            <span onClick={() => removeFromExam(row.q.id)} title={t('generator.removeFromExam')} style={{ display: 'flex', alignItems: 'center', height: STATEMENT_LINE_H, fontSize: 15, lineHeight: 1, color: palette.danger, cursor: 'pointer' }}>×</span>
+                            <Tooltip content={t('generator.removeFromExam')}>
+                              <span onClick={() => removeFromExam(row.q.id)} style={{ display: 'flex', alignItems: 'center', height: STATEMENT_LINE_H, fontSize: 15, lineHeight: 1, color: palette.danger, cursor: 'pointer' }}>×</span>
+                            </Tooltip>
                           </div>
                         );
                       })}
@@ -1713,15 +1726,16 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
             >
               {t('generator.addSection')}
             </button>
-            <button
-              type="button"
-              onClick={addPageBreak}
-              title={t('generator.addPageBreakTooltip')}
-              style={{ width: '100%', padding: '11px', borderRadius: 10, border: `1px solid ${palette.line}`, background: palette.surfaceRaised, color: palette.inkMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', boxSizing: 'border-box' as const, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-            >
-              <SeparatorHorizontal size={15} strokeWidth={1.75} />
-              {t('generator.pageBreak')}
-            </button>
+            <Tooltip content={t('generator.addPageBreakTooltip')}>
+              <button
+                type="button"
+                onClick={addPageBreak}
+                style={{ width: '100%', padding: '11px', borderRadius: 10, border: `1px solid ${palette.line}`, background: palette.surfaceRaised, color: palette.inkMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', boxSizing: 'border-box' as const, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                <SeparatorHorizontal size={15} strokeWidth={1.75} />
+                {t('generator.pageBreak')}
+              </button>
+            </Tooltip>
           </div>
       </div>
       </div>

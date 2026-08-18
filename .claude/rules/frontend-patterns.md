@@ -34,6 +34,40 @@ Référence : `src/app/[locale]/workshops/[id]/settings/SettingsClient.tsx`.
 
 Carte crème `borderRadius: 20`, icône d'avertissement, titre/description centrés, actions en bas (« Confirmer » / « Annuler », ou 3 actions type « Enregistrer et quitter » / « Annuler » / « Quitter sans enregistrer »). À utiliser pour toute action destructive ou décision à conséquence (suppression, navigation avec perte de données).
 
+## Infobulles — `<Tooltip>` uniquement, jamais l'attribut `title`
+
+L'attribut `title` du HTML est **interdit dans le JSX** : il est dessiné par le système d'exploitation, hors du DOM, donc aucun CSS ne l'atteint (police, couleurs, rayon, délai, position). La règle `no-restricted-syntax` d'`eslint.config.mjs` le refuse en `error` sur **toute balise JSX**, et n'excepte qu'une liste nommée : nos propres composants dont `title` est une vraie prop (`<ConfirmDialog title=…>`, `<ListCard title=…>`). **C'est cette règle, et non un `grep`, qui fait foi pour recenser les infobulles** — elle lit l'AST. Migration initiale : 78 sites, 18/08/2026.
+
+**Le sens de la règle compte.** Sa première version ne visait que les balises en minuscule, en supposant que le PascalCase était forcément à nous : elle laissait donc passer `title` sur un composant qui le **transmet** au DOM. C'est arrivé à `<Link title=…>` (next/link le pose sur son `<a>`) — l'engrenage des paramètres a gardé une infobulle système, invisible du lint, alors que la migration se croyait exhaustive. D'où l'inversion : interdit partout, autorisé nommément. Ajouter un nom à la liste, c'est affirmer que ce composant ne transmet pas `title` au DOM. Le contrôle de dernier recours reste le navigateur : `document.querySelectorAll('[title]')` doit ne rien renvoyer.
+
+Le composant est `src/components/ui/tooltip.tsx` (Base UI), le délai partagé est monté une fois dans `[locale]/layout.tsx`. On enveloppe le déclencheur, on ne lui passe pas de prop :
+
+```tsx
+<Tooltip content={t('bank.editLabelTitle')}>
+  <button aria-label={t('bank.editLabelTitle')}><Pencil /></button>
+</Tooltip>
+```
+
+Quatre règles qui vont avec :
+
+- **`content` vide ⇒ rien du tout** : l'enfant est rendu tel quel, aucun composant monté. C'est ce qui permet une infobulle conditionnelle sans écrire deux branches de JSX.
+- **Une infobulle n'est pas un nom accessible.** Elle décrit (`aria-describedby`), elle ne nomme pas. Un bouton **sans texte visible** doit donc porter en plus son propre `aria-label` — ce que l'attribut `title` assurait au passage. À l'inverse, un bouton qui a déjà son libellé visible n'en veut pas : il écraserait le nom qu'on lit.
+- **Un `<button disabled>` n'émet aucun événement de souris** : l'infobulle posée dessus ne s'ouvrirait jamais, précisément quand elle a quelque chose à expliquer. Envelopper le bouton dans un `<span style={{ display: 'inline-flex' }}>` et poser l'infobulle sur le span.
+- **Jamais deux infobulles imbriquées.** Entrer dans un enfant ne fait pas sortir du parent : un conteneur qui porte une infobulle et contient un bouton qui en porte une autre les ouvre toutes les deux. Poser celle du conteneur sur la partie qui n'est pas couverte par l'enfant (précédent : `LabelPill`, l'infobulle du nom est sur le texte, pas sur la pastille).
+- **`content` conditionnel ne change pas le DOM rendu** (le déclencheur est simplement désactivé). C'est indispensable quand la condition vient d'une **mesure faite sur le déclencheur lui-même** : la première version rendait l'enfant nu quand `content` était vide, si bien que gagner une infobulle déplaçait l'élément dans l'arbre, React le démontait, et la mesure qui décidait de l'infobulle tombait avec lui — les noms de pastille coupés n'en avaient plus. Règle générale : **ne jamais faire dépendre la position d'un élément dans l'arbre React d'un état mesuré sur cet élément** (même famille que le piège du composant qui se remonte selon sa propre hauteur, plus bas).
+
+Enfin, l'ombre de la bulle est posée en `style` et non en classe : `shadow-[var(--shadow-lg)]` passe par la composition d'ombres de Tailwind v4, qui perd la couleur du token et rend une ombre **transparente**. Vrai pour tout token d'ombre multi-couches.
+
+Le déclencheur ne reçoit ni `role`, ni `tabIndex`, ni nœud DOM supplémentaire (Base UI rend l'enfant lui-même) : une mise en page en flex/grid n'est jamais perturbée, et un élément décoratif le reste. La bulle est portée par un portail sur `body`, donc au-dessus des panneaux (60) et des modales (80), et hors du `zoom` de la feuille A4. Enfin, elle est **desktop seulement** (Base UI n'écoute que la souris) : jamais d'information nécessaire pour agir dedans.
+
+Deux réglages qui ont l'air cosmétiques et ne le sont pas : le délai d'ouverture est **long** (750 ms) et il n'y a **pas de `Tooltip.Provider`** — celui-ci partage le délai entre bulles voisines, si bien qu'une fois la première ouverte les suivantes s'ouvrent instantanément, et balayer une rangée de boutons fait clignoter une bulle par bouton. Et surtout **jamais `text-balance` sur la bulle** : il raccourcit les lignes sans rétrécir la boîte, qui reste à sa largeur maximale — d'où une bande blanche à droite de toute bulle qui revient à la ligne.
+
+## Borner un texte qui pourrait déborder : en largeur, pas en caractères
+
+Un plafond du type `name.slice(0, 30)` compte des caractères là où le débordement se mesure en pixels : il coupe des noms qui avaient la place de tenir, et laisse passer les caractères larges (majuscules, « m ») qui débordent quand même. Poser la borne sur l'élément : `maxWidth: '100%'` (+ `boxSizing: 'border-box'`) sur le bloc, et `minWidth: 0` + `overflow: hidden` + `textOverflow: 'ellipsis'` + `whiteSpace: 'nowrap'` sur le texte lui-même. **`minWidth: 0` est indispensable** dès que le texte est un élément de flex : sans lui, un élément de flex refuse de se réduire sous la largeur de son contenu et le « … » ne se déclenche jamais. Les cibles de clic voisines (boutons, pictogrammes) gardent leur `flexShrink: 0` — c'est le texte qui cède, pas elles.
+
+**L'infobulle de secours ne se déduit alors plus du texte** : la coupe se décide au rendu. La mesurer (`scrollWidth > clientWidth + 1`, la tolérance d'un pixel écartant les arrondis sous-pixel) dans un `useLayoutEffect` + `ResizeObserver` sur l'élément de texte, gardée par une comparaison explicite (voir plus bas). Sans cette mesure, il ne reste que deux mauvaises options : une infobulle sur tout, y compris ce qui se lit déjà en entier, ou aucune sur ce qui est coupé. Référence : `LabelPill` (`examen/examShared.tsx`, 18/08/2026).
+
 ## Fermeture des panneaux au clic extérieur — `useDismissOnOutsideClick`
 
 Point d'entrée unique pour tout panneau flottant qui se ferme quand on clique ailleurs (`examen/examShared.tsx`). Deux règles indissociables, décidées le 12/08/2026 :

@@ -12,6 +12,7 @@ import { resetMyParcoursProgress } from '@/app/actions/parcoursProgress';
 import ParcoursQuestions from './programme/ParcoursQuestions';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ProgressBar } from '@/components/ui/progress-bar';
+import { Tooltip } from '@/components/ui/tooltip';
 import LinkButton from '@/components/LinkButton';
 
 type Props = {
@@ -77,16 +78,20 @@ export default function ProgrammeTab({ chapters, workshopId, workshopName, canMa
             {t('progressPercent', { pct: progress.workshopPercent })}
           </span>
         </div>
+        {/* `aria-label` : le libellé du bouton disparaît sous `xl`, l'icône
+            reste seule — le nom accessible ne peut donc pas en dépendre. */}
         {canManage && (
+          <Tooltip content={t('questions.open')}>
           <button
             type="button"
             onClick={() => setShowQuestions(true)}
-            title={t('questions.open')}
+            aria-label={t('questions.open')}
             className="mt-3.5 ml-auto flex items-center gap-2 rounded-full border border-[var(--line-strong)] bg-[var(--surface-raised)] px-[13px] py-2 text-[13px] font-semibold text-[var(--green-strong)] shadow-[var(--shadow-sm)] transition-colors hover:border-[var(--green-light)] hover:bg-[var(--green-tint)] md:absolute md:top-6 md:right-6 md:z-[5] md:mt-0 xl:px-[15px]"
           >
             <ListChecks size={15} strokeWidth={1.75} />
             <span className="hidden xl:inline">{t('questions.open')}</span>
           </button>
+          </Tooltip>
         )}
 
         {/* ⚠️ MÉCANISME DE TEST TEMPORAIRE — à retirer avant la mise en service.
@@ -95,16 +100,21 @@ export default function ProgrammeTab({ chapters, workshopId, workshopName, canMa
             Volontairement discret et d'un seul tenant (bouton + handler + clé
             i18n `resetProgress`), pour se supprimer sans laisser de trace.
             Voir `resetUserMastery` dans @/lib/workshops/mastery. */}
+        {/* Le `span` porte l'infobulle : pendant la remise à zéro le bouton est
+            désactivé, et un bouton désactivé n'émet aucun événement de souris. */}
+        <Tooltip content={t('resetProgressHint')}>
+        <span className="mt-3 inline-flex">
         <button
           type="button"
           onClick={handleReset}
           disabled={resetting}
-          title={t('resetProgressHint')}
-          className="mt-3 flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--ink-faint)] transition-colors hover:text-[var(--danger)] disabled:opacity-50"
+          className="flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--ink-faint)] transition-colors hover:text-[var(--danger)] disabled:opacity-50"
         >
           <RotateCcw size={12} strokeWidth={1.75} />
           {resetting ? t('resetProgressBusy') : t('resetProgress')}
         </button>
+        </span>
+        </Tooltip>
 
         {!hero ? (
           <EmptyState icon={Sprout} title={t('emptyTitle')} description={t('emptyDesc')} className="mt-8" />

@@ -139,7 +139,10 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
   ];
 
   return (
-    <div style={{ background: palette.cream, minHeight: 'calc(100vh - 60px)', padding: '28px 24px 48px' }}>
+    // `page-no-scrollbar` : la page défile toujours (elle dépasse d'environ
+    // 180px sur un écran courant), mais sans barre visible à droite — décision
+    // du 18/08/2026. Voir `globals.css`.
+    <div className="page-no-scrollbar" style={{ background: palette.cream, minHeight: 'calc(100vh - 60px)', padding: '28px 24px 48px' }}>
       <div style={{ maxWidth: 520, margin: '0 auto' }}>
         {/* Bannière — rayures diagonales, avatar centré sans contour, nom en haut
             à gauche avec le tag juste en dessous. « éditer » ouvre le composeur

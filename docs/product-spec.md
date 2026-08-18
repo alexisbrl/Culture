@@ -369,6 +369,8 @@ Chaque question est associée à une réponse. Une même question peut apparteni
 
 **Types de réponse :** Sans réponse `[base]` / QCS / QCM / Textuelle (avec option « réponse libre / sans correction ») / Liste / Tableau / Matching / Dessin (fond blanc ou calque) / Fichier (dépôt, y compris un fichier audio)
 
+**Mode de réponse** (paramètres avancés, exclusifs l'un de l'autre) : une question peut demander que la réponse soit donnée **à la voix** (« réponse orale » — textuelle, liste, paire) ou **sur l'image de la question** (« répondre sur l'image » — dessin, liste ; proposé seulement si une image est jointe). Les deux ne concernent **que les versions en ligne** (examen passé en ligne, parcours) : la feuille A4 les ignore. À ce jour ils ne font qu'identifier la question — le branchement réel, et le format d'une réponse orale, sont au backlog.
+
 **Génération d'examens**
 Un gestionnaire génère autant d'examens que souhaité, organisés en sections, à partir des questions de la banque. Les examens générés sont modifiables librement dans un éditeur avec aperçu A4 en direct.
 

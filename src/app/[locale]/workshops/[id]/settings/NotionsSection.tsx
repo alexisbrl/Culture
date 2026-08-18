@@ -19,6 +19,7 @@ import {
   type Chapter,
 } from '@/app/actions/workshopChapters';
 import { SmallBtn } from './settingsShared';
+import { Tooltip } from '@/components/ui/tooltip';
 
 type Props = {
   workshopId: string;
@@ -309,20 +310,24 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
           {notion.title}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-          <button
-            onClick={() => { setEditingId(notion.id); setAdding(false); setError(''); }}
-            title={t('notions.edit')}
-            style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
-          >
-            <Pencil size={15} strokeWidth={1.75} />
-          </button>
-          <button
-            onClick={() => setDeleteTarget(notion)}
-            title={t('notions.delete')}
-            style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
-          >
-            <Trash2 size={15} strokeWidth={1.75} />
-          </button>
+          <Tooltip content={t('notions.edit')}>
+            <button
+              onClick={() => { setEditingId(notion.id); setAdding(false); setError(''); }}
+              aria-label={t('notions.edit')}
+              style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
+            >
+              <Pencil size={15} strokeWidth={1.75} />
+            </button>
+          </Tooltip>
+          <Tooltip content={t('notions.delete')}>
+            <button
+              onClick={() => setDeleteTarget(notion)}
+              aria-label={t('notions.delete')}
+              style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
+            >
+              <Trash2 size={15} strokeWidth={1.75} />
+            </button>
+          </Tooltip>
         </div>
       </div>
     );
@@ -415,9 +420,11 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
                     }}
                   >
                     <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: isActive ? palette.green : 'transparent' }} />
-                    <span title={t('chapters.dragHint')} style={{ cursor: 'grab', color: palette.inkFaint, flexShrink: 0, display: 'flex' }}>
-                      <GripVertical size={15} strokeWidth={1.75} />
-                    </span>
+                    <Tooltip content={t('chapters.dragHint')}>
+                      <span style={{ cursor: 'grab', color: palette.inkFaint, flexShrink: 0, display: 'flex' }}>
+                        <GripVertical size={15} strokeWidth={1.75} />
+                      </span>
+                    </Tooltip>
                     {isActive && (
                       <span style={{ width: 7, height: 7, borderRadius: 999, background: palette.green, flexShrink: 0 }} />
                     )}
@@ -430,20 +437,24 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setEditingChapterId(chapter.id); setEditingChapterName(chapter.name); setError(''); }}
-                        title={t('chapters.rename')}
-                        style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
-                      >
-                        <Pencil size={15} strokeWidth={1.75} />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setChapterDeleteTarget(chapter); }}
-                        title={t('notions.delete')}
-                        style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
-                      >
-                        <Trash2 size={15} strokeWidth={1.75} />
-                      </button>
+                      <Tooltip content={t('chapters.rename')}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditingChapterId(chapter.id); setEditingChapterName(chapter.name); setError(''); }}
+                          aria-label={t('chapters.rename')}
+                          style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
+                        >
+                          <Pencil size={15} strokeWidth={1.75} />
+                        </button>
+                      </Tooltip>
+                      <Tooltip content={t('notions.delete')}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setChapterDeleteTarget(chapter); }}
+                          aria-label={t('notions.delete')}
+                          style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
+                        >
+                          <Trash2 size={15} strokeWidth={1.75} />
+                        </button>
+                      </Tooltip>
                     </div>
                   </div>
                 );

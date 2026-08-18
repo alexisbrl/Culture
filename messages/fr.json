@@ -617,7 +617,8 @@
       "addTableCol": "+ colonne",
       "matchLeft": "élément…",
       "matchRight": "correspondance…",
-      "drawOnImage": "basé sur l’image de la question",
+      "answerOnImage": "répondre sur l’image",
+      "oralAnswer": "réponse orale",
       "drawHere": "dessiner la réponse ici",
       "fileTypesLabel": "types de fichiers acceptés",
       "fileUrlLabel": "(lien vers le dépôt)",
@@ -626,7 +627,8 @@
       "emptyHintB": "→ Ajoute des attendus pour aider l’IA à corriger.",
       "shuffle": "ordre aléatoire",
       "matchSplitHint": "glisser pour ajuster la largeur des colonnes",
-      "drawOnImageHint": "l’élève dessinera par-dessus l’image de la question"
+      "answerOnImageHint": "l’élève répond directement sur l’image de la question, sans cadre à part",
+      "oralAnswerHint": "la réponse se donne à la voix et non par écrit — sans effet sur la copie papier"
     },
     "fileType": {
       "pdf": "PDF",

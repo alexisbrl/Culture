@@ -408,6 +408,19 @@
     width: 0;
     height: 0;
   }
+  /* Page qui masque la barre de défilement du DOCUMENT — sans empêcher de
+     défiler : molette, trackpad et clavier continuent d'agir. La classe se pose
+     sur la page, mais c'est `html` qui défile, d'où le `:has()`.
+     À n'utiliser que là où ce qui dépasse est secondaire : sans barre, plus
+     rien ne signale qu'il y a du contenu en dessous. */
+  html:has(.page-no-scrollbar) {
+    scrollbar-width: none; /* Firefox, Chrome 121+ */
+    -ms-overflow-style: none; /* anciens Edge/IE */
+  }
+  html:has(.page-no-scrollbar)::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
   /* Coquille à deux colonnes de l'onglet examen : à partir de 768px sa hauteur
      est bornée au viewport (61px de barre du haut + 22 de marge haute + 28 de
      marge basse), donc la page ne défile plus et chaque colonne fait défiler

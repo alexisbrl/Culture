@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { Settings } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 
 type Props = {
   workshopId: string;
@@ -31,15 +32,17 @@ export default function WorkshopActionsMenu({ workshopId, size = 34 }: Props) {
   const active = pathname.includes(`/workshops/${workshopId}/settings`);
 
   return (
-    <Link
-      href={`/${locale}/workshops/${workshopId}/settings`}
-      title={tNav('workshopSettings')}
-      className={`flex flex-none items-center justify-center rounded-full border border-[var(--line)] outline-none transition-colors focus-visible:shadow-[var(--shadow-focus)] ${
-        active ? 'text-[var(--green)]' : 'text-[var(--ink-body)] hover:text-[var(--ink)]'
-      }`}
-      style={{ width: size, height: size }}
-    >
-      <Settings size={size >= 34 ? 16 : 15} strokeWidth={1.75} />
-    </Link>
+    <Tooltip content={tNav('workshopSettings')}>
+      <Link
+        href={`/${locale}/workshops/${workshopId}/settings`}
+        aria-label={tNav('workshopSettings')}
+        className={`flex flex-none items-center justify-center rounded-full border border-[var(--line)] outline-none transition-colors focus-visible:shadow-[var(--shadow-focus)] ${
+          active ? 'text-[var(--green)]' : 'text-[var(--ink-body)] hover:text-[var(--ink)]'
+        }`}
+        style={{ width: size, height: size }}
+      >
+        <Settings size={size >= 34 ? 16 : 15} strokeWidth={1.75} />
+      </Link>
+    </Tooltip>
   );
 }

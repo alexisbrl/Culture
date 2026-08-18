@@ -41,6 +41,7 @@ import {
 import { QuestionFields, emptyPart } from './questionFields';
 import { MediaAttachment, useQuestionMediaDrop } from './questionMedia';
 import { type Pool, LabelPill, LabelEditor, LabelPicker } from './examShared';
+import { Tooltip } from '@/components/ui/tooltip';
 
 type Props = {
   workshopId: string;
@@ -174,6 +175,7 @@ export default function InlineQuestionEditor({
         notions={notions}
         weight={weight}
         onWeightChange={onWeightChange}
+        hasImage={!!draft.image}
         statementPlaceholder={t('inline.statementPlaceholder')}
         media={
           <>
@@ -223,6 +225,9 @@ export default function InlineQuestionEditor({
             // non plus : `QuestionFields` masque le bloc quand `weight` manque.
             weight={partWeight?.(idx)}
             onWeightChange={onPartWeightChange ? (p) => onPartWeightChange(idx, p) : undefined}
+            // L'image appartient à la grappe : une question liée peut donc, elle
+            // aussi, demander une réponse posée dessus.
+            hasImage={!!draft.image}
             onRemove={() => removePart(idx)}
             statementPlaceholder={t('inline.linkedStatementPlaceholder')}
           />
@@ -321,11 +326,16 @@ export default function InlineQuestionEditor({
           >
             {t('cancel')}
           </button>
+          {/* Enveloppe indispensable : un `<button disabled>` n'émet aucun
+              événement de souris, l'infobulle ne s'ouvrirait donc jamais posée
+              sur lui — or c'est précisément désactivé qu'il a quelque chose à
+              expliquer. C'est le `span` qui reçoit le survol. */}
+          <Tooltip content={canSave ? undefined : t('inline.statementRequired')}>
+          <span style={{ display: 'inline-flex' }}>
           <button
             type="button"
             disabled={!canSave}
             onClick={() => onSave(draft)}
-            title={canSave ? undefined : t('inline.statementRequired')}
             style={{
               ...footerBtn,
               border: 'none',
@@ -336,6 +346,8 @@ export default function InlineQuestionEditor({
           >
             {t('inline.save')}
           </button>
+          </span>
+          </Tooltip>
         </div>
       </div>
     </div>
