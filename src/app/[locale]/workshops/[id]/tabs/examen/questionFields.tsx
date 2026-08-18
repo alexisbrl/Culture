@@ -411,9 +411,12 @@ export function QuestionFields({
                 ) : <span style={{ flex: 'none', width: 19 }} />}
               </div>
             ))}
+            {/* Ordre de la rangée : d'abord ce qui n'est pas une pastille (le
+                lien d'ajout, le champ chiffré), puis TOUTES les pastilles à la
+                suite. Les mêler laissait « numéros » isolé entre deux commandes
+                d'un autre genre. */}
             <ControlRow trailing={attendusButton}>
               <button type="button" onClick={() => commit([...items, ''], 1)} style={addLink}>{t('inline.addRow')}</button>
-              <PillToggle on={numbered} onClick={() => patchOptions({ listNumbered: !numbered })} label={t('inline.numbers')} title={t('inline.numbersHint')} />
               {advancedOpen && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 11.5, color: palette.inkMuted }}>{t('inline.expectedAnswers')}</span>
@@ -427,6 +430,7 @@ export function QuestionFields({
                   />
                 </div>
               )}
+              <PillToggle on={numbered} onClick={() => patchOptions({ listNumbered: !numbered })} label={t('inline.numbers')} title={t('inline.numbersHint')} />
               {answerOnImageToggle}
               {oralAnswerToggle}
             </ControlRow>
