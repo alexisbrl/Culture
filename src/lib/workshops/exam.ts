@@ -25,7 +25,7 @@ import type {
   ExerciseTypeOptions,
   ResponseType,
 } from '@/lib/workshops/examTypes';
-import { toBloomLevel, toResponseType, type QuestionTypeOptions } from '@/lib/workshops/examTypes';
+import { normalizeTypeOptions, toBloomLevel, toResponseType, type QuestionTypeOptions } from '@/lib/workshops/examTypes';
 // ─── Stockage : un groupe, ses questions ─────────────────────────────────────
 //
 // `exam_questions` porte le GROUPE — uniquement ce qui est commun : titre,
@@ -131,7 +131,7 @@ function itemToPart(row: ItemRow, notionIds: string[]): QuestionPart {
     correctChoices: row.correct_choices ?? [],
     shuffleChoices: row.shuffle_choices ?? false,
     textLines: row.text_lines ?? 4,
-    typeOptions: row.type_options ?? {},
+    typeOptions: normalizeTypeOptions(row.type_options),
     expectations: row.expectations ?? '',
     bloomLevel: toBloomLevel(row.bloom_level),
     notionIds,
@@ -498,7 +498,11 @@ function toExerciseTypeOptions(source: ChoiceSource & { typeOptions?: QuestionTy
     matchSplit: options.matchSplit,
     fileTypes: options.fileTypes,
     fileUrl: options.fileUrl,
-    drawOnImage: options.drawOnImage,
+    // Les deux modes de réponse voyagent jusqu'au candidat, mais RIEN ne les
+    // exploite encore : l'exercice affiche toujours une saisie écrite. Le
+    // branchement (enregistrement vocal, annotation de l'image) est au backlog.
+    answerOnImage: options.answerOnImage,
+    oralAnswer: options.oralAnswer,
   };
 }
 

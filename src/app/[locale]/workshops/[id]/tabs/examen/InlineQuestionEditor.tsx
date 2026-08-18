@@ -175,6 +175,7 @@ export default function InlineQuestionEditor({
         notions={notions}
         weight={weight}
         onWeightChange={onWeightChange}
+        hasImage={!!draft.image}
         statementPlaceholder={t('inline.statementPlaceholder')}
         media={
           <>
@@ -224,6 +225,9 @@ export default function InlineQuestionEditor({
             // non plus : `QuestionFields` masque le bloc quand `weight` manque.
             weight={partWeight?.(idx)}
             onWeightChange={onPartWeightChange ? (p) => onPartWeightChange(idx, p) : undefined}
+            // L'image appartient à la grappe : une question liée peut donc, elle
+            // aussi, demander une réponse posée dessus.
+            hasImage={!!draft.image}
             onRemove={() => removePart(idx)}
             statementPlaceholder={t('inline.linkedStatementPlaceholder')}
           />

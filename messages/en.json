@@ -617,7 +617,8 @@
       "addTableCol": "+ column",
       "matchLeft": "item…",
       "matchRight": "match…",
-      "drawOnImage": "draw over the question image",
+      "answerOnImage": "answer on the image",
+      "oralAnswer": "spoken answer",
       "drawHere": "draw the answer here",
       "fileTypesLabel": "accepted file types",
       "fileUrlLabel": "(link to the drop folder)",
@@ -626,7 +627,8 @@
       "emptyHintB": "→ Add grading notes so the AI can still help.",
       "shuffle": "random order",
       "matchSplitHint": "drag to adjust the column widths",
-      "drawOnImageHint": "the student will draw over the question image"
+      "answerOnImageHint": "the student answers directly on the question image, with no separate frame",
+      "oralAnswerHint": "the answer is spoken rather than written — no effect on the printed paper"
     },
     "fileType": {
       "pdf": "PDF",

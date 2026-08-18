@@ -102,9 +102,38 @@ export type QuestionTypeOptions = {
   fileTypes?: string[];
   /** fichier — lien vers le dépôt attendu. */
   fileUrl?: string;
-  /** dessin — l'élève dessine par-dessus l'image de la question. */
+  /** dessin, liste — la réponse se donne SUR l'image de la question : l'élève
+   *  dessine ou écrit par-dessus, plutôt que dans un cadre à part. N'a de sens
+   *  que si la question porte une image, et le réglage n'est proposé que dans
+   *  ce cas — un consommateur doit donc toujours vérifier `image` avant d'en
+   *  tenir compte. Remplace `drawOnImage`, qui ne valait que pour le dessin
+   *  (18/08/2026) : les anciennes valeurs sont reprises à la lecture par
+   *  `normalizeTypeOptions`, sans migration. */
+  answerOnImage?: boolean;
+  /** texte, liste, paire — la réponse se donne À LA VOIX et non par écrit. Ce
+   *  qui est saisi dans l'éditeur reste la référence de correction.
+   *
+   *  **Le drapeau ne fait qu'IDENTIFIER ces questions**, il ne commande encore
+   *  rien : le format d'une réponse orale (enregistrement, transcription,
+   *  correction) reste à définir, et rien ne le lit à ce jour (18/08/2026, voir
+   *  docs/backlog.md). Exclusif de `answerOnImage` — on répond d'une façon ou de
+   *  l'autre. Sans effet sur la feuille A4, qui ignore les deux. */
+  oralAnswer?: boolean;
+  /** @deprecated Lu uniquement pour reprendre l'existant — écrire `answerOnImage`. */
   drawOnImage?: boolean;
 };
+
+/** Ramène des réglages stockés sur la forme courante. Même parti pris que
+ *  `toResponseType` : la normalisation se fait à la LECTURE et la nouvelle
+ *  valeur est réécrite au premier enregistrement, plutôt qu'une migration
+ *  destructive sur une colonne jsonb. */
+export function normalizeTypeOptions(value: unknown): QuestionTypeOptions {
+  if (!value || typeof value !== 'object') return {};
+  const { drawOnImage, ...rest } = value as QuestionTypeOptions;
+  return drawOnImage === undefined
+    ? rest
+    : { ...rest, answerOnImage: rest.answerOnImage ?? drawOnImage };
+}
 
 export const FILE_TYPE_KEYS = ['pdf', 'image', 'word', 'excel', 'ppt', 'txt', 'audio', 'video', 'zip'] as const;
 export type FileTypeKey = (typeof FILE_TYPE_KEYS)[number];

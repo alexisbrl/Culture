@@ -99,6 +99,10 @@ type Props = {
   onWeightChange?: (patch: Partial<QuestionWeight>) => void;
   /** Boutons de pièce jointe : seule la question principale en reçoit. */
   media?: React.ReactNode;
+  /** Une image est jointe à l'énoncé. Elle appartient à la GRAPPE (saisie une
+   *  fois sur la question principale), donc les questions liées la reçoivent
+   *  aussi : « répondre sur l'image » leur est ouvert de la même façon. */
+  hasImage?: boolean;
   /** Retrait de l'énoncé : seules les questions liées en ont un. */
   onRemove?: () => void;
   statementPlaceholder: string;
@@ -133,7 +137,7 @@ function RemoveLinkedButton({ onClick, title }: { onClick: () => void; title: st
 }
 
 export function QuestionFields({
-  values, onChange, number, advancedOpen, notions, weight, onWeightChange, media, onRemove, statementPlaceholder,
+  values, onChange, number, advancedOpen, notions, weight, onWeightChange, media, hasImage = false, onRemove, statementPlaceholder,
 }: Props) {
   const t = useTranslations('examen');
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
@@ -158,6 +162,33 @@ export function QuestionFields({
   function patchOptions(p: Partial<QuestionTypeOptions>) {
     onChange({ typeOptions: { ...(values.typeOptions ?? {}), ...p } });
   }
+  /** Les deux modes de réponse s'excluent : on répond à la voix OU sur l'image,
+   *  jamais les deux. L'exclusion est tenue ici, à l'écriture, plutôt que
+   *  laissée à celui qui lira le réglage plus tard. */
+  function setAnswerMode(mode: 'oralAnswer' | 'answerOnImage', on: boolean) {
+    const other = mode === 'oralAnswer' ? 'answerOnImage' : 'oralAnswer';
+    patchOptions({ [mode]: on, ...(on ? { [other]: false } : {}) });
+  }
+  /** Bascule « répondre sur l'image » : absente tant qu'aucune image n'est
+   *  jointe — le réglage n'aurait alors rien à désigner (voir `hasImage`). */
+  const answerOnImageToggle = advancedOpen && hasImage ? (
+    <PillToggle
+      on={opts.answerOnImage ?? false}
+      onClick={() => setAnswerMode('answerOnImage', !opts.answerOnImage)}
+      label={t('inline.answerOnImage')}
+      title={t('inline.answerOnImageHint')}
+    />
+  ) : null;
+  /** Bascule « réponse orale » — texte, liste et paire seulement. Elle ne fait
+   *  qu'identifier la question : rien ne la lit encore (voir `oralAnswer`). */
+  const oralAnswerToggle = advancedOpen ? (
+    <PillToggle
+      on={opts.oralAnswer ?? false}
+      onClick={() => setAnswerMode('oralAnswer', !opts.oralAnswer)}
+      label={t('inline.oralAnswer')}
+      title={t('inline.oralAnswerHint')}
+    />
+  ) : null;
   function toggleNotion(id: string) {
     patch({ notionIds: values.notionIds.includes(id) ? values.notionIds.filter(n => n !== id) : [...values.notionIds, id] });
   }
@@ -340,6 +371,7 @@ export function QuestionFields({
                   style={{ ...numInput, width: 54 }}
                 />
               </div>
+              {oralAnswerToggle}
             </ControlRow>
           </div>
         );
@@ -395,6 +427,8 @@ export function QuestionFields({
                   />
                 </div>
               )}
+              {answerOnImageToggle}
+              {oralAnswerToggle}
             </ControlRow>
           </div>
         );
@@ -569,6 +603,7 @@ export function QuestionFields({
             </div>
             <ControlRow trailing={attendusButton}>
               <button type="button" onClick={() => commit([...pairs, { l: '', r: '' }])} style={addLink}>{t('inline.addRow')}</button>
+              {oralAnswerToggle}
             </ControlRow>
           </div>
         );
@@ -576,9 +611,6 @@ export function QuestionFields({
 
       // Dessin / fichier / vide : rien à corriger automatiquement, le bloc
       // montre à quoi ressemblera l'espace de réponse de l'élève.
-      // Le réglage « basé sur l'image de la question » ne vit pas ici mais
-      // juste sous le sélecteur de type (voir plus bas) : le laisser au-dessus
-      // du cadre de dessin creusait un vide dans la carte.
       case 'dessin':
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -586,7 +618,13 @@ export function QuestionFields({
               <Palette size={30} strokeWidth={1.6} />
               <span style={{ fontSize: 12.5, fontWeight: 600 }}>{t('inline.drawHere')}</span>
             </div>
-            <ControlRow trailing={attendusButton} />
+            {/* « répondre sur l'image » vivait sous le sélecteur de type, où il
+                s'appelait « basé sur l'image de la question » et ne valait que
+                pour le dessin. Il rejoint la rangée de réglages sous le cadre de
+                réponse (18/08/2026), à la même place que pour la liste. */}
+            <ControlRow trailing={attendusButton}>
+              {answerOnImageToggle}
+            </ControlRow>
           </div>
         );
 
@@ -709,16 +747,6 @@ export function QuestionFields({
             </>
           )}
         </div>
-        {/* Réglage propre au type, collé sous le sélecteur pour ne pas creuser
-            de vide dans la carte (maquette, `dessinAdv` l.1076). */}
-        {rt === 'dessin' && advancedOpen && (
-          <PillToggle
-            on={opts.drawOnImage ?? false}
-            onClick={() => patchOptions({ drawOnImage: !opts.drawOnImage })}
-            label={t('inline.drawOnImage')}
-            title={t('inline.drawOnImageHint')}
-          />
-        )}
         </div>
 
         {/* Barème : « / n pts » discret par défaut, deux lignes étiquetées
