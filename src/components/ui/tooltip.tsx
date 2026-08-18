@@ -50,7 +50,7 @@ function Tooltip({
   // Base UI la retourne d'elle-même si le bas de la fenêtre manque de place.
   side = 'bottom',
   sideOffset = 6,
-  delay = 350,
+  delay = 750,
   className,
 }: {
   /** Vide ⇒ pas d'infobulle du tout (voir plus haut). */
@@ -59,7 +59,9 @@ function Tooltip({
   children: React.ReactElement;
   side?: 'top' | 'bottom' | 'left' | 'right';
   sideOffset?: number;
-  /** Délai d'ouverture au survol, en ms. */
+  /** Délai d'ouverture au survol, en ms. Long à dessein : une infobulle qui
+   *  s'ouvre au premier frôlement agresse plus qu'elle n'aide, et la plupart
+   *  des survols ne sont que des passages. */
   delay?: number;
   /** Pour ajuster la bulle elle-même (largeur, alignement du texte). */
   className?: string;
@@ -95,9 +97,15 @@ function Tooltip({
               // ombre. L'aplat d'encre des premiers essais (18/08/2026) tranchait
               // trop avec la page — le regard allait à la bulle avant d'aller à
               // ce qu'elle explique.
-              'max-w-[260px] rounded-[var(--radius-sm)] bg-[var(--surface-raised)] px-2.5 py-1.5',
+              // `w-fit` pour qu'une bulle courte fasse la largeur de son texte,
+              // et **surtout pas `text-balance`** : il raccourcit les lignes
+              // sans rétrécir la boîte, qui reste à sa largeur maximale — d'où
+              // une bande blanche à droite de toute bulle qui revient à la
+              // ligne. Sans lui, les lignes remplissent la largeur et le bord
+              // droit se tient.
+              'w-fit max-w-[260px] rounded-[var(--radius-sm)] bg-[var(--surface-raised)] px-2.5 py-1.5',
               'border border-[var(--line)]',
-              'font-sans text-[12px] leading-[1.35] font-medium text-balance break-words text-[var(--ink-body)]',
+              'font-sans text-[12px] leading-[1.35] font-medium break-words text-[var(--ink-body)]',
               // L'apparition est franche mais pas sèche : la bulle descend de
               // 2px en se révélant, et s'efface sans bouger.
               'transition-[opacity,translate] duration-[var(--dur-fast)] ease-[var(--ease-soft)]',
@@ -113,12 +121,10 @@ function Tooltip({
   );
 }
 
-/** Délai partagé par toutes les infobulles, monté une fois dans le layout.
- *  Sans lui, chaque bulle attend son propre délai : en balayant une rangée de
- *  boutons, on paie l'attente à chaque bouton. Avec, la première attend, les
- *  suivantes s'ouvrent aussitôt — et le groupe se referme après un court répit. */
-function TooltipProvider({ children }: { children: React.ReactNode }) {
-  return <BaseTooltip.Provider closeDelay={100}>{children}</BaseTooltip.Provider>;
-}
+// `Tooltip.Provider` de Base UI a été monté ici puis retiré (18/08/2026) : il
+// partage le délai entre bulles voisines, si bien qu'une fois la première
+// ouverte, toutes les suivantes s'ouvraient INSTANTANÉMENT. Balayer une rangée
+// de boutons faisait alors clignoter une bulle par bouton. Chaque infobulle
+// attend désormais son propre délai, sans exception.
 
-export { Tooltip, TooltipProvider };
+export { Tooltip };

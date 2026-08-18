@@ -188,13 +188,15 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 40, display: 'flex', flexDirection: 'column', background: palette.cream }}>
       <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 14, padding: '18px 20px' }}>
-        <Link
-          href={`/${locale}/workshops/${workshopId}`}
-          title={t('back', { workshop: workshopName })}
-          style={{ width: 36, height: 36, borderRadius: 12, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, flexShrink: 0 }}
-        >
-          <X size={16} strokeWidth={1.75} />
-        </Link>
+        <Tooltip content={t('back', { workshop: workshopName })}>
+          <Link
+            href={`/${locale}/workshops/${workshopId}`}
+            aria-label={t('back', { workshop: workshopName })}
+            style={{ width: 36, height: 36, borderRadius: 12, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, flexShrink: 0 }}
+          >
+            <X size={16} strokeWidth={1.75} />
+          </Link>
+        </Tooltip>
         {/* Barre d'avancement de la session (maquette : `exProgressW`). Le
             tirage serveur pioche indéfiniment ; la longueur de session est une
             règle client (`EXERCISE_SESSION_LENGTH`), c'est donc elle qui donne

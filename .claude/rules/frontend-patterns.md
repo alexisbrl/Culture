@@ -36,7 +36,9 @@ Carte crème `borderRadius: 20`, icône d'avertissement, titre/description centr
 
 ## Infobulles — `<Tooltip>` uniquement, jamais l'attribut `title`
 
-L'attribut `title` du HTML est **interdit dans le JSX**, sur toute balise DOM : il est dessiné par le système d'exploitation, hors du DOM, donc aucun CSS ne l'atteint (police, couleurs, rayon, délai, position). La règle `no-restricted-syntax` d'`eslint.config.mjs` le refuse en `error` ; elle ne vise que les balises en minuscule, `title` reste une prop légitime de nos composants (`<Modal title=…>`, `<ListCard title=…>`). **C'est cette règle, et non un `grep`, qui fait foi pour recenser les infobulles** — elle lit l'AST. Migration initiale : 78 sites, 18/08/2026.
+L'attribut `title` du HTML est **interdit dans le JSX** : il est dessiné par le système d'exploitation, hors du DOM, donc aucun CSS ne l'atteint (police, couleurs, rayon, délai, position). La règle `no-restricted-syntax` d'`eslint.config.mjs` le refuse en `error` sur **toute balise JSX**, et n'excepte qu'une liste nommée : nos propres composants dont `title` est une vraie prop (`<ConfirmDialog title=…>`, `<ListCard title=…>`). **C'est cette règle, et non un `grep`, qui fait foi pour recenser les infobulles** — elle lit l'AST. Migration initiale : 78 sites, 18/08/2026.
+
+**Le sens de la règle compte.** Sa première version ne visait que les balises en minuscule, en supposant que le PascalCase était forcément à nous : elle laissait donc passer `title` sur un composant qui le **transmet** au DOM. C'est arrivé à `<Link title=…>` (next/link le pose sur son `<a>`) — l'engrenage des paramètres a gardé une infobulle système, invisible du lint, alors que la migration se croyait exhaustive. D'où l'inversion : interdit partout, autorisé nommément. Ajouter un nom à la liste, c'est affirmer que ce composant ne transmet pas `title` au DOM. Le contrôle de dernier recours reste le navigateur : `document.querySelectorAll('[title]')` doit ne rien renvoyer.
 
 Le composant est `src/components/ui/tooltip.tsx` (Base UI), le délai partagé est monté une fois dans `[locale]/layout.tsx`. On enveloppe le déclencheur, on ne lui passe pas de prop :
 
@@ -57,6 +59,8 @@ Quatre règles qui vont avec :
 Enfin, l'ombre de la bulle est posée en `style` et non en classe : `shadow-[var(--shadow-lg)]` passe par la composition d'ombres de Tailwind v4, qui perd la couleur du token et rend une ombre **transparente**. Vrai pour tout token d'ombre multi-couches.
 
 Le déclencheur ne reçoit ni `role`, ni `tabIndex`, ni nœud DOM supplémentaire (Base UI rend l'enfant lui-même) : une mise en page en flex/grid n'est jamais perturbée, et un élément décoratif le reste. La bulle est portée par un portail sur `body`, donc au-dessus des panneaux (60) et des modales (80), et hors du `zoom` de la feuille A4. Enfin, elle est **desktop seulement** (Base UI n'écoute que la souris) : jamais d'information nécessaire pour agir dedans.
+
+Deux réglages qui ont l'air cosmétiques et ne le sont pas : le délai d'ouverture est **long** (750 ms) et il n'y a **pas de `Tooltip.Provider`** — celui-ci partage le délai entre bulles voisines, si bien qu'une fois la première ouverte les suivantes s'ouvrent instantanément, et balayer une rangée de boutons fait clignoter une bulle par bouton. Et surtout **jamais `text-balance` sur la bulle** : il raccourcit les lignes sans rétrécir la boîte, qui reste à sa largeur maximale — d'où une bande blanche à droite de toute bulle qui revient à la ligne.
 
 ## Borner un texte qui pourrait déborder : en largeur, pas en caractères
 
