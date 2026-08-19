@@ -33,70 +33,44 @@ et l'incident du 22/06/2026 dans `docs/changelog.md`.
 
 ## À appliquer
 
-- **19/08/2026 — Question sans titre : suppression de `exam_questions.title`**
-  (`2026-08-19-question-sans-titre.sql`). Plus rien ne permettait de saisir ce
-  titre depuis le passage à l'éditeur en ligne ; il ne restait que d'anciennes
-  valeurs, qui masquaient l'énoncé dans les listes. Le code ne le lit ni ne
-  l'écrit plus. **Prérequis** : branche mergée et **déployée** — `title` figure
-  encore dans `GROUP_COLUMNS` en production, donc dans tous les `select` de
-  questions. À appliquer avec la suppression de `chapter_id` ci-dessous : même
-  table, même prérequis, une seule régénération de `database.types.ts`.
-
-- **19/08/2026 — Question sans chapitre : suppression de `exam_questions.chapter_id`**
-  (`2026-08-19-question-sans-chapitre.sql`). Le chapitre d'une question de
-  parcours se déduit maintenant des notions qu'elle mobilise ; la colonne n'est
-  plus ni lue ni écrite. **Prérequis** : branche mergée et **déployée** — la
-  colonne figure encore dans `GROUP_COLUMNS` en production, donc dans tous les
-  `select` de questions (banque d'examen comprise), et sa disparition les ferait
-  échouer en bloc. Le fichier contient d'abord un `select` de contrôle : il
-  compte les questions dont le rattachement manuel va être perdu sans qu'aucune
-  notion rangée ne prenne le relais — celles-là ne seront plus tirées tant
-  qu'on ne leur aura pas relié une notion rangée dans un chapitre.
-
-- **19/08/2026 — Notion à texte unique : suppression de `workshop_bricks.content`**
-  (`2026-08-19-notion-texte-unique.sql`, phase 2). Une notion n'a plus qu'un
-  texte, porté par `title` ; `content` n'est plus ni lu ni écrit par le code.
-  **Prérequis** : la branche `feat/infobulles-maison` doit être **mergée et
-  déployée** — le code en ligne lit encore `content` dans le `select` de
-  `listNotions`, et une colonne disparue y ferait échouer le select entier,
-  donc une page paramètres sans aucune notion, sans erreur visible.
-  **Phase 1 du même fichier (recoller les descriptions au titre) : à appliquer
-  tout de suite**, elle ne casse rien en ligne — et tant qu'elle ne l'est pas,
-  les descriptions déjà saisies n'apparaissent plus nulle part.
-
-- **15/08/2026 — `exam_questions.context` : défaut à `'parcours'`** (`2026-08-15-context-defaut-parcours.sql`) :
-  bascule le `DEFAULT` de la colonne de `'exam'` à `'parcours'`. Règle métier :
-  un groupe est toujours d'un côté ou de l'autre, et à défaut il va dans le
-  parcours. Non destructif, aucune ligne existante touchée.
-  **Prérequis** : le code qui passe le contexte explicitement des deux côtés
-  (`saveQuestion(..., 'exam')` côté banque, paramètre `context` devenu
-  obligatoire dans `lib/workshops/exam.ts`) doit être **déployé**. Avant ça, la
-  banque d'examen en production s'en remet encore à ce `DEFAULT` et créerait des
-  questions de parcours sans aucune erreur.
-
-- **11/08/2026 — Groupes de questions, phase contract** (`2026-08-11-groupes-de-questions-contract.sql`) :
-  supprime les 14 colonnes de contenu de `exam_questions` (`content`,
-  `response_type`, `answer`, `choices`, `correct_choices`, `shuffle_choices`,
-  `text_lines`, `type_options`, `expectations`, `bloom_level`, `parts`,
-  `answer_optional`, `difficulty`, `duration`) et l'ancienne table de jonction
-  `exam_question_bricks`. La ligne `exam_questions` ne porte plus que le GROUPE
-  (titre, image, audio, libellés, chapitre) ; chaque question est une ligne de
-  `exam_question_items`, reprise par la phase expand déjà appliquée.
-  **Le plus destructif du lot** : tant que scellow.com sert l'ancien code, ces
-  colonnes sont sa seule source de vérité. Vérifier le prérequis inscrit en tête
-  du fichier SQL (0 groupe sans question principale) avant d'appliquer, puis
-  régénérer `src/lib/database.types.ts`.
-
-- **11/08/2026 — Retrait de `exam_questions.question_type`** (`2026-08-11-drop-question-type.sql`) :
-  colonne devenue morte — le type de question a été remplacé par deux pièces
-  jointes indépendantes (`image_key`, `audio_key`, voir `QuestionMedia` dans
-  `src/lib/workshops/examTypes.ts`). Migration de suppression (contract) : à
-  appliquer seulement une fois `feat/...` mergée dans `main` et déployée sur
-  Vercel — pas avant.
+AUCUN
 
 ---
 
 ## Appliqué / sans objet
+
+- **19/08/2026 — Tout le retard de migrations soldé après le déploiement de la
+  PR #40** (`7532c78`, production Vercel `READY`). Les six entrées ci-dessous
+  attendaient toutes le même prérequis — que le code déployé n'utilise plus les
+  objets visés — levé d'un coup par ce déploiement. Ordre suivi : sauvegarde
+  JSON des 121 lignes d'`exam_questions` **hors du repo** (il est public), puis
+  phase 1 des notions (données), puis les suppressions, puis régénération de
+  `src/lib/database.types.ts`, `npm run typecheck` + `lint` + `build` au vert.
+  - `2026-08-19-notion-texte-unique.sql` **phase 1** : 4 notions avaient une
+    description, recollée à leur titre (1 dépasse désormais 280 caractères et
+    devra être raccourcie à sa prochaine modification).
+  - `2026-08-11-groupes-de-questions-contract.sql` : prérequis vérifié à 0
+    groupe sans question principale ; les 14 colonnes de contenu supprimées et
+    la table `exam_question_bricks` retirée (son unique lien vérifié comme
+    repris dans `exam_question_item_bricks`).
+  - `2026-08-11-drop-question-type.sql` : colonne `question_type` supprimée.
+  - `2026-08-19-question-sans-titre.sql` : colonne `title` supprimée — 46
+    questions portaient encore un titre figé et affichent désormais leur énoncé.
+  - `2026-08-19-question-sans-chapitre.sql` : colonne `chapter_id` supprimée.
+    22 questions de parcours portaient un rattachement manuel, dont **21 sans
+    aucune notion rangée dans un chapitre** : elles ne sont tirées par aucun
+    exercice tant qu'on ne leur aura pas relié une telle notion. C'était déjà le
+    cas avant la migration (le code déployé passe par les notions) ; ce que la
+    suppression fait perdre, c'est la trace du rattachement d'origine —
+    conservée dans la sauvegarde JSON.
+  - `2026-08-19-notion-texte-unique.sql` **phase 2** : colonne
+    `workshop_bricks.content` supprimée.
+  - `2026-08-15-context-defaut-parcours.sql` : `exam_questions.context` a
+    désormais `'parcours'` pour défaut (vérifié en base).
+
+  État final d'`exam_questions` : `id, workshop_id, pools, exam_ids, created_at,
+  updated_at, context, image_key, audio_key` — le groupe, et rien d'autre.
+
 
 - **11/08/2026 — Groupes de questions, phase expand**
   (`2026-08-11-groupes-de-questions-expand.sql`) : additive, appliquée
@@ -111,9 +85,9 @@ et l'incident du 22/06/2026 dans `docs/changelog.md`.
 - **11/08/2026 — `exam_questions.image_key` / `audio_key`** (pièces jointes
   d'énoncé, `2026-08-11-add-question-media-keys.sql`) : additive, appliquée
   directement. Remplace le concept de « type de question »
-  (`textuel`/`visuel`/`audio`) par deux pièces jointes indépendantes — voir
-  l'entrée « À appliquer » ci-dessus pour le nettoyage de la colonne
-  `question_type`, désormais morte.
+  (`textuel`/`visuel`/`audio`) par deux pièces jointes indépendantes. La colonne
+  `question_type`, devenue morte, a été supprimée le 19/08/2026 (voir l'entrée
+  en tête de cette section).
 - **10/08/2026 — Bloom ramené à 4 niveaux** (`2026-08-09-bloom-4-niveaux.sql`) :
   appliquée après le merge de `feat/progression-parcours` (PR #32) et le
   déploiement production Vercel. Contraintes `exam_questions_bloom_level_check`
