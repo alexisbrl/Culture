@@ -178,6 +178,30 @@ pipeline — validation, résolution des références, écriture — est **ident
 que soit le fournisseur**, parce que le contrat de sortie est défini
 indépendamment de lui.
 
+### Passer par AWS un jour : deux choses très différentes (vérifié le 20/08/2026)
+
+| | Ce qu'on garde | Ce qu'on perd |
+|---|---|---|
+| **Claude Platform on AWS** (opéré par Anthropic, parité à J+0) | tout | rien |
+| **Amazon Bedrock** (opéré par AWS) | PDF natif, sortie structurée, réflexion adaptative, cache de prompt manuel, citations | **Files API** et **Message Batches**, plus le cache automatique |
+
+La distinction n'est pas cosmétique : ce sont **les deux piliers de la
+conception** qui tombent côté Bedrock.
+
+- Sans **Files API**, le document ne peut plus être téléversé une fois puis
+  référencé : il repart **en entier dans chaque requête**, une fois par chapitre
+  (§5.2). Le cache de prompt évite de le **repayer** en tokens, mais pas de le
+  **renvoyer** en octets.
+- Sans **Message Batches**, la génération en masse perd son régime asynchrone et
+  sa remise de 50 % (§9) — il faut revenir à des appels directs, donc au
+  problème de durée qu'on avait justement contourné.
+
+Rien de tout cela n'est bloquant, et **rien n'est à décider aujourd'hui** :
+l'interface `PlanProvider` fait que le changement tient dans un fichier. Mais si
+la question se pose, elle se pose ainsi : « Claude Platform on AWS » se substitue
+sans rien perdre, « Bedrock » demande de repenser le transport du document et le
+régime de masse.
+
 ---
 
 ## 5. Méthode d'appel (ajouté le 19/08/2026)
@@ -836,5 +860,18 @@ représentent l'essentiel du travail. Le jour où le modèle arrive, il ne reste
 4. **Clé API** → `ANTHROPIC_API_KEY` dans `.env.local` (jamais commité,
    `CLAUDE.md` §8) **et** dans les variables d'environnement Vercel (production +
    preview). À ajouter aussi à `.env.local.example`, sans valeur.
+
+   - **Clé statique, pas fédération d'identité.** La console propose la
+     fédération (jetons courts émis par GCP, AWS, Azure ou GitHub Actions) ;
+     elle ne couvre pas notre cas — développement local et Vercel. La console le
+     dit elle-même : les scripts locaux et les environnements sans fournisseur
+     d'identité nécessitent une clé statique.
+   - **Expiration : 30 jours pendant la mise au point** (choisi le 20/08/2026).
+     Tant que la clé ne sert qu'en local, une expiration ne coûte qu'un
+     développement interrompu, constaté dans la seconde. ⚠️ **À rouvrir avant de
+     poser la clé dans Vercel** : en production, une clé expirée ferait échouer
+     la génération **en silence** — il n'existe aucune remontée d'erreur (voir
+     `docs/backlog.md`). Soit on allonge, soit on met en place une rotation, mais
+     ce n'est pas une décision à laisser au hasard d'un rappel de calendrier.
 5. **Pas de clé en CI** : les tests unitaires ne doivent jamais appeler l'API
    réelle — ils valident le pipeline avec des plans écrits à la main (§12.2).
