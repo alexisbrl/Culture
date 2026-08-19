@@ -248,9 +248,42 @@ qui change en amont invalide tout ce qui suit :
 ```
 
 Contrôle à câbler dès le premier appel : journaliser
-`usage.cache_read_input_tokens`. S'il reste à zéro d'un appel à l'autre, un
-invalidateur silencieux traîne dans le préfixe (une date, un uuid, un
-`JSON.stringify` d'objet non ordonné).
+`usage.cache_read_input_tokens` **et** `cache_creation_input_tokens`. Lire le
+seul `input_tokens` ne montre rien — sur un document mis en cache il tombe à
+~200, ce qui donne l'illusion d'un appel gratuit alors que les 70 000 tokens du
+cours sont passés en *écriture* de cache.
+
+### Mesuré le 20/08/2026 : le cache est **par schéma de sortie**
+
+Trois appels successifs sur un vrai cours (« Cours SVT.pdf », **70 648 tokens**) :
+
+| Appel | Cache | Coût |
+|---|---|---|
+| chapitres #1 | **écrit** 70 648 | 0,449 $ |
+| chapitres #2 — même passe | **lu** 70 648 | **0,042 $** |
+| notions — passe différente | **écrit** 70 726 | 0,459 $ |
+
+Deux enseignements, l'un attendu et l'autre pas :
+
+1. **Le cache divise le coût par ~10,7.** Ce n'est pas une optimisation de
+   confort : sans lui, une ingestion coûte dix fois plus cher.
+2. **Changer de schéma de sortie invalide le cache.** `output_config.format` est
+   rendu avec les outils, donc **avant** le système et les messages : un schéma
+   différent change le préfixe et rend tout ce qui suit inutilisable. Le passage
+   de la passe « chapitres » à la passe « notions » provoque donc une nouvelle
+   écriture, pas une lecture.
+
+**Règle d'orchestration qui en découle : grouper les appels par passe.** Toutes
+les passes « notions » à la suite, puis toutes les passes « questions ». Le
+schéma ne change alors que **deux fois** sur toute l'ingestion : 3 écritures de
+cache au lieu d'une par appel. Sur 12 chapitres, c'est la différence entre ~2 $ et
+~11 $ d'entrée.
+
+> Alternative écartée : un schéma unique pour les trois passes (`{ chapters?,
+> notions?, groups? }`), qui ramènerait à une seule écriture. Elle économise
+> ~0,80 $ par ingestion mais **affaiblit la contrainte de génération** — le modèle
+> pourrait remplir la mauvaise section. On préfère la contrainte forte, qui est
+> ce qui garantit la qualité de la sortie.
 
 **Le modèle est un réglage par passe, pas une constante.** Changer de modèle est
 alors une chaîne de caractères — utile pour itérer à bas coût pendant la mise au
@@ -494,21 +527,30 @@ prompt. Elles ne sont **pas** vérifiées par un refus serveur (§11).
    de prompt s'y applique aussi bien qu'en direct — si oui, les deux remises se
    cumulent.
 
-### Ordre de grandeur du coût
+### Coût — mesuré, plus estimé (20/08/2026)
 
-Cours de 150 pages, 12 chapitres, `claude-opus-5` ($5/M en entrée, $25/M en sortie) :
+Base réelle : « Cours SVT.pdf » de l'atelier de test pèse **70 648 tokens**
+(document entier, pages rendues en images comprises). Un appel coûte donc
+**0,449 $ en écriture de cache** et **0,042 $ en lecture** — rapport de 10,7.
 
-| | Sans cache | Avec cache (§5.2) |
+Projection pour ce cours avec 12 chapitres, `claude-opus-5` ($5/M en entrée,
+$6,25/M en écriture de cache, $0,50/M en lecture, $25/M en sortie) :
+
+| | Appels | Coût |
 |---|---|---|
-| Entrée (1 passe 1 + 12 passes 2 + 12 passes 3) | ~$8 à $15 | **~$2 à $4** |
-| Sortie (~200 questions) | ~$1 | ~$1 |
-| **Total par ingestion** | **$9 à $16** | **$3 à $5** |
+| Écritures de cache (une par schéma de sortie) | 3 | 1,31 $ |
+| Lectures de cache | 22 | 0,77 $ |
+| Sortie (~1 000 questions et notions) | — | ~1,10 $ |
+| **Total par ingestion** | 25 | **~3,20 $** |
 
-Ordre de grandeur, à confirmer par une mesure réelle (`countTokens`). Deux
-enseignements déjà solides : **sans cache de prompt, l'ingestion coûte trois fois
-plus cher**, et une ingestion vaut l'équivalent d'une fraction notable d'un
-abonnement mensuel. **Quota : illimité pour l'instant** (un seul utilisateur,
-décision du 19/08/2026), à rouvrir impérativement avec les abonnements.
+Sans le groupement par passe (§5.2), les 25 appels seraient autant d'écritures :
+**~11 $**, soit 3,4 fois plus.
+
+Deux points à garder en tête : ce cours n'est pas un cas extrême (un cours de 150
+pages pèsera davantage), et **une ingestion vaut donc l'équivalent d'un tiers
+d'abonnement Premium mensuel**. **Quota : illimité pour l'instant** (un seul
+utilisateur, décision du 19/08/2026), à rouvrir impérativement avec les
+abonnements — le chiffre ci-dessus est l'argument.
 
 ---
 
