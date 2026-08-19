@@ -1,0 +1,115 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  chaptersInstruction,
+  existingContentBlock,
+  notionsInstruction,
+  questionsInstruction,
+  systemPrompt,
+  QUESTIONS_PER_NOTION,
+  type ExistingContent,
+} from '@/lib/ingest/prompt';
+import { GENERATED_RESPONSE_TYPES, wireGroupsOutput, wireNotionsOutput } from '@/lib/ingest/wireSchema';
+
+const empty: ExistingContent = { chapters: [], notions: [], questions: [] };
+
+describe('systemPrompt — stabilité (condition du cache)', () => {
+  it('est strictement identique d’un appel à l’autre', () => {
+    // Le cache de prompt est un préfixe : une date, un identifiant ou un
+    // compteur glissé ici le ferait manquer à chaque appel, et on paierait le
+    // document en entier une fois par chapitre.
+    expect(systemPrompt()).toBe(systemPrompt());
+  });
+
+  it('ne contient ni date ni identifiant', () => {
+    const s = systemPrompt();
+    expect(s).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(s).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i);
+  });
+});
+
+describe('existingContentBlock — compléter, pas dupliquer', () => {
+  it('le dit clairement quand l’atelier est vide', () => {
+    expect(existingContentBlock(empty)).toContain('vide');
+  });
+
+  it('transmet les identifiants réels, qui servent de références', () => {
+    // C'est ce qui permet à une question de se rattacher à une notion DÉJÀ en
+    // base plutôt que d'en créer un doublon.
+    const block = existingContentBlock({
+      chapters: [{ id: 'ch-uuid', name: 'Les fleuves' }],
+      notions: [{ id: 'n-uuid', title: 'La Loire est le plus long fleuve de France', chapterId: 'ch-uuid' }],
+      questions: ['Quel est le plus long fleuve de France ?'],
+    });
+    expect(block).toContain('ch-uuid');
+    expect(block).toContain('n-uuid');
+    expect(block).toContain('Quel est le plus long fleuve de France ?');
+    expect(block).toMatch(/complètes|recrées/);
+  });
+});
+
+describe('instructions de passe', () => {
+  it('la passe notions cible UN chapitre et impose sa référence', () => {
+    const instruction = notionsInstruction({ id: 'ch-uuid', name: 'Les fleuves' });
+    expect(instruction).toContain('Les fleuves');
+    expect(instruction).toContain('ch-uuid');
+    expect(instruction).toContain('280');
+  });
+
+  it('la passe questions liste les notions à couvrir et rappelle le budget', () => {
+    const instruction = questionsInstruction({
+      chapter: { id: 'ch1', name: 'Les fleuves' },
+      notions: [{ id: 'n1', title: 'La Loire…' }, { id: 'n2', title: 'La Seine…' }],
+      budget: 12,
+    });
+    expect(instruction).toContain('n1');
+    expect(instruction).toContain('n2');
+    expect(instruction).toContain(String(QUESTIONS_PER_NOTION));
+    expect(instruction).toContain('12');
+  });
+
+  it('la passe questions dit ce qu’une question sans notion implique', () => {
+    // C'est le seul endroit où le modèle peut l'apprendre : rien côté serveur ne
+    // l'y oblige (une question sans notion reste permise).
+    const instruction = questionsInstruction({
+      chapter: { id: 'ch1', name: 'X' },
+      notions: [{ id: 'n1', title: 'Y' }],
+      budget: 4,
+    });
+    expect(instruction).toMatch(/jamais posée/);
+  });
+
+  it('la passe chapitres ne parle ni de notions ni de questions', () => {
+    const instruction = chaptersInstruction();
+    expect(instruction).not.toMatch(/notion/i);
+    expect(instruction).not.toMatch(/question/i);
+  });
+});
+
+describe('wireSchema — ce qu’on autorise le modèle à produire', () => {
+  it('n’ouvre que les types de réponse complets sans réglages', () => {
+    // `tableau` porte ses lignes, colonnes et cases correctes dans type_options :
+    // en générer un sans ces réglages donnerait une grille vide (décision du
+    // 20/08/2026).
+    expect([...GENERATED_RESPONSE_TYPES]).toEqual(['qcs', 'qcm', 'textuelle', 'liste']);
+    expect(GENERATED_RESPONSE_TYPES).not.toContain('tableau');
+  });
+
+  it('refuse un type de réponse hors de cette liste', () => {
+    const result = wireGroupsOutput.safeParse({
+      groups: [{ ref: 'g1', questions: [{ content: 'Q', responseType: 'tableau', choices: [], correctChoices: [], answer: '', expectations: '', bloomLevel: 1, notionRefs: ['n1'] }] }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('refuse un niveau de Bloom hors 1–4 dès la contrainte de sortie', () => {
+    const question = { content: 'Q', responseType: 'qcm', choices: [], correctChoices: [], answer: '', expectations: '', notionRefs: ['n1'] };
+    expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [{ ...question, bloomLevel: 6 }] }] }).success).toBe(false);
+    expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [{ ...question, bloomLevel: 3 }] }] }).success).toBe(true);
+  });
+
+  it('exige la référence de chapitre sur une notion', () => {
+    expect(wireNotionsOutput.safeParse({ notions: [{ ref: 'n1', title: 'T' }] }).success).toBe(false);
+    expect(wireNotionsOutput.safeParse({ notions: [{ ref: 'n1', title: 'T', chapterRef: 'ch1' }] }).success).toBe(true);
+  });
+});

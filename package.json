@@ -12,6 +12,7 @@
     "test:unit:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
     "@base-ui/react": "^1.4.1",
     "@clerk/localizations": "^4.6.4",
     "@clerk/nextjs": "^7.3.5",
