@@ -208,7 +208,7 @@ Et un chapitre raté se rejoue seul, sans reprendre les 150 pages.
 
 | Réglage | Valeur | Pourquoi |
 |---|---|---|
-| Modèle | `claude-opus-5` | Extraction structurée exhaustive sur document long — le cœur du produit, pas l'endroit où économiser. DeepSeek plus tard, derrière `PlanProvider`. |
+| Modèle | `claude-opus-5`, **réglable par passe** | Extraction structurée exhaustive sur document long — le cœur du produit, pas l'endroit où économiser. DeepSeek plus tard, derrière `PlanProvider`. Voir la note ci-dessous : le modèle doit être un réglage, pas une constante enfouie. |
 | Réflexion | `thinking: { type: 'adaptive' }` + `output_config: { effort: 'high' }` | Découper un cours en notions est un travail de raisonnement. |
 | Sortie | `output_config.format` (JSON Schema dérivé du Zod), **puis** re-validation Zod | Les deux usages prévus au §7. La contrainte native évite l'essentiel des sorties malformées ; Zod reste le filet, et le seul rempart pour un fournisseur sans sortie structurée. |
 | Streaming | oui, `max_tokens` ~64 000 | Sans streaming, un gros lot dépasse les délais d'attente HTTP du SDK. |
@@ -227,6 +227,21 @@ Contrôle à câbler dès le premier appel : journaliser
 `usage.cache_read_input_tokens`. S'il reste à zéro d'un appel à l'autre, un
 invalidateur silencieux traîne dans le préfixe (une date, un uuid, un
 `JSON.stringify` d'objet non ordonné).
+
+**Le modèle est un réglage par passe, pas une constante.** Changer de modèle est
+alors une chaîne de caractères — utile pour itérer à bas coût pendant la mise au
+point, et utile durablement (la passe « questions » est dominée par le coût de
+**sortie**, où Haiku est cinq fois moins cher qu'Opus : structure en Opus,
+questions en Haiku est un arbitrage sérieux, à mesurer sur la qualité une fois le
+pipeline debout). **Deux pièges** :
+
+- **Haiku 4.5 a une fenêtre de 200 000 tokens**, contre 1 million pour Opus 5. Un
+  cours de 150 pages (225k–450k tokens, §3) **n'y entre pas** : Haiku convient
+  pour itérer sur un petit document de test, pas pour valider le comportement
+  réel.
+- **Les paramètres de réflexion diffèrent entre générations de modèles.**
+  L'implémentation du fournisseur ne doit pas figer des réglages propres à Opus,
+  sinon le basculement échoue à l'appel.
 
 ### 5.3 Traçabilité : arbitrage tranché
 
@@ -276,13 +291,28 @@ seuls que l'API accepte nativement.
    sélectionnables, avec une infobulle « format pas encore pris en charge par la
    génération ». Jamais un échec d'API en pleine ingestion pour un format qu'on
    savait refusé d'avance.
-2. **Écart de limite à traiter.** `MAX_FILE_SIZE` vaut **50 Mo** dans
-   `src/lib/workshops/files.ts`, alors que l'API plafonne à **32 Mo**. Un PDF de
-   40 Mo est donc téléversable aujourd'hui et sera refusé à la génération : il
-   faut le contrôle et le message explicite avant l'appel.
+2. **Plafond de l'app ramené à 25 Mo** (décidé le 19/08/2026). `MAX_FILE_SIZE`
+   vaut **50 Mo** dans `src/lib/workshops/files.ts`, alors que l'API plafonne à
+   **32 Mo par requête**. La marge n'est pas du confort : un fichier envoyé
+   *inline* part encodé en base64, ce qui **gonfle sa taille d'un tiers** — 25 Mo
+   de PDF pèsent ~33 Mo dans la requête, déjà au-dessus du plafond, avant même
+   d'ajouter le contexte de l'atelier. Deux mesures qui vont ensemble : le
+   plafond à 25 Mo **et** le passage par la Files API (le document est téléversé
+   à part, il n'est plus dans le corps de la requête, et le plafond de 32 Mo
+   cesse d'être la contrainte mordante). **Le contrôle avant appel reste
+   nécessaire** : c'est le cumul document + chapitres + notions + questions qui
+   peut déborder, pas le document seul.
 3. **Plusieurs fichiers en une fois.** Un atelier a plusieurs ressources ; l'appel
    accepte plusieurs blocs `document`. La sélection est donc multiple, dans la
-   limite des 32 Mo / 600 pages cumulés.
+   limite des 600 pages et du budget de tokens cumulés.
+4. **Ajouter un format plus tard ne doit rien casser.** Une seule fonction
+   traduit « fichier stocké » → « blocs envoyés au modèle », et **une seule
+   liste** de formats pris en charge, lue aussi par le sélecteur de fichiers.
+   Ajouter le `.docx` = un convertisseur + une entrée dans cette liste ; le
+   schéma, la validation, l'écriture et les écrans ne bougent pas, parce que rien
+   en aval ne sait qu'il s'agissait d'un PDF. **Le seul piège qui obligerait à
+   tout reprendre** : semer des hypothèses « c'est un PDF » dans le prompt ou
+   dans l'interface.
 
 ---
 
@@ -374,15 +404,35 @@ Conséquences :
 **Décision :** le nombre de questions générées et la répartition des niveaux de
 Bloom sont **imposés par le site**, jamais exposés à l'utilisateur.
 
-**Règle retenue le 19/08/2026 — ⚠️ à confirmer :** *une question par niveau de
-Bloom et par notion*, soit **4 questions par notion**. À confirmer parce que la
-formulation d'origine (« 1 de chaque niveau de Bloom par question ») ne peut pas
-se lire telle quelle — une question porte un seul niveau — et parce que le volume
-qui en découle n'est pas anodin : **40 notions → 160 questions par ingestion**.
-Règle explicitement provisoire, à ajuster à l'usage.
+**Règle retenue et confirmée le 19/08/2026 :** *une question par niveau de Bloom
+et par notion*, soit **4 questions par notion**. Le volume est assumé et connu :
+**40 notions → 160 questions par ingestion**. Règle provisoire, à ajuster à
+l'usage.
 
 Ces règles vivent dans le code (module d'ingestion) et sont injectées dans le
 prompt. Elles ne sont **pas** vérifiées par un refus serveur (§11).
+
+**Les deux conséquences à traiter, dans cet ordre :**
+
+1. **Limiter le nombre de notions.** C'est le paramètre qui commande tout le
+   reste — le volume de questions en découle mécaniquement, et le coût avec lui.
+2. **Générer en masse sans tenir de connexion ouverte : la Batch API.** Les
+   requêtes sont déposées en lot, traitées de façon asynchrone, et facturées
+   **50 % moins cher**. Elle règle les deux problèmes d'un coup : la question du
+   délai maximal d'une fonction Vercel disparaît (on ne tient plus rien ouvert —
+   et c'est bien Vercel qui contraint, pas Clerk, qui ne fait qu'authentifier),
+   et c'est la seule remise tarifaire structurelle disponible.
+
+   D'où deux régimes, un seul moteur :
+
+   | Régime | Quand | Comment |
+   |---|---|---|
+   | **Interactif** | petit atelier, l'utilisateur regarde | appels directs (§5.4) |
+   | **Masse** | 40 notions, 160 questions | lot déposé, état porté par `ai_imports`, l'utilisateur peut fermer l'onglet |
+
+   À vérifier à l'écriture : le délai réel de traitement d'un lot, et si le cache
+   de prompt s'y applique aussi bien qu'en direct — si oui, les deux remises se
+   cumulent.
 
 ### Ordre de grandeur du coût
 
@@ -448,6 +498,16 @@ résultat, disparaît de lui-même au bout de 24 h (ou à la première modificat
 et ne laisse aucune commande destructrice traîner dans un menu une fois le délai
 passé.
 
+**Et dans les notifications ?** Bonne idée, mauvais moment (arbitré le
+19/08/2026). La cloche est un placeholder — 80 lignes, deux exemples en dur,
+aucune table, aucun flux (`src/components/NotificationBell.tsx`, voir la
+gamification V2 dans `docs/backlog.md`) : y loger l'annulation reviendrait à
+construire tout le système de notifications avant la première ingestion. Et même
+une fois qu'il existera, la notification restera un bon canal de **découverte** et
+un mauvais canal d'**action** : la commande doit être sous les yeux là où on
+constate le dégât. Cible : **bandeau maintenant, entrée de notification en plus**
+le jour où la cloche devient réelle — les deux, pas l'un ou l'autre.
+
 ### Pourquoi pas une transaction atomique
 
 Le client Supabase JS ne sait pas faire de transaction multi-requêtes. Une
@@ -510,9 +570,17 @@ visible**, parce qu'elle est silencieuse :
 > elle s'affiche dans la liste, et elle ne sert à rien.
 
 État constaté le 19/08/2026 : **21 des 22** questions de parcours qui portaient un
-chapitre manuel sont dans ce cas. À faire : une pastille d'avertissement sur la
-ligne concernée — « aucune notion : cette question ne sera jamais tirée ». La
-liberté reste entière, le piège disparaît.
+chapitre manuel sont dans ce cas — héritage de la saisie manuelle, à une époque
+où les notions n'existaient pas encore.
+
+**Arbitré le 19/08/2026 : le filtre « sans chapitre » suffit, rien à ajouter.**
+Il attrape déjà *exactement* l'ensemble des questions non tirables — « les
+questions dont aucune notion associée n'est rattachée à un chapitre, y compris
+celles sans notion du tout » (`QuestionListView.tsx`) — c'est-à-dire les deux cas
+qui empêchent le tirage, sans en manquer ni en inventer un. Et le phénomène est
+appelé à devenir rare : ~99 % des questions seront produites par l'IA, qui relie
+les notions à la création. Pas de pastille supplémentaire. Le point reste
+consigné dans `docs/backlog.md` pour qu'on ne le redécouvre pas.
 
 ---
 
@@ -533,17 +601,38 @@ travail d'ingestion**.
 > À noter : `exam_questions.id` est de type `text` (identifiants générés côté
 > client), pas `uuid`.
 
-### 12.2 Aucune infrastructure de test
+### 12.2 Aucune infrastructure de test — périmètre arbitré
 
 Ni Vitest ni Playwright ne sont installés (`package.json`, 19/08/2026), et
-`tests/` n'existe pas. Or l'étape « `ingestWorkshopPlan()` testable avec un plan
-écrit à la main » suppose un runner.
+`tests/` n'existe pas.
 
-Enjeu concret : sans lui, la seule façon de vérifier qu'une ingestion écrit
-correctement 200 lignes est de **la lancer pour de vrai sur la base Supabase —
-celle que partage scellow.com**. Vitest tourne en local, sur des fonctions pures :
-ni réseau, ni base, ni site. C'est précisément ce qui évite de tester en
-production.
+**Ce qui ne justifie pas de tests :** la *qualité* du contenu produit. Des notions
+ou des questions mal fichues se suppriment, et se jugent à l'œil dans l'app.
+Aucun test ne remplace ce coup d'œil, et aucun n'est utile pour ça.
+
+**Ce qui les justifie :** trois opérations du pipeline sont **destructrices par
+nature**, et elles ne touchent pas que le contenu généré — elles peuvent emporter
+ce qui a été saisi à la main.
+
+| Opération | Ce qui casse si elle est buggée |
+|---|---|
+| `delete … where import_id = $1` (annulation, §10) | Si `$1` arrive à `undefined`, le constructeur de requête **laisse tomber le filtre** et vide la table — chapitres et notions manuels compris. |
+| `upsert` par identifiant fourni par le client | Un identifiant généré qui entre en collision avec une question existante **l'écrase silencieusement** (§12.1, tourné vers les données manuelles). |
+| Ré-écritures de masse (`saveQuestions`) | Elles touchent des lignes existantes, pas seulement les nouvelles. |
+
+Le contexte aggrave : la base est **partagée avec scellow.com**, il n'y a pas de
+transaction (§10), et les `on delete cascade` propagent une suppression aux
+questions et à leurs liens.
+
+**Décision du 19/08/2026 :** installer Vitest, et n'écrire des tests que pour ces
+**trois fonctions plus la validation Zod**. Pas de suite de tests complète, pas de
+Playwright à ce stade. Ce n'est pas « tester avant de livrer », c'est « ne pas
+laisser une requête de suppression non testée s'exécuter sur la base de
+production ».
+
+> La vraie réponse de fond — un second projet Supabase pour le développement, au
+> lieu de partager la base de production — est notée dans `docs/backlog.md`. Hors
+> périmètre de ce chantier.
 
 ### 12.3 Absence de suppression multiple
 
@@ -560,7 +649,11 @@ bloquant (l'annulation par `import_id` couvre le besoin), mais à garder en têt
 |---|---|
 | Modification de l'existant | **Ajout seulement.** Modifier/supprimer plus tard. |
 | Validation humaine entre les étapes | **Aucune** — les trois passes s'enchaînent. |
-| Volumétrie | 1 question par niveau de Bloom et par notion (**à confirmer**, §9). |
+| Volumétrie | 1 question par niveau de Bloom et par notion — **confirmé** (§9). D'où : limiter le nombre de notions, et passer par la Batch API pour la masse. |
+| Périmètre des tests | Vitest, **uniquement** sur les 3 opérations destructrices + Zod (§12.2). |
+| Formats | PDF et texte ; plafond app ramené à **25 Mo** ; Files API (§6). |
+| Modèle | Réglable **par passe** (§5.2) — Haiku pour itérer, Opus pour valider. |
+| Question sans notion | Le filtre « sans chapitre » suffit, pas de pastille (§11). |
 | Quotas / coût | **Illimité** pour l'instant (un seul utilisateur) ; à rouvrir avec les abonnements. |
 | Traçabilité | Sortie structurée en V1 ; citations gardées en tête. |
 | Table d'imports | **Oui**, minimale (§10). |
@@ -568,8 +661,7 @@ bloquant (l'annulation par `import_id` couvre le besoin), mais à garder en têt
 
 ### Encore ouvert
 
-1. **Confirmation de la volumétrie** (§9) et de la variété attendue des types de
-   réponse.
+1. **Plafond du nombre de notions** (§9) et variété attendue des types de réponse.
 2. **Qui peut annuler un import** — gestionnaire, ou propriétaire uniquement ?
 3. **Ré-ingestion du même fichier** — comportement attendu si un fichier déjà
    traité est resoumis (la table `ai_imports` donne de quoi le détecter, reste à
@@ -602,8 +694,16 @@ représentent l'essentiel du travail. Le jour où le modèle arrive, il ne reste
 
 ## 15. Mise en service de l'API (à faire une fois, avant l'étape 6)
 
-1. **Compte** sur `console.anthropic.com` (distinct d'un abonnement Claude.ai :
-   l'API se facture à part).
+1. **Compte** sur `console.anthropic.com`.
+
+   > ⚠️ **Deux porte-monnaie à ne pas confondre** (constaté le 19/08/2026). Les
+   > « crédits d'utilisation » visibles dans les réglages du **forfait Claude**
+   > (« pour que votre équipe puisse continuer à utiliser Claude lorsqu'elle
+   > atteint la limite de son forfait ») servent à Claude et Claude Code, **pas à
+   > l'API**. Le solde de l'API est distinct, dans la console, et c'est le seul
+   > que consomment les clés API. Recharger le premier ne donne aucun accès API à
+   > l'application.
+
 2. **Moyen de paiement + crédits prépayés.** Oui, une carte bancaire est
    nécessaire ; l'API fonctionne sur des crédits achetés d'avance, pas sur
    facturation à terme. Quelques dizaines d'euros couvrent très largement la mise
