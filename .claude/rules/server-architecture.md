@@ -53,6 +53,30 @@ La conversion entre la forme stockée et `Question` est **confinée à `src/lib/
 
 Les écritures de questions sont **différentielles** (upsert des lignes voulues, suppression des seules lignes disparues) : une question liée garde sa ligne et ses liens de notions d'une édition à l'autre. Ne pas revenir à un « tout effacer puis tout réinsérer », qui perdrait les liens et pourrait laisser un groupe sans question.
 
+## Ajouter (ou retirer) un type de réponse — la liste complète
+
+Un type de réponse (`ResponseType`) touche **onze endroits**, dont deux qui échouent en silence si on les oublie. Faire la liste dans l'ordre :
+
+1. **`src/lib/workshops/examTypes.ts`** — l'union `ResponseType` **et** le tableau `RESPONSE_TYPES` (le second sert de garde à `parseResponseType`, il ne se déduit pas du premier : TypeScript disparaît à l'exécution).
+2. **La contrainte en base** — `exam_question_items_response_type_check` (posée le 19/08/2026, voir `docs/migrations/2026-08-19-types-de-reponse-verrouilles.sql`). ⚠️ **Dans la même migration que le déploiement du code** : ajoutée trop tard, toute question du nouveau type est rejetée en base ; retirée trop tôt sur un type supprimé, les questions existantes deviennent non enregistrables.
+3. **`parseResponseType`** — si le nouveau type *remplace* un ancien, ajouter le `case` de mapping. Rappel de la règle (`docs/ai-ingestion-plan.md` §7) : on ne mappe que ce qui a un sens équivalent ; sans mapping fondé, l'ancien type doit être rejeté, pas replié sur `textuelle`.
+4. **`RESPONSE_TYPE_ORDER`** (`tabs/examen/questionFields.tsx`) — l'ordre du menu de l'éditeur. Un type absent d'ici est **inutilisable dans l'interface tout en étant valide partout ailleurs** : c'est le premier oubli silencieux.
+5. **`CHOICE_BASED`** (même fichier) — seulement si le type se répond par une liste de propositions (`qcs`, `qcm`, `matching`).
+6. **`RESPONSE_TYPE_V2`** (même fichier) — pour afficher le type comme « bientôt » sans le rendre sélectionnable.
+7. **Les champs de saisie** — `QuestionFields` (`questionFields.tsx`) : le formulaire propre au type.
+8. **La feuille A4** — `tabs/examen/examShared.tsx` : le rendu sur la copie imprimée.
+9. **L'exercice du parcours** — `exercise/[chapterId]/ExerciseClient.tsx` (zone de réponse côté candidat) **et** `toExerciseTypeOptions` dans `lib/workshops/exam.ts`, qui transmet les réglages en **liste blanche**. Second oubli silencieux : un réglage non listé n'arrive jamais au candidat, sans la moindre erreur (cf. `tableShuffleRows`, `docs/backlog.md`).
+10. **La correction** — `gradeParcoursAnswer` (`lib/workshops/exam.ts`) : sans règle, le type renvoie `correct: null` et ne fait jamais progresser la maîtrise (`docs/backlog.md`).
+11. **i18n** — la clé `responseType.<type>` dans `messages/fr.json` **et** `messages/en.json`, plus `shufflesAnswerItems` (`examTypes.ts`) si l'ordre des éléments de réponse doit être mélangé.
+
+Le contrat exposé à l'extérieur (`QuestionGroup`, `normalizeGroupInput`) n'a rien à changer : il s'appuie sur `parseResponseType`/`toResponseType`. En revanche, **le schéma Zod de l'ingestion IA reprendra l'énumération** — à mettre à jour aussi le jour venu (`docs/ai-ingestion-plan.md` §7).
+
+## Énoncé obligatoire
+
+Une question doit avoir **au moins un caractère d'énoncé**, la principale comme chaque question liée (décision produit du 19/08/2026). Tenu à trois niveaux : `canSave` dans `InlineQuestionEditor.tsx` (bouton désactivé + infobulle), `assertStatements` dans `src/lib/workshops/questionIntegrity.ts` (refus serveur), et rien en base — la colonne a un défaut `''`, volontairement conservé pour ne pas casser les ré-écritures de masse.
+
+Le refus serveur porte sur **`saveQuestion` seulement** (création/modification), jamais sur `saveQuestions` : une ré-écriture de masse (suppression d'un libellé, d'une question) ne touche pas aux énoncés, et échouer sur le contenu d'une question sans rapport ferait avorter une opération qui n'a rien demandé. Un refus annule **tout** l'enregistrement, jamais seulement l'énoncé fautif : conserver l'ancien texte et enregistrer le reste serait une réparation silencieuse.
+
 ## Éviter les requêtes N+1
 
 Ne jamais boucler un appel réseau (Clerk `getUser`, envoi d'email…) dans une server action — utiliser un appel batch (`clerkClient().users.getUserList({ userId: [...] })`) ou `Promise.all`. Regrouper les requêtes Supabase indépendantes en `Promise.all` (voir `getExamBankData`, `getUserWorkshops`).

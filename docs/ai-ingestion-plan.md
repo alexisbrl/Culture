@@ -591,8 +591,18 @@ traitements opposés — ne jamais les confondre :
 
 | Famille | Exemples | Traitement |
 |---|---|---|
-| **Qualité pédagogique** | nombre de propositions d'un QCM, réponse remplie, répartition Bloom, variété des types de réponse | **Prompt uniquement.** Aucun refus serveur. |
-| **Intégrité structurelle** | notion référencée inexistante, ou appartenant à **un autre atelier** ; `bloomLevel` hors 1–4 ; type de réponse inventé ; groupe à zéro question | **Refus serveur, systématique.** |
+| **Qualité pédagogique** | nombre de propositions d'un QCM, réponse attendue remplie, répartition Bloom, variété des types de réponse | **Prompt uniquement.** Aucun refus serveur. |
+| **Intégrité structurelle** | notion référencée inexistante, ou appartenant à **un autre atelier** ; `bloomLevel` hors 1–4 ; type de réponse inventé ; groupe à zéro question ; **énoncé vide** | **Refus serveur, systématique.** |
+
+**L'énoncé fait partie de l'intégrité, pas de la qualité** (décision du
+19/08/2026). Ce n'est pas une exception à la règle mais son application : une
+question sans énoncé n'est pas une question, et **l'interface l'interdit déjà**
+(`canSave` dans `InlineQuestionEditor.tsx` — bouton désactivé, infobulle). Le
+contrôle serveur ne change donc aucun comportement visible ; il rattrape ce qui
+ne devrait pas pouvoir arriver. Le minimum est **un caractère** — on n'évalue pas
+la qualité de la formulation. Détail (portée `saveQuestion` seulement, refus de
+tout l'enregistrement plutôt que du seul énoncé) : `.claude/rules/server-architecture.md`
+§ « Énoncé obligatoire ».
 
 **Pourquoi cette ligne de partage.** Un QCM à une seule bonne réponse est un
 choix légitime de l'utilisateur, pas une erreur : brider l'écriture au nom de la

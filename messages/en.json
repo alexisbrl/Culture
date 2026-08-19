@@ -573,7 +573,7 @@
       "advanced": "advanced settings",
       "addPart": "+ linked question",
       "save": "save →",
-      "statementRequired": "the question wording is required",
+      "statementRequired": "every question needs a wording",
       "attachAudio": "add an audio clip",
       "removeMedia": "remove attachment",
       "unsupportedFormat": "Unsupported file format.",

@@ -573,7 +573,7 @@
       "advanced": "paramètres avancés",
       "addPart": "+ question liée",
       "save": "enregistrer →",
-      "statementRequired": "l’intitulé de la question est obligatoire",
+      "statementRequired": "chaque question doit avoir un intitulé",
       "attachAudio": "ajouter un audio",
       "removeMedia": "retirer la pièce jointe",
       "unsupportedFormat": "Format de fichier non pris en charge.",

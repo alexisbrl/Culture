@@ -26,7 +26,7 @@ import type {
   ResponseType,
 } from '@/lib/workshops/examTypes';
 import { normalizeTypeOptions, toBloomLevel, toResponseType, type QuestionTypeOptions } from '@/lib/workshops/examTypes';
-import { assertQuestionIntegrity, notionIdsOf } from '@/lib/workshops/questionIntegrity';
+import { assertQuestionIntegrity, assertStatements, notionIdsOf } from '@/lib/workshops/questionIntegrity';
 // ─── Stockage : un groupe, ses questions ─────────────────────────────────────
 //
 // `exam_questions` porte le GROUPE — uniquement ce qui est commun : titre,
@@ -427,6 +427,10 @@ export async function saveQuestion(workshopId: string, question: Question, conte
   // groupe puis échouer sur ses notions laisserait une question à moitié
   // enregistrée — c'est exactement ce qui se produisait jusqu'ici, la clé
   // étrangère ne levant qu'au moment des liens.
+  //
+  // L'énoncé n'est exigé que sur ce chemin (création/modification), jamais sur
+  // `saveQuestions` — voir `questionIntegrity.ts`.
+  assertStatements(question);
   await assertQuestionsIntegrity(workshopId, [question]);
 
   const supabase = getSupabaseServerClient();

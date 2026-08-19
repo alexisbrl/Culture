@@ -4,6 +4,8 @@ import type { Question, QuestionPart } from '@/lib/workshops/examTypes';
 import { parseResponseType } from '@/lib/workshops/examTypes';
 import {
   assertQuestionIntegrity,
+  assertStatements,
+  missingStatementErrors,
   notionIdsOf,
   questionIntegrityErrors,
 } from '@/lib/workshops/questionIntegrity';
@@ -123,9 +125,10 @@ describe('questionIntegrityErrors — ce qui est LAISSÉ PASSER', () => {
     expect(questionIntegrityErrors(question({ choices: [], correctChoices: [] }), new Set())).toEqual([]);
   });
 
-  it('accepte un énoncé vide et une réponse vide', () => {
-    // Une question en cours de rédaction s'enregistre : on ne bloque pas la saisie.
-    expect(questionIntegrityErrors(question({ content: '', answer: '' }), new Set())).toEqual([]);
+  it('accepte une réponse vide', () => {
+    // Une question sans réponse attendue est un choix légitime (correction
+    // manuelle, question ouverte).
+    expect(questionIntegrityErrors(question({ answer: '' }), new Set())).toEqual([]);
   });
 
   it('accepte une question sans aucune notion', () => {
@@ -139,6 +142,44 @@ describe('questionIntegrityErrors — ce qui est LAISSÉ PASSER', () => {
     const legacy = { responseType: 'sondage' } as unknown as Partial<Question>;
     expect(questionIntegrityErrors(question(legacy), new Set())).toEqual([]);
     expect(parseResponseType('sondage')).toBe('qcm');
+  });
+});
+
+describe('missingStatementErrors — énoncé obligatoire', () => {
+  it('refuse un énoncé vide, ou fait d’espaces', () => {
+    expect(missingStatementErrors(question({ content: '' }))).toHaveLength(1);
+    expect(missingStatementErrors(question({ content: '   ' }))).toHaveLength(1);
+  });
+
+  it('accepte un énoncé d’un seul caractère', () => {
+    // Le minimum demandé est UN caractère, pas une phrase : ce n'est pas un
+    // contrôle de qualité.
+    expect(missingStatementErrors(question({ content: '?' }))).toEqual([]);
+  });
+
+  it('exige aussi un énoncé sur chaque question liée, et les nomme', () => {
+    const q = question({ parts: [part({ content: 'ok' }), part({ id: 'p2', content: '' })] });
+    const errors = missingStatementErrors(q);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('question liée 2');
+  });
+
+  it('ne dit rien des notions ni des types — ce n’est pas son rôle', () => {
+    const q = question({ content: 'ok', notionIds: ['n-fantome'] });
+    expect(missingStatementErrors(q)).toEqual([]);
+  });
+});
+
+describe('assertStatements', () => {
+  it('refuse TOUT le groupe, pas seulement l’énoncé fautif', () => {
+    // Conserver l'ancien énoncé et enregistrer le reste serait une réparation
+    // silencieuse : l'utilisateur verrait un texte qu'il n'a pas écrit.
+    expect(() => assertStatements(question({ content: '' }))).toThrow(/énoncé/);
+  });
+
+  it('ne lève pas quand tous les énoncés sont remplis', () => {
+    const q = question({ content: 'Énoncé', parts: [part({ content: 'Liée' })] });
+    expect(() => assertStatements(q)).not.toThrow();
   });
 });
 

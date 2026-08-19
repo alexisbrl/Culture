@@ -94,3 +94,45 @@ export function assertQuestionIntegrity(question: Question, allowedNotionIds: Se
     throw new Error(`Question ${question.id} — ${errors.join(' · ')}`);
   }
 }
+
+// ─── Énoncé obligatoire (décision produit du 19/08/2026) ─────────────────────
+//
+// Une question sans énoncé n'est pas une question : au moins un caractère, sur
+// la principale comme sur chaque question liée.
+//
+// Ce n'est pas une exception à la ligne « qualité vs intégrité » ci-dessus, mais
+// son application : l'interface INTERDIT DÉJÀ d'enregistrer sans énoncé
+// (`canSave` dans `InlineQuestionEditor.tsx`, bouton désactivé + infobulle). Le
+// contrôle serveur ne change donc aucun comportement visible — il rattrape ce
+// qui « ne devrait pas pouvoir arriver » : appel forgé, ou bug de l'éditeur.
+// Vérifié le 19/08/2026 avant de l'introduire : 0 énoncé vide sur 130 questions
+// en base, donc rien d'existant ne devient soudain non enregistrable.
+//
+// ⚠️ Ce contrôle ne s'applique qu'à la CRÉATION et à la MODIFICATION
+// (`saveQuestion`), pas aux ré-écritures de masse (`saveQuestions` — suppression
+// d'un libellé, d'une question). Celles-ci ne touchent pas aux énoncés : les
+// bloquer sur le contenu d'une question sans rapport ferait échouer une
+// opération qui n'a rien demandé.
+
+/** Les énoncés manquants d'un groupe. Séparé de `questionIntegrityErrors` parce
+ *  qu'il ne s'applique pas aux mêmes chemins d'écriture (voir ci-dessus). */
+export function missingStatementErrors(question: Question): string[] {
+  const errors: string[] = [];
+  if (!(question.content ?? '').trim()) errors.push('La question doit avoir un énoncé');
+  (question.parts ?? []).forEach((part, i) => {
+    if (!(part.content ?? '').trim()) errors.push(`La question liée ${i + 1} doit avoir un énoncé`);
+  });
+  return errors;
+}
+
+/** Lève si un énoncé manque. Rien n'est enregistré : sur une modification, c'est
+ *  TOUT le changement qui est refusé, pas seulement l'énoncé fautif. Conserver
+ *  l'ancien énoncé et enregistrer le reste serait une réparation silencieuse —
+ *  l'utilisateur verrait un texte qu'il n'a pas écrit, et croirait avoir
+ *  enregistré ce qu'il avait à l'écran. */
+export function assertStatements(question: Question): void {
+  const errors = missingStatementErrors(question);
+  if (errors.length > 0) {
+    throw new Error(`Question ${question.id} — ${errors.join(' · ')}`);
+  }
+}
