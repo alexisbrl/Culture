@@ -797,8 +797,14 @@ bloquant (l'annulation par `import_id` couvre le besoin), mais à garder en têt
    non créé — une server action exportée est une URL POST publique, on ne l'ouvre
    pas avant d'en avoir l'usage), l'écriture qui pose les étiquettes (étape 5),
    et le bandeau (étape 7).
-5. **Schéma Zod + `ingestWorkshopPlan()`** (§7) — testable avec un plan écrit à
-   la main, **sans une ligne d'IA**.
+5. ~~**Schéma Zod + `ingestWorkshopPlan()`**~~ ✅ **fait le 20/08/2026** (§7) —
+   `src/lib/ingest/planSchema.ts` (contrat + lecture défensive) et
+   `src/lib/ingest/ingest.ts` (écriture étiquetée), 20 tests. Vérifié comme
+   promis : **avec un plan écrit à la main, sans une ligne d'IA** — type inventé
+   écarté sans emporter le reste du lot, chapitre pendant réparé en « sans
+   chapitre », Bloom 6 ramené à 4, `created_at = updated_at` (donc annulable),
+   puis annulation complète. **Reste à faire** : le wrapper `'use server'` avec
+   authz, et le `type_options` par type de réponse, aujourd'hui écrit vide.
 6. **Interface `PlanProvider` + implémentation Claude** (§4, §5).
 7. **Les points d'entrée** (§8), dans l'ordre 1/2 → 3 → 4 → 5.
 

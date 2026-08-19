@@ -93,6 +93,12 @@ export type ImportSummary = {
   state: ImportCancelState;
   chapters: number;
   notions: number;
+  /** Nombre de GROUPES — une carte dans la liste de questions. */
+  questionGroups: number;
+  /** Nombre de QUESTIONS, questions liées comprises. C'est ce chiffre-là qu'on
+   *  annonce à l'utilisateur (« 87 questions ajoutées »), et c'est aussi celui
+   *  que compte l'ingestion : les deux doivent dire la même chose, sans quoi le
+   *  bandeau d'annulation contredirait le message de fin d'import. */
   questions: number;
 };
 
@@ -103,7 +109,7 @@ export type ImportSummary = {
 // place) ; suivre l'ordre inverse évite simplement de faire transiter les
 // données par des états intermédiaires incohérents.
 const TAGGED_TABLES = [
-  { table: 'exam_questions', key: 'questions' },
+  { table: 'exam_questions', key: 'questionGroups' },
   // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
   { table: 'workshop_bricks', key: 'notions' },
   { table: 'workshop_chapters', key: 'chapters' },
@@ -140,26 +146,44 @@ export async function getImportSummary(workshopId: string, importId: string): Pr
     TAGGED_TABLES.map(({ table }) =>
       supabase
         .from(table)
-        .select('created_at, updated_at')
+        .select('id, created_at, updated_at')
         .eq('workshop_id', workshopId)
         .eq('import_id', importId),
     ),
   );
 
-  const counts = { chapters: 0, notions: 0, questions: 0 };
+  const counts = { chapters: 0, notions: 0, questionGroups: 0 };
   const rows: ImportRowDates[] = [];
+  const groupIds: string[] = [];
 
   results.forEach(({ data, error }, i) => {
     if (error) throw new Error(error.message);
-    counts[TAGGED_TABLES[i].key] = (data ?? []).length;
-    for (const row of data ?? []) rows.push({ createdAt: row.created_at, updatedAt: row.updated_at });
+    const table = TAGGED_TABLES[i];
+    counts[table.key] = (data ?? []).length;
+    for (const row of data ?? []) {
+      rows.push({ createdAt: row.created_at, updatedAt: row.updated_at });
+      if (table.table === 'exam_questions') groupIds.push(row.id as string);
+    }
   });
 
-  return { state: importCancelState(rows), ...counts };
+  // Les questions liées ne portent pas d'étiquette (elles suivent leur groupe) :
+  // il faut donc les compter à part pour annoncer un nombre qui corresponde à ce
+  // que l'utilisateur voit.
+  let questions = 0;
+  if (groupIds.length > 0) {
+    const { count, error } = await supabase
+      .from('exam_question_items')
+      .select('id', { count: 'exact', head: true })
+      .in('group_id', groupIds);
+    if (error) throw new Error(error.message);
+    questions = count ?? 0;
+  }
+
+  return { state: importCancelState(rows), ...counts, questions };
 }
 
 export type CancelImportResult =
-  | { cancelled: true; chapters: number; notions: number; questions: number }
+  | { cancelled: true; chapters: number; notions: number; questionGroups: number }
   | { cancelled: false; reason: Exclude<ImportCancelState, 'cancellable'> };
 
 /** Annule un import : supprime tout ce qu'il a produit, et rien d'autre.
@@ -176,7 +200,7 @@ export async function cancelImport(workshopId: string, importId: string): Promis
   if (state !== 'cancellable') return { cancelled: false, reason: state };
 
   const supabase = getSupabaseServerClient();
-  const deleted = { chapters: 0, notions: 0, questions: 0 };
+  const deleted = { chapters: 0, notions: 0, questionGroups: 0 };
 
   // Séquentiel et non `Promise.all` : l'ordre inverse de création n'a de sens
   // que s'il est respecté.
