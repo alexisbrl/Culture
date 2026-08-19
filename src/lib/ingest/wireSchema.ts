@@ -29,15 +29,24 @@
 
 import { z } from 'zod';
 
-/** Les types de réponse que l'IA a le droit de produire. Sous-ensemble strict
- *  des 9 types du produit (`ResponseType`, examTypes.ts). */
+/** Les types de réponse que l'IA a le droit de produire.
+ *
+ *  ⚠️ `qcs` et `qcm` sont **le même type pour l'utilisateur** : le menu de
+ *  l'éditeur n'affiche que « QCM » (`RESPONSE_TYPE_ORDER` ne contient pas `qcs`),
+ *  et la pastille « réponse unique » bascule de l'un à l'autre. Ils portent
+ *  d'ailleurs le même libellé en fr comme en en. Les exposer séparément ici est
+ *  correct — c'est bien la valeur stockée — mais le prompt doit dire qu'il
+ *  s'agit d'une OPTION et non de deux types, sinon un modèle qui alterne les
+ *  deux croit varier alors que l'utilisateur voit un mur de QCM. */
 export const GENERATED_RESPONSE_TYPES = ['qcs', 'qcm', 'textuelle', 'liste'] as const;
 
 export const wireQuestionSchema = z.object({
   content: z.string().describe("L'énoncé de la question, tel qu'il sera lu par le candidat."),
   responseType: z
     .enum(GENERATED_RESPONSE_TYPES)
-    .describe('qcs = une seule bonne réponse, qcm = plusieurs, textuelle = réponse rédigée, liste = plusieurs réponses courtes.'),
+    .describe(
+      "Trois types seulement, du point de vue du candidat : QCM (propositions à cocher — « qcs » si une seule est correcte, « qcm » si plusieurs le sont : c'est la même chose à ses yeux), « textuelle » (réponse rédigée), « liste » (plusieurs réponses courtes).",
+    ),
   choices: z
     .array(z.string())
     .describe('Propositions, pour qcs et qcm uniquement. Tableau vide pour les autres types.'),

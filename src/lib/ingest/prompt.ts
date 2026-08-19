@@ -121,8 +121,8 @@ ${list}
 Règles de production :
 - ${QUESTIONS_PER_NOTION} questions par notion, une par niveau de Bloom : 1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser ou créer.
 - Chaque question porte dans \`notionRefs\` la ou les notions qu'elle fait travailler, avec les références ci-dessus. Une question sans notion ne sera jamais posée à personne.
-- Varie les types de réponse. Une suite de QCM sur un même chapitre lasse et n'évalue qu'une seule chose.
-- Pour un qcs ou un qcm : des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien.
+- Varie les types de réponse. Attention : \`qcs\` et \`qcm\` sont LE MÊME TYPE pour le candidat — un QCM, dont une seule ou plusieurs propositions sont correctes. Alterner entre les deux n'est pas varier : la variété se joue entre QCM, réponse textuelle et liste.
+- Pour un QCM : des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien, elle se raye d'office.
 - N'excède pas ${input.budget} questions au total.
 
 Une bonne question se répond avec la notion et rien d'autre : ni piège de formulation, ni connaissance extérieure au document.`;
