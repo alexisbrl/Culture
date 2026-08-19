@@ -36,8 +36,15 @@ describe('toResponseType', () => {
   });
 
   it('ramène une valeur inventée sur « textuelle » plutôt que de la laisser passer', () => {
-    // Le cas qui compte pour l'IA : un type plausible mais inexistant ne doit
-    // jamais atteindre la base.
+    // ⚠️ Comportement volontaire EN LECTURE, et seulement là : une question déjà
+    // en base a été écrite par un humain, la faire disparaître parce que son type
+    // a été retiré détruirait son travail.
+    //
+    // L'ingestion IA, elle, ne doit PAS s'appuyer là-dessus : un type inventé n'a
+    // aucun mapping fondé, et le replier sur « textuelle » produirait une question
+    // silencieusement fausse (un vrai/faux rendu en texte libre). Côté ingestion,
+    // le schéma Zod rejette la question et compte l'écart — voir la règle
+    // « réparer ou rejeter » dans docs/ai-ingestion-plan.md §7.
     expect(toResponseType('vrai_faux')).toBe('textuelle');
     expect(toResponseType('QCM')).toBe('textuelle'); // la casse compte
     expect(toResponseType(null)).toBe('textuelle');

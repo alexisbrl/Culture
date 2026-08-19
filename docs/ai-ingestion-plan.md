@@ -356,6 +356,31 @@ sans sortie structurée native.
 `normalizeGroupInput` les recalcule déjà côté serveur ; les `ref` du plan ne sont
 que des clés locales, résolues en identifiants réels à l'écriture.
 
+### Réparer ou rejeter : la règle (arbitrée le 19/08/2026)
+
+> **On répare ce qui n'a pas de conséquence de sens ; on rejette ce qui en a une.**
+
+| Cas | Traitement | Pourquoi |
+|---|---|---|
+| Bloom `6` → `4` | **réparer** | Mapping fondé : l'échelle est passée de 6 à 4 niveaux, « créer » reste le plus exigeant. |
+| `sondage` → `qcm`, `ordre` → `liste` | **réparer** | Mappings fondés : ce sont d'anciens noms de types qui existent toujours sous une autre forme. |
+| Type inventé (`vrai_faux`…) | **rejeter la question** | Aucun mapping fondé. Le replier sur `textuelle` produirait un vrai/faux rendu en champ de texte libre, avec des propositions devenues inutiles et une bonne réponse qui ne pointe sur rien : une question **silencieusement fausse**, pire qu'une question absente. |
+| Notion inexistante ou d'un autre atelier | **rejeter la question** | Intégrité (§11). |
+
+**Rejeter, c'est écarter cette question-là et compter l'écart** (« 3 questions
+écartées : type de réponse non reconnu », remonté à l'utilisateur et consigné dans
+`ai_imports`) — jamais perdre un lot de 160 pour une ligne.
+
+**Conséquence architecturale à ne pas manquer :** `normalizeGroupInput`
+(`questionGroup.ts`) est une porte **tolérante** — sa raison d'être est de
+réparer, y compris `toResponseType`, qui replie un type inconnu sur `textuelle`.
+Elle ne peut donc **pas** être la porte d'entrée de l'ingestion. L'ordre est :
+**Zod strict d'abord** (énumération fermée, rejet et comptage), normalisation
+ensuite pour le reste. Les deux fonctions gardent chacune son rôle :
+`toResponseType` reste juste **en lecture** — une question déjà en base a été
+écrite par un humain, la faire disparaître parce que son type a été retiré
+détruirait son travail.
+
 ---
 
 ## 8. Les points d'entrée (emplacements réels, 19/08/2026)
@@ -607,20 +632,29 @@ consigné dans `docs/backlog.md` pour qu'on ne le redécouvre pas.
 
 ## 12. Prérequis techniques restants
 
-### 12.1 Bug bloquant — collision d'identifiants
+### 12.1 Collision d'identifiants — ✅ corrigé le 19/08/2026
 
 `emptyQuestion()` (`src/app/[locale]/workshops/[id]/tabs/QuestionEditor.tsx`)
-génère `id: 'q' + Date.now()`. Les questions *liées* sont passées à
-`crypto.randomUUID()` (`questionFields.tsx`, `exam.ts`, `questionGroup.ts`), **le
-groupe non**.
+générait `id: 'q' + Date.now()`. En création manuelle, aucun risque ; **en
+ingestion, N groupes créés dans la même milliseconde auraient partagé le même
+identifiant** → l'`upsert` les écrasant les uns les autres, **silencieusement**.
+Remplacé par `crypto.randomUUID()`.
 
-En création manuelle, aucun risque. **En ingestion, N groupes créés dans la même
-milliseconde partagent le même identifiant** → l'`upsert` les écrase les uns les
-autres, **silencieusement**. À remplacer par `crypto.randomUUID()` **avant tout
-travail d'ingestion**.
+Vérifié avant le changement : **rien n'analyse le préfixe `q`** d'un identifiant
+de question. Le seul préfixe réellement interprété est `pb` (`isPageBreakId`,
+`examShared.tsx`), et un uuid ne peut pas commencer par `pb` — `p` n'est pas un
+caractère hexadécimal.
 
 > À noter : `exam_questions.id` est de type `text` (identifiants générés côté
 > client), pas `uuid`.
+
+**Le même piège reste ouvert ailleurs, et se réveillera au point d'entrée n°5.**
+Sections (`'sec' + Date.now()`), libellés (`'pool' + …`), examens (`'e' + …`) et
+sauts de page (`'pb' + …`) sont encore dérivés de l'horloge. Sans danger
+aujourd'hui — ils sont créés un par un, à la main — mais la **génération
+d'examens par IA** (§8, entrée n°5) créera des sections en boucle. À traiter à ce
+moment-là, avec une réserve : les sauts de page **doivent garder leur préfixe
+`pb`**, qui est lu par `isPageBreakId`.
 
 ### 12.2 Infrastructure de test — ✅ posée le 19/08/2026, périmètre arbitré
 
