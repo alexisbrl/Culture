@@ -268,9 +268,6 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
               </div>
             ) : (
               <>
-                {prompt.title.trim() && (
-                  <div style={{ fontSize: 12, color: palette.inkFaint, marginBottom: 8 }}>{prompt.title}</div>
-                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 22 }}>
                   <span style={{ width: 44, height: 44, borderRadius: 12, background: withAlpha(palette.green, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.green, flexShrink: 0 }}>
                     <Sprout size={20} strokeWidth={1.75} />

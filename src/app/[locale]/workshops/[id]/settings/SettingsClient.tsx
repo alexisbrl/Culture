@@ -272,7 +272,18 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
       <div
         className="scroll-panel hidden md:flex"
         style={{
-          width: 232,
+          // `scroll-panel` pose `overflow-y: auto`, ce qui force le navigateur à
+          // rogner AUSSI l'axe horizontal (`overflow-x: visible` n'existe pas en
+          // face d'un axe qui défile). Le halo de focus des entrées, posé en
+          // `box-shadow` de 3px tout autour, était donc coupé à gauche et à
+          // droite. On lui ouvre 16px de marge intérieure, rendus au voisinage
+          // par une marge négative de même valeur : la colonne occupe exactement
+          // la même place qu'avant (232 = 264 − 2 × 16) et son contenu tombe au
+          // même endroit, halo compris — y compris celui du retour à l'atelier,
+          // qui déborde de 10px sur la gauche.
+          width: 264,
+          paddingInline: 16,
+          marginInline: -16,
           flexShrink: 0,
           // Pas de `sticky` : la coquille (.settings-shell) est bornée au
           // viewport et ne défile pas — la navigation reste en place d'elle-même.

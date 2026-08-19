@@ -114,7 +114,9 @@ Un seul schéma décrit le plan complet, avec des **clés de référence locales
 // Forme cible, à affiner
 {
   chapters: [{ ref: "ch1", name: "Les fleuves", position: 0 }],
-  bricks:   [{ ref: "b1", title: "…", content: "…", chapterRef: "ch1" }],
+  // Une notion n'a plus qu'UN texte depuis le 19/08/2026 (`content` retirée du
+  // modèle et de la base) — le champ `title` porte la phrase entière.
+  bricks:   [{ ref: "b1", title: "…", chapterRef: "ch1" }],
   questions:[{
     ref: "q1",
     context: "parcours" | "exam",

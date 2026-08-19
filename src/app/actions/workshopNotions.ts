@@ -8,10 +8,10 @@ import { revalidateWorkshop } from '@/lib/revalidate';
 // ne portent que l'authz Clerk et la revalidation Next.js. Type redéclaré
 // localement (un fichier `'use server'` ne peut pas réexporter un type importé
 // — piège Turbopack, cf. .claude/rules/server-architecture.md).
+// Une notion n'a qu'UN texte, porté par `title` (voir @/lib/workshops/notions).
 export type Notion = {
   id: string;
   title: string;
-  content: string | null;
   chapterId: string | null;
   createdAt: string;
 };
@@ -27,14 +27,13 @@ export async function getWorkshopNotions(workshopId: string): Promise<Notion[]> 
 export async function createWorkshopNotion(
   workshopId: string,
   title: string,
-  content: string | null,
   chapterId: string | null = null
 ): Promise<{ success: boolean; notion?: Notion; error?: string }> {
   try {
     const ctx = await requireManager(workshopId);
     if (!ctx) return { success: false, error: 'Droits insuffisants' };
 
-    const result = await notionsLib.createNotion(workshopId, ctx.userId, title, content, chapterId);
+    const result = await notionsLib.createNotion(workshopId, ctx.userId, title, chapterId);
     if (result.success) revalidateWorkshop();
     return result;
   } catch (err) {
@@ -47,17 +46,34 @@ export async function updateWorkshopNotion(
   workshopId: string,
   notionId: string,
   title: string,
-  content: string | null,
   chapterId: string | null = null
 ): Promise<{ success: boolean; error?: string }> {
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
-    const result = await notionsLib.updateNotion(workshopId, notionId, title, content, chapterId);
+    const result = await notionsLib.updateNotion(workshopId, notionId, title, chapterId);
     if (result.success) revalidateWorkshop();
     return result;
   } catch (err) {
     console.error('updateWorkshopNotion error:', err);
+    return { success: false, error: 'Erreur serveur' };
+  }
+}
+
+// Glisser-déposer d'une notion sur un chapitre : ne touche qu'au rangement.
+export async function moveWorkshopNotion(
+  workshopId: string,
+  notionId: string,
+  chapterId: string | null
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+
+    const result = await notionsLib.setNotionChapter(workshopId, notionId, chapterId);
+    if (result.success) revalidateWorkshop();
+    return result;
+  } catch (err) {
+    console.error('moveWorkshopNotion error:', err);
     return { success: false, error: 'Erreur serveur' };
   }
 }

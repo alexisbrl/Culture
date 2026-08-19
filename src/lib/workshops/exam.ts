@@ -51,8 +51,6 @@ import { normalizeTypeOptions, toBloomLevel, toResponseType, type QuestionTypeOp
 type GroupRow = {
   id: string;
   workshop_id: string;
-  chapter_id: string | null;
-  title: string;
   image_key: string | null;
   audio_key: string | null;
   pools: string[];
@@ -77,7 +75,11 @@ type ItemRow = {
 };
 
 /** Colonnes du groupe, sans les colonnes historiques désormais mortes. */
-const GROUP_COLUMNS = 'id, workshop_id, chapter_id, title, image_key, audio_key, pools, exam_ids, created_at';
+// `chapter_id` n'y est plus (19/08/2026) : le chapitre d'une question se déduit
+// des notions qu'elle mobilise, des deux côtés — la banque le faisait déjà pour
+// son filtre, le parcours le fait maintenant pour son tirage. La colonne est en
+// attente de suppression (EN-ATTENTE-DEPLOIEMENT.md).
+const GROUP_COLUMNS = 'id, workshop_id, image_key, audio_key, pools, exam_ids, created_at';
 
 // Le groupe, ses questions et leurs notions en UN aller-retour : PostgREST suit
 // les clés étrangères (`exam_question_items.group_id`, puis
@@ -150,12 +152,10 @@ function rowToQuestion(row: GroupRow, items: ItemRow[], notionsByItem: NotionLin
 
   return {
     id: row.id,
-    title: row.title ?? '',
     image: row.image_key ? { key: row.image_key } : null,
     audio: row.audio_key ? { key: row.audio_key } : null,
     pools: row.pools ?? [],
     examIds: row.exam_ids ?? [],
-    chapterId: row.chapter_id ?? null,
     createdAt: row.created_at,
 
     content: headPart.content,
@@ -188,15 +188,11 @@ function rowToQuestion(row: GroupRow, items: ItemRow[], notionsByItem: NotionLin
 // chemin de CRÉATION, exige désormais un contexte explicite : sans lui, une
 // nouvelle ligne se rangeait selon le `DEFAULT` de la colonne (`'exam'`) sans
 // qu'aucune erreur ne le signale.
-// `chapter_id` suit la même règle et n'est écrit que dans le contexte
-// « parcours » : la banque d'examen ne connaît pas les chapitres.
 function questionToRow(workshopId: string, q: Question, context?: QuestionContext) {
   return {
     ...(context ? { context } : {}),
-    ...(context === 'parcours' ? { chapter_id: q.chapterId ?? null } : {}),
     id: q.id,
     workshop_id: workshopId,
-    title: q.title ?? '',
     image_key: q.image?.key ?? null,
     audio_key: q.audio?.key ?? null,
     pools: q.pools,
@@ -513,7 +509,6 @@ async function toPrompt(q: Question): Promise<ExercisePrompt> {
   ]);
   return {
     id: q.id,
-    title: q.title,
     content: q.content,
     imageUrl,
     audioUrl,
@@ -548,6 +543,62 @@ export async function resolveMediaUrls(keys: string[]): Promise<Record<string, s
   return Object.fromEntries(entries.filter((entry): entry is [string, string] => entry[1] !== null));
 }
 
+/** Identifiants des questions de parcours qui couvrent un chapitre.
+ *
+ *  Une question n'est pas rattachée à un chapitre : elle **hérite de celui de
+ *  ses notions** (19/08/2026, en remplacement de `exam_questions.chapter_id` et
+ *  de son sélecteur dans la liste). C'est déjà la règle du filtre « chapitre »
+ *  de la banque d'examen (`chaptersOfQuestion`), et c'est ce qui fait qu'une
+ *  question posée sur des notions de deux chapitres est tirable dans les deux.
+ *  Corollaire assumé : une question sans notion — ou dont aucune notion n'est
+ *  rangée — n'est jamais tirée.
+ *
+ *  Trois sauts, faute de jointure côté PostgREST : notions du chapitre →
+ *  questions (`exam_question_item_bricks`) → groupes (`exam_question_items`),
+ *  puis on ne garde que les groupes de CET atelier en contexte parcours. */
+async function parcoursQuestionIdsOfChapter(workshopId: string, chapterId: string): Promise<string[]> {
+  const supabase = getSupabaseServerClient();
+
+  // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
+  const { data: notions, error: notionsError } = await supabase
+    .from('workshop_bricks')
+    .select('id')
+    .eq('workshop_id', workshopId)
+    .eq('chapter_id', chapterId);
+  if (notionsError) throw new Error(notionsError.message);
+
+  const notionIds = (notions ?? []).map((n) => n.id as string);
+  if (notionIds.length === 0) return [];
+
+  const { data: links, error: linksError } = await supabase
+    .from('exam_question_item_bricks')
+    .select('item_id')
+    .in('brick_id', notionIds);
+  if (linksError) throw new Error(linksError.message);
+
+  const itemIds = [...new Set((links ?? []).map((l) => l.item_id as string))];
+  if (itemIds.length === 0) return [];
+
+  const { data: items, error: itemsError } = await supabase
+    .from('exam_question_items')
+    .select('group_id')
+    .in('id', itemIds);
+  if (itemsError) throw new Error(itemsError.message);
+
+  const groupIds = [...new Set((items ?? []).map((i) => i.group_id as string))];
+  if (groupIds.length === 0) return [];
+
+  const { data: groups, error: groupsError } = await supabase
+    .from('exam_questions')
+    .select('id')
+    .eq('workshop_id', workshopId)
+    .eq('context', 'parcours')
+    .in('id', groupIds);
+  if (groupsError) throw new Error(groupsError.message);
+
+  return (groups ?? []).map((g) => g.id as string);
+}
+
 // Tirage uniforme parmi les questions du chapitre. `excludeId` évite de
 // retomber sur la question qu'on vient de faire quand il y a de quoi varier —
 // avec une seule question dans le chapitre, on la retire logiquement.
@@ -558,16 +609,7 @@ export async function drawParcoursQuestion(
 ): Promise<ExercisePrompt | null> {
   const supabase = getSupabaseServerClient();
 
-  const { data: ids, error } = await supabase
-    .from('exam_questions')
-    .select('id')
-    .eq('workshop_id', workshopId)
-    .eq('context', 'parcours')
-    .eq('chapter_id', chapterId);
-
-  if (error) throw new Error(error.message);
-
-  let pool = (ids ?? []).map((r) => r.id as string);
+  let pool = await parcoursQuestionIdsOfChapter(workshopId, chapterId);
   if (pool.length === 0) return null;
   if (excludeId && pool.length > 1) pool = pool.filter((id) => id !== excludeId);
 

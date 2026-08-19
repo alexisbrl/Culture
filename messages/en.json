@@ -372,9 +372,6 @@
       "new": "New question",
       "edit": "Edit question",
       "subtitle": "created manually or reworked with AI",
-      "titleLabel": "Title",
-      "titleHint": "optional — if filled, replaces the statement as the title shown in the question bank",
-      "titlePlaceholder": "Short title (optional)…",
       "contentLabel": "Question statement",
       "contentPlaceholder": "Write or paste the question statement…",
       "rTypeLabel": "Response type",
@@ -773,7 +770,8 @@
       "reject": "reject",
       "promote": "promote",
       "demote": "demote",
-      "exclude": "remove"
+      "exclude": "remove",
+      "actions": "member actions"
     },
     "groups": {
       "title": "Groups",
@@ -854,15 +852,16 @@
       "confirmBtn": "Confirm activation"
     },
     "notions": {
-      "sectionTitle": "Chapter & Notion",
       "title": "Notions",
       "edit": "edit",
+      "actions": "notion actions",
       "add": "add a notion",
       "save": "save",
       "cancel": "cancel",
       "delete": "delete",
-      "titlePlaceholder": "Notion title (the idea in one sentence)",
-      "contentPlaceholder": "Detailed content (optional)",
+      "textPlaceholder": "The notion, in one sentence (e.g. “Paris is the capital of France”)",
+      "chapterLabel": "Notion chapter",
+      "dragHint": "drag onto a chapter",
       "empty": "No notions yet — add them by hand or upload source files.",
       "emptyChapter": "No notions in this chapter.",
       "noChapter": "No chapter",
@@ -875,9 +874,10 @@
       "title": "Chapters",
       "add": "add a chapter",
       "rename": "rename",
+      "actions": "chapter actions",
       "namePlaceholder": "Chapter name",
       "dragHint": "drag to reorder",
-      "empty": "No chapters yet — the educational programme stays empty until you add one.",
+      "empty": "No chapters yet.",
       "count": "{count, plural, =0 {no chapters} one {# chapter} other {# chapters}}",
       "deleteTitle": "Delete this chapter?",
       "deleteDesc": "“{name}” will be deleted and its pot will disappear from the programme. Its notions are not deleted: they move back to “no chapter”."
@@ -988,20 +988,13 @@
       "open": "programme question list",
       "back": "back to the programme",
       "title": "Educational programme questions",
-      "desc": "The questions asked to candidates during their programme. Separate from the exam generator's bank.",
-      "new": "new question",
-      "edit": "edit",
-      "delete": "delete",
-      "empty": "No programme questions yet.",
+      "desc": "The questions asked to candidates during their parcours. Separate from the question bank of the exam section.",
       "loading": "loading questions…",
       "saving": "saving…",
       "loadError": "Error while loading the questions",
       "saveError": "Error while saving",
       "deleteError": "Error while deleting",
-      "deleteTitle": "Delete this question?",
-      "chapter": "Linked chapter",
-      "noChapter": "no chapter",
-      "noChapterHint": "Every question must be linked to a chapter: without one, it is never drawn by the “start an exercise” button."
+      "noChapterHint": "A question's chapter comes from the notions linked to it."
     }
   },
   "exercise": {
@@ -1010,7 +1003,7 @@
     "dropletsTitle": "droplets earned this session",
     "drawing": "drawing a question…",
     "emptyTitle": "No question in this chapter",
-    "emptyDesc": "A manager must first create programme questions and link them to this chapter.",
+    "emptyDesc": "A manager must first create parcours questions and link them to notions filed in this chapter.",
     "answerPlaceholder": "your answer…",
     "validate": "validate",
     "revealAnswer": "show the answer",

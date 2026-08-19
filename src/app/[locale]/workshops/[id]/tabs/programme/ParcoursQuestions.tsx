@@ -8,14 +8,25 @@
 // réutilisation directe de `QuestionEditor` plutôt qu'un second éditeur.
 // Chargement à l'ouverture (et non côté serveur avec la page) : un candidat ne
 // doit jamais recevoir ces données, qui contiennent les réponses.
+//
+// La LISTE est celle de la banque d'examen (`QuestionListView`, 19/08/2026) :
+// même barre d'outils, mêmes filtres, mêmes cartes. Deux différences, portées
+// par les props optionnelles du composant : pas de libellés (ce sont les
+// étiquettes de la banque) et pas d'examens (une question de parcours
+// n'appartient à aucun examen).
+//
+// Deux ajouts propres au parcours, eux aussi optionnels côté liste :
+//   - l'éditeur s'ouvre DANS la liste, à la place de la carte (`renderEditor`),
+//     là où la banque le pose dans sa feuille ;
+//   - un double-clic sur une carte l'ouvre. Raccourci seulement : le crayon
+//     fait la même chose et reste le geste découvrable. Il n'entre en conflit
+//     avec rien ici, une carte de parcours n'ayant pas d'action au clic simple
+//     (côté banque, le clic pose la question sur la feuille).
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { ArrowLeft, Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
-import { palette, withAlpha } from '@/lib/theme';
-import ConfirmDialog from '@/components/ConfirmDialog';
-import { Button } from '@/components/ui/button';
-import { Tooltip } from '@/components/ui/tooltip';
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import { palette } from '@/lib/theme';
 import type { Chapter } from '@/app/actions/workshopChapters';
 // Le parcours utilise le MÊME éditeur que la banque d'examen. Il exposait
 // auparavant un second éditeur en popup (`QuestionEditor`), qui avait dérivé :
@@ -26,6 +37,8 @@ import type { Chapter } from '@/app/actions/workshopChapters';
 // Une seule implémentation : une correction profite désormais aux deux côtés.
 import { type Question, emptyQuestion } from '../QuestionEditor';
 import InlineQuestionEditor from '../examen/InlineQuestionEditor';
+import QuestionListView from '../examen/QuestionListView';
+import { LIST_INSET_X } from '../examen/examShared';
 import {
   getParcoursQuestions,
   saveParcoursQuestion,
@@ -34,22 +47,19 @@ import {
 
 export default function ParcoursQuestions({ workshopId, chapters, onBack }: { workshopId: string; chapters: Chapter[]; onBack: () => void }) {
   const t = useTranslations('programme');
-  const tExam = useTranslations('examen');
 
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState<Question[]>([]);
   // Pas d'état de libellés : ils ne sont pas affichés côté parcours (ce sont
   // les étiquettes de la banque d'examen — voir `showLabels` sur l'éditeur).
-  const [notions, setNotions] = useState<{ id: string; title: string }[]>([]);
+  // `chapterId` accompagne chaque notion : c'est de là que la liste tire le
+  // chapitre d'une question, comme la banque.
+  const [notions, setNotions] = useState<{ id: string; title: string; chapterId: string | null }[]>([]);
   const [editing, setEditing] = useState<Question | null>(null);
-  // Le chapitre s'affecte depuis la liste, pas depuis l'éditeur (partagé avec
-  // la banque d'examen, qui ignore les chapitres). Cet état ne pilote donc
-  // aucun champ : il mémorise le chapitre de la question en cours d'édition
-  // pour le réinjecter à la sauvegarde, que QuestionEditor perdrait sinon.
-  const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
+  // Grappe dépliée dans la liste (chevron de la carte).
+  const [openId, setOpenId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [deleteTarget, setDeleteTarget] = useState<Question | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,13 +82,10 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
 
   function openEditor(q: Question) {
     setEditing(q);
-    setEditingChapterId(q.chapterId ?? null);
     setError('');
   }
 
-  async function handleSave(q: Question) {
-    // QuestionEditor ne connaît pas le chapitre : on le réinjecte à la sortie.
-    const question: Question = { ...q, chapterId: editingChapterId };
+  async function handleSave(question: Question) {
     setSaving(true);
     setError('');
     const result = await saveParcoursQuestion(workshopId, question);
@@ -94,26 +101,9 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
     setEditing(null);
   }
 
-  // Affectation à un chapitre depuis la liste : mise à jour optimiste puis
-  // enregistrement, avec retour à l'état précédent si ça échoue. Pas de bouton
-  // « enregistrer » — c'est un champ unique, l'aller-retour serveur est court.
-  async function handleChapterChange(question: Question, chapterId: string | null) {
-    const previous = question.chapterId ?? null;
-    const updated: Question = { ...question, chapterId };
-    setQuestions((prev) => prev.map((x) => (x.id === question.id ? updated : x)));
-    setError('');
-
-    const result = await saveParcoursQuestion(workshopId, updated);
-    if (!result.success) {
-      setQuestions((prev) => prev.map((x) => (x.id === question.id ? { ...x, chapterId: previous } : x)));
-      setError(result.error ?? t('questions.saveError'));
-    }
-  }
-
-  async function handleDelete() {
-    if (!deleteTarget) return;
-    const target = deleteTarget;
-    setDeleteTarget(null);
+  // La confirmation est portée par la liste (`QuestionListView`) : ici, on ne
+  // reçoit que la décision prise.
+  async function handleDelete(target: Question) {
     setError('');
     const result = await deleteParcoursQuestion(workshopId, target.id);
     if (!result.success) {
@@ -124,15 +114,23 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
     if (editing?.id === target.id) setEditing(null);
   }
 
-  if (editing) {
+  // Rendu par la liste, à la place de la carte de la question éditée — ou tout
+  // en haut si cette carte n'y est pas (question nouvelle, ou écartée par les
+  // filtres actifs). Voir `renderEditor` dans `QuestionListView`.
+  function editeur() {
+    if (!editing) return null;
     return (
-      <div style={{ padding: '18px 22px 22px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
-        {error && <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 10 }}>{error}</div>}
+      <div>
         {/* MÊME éditeur que la banque d'examen — voir la note d'import. Les
             props omis sont ceux qui n'ont pas de sens ici : le barème
             (`weight`) appartient à l'examen, et l'édition d'un libellé demande
             de connaître les questions des DEUX contextes. */}
+        {/* `key` sur l'identifiant : passer d'une question à l'autre (ou à une
+            nouvelle) sans quitter la liste garde l'éditeur au MÊME endroit de
+            l'arbre, et React réutiliserait alors son état — le brouillon de la
+            question précédente restait affiché sous le titre de la suivante. */}
         <InlineQuestionEditor
+          key={editing.id}
           workshopId={workshopId}
           question={editing}
           isNew={!questions.some((q) => q.id === editing.id)}
@@ -152,100 +150,53 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
   }
 
   return (
-    <div style={{ padding: '18px 22px 22px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+    <div style={{ height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
+      {/* Coquille centrée, à la largeur de la page paramètres (1100 =
+          navigation + colonne de droite, `.settings-shell`) : sur grand écran,
+          des cartes de question étalées sur toute la fenêtre donnent des lignes
+          d'énoncé interminables et un vide immense entre le texte et ses deux
+          boutons, à l'autre bout. */}
+      <div style={{ maxWidth: 1100, width: '100%', margin: '0 auto' }}>
+      {/* En-tête propre au parcours. Le retrait horizontal est celui de la
+          liste (`LIST_INSET_X`), pour que titre et cartes s'alignent. */}
+      <div style={{ padding: `18px ${LIST_INSET_X}px 0` }}>
         <button
           onClick={onBack}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, color: palette.inkMuted, padding: 0 }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, color: palette.inkMuted, padding: 0, marginBottom: 14 }}
         >
           <ArrowLeft size={14} /> {t('questions.back')}
         </button>
-        <Button variant="ink" size="sm" onClick={() => openEditor(emptyQuestion())}>
-          <Plus size={13} /> {t('questions.new')}
-        </Button>
+
+        <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{t('questions.title')}</div>
+        <div style={{ fontSize: 12.5, color: palette.inkFaint, marginBottom: 4 }}>{t('questions.desc')}</div>
+        <div style={{ fontSize: 12.5, color: palette.inkFaint }}>{t('questions.noChapterHint')}</div>
+
+        {error && <div style={{ fontSize: 12.5, color: palette.danger, marginTop: 10 }}>{error}</div>}
       </div>
 
-      <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{t('questions.title')}</div>
-      <div style={{ fontSize: 12.5, color: palette.inkFaint, marginBottom: 4 }}>{t('questions.desc')}</div>
-      <div style={{ fontSize: 12.5, color: palette.inkFaint, marginBottom: 12 }}>{t('questions.noChapterHint')}</div>
-
-      {error && <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 10 }}>{error}</div>}
-
-      <div style={{ background: palette.surfaceRaised, borderRadius: 14, border: `1px solid ${palette.line}`, padding: '6px 18px' }}>
-        {loading ? (
-          <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 12.5, color: palette.inkSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-            <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> {t('questions.loading')}
-          </div>
-        ) : questions.length === 0 ? (
-          <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 12.5, color: palette.inkFaint }}>{t('questions.empty')}</div>
-        ) : (
-          questions.map((q, i) => (
-            <div
-              key={q.id}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 36, padding: '9px 0', borderBottom: i < questions.length - 1 ? `1px solid ${palette.line}` : 'none' }}
-            >
-              <div style={{ fontSize: 11, fontWeight: 600, color: palette.inkFaint, fontFamily: 'var(--font-mono)', width: 24, flexShrink: 0 }}>
-                {String(i + 1).padStart(2, '0')}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {q.content.trim() || tExam('noStatement')}
-                </div>
-                <div style={{ fontSize: 11, color: palette.inkFaint, marginTop: 2 }}>
-                  {tExam(`responseType.${q.responseType}`)}
-                </div>
-              </div>
-              {/* Chapitre de rattachement : c'est lui qui détermine dans quel
-                  pot la question peut être tirée. Sans chapitre, jamais tirée. */}
-              <Tooltip content={t('questions.chapter')}>
-              <select
-                value={q.chapterId ?? ''}
-                onChange={(e) => handleChapterChange(q, e.target.value || null)}
-                aria-label={t('questions.chapter')}
-                style={{ flexShrink: 0, width: 190, height: 32, padding: '0 10px', borderRadius: 9, border: `1px solid ${q.chapterId ? palette.lineStrong : withAlpha(palette.danger, 0.45)}`, background: palette.surfaceInput, color: q.chapterId ? palette.ink : palette.inkFaint, fontSize: 12.5, fontFamily: 'inherit', cursor: 'pointer' }}
-              >
-                <option value="">{t('questions.noChapter')}</option>
-                {chapters.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              </Tooltip>
-              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                <Tooltip content={t('questions.edit')}>
-                  <button
-                    onClick={() => openEditor(q)}
-                    aria-label={t('questions.edit')}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 9, background: 'transparent', border: `1px solid ${palette.lineStrong}`, color: palette.inkMuted, cursor: 'pointer' }}
-                  >
-                    <Pencil size={14} strokeWidth={1.75} />
-                  </button>
-                </Tooltip>
-                <Tooltip content={t('questions.delete')}>
-                  <button
-                    onClick={() => setDeleteTarget(q)}
-                    aria-label={t('questions.delete')}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 9, background: withAlpha(palette.danger, 0.10), border: `1px solid ${withAlpha(palette.danger, 0.30)}`, color: palette.danger, cursor: 'pointer' }}
-                  >
-                    <Trash2 size={14} strokeWidth={1.75} />
-                  </button>
-                </Tooltip>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      {deleteTarget && (
-        <ConfirmDialog
-          title={t('questions.deleteTitle')}
-          description={tExam('irreversible')}
-          confirmLabel={t('questions.delete')}
-          cancelLabel={tExam('cancel')}
-          portal
-          onConfirm={handleDelete}
-          onCancel={() => setDeleteTarget(null)}
+      {loading ? (
+        <div style={{ padding: '28px 0', textAlign: 'center', fontSize: 12.5, color: palette.inkSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+          <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> {t('questions.loading')}
+        </div>
+      ) : (
+        // Ni `labels` ni `exams` : le parcours n'a ni étiquettes ni examens, et
+        // leur absence retire les sections correspondantes au lieu de les
+        // désactiver (voir `QuestionListView`).
+        <QuestionListView
+          questions={questions}
+          notions={notions}
+          chapters={chapters}
+          renderEditor={editeur}
+          editOnDoubleClick
+          editingQuestionId={editing?.id ?? null}
+          openId={openId}
+          setOpenId={setOpenId}
+          onEditQuestion={openEditor}
+          onNewQuestion={() => openEditor(emptyQuestion())}
+          onDeleteQuestion={handleDelete}
         />
       )}
+      </div>
     </div>
   );
 }

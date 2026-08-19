@@ -2,7 +2,7 @@
 
 import { useState, useEffect, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Mail, UserPlus, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Mail, UserPlus, Pencil, Plus, Trash2, EllipsisVertical, ArrowUp, ArrowDown, UserMinus } from 'lucide-react';
 import { palette, ink, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -12,7 +12,7 @@ import {
   getJoinRequests, approveJoinRequest, rejectJoinRequest, type PendingInvite,
   createMemberGroup, updateMemberGroup, deleteMemberGroup, setMemberGroups as setMemberGroupsAction, type MemberGroup,
 } from '@/app/actions/workshops';
-import { LABEL_COLORS } from '../tabs/examen/examShared';
+import { LABEL_COLORS, SelectMenu } from '../tabs/examen/examShared';
 import { ROLE_RANK, avatarTone, type Member, type WorkshopRole } from './settingsShared';
 
 // Bouton de ligne façon maquette (Paramètres > Membres) : plus grand rayon et
@@ -231,6 +231,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
   const [memberActionId, setMemberActionId] = useState<string | null>(null);
 
   async function handleSetRole(m: Member, newRole: 'manager' | 'member') {
+    if (memberActionId === m.id) return;
     setMemberActionId(m.id);
     const res = await setMemberRole(workshopId, m.userId, newRole);
     setMemberActionId(null);
@@ -240,6 +241,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
   }
 
   async function handleExcludeMember(m: Member) {
+    if (memberActionId === m.id) return;
     setMemberActionId(m.id);
     const res = await removeMember(workshopId, m.userId);
     setMemberActionId(null);
@@ -602,26 +604,47 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
               );
             }
 
-            // Vue « tous les membres » : actions de rôle/exclusion classiques.
+            // Vue « tous les membres » : actions de rôle/exclusion regroupées
+            // dans un menu ⋮. Elles ne sont ni fréquentes ni urgentes — les
+            // laisser en boutons pleins faisait de la promotion et surtout de
+            // l'exclusion des cibles de clic permanentes, à côté d'une liste
+            // qu'on parcourt surtout pour lire. Le panneau se pose en
+            // `position: fixed` (`SelectMenu`, mode flottant) : la carte est en
+            // `overflow: hidden`, un menu en `absolute` y serait rogné.
             if (!filterGroupId) {
               return localMembers.map((member) => renderMemberRow(
                 member,
                 member.role !== 'owner' && actorRank > ROLE_RANK[member.role] ? (
-                  <>
-                    {member.role === 'member' && (
-                      <RowBtn tone="ghost" disabled={memberActionId === member.id} onClick={() => handleSetRole(member, 'manager')}>
-                        {t('members.promote')}
-                      </RowBtn>
-                    )}
-                    {member.role === 'manager' && (
-                      <RowBtn tone="ghost" disabled={memberActionId === member.id} onClick={() => handleSetRole(member, 'member')}>
-                        {t('members.demote')}
-                      </RowBtn>
-                    )}
-                    <RowBtn tone="danger" disabled={memberActionId === member.id} onClick={() => handleExcludeMember(member)}>
-                      {t('members.exclude')}
-                    </RowBtn>
-                  </>
+                  <SelectMenu
+                    // Le pictogramme dit le sens de l'action avant le libellé :
+                    // la flèche monte pour la promotion, descend pour la
+                    // rétrogradation. « exclure » en porte un lui aussi, sans
+                    // quoi son libellé décrocherait de la colonne des deux
+                    // autres.
+                    items={[
+                      member.role === 'member'
+                        ? { value: 'promote', label: t('members.promote'), icon: <ArrowUp size={14} strokeWidth={2} /> }
+                        : { value: 'demote', label: t('members.demote'), icon: <ArrowDown size={14} strokeWidth={2} /> },
+                      { value: 'exclude', label: t('members.exclude'), tone: 'danger', icon: <UserMinus size={14} strokeWidth={2} /> },
+                    ]}
+                    onSelect={(action) => {
+                      if (action === 'promote') handleSetRole(member, 'manager');
+                      else if (action === 'demote') handleSetRole(member, 'member');
+                      else handleExcludeMember(member);
+                    }}
+                    title={t('members.actions')}
+                    triggerLabel={t('members.actions')}
+                    panelWidth="auto"
+                    align="right"
+                    triggerStyle={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      width: 32, height: 32, padding: 0, borderRadius: 9,
+                      border: 'none', background: 'transparent',
+                      color: palette.inkMuted, cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    <EllipsisVertical size={15} strokeWidth={1.75} />
+                  </SelectMenu>
                 ) : null
               ));
             }
