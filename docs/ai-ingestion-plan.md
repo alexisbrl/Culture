@@ -514,12 +514,24 @@ Annulation possible **tant que** :
 2. **aucun élément modifié** → aucune ligne du lot n'a `updated_at` postérieur à
    son `created_at`.
 
-> ⚠️ **Piège d'implémentation, toujours d'actualité.** `questionToRow`
-> (`src/lib/workshops/exam.ts`) écrit explicitement `updated_at` à chaque
-> `upsert`, **y compris à la création**. Les deux dates seraient donc séparées dès
-> l'insertion et le bouton d'annulation ne s'afficherait jamais. Correctif retenu :
-> **aligner `updated_at` sur `created_at` pendant l'ingestion** — surtout pas une
-> tolérance de quelques secondes, qui se dérègle toute seule.
+> ⚠️ **Piège d'implémentation — parade trouvée et mesurée le 20/08/2026.**
+> `questionToRow` (`src/lib/workshops/exam.ts`) écrit explicitement `updated_at`
+> à chaque `upsert`, **y compris à la création** : tout import naîtrait « déjà
+> modifié » et le bouton d'annulation ne s'afficherait jamais. **Sur les 130
+> questions actuelles, 65 ont effectivement `updated_at > created_at`** — le
+> piège n'était pas théorique.
+>
+> La parade tient à une propriété de Postgres : `now()` renvoie l'heure de
+> **début de transaction**. Un INSERT qui omet `created_at` **et** `updated_at`
+> leur donne donc une valeur strictement identique — les deux colonnes ont
+> `default now()` sur les quatre tables. **Vérifié en base** le 20/08/2026 par
+> insertion réelle sur `workshop_chapters`, `workshop_bricks` et
+> `exam_questions` : `created_at = updated_at` dans les trois cas.
+>
+> **Donc : l'écriture d'ingestion doit OMETTRE `updated_at`, pas l'aligner** — et
+> surtout pas se rabattre sur une tolérance de quelques secondes, qui finirait
+> immanquablement par mentir dans un sens ou dans l'autre. La comparaison reste
+> exacte (`updated_at > created_at`).
 
 ### Où se trouve le bouton
 
@@ -774,8 +786,17 @@ bloquant (l'annulation par `import_id` couvre le besoin), mais à garder en têt
 2. **`crypto.randomUUID()` dans `emptyQuestion()`** (§12.1) — bloquant,
    indépendant, une ligne.
 3. **Contrôles d'intégrité dans `lib/`** (§11) + pastille « aucune notion ».
-4. **`import_id` + `ai_imports` + annulation** (§10), correctif `updated_at`
-   compris — migration expand, testable seule.
+4. ~~**`import_id` + `ai_imports` + annulation**~~ ✅ **fait le 20/08/2026** (§10)
+   — migration expand appliquée (table `ai_imports`, colonne `import_id` sur les
+   trois tables étiquetables, index partiels), module
+   `src/lib/workshops/imports.ts` (`assertImportId`, `importCancelState`,
+   `getImportSummary`, `cancelImport`), 12 tests sur les deux gardes pures.
+   Mécanisme vérifié en base de bout en bout : import simulé, dates identiques,
+   annulation par double filtre, lignes manuelles intactes. **Reste à faire au
+   moment du branchement** : le wrapper `'use server'` avec authz (volontairement
+   non créé — une server action exportée est une URL POST publique, on ne l'ouvre
+   pas avant d'en avoir l'usage), l'écriture qui pose les étiquettes (étape 5),
+   et le bandeau (étape 7).
 5. **Schéma Zod + `ingestWorkshopPlan()`** (§7) — testable avec un plan écrit à
    la main, **sans une ligne d'IA**.
 6. **Interface `PlanProvider` + implémentation Claude** (§4, §5).

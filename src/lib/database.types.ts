@@ -23,6 +23,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_imports: {
+        Row: {
+          cached_tokens: number
+          created_at: string
+          created_by: string
+          file_ids: Json
+          id: string
+          input_tokens: number
+          output_tokens: number
+          scope: Json
+          workshop_id: string
+        }
+        Insert: {
+          cached_tokens?: number
+          created_at?: string
+          created_by: string
+          file_ids?: Json
+          id?: string
+          input_tokens?: number
+          output_tokens?: number
+          scope?: Json
+          workshop_id: string
+        }
+        Update: {
+          cached_tokens?: number
+          created_at?: string
+          created_by?: string
+          file_ids?: Json
+          id?: string
+          input_tokens?: number
+          output_tokens?: number
+          scope?: Json
+          workshop_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_imports_workshop_id_fkey"
+            columns: ["workshop_id"]
+            isOneToOne: false
+            referencedRelation: "workshops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brick_mastery: {
         Row: {
           bloom_level: number
@@ -314,6 +358,7 @@ export type Database = {
           exam_ids: Json
           id: string
           image_key: string | null
+          import_id: string | null
           pools: Json
           updated_at: string
           workshop_id: string
@@ -325,6 +370,7 @@ export type Database = {
           exam_ids?: Json
           id: string
           image_key?: string | null
+          import_id?: string | null
           pools?: Json
           updated_at?: string
           workshop_id: string
@@ -336,11 +382,19 @@ export type Database = {
           exam_ids?: Json
           id?: string
           image_key?: string | null
+          import_id?: string | null
           pools?: Json
           updated_at?: string
           workshop_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "exam_questions_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "ai_imports"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "exam_questions_workshop_id_fkey"
             columns: ["workshop_id"]
@@ -409,6 +463,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          import_id: string | null
           title: string
           updated_at: string
           workshop_id: string
@@ -418,6 +473,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          import_id?: string | null
           title: string
           updated_at?: string
           workshop_id: string
@@ -427,6 +483,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          import_id?: string | null
           title?: string
           updated_at?: string
           workshop_id?: string
@@ -437,6 +494,13 @@ export type Database = {
             columns: ["chapter_id"]
             isOneToOne: false
             referencedRelation: "workshop_chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workshop_bricks_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "ai_imports"
             referencedColumns: ["id"]
           },
           {
@@ -453,6 +517,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          import_id: string | null
           name: string
           position: number
           updated_at: string
@@ -462,6 +527,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          import_id?: string | null
           name: string
           position?: number
           updated_at?: string
@@ -471,12 +537,20 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          import_id?: string | null
           name?: string
           position?: number
           updated_at?: string
           workshop_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "workshop_chapters_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "ai_imports"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "workshop_chapters_workshop_id_fkey"
             columns: ["workshop_id"]

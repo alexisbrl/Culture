@@ -120,3 +120,13 @@ AUCUN
   (`sondage`, `ordre`, `fill_blank`, `audio`…) existe en base. ⚠️ L'ajout d'un
   nouveau type de réponse au produit devra mettre à jour cette contrainte dans la
   même migration que le code.
+
+- **20/08/2026 — Étiquetage des imports IA** (`2026-08-20-import-id-et-ai-imports.sql`) :
+  **expand pure**, appliquée directement — table `ai_imports`, colonne
+  `import_id` (nullable, FK `on delete set null`) sur `workshop_chapters`,
+  `workshop_bricks` et `exam_questions`, plus des index partiels. Rien n'est
+  supprimé ni renommé, le code déployé ignore ces colonnes. `database.types.ts`
+  régénéré. Mécanisme vérifié en base : un import simulé produit bien
+  `created_at = updated_at` sur les trois tables (condition de l'annulation), et
+  la suppression par double filtre `import_id` + `workshop_id` n'a touché aucune
+  ligne manuelle.
