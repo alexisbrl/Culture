@@ -8,7 +8,10 @@ import type { Question, ExamPool } from '@/lib/workshops/examTypes';
 
 // Notions proposées à l'association dans l'éditeur — toutes celles de l'atelier,
 // sans restriction de chapitre (une question peut mobiliser plusieurs chapitres).
-type QuestionNotion = { id: string; title: string };
+// `chapterId` accompagne chacune : c'est de là que la liste tire le chapitre
+// d'une question, comme la banque d'examen (une question n'a pas de chapitre à
+// elle, voir `lib/workshops/exam.ts`).
+type QuestionNotion = { id: string; title: string; chapterId: string | null };
 
 // ⚠️ SÉCURITÉ — Comme la banque d'examen, les questions du parcours contiennent
 // les RÉPONSES : la gestion est réservée aux gestionnaires. Les candidats n'y
@@ -31,7 +34,7 @@ export async function getParcoursQuestions(workshopId: string): Promise<{
     notionsLib.listNotions(workshopId),
   ]);
 
-  return { ...data, notions: notions.map((n) => ({ id: n.id, title: n.title })) };
+  return { ...data, notions: notions.map((n) => ({ id: n.id, title: n.title, chapterId: n.chapterId })) };
 }
 
 export async function saveParcoursQuestion(workshopId: string, question: Question): Promise<{ success: boolean; error?: string }> {

@@ -69,14 +69,11 @@ export type QuestionItem = {
 // libellés saisis une seule fois, voir `QuestionPart`).
 export type QuestionGroup = {
   id: string;
-  title: string;
   image?: QuestionMedia | null;
   audio?: QuestionMedia | null;
   /** Libellés d'examen (`exam_pools`) — communs à tout le groupe. */
   pools: string[];
   examIds: string[];
-  /** Chapitre de rattachement, pour les groupes du parcours pédagogique. */
-  chapterId?: string | null;
   createdAt?: string;
   /** Au moins une. `questions[0]` est la question principale de la copie. */
   questions: QuestionItem[];
@@ -124,12 +121,10 @@ export function toGroup(q: Question): QuestionGroup {
 
   return {
     id: q.id,
-    title: q.title ?? '',
     image: q.image ?? null,
     audio: q.audio ?? null,
     pools: q.pools ?? [],
     examIds: q.examIds ?? [],
-    chapterId: q.chapterId ?? null,
     createdAt: q.createdAt,
     questions: [head, ...linked],
   };
@@ -144,12 +139,10 @@ export function fromGroup(group: QuestionGroup): Question {
 
   return {
     id: group.id,
-    title: group.title ?? '',
     image: group.image ?? null,
     audio: group.audio ?? null,
     pools: group.pools ?? [],
     examIds: group.examIds ?? [],
-    chapterId: group.chapterId ?? null,
     createdAt: group.createdAt,
 
     content: head.content,
@@ -243,14 +236,12 @@ export function normalizeGroupInput(raw: unknown, id: string): QuestionGroup {
 
   return {
     id,
-    title: asString(r.title),
     // Une IA ne dépose pas de fichier : elle ne peut fournir qu'une clé de
     // stockage déjà connue, sinon la pièce jointe est ignorée.
     image: typeof image.key === 'string' ? { key: image.key } : null,
     audio: typeof audio.key === 'string' ? { key: audio.key } : null,
     pools: asStringArray(r.pools),
     examIds: [],
-    chapterId: typeof r.chapterId === 'string' ? r.chapterId : null,
     questions,
   };
 }

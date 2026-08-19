@@ -33,6 +33,37 @@ et l'incident du 22/06/2026 dans `docs/changelog.md`.
 
 ## À appliquer
 
+- **19/08/2026 — Question sans titre : suppression de `exam_questions.title`**
+  (`2026-08-19-question-sans-titre.sql`). Plus rien ne permettait de saisir ce
+  titre depuis le passage à l'éditeur en ligne ; il ne restait que d'anciennes
+  valeurs, qui masquaient l'énoncé dans les listes. Le code ne le lit ni ne
+  l'écrit plus. **Prérequis** : branche mergée et **déployée** — `title` figure
+  encore dans `GROUP_COLUMNS` en production, donc dans tous les `select` de
+  questions. À appliquer avec la suppression de `chapter_id` ci-dessous : même
+  table, même prérequis, une seule régénération de `database.types.ts`.
+
+- **19/08/2026 — Question sans chapitre : suppression de `exam_questions.chapter_id`**
+  (`2026-08-19-question-sans-chapitre.sql`). Le chapitre d'une question de
+  parcours se déduit maintenant des notions qu'elle mobilise ; la colonne n'est
+  plus ni lue ni écrite. **Prérequis** : branche mergée et **déployée** — la
+  colonne figure encore dans `GROUP_COLUMNS` en production, donc dans tous les
+  `select` de questions (banque d'examen comprise), et sa disparition les ferait
+  échouer en bloc. Le fichier contient d'abord un `select` de contrôle : il
+  compte les questions dont le rattachement manuel va être perdu sans qu'aucune
+  notion rangée ne prenne le relais — celles-là ne seront plus tirées tant
+  qu'on ne leur aura pas relié une notion rangée dans un chapitre.
+
+- **19/08/2026 — Notion à texte unique : suppression de `workshop_bricks.content`**
+  (`2026-08-19-notion-texte-unique.sql`, phase 2). Une notion n'a plus qu'un
+  texte, porté par `title` ; `content` n'est plus ni lu ni écrit par le code.
+  **Prérequis** : la branche `feat/infobulles-maison` doit être **mergée et
+  déployée** — le code en ligne lit encore `content` dans le `select` de
+  `listNotions`, et une colonne disparue y ferait échouer le select entier,
+  donc une page paramètres sans aucune notion, sans erreur visible.
+  **Phase 1 du même fichier (recoller les descriptions au titre) : à appliquer
+  tout de suite**, elle ne casse rien en ligne — et tant qu'elle ne l'est pas,
+  les descriptions déjà saisies n'apparaissent plus nulle part.
+
 - **15/08/2026 — `exam_questions.context` : défaut à `'parcours'`** (`2026-08-15-context-defaut-parcours.sql`) :
   bascule le `DEFAULT` de la colonne de `'exam'` à `'parcours'`. Règle métier :
   un groupe est toujours d'un côté ou de l'autre, et à défaut il va dans le

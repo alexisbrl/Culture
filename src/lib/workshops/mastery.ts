@@ -166,7 +166,8 @@ async function creditNotions(
 }
 
 export type ParcoursProgress = {
-  /** Avancement de l'atelier entier, 0-100 (toutes ses notions, rangées ou non). */
+  /** Avancement de l'atelier entier, 0-100, sur ses notions **rangées dans un
+   *  chapitre** — voir `getParcoursProgress` pour la raison. */
   workshopPercent: number;
   /** Avancement par chapitre, 0-100. Un chapitre sans notion vaut 0. */
   chapterPercent: Record<string, number>;
@@ -204,12 +205,23 @@ export async function getParcoursProgress(workshopId: string, userId: string): P
   const scores = new Map<string, number>();
   for (const row of mastery ?? []) scores.set(row.brick_id as string, row.score as number);
 
+  // Les notions SANS chapitre ne comptent nulle part (19/08/2026). Elles
+  // comptaient auparavant dans l'avancement de l'atelier, alors qu'aucun
+  // exercice ne peut les faire progresser : le tirage se fait par chapitre
+  // (`drawParcoursQuestion`) et elles n'ont pas de pot. Une seule notion laissée
+  // hors chapitre plafonnait donc la barre de l'atelier sous 100 %, sans que le
+  // membre puisse voir ce qui manque ni y remédier. « Sans chapitre » reste un
+  // sas côté gestion (notion créée à la volée, chapitre supprimé, ingestion IA
+  // à venir) : ce qui y attend n'est pas encore du programme.
   const byChapter = new Map<string, number[]>();
+  const rangees: number[] = [];
   for (const notion of all) {
     const chapterId = notion.chapter_id as string | null;
     if (!chapterId) continue;
+    const score = scores.get(notion.id as string) ?? 0;
+    rangees.push(score);
     const list = byChapter.get(chapterId) ?? [];
-    list.push(scores.get(notion.id as string) ?? 0);
+    list.push(score);
     byChapter.set(chapterId, list);
   }
 
@@ -217,7 +229,9 @@ export async function getParcoursProgress(workshopId: string, userId: string): P
   for (const [chapterId, list] of byChapter) chapterPercent[chapterId] = percentOf(list);
 
   return {
-    workshopPercent: percentOf(all.map((n) => scores.get(n.id as string) ?? 0)),
+    // `percentOf` rend 0 sur une liste vide : un atelier dont aucune notion
+    // n'est rangée affiche donc 0 %, comme un atelier sans notion du tout.
+    workshopPercent: percentOf(rangees),
     chapterPercent,
   };
 }

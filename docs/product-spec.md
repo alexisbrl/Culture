@@ -63,7 +63,7 @@ Termes utilisés dans toute la codebase et dans ce document.
 | Terme | Définition |
 |---|---|
 | **Atelier** | Espace pédagogique créé par un gestionnaire à partir de fichiers sources. Contient un programme éducatif et un générateur d'examens. |
-| **Notion** | Unité minimale d'information extraite d'un fichier source par l'IA (ou créée à la main). Un titre obligatoire, un contenu détaillé optionnel, rattachement à un chapitre optionnel. Terme produit et code depuis le chantier de refonte UI (08/2026) — anciennement « brique de connaissance » ; les tables Supabase restent nommées `workshop_bricks`/`brick_mastery`/`exam_question_bricks`, voir `CLAUDE.md` §1. |
+| **Notion** | Unité minimale d'information extraite d'un fichier source par l'IA (ou créée à la main). **Un seul texte** (280 caractères, l'idée en une phrase — le titre et la description séparés ont fusionné le 19/08/2026), rattachement à un chapitre optionnel. Terme produit et code depuis le chantier de refonte UI (08/2026) — anciennement « brique de connaissance » ; les tables Supabase restent nommées `workshop_bricks`/`brick_mastery`/`exam_question_bricks`, voir `CLAUDE.md` §1. |
 | **Programme éducatif** | Parcours d'entraînements personnalisés par candidat, généré à partir des notions d'un atelier. |
 | **Section** | Groupe de notions au sein d'un programme éducatif. |
 | **Générateur d'examen** | Outil permettant de créer, gérer et corriger des examens à partir des notions d'un atelier. |
@@ -231,7 +231,7 @@ Un propriétaire peut activer le statut Premium sur son atelier. C'est une opér
 ### Notions
 
 - Générées par l'IA à partir des fichiers sources de l'atelier, ou ajoutées à la main
-- Chaque notion possède : un **titre** (l'idée en une phrase) et un **contenu détaillé** optionnel
+- Chaque notion n'a qu'**un texte** : l'idée en une phrase, 280 caractères au plus. Il sert de libellé partout ailleurs (liaison aux questions, parcours). Le titre et le contenu détaillé séparés ont fusionné le 19/08/2026 — la liste n'affichait que le titre, la description ne se lisait qu'en rouvrant le formulaire
 - Une notion peut être rattachée à un **chapitre** — le rattachement est optionnel, les notions non rangées apparaissent sous « sans chapitre »
 - Pas de niveau de difficulté ni d'importance (décision du 19/07/2026, remplace la spécification initiale)
 - CRUD manuel réservé au propriétaire et aux gestionnaires, dans Paramètres → Notions
@@ -272,7 +272,9 @@ Toute question — parcours **et** banque d'examen — porte :
 
 Les deux se saisissent dans l'éditeur de question, section « Options par question ».
 
-Chaque question de parcours se rattache en plus à **un chapitre** (`exam_questions.chapter_id`). L'affectation se fait par un sélecteur **sur chaque ligne de la liste** — enregistrement immédiat, sans passer par l'éditeur, qui est partagé avec la banque d'examen et ignore les chapitres. Une question sans chapitre n'est jamais tirée (son sélecteur est souligné en rouge). Supprimer un chapitre ne supprime pas ses questions : elles retombent dans « sans chapitre » (FK `on delete set null`, même choix que les notions).
+Une question de parcours **n'a pas de chapitre à elle** : elle hérite de ceux des **notions qu'elle mobilise** (19/08/2026 — remplace `exam_questions.chapter_id` et son sélecteur par ligne). C'était déjà la règle du filtre « chapitre » de la banque d'examen ; c'est maintenant aussi celle du tirage. Trois conséquences : une question posée sur des notions de deux chapitres est tirable dans les deux ; une question sans notion — ou dont aucune notion n'est rangée — n'est jamais tirée ; et ranger une notion dans un chapitre suffit à y faire entrer toutes les questions qui la mobilisent.
+
+La **liste des questions du parcours** est celle de la banque d'examen (même composant, `QuestionListView`) : recherche, tri, panneau de filtres (type de réponse, statut, chapitre) et cartes identiques. Deux différences, faute d'objet : ni libellés (ce sont les étiquettes de la banque), ni examens (une question de parcours n'appartient à aucun examen).
 
 **Exercice (page candidat)**
 
@@ -307,7 +309,8 @@ C'est un **rattrapage exponentiel plafonné**. Le terme proportionnel fait qu'un
 - Une **mauvaise réponse ne retire rien** : le score est monotone, une notion travaillée ne régresse jamais. Idem pour les questions sans correction automatique (texte libre, dessin, fichier) : `correct: null`, donc score inchangé.
 - Le **plafond par cible** est structurant : une question « mémoriser » ne peut pas prouver qu'on sait analyser. Un chapitre qui n'a que des questions de Bloom 1 plafonne ses notions à 10 points, donc à 33 % d'avancement.
 - Une question n'alimente que les notions qui lui sont **explicitement reliées** (`exam_question_bricks`). Une question sans notion reliée ne fait progresser aucune barre.
-- **Avancement affiché** — calculé sur le score exact, pas sur le niveau, et saturé à 30 (les 3 premiers niveaux valent 100 %, le 4e est du bonus) : notion = `min(score, 30) / 30`, chapitre = `Σ min(score, 30) / (30 × nombre de notions)`, atelier = même formule sur toutes ses notions.
+- Une notion **sans chapitre ne compte dans aucune barre**, pas même celle de l'atelier (19/08/2026). Aucun exercice ne peut la faire progresser — le tirage se fait par chapitre et elle n'a pas de pot — donc la compter revenait à plafonner la barre de l'atelier sous 100 % sans que le membre puisse voir ce qui manque. « Sans chapitre » est un sas de gestion (notion créée à la volée, chapitre supprimé, ingestion IA), pas encore du programme.
+- **Avancement affiché** — calculé sur le score exact, pas sur le niveau, et saturé à 30 (les 3 premiers niveaux valent 100 %, le 4e est du bonus) : notion = `min(score, 30) / 30`, chapitre = `Σ min(score, 30) / (30 × nombre de notions)`, atelier = même formule, mais **seulement sur les notions rangées dans un chapitre**.
 - Chaque **nouvelle question** (hors réitération) consomme **1 goutte d'eau** *(V2 — l'énergie n'existe pas encore, le compteur de la barre du haut affiche une valeur fixe)*
 - Les gouttes d'eau se regagnent : avec le temps / en quantité aléatoire après un nombre aléatoire de questions *(V2)*
 - Une question ratée est **réposée** jusqu'à être réussie *(non implémenté — le tirage est uniforme dans le chapitre)*

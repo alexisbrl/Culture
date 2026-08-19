@@ -38,7 +38,6 @@ export {
 export function emptyQuestion(): Question {
   return {
     id: 'q' + Date.now(),
-    title: '',
     responseType: 'qcm',
     content: '',
     answer: '',
@@ -265,12 +264,6 @@ export default function QuestionEditor({
 
         {/* body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px 24px' }}>
-          {/* titre */}
-          <div style={{ marginBottom: 18 }}>
-            <FieldLabel hint={t('editor.titleHint')}>{t('editor.titleLabel')}</FieldLabel>
-            <TextField value={draft.title} onChange={(v) => patch({ title: v })} placeholder={t('editor.titlePlaceholder')} />
-          </div>
-
           {/* contenu + pièces jointes */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             <div style={{ flex: 1, minWidth: 0 }}>

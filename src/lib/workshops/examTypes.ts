@@ -259,9 +259,13 @@ export type QuestionPart = {
   notionIds: string[];
 };
 
+// Pas de titre : une question n'a que son énoncé (19/08/2026). Le champ
+// existait du temps de l'éditeur en popup ; l'éditeur en ligne qui l'a remplacé
+// n'a jamais eu de quoi le saisir, si bien qu'il ne restait que des valeurs
+// figées en base — et elles masquaient l'énoncé dans les listes. Colonne
+// `exam_questions.title` en attente de suppression (EN-ATTENTE-DEPLOIEMENT.md).
 export type Question = {
   id: string;
-  title: string;
   responseType: ResponseType;
   content: string;
   // Pièce jointe sur l'énoncé — indépendantes l'une de l'autre, voir QuestionMedia.
@@ -280,10 +284,9 @@ export type Question = {
   examIds: string[];
   createdAt?: string;
   textLines?: number;
-  // Chapitre de rattachement — utilisé uniquement par les questions du parcours
-  // (`context = 'parcours'`), où il détermine dans quel pot la question peut
-  // être tirée. Toujours `null` côté banque d'examen.
-  chapterId?: string | null;
+  // Pas de chapitre sur une question : elle hérite de ceux de ses notions, des
+  // deux côtés (filtre de la banque, tirage du parcours). Voir
+  // `parcoursQuestionIdsOfChapter` dans `lib/workshops/exam.ts`.
   // Niveau de Bloom visé. Non optionnel : toute construction d'une Question doit
   // le fournir (emptyQuestion() met 1), pour qu'il soit impossible d'aboutir en
   // base sans valeur.
@@ -346,7 +349,6 @@ export type ExercisePart = {
 
 export type ExercisePrompt = {
   id: string;
-  title: string;
   content: string;
   // URLs signées déjà résolues côté serveur (jamais la clé de stockage brute) :
   // ce type est la vue « sans réponse » envoyée à un simple membre, voir plus haut.

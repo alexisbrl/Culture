@@ -9,6 +9,7 @@ import { AlignLeft, ArrowDown, ArrowUp, Check, CheckSquare, File, Filter, Info, 
 import { palette, ink, withAlpha, categoryTones, shadow } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { Tooltip } from '@/components/ui/tooltip';
+import { useIsClipped } from '@/components/ui/clipped-text';
 import { type Question, type QuestionPart, type ResponseType } from '../QuestionEditor';
 // Pièce jointe média (image/audio) : voir questionMedia.tsx pour l'explication
 // du cycle d'import évité. Réexporté ici pour ne pas casser les imports
@@ -198,8 +199,16 @@ const MENU_AUTO_MAX = 240;
  *  propre. */
 export const SHEET_PANEL_Z = 3;
 
-export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, title, triggerStyle, wrapperStyle, panelWidth = 'trigger', align = 'left', onScroll = 'close', variant = 'list', footer, children }: {
-  items: readonly { value: string; label: string; color?: string }[];
+export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, title, triggerLabel, triggerStyle, wrapperStyle, panelWidth = 'trigger', align = 'left', onScroll = 'close', variant = 'list', footer, children }: {
+  /** `tone: 'danger'` — entrée destructrice (exclure, supprimer), rendue en
+   *  rouge. Elle reste une entrée comme les autres : c'est la couleur qui
+   *  prévient, pas une mécanique à part.
+   *
+   *  `icon` — pictogramme à gauche du libellé, qui prend la couleur de
+   *  l'entrée. Dès qu'une entrée du menu en porte un, **toutes réservent la
+   *  place** : sans quoi les libellés ne s'aligneraient plus d'une ligne à
+   *  l'autre. */
+  items: readonly { value: string; label: string; color?: string; tone?: 'danger'; icon?: ReactNode }[];
   /** Entrée à marquer comme courante. Absent = menu d'action (« ajouter… »), où
    *  aucune entrée n'est « la » valeur. */
   value?: string;
@@ -212,6 +221,10 @@ export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, titl
   onEditItem?: (value: string) => void;
   editTitle?: string;
   title?: string;
+  /** Nom accessible du déclencheur, nécessaire quand `children` n'a pas de
+   *  texte (bouton à pictogramme seul) : une infobulle décrit, elle ne nomme
+   *  pas (cf. `.claude/rules/frontend-patterns.md`). */
+  triggerLabel?: string;
   triggerStyle?: CSSProperties;
   /** Mode `clip` seulement : style du conteneur, qui devient le référentiel de
    *  position du panneau. Reçoit `position: relative` d'office. */
@@ -268,6 +281,8 @@ export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, titl
     };
   }, [open, place, floating]);
 
+  // Une seule entrée à pictogramme suffit à réserver la gouttière pour toutes.
+  const hasIcons = items.some(i => i.icon);
   const pillItems = variant === 'pills' ? items.filter(i => i.color) : [];
   const rowItems = variant === 'pills' ? items.filter(i => !i.color) : items;
   const panelSkin: CSSProperties = {
@@ -285,9 +300,10 @@ export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, titl
     // l'appartenance dans le DOM.
     <div ref={wrapRef} style={floating ? { display: 'contents' } : { position: 'relative', minWidth: 0, ...wrapperStyle }}>
       <Tooltip content={title}>
-        {/* Pas d'`aria-label` : le déclencheur porte déjà son texte visible
-            (`children`), qui est son nom accessible. */}
-        <button ref={btnRef} type="button" onClick={() => setOpen(v => !v)} style={triggerStyle}>
+        {/* Sans `triggerLabel`, pas d'`aria-label` : le déclencheur porte déjà
+            son texte visible (`children`), qui est son nom accessible — en
+            ajouter un l'écraserait. */}
+        <button ref={btnRef} type="button" aria-label={triggerLabel} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(v => !v)} style={triggerStyle}>
           {children}
         </button>
       </Tooltip>
@@ -323,7 +339,7 @@ export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, titl
             </div>
           )}
           {rowItems.map(item => (
-            <MenuItem key={item.value} item={item} current={item.value === value} wrap={panelWidth === 'auto'} onPick={() => { setOpen(false); onSelect(item.value); }} />
+            <MenuItem key={item.value} item={item} current={item.value === value} wrap={panelWidth === 'auto'} withIcons={hasIcons} onPick={() => { setOpen(false); onSelect(item.value); }} />
           ))}
           {footer?.(() => setOpen(false))}
         </div>
@@ -332,8 +348,9 @@ export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, titl
   );
 }
 
-function MenuItem({ item, current, wrap = false, onPick }: { item: { value: string; label: string; color?: string }; current: boolean; wrap?: boolean; onPick: () => void }) {
+function MenuItem({ item, current, wrap = false, withIcons = false, onPick }: { item: { value: string; label: string; color?: string; tone?: 'danger'; icon?: ReactNode }; current: boolean; wrap?: boolean; withIcons?: boolean; onPick: () => void }) {
   const [hovered, setHovered] = useState(false);
+  const danger = item.tone === 'danger';
   return (
     <button
       type="button"
@@ -343,12 +360,17 @@ function MenuItem({ item, current, wrap = false, onPick }: { item: { value: stri
       style={{
         display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left' as const,
         fontFamily: 'inherit', fontSize: 12.5, fontWeight: current ? 700 : 500,
-        color: current ? palette.greenBrand : palette.ink,
-        background: hovered ? withAlpha(palette.amber, 0.10) : 'transparent',
+        color: danger ? palette.danger : current ? palette.greenBrand : palette.ink,
+        background: hovered ? withAlpha(danger ? palette.danger : palette.amber, 0.10) : 'transparent',
         border: 'none', borderRadius: 8, padding: '7px 10px', cursor: 'pointer',
       }}
     >
       {item.color && <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, flexShrink: 0 }} />}
+      {/* Gouttière de largeur fixe : une entrée sans pictogramme garde la place
+          de celui des autres, sinon son libellé décrocherait de la colonne. */}
+      {withIcons && (
+        <span style={{ width: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{item.icon}</span>
+      )}
       {/* En largeur automatique, une entrée trop longue passe à la ligne plutôt
           que d'être coupée : c'est le maximum du panneau qui décide. */}
       <span style={{ flex: 1, minWidth: 0, ...(wrap ? { whiteSpace: 'normal' as const } : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }) }}>{item.label}</span>
@@ -603,32 +625,10 @@ export function LabelPill({ name, color, size = 'sm', active = false, excluded =
   removeTitle?: string;
 }) {
   const s = LABEL_PILL_SIZES[size];
-  // Infobulle seulement quand le nom est réellement coupé. La coupe se décide à
-  // la largeur disponible et ne se déduit donc pas du nom : on mesure son
-  // débordement, et on le remesure quand la pastille change de largeur
-  // (`ResizeObserver`) — un simple rendu ne suffirait pas. La comparaison
-  // explicite garde l'état contre la boucle de mesure. La tolérance d'un pixel
-  // écarte les faux positifs d'arrondi sous-pixel.
+  // Infobulle seulement quand le nom est réellement coupé — mesuré, pas déduit
+  // du nom (`useIsClipped`, `ui/clipped-text.tsx`, qui porte le détail).
   const textRef = useRef<HTMLSpanElement>(null);
-  const [clipped, setClipped] = useState(false);
-  const measure = useCallback(() => {
-    const el = textRef.current;
-    if (!el) return;
-    const next = el.scrollWidth > el.clientWidth + 1;
-    setClipped(prev => prev === next ? prev : next);
-  }, []);
-  // Rejouée à CHAQUE rendu, sans tableau de dépendances : le nom, la place
-  // disponible ou l'entourage de la pastille ont pu changer sans que ce
-  // composant sache lequel. Même parti pris que `ClampedTitle` plus bas.
-  useLayoutEffect(measure);
-  // Et à chaque changement de largeur, qui lui n'entraîne aucun rendu ici.
-  useLayoutEffect(() => {
-    const el = textRef.current;
-    if (!el) return;
-    const obs = new ResizeObserver(measure);   // `observe()` mesure déjà une fois
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [measure]);
+  const clipped = useIsClipped(textRef);
   const affordance: CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     width: s.affordance, height: s.affordance, borderRadius: '50%', padding: 0,
@@ -1592,8 +1592,13 @@ function ClampedTitle({ text, indent }: { text: string; indent: number }) {
  *  - `tint` : teinte translucide d'un état particulier (posée sur la feuille,
  *    tout juste créée…), avec `borderColor` assorti.
  *  - `children` : le détail déplié, sous le bloc de trois lignes. */
-export function ListCard({ onClick, tint, borderColor, leading, indent = 0, title, meta, actions, children }: {
+export function ListCard({ onClick, onDoubleClick, tint, borderColor, leading, indent = 0, title, meta, actions, children }: {
   onClick?: () => void;
+  /** Raccourci, jamais le seul chemin : les boutons de la carte font la même
+   *  chose et restent le geste découvrable (un double-clic n'a ni indice visuel
+   *  ni équivalent clavier). La carte cesse d'être sélectionnable au texte tant
+   *  qu'il est actif, sinon le geste surligne un mot au passage. */
+  onDoubleClick?: () => void;
   tint?: string;
   borderColor?: string;
   leading?: React.ReactNode;
@@ -1606,8 +1611,10 @@ export function ListCard({ onClick, tint, borderColor, leading, indent = 0, titl
   return (
     <div
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       style={{
         cursor: onClick ? 'pointer' : 'default', display: 'flex', flexDirection: 'column', padding: `${CARD_PAD_Y}px ${CARD_PAD_X}px`, borderRadius: 12,
+        userSelect: onDoubleClick ? 'none' : undefined,
         background: tint ?? palette.surfaceRaised,
         // Carte sans contour : c'est son fond, plus clair que le crème de la
         // page, qui la détache — la colonne n'a plus ni cadre ni panneau. La
@@ -1617,7 +1624,12 @@ export function ListCard({ onClick, tint, borderColor, leading, indent = 0, titl
         border: `1px solid ${borderColor ?? 'transparent'}`,
       }}
     >
-      <div style={{ position: 'relative' as const, height: 3 * CARD_LINE }}>
+      {/* Hauteur fixe : deux lignes de titre, plus une de garnitures quand la
+          carte en a. `meta` ABSENT retire la ligne (la liste du parcours n'a
+          pas de libellés) ; `meta` fourni mais vide la garde, et c'est ce qui
+          donne à la banque des cartes de même hauteur qu'elles portent des
+          libellés ou non. */}
+      <div style={{ position: 'relative' as const, height: (meta === undefined ? 2 : 3) * CARD_LINE }}>
         {leading && (
           /* `zIndex` obligatoire : `ClampedTitle` est en `position: relative` et
              vient après dans le DOM, donc il se peint par-dessus les icônes et
@@ -1626,7 +1638,9 @@ export function ListCard({ onClick, tint, borderColor, leading, indent = 0, titl
           <div style={{ position: 'absolute' as const, zIndex: 1, top: 0, left: 0, height: CARD_LINE, display: 'flex', alignItems: 'center', gap: 4 }}>{leading}</div>
         )}
         <ClampedTitle text={title} indent={indent} />
-        <div style={{ height: CARD_LINE, paddingRight: CARD_ACTIONS_W, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>{meta}</div>
+        {meta !== undefined && (
+          <div style={{ height: CARD_LINE, paddingRight: CARD_ACTIONS_W, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>{meta}</div>
+        )}
         {actions && (
           <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute' as const, right: 0, bottom: 0, height: 2 * CARD_LINE, display: 'flex', alignItems: 'center', gap: CARD_ACTION_GAP }}>{actions}</div>
         )}

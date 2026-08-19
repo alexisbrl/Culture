@@ -11,21 +11,28 @@
 
 import { getSupabaseServerClient } from '@/lib/supabase';
 
+// Une notion n'a qu'UN texte (19/08/2026). Le titre et la description séparés
+// disaient deux fois la même chose : la liste n'affichait que le titre, et la
+// description ne se lisait qu'en rouvrant le formulaire. Le champ unique est
+// `title` — c'est lui que lisent les autres écrans (liaison aux questions
+// d'examen, parcours). La colonne `content` de la base n'est plus ni lue ni
+// écrite ; son contenu est recollé au titre par
+// `docs/migrations/2026-08-19-notion-texte-unique.sql`, et la colonne elle-même
+// tombe une fois ce code déployé (voir EN-ATTENTE-DEPLOIEMENT.md).
 export type Notion = {
   id: string;
   title: string;
-  content: string | null;
   chapterId: string | null;
   createdAt: string;
 };
 
-export const NOTION_TITLE_MAX = 200;
-export const NOTION_CONTENT_MAX = 2000;
+/** Assez pour une notion en une ou deux phrases, pas assez pour un paragraphe :
+ *  la même valeur sert de libellé partout ailleurs dans l'app. */
+export const NOTION_TITLE_MAX = 280;
 
-function validate(title: string, content: string | null): string | null {
-  if (!title.trim()) return 'Le titre est requis';
-  if (title.length > NOTION_TITLE_MAX) return `Titre trop long (${NOTION_TITLE_MAX} caractères max)`;
-  if (content && content.length > NOTION_CONTENT_MAX) return `Contenu trop long (${NOTION_CONTENT_MAX} caractères max)`;
+function validate(title: string): string | null {
+  if (!title.trim()) return 'Le texte de la notion est requis';
+  if (title.length > NOTION_TITLE_MAX) return `Texte trop long (${NOTION_TITLE_MAX} caractères max)`;
   return null;
 }
 
@@ -35,7 +42,7 @@ export async function listNotions(workshopId: string): Promise<Notion[]> {
   // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
   const { data, error } = await supabase
     .from('workshop_bricks')
-    .select('id, title, content, chapter_id, created_at')
+    .select('id, title, chapter_id, created_at')
     .eq('workshop_id', workshopId)
     .order('created_at', { ascending: true });
 
@@ -47,7 +54,6 @@ export async function listNotions(workshopId: string): Promise<Notion[]> {
   return (data ?? []).map((b) => ({
     id: b.id,
     title: b.title,
-    content: b.content,
     chapterId: b.chapter_id,
     createdAt: b.created_at,
   }));
@@ -70,10 +76,9 @@ export async function createNotion(
   workshopId: string,
   userId: string,
   title: string,
-  content: string | null,
   chapterId: string | null = null
 ): Promise<{ success: boolean; notion?: Notion; error?: string }> {
-  const invalid = validate(title, content);
+  const invalid = validate(title);
   if (invalid) return { success: false, error: invalid };
 
   if (chapterId && !(await chapterBelongsToWorkshop(workshopId, chapterId))) {
@@ -89,10 +94,9 @@ export async function createNotion(
       workshop_id: workshopId,
       created_by: userId,
       title: title.trim(),
-      content: content?.trim() || null,
       chapter_id: chapterId,
     })
-    .select('id, title, content, chapter_id, created_at')
+    .select('id, title, chapter_id, created_at')
     .single();
 
   if (error || !data) {
@@ -102,7 +106,7 @@ export async function createNotion(
 
   return {
     success: true,
-    notion: { id: data.id, title: data.title, content: data.content, chapterId: data.chapter_id, createdAt: data.created_at },
+    notion: { id: data.id, title: data.title, chapterId: data.chapter_id, createdAt: data.created_at },
   };
 }
 
@@ -110,10 +114,9 @@ export async function updateNotion(
   workshopId: string,
   notionId: string,
   title: string,
-  content: string | null,
   chapterId: string | null = null
 ): Promise<{ success: boolean; error?: string }> {
-  const invalid = validate(title, content);
+  const invalid = validate(title);
   if (invalid) return { success: false, error: invalid };
 
   if (chapterId && !(await chapterBelongsToWorkshop(workshopId, chapterId))) {
@@ -127,7 +130,7 @@ export async function updateNotion(
   // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
   const { data, error } = await supabase
     .from('workshop_bricks')
-    .update({ title: title.trim(), content: content?.trim() || null, chapter_id: chapterId, updated_at: new Date().toISOString() })
+    .update({ title: title.trim(), chapter_id: chapterId, updated_at: new Date().toISOString() })
     .eq('id', notionId)
     .eq('workshop_id', workshopId)
     .select('id');
@@ -135,6 +138,38 @@ export async function updateNotion(
   if (error) {
     console.error('updateNotion error:', error);
     return { success: false, error: 'Erreur lors de la modification' };
+  }
+  if (!data || data.length === 0) return { success: false, error: 'Notion introuvable' };
+
+  return { success: true };
+}
+
+/** Range une notion dans un chapitre (ou l'en sort, avec `null`) sans toucher à
+ *  son texte — c'est ce que fait le glisser-déposer d'une notion sur un chapitre.
+ *  Passer par `updateNotion` obligerait l'appelant à renvoyer le texte, donc à
+ *  l'écraser avec ce qu'il croit être à jour. */
+export async function setNotionChapter(
+  workshopId: string,
+  notionId: string,
+  chapterId: string | null
+): Promise<{ success: boolean; error?: string }> {
+  if (chapterId && !(await chapterBelongsToWorkshop(workshopId, chapterId))) {
+    return { success: false, error: 'Chapitre introuvable' };
+  }
+
+  const supabase = getSupabaseServerClient();
+
+  // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
+  const { data, error } = await supabase
+    .from('workshop_bricks')
+    .update({ chapter_id: chapterId, updated_at: new Date().toISOString() })
+    .eq('id', notionId)
+    .eq('workshop_id', workshopId)
+    .select('id');
+
+  if (error) {
+    console.error('setNotionChapter error:', error);
+    return { success: false, error: 'Erreur lors du déplacement' };
   }
   if (!data || data.length === 0) return { success: false, error: 'Notion introuvable' };
 

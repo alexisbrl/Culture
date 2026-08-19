@@ -1,14 +1,15 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { GripVertical, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
-import { palette, shadow } from '@/lib/theme';
+import { ChevronDown, EllipsisVertical, GripVertical, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { palette, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import {
   createWorkshopNotion,
   updateWorkshopNotion,
   deleteWorkshopNotion,
+  moveWorkshopNotion,
   type Notion,
 } from '@/app/actions/workshopNotions';
 import {
@@ -20,6 +21,15 @@ import {
 } from '@/app/actions/workshopChapters';
 import { SmallBtn } from './settingsShared';
 import { Tooltip } from '@/components/ui/tooltip';
+import { ClippedText } from '@/components/ui/clipped-text';
+import { SelectMenu } from '../tabs/examen/examShared';
+import { NOTION_TITLE_MAX } from '@/lib/workshops/notions';
+
+/** Hauteur commune aux lignes des deux colonnes, pour qu'elles se répondent
+ *  d'une colonne à l'autre. C'est la hauteur naturelle d'une ligne de chapitre :
+ *  8 + 21 (nom) + 1 + 18 (compte de notions) + 8. Une notion n'ayant qu'un
+ *  titre, la place ainsi libérée lui sert à l'écrire sur deux lignes. */
+const ROW_MIN_HEIGHT = 56;
 
 type Props = {
   workshopId: string;
@@ -44,57 +54,130 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
-// Formulaire partagé ajout/édition d'une notion : titre requis, contenu et
-// chapitre optionnels.
+// La zone de saisie d'une notion grandit avec son texte, jusqu'à 6 lignes ;
+// au-delà, elle défile. `LINE` doit rester égal au `lineHeight` posé sur la
+// zone, et `PADDING` aux deux moitiés de son remplissage vertical (`inputStyle`)
+// — c'est ce que `scrollHeight` mesure.
+/** Mise en page des formulaires de chapitre (ajout, renommage), reprise de
+ *  celle d'une notion en édition : le champ sur toute la largeur, les actions
+ *  rangées en dessous à droite. Sur une seule ligne, le champ n'avait plus la
+ *  place d'afficher ce qu'on y tapait dès que les deux boutons étaient là. */
+const chapterFormStyle: React.CSSProperties = {
+  display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px',
+};
+
+/** Une ligne « il n'y a rien ici » est une ligne comme une autre : même
+ *  hauteur que les vraies, sans quoi la carte se tasse dès qu'elle est vide et
+ *  les deux colonnes ne se répondent plus. */
+const emptyRowStyle: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  minHeight: ROW_MIN_HEIGHT, padding: '6px 14px',
+  fontSize: 13, color: palette.inkMuted, textAlign: 'center',
+};
+
+const NOTION_LINE_HEIGHT = 20;
+const NOTION_MAX_LINES = 6;
+const NOTION_TEXTAREA_MAX = NOTION_MAX_LINES * NOTION_LINE_HEIGHT + 18;
+
+// Formulaire partagé ajout/édition d'une notion : un seul texte (requis) et le
+// chapitre (optionnel). Le texte est saisi dans une zone multi-lignes — c'est
+// une phrase, pas un intitulé — et c'est ce même texte que la liste affiche.
+//
+// Le chapitre passe par `SelectMenu` et non par un `<select>` natif : le déroulé
+// natif est peint par le système, il sortait de la page et n'avait aucun rapport
+// avec la palette. Le panneau maison se place sous le bouton, borné à la fenêtre.
+// Le glisser-déposer d'une notion sur un chapitre fait la même chose en un
+// geste, mais ce choix reste : il sert quand les deux colonnes ne sont pas
+// visibles ensemble (téléphone) et à la création, avant que la notion existe.
 function NotionForm({
-  initialTitle,
-  initialContent,
+  initialText,
   initialChapterId,
   chapters,
   saving,
   onSave,
   onCancel,
 }: {
-  initialTitle: string;
-  initialContent: string;
+  initialText: string;
   initialChapterId: string | null;
   chapters: Chapter[];
   saving: boolean;
-  onSave: (title: string, content: string, chapterId: string | null) => void;
+  onSave: (text: string, chapterId: string | null) => void;
   onCancel: () => void;
 }) {
   const t = useTranslations('settings');
-  const [title, setTitle] = useState(initialTitle);
-  const [content, setContent] = useState(initialContent);
+  const [text, setText] = useState(initialText);
   const [chapterId, setChapterId] = useState<string>(initialChapterId ?? '');
+  const chapterLabel = chapters.find((c) => c.id === chapterId)?.name ?? t('notions.noChapter');
+
+  // Hauteur ajustée au texte, écrite directement sur le nœud : la passer par un
+  // state relancerait un rendu à chaque frappe pour une valeur que seul le DOM
+  // consomme. Remise à `auto` avant la mesure — sinon `scrollHeight` reste
+  // bloqué sur la hauteur déjà posée et la zone ne rétrécit jamais.
+  const textRef = useRef<HTMLTextAreaElement>(null);
+  const fitHeight = useCallback(() => {
+    const el = textRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, NOTION_TEXTAREA_MAX) + 2}px`;  // + les deux filets
+    el.style.overflowY = el.scrollHeight > NOTION_TEXTAREA_MAX ? 'auto' : 'hidden';
+  }, []);
+  // Sans tableau de dépendances : la frappe, le texte initial et le montage
+  // passent tous par un rendu.
+  useLayoutEffect(fitHeight);
+  // La largeur, elle, peut changer sans rendu (fenêtre redimensionnée) et le
+  // texte se replie alors sur un nombre de lignes différent. On ne réagit qu'à
+  // la LARGEUR : réagir à la hauteur ferait boucler l'observateur, puisque c'est
+  // nous qui la modifions.
+  const lastWidth = useRef(0);
+  useLayoutEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(() => {
+      if (!textRef.current || textRef.current.clientWidth === lastWidth.current) return;
+      lastWidth.current = textRef.current.clientWidth;
+      fitHeight();
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [fitHeight]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px' }}>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder={t('notions.titlePlaceholder')}
-        maxLength={200}
-        autoFocus
-        style={inputStyle}
-      />
       <textarea
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        placeholder={t('notions.contentPlaceholder')}
-        maxLength={2000}
-        rows={3}
-        style={{ ...inputStyle, resize: 'vertical' }}
+        ref={textRef}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={t('notions.textPlaceholder')}
+        maxLength={NOTION_TITLE_MAX}
+        rows={1}
+        autoFocus
+        // `resize: none` : la zone se dimensionne elle-même, une poignée de
+        // redimensionnement serait reprise dès la frappe suivante.
+        style={{ ...inputStyle, lineHeight: `${NOTION_LINE_HEIGHT}px`, resize: 'none' }}
       />
-      <select value={chapterId} onChange={(e) => setChapterId(e.target.value)} style={inputStyle}>
-        <option value="">{t('notions.noChapter')}</option>
-        {chapters.map((c) => (
-          <option key={c.id} value={c.id}>{c.name}</option>
-        ))}
-      </select>
+      <SelectMenu
+        items={[
+          { value: '', label: t('notions.noChapter') },
+          ...chapters.map((c) => ({ value: c.id, label: c.name })),
+        ]}
+        value={chapterId}
+        onSelect={(next) => setChapterId(next)}
+        title={t('notions.chapterLabel')}
+        panelWidth="trigger"
+        triggerStyle={{
+          ...inputStyle,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          textAlign: 'left', cursor: 'pointer',
+        }}
+      >
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {chapterLabel}
+        </span>
+        <ChevronDown size={14} strokeWidth={2} style={{ flexShrink: 0, color: palette.inkFaint }} />
+      </SelectMenu>
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <SmallBtn tone="ghost" onClick={onCancel} disabled={saving}>{t('notions.cancel')}</SmallBtn>
-        <SmallBtn tone="dark" onClick={() => onSave(title, content, chapterId || null)} disabled={saving || !title.trim()}>
+        <SmallBtn tone="dark" onClick={() => onSave(text, chapterId || null)} disabled={saving || !text.trim()}>
           {saving ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : t('notions.save')}
         </SmallBtn>
       </div>
@@ -131,10 +214,10 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
 
   // ─── Notions ──────────────────────────────────────────────────────────────
 
-  async function handleCreate(title: string, content: string, chapterId: string | null) {
+  async function handleCreate(text: string, chapterId: string | null) {
     setSaving(true);
     setError('');
-    const result = await createWorkshopNotion(workshopId, title, content.trim() ? content : null, chapterId);
+    const result = await createWorkshopNotion(workshopId, text, chapterId);
     setSaving(false);
     if (result.success && result.notion) {
       const notion = result.notion;
@@ -146,15 +229,14 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
     }
   }
 
-  async function handleUpdate(notionId: string, title: string, content: string, chapterId: string | null) {
+  async function handleUpdate(notionId: string, text: string, chapterId: string | null) {
     const previous = notions.find((n) => n.id === notionId);
     setSaving(true);
     setError('');
-    const cleanContent = content.trim() ? content : null;
-    const result = await updateWorkshopNotion(workshopId, notionId, title, cleanContent, chapterId);
+    const result = await updateWorkshopNotion(workshopId, notionId, text, chapterId);
     setSaving(false);
     if (result.success) {
-      setNotions((prev) => prev.map((n) => (n.id === notionId ? { ...n, title: title.trim(), content: cleanContent, chapterId } : n)));
+      setNotions((prev) => prev.map((n) => (n.id === notionId ? { ...n, title: text.trim(), chapterId } : n)));
       if (previous && previous.chapterId !== chapterId) {
         bumpChapterCount(previous.chapterId, -1);
         bumpChapterCount(chapterId, +1);
@@ -249,6 +331,64 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
     setDragIndex(index);
   }
 
+  // Glisser-déposer d'une NOTION sur un chapitre : le geste range la notion,
+  // il ne réordonne rien. Les deux glissements arrivent sur les mêmes lignes de
+  // chapitre, d'où deux références distinctes — celle qui est renseignée dit de
+  // quel geste il s'agit. Même raison qu'au-dessus pour le ref plutôt que le
+  // state : le `onDrop` de la ligne cible a été attaché avant le rendu déclenché
+  // par le `dragstart`.
+  const [dragNotionId, setDragNotionId] = useState<string | null>(null);
+  const dragNotionRef = useRef<string | null>(null);
+  // Ligne de chapitre survolée par la notion en cours de glissement — c'est le
+  // seul retour visuel qui dit où le lâcher va la ranger.
+  const [dropChapterId, setDropChapterId] = useState<string | typeof UNASSIGNED | null>(null);
+
+  function startNotionDrag(id: string | null) {
+    dragNotionRef.current = id;
+    setDragNotionId(id);
+    if (!id) setDropChapterId(null);
+  }
+
+  async function handleDropNotion(chapterId: string | null) {
+    const notionId = dragNotionRef.current;
+    startNotionDrag(null);
+    if (!notionId) return;
+
+    const notion = notions.find((n) => n.id === notionId);
+    if (!notion || notion.chapterId === chapterId) return;
+
+    const from = notion.chapterId;
+    setNotions((prev) => prev.map((n) => (n.id === notionId ? { ...n, chapterId } : n)));
+    bumpChapterCount(from, -1);
+    bumpChapterCount(chapterId, +1);
+    setError('');
+
+    const result = await moveWorkshopNotion(workshopId, notionId, chapterId);
+    if (!result.success) {
+      setNotions((prev) => prev.map((n) => (n.id === notionId ? { ...n, chapterId: from } : n)));
+      bumpChapterCount(chapterId, -1);
+      bumpChapterCount(from, +1);
+      setError(result.error ?? t('err.save'));
+    }
+  }
+
+  // Retour visuel du survol, posé sur la ligne visée. Le `onDrop`, lui, reste à
+  // la charge de chaque ligne : celle d'un chapitre doit encore départager les
+  // deux gestes possibles.
+  function dropHoverProps(target: string | typeof UNASSIGNED) {
+    return {
+      onDragOver: (e: React.DragEvent) => {
+        e.preventDefault();
+        // Seul le glissement d'une notion allume la cible : un chapitre qu'on
+        // réordonne se signale déjà par sa propre ligne en transparence. L'état
+        // suffit ici (le rendu qui suit le `dragstart` a eu lieu bien avant
+        // qu'on survole une autre ligne), là où le lâcher a besoin du ref.
+        if (dragNotionId) setDropChapterId((prev) => (prev === target ? prev : target));
+      },
+      onDragLeave: () => setDropChapterId((prev) => (prev === target ? null : prev)),
+    };
+  }
+
   async function handleDropOnChapter(targetIndex: number) {
     const from = dragIndexRef.current;
     startChapterDrag(null);
@@ -275,130 +415,174 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
   const activeNotions = selectedChapterId === UNASSIGNED
     ? unassignedNotions
     : notions.filter((n) => n.chapterId === selectedChapterId);
-  // Rien à gérer nulle part : ni chapitre, ni notion non rangée — état vide
-  // fidèle à la maquette (lignes 1780-1782). Dans tous les autres cas (au
-  // moins un chapitre, ou des notions sans chapitre à retrouver), la colonne
-  // de droite reste utilisable même à zéro chapitre.
-  const nothingToManage = chapters.length === 0 && unassignedNotions.length === 0;
+  // Menu ⋮ d'une ligne (chapitre ou notion) : « modifier » et « supprimer »,
+  // là où les deux listes alignaient un crayon et une corbeille. Deux cibles de
+  // 32px par ligne coûtaient 70px de largeur dans des colonnes déjà étroites,
+  // pour des actions qu'on ne déclenche qu'occasionnellement.
+  //
+  // `stopPropagation` sur l'enveloppe : la ligne d'un chapitre est cliquable
+  // (elle le sélectionne), et ouvrir son menu n'est pas le choisir. Le clic-
+  // dehors du panneau, lui, est écouté sur `document` en capture — il n'est pas
+  // concerné.
+  function rowMenu({ label, onEdit, onDelete, editLabel, deleteLabel }: {
+    label: string; onEdit: () => void; onDelete: () => void; editLabel: string; deleteLabel: string;
+  }) {
+    return (
+      <span onClick={(e) => e.stopPropagation()} style={{ display: 'flex', flexShrink: 0 }}>
+        <SelectMenu
+          items={[
+            { value: 'edit', label: editLabel, icon: <Pencil size={14} strokeWidth={2} /> },
+            { value: 'delete', label: deleteLabel, tone: 'danger', icon: <Trash2 size={14} strokeWidth={2} /> },
+          ]}
+          onSelect={(action) => { if (action === 'edit') onEdit(); else onDelete(); }}
+          title={label}
+          triggerLabel={label}
+          panelWidth="auto"
+          align="right"
+          triggerStyle={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 32, height: 32, padding: 0, borderRadius: 9,
+            border: 'none', background: 'transparent', color: palette.inkMuted,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          <EllipsisVertical size={15} strokeWidth={1.75} />
+        </SelectMenu>
+      </span>
+    );
+  }
 
   function renderNotionRow(notion: Notion) {
     if (editingId === notion.id) {
       return (
         <div key={notion.id} style={{ display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${palette.line}` }}>
+          {/* Pas de « supprimer » ici : l'entrée existe déjà dans le ⋮ de la
+              ligne, et deux chemins pour la même action destructive à deux
+              clics d'écart est un piège de plus qu'un service. */}
           <NotionForm
-            initialTitle={notion.title}
-            initialContent={notion.content ?? ''}
+            initialText={notion.title}
             initialChapterId={notion.chapterId}
             chapters={chapters}
             saving={saving}
-            onSave={(title, content, chapterId) => handleUpdate(notion.id, title, content, chapterId)}
+            onSave={(text, chapterId) => handleUpdate(notion.id, text, chapterId)}
             onCancel={() => setEditingId(null)}
           />
-          <div style={{ display: 'flex', justifyContent: 'flex-start', padding: '0 14px 12px' }}>
-            <SmallBtn tone="danger" onClick={() => setDeleteTarget(notion)} disabled={saving}>
-              {t('notions.delete')}
-            </SmallBtn>
-          </div>
         </div>
       );
     }
 
     return (
-      <div key={notion.id} style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 44, padding: '8px 14px', borderBottom: `1px solid ${palette.line}` }}>
-        {/* Titre seul, comme la maquette — le contenu se lit dans le formulaire d'édition. */}
-        <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {notion.title}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-          <Tooltip content={t('notions.edit')}>
-            <button
-              onClick={() => { setEditingId(notion.id); setAdding(false); setError(''); }}
-              aria-label={t('notions.edit')}
-              style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
-            >
-              <Pencil size={15} strokeWidth={1.75} />
-            </button>
-          </Tooltip>
-          <Tooltip content={t('notions.delete')}>
-            <button
-              onClick={() => setDeleteTarget(notion)}
-              aria-label={t('notions.delete')}
-              style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
-            >
-              <Trash2 size={15} strokeWidth={1.75} />
-            </button>
-          </Tooltip>
-        </div>
+      // `alignItems: 'center'` fait tout le travail d'alignement vertical : un
+      // titre d'une ligne se centre dans la hauteur de la ligne, un titre de deux
+      // lignes se centre en bloc. Le remplissage vertical descend à 6 pour que
+      // deux lignes (2 × 21) tiennent dans les 56 sans pousser la ligne.
+      <div
+        key={notion.id}
+        draggable
+        onDragStart={() => startNotionDrag(notion.id)}
+        onDragEnd={() => startNotionDrag(null)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10, minHeight: ROW_MIN_HEIGHT,
+          padding: '6px 6px 6px 10px', borderBottom: `1px solid ${palette.line}`,
+          opacity: dragNotionId === notion.id ? 0.5 : 1,
+        }}
+      >
+        <Tooltip content={t('notions.dragHint')}>
+          <span style={{ cursor: 'grab', color: palette.inkFaint, flexShrink: 0, display: 'flex' }}>
+            <GripVertical size={15} strokeWidth={1.75} />
+          </span>
+        </Tooltip>
+        {/* Le texte de la notion, tel qu'il est saisi — il n'y en a qu'un. */}
+        <ClippedText
+          text={notion.title}
+          lines={2}
+          style={{ flex: 1, minWidth: 0, fontSize: 14, lineHeight: '21px', fontWeight: 600, color: palette.ink }}
+        />
+        {rowMenu({
+          label: t('notions.actions'),
+          editLabel: t('notions.edit'),
+          deleteLabel: t('notions.delete'),
+          onEdit: () => { setEditingId(notion.id); setAdding(false); setError(''); },
+          onDelete: () => setDeleteTarget(notion),
+        })}
       </div>
     );
   }
 
   return (
     <>
-      {/* ── En-tête — titre seul, comme la maquette (pas de description ni de
-          ligne « fichiers source »). Même graphie que les autres sections. ── */}
-      <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink, marginBottom: 18 }}>{t('notions.sectionTitle')}</div>
-
+      {/* Pas de titre de section, contrairement aux autres : la maquette n'en
+          met pas ici, « Chapitres » et « Notions » en tête de colonne disant
+          déjà de quoi il s'agit — et le titre répétait le libellé de l'entrée
+          de navigation active, juste à gauche. */}
       {error && (
         <div style={{ fontSize: 12.5, color: palette.danger, padding: '2px 0 12px' }}>{error}</div>
       )}
 
-      {nothingToManage ? (
-        <div style={{ background: palette.cream, border: `1.5px dashed ${palette.lineStrong}`, borderRadius: 16, padding: '34px 24px', textAlign: 'center', fontSize: 13.5, color: palette.inkMuted }}>
-          {t('notions.needChapterHint')}
-        </div>
-      ) : (
+      {(
+        // `minWidth: 0` sur chaque colonne : une colonne de grille ne descend pas
+        // d'elle-même sous la largeur minimale de son contenu (`min-width: auto`).
+        // Un nom de chapitre long, posé en `nowrap`, élargissait donc la première
+        // colonne bien au-delà de son `0.85fr` et poussait la colonne des notions
+        // hors de l'écran — le texte n'était jamais coupé puisque la colonne
+        // cédait à sa place.
         <div className="grid grid-cols-1 md:grid-cols-[0.85fr_1.45fr]" style={{ gap: 16, alignItems: 'start' }}>
           {/* ── Colonne Chapitres ── */}
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: palette.ink, padding: '0 2px 8px' }}>
               {t('chapters.title')}
             </div>
             <div style={{ background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 14, boxShadow: shadow.sm, overflow: 'hidden' }}>
-              {addingChapter ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: `1px solid ${palette.line}` }}>
+              {/* « ajouter un chapitre » ne disparaît plus quand on l'active :
+                  le formulaire s'ajoute EN LIGNE juste en dessous, comme dans la
+                  colonne des notions. Le remplacer par sa propre saisie faisait
+                  perdre le repère du geste en cours. */}
+              <button
+                onClick={() => { setAddingChapter(true); setError(''); }}
+                className="hover:bg-[var(--green-tint)]"
+                style={{ width: '100%', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', border: 'none', borderBottom: `1px solid ${palette.line}`, background: 'transparent', color: palette.greenBrand, fontSize: 13.5, fontWeight: 600 }}
+              >
+                <Plus size={16} strokeWidth={2} />
+                {t('chapters.add')}
+              </button>
+
+              {addingChapter && (
+                <div style={{ ...chapterFormStyle, borderBottom: `1px solid ${palette.line}` }}>
                   <input
                     value={chapterName}
                     onChange={(e) => setChapterName(e.target.value)}
                     placeholder={t('chapters.namePlaceholder')}
                     maxLength={120}
                     autoFocus
-                    style={{ ...inputStyle, flex: 1 }}
+                    style={inputStyle}
                   />
-                  <SmallBtn tone="ghost" onClick={() => { setAddingChapter(false); setChapterName(''); }} disabled={chapterSaving}>{t('notions.cancel')}</SmallBtn>
-                  <SmallBtn tone="dark" onClick={handleCreateChapter} disabled={chapterSaving || !chapterName.trim()}>{t('notions.save')}</SmallBtn>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <SmallBtn tone="ghost" onClick={() => { setAddingChapter(false); setChapterName(''); }} disabled={chapterSaving}>{t('notions.cancel')}</SmallBtn>
+                    <SmallBtn tone="dark" onClick={handleCreateChapter} disabled={chapterSaving || !chapterName.trim()}>{t('notions.save')}</SmallBtn>
+                  </div>
                 </div>
-              ) : (
-                <button
-                  onClick={() => { setAddingChapter(true); setError(''); }}
-                  className="hover:bg-[var(--green-tint)]"
-                  style={{ width: '100%', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', border: 'none', borderBottom: `1px solid ${palette.line}`, background: 'transparent', color: palette.greenBrand, fontSize: 13.5, fontWeight: 600 }}
-                >
-                  <Plus size={16} strokeWidth={2} />
-                  {t('chapters.add')}
-                </button>
               )}
 
               {chapters.length === 0 && (
-                <div style={{ padding: '18px 14px', textAlign: 'center', fontSize: 12.5, color: palette.inkFaint }}>
-                  {t('chapters.empty')}
-                </div>
+                <div style={emptyRowStyle}>{t('chapters.empty')}</div>
               )}
 
               {chapters.map((chapter, i) => {
                 const isActive = selectedChapterId === chapter.id;
                 if (editingChapterId === chapter.id) {
                   return (
-                    <div key={chapter.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: i < chapters.length - 1 || showUnassignedEntry ? `1px solid ${palette.line}` : 'none' }}>
+                    <div key={chapter.id} style={{ ...chapterFormStyle, borderBottom: i < chapters.length - 1 || showUnassignedEntry ? `1px solid ${palette.line}` : 'none' }}>
                       <input
                         value={editingChapterName}
                         onChange={(e) => setEditingChapterName(e.target.value)}
                         maxLength={120}
                         autoFocus
-                        style={{ ...inputStyle, flex: 1 }}
+                        style={inputStyle}
                       />
-                      <SmallBtn tone="ghost" onClick={() => setEditingChapterId(null)} disabled={chapterSaving}>{t('notions.cancel')}</SmallBtn>
-                      <SmallBtn tone="dark" onClick={() => handleRenameChapter(chapter.id)} disabled={chapterSaving || !editingChapterName.trim()}>{t('notions.save')}</SmallBtn>
+                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                        <SmallBtn tone="ghost" onClick={() => setEditingChapterId(null)} disabled={chapterSaving}>{t('notions.cancel')}</SmallBtn>
+                        <SmallBtn tone="dark" onClick={() => handleRenameChapter(chapter.id)} disabled={chapterSaving || !editingChapterName.trim()}>{t('notions.save')}</SmallBtn>
+                      </div>
                     </div>
                   );
                 }
@@ -409,13 +593,20 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
                     draggable
                     onDragStart={() => startChapterDrag(i)}
                     onDragEnd={() => startChapterDrag(null)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => { e.preventDefault(); handleDropOnChapter(i); }}
+                    {...dropHoverProps(chapter.id)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      // Une notion se range, un chapitre se réordonne : c'est la
+                      // référence renseignée qui tranche.
+                      if (dragNotionRef.current) handleDropNotion(chapter.id);
+                      else handleDropOnChapter(i);
+                    }}
                     style={{
-                      position: 'relative', display: 'flex', alignItems: 'center', gap: 10, minHeight: 44,
-                      padding: '8px 14px 8px 17px', cursor: 'pointer',
+                      position: 'relative', display: 'flex', alignItems: 'center', gap: 10, minHeight: ROW_MIN_HEIGHT,
+                      padding: '8px 6px 8px 10px', cursor: 'pointer',
                       borderBottom: i < chapters.length - 1 || showUnassignedEntry ? `1px solid ${palette.line}` : 'none',
-                      background: isActive ? palette.surfaceSunken : 'transparent',
+                      background: dropChapterId === chapter.id ? withAlpha(palette.green, 0.14)
+                        : isActive ? palette.surfaceSunken : 'transparent',
                       opacity: dragIndex === i ? 0.5 : 1,
                     }}
                   >
@@ -425,37 +616,22 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
                         <GripVertical size={15} strokeWidth={1.75} />
                       </span>
                     </Tooltip>
-                    {isActive && (
-                      <span style={{ width: 7, height: 7, borderRadius: 999, background: palette.green, flexShrink: 0 }} />
-                    )}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: isActive ? 700 : 600, color: isActive ? palette.greenBrand : palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {chapter.name}
-                      </div>
-                      <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 1 }}>
+                      <ClippedText
+                        text={chapter.name}
+                        style={{ fontSize: 14, fontWeight: isActive ? 700 : 600, color: isActive ? palette.greenBrand : palette.ink }}
+                      />
+                      <div style={{ fontSize: 12, color: palette.inkMuted }}>
                         {t('notions.count', { count: chapter.notionCount })}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-                      <Tooltip content={t('chapters.rename')}>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setEditingChapterId(chapter.id); setEditingChapterName(chapter.name); setError(''); }}
-                          aria-label={t('chapters.rename')}
-                          style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
-                        >
-                          <Pencil size={15} strokeWidth={1.75} />
-                        </button>
-                      </Tooltip>
-                      <Tooltip content={t('notions.delete')}>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setChapterDeleteTarget(chapter); }}
-                          aria-label={t('notions.delete')}
-                          style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, padding: 0 }}
-                        >
-                          <Trash2 size={15} strokeWidth={1.75} />
-                        </button>
-                      </Tooltip>
-                    </div>
+                    {rowMenu({
+                      label: t('chapters.actions'),
+                      editLabel: t('chapters.rename'),
+                      deleteLabel: t('notions.delete'),
+                      onEdit: () => { setEditingChapterId(chapter.id); setEditingChapterName(chapter.name); setError(''); },
+                      onDelete: () => setChapterDeleteTarget(chapter),
+                    })}
                   </div>
                 );
               })}
@@ -463,10 +639,13 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
               {showUnassignedEntry && (
                 <div
                   onClick={() => setSelectedChapterId(UNASSIGNED)}
+                  {...dropHoverProps(UNASSIGNED)}
+                  onDrop={(e) => { e.preventDefault(); handleDropNotion(null); }}
                   style={{
-                    position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minHeight: 44,
-                    padding: '8px 14px 8px 17px', cursor: 'pointer',
-                    background: selectedChapterId === UNASSIGNED ? palette.surfaceSunken : 'transparent',
+                    position: 'relative', display: 'flex', alignItems: 'center', gap: 10, minHeight: ROW_MIN_HEIGHT,
+                    padding: '8px 6px 8px 10px', cursor: 'pointer',
+                    background: dropChapterId === UNASSIGNED ? withAlpha(palette.green, 0.14)
+                      : selectedChapterId === UNASSIGNED ? palette.surfaceSunken : 'transparent',
                   }}
                 >
                   <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: selectedChapterId === UNASSIGNED ? palette.green : 'transparent' }} />
@@ -474,7 +653,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
                     <div style={{ fontSize: 14, fontWeight: selectedChapterId === UNASSIGNED ? 700 : 600, color: selectedChapterId === UNASSIGNED ? palette.greenBrand : palette.inkMuted, fontStyle: 'italic' }}>
                       {t('notions.noChapter')}
                     </div>
-                    <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 1 }}>
+                    <div style={{ fontSize: 12, color: palette.inkMuted }}>
                       {t('notions.count', { count: unassignedNotions.length })}
                     </div>
                   </div>
@@ -484,7 +663,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
           </div>
 
           {/* ── Colonne Notions du chapitre sélectionné ── */}
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: palette.ink, padding: '0 2px 8px' }}>
               {t('notions.title')}
             </div>
@@ -499,20 +678,27 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
               </button>
 
               {adding && (
-                <NotionForm
-                  initialTitle=""
-                  initialContent=""
-                  initialChapterId={selectedChapterId === UNASSIGNED ? null : selectedChapterId}
-                  chapters={chapters}
-                  saving={saving}
-                  onSave={handleCreate}
-                  onCancel={() => setAdding(false)}
-                />
+                // Le filet ferme le formulaire comme n'importe quelle autre
+                // ligne de la carte : sans lui, il flottait au-dessus des
+                // notions existantes sans frontière.
+                <div style={{ borderBottom: `1px solid ${palette.line}` }}>
+                  <NotionForm
+                    initialText=""
+                    initialChapterId={selectedChapterId === UNASSIGNED ? null : selectedChapterId}
+                    chapters={chapters}
+                    saving={saving}
+                    onSave={handleCreate}
+                    onCancel={() => setAdding(false)}
+                  />
+                </div>
               )}
 
               {activeNotions.length === 0 ? (
-                <div style={{ padding: '22px 20px', textAlign: 'center', fontSize: 13, color: palette.inkMuted }}>
-                  {t('notions.emptyChapter')}
+                // Sans le moindre chapitre, « aucune notion dans ce chapitre »
+                // parlerait d'un chapitre qui n'existe pas : on dit alors par
+                // quoi commencer.
+                <div style={emptyRowStyle}>
+                  {selectedChapterId === null ? t('notions.needChapterHint') : t('notions.emptyChapter')}
                 </div>
               ) : (
                 activeNotions.map((notion) => renderNotionRow(notion))
