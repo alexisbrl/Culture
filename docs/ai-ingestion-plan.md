@@ -414,8 +414,19 @@ prompt. Elles ne sont **pas** vérifiées par un refus serveur (§11).
 
 **Les deux conséquences à traiter, dans cet ordre :**
 
-1. **Limiter le nombre de notions.** C'est le paramètre qui commande tout le
-   reste — le volume de questions en découle mécaniquement, et le coût avec lui.
+1. **Plafonner le nombre de questions produites par ingestion : 50 pour l'instant**
+   (décidé le 19/08/2026). C'est un plafond de débit, **pas** un plafond de
+   notions : limiter les notions n'est pas viable à long terme — elles sont la
+   matière même du produit, et un cours dense en a légitimement beaucoup. On
+   borne donc ce qu'une ingestion **produit**, pas ce que l'atelier **contient**.
+
+   > ⚠️ **La cible est 500 à 1000 questions**, et l'architecture doit y tenir dès
+   > maintenant. Elle y tient : un seul appel ne pourrait pas rendre 1000
+   > questions (la sortie maximale d'une réponse serait dépassée), mais comme on
+   > découpe par chapitre et qu'on dépose un lot, cela fait 25 à 50 requêtes
+   > bornées, aucune près des limites. **Ne jamais introduire d'étape qui
+   > supposerait « tout le lot dans une seule réponse ».**
+
 2. **Générer en masse sans tenir de connexion ouverte : la Batch API.** Les
    requêtes sont déposées en lot, traitées de façon asynchrone, et facturées
    **50 % moins cher**. Elle règle les deux problèmes d'un coup : la question du
@@ -498,15 +509,25 @@ résultat, disparaît de lui-même au bout de 24 h (ou à la première modificat
 et ne laisse aucune commande destructrice traîner dans un menu une fois le délai
 passé.
 
-**Et dans les notifications ?** Bonne idée, mauvais moment (arbitré le
-19/08/2026). La cloche est un placeholder — 80 lignes, deux exemples en dur,
-aucune table, aucun flux (`src/components/NotificationBell.tsx`, voir la
-gamification V2 dans `docs/backlog.md`) : y loger l'annulation reviendrait à
-construire tout le système de notifications avant la première ingestion. Et même
-une fois qu'il existera, la notification restera un bon canal de **découverte** et
-un mauvais canal d'**action** : la commande doit être sous les yeux là où on
-constate le dégât. Cible : **bandeau maintenant, entrée de notification en plus**
-le jour où la cloche devient réelle — les deux, pas l'un ou l'autre.
+### Et dans les notifications ? Une option à creuser, pas à écarter
+
+Piste retenue pour plus tard (19/08/2026), avec ses deux faces — à trancher le
+jour où la cloche cessera d'être un placeholder (80 lignes, deux exemples en dur,
+aucune table, aucun flux : `src/components/NotificationBell.tsx`, gamification V2
+dans `docs/backlog.md`).
+
+| Avantages | Défauts |
+|---|---|
+| **Accessible de partout** — un import touche trois écrans, la cloche les surplombe tous | **Coût d'entrée** : il faut d'abord construire le système de notifications (table, état lu/non lu, flux) — un chantier entier avant la première ingestion |
+| **Endroit logique** : « il s'est passé quelque chose sur ton atelier » est exactement une notification | **Bon canal de découverte, mauvais canal d'action** : on y apprend qu'un import a eu lieu, on n'y répare pas ce qu'on a sous les yeux |
+| **Trace durable** : survit à un changement de page, là où un bandeau se rate si on n'était pas sur le bon écran | **Éloigne la commande du dégât** : quand ce sont les notions qui sont fausses, l'annulation doit être sur l'écran des notions |
+| Prépare le terrain pour l'ingestion **asynchrone** (Batch API, §9), où la fin du traitement doit justement être notifiée | **Deadline invisible** : l'annulation expire à 24 h, une notification ne le montre pas d'elle-même |
+
+**Position actuelle : bandeau d'abord** (contextuel, sans prérequis, impossible à
+manquer), **notification en plus** ensuite — les deux, pas l'un ou l'autre. Le
+dernier avantage du tableau est le plus fort à moyen terme : dès que la
+génération en masse passera par un lot asynchrone, il **faudra** un canal pour
+dire « c'est prêt », et l'annulation y trouvera naturellement sa place.
 
 ### Pourquoi pas une transaction atomique
 
@@ -601,10 +622,12 @@ travail d'ingestion**.
 > À noter : `exam_questions.id` est de type `text` (identifiants générés côté
 > client), pas `uuid`.
 
-### 12.2 Aucune infrastructure de test — périmètre arbitré
+### 12.2 Infrastructure de test — ✅ posée le 19/08/2026, périmètre arbitré
 
-Ni Vitest ni Playwright ne sont installés (`package.json`, 19/08/2026), et
-`tests/` n'existe pas.
+**Fait :** Vitest installé (`npm run test:unit`, `vitest.config.mts`,
+`tests/unit/`), avec une première suite de 23 tests sur le contrat exposé à l'IA
+(`questionGroup.ts`) et les normaliseurs (`examTypes.ts`). Playwright reste à
+installer, hors périmètre de ce chantier.
 
 **Ce qui ne justifie pas de tests :** la *qualité* du contenu produit. Des notions
 ou des questions mal fichues se suppriment, et se jugent à l'œil dans l'app.
@@ -624,11 +647,12 @@ Le contexte aggrave : la base est **partagée avec scellow.com**, il n'y a pas d
 transaction (§10), et les `on delete cascade` propagent une suppression aux
 questions et à leurs liens.
 
-**Décision du 19/08/2026 :** installer Vitest, et n'écrire des tests que pour ces
-**trois fonctions plus la validation Zod**. Pas de suite de tests complète, pas de
+**Décision du 19/08/2026 :** n'écrire des tests que pour ces **trois fonctions
+plus la validation Zod** (elles n'existent pas encore : à couvrir au fur et à
+mesure qu'elles s'écrivent, étapes 3 à 5). Pas de suite de tests complète, pas de
 Playwright à ce stade. Ce n'est pas « tester avant de livrer », c'est « ne pas
 laisser une requête de suppression non testée s'exécuter sur la base de
-production ».
+production ». La règle est consignée dans `CLAUDE.md` §7.
 
 > La vraie réponse de fond — un second projet Supabase pour le développement, au
 > lieu de partager la base de production — est notée dans `docs/backlog.md`. Hors
@@ -674,8 +698,8 @@ bloquant (l'annulation par `import_id` couvre le besoin), mais à garder en têt
 
 ## 14. Ordre de chantier
 
-1. **Installer Vitest** (§12.2) — sans lui, rien de ce qui suit n'est vérifiable
-   hors production.
+1. ~~**Installer Vitest**~~ ✅ **fait le 19/08/2026** (§12.2) — 23 tests sur le
+   contrat exposé à l'IA et les normaliseurs.
 2. **`crypto.randomUUID()` dans `emptyQuestion()`** (§12.1) — bloquant,
    indépendant, une ligne.
 3. **Contrôles d'intégrité dans `lib/`** (§11) + pastille « aucune notion ».

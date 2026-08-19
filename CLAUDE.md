@@ -103,7 +103,7 @@ Pages hors-projet à ne pas consulter :
 | i18n | next-intl (FR + EN) |
 | Email | Resend |
 | Tests E2E | Playwright (à installer) |
-| Tests unitaires | Vitest (à installer — pour les grosses modifications avant PR) |
+| Tests unitaires | Vitest (installé le 19/08/2026 — `npm run test:unit`, portée volontairement étroite, voir §7) |
 
 > **Important Next.js 16 :** Lire `node_modules/next/dist/docs/` avant d'écrire du code Next.js — cette version a des breaking changes par rapport aux connaissances d'entraînement. Respecter les avertissements de dépréciation.
 
@@ -206,11 +206,22 @@ npx playwright test
 npx playwright test --headed   # avec navigateur visible
 ```
 
+### Tests unitaires (Vitest) — portée volontairement étroite
+Installé le 19/08/2026. `npm run test:unit` (ou `test:unit:watch`), config `vitest.config.mts`, fichiers dans `tests/unit/`.
+
+**On ne teste pas tout, et c'est délibéré.** Deux critères, un seul suffit :
+- l'opération peut **détruire des données saisies à la main** (suppression par lot, `upsert` sur un identifiant fourni par le client, ré-écriture de masse) ;
+- la fonction est le **contrat d'une entrée non fiable** (IA, import, future API) — typiquement `src/lib/workshops/questionGroup.ts` et les normaliseurs d'`examTypes.ts`.
+
+Ce qui relève du rendu, de l'ergonomie ou de la qualité d'un contenu généré **ne se teste pas ici** : ça se regarde dans l'app. Raison d'être de cette discipline : la base Supabase est partagée avec la production (`docs/backlog.md`), donc une requête de suppression non testée s'exécuterait sur les vraies données.
+
+**Aucun test ne doit toucher au réseau ni à Supabase.** Un module qui a besoin d'un client lui reçoit un double ; on ne laisse jamais `getSupabaseServerClient()` s'exécuter dans un test.
+
 ### Avant une Pull Request (grosses modifications)
 Lancer **Vitest (unit) + Playwright (E2E)** — les deux suites doivent passer avant de créer la PR.
 ```bash
 npm run test:unit    # Vitest
-npm run test:e2e     # Playwright
+npm run test:e2e     # Playwright (à installer)
 ```
 
 ### Claude in Chrome
