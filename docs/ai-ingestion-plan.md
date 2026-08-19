@@ -1,20 +1,53 @@
 # Plan d'implémentation — génération du programme par IA
 
-> Conception arrêtée le 20/07/2026, **aucun code écrit**. Ce document est le point de départ d'une future session d'implémentation : il fixe les décisions prises, les justifie, et liste ce qui reste à trancher. À lire en entier avant d'écrire la première ligne.
+> Conception arrêtée le 20/07/2026, **révisée le 19/08/2026** (session de cadrage
+> avec Alexis) : décisions produit tranchées, prérequis réévalués contre le code
+> réel, méthode d'appel au modèle ajoutée. **Aucun code écrit à ce jour.** À lire
+> en entier avant d'écrire la première ligne.
 >
-> Contexte technique associé : `.claude/rules/server-architecture.md` (pattern `lib/` + wrapper, authz, revalidation), `docs/product-spec.md` (§ Programme éducatif, § Briques de connaissance), `docs/backlog.md` (dette et chantiers ouverts).
+> Contexte technique associé : `.claude/rules/server-architecture.md` (pattern
+> `lib/` + wrapper, authz, revalidation), `docs/product-spec.md` (§ Programme
+> éducatif, § Notions), `docs/backlog.md` (dette et chantiers ouverts).
+
+## Ce qui a changé depuis la conception du 20/07/2026
+
+Trois prérequis du plan initial ont été livrés entre-temps sans que ce document
+suive, et quatre affirmations y étaient devenues fausses. Corrigé ici :
+
+- **Le basculement chapitre → notions est fait** (19/08/2026) :
+  `exam_questions.chapter_id` n'existe plus, le chapitre d'une question se déduit
+  de ses notions (`parcoursQuestionIdsOfChapter`, `src/lib/workshops/exam.ts`).
+  Le champ `chapterRef` a donc disparu du contrat.
+- **Le stockage est symétrique** (11/08/2026) : `exam_questions` porte le GROUPE,
+  `exam_question_items` chaque question, et les notions sont reliées **à la
+  question** par `exam_question_item_bricks`. L'ancienne jonction
+  `exam_question_bricks` a été supprimée le 19/08/2026 — toute référence à elle
+  dans une version antérieure de ce document est caduque.
+- **Le contrat exposé à l'IA existe déjà** : `src/lib/workshops/questionGroup.ts`
+  (`QuestionGroup`, `normalizeGroupInput`) — écrit le 11/08/2026, exactement la
+  façade que ce plan appelait de ses vœux.
+- **Bloom est à 4 niveaux**, pas 6 (contrainte `exam_question_items_bloom_level_check`).
+- **Trois types de réponse ont été retirés** (`sondage`, `ordre`, `fill_blank`,
+  09/08/2026). Les 9 types réels font foi : `src/lib/workshops/examTypes.ts`.
+  ⚠️ `docs/product-spec.md` en annonce encore certains — c'est le code qui fait foi.
+- **Le bouton « générer par IA » de la banque a disparu** avec la refonte UI :
+  les points d'entrée sont **tous** à créer (§8).
 
 ---
 
 ## 1. L'objectif
 
-À partir d'un simple fichier source (PDF en priorité), l'IA doit pouvoir produire automatiquement :
+À partir des fichiers sources de l'atelier (PDF et texte aujourd'hui, voir §6),
+l'IA produit automatiquement, **en trois étapes enchaînées** :
 
 1. les **chapitres** de l'atelier ;
-2. les **briques de connaissance**, rattachées à leur chapitre ;
-3. les **questions** (variées), avec leur niveau de Bloom et leurs briques couvertes.
+2. les **notions**, rattachées à leur chapitre ;
+3. les **questions**, avec leur niveau de Bloom et les notions qu'elles couvrent.
 
-Le tout sans saisie manuelle, et sans créer de doublons avec ce qui existe déjà.
+Le tout sans saisie manuelle, sans créer de doublons avec l'existant, et **sans
+étape de validation humaine entre les trois** (décision du 19/08/2026 : la
+génération va au bout d'un trait ; l'utilisateur constate et annule si besoin,
+voir §10).
 
 ---
 
@@ -40,9 +73,11 @@ serveur Next.js
   └─ écrit en base via src/lib/…       (appel de fonction, pas HTTP)
 ```
 
-**L'architecture actuelle est déjà la bonne.** Le pattern imposé par `CLAUDE.md` (« logique métier dans `src/lib/<domaine>/`, `app/actions/` = wrapper fin ») fait que l'ingestion appellera `lib/` directement, exactement comme le ferait une future API publique. **Rien à ré-architecturer.**
-
-**Le seul cas qui justifierait une route API à nous :** si le traitement (lecture du document + appel modèle) dépasse la limite de temps d'une server action Vercel, il faudra le déporter en tâche de fond déclenchée par une route. C'est une contrainte d'exécution longue, pas d'écriture en base — la fonction d'ingestion reste identique.
+**L'architecture actuelle est déjà la bonne.** Le pattern imposé par `CLAUDE.md`
+(« logique métier dans `src/lib/<domaine>/`, `app/actions/` = wrapper fin ») fait
+que l'ingestion appellera `lib/` directement, exactement comme le ferait une
+future API publique. **Rien à ré-architecturer** — vérifié le 19/08/2026 :
+`requireMember`/`requireManager` sont bien appelés en tête de chaque action.
 
 ---
 
@@ -52,9 +87,17 @@ serveur Next.js
 
 ### Trois clarifications
 
-1. **Vectoriser n'est pas une alternative à extraire le texte.** Un modèle d'embedding prend du texte en entrée. L'ordre est toujours `PDF → texte → vecteur`. La vectorisation vient après, elle ne remplace rien.
-2. **Un vecteur n'est pas réversible.** On ne reconstruit pas le texte depuis ~1500 nombres. Stocker le vecteur *à la place* du PDF rendrait impossible toute réextraction ultérieure — notamment le jour où un meilleur modèle justifiera de relancer l'ingestion.
-3. **Le PDF reste la source de vérité** (déjà correctement stocké via `workshop_files` + `src/lib/storage.ts`). Un vecteur est une **donnée dérivée**, régénérable — un cache, jamais une source.
+1. **Vectoriser n'est pas une alternative à extraire le texte.** Un modèle
+   d'embedding prend du texte en entrée. L'ordre est toujours `PDF → texte →
+   vecteur`. La vectorisation vient après, elle ne remplace rien.
+2. **Un vecteur n'est pas réversible.** On ne reconstruit pas le texte depuis
+   ~1500 nombres. Stocker le vecteur *à la place* du PDF rendrait impossible
+   toute réextraction ultérieure — notamment le jour où un meilleur modèle
+   justifiera de relancer l'ingestion.
+3. **Le PDF reste la source de vérité** (déjà correctement stocké via
+   `workshop_files` + `src/lib/storage.ts`, bucket privé, clé en base et jamais
+   d'URL). Un vecteur est une **donnée dérivée**, régénérable — un cache, jamais
+   une source.
 
 ### RAG serait contre-productif ici
 
@@ -63,208 +106,513 @@ serveur Next.js
 | **RAG** | Découper, vectoriser, ne récupérer que les passages *les plus pertinents* | Répondre à une question ciblée dans un corpus immense |
 | **CAG** | Mettre le document entier dans le contexte | Traiter un document **exhaustivement** |
 
-L'ingestion est exhaustive par nature (« lis tout, produis le programme complet »). Avec du RAG, le modèle ne verrait jamais les passages non retenus et produirait un programme **avec des chapitres manquants, sans que rien ne le signale**. C'est le pire mode de défaillance possible ici.
+L'ingestion est exhaustive par nature (« lis tout, produis le programme
+complet »). Avec du RAG, le modèle ne verrait jamais les passages non retenus et
+produirait un programme **avec des chapitres manquants, sans que rien ne le
+signale**. C'est le pire mode de défaillance possible ici.
 
-Le contexte n'est plus limitant : les modèles actuels acceptent jusqu'à 1 M de tokens ; un cours de 150 pages en fait de l'ordre de 80 000.
+**Chiffrage corrigé (19/08/2026).** La version initiale estimait un cours de 150
+pages à ~80 000 tokens. C'est le chiffre du **texte seul** : en PDF natif, chaque
+page part *aussi* en image (c'est ce qui préserve tableaux et schémas, voir §4),
+soit de l'ordre de **1 500 à 3 000 tokens par page** — un cours de 150 pages pèse
+donc plutôt **225 000 à 450 000 tokens**. Toujours très en deçà du million de la
+fenêtre de contexte, mais avec deux conséquences directes : le cache de prompt
+n'est pas une optimisation mais une nécessité (§5), et le coût par ingestion est
+d'un autre ordre que prévu (§9). **À mesurer pour de vrai** avec
+`messages.countTokens` sur un cours réel avant de fixer quoi que ce soit de
+tarifaire.
 
-**Document hors-normes (> limites du fournisseur) :** découpage **séquentiel** (par partie, dans l'ordre de lecture), ingestion de chaque tranche, fusion des plans. Un découpage par ordre, pas par pertinence — la couverture reste complète.
+**Document hors-normes :** découpage **séquentiel** (par partie, dans l'ordre de
+lecture), ingestion de chaque tranche, fusion des plans. Un découpage par ordre,
+pas par pertinence — la couverture reste complète.
 
 ### Vecteurs : plus tard, et le terrain est prêt
 
-`pgvector` **0.8.0 est disponible sur le projet Supabase `hhkmrejjksjpfetwefju`, non installé** (vérifié le 20/07/2026).
+`pgvector` **0.8.0 est disponible sur le projet Supabase `hhkmrejjksjpfetwefju`,
+non installé** (revérifié le 19/08/2026).
 
-Le jour où une vraie recherche sémantique arrivera (recherche côté candidat, rattachement automatique question ↔ brique), **les briques de connaissance sont déjà les chunks** : une brique est exactement ce qu'un projet classique doit fabriquer artificiellement — une unité de sens autonome, avec titre et contenu, découpée à la main. Il suffira d'activer l'extension et d'ajouter une colonne `embedding` sur `workshop_bricks`. Rien à redécouper.
+Le jour où une vraie recherche sémantique arrivera (recherche côté candidat,
+détection de doublons à grande échelle, rattachement automatique question ↔
+notion), **les notions sont déjà les chunks** : une notion est exactement ce
+qu'un projet classique doit fabriquer artificiellement — une unité de sens
+autonome, un seul texte de 280 caractères. Il suffira d'activer l'extension et
+d'ajouter une colonne `embedding` sur `workshop_bricks`. Rien à redécouper.
 
-**Aujourd'hui : ne rien vectoriser.** Complexité et coût d'embedding pour un besoin qui n'existe pas encore.
+**Aujourd'hui : ne rien vectoriser.** Complexité et coût d'embedding pour un
+besoin qui n'existe pas encore.
 
 ---
 
 ## 4. Fournisseurs : trajectoire et frontière d'abstraction
 
-**Trajectoire décidée :** Claude d'abord (le plus simple à mettre en place) → DeepSeek ensuite (coût) → à terme, modèles open-source DeepSeek **auto-hébergés en local**.
+**Trajectoire décidée :** Claude d'abord (le plus simple à mettre en place) →
+DeepSeek ensuite (coût) → à terme, modèles open-source DeepSeek **auto-hébergés
+en local**.
 
 ### Comment Claude préserve tableaux et images
 
-Ce n'est pas du parsing : **chaque page du PDF est envoyée au modèle comme une image**, en plus du texte extrait. Le modèle *regarde* la page. D'où la conservation des tableaux, schémas, colonnes et encadrés qu'une extraction texte aplatit — et d'où le surcoût (tokens d'image par page) et les limites (32 Mo, 600 pages).
+Ce n'est pas du parsing : **chaque page du PDF est envoyée au modèle comme une
+image**, en plus du texte extrait. Le modèle *regarde* la page. D'où la
+conservation des tableaux, schémas, colonnes et encadrés qu'une extraction texte
+aplatit — et d'où le surcoût en tokens (§3) et les limites (32 Mo, 600 pages).
 
 ### Conséquence structurante
 
-Changer de fournisseur **n'est pas un changement d'URL**. Sans lecture PDF native, il faudra soit extraire le texte (et perdre les tableaux), soit rendre les pages en images pour un modèle de vision.
+Changer de fournisseur **n'est pas un changement d'URL**. Sans lecture PDF
+native, il faudra soit extraire le texte (et perdre les tableaux), soit rendre
+les pages en images pour un modèle de vision.
 
-**La frontière à isoler n'est donc pas « appeler un modèle » mais « transformer un document en plan » :**
+**La frontière à isoler n'est donc pas « appeler un modèle » mais « transformer
+un document en plan » :**
 
 ```ts
 // src/lib/ingest/providers/types.ts (à créer)
 type PlanProvider = {
-  documentToPlan(file: SourceFile, context: ExistingContent, scope: IngestScope): Promise<unknown>;
+  documentToPlan(files: SourceFile[], context: ExistingContent, scope: IngestScope): Promise<unknown>;
 };
 ```
 
-Chaque fournisseur l'implémente à sa façon (Claude : PDF direct ; DeepSeek : extraction préalable ; local : idem + contraintes matérielles). Le reste du pipeline — validation, résolution des références, écriture — est **identique quel que soit le fournisseur**, parce que le contrat de sortie est défini indépendamment de lui.
+Chaque fournisseur l'implémente à sa façon (Claude : PDF direct ; DeepSeek :
+extraction préalable ; local : idem + contraintes matérielles). Le reste du
+pipeline — validation, résolution des références, écriture — est **identique quel
+que soit le fournisseur**, parce que le contrat de sortie est défini
+indépendamment de lui.
 
 ---
 
-## 5. Le contrat : un schéma Zod unique
+## 5. Méthode d'appel (ajouté le 19/08/2026)
 
-`zod` est **déjà installé et utilisé nulle part dans `src/`** — ce serait son premier usage réel.
+### 5.1 Trois passes, ancrées sur les notions
 
-Un seul schéma décrit le plan complet, avec des **clés de référence locales** (l'IA ne peut pas connaître des identifiants qui n'existent pas encore) :
+L'appel unique « document → tout le programme » est le pire réglage possible : la
+qualité des questions décroît à mesure que la sortie s'allonge, la sortie est
+plafonnée à 128k tokens, et **un seul JSON invalide fait perdre tout le lot**.
+
+```
+Passe 1 — CHAPITRES   1 appel, tous les documents  →  chapitres
+Passe 2 — NOTIONS     1 appel par chapitre         →  notions du chapitre
+Passe 3 — QUESTIONS   1 appel par chapitre         →  questions, reliées aux notions
+```
+
+Les passes 2 et 3 sont parallélisables par chapitre. **Aucune validation humaine
+entre les passes** (décision du 19/08/2026) : l'enchaînement va au bout, et le
+recours est l'annulation d'import (§10).
+
+Ce que cet ancrage apporte, et qui est le vrai levier de qualité : en passe 3, le
+modèle ne reçoit pas « invente des questions sur ce cours » mais « voici les N
+notions de ce chapitre, produis les questions qui les font travailler ». Chaque
+question **naît reliée à ses notions**, sans qu'on ait à l'imposer par une règle.
+Et un chapitre raté se rejoue seul, sans reprendre les 150 pages.
+
+### 5.2 Réglages Claude
+
+| Réglage | Valeur | Pourquoi |
+|---|---|---|
+| Modèle | `claude-opus-5` | Extraction structurée exhaustive sur document long — le cœur du produit, pas l'endroit où économiser. DeepSeek plus tard, derrière `PlanProvider`. |
+| Réflexion | `thinking: { type: 'adaptive' }` + `output_config: { effort: 'high' }` | Découper un cours en notions est un travail de raisonnement. |
+| Sortie | `output_config.format` (JSON Schema dérivé du Zod), **puis** re-validation Zod | Les deux usages prévus au §7. La contrainte native évite l'essentiel des sorties malformées ; Zod reste le filet, et le seul rempart pour un fournisseur sans sortie structurée. |
+| Streaming | oui, `max_tokens` ~64 000 | Sans streaming, un gros lot dépasse les délais d'attente HTTP du SDK. |
+| Fichier | Files API (bêta `files-api-2025-04-14`) | Le document est **téléversé une fois** et référencé par `file_id` dans les N+1 appels, au lieu de renvoyer des dizaines de Mo de base64 à chaque chapitre. |
+| Cache | `cache_control: { type: 'ephemeral', ttl: '1h' }` sur documents + existant | Décisif : les passes 2 et 3 relisent le même document une fois par chapitre. Lecture en cache ≈ 0,1× le prix. TTL 1 h (et non 5 min par défaut) car l'enchaînement s'étale. |
+
+**Ordre du prompt, non négociable** — le cache est un préfixe, le moindre octet
+qui change en amont invalide tout ce qui suit :
+
+```
+[ système figé ] → [ documents ] → [ existant de l'atelier ] → [ consigne du chapitre N ]
+└──────────────── stable, mis en cache ────────────────┘        └──── volatile ────┘
+```
+
+Contrôle à câbler dès le premier appel : journaliser
+`usage.cache_read_input_tokens`. S'il reste à zéro d'un appel à l'autre, un
+invalidateur silencieux traîne dans le préfixe (une date, un uuid, un
+`JSON.stringify` d'objet non ordonné).
+
+### 5.3 Traçabilité : arbitrage tranché
+
+Les **citations** de l'API (`citations: {enabled: true}` sur le bloc document)
+rendraient chaque notion traçable à sa page d'origine — l'antidote naturel à
+l'hallucination sur un support pédagogique. Mais elles sont **incompatibles avec
+`output_config.format`** (400 si on combine les deux).
+
+**Décision du 19/08/2026 : sortie structurée pour la V1**, citations gardées en
+tête pour une éventuelle passe de vérification ultérieure. La fiabilité du
+premier jet prime sur la traçabilité.
+
+### 5.4 Exécution : unités bornées plutôt que tâche de fond
+
+Il n'y a ni `vercel.json`, ni `maxDuration`, ni file d'attente dans le projet.
+Plutôt que de rallonger le délai d'une server action, on **rend la question sans
+objet** : chaque appel serveur ne fait qu'**une unité bornée** (une passe, un
+chapitre), et le client enchaîne. Aucun appel ne dure longtemps, la barre de
+progression est gratuite, un chapitre en échec se rejoue seul.
+
+⚠️ **À reprendre plus tard — ce n'est pas optimisé** (noté le 19/08/2026) :
+l'onglet doit rester ouvert pendant toute l'ingestion, et l'orchestration vit
+côté client. Le jour où ça devient gênant (gros cours, ingestion en arrière-plan,
+reprise après fermeture), il faudra une vraie tâche de fond : route API
+déclenchante + état d'avancement en base + reprise. La fonction d'ingestion
+elle-même, elle, ne changera pas.
+
+---
+
+## 6. Documents acceptés (ajouté le 19/08/2026)
+
+Cible : tous les formats. Aujourd'hui : **PDF et texte**, parce que ce sont les
+seuls que l'API accepte nativement.
+
+| Format | Aujourd'hui | Comment |
+|---|---|---|
+| PDF (`application/pdf`) | ✅ | Bloc `document` natif — pages en image + texte, tableaux et schémas préservés. **32 Mo et 600 pages maximum.** |
+| Texte (`text/*`) | ✅ | Bloc texte / document texte. Aucun coût d'image. |
+| Images (`image/png`, `image/jpeg`…) | ✅ techniquement | Bloc `image`. Utile pour une photo de cours ; pas un cas d'usage prioritaire. |
+| Word, PowerPoint, Excel | ❌ | **Non acceptés nativement.** Il faudra les convertir (en PDF, ou extraire le texte) côté serveur — chantier à part entière, V2 (`docs/product-spec.md` : « autres formats en V2+ »). |
+| Audio, vidéo | ❌ | V2+, hors sujet pour l'ingestion de programme. |
+
+**Trois règles d'implémentation qui en découlent :**
+
+1. **Filtrer à la source, pas à l'appel.** L'écran de génération ne propose que
+   les fichiers d'un format pris en charge ; les autres restent visibles mais non
+   sélectionnables, avec une infobulle « format pas encore pris en charge par la
+   génération ». Jamais un échec d'API en pleine ingestion pour un format qu'on
+   savait refusé d'avance.
+2. **Écart de limite à traiter.** `MAX_FILE_SIZE` vaut **50 Mo** dans
+   `src/lib/workshops/files.ts`, alors que l'API plafonne à **32 Mo**. Un PDF de
+   40 Mo est donc téléversable aujourd'hui et sera refusé à la génération : il
+   faut le contrôle et le message explicite avant l'appel.
+3. **Plusieurs fichiers en une fois.** Un atelier a plusieurs ressources ; l'appel
+   accepte plusieurs blocs `document`. La sélection est donc multiple, dans la
+   limite des 32 Mo / 600 pages cumulés.
+
+---
+
+## 7. Le contrat : un schéma Zod unique
+
+`zod` est **installé (4.4.3) et utilisé nulle part dans `src/`** — ce sera son
+premier usage réel.
+
+Un seul schéma décrit le plan, avec des **clés de référence locales** (l'IA ne
+peut pas connaître des identifiants qui n'existent pas encore) :
 
 ```ts
-// Forme cible, à affiner
+// Forme cible, à affiner à l'écriture
 {
   chapters: [{ ref: "ch1", name: "Les fleuves", position: 0 }],
-  // Une notion n'a plus qu'UN texte depuis le 19/08/2026 (`content` retirée du
-  // modèle et de la base) — le champ `title` porte la phrase entière.
-  bricks:   [{ ref: "b1", title: "…", chapterRef: "ch1" }],
-  questions:[{
-    ref: "q1",
+  // Une notion n'a qu'UN texte depuis le 19/08/2026 (280 caractères).
+  notions:  [{ ref: "n1", title: "…", chapterRef: "ch1" }],
+  // Une QUESTION est en réalité un GROUPE (au moins une question) — voir
+  // QuestionGroup dans src/lib/workshops/questionGroup.ts, qui est le contrat
+  // déjà écrit. Ne pas en inventer un second.
+  groups: [{
+    ref: "g1",
     context: "parcours" | "exam",
-    content: "…", responseType: "qcm", choices: [...], correctChoices: [...],
-    bloomLevel: 3,
-    brickRefs: ["b1", "b7"],
-    chapterRef: "ch1",        // voir §9 — susceptible de disparaître
+    questions: [{
+      content: "…",
+      responseType: "qcm",       // l'un des 9 types réels (examTypes.ts)
+      choices: [...], correctChoices: [...], answer: "…", expectations: "…",
+      bloomLevel: 1 | 2 | 3 | 4, // 4 niveaux, pas 6
+      notionRefs: ["n1", "n7"],  // remplace l'ancien chapterRef : le chapitre
+                                 // d'une question se déduit de ses notions
+    }],
   }],
 }
 ```
 
-Ce schéma sert **deux fois** :
+Ce schéma sert **deux fois** : en sortie contrainte du modèle (§5.2), et en
+validation avant écriture — filet indispensable, notamment pour les fournisseurs
+sans sortie structurée native.
 
-1. **En sortie contrainte du modèle** — le fournisseur ne peut produire que du conforme (côté Claude, la conversion Zod → JSON Schema est automatique).
-2. **En validation avant écriture** — filet indispensable, notamment pour les fournisseurs sans sortie structurée native.
+**Point d'attention :** les identifiants ne viennent jamais du modèle.
+`normalizeGroupInput` les recalcule déjà côté serveur ; les `ref` du plan ne sont
+que des clés locales, résolues en identifiants réels à l'écriture.
 
 ---
 
-## 6. Les quatre points d'entrée (en escalier)
+## 8. Les points d'entrée (emplacements réels, 19/08/2026)
 
-Chaque bouton « générer par IA » fait ce que fait le précédent, **plus une couche**. Un seul moteur d'ingestion derrière, avec un périmètre (`scope`) différent.
+Un seul moteur d'ingestion, un périmètre (`scope`) différent selon l'entrée.
+**Tous ces boutons sont à créer** — celui qui existait dans la banque a disparu
+avec la refonte UI.
 
-| # | Emplacement | Crée | État |
+| # | Emplacement | Comportement | État |
 |---|---|---|---|
-| 1 | **Paramètres → Briques de connaissance** | chapitres + briques | à créer |
-| 2 | **Parcours éducatif** (onglet Programme) | idem **+ questions de parcours** | bouton pas encore présent visuellement |
-| 3 | **Banque de questions** (Génération d'examen) | idem n°1 **+ questions de banque d'examen** | bouton présent, **aucun `onClick`** ([BankContent.tsx:363](../src/app/[locale]/workshops/[id]/tabs/examen/BankContent.tsx)) |
-| 4 | **Examens générés** | idem n°3 **+ compose des examens** | plus tard |
+| 1 | **Paramètres → Ressources** | Bouton « générer par IA » ouvrant des **cases à cocher** : chapitres / notions / questions de parcours | à créer |
+| 2 | **Paramètres → Chapitre & Notion** | **Le même bouton, le même dialogue** que le n°1 — deux portes sur la même fonction | à créer |
+| 3 | **Liste de questions (examen)** | « + nouvelle » ouvre le choix **IA / manuel** ; l'IA n'ajoute que dans **cette** liste (`context = 'exam'`) | à créer |
+| 4 | **Liste de questions (parcours)** | Idem, `context = 'parcours'` | à créer |
+| 5 | **Génération d'examens** | Même schéma (« + nouvel examen » → IA / manuel) | **plus tard** |
 
-Les entrées 2 et 3 sont **sœurs**, pas imbriquées : l'une produit des questions de parcours (`context = 'parcours'`), l'autre des questions de banque (`context = 'exam'`). L'entrée 4 s'appuie sur la 3.
+Deux conséquences de cette disposition :
+
+- les entrées 1 et 2 partagent **un seul composant de dialogue** — le périmètre
+  vient des cases cochées, pas de l'écran d'origine ;
+- les entrées 3 et 4 sont **sœurs, pas imbriquées** : chacune écrit dans son
+  propre contexte, et n'ajoute jamais de questions à l'autre liste.
 
 ### Règle transverse : toujours fournir l'existant
 
-**À chaque appel, on transmet au modèle tout ce qui existe déjà** dans l'atelier — chapitres, briques, questions — afin qu'il ne recrée pas de doublons et qu'il complète l'existant au lieu de le dupliquer.
+**À chaque appel, on transmet au modèle tout ce qui existe déjà** dans l'atelier
+— chapitres, notions, questions — afin qu'il ne recrée pas de doublons et
+complète l'existant au lieu de le dupliquer. C'est la règle depuis la conception
+initiale, et elle est **indispensable**, pas optionnelle.
 
 Conséquences :
 
-- la déduplication est **portée par le modèle**, pas par un algorithme de rapprochement côté serveur ;
-- le prompt grossit avec l'atelier — à surveiller sur les gros ateliers, et argument fort pour le **cache de prompt** (l'existant est stable d'un appel à l'autre, il doit être placé en tête pour être mis en cache) ;
-- il faut décider si le modèle a le droit de **modifier** l'existant (renommer un chapitre, corriger une brique) ou seulement d'**ajouter** — voir §11.
+- la déduplication est **portée par le modèle**, pas par un algorithme de
+  rapprochement côté serveur ;
+- l'existant est placé **en tête du prompt**, dans la partie mise en cache (§5.2)
+  — c'est ce qui rend son grossissement supportable ;
+- **filet à prévoir dès la V1** : refuser côté serveur une notion dont le texte
+  normalisé est identique à une notion existante. Le modèle suffit sur un atelier
+  jeune ; à 300 notions injectées dans chaque prompt, il finira par en manquer
+  une. C'est ce besoin, et lui seul, qui fera arriver pgvector (§3).
 
 ---
 
-## 7. Volumétrie : des règles produit, pas un réglage utilisateur
+## 9. Volumétrie et coût
 
-**Décision :** le nombre de questions générées et la répartition des niveaux de Bloom sont **imposés par le site**, pas exposés à l'utilisateur.
+**Décision :** le nombre de questions générées et la répartition des niveaux de
+Bloom sont **imposés par le site**, jamais exposés à l'utilisateur.
 
-Forme des règles (valeurs **à définir**, voir §11) :
+**Règle retenue le 19/08/2026 — ⚠️ à confirmer :** *une question par niveau de
+Bloom et par notion*, soit **4 questions par notion**. À confirmer parce que la
+formulation d'origine (« 1 de chaque niveau de Bloom par question ») ne peut pas
+se lire telle quelle — une question porte un seul niveau — et parce que le volume
+qui en découle n'est pas anodin : **40 notions → 160 questions par ingestion**.
+Règle explicitement provisoire, à ajuster à l'usage.
 
-- aucune question sur la brique → en créer **X** ;
-- des questions existent déjà → en créer **Y** (complément) ;
-- chapitre nouvellement créé → **Z** ;
-- répartition Bloom et variété des types de réponse : à cadrer.
+Ces règles vivent dans le code (module d'ingestion) et sont injectées dans le
+prompt. Elles ne sont **pas** vérifiées par un refus serveur (§11).
 
-Ces règles vivent dans le code (module d'ingestion), sont injectées dans le prompt **et** vérifiées par le schéma quand c'est exprimable.
+### Ordre de grandeur du coût
+
+Cours de 150 pages, 12 chapitres, `claude-opus-5` ($5/M en entrée, $25/M en sortie) :
+
+| | Sans cache | Avec cache (§5.2) |
+|---|---|---|
+| Entrée (1 passe 1 + 12 passes 2 + 12 passes 3) | ~$8 à $15 | **~$2 à $4** |
+| Sortie (~200 questions) | ~$1 | ~$1 |
+| **Total par ingestion** | **$9 à $16** | **$3 à $5** |
+
+Ordre de grandeur, à confirmer par une mesure réelle (`countTokens`). Deux
+enseignements déjà solides : **sans cache de prompt, l'ingestion coûte trois fois
+plus cher**, et une ingestion vaut l'équivalent d'une fraction notable d'un
+abonnement mensuel. **Quota : illimité pour l'instant** (un seul utilisateur,
+décision du 19/08/2026), à rouvrir impérativement avec les abonnements.
 
 ---
 
-## 8. Écriture en base : directe, avec annulation
+## 10. Écriture en base : directe, avec annulation
 
-**Décision :** pas de prévisualisation. Le plan est écrit immédiatement ; l'utilisateur constate le résultat dans l'app et annule si besoin.
+**Décision :** pas de prévisualisation. Le plan est écrit immédiatement ;
+l'utilisateur constate le résultat dans l'app et annule si besoin.
 
 ### Le mécanisme d'annulation
 
-**Une colonne `import_id` (uuid, nullable)** sur `workshop_chapters`, `workshop_bricks` et `exam_questions`. **Pas de table `import_runs`** — décision explicite.
+**Une colonne `import_id` (uuid, nullable)** sur `workshop_chapters`,
+`workshop_bricks` et `exam_questions`.
 
 - Ligne sans valeur = saisie à la main. Ligne avec valeur = issue de ce lot.
-- Migration **expand** pure : rien de supprimé, rien de renommé, aucun impact sur le code déployé.
-- Annuler = `delete … where import_id = $1`. Les liens `exam_question_bricks` suivent seuls (`on delete cascade` des deux côtés).
+- Migration **expand** pure : rien de supprimé, rien de renommé, aucun impact sur
+  le code déployé.
+- Annuler = `delete … where import_id = $1`. Les questions emportent leurs lignes
+  `exam_question_items` et leurs liens `exam_question_item_bricks`
+  (`on delete cascade` en place, vérifié le 19/08/2026).
 
 ### Les deux conditions d'annulation
 
 Annulation possible **tant que** :
 
-1. **moins de 24 h** depuis l'import → date de l'import = le plus ancien `created_at` du lot ;
-2. **aucun élément modifié** → aucune ligne du lot n'a `updated_at` postérieur à son `created_at`.
+1. **moins de 24 h** depuis l'import → date de l'import = le plus ancien
+   `created_at` du lot ;
+2. **aucun élément modifié** → aucune ligne du lot n'a `updated_at` postérieur à
+   son `created_at`.
 
-Aucune table de métadonnées nécessaire : les trois tables portent déjà `created_at` **et** `updated_at`.
+> ⚠️ **Piège d'implémentation, toujours d'actualité.** `questionToRow`
+> (`src/lib/workshops/exam.ts`) écrit explicitement `updated_at` à chaque
+> `upsert`, **y compris à la création**. Les deux dates seraient donc séparées dès
+> l'insertion et le bouton d'annulation ne s'afficherait jamais. Correctif retenu :
+> **aligner `updated_at` sur `created_at` pendant l'ingestion** — surtout pas une
+> tolérance de quelques secondes, qui se dérègle toute seule.
 
-> ⚠️ **Piège d'implémentation.** `questionToRow` (`src/lib/workshops/exam.ts`) écrit explicitement `updated_at` à chaque `upsert`, **y compris à la création**. Les deux dates seront séparées de quelques microsecondes dès l'insertion, donc tout import serait considéré « déjà modifié » et le bouton d'annulation ne s'afficherait jamais. Il faut soit une tolérance de quelques secondes, soit aligner `updated_at` sur `created_at` pendant l'ingestion.
+### Où se trouve le bouton
+
+**Un bandeau, pas une entrée de menu.** « 3 chapitres, 42 notions et 87 questions
+ajoutés par l'IA il y a 12 minutes · Annuler », affiché en tête de **chacun** des
+écrans concernés (Ressources, Chapitre & Notion, et la liste de questions
+touchée) tant que l'annulation reste possible.
+
+Pourquoi : un import touche trois écrans à la fois, donc l'ancrer sur un seul le
+rendrait introuvable depuis les autres. Le bandeau naît là où on constate le
+résultat, disparaît de lui-même au bout de 24 h (ou à la première modification),
+et ne laisse aucune commande destructrice traîner dans un menu une fois le délai
+passé.
 
 ### Pourquoi pas une transaction atomique
 
-Le client Supabase JS ne sait pas faire de transaction multi-requêtes. Une fonction Postgres (RPC) prenant le plan en JSONB donnerait l'atomicité (tout ou rien), mais ferait vivre la logique métier en SQL — hors du pattern `lib/` du projet et hors des tests TypeScript.
+Le client Supabase JS ne sait pas faire de transaction multi-requêtes. Une
+fonction Postgres (RPC) prenant le plan en JSONB donnerait l'atomicité, mais
+ferait vivre la logique métier en SQL — hors du pattern `lib/` et hors des tests
+TypeScript.
 
-L'approche retenue n'est pas atomique : un échec en cours laisse un atelier partiellement rempli. C'est assumé, parce que l'étiquette `import_id` permet de nettoyer d'un coup — **et parce qu'elle sert bien au-delà de la panne** : annuler un import qui a *techniquement réussi* mais dont l'IA a mal compris le document. Aucune transaction ne donne ça.
+L'approche retenue n'est pas atomique : un échec en cours laisse un atelier
+partiellement rempli. C'est assumé, parce que l'étiquette `import_id` permet de
+nettoyer d'un coup — **et parce qu'elle sert bien au-delà de la panne** : annuler
+un import qui a *techniquement réussi* mais dont l'IA a mal compris le document.
+Aucune transaction ne donne ça.
 
----
+### Une table minimale d'imports (décidé le 19/08/2026)
 
-## 9. Prérequis : le basculement chapitre → briques
+Le plan initial excluait toute table (`import_runs`). **Décision révisée : on la
+fait**, minimale et purement additive :
 
-**Décision produit annoncée (à faire avant l'ingestion) :** supprimer la sélection de chapitre sur les questions. Le chapitre d'une question se déduira de ses briques (`question → exam_question_bricks → workshop_bricks.chapter_id`) au lieu d'être saisi deux fois.
+```
+ai_imports(id, workshop_id, created_by, created_at, scope, file_ids,
+           input_tokens, output_tokens, cached_tokens)
+```
 
-**Impact direct sur l'existant** (livré le 19/07/2026) : `drawParcoursQuestion` filtre sur `exam_questions.chapter_id`. Sans cette colonne, le tirage devra passer par la jonction — et **une question sans brique ne serait plus jamais tirable**. L'association aux briques cesse d'être facultative : elle devient la condition d'existence de la question dans un parcours. Il faudra la rendre obligatoire (au moins une brique), comme on l'a fait pour le niveau de Bloom.
-
-**Ordre impératif :** faire ce basculement **avant** d'écrire le schéma Zod, sinon le contrat est à réécrire (le champ `chapterRef` sur les questions disparaîtrait).
-
----
-
-## 10. Chantiers techniques préalables
-
-### 10.1 Bug bloquant — collision d'identifiants
-
-`emptyQuestion()` (`src/app/[locale]/workshops/[id]/tabs/QuestionEditor.tsx`) génère `id: 'q' + Date.now()`.
-
-En création manuelle, aucun risque. **En ingestion, N questions créées dans la même milliseconde partagent le même identifiant** → l'`upsert` les écrase les unes les autres, **silencieusement**. À remplacer par `crypto.randomUUID()` **avant tout travail d'ingestion**.
-
-> À noter : `exam_questions.id` est de type `text` (identifiants générés côté client), pas `uuid` — c'est ce qui a fait échouer la première migration de `exam_question_bricks`, dont la clé étrangère est en `text`.
-
-### 10.2 Invariants métier à faire remonter dans `lib/`
-
-Les écritures actuelles font confiance à l'UI : le seul contrôle métier existant est `validateName` pour les chapitres. Une IA écrit 200 lignes d'un coup. À vérifier **dans `lib/`**, pas dans un composant :
-
-- `bloomLevel` entre 1 et 6 (déjà garanti en base par contrainte, mais l'erreur doit être lisible) ;
-- QCM/QCS ⇒ au moins 2 choix et au moins une bonne réponse ;
-- réponse non vide sauf `sans_reponse` ;
-- brique référencée existante **et appartenant au même atelier** ;
-- chapitre référencé existant et du même atelier ;
-- longueurs maximales (`CHAPTER_NAME_MAX` = 120, etc.).
-
-### 10.3 Absence de suppression multiple
-
-Ni la banque d'examen ni la vue parcours n'ont de suppression multiple — chaque bouton ouvre une confirmation pour une seule question. Non bloquant (l'annulation par `import_id` couvre le besoin), mais à garder en tête.
+Raison : l'annulation seule n'en a pas besoin, mais **les quotas** (§9) et la
+**ré-ingestion d'un même fichier** en ont besoin tous les deux — savoir ce qui a
+déjà été importé, quand, par qui, à quel coût. En prime, de quoi déboguer une
+génération ratée et suivre la dépense réelle.
 
 ---
 
-## 11. Questions ouvertes
+## 11. Ce qui est vérifié côté serveur, et ce qui ne l'est pas
 
-À trancher au moment de l'implémentation :
+**Décision structurante du 19/08/2026.** Deux familles de règles, deux
+traitements opposés — ne jamais les confondre :
 
-1. **Valeurs de la volumétrie** — les X / Y / Z du §7, la répartition Bloom cible, la variété attendue des types de réponse.
-2. **Modification de l'existant** — le modèle peut-il renommer un chapitre, corriger une brique, reformuler une question existante, ou uniquement **ajouter** ? (Impacte le schéma, l'annulation et la confiance.)
-3. **Qui peut annuler un import** — gestionnaire, ou propriétaire uniquement ?
-4. **Ré-ingestion du même fichier** — comportement attendu si un fichier déjà traité est resoumis.
-5. **Documents hors limites** — seuil de découpage séquentiel, et où il s'exécute (server action vs tâche de fond).
-6. **Coût** — la génération par IA est-elle liée à l'atelier Premium ? Quelles limites par atelier / par mois ?
-7. **Cohérence Bloom** — le `bloom_level` généré doit-il suivre une règle par rapport au contenu de la brique, et comment il s'articulera plus tard avec `brick_mastery` (voir `docs/backlog.md`).
+| Famille | Exemples | Traitement |
+|---|---|---|
+| **Qualité pédagogique** | nombre de propositions d'un QCM, réponse remplie, répartition Bloom, variété des types de réponse | **Prompt uniquement.** Aucun refus serveur. |
+| **Intégrité structurelle** | notion référencée inexistante, ou appartenant à **un autre atelier** ; `bloomLevel` hors 1–4 ; type de réponse inventé ; groupe à zéro question | **Refus serveur, systématique.** |
+
+**Pourquoi cette ligne de partage.** Un QCM à une seule bonne réponse est un
+choix légitime de l'utilisateur, pas une erreur : brider l'écriture au nom de la
+qualité reviendrait à lui interdire ce qu'il demande explicitement. La qualité
+s'obtient en orientant le modèle, jamais en refusant la donnée.
+
+À l'inverse, aucun utilisateur ne peut *vouloir* qu'une question pointe vers la
+notion d'un autre atelier : c'est de la corruption de données. Le contrôle
+« notion existante **et du même atelier** » est d'ailleurs aussi une question de
+sécurité — une server action est une URL POST publique, et `notionIds` n'est
+aujourd'hui recoupé avec rien.
+
+### Le cas particulier de la question sans notion
+
+Une question **peut** n'avoir aucune notion : c'est permis, et l'IA en associe
+naturellement sans qu'on l'impose. Mais la conséquence doit être **rendue
+visible**, parce qu'elle est silencieuse :
+
+> Une question de parcours sans notion **n'est tirée par aucun exercice, jamais**
+> (le tirage passe par les notions depuis le 19/08/2026). Elle est enregistrée,
+> elle s'affiche dans la liste, et elle ne sert à rien.
+
+État constaté le 19/08/2026 : **21 des 22** questions de parcours qui portaient un
+chapitre manuel sont dans ce cas. À faire : une pastille d'avertissement sur la
+ligne concernée — « aucune notion : cette question ne sera jamais tirée ». La
+liberté reste entière, le piège disparaît.
 
 ---
 
-## 12. Ordre de chantier recommandé
+## 12. Prérequis techniques restants
 
-1. **Basculement chapitre → briques** (§9) — change le modèle de données, doit précéder le contrat.
-2. **Fix des identifiants de question** (§10.1) — bloquant, indépendant, rapide.
-3. **Invariants métier dans `lib/`** (§10.2) — utile même sans IA.
-4. **Colonne `import_id`** + fonction d'annulation (§8) — migration expand, testable seule.
-5. **Schéma Zod du plan** (§5) + `ingestWorkshopPlan()` — testable avec un plan écrit à la main, **sans une ligne d'IA**.
-6. **Interface fournisseur** (§4) + première implémentation Claude.
-7. **Les quatre boutons** (§6), dans l'ordre 1 → 2 → 3 → 4.
+### 12.1 Bug bloquant — collision d'identifiants
 
-Les étapes 1 à 5 se construisent et se testent **entièrement sans IA**. Le jour où le modèle arrive, il ne reste que « document → plan ».
+`emptyQuestion()` (`src/app/[locale]/workshops/[id]/tabs/QuestionEditor.tsx`)
+génère `id: 'q' + Date.now()`. Les questions *liées* sont passées à
+`crypto.randomUUID()` (`questionFields.tsx`, `exam.ts`, `questionGroup.ts`), **le
+groupe non**.
+
+En création manuelle, aucun risque. **En ingestion, N groupes créés dans la même
+milliseconde partagent le même identifiant** → l'`upsert` les écrase les uns les
+autres, **silencieusement**. À remplacer par `crypto.randomUUID()` **avant tout
+travail d'ingestion**.
+
+> À noter : `exam_questions.id` est de type `text` (identifiants générés côté
+> client), pas `uuid`.
+
+### 12.2 Aucune infrastructure de test
+
+Ni Vitest ni Playwright ne sont installés (`package.json`, 19/08/2026), et
+`tests/` n'existe pas. Or l'étape « `ingestWorkshopPlan()` testable avec un plan
+écrit à la main » suppose un runner.
+
+Enjeu concret : sans lui, la seule façon de vérifier qu'une ingestion écrit
+correctement 200 lignes est de **la lancer pour de vrai sur la base Supabase —
+celle que partage scellow.com**. Vitest tourne en local, sur des fonctions pures :
+ni réseau, ni base, ni site. C'est précisément ce qui évite de tester en
+production.
+
+### 12.3 Absence de suppression multiple
+
+Ni la banque d'examen ni la vue parcours n'ont de suppression multiple. Non
+bloquant (l'annulation par `import_id` couvre le besoin), mais à garder en tête.
+
+---
+
+## 13. Décisions prises et questions encore ouvertes
+
+### Tranché le 19/08/2026
+
+| Question | Décision |
+|---|---|
+| Modification de l'existant | **Ajout seulement.** Modifier/supprimer plus tard. |
+| Validation humaine entre les étapes | **Aucune** — les trois passes s'enchaînent. |
+| Volumétrie | 1 question par niveau de Bloom et par notion (**à confirmer**, §9). |
+| Quotas / coût | **Illimité** pour l'instant (un seul utilisateur) ; à rouvrir avec les abonnements. |
+| Traçabilité | Sortie structurée en V1 ; citations gardées en tête. |
+| Table d'imports | **Oui**, minimale (§10). |
+| Qualité vs intégrité | Prompt pour l'une, refus serveur pour l'autre (§11). |
+
+### Encore ouvert
+
+1. **Confirmation de la volumétrie** (§9) et de la variété attendue des types de
+   réponse.
+2. **Qui peut annuler un import** — gestionnaire, ou propriétaire uniquement ?
+3. **Ré-ingestion du même fichier** — comportement attendu si un fichier déjà
+   traité est resoumis (la table `ai_imports` donne de quoi le détecter, reste à
+   décider quoi en faire).
+4. **Seuil de découpage séquentiel** pour un document hors limites (§3).
+5. **Cohérence Bloom** — comment le niveau généré s'articulera avec
+   `brick_mastery` (voir `docs/backlog.md`).
+
+---
+
+## 14. Ordre de chantier
+
+1. **Installer Vitest** (§12.2) — sans lui, rien de ce qui suit n'est vérifiable
+   hors production.
+2. **`crypto.randomUUID()` dans `emptyQuestion()`** (§12.1) — bloquant,
+   indépendant, une ligne.
+3. **Contrôles d'intégrité dans `lib/`** (§11) + pastille « aucune notion ».
+4. **`import_id` + `ai_imports` + annulation** (§10), correctif `updated_at`
+   compris — migration expand, testable seule.
+5. **Schéma Zod + `ingestWorkshopPlan()`** (§7) — testable avec un plan écrit à
+   la main, **sans une ligne d'IA**.
+6. **Interface `PlanProvider` + implémentation Claude** (§4, §5).
+7. **Les points d'entrée** (§8), dans l'ordre 1/2 → 3 → 4 → 5.
+
+Les étapes 1 à 5 se construisent et se testent **entièrement sans IA**, et
+représentent l'essentiel du travail. Le jour où le modèle arrive, il ne reste que
+« document → plan ».
+
+---
+
+## 15. Mise en service de l'API (à faire une fois, avant l'étape 6)
+
+1. **Compte** sur `console.anthropic.com` (distinct d'un abonnement Claude.ai :
+   l'API se facture à part).
+2. **Moyen de paiement + crédits prépayés.** Oui, une carte bancaire est
+   nécessaire ; l'API fonctionne sur des crédits achetés d'avance, pas sur
+   facturation à terme. Quelques dizaines d'euros couvrent très largement la mise
+   au point.
+3. **Plafond de dépense et alerte** dans la console — à poser dès le premier jour.
+   C'est le vrai garde-fou tant qu'il n'y a pas de quota applicatif (§9), et il
+   protège d'une boucle qui partirait en vrille pendant le développement.
+4. **Clé API** → `ANTHROPIC_API_KEY` dans `.env.local` (jamais commité,
+   `CLAUDE.md` §8) **et** dans les variables d'environnement Vercel (production +
+   preview). À ajouter aussi à `.env.local.example`, sans valeur.
+5. **Pas de clé en CI** : les tests unitaires ne doivent jamais appeler l'API
+   réelle — ils valident le pipeline avec des plans écrits à la main (§12.2).
