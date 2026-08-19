@@ -100,7 +100,23 @@ AUCUN
 - **09/08/2026 — `exam_questions.type_options`** (jsonb des réglages par type de
   réponse) : additive, appliquée directement.
 - **09/08/2026 — types de réponse retirés** (`sondage`, `ordre`, `fill_blank`) :
-  **aucune migration prévue, jamais**. La normalisation se fait à la lecture
-  (`toResponseType()` dans `src/lib/workshops/examTypes.ts`) et la nouvelle
-  valeur se réécrit au premier enregistrement de la question. Rien à nettoyer en
-  base.
+  aucune migration de *données* n'a été nécessaire. La normalisation se faisait à
+  la lecture (`toResponseType()` dans `src/lib/workshops/examTypes.ts`) et la
+  nouvelle valeur se réécrivait au premier enregistrement de la question ; au
+  19/08/2026, plus aucune ligne ne portait d'ancienne valeur.
+  **Décision revue le 19/08/2026** : le laisser *possible* ne suffisait pas —
+  voir l'entrée « Types de réponse verrouillés en base » ci-dessous, qui ajoute
+  la contrainte manquante.
+
+- **19/08/2026 — Types de réponse verrouillés en base**
+  (`2026-08-19-types-de-reponse-verrouilles.sql`) : contrainte
+  `exam_question_items_response_type_check` limitant `response_type` aux 9 types
+  actuels. Appliquée **directement** malgré son caractère restrictif : le
+  contrôle de conformité renvoyait 0 sur 130 lignes (les valeurs héritées avaient
+  déjà été normalisées par la reprise du 11/08), et aucun chemin d'écriture du
+  code déployé ne peut produire autre chose — toute `Question` passe par
+  `toResponseType` en lecture, et l'éditeur ne propose que `RESPONSE_TYPE_ORDER`.
+  Décision du jour : il ne doit plus être *possible* qu'un ancien type
+  (`sondage`, `ordre`, `fill_blank`, `audio`…) existe en base. ⚠️ L'ajout d'un
+  nouveau type de réponse au produit devra mettre à jour cette contrainte dans la
+  même migration que le code.

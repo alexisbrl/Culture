@@ -605,6 +605,33 @@ notion d'un autre atelier : c'est de la corruption de données. Le contrôle
 sécurité — une server action est une URL POST publique, et `notionIds` n'est
 aujourd'hui recoupé avec rien.
 
+### Que faire quand un contrôle échoue (arbitré le 19/08/2026)
+
+| Contexte | Comportement |
+|---|---|
+| **Ingestion IA** | Écarter la question fautive, **compter l'écart** et le remonter (« 3 questions écartées : type de réponse non reconnu »). Jamais perdre un lot de 160 pour une ligne. |
+| **Saisie manuelle** | **Refuser l'enregistrement et remonter l'erreur.** Retirer silencieusement la notion fautive laisserait l'utilisateur croire qu'il a relié une notion qui ne l'est pas. |
+
+Ce que ça remplace — l'état d'avant le 19/08/2026, mesuré et non supposé :
+
+- **notion inexistante** : la clé étrangère levait, mais **après** l'écriture du
+  groupe → question à moitié enregistrée, et l'erreur avalée par le
+  `.catch(console.error)` du client (voir `docs/backlog.md`, écritures
+  optimistes) ;
+- **notion d'un autre atelier** : la clé étrangère passait — elle vérifie que la
+  notion existe, **pas qu'elle est d'ici** → le lien inter-ateliers se créait
+  silencieusement.
+
+D'où deux points d'implémentation retenus : le contrôle s'exécute **avant toute
+écriture** (un refus laisse la base intacte), et il liste **tous** les
+manquements d'un coup — corriger un problème pour en découvrir un autre au
+ré-enregistrement est une perte de temps, pour un humain comme pour une boucle.
+
+> ⚠️ Le message d'erreur ne sera réellement **visible** par l'utilisateur que
+> lorsque les écritures optimistes remonteront leurs échecs (item ouvert de
+> `docs/backlog.md`). Aujourd'hui il part dans la console. Le refus, lui, est
+> déjà effectif : rien d'incohérent n'atteint la base.
+
 ### Le cas particulier de la question sans notion
 
 Une question **peut** n'avoir aucune notion : c'est permis, et l'IA en associe

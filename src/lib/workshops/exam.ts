@@ -26,6 +26,7 @@ import type {
   ResponseType,
 } from '@/lib/workshops/examTypes';
 import { normalizeTypeOptions, toBloomLevel, toResponseType, type QuestionTypeOptions } from '@/lib/workshops/examTypes';
+import { assertQuestionIntegrity, notionIdsOf } from '@/lib/workshops/questionIntegrity';
 // ─── Stockage : un groupe, ses questions ─────────────────────────────────────
 //
 // `exam_questions` porte le GROUPE — uniquement ce qui est commun : titre,
@@ -271,6 +272,39 @@ async function loadNotionLinks(itemIds: string[]): Promise<NotionLinkMap> {
 
 // ─── Écriture ────────────────────────────────────────────────────────────────
 
+/** Contrôle d'intégrité de tout un lot avant écriture — **une seule** lecture
+ *  des notions de l'atelier, quel que soit le nombre de questions (règle N+1 :
+ *  l'ingestion IA en enverra des centaines d'un coup).
+ *
+ *  Ce qui est vérifié, et pourquoi si peu : voir `questionIntegrity.ts`. En deux
+ *  mots — on refuse ce que personne ne peut vouloir (notion inexistante ou d'un
+ *  autre atelier, type de réponse inventé), jamais un choix pédagogique.
+ *
+ *  Le contrôle du rattachement inter-ateliers ne peut pas être délégué à la base :
+ *  la clé étrangère de `exam_question_item_bricks` vérifie que la notion existe,
+ *  pas qu'elle appartient à CET atelier. Et une server action étant une URL POST
+ *  publique, on ne peut pas s'en remettre à l'interface, qui ne propose pourtant
+ *  que les notions de l'atelier. */
+async function assertQuestionsIntegrity(workshopId: string, questions: Question[]): Promise<void> {
+  const wanted = [...new Set(questions.flatMap(notionIdsOf))];
+
+  // Aucune notion référencée : rien à lire, seuls les types restent à vérifier.
+  let allowed = new Set<string>();
+  if (wanted.length > 0) {
+    const supabase = getSupabaseServerClient();
+    // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
+    const { data, error } = await supabase
+      .from('workshop_bricks')
+      .select('id')
+      .eq('workshop_id', workshopId)
+      .in('id', wanted);
+    if (error) throw new Error(error.message);
+    allowed = new Set((data ?? []).map((row) => row.id as string));
+  }
+
+  for (const question of questions) assertQuestionIntegrity(question, allowed);
+}
+
 /** Aligne les lignes `exam_question_items` d'un groupe sur ce que porte la
  *  question, puis leurs notions. Différentiel plutôt que « tout effacer, tout
  *  réinsérer » : une question liée conserve sa ligne (et ses liens) d'une
@@ -389,6 +423,12 @@ export async function getExamBankData(workshopId: string): Promise<{
 // rôle est justement de ne PAS requalifier les lignes existantes (voir
 // `questionToRow`).
 export async function saveQuestion(workshopId: string, question: Question, context: QuestionContext): Promise<void> {
+  // AVANT toute écriture : un refus doit laisser la base intacte. Écrire le
+  // groupe puis échouer sur ses notions laisserait une question à moitié
+  // enregistrée — c'est exactement ce qui se produisait jusqu'ici, la clé
+  // étrangère ne levant qu'au moment des liens.
+  await assertQuestionsIntegrity(workshopId, [question]);
+
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_questions').upsert(questionToRow(workshopId, question, context));
   if (error) throw new Error(error.message);
@@ -703,6 +743,8 @@ export async function gradeParcoursAnswer(
 
 export async function saveQuestions(workshopId: string, questions: Question[]): Promise<void> {
   if (questions.length === 0) return;
+  await assertQuestionsIntegrity(workshopId, questions);
+
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from('exam_questions').upsert(questions.map((q) => questionToRow(workshopId, q)));
   if (error) throw new Error(error.message);
