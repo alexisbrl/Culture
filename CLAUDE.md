@@ -230,7 +230,7 @@ Activée — à utiliser systématiquement pour ouvrir l'app, tester l'UI et val
 ### Lint & CI
 - `npm run lint` (= `eslint .`) doit passer **sans erreur** avant tout commit/PR. Les règles « React Compiler readiness » (`react-hooks/set-state-in-effect`, `refs`, `immutability`, `purity`) sont volontairement en `warn` (patterns hydration-safe légitimes) — ne pas les repasser en `error` sans raison, et ne pas « corriger » un warning hydration en retirant l'effet (réintroduit un hydration mismatch).
 - `npm run typecheck` (= `tsc --noEmit`) en local ; en CI le typecheck fiable passe par `npm run build` (régénère `next-env.d.ts` + types de routes) — voir le piège Turbopack en §1.
-- CI : `.github/workflows/ci.yml` (job `lint` sans secret + job `build` avec secrets dépôt, mêmes valeurs que Vercel).
+- CI : `.github/workflows/ci.yml` — jobs `lint` et `build`, **ni l'un ni l'autre ne dispose de secrets**. Le dépôt n'en définit aucun (`Settings → Secrets and variables → Actions` est vide), donc les `${{ secrets.* }}` du job `build` se résolvent tous en chaîne vide. C'est **sans conséquence et assumé** (constaté le 20/08/2026) : `next build` compile sans identifiants valides, et rien dans ce projet ne consulte Clerk, Supabase ou Resend *au moment du build* — toutes les routes applicatives sont rendues à la demande. La CI vérifie donc la compilation, les types de routes et TypeScript, **pas** l'accès aux services. Ne pas ajouter un seul secret « pour bien faire » : ce serait la moitié d'un invariant, plus trompeur que l'absence.
 
 ---
 
