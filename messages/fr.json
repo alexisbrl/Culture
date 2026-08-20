@@ -798,7 +798,7 @@
       "title": "Ressources",
       "dropHere": "glisse tes fichiers ici ou",
       "browse": "parcourir",
-      "addFileHint": "PDF, images, documents · 50 Mo max par fichier",
+      "addFileHint": "PDF, images, documents · 25 Mo max par fichier",
       "uploading": "téléchargement… {percent}%",
       "noFiles": "aucun fichier déposé pour l'instant.",
       "saveTitle": "enregistrer",
@@ -1187,5 +1187,45 @@
       "restore": "Si c'est une erreur, restaurez l'atelier depuis la corbeille, tout en bas de votre tableau de bord.",
       "restoreCta": "Ouvrir scellow.com"
     }
+  },
+  "ai": {
+    "title": "Générer par IA",
+    "subtitle": "À partir des documents de l’atelier, l’IA construit les chapitres, les notions, puis les questions.",
+    "files": "Documents sources",
+    "noFiles": "Aucun document dans cet atelier. Ajoute un PDF ou un fichier texte dans Ressources.",
+    "unsupported": "Format pas encore pris en charge par la génération (PDF et texte uniquement)",
+    "whatToGenerate": "Ce qu’il faut générer",
+    "scope": {
+      "chapters": "Les chapitres",
+      "notions": "Les notions de chaque chapitre",
+      "questionsParcours": "Les questions du parcours",
+      "questionsExam": "Les questions de la banque d’examen"
+    },
+    "questionsNeedNotions": "Les questions se rattachent aux notions : sans elles, aucune ne serait jamais posée.",
+    "generate": "générer",
+    "cancel": "annuler",
+    "close": "fermer",
+    "retry": "réessayer",
+    "progress": {
+      "chapters": "Lecture du document et découpage en chapitres…",
+      "notions": "Notions — {chapter} ({i}/{n})",
+      "questions": "Questions — {chapter} ({i}/{n})"
+    },
+    "keepOpen": "Garde cet onglet ouvert : la génération s’interrompt s’il est fermé. Ce qui a déjà été écrit reste, et reste annulable.",
+    "runningCounts": "{chapters} chapitres · {notions} notions · {questions} questions",
+    "doneCounts": "{chapters} chapitres, {notions} notions et {questions} questions ajoutés",
+    "discarded": "Écarté",
+    "adjusted": "Corrigé",
+    "cancellable": "Tu peux annuler cet import pendant 24 h, tant que rien n’a été modifié.",
+    "banner": {
+      "text": "{chapters} chapitres, {notions} notions et {questions} questions ajoutés par l’IA",
+      "cancel": "annuler l’import",
+      "cancelling": "annulation…",
+      "cancelled": "Import annulé.",
+      "error": "Annulation impossible : {reason}"
+    },
+    "button": "générer par IA",
+    "chooseAi": "par IA",
+    "chooseManual": "manuellement"
   }
 }

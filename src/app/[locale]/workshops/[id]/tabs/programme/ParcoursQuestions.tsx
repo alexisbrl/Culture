@@ -183,6 +183,8 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
         // leur absence retire les sections correspondantes au lieu de les
         // désactiver (voir `QuestionListView`).
         <QuestionListView
+          workshopId={workshopId}
+          aiContext="parcours"
           questions={questions}
           notions={notions}
           chapters={chapters}

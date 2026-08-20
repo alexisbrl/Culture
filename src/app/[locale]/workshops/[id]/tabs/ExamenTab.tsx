@@ -488,6 +488,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             <div className="scroll-panel" style={{ display: leftTab === 'bank' ? 'block' : 'none', height: '100%', position: 'relative', overflowY: sheetDragging ? 'hidden' : undefined }}>
               <div style={{ zoom: 'var(--exam-list-zoom, 1)' }}>
               <BankContent
+                workshopId={workshopId}
                 questions={questions}
                 pools={pools}
                 exams={exams}

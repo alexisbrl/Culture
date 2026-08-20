@@ -10,7 +10,8 @@ import { type Question } from '../QuestionEditor';
 import { type Pool, type Exam } from './examShared';
 import QuestionListView from './QuestionListView';
 
-function BankContent({ questions, pools, exams, notions, chapters, draftIds, editingQuestionId, openId, setOpenId, onEditQuestion, onNewQuestion, onToggleInExam, onCreatePool, onUpdatePool, onDeletePool, onDeleteQuestion }: {
+function BankContent({ workshopId, questions, pools, exams, notions, chapters, draftIds, editingQuestionId, openId, setOpenId, onEditQuestion, onNewQuestion, onToggleInExam, onCreatePool, onUpdatePool, onDeletePool, onDeleteQuestion }: {
+  workshopId: string;
   questions: Question[];
   pools: Pool[];
   exams: Exam[];
@@ -30,6 +31,8 @@ function BankContent({ questions, pools, exams, notions, chapters, draftIds, edi
 }) {
   return (
     <QuestionListView
+      workshopId={workshopId}
+      aiContext="exam"
       questions={questions}
       notions={notions}
       chapters={chapters}

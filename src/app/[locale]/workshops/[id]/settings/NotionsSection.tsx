@@ -5,6 +5,8 @@ import { useTranslations } from 'next-intl';
 import { ChevronDown, EllipsisVertical, GripVertical, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { palette, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import AiGenerationButton from '@/components/ai/AiGenerationButton';
+import ImportBanner from '@/components/ai/ImportBanner';
 import {
   createWorkshopNotion,
   updateWorkshopNotion,
@@ -518,6 +520,16 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
       {error && (
         <div style={{ fontSize: 12.5, color: palette.danger, padding: '2px 0 12px' }}>{error}</div>
       )}
+
+      {/* Génération par IA — l'une des deux portes sur la même fonction, l'autre
+          étant Ressources (§8 du plan d'ingestion). Le bandeau d'annulation est
+          posé ici parce que c'est ici qu'on constate le résultat sur les
+          chapitres et les notions ; il ne s'affiche que tant que le lot est
+          réellement annulable, et disparaît de lui-même. */}
+      <ImportBanner workshopId={workshopId} onCancelled={() => window.location.reload()} />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <AiGenerationButton workshopId={workshopId} onDone={() => window.location.reload()} />
+      </div>
 
       {(
         // `minWidth: 0` sur chaque colonne : une colonne de grille ne descend pas

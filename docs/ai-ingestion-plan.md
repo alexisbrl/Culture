@@ -872,7 +872,13 @@ bloquant (l'annulation par `import_id` couvre le besoin), mais à garder en têt
    puis annulation complète. **Reste à faire** : le wrapper `'use server'` avec
    authz, et le `type_options` par type de réponse, aujourd'hui écrit vide.
 6. **Interface `PlanProvider` + implémentation Claude** (§4, §5).
-7. **Les points d'entrée** (§8), dans l'ordre 1/2 → 3 → 4 → 5.
+7. ~~**Les points d'entrée**~~ ✅ **fait le 20/08/2026** (§8) — entrées 1 à 4.
+   `AiGenerationDialog` (un seul dialogue pour tous les boutons, avec
+   l'enchaînement des passes côté client), `AiGenerationButton` (Ressources et
+   Chapitre & Notion), le choix « par IA / manuellement » derrière « + nouvelle »
+   dans les deux listes de questions, et `ImportBanner` sur chacun des écrans
+   touchés. Actions `aiIngest.ts` sous `requireManager`. L'entrée 5 (génération
+   d'examens) reste pour plus tard, comme prévu.
 
 Les étapes 1 à 5 se construisent et se testent **entièrement sans IA**, et
 représentent l'essentiel du travail. Le jour où le modèle arrive, il ne reste que
