@@ -87,6 +87,10 @@ Mise en œuvre : écoute `mousedown` **en capture sur `document`** — elle pass
 
 Les modales sont hors du jeu, au clic comme au défilement : `Modal` marque sa racine d'un `data-modal-layer`, que le hook ignore. Elles se posent au-dessus des panneaux et gèrent leur propre sortie ; sans ce repère, un bouton de confirmation rendu dans un portail (donc hors de l'arbre du panneau) passerait pour un clic ailleurs et serait avalé avant d'être reçu.
 
+## Ajouter un type de réponse à une question
+
+**Ne pas se contenter de toucher l'éditeur.** Un type de réponse touche onze endroits — l'union TypeScript, une contrainte en base, le menu de l'éditeur, la feuille A4, l'exercice du parcours et sa liste blanche de réglages, la correction, l'i18n… dont deux qui échouent **en silence** si on les oublie. La liste complète et ordonnée est dans `.claude/rules/server-architecture.md` § « Ajouter (ou retirer) un type de réponse ».
+
 ## Pièges React/CSS rencontrés
 
 - **`setState(prev => ...)` n'est pas synchrone.** Construire l'objet à passer à une server action **avant** l'appel à `setXxx`, jamais à l'intérieur de l'updater avec une variable externe capturée (`let saved = null; setXxx(prev => { saved = ...; return ... })` — `saved` reste `null` après l'appel). De même, **n'appelle jamais une server action à l'intérieur d'un updater `setState`** (l'updater s'exécute pendant la phase de rendu ; une server action qui fait `revalidatePath`/`router.refresh()` déclenche « Cannot update a component while rendering a different component »). Collecter le résultat dans une variable externe pendant l'updater, puis appeler la server action après `setXxx`.

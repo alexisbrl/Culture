@@ -23,6 +23,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_imports: {
+        Row: {
+          cached_tokens: number
+          created_at: string
+          created_by: string
+          file_ids: Json
+          id: string
+          input_tokens: number
+          output_tokens: number
+          scope: Json
+          workshop_id: string
+        }
+        Insert: {
+          cached_tokens?: number
+          created_at?: string
+          created_by: string
+          file_ids?: Json
+          id?: string
+          input_tokens?: number
+          output_tokens?: number
+          scope?: Json
+          workshop_id: string
+        }
+        Update: {
+          cached_tokens?: number
+          created_at?: string
+          created_by?: string
+          file_ids?: Json
+          id?: string
+          input_tokens?: number
+          output_tokens?: number
+          scope?: Json
+          workshop_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_imports_workshop_id_fkey"
+            columns: ["workshop_id"]
+            isOneToOne: false
+            referencedRelation: "workshops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brick_mastery: {
         Row: {
           bloom_level: number
@@ -211,39 +255,6 @@ export type Database = {
           },
         ]
       }
-      exam_question_bricks: {
-        Row: {
-          brick_id: string
-          created_at: string
-          question_id: string
-        }
-        Insert: {
-          brick_id: string
-          created_at?: string
-          question_id: string
-        }
-        Update: {
-          brick_id?: string
-          created_at?: string
-          question_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "exam_question_bricks_brick_id_fkey"
-            columns: ["brick_id"]
-            isOneToOne: false
-            referencedRelation: "workshop_bricks"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "exam_question_bricks_question_id_fkey"
-            columns: ["question_id"]
-            isOneToOne: false
-            referencedRelation: "exam_questions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       exam_question_item_bricks: {
         Row: {
           brick_id: string
@@ -341,95 +352,47 @@ export type Database = {
       }
       exam_questions: {
         Row: {
-          answer: string
-          answer_optional: boolean
           audio_key: string | null
-          bloom_level: number
-          chapter_id: string | null
-          choices: Json
-          content: string
           context: string
-          correct_choices: Json
           created_at: string
-          difficulty: Json
-          duration: Json
           exam_ids: Json
-          expectations: string
           id: string
           image_key: string | null
-          parts: Json
+          import_id: string | null
           pools: Json
-          question_type: string
-          response_type: string
-          shuffle_choices: boolean
-          text_lines: number
-          title: string
-          type_options: Json
           updated_at: string
           workshop_id: string
         }
         Insert: {
-          answer?: string
-          answer_optional?: boolean
           audio_key?: string | null
-          bloom_level?: number
-          chapter_id?: string | null
-          choices?: Json
-          content?: string
           context?: string
-          correct_choices?: Json
           created_at?: string
-          difficulty?: Json
-          duration?: Json
           exam_ids?: Json
-          expectations?: string
           id: string
           image_key?: string | null
-          parts?: Json
+          import_id?: string | null
           pools?: Json
-          question_type?: string
-          response_type?: string
-          shuffle_choices?: boolean
-          text_lines?: number
-          title?: string
-          type_options?: Json
           updated_at?: string
           workshop_id: string
         }
         Update: {
-          answer?: string
-          answer_optional?: boolean
           audio_key?: string | null
-          bloom_level?: number
-          chapter_id?: string | null
-          choices?: Json
-          content?: string
           context?: string
-          correct_choices?: Json
           created_at?: string
-          difficulty?: Json
-          duration?: Json
           exam_ids?: Json
-          expectations?: string
           id?: string
           image_key?: string | null
-          parts?: Json
+          import_id?: string | null
           pools?: Json
-          question_type?: string
-          response_type?: string
-          shuffle_choices?: boolean
-          text_lines?: number
-          title?: string
-          type_options?: Json
           updated_at?: string
           workshop_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "exam_questions_chapter_id_fkey"
-            columns: ["chapter_id"]
+            foreignKeyName: "exam_questions_import_id_fkey"
+            columns: ["import_id"]
             isOneToOne: false
-            referencedRelation: "workshop_chapters"
+            referencedRelation: "ai_imports"
             referencedColumns: ["id"]
           },
           {
@@ -497,30 +460,30 @@ export type Database = {
       workshop_bricks: {
         Row: {
           chapter_id: string | null
-          content: string | null
           created_at: string
           created_by: string | null
           id: string
+          import_id: string | null
           title: string
           updated_at: string
           workshop_id: string
         }
         Insert: {
           chapter_id?: string | null
-          content?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
+          import_id?: string | null
           title: string
           updated_at?: string
           workshop_id: string
         }
         Update: {
           chapter_id?: string | null
-          content?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
+          import_id?: string | null
           title?: string
           updated_at?: string
           workshop_id?: string
@@ -531,6 +494,13 @@ export type Database = {
             columns: ["chapter_id"]
             isOneToOne: false
             referencedRelation: "workshop_chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workshop_bricks_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "ai_imports"
             referencedColumns: ["id"]
           },
           {
@@ -547,6 +517,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          import_id: string | null
           name: string
           position: number
           updated_at: string
@@ -556,6 +527,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          import_id?: string | null
           name: string
           position?: number
           updated_at?: string
@@ -565,12 +537,20 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          import_id?: string | null
           name?: string
           position?: number
           updated_at?: string
           workshop_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "workshop_chapters_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "ai_imports"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "workshop_chapters_workshop_id_fkey"
             columns: ["workshop_id"]

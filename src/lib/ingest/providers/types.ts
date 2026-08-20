@@ -1,0 +1,95 @@
+// La frontière d'abstraction entre l'application et le fournisseur de modèle.
+//
+// ─── Ce qu'on isole n'est PAS « appeler un modèle » ──────────────────────────
+//
+// Changer de fournisseur n'est pas un changement d'URL (§4 du plan). Claude lit
+// un PDF nativement — chaque page lui est envoyée comme IMAGE en plus du texte,
+// ce qui préserve tableaux, schémas et encadrés qu'une extraction texte aplatit.
+// Un fournisseur sans lecture PDF devra soit extraire le texte (et perdre les
+// tableaux), soit rendre les pages en images pour un modèle de vision.
+//
+// La frontière utile est donc « transformer un document en plan », pas « envoyer
+// un message ». Tout ce qui vient après — validation, résolution des références,
+// écriture — est identique quel que soit le fournisseur, parce que le contrat de
+// sortie (`planSchema.ts`) est défini indépendamment de lui.
+//
+// Trajectoire prévue : Claude, puis DeepSeek (coût), puis modèles open-source
+// auto-hébergés.
+
+import type { ExistingContent } from '@/lib/ingest/prompt';
+
+/** Un document source, déjà lu depuis le stockage de l'atelier. */
+export type SourceDocument = {
+  /** Clé de stockage (`workshop_files.storage_path`), pour la traçabilité. */
+  key: string;
+  fileName: string;
+  mimeType: string;
+  bytes: Uint8Array;
+};
+
+/** Un document **déjà remis au fournisseur**, désigné par une poignée opaque.
+ *
+ *  C'est ce qui permet de ne téléverser qu'une fois : une ingestion enchaîne un
+ *  appel pour les chapitres puis deux par chapitre, et sans cette étape le cours
+ *  repartirait en entier à chaque fois. Le cache de prompt évite de le *repayer*
+ *  en tokens, jamais de le *renvoyer* en octets — sur un cours de 25 Mo et douze
+ *  chapitres, la différence est de l'ordre de 600 Mo téléversés.
+ *
+ *  `ref` est **opaque** : un identifiant de fichier chez Claude, autre chose
+ *  ailleurs. L'appelant ne l'interprète pas, il se contente de le conserver
+ *  (`ai_imports.file_ids`) pour que les passes suivantes le réutilisent. */
+export type PreparedDocument = {
+  key: string;
+  fileName: string;
+  mimeType: string;
+  ref: string;
+};
+
+/** Ce qu'on demande au modèle. Une passe à la fois : on ne lui fait jamais
+ *  produire le programme entier d'un coup (§5.1). */
+export type IngestScope =
+  | { pass: 'chapters' }
+  | { pass: 'notions'; chapter: { id: string; name: string } }
+  | {
+      pass: 'questions';
+      chapter: { id: string; name: string };
+      notions: { id: string; title: string }[];
+      budget: number;
+    };
+
+/** Ce que rend un fournisseur : la sortie brute — **non validée**, c'est le rôle
+ *  de `parsePlan` — et ce que l'appel a coûté. */
+export type ProviderResult = {
+  plan: unknown;
+  usage: {
+    /** Tokens facturés plein tarif — ni mis en cache, ni lus depuis le cache. */
+    inputTokens: number;
+    outputTokens: number;
+    /** Tokens **écrits** dans le cache (facturés ~1,25×). Un document volumineux
+     *  atterrit ici au premier appel : sans cette mesure, on croit à tort que
+     *  l'appel n'a presque rien coûté en entrée. */
+    cacheCreationTokens: number;
+    /** Tokens **servis** par le cache (~0,1×). À zéro d'un appel à l'autre alors
+     *  que le document ne change pas, un invalidateur traîne dans le préfixe
+     *  (§5.2) — et on paie l'écriture du cache à chaque fois au lieu de la
+     *  lecture. */
+    cachedTokens: number;
+  };
+};
+
+export type PlanProvider = {
+  /** Nom court, pour la journalisation et le suivi de coût. */
+  readonly name: string;
+
+  /** Remet les documents au fournisseur, **une fois pour toute l'ingestion**.
+   *  Chez Claude : un téléversement vers la Files API. Chez un fournisseur sans
+   *  stockage : une simple mise en forme, les octets restant portés par la
+   *  poignée. */
+  prepare(documents: SourceDocument[]): Promise<PreparedDocument[]>;
+
+  documentToPlan(
+    documents: PreparedDocument[],
+    existing: ExistingContent,
+    scope: IngestScope,
+  ): Promise<ProviderResult>;
+};

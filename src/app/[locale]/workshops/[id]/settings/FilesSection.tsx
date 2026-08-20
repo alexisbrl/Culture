@@ -5,6 +5,8 @@ import { useTranslations } from 'next-intl';
 import { Check, Download, Loader2, Pencil, Trash2, Upload, X } from 'lucide-react';
 import { palette, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import AiGenerationButton from '@/components/ai/AiGenerationButton';
+import ImportBanner from '@/components/ai/ImportBanner';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import {
   createFileUploadTicket, finalizeWorkshopFileUpload, deleteWorkshopFile, renameWorkshopFile,
@@ -160,8 +162,15 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
         {/* ── Fichiers — zone de dépôt autonome + carte de liste (maquette,
             lignes 1597-1629 de App-Culture.dc.html) ── */}
         <div style={{ marginBottom: 36 }}>
-          <div style={{ marginBottom: 10 }}>
+          {/* Seconde porte sur la génération : on y arrive soit par les documents
+              (ici), soit par le programme qu'ils alimentent (Chapitre & Notion).
+              Même dialogue derrière — §8 du plan d'ingestion. Le bandeau
+              d'annulation suit, pour qu'on puisse revenir en arrière sans changer
+              d'écran. */}
+          <ImportBanner workshopId={workshopId} onCancelled={() => window.location.reload()} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
             <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{t('files.title')}</div>
+            <AiGenerationButton workshopId={workshopId} onDone={() => window.location.reload()} />
           </div>
 
           {/* Zone de dépôt — bordure pointillée `--line-strong`, vire au vert au

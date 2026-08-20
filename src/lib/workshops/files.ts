@@ -19,7 +19,12 @@ export type WorkshopFile = {
   createdAt: string;
 };
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 Mo (limite globale Supabase sur le plan Free)
+// 25 Mo (abaissé de 50 le 20/08/2026). Le plafond n'est plus dicté par Supabase
+// mais par l'ingestion IA : l'API plafonne une requête à 32 Mo, et un fichier
+// envoyé en base64 y pèse un tiers de plus — 25 Mo de PDF en font ~33, déjà
+// au-dessus, avant même d'ajouter le contexte de l'atelier (chapitres, notions,
+// questions déjà là). Voir docs/ai-ingestion-plan.md §6.
+export const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
 function categoryFor(mimeType: string): FileCategory {
   if (mimeType.startsWith('audio/')) return 'audio';
@@ -63,7 +68,7 @@ export async function createUploadTicketFor(
   mimeType: string
 ): Promise<{ success: boolean; ticket?: UploadTicket; path?: string; error?: string }> {
   if (fileSize > MAX_FILE_SIZE) {
-    return { success: false, error: 'Fichier trop lourd (50 Mo maximum)' };
+    return { success: false, error: 'Fichier trop lourd (25 Mo maximum)' };
   }
 
   const path = buildWorkshopFileKey(workshopId, fileName);

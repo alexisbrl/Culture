@@ -37,7 +37,14 @@ export {
 // `questionFields`), pour n'avoir plus qu'à les remplir.
 export function emptyQuestion(): Question {
   return {
-    id: 'q' + Date.now(),
+    // Identifiant aléatoire, PAS dérivé de l'horloge. `'q' + Date.now()` tenait
+    // tant qu'un humain créait les questions une par une ; l'ingestion IA en
+    // crée des dizaines dans la même milliseconde, et elles partageraient alors
+    // le même identifiant — l'`upsert` les écraserait les unes les autres, sans
+    // la moindre erreur (docs/ai-ingestion-plan.md §12.1). Un uuid ne peut pas
+    // non plus être confondu avec un saut de page (`isPageBreakId`, préfixe
+    // `pb`) : un uuid commence toujours par un caractère hexadécimal.
+    id: crypto.randomUUID(),
     responseType: 'qcm',
     content: '',
     answer: '',

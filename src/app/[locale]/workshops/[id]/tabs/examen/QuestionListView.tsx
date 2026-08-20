@@ -2,9 +2,12 @@
 
 import { useState, useRef, useEffect, type Dispatch, type SetStateAction, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Link2, Pencil, Trash2 } from 'lucide-react';
+import { Link2, Pencil, Sparkles, Trash2 } from 'lucide-react';
 import { palette, withAlpha, ink } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import Modal from '@/components/Modal';
+import AiGenerationDialog, { useWorkshopFiles } from '@/components/ai/AiGenerationDialog';
+import ImportBanner from '@/components/ai/ImportBanner';
 import { type Question, type ResponseType } from '../QuestionEditor';
 import { RESPONSE_TYPE_ORDER } from './questionFields';
 import {
@@ -90,8 +93,13 @@ export type QuestionListExams = {
   onToggleInExam: (id: string) => void;
 };
 
-function QuestionListView({ questions, notions, chapters, labels, exams: examsProp, renderEditor, editOnDoubleClick = false, editingQuestionId, openId, setOpenId, onEditQuestion, onNewQuestion, onDeleteQuestion }: {
+function QuestionListView({ questions, notions, chapters, labels, exams: examsProp, renderEditor, editOnDoubleClick = false, editingQuestionId, openId, setOpenId, onEditQuestion, onNewQuestion, onDeleteQuestion, workshopId, aiContext }: {
   questions: Question[];
+  /** Requis pour la génération par IA ; absent, la liste se comporte comme avant. */
+  workshopId?: string;
+  /** Le contexte dans lequel l'IA écrira : celui de CETTE liste, jamais un choix
+   *  du modèle. Une liste de parcours ne remplit pas la banque d'examen (§8). */
+  aiContext?: 'parcours' | 'exam';
   /** `chapterId` par notion : c'est de là que vient le chapitre d'une question. */
   notions: { id: string; title: string; chapterId: string | null }[];
   chapters: { id: string; name: string }[];
@@ -117,6 +125,12 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   onDeleteQuestion: (q: Question) => void;
 }) {
   const tr = useTranslations('examen');
+  const tAi = useTranslations('ai');
+  // Génération par IA : le choix d'abord, le dialogue ensuite. Les documents sont
+  // chargés d'avance pour que le dialogue s'ouvre déjà rempli.
+  const [choosing, setChoosing] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const aiFiles = useWorkshopFiles(workshopId ?? '');
   // Les deux familles optionnelles ramenées à des valeurs neutres : le reste du
   // composant s'écrit alors sans condition, seuls l'affichage des sections
   // concernées et les rappels regardent leur présence.
@@ -423,11 +437,48 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
 
   return (
     <div style={{ padding: `16px ${LIST_INSET_X}px 28px` }}>
-      {/* Ni titre ni bouton « générer par IA » : l'onglet au-dessus de la liste
-          dit déjà où l'on est, et la maquette ne montre que la barre d'outils
-          (recherche · tri · filtre · nouvelle). Les filtres actifs ne sont plus
-          repris ici non plus : ils se lisent et se règlent dans leur panneau,
-          d'où le compteur porté par le bouton « filtres ». */}
+      {/* Ni titre ni bouton en propre : l'onglet au-dessus de la liste dit déjà
+          où l'on est, et la maquette ne montre que la barre d'outils (recherche ·
+          tri · filtre · nouvelle). La génération n'ajoute donc pas un bouton de
+          plus — elle se glisse DANS « + nouvelle », qui demande désormais par
+          quoi créer. Les filtres actifs ne sont pas repris ici non plus : ils se
+          lisent et se règlent dans leur panneau, d'où le compteur porté par le
+          bouton « filtres ». */}
+      {workshopId && <ImportBanner workshopId={workshopId} onCancelled={() => window.location.reload()} />}
+
+      {/* Le choix « par IA / manuellement ». Une modale plutôt qu'un menu ancré :
+          le bouton est rendu par `ListToolbar`, qui n'expose pas son nœud — et
+          deux options méritent d'être lisibles, pas tassées. */}
+      {choosing && (
+        <Modal onClose={() => setChoosing(false)} width={360} portal>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button
+              type="button"
+              onClick={() => { setChoosing(false); setGenerating(true); }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px 14px', borderRadius: 10, border: 'none', background: palette.green, color: palette.parchment, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              <Sparkles size={15} /> {tAi('chooseAi')}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setChoosing(false); onNewQuestion(); }}
+              style={{ padding: '11px 14px', borderRadius: 10, border: `1px solid ${palette.lineStrong}`, background: 'transparent', color: palette.inkMuted, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              {tAi('chooseManual')}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {generating && workshopId && (
+        <AiGenerationDialog
+          workshopId={workshopId}
+          files={aiFiles ?? []}
+          forcedContext={aiContext}
+          onClose={() => setGenerating(false)}
+          onDone={() => window.location.reload()}
+        />
+      )}
 
       {/* Barre d'outils commune aux deux listes (`ListToolbar`) : la banque n'y
           met que ce qui lui est propre — sa recherche, ses critères de tri, son
@@ -443,7 +494,10 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
         onToggleSortDir={() => setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')}
         actionLabel={tr('bank.newShort')}
         actionTitle={tr('bank.newQuestion')}
-        onAction={onNewQuestion}
+        // « + nouvelle » ne crée plus directement : elle demande d'abord PAR QUOI
+        // (§8 du plan d'ingestion). Sans `aiContext` — donc partout où la
+        // génération n'a pas de sens — le comportement d'avant est conservé.
+        onAction={aiContext ? () => setChoosing(true) : onNewQuestion}
         filter={
           <FilterButton
             title={tr('bank.filters')}

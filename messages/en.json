@@ -573,7 +573,7 @@
       "advanced": "advanced settings",
       "addPart": "+ linked question",
       "save": "save →",
-      "statementRequired": "the question wording is required",
+      "statementRequired": "every question needs a wording",
       "attachAudio": "add an audio clip",
       "removeMedia": "remove attachment",
       "unsupportedFormat": "Unsupported file format.",
@@ -798,7 +798,7 @@
       "title": "Resources",
       "dropHere": "drag your files here or",
       "browse": "browse",
-      "addFileHint": "PDF, images, documents · 50 MB max per file",
+      "addFileHint": "PDF, images, documents · 25 MB max per file",
       "uploading": "uploading… {percent}%",
       "noFiles": "no file uploaded yet.",
       "saveTitle": "save",
@@ -1187,5 +1187,45 @@
       "restore": "If this was a mistake, restore the workshop from the trash, at the very bottom of your dashboard.",
       "restoreCta": "Open scellow.com"
     }
+  },
+  "ai": {
+    "title": "Generate with AI",
+    "subtitle": "From the workshop documents, the AI builds the chapters, the notions, then the questions.",
+    "files": "Source documents",
+    "noFiles": "No document in this workshop. Add a PDF or a text file under Resources.",
+    "unsupported": "Format not supported by generation yet (PDF and text only)",
+    "whatToGenerate": "What to generate",
+    "scope": {
+      "chapters": "The chapters",
+      "notions": "The notions of each chapter",
+      "questionsParcours": "The learning path questions",
+      "questionsExam": "The exam bank questions"
+    },
+    "questionsNeedNotions": "Questions attach to notions: without them, none would ever be asked.",
+    "generate": "generate",
+    "cancel": "cancel",
+    "close": "close",
+    "retry": "try again",
+    "progress": {
+      "chapters": "Reading the document and splitting it into chapters…",
+      "notions": "Notions — {chapter} ({i}/{n})",
+      "questions": "Questions — {chapter} ({i}/{n})"
+    },
+    "keepOpen": "Keep this tab open: generation stops if you close it. Whatever was written stays, and stays undoable.",
+    "runningCounts": "{chapters} chapters · {notions} notions · {questions} questions",
+    "doneCounts": "{chapters} chapters, {notions} notions and {questions} questions added",
+    "discarded": "Discarded",
+    "adjusted": "Adjusted",
+    "cancellable": "You can undo this import for 24 hours, as long as nothing has been edited.",
+    "banner": {
+      "text": "{chapters} chapters, {notions} notions and {questions} questions added by AI",
+      "cancel": "undo import",
+      "cancelling": "undoing…",
+      "cancelled": "Import undone.",
+      "error": "Cannot undo: {reason}"
+    },
+    "button": "generate with AI",
+    "chooseAi": "with AI",
+    "chooseManual": "manually"
   }
 }

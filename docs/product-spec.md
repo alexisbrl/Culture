@@ -28,7 +28,7 @@
 | Création de compte et authentification | — |
 | Upload de fichiers PDF | Un ou plusieurs fichiers par atelier |
 | Décomposition en notions | Via IA. Notions modifiables manuellement. |
-| Génération de questions | Via IA. Types : QCM, réponse ouverte, fill in the blank, matching, trier dans l'ordre. |
+| Génération de questions | Via IA. Types : les 9 types de réponse réels (`ResponseType`, `src/lib/workshops/examTypes.ts`) — QCS, QCM, textuelle, liste, tableau, matching, dessin, fichier, sans réponse. `sondage`, `trier dans l'ordre` et `fill in the blank` ont été **retirés** le 09/08/2026 : ne pas les faire générer. |
 | Parcours d'apprentissage séquencé | Enchaînement d'exercices sans gamification visuelle |
 | Gestion d'un atelier | Ateliers toujours privés (adhésion validée), rôles gestionnaire/candidat, paramètres de base |
 | Correction assistée | Suggestion IA + correction manuelle par le gestionnaire |

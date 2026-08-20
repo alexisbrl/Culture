@@ -51,8 +51,16 @@ export type ResponseType =
   | 'dessin'
   | 'fichier';
 
-/** Ramène n'importe quelle valeur stockée (y compris les types supprimés) sur un type valide. */
-export function toResponseType(value: unknown): ResponseType {
+/** Interprète une valeur de type de réponse, **sans jamais deviner** : elle rend
+ *  un type valide quand il existe un mapping FONDÉ (type actuel, ou ancien nom
+ *  dont on sait par quoi il a été remplacé), et `null` quand la valeur n'a aucun
+ *  sens connu.
+ *
+ *  C'est la version à utiliser **à l'écriture**, où une valeur inventée doit être
+ *  rejetée : la replier sur `textuelle` transformerait, par exemple, un
+ *  `vrai_faux` en champ de texte libre — une question silencieusement fausse
+ *  (voir `questionIntegrity.ts` et docs/ai-ingestion-plan.md §7). */
+export function parseResponseType(value: unknown): ResponseType | null {
   switch (value) {
     case 'sondage': return 'qcm';        // le sondage est un QCM sans bonne réponse
     case 'ordre': return 'liste';        // trier dans l'ordre → liste numérotée
@@ -65,8 +73,19 @@ export function toResponseType(value: unknown): ResponseType {
     // audio en réponse reste possible via `fichier` (voir FILE_TYPE_KEYS).
     case 'audio': return 'fichier';
     default:
-      return RESPONSE_TYPES.includes(value as ResponseType) ? (value as ResponseType) : 'textuelle';
+      return RESPONSE_TYPES.includes(value as ResponseType) ? (value as ResponseType) : null;
   }
+}
+
+/** Ramène n'importe quelle valeur stockée (y compris les types supprimés) sur un
+ *  type valide, sans jamais échouer.
+ *
+ *  ⚠️ Version tolérante, à réserver à la **LECTURE**. Une question déjà en base a
+ *  été écrite par un humain : la faire disparaître d'une liste parce que son type
+ *  a été retiré détruirait son travail, d'où le repli sur `textuelle`. À
+ *  l'écriture, utiliser `parseResponseType` et rejeter `null`. */
+export function toResponseType(value: unknown): ResponseType {
+  return parseResponseType(value) ?? 'textuelle';
 }
 
 const RESPONSE_TYPES: ResponseType[] = [
@@ -254,8 +273,8 @@ export type QuestionPart = {
   expectations: string;
   /** Niveau de Bloom visé par cette question liée, indépendant du principal. */
   bloomLevel: BloomLevel;
-  /** Notions couvertes par cette question liée (stockées dans le jsonb, voir
-   *  plus haut — pas dans `exam_question_bricks`). */
+  /** Notions couvertes par cette question liée, comme pour la principale :
+   *  reliées à la QUESTION (`exam_question_item_bricks`), pas au groupe. */
   notionIds: string[];
 };
 
@@ -298,8 +317,10 @@ export type Question = {
   // paramètres avancés de l'éditeur ; destinées à la correction assistée par IA.
   expectations?: string;
   // Notions couvertes par la question (table de jonction
-  // `exam_question_bricks` — encore nommée bricks en base, voir docs/backlog.md —
-  // N-N, sans restriction de chapitre).
+  // `exam_question_item_bricks` — encore nommée bricks en base, voir
+  // docs/backlog.md — N-N, sans restriction de chapitre). Reliées à la QUESTION
+  // et non au groupe depuis le 11/08/2026 ; l'ancienne `exam_question_bricks` a
+  // été supprimée le 19/08/2026.
   notionIds: string[];
 };
 

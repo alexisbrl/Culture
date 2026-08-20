@@ -38,6 +38,19 @@ export async function createUploadTicket(key: string, mimeType: string): Promise
   };
 }
 
+/** Lit le contenu d'un objet **côté serveur**, sans passer par une URL signée.
+ *
+ *  Sert à l'ingestion IA : le fichier doit être remis au fournisseur de modèle,
+ *  ce qui suppose d'en avoir les octets ici. Le reste de l'app n'en a pas besoin
+ *  — un client télécharge toujours par URL signée (`createSignedDownloadUrl`),
+ *  jamais en faisant transiter le fichier par notre serveur. */
+export async function readObject(key: string): Promise<Uint8Array | null> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.storage.from(WORKSHOP_FILES_BUCKET).download(key);
+  if (error || !data) return null;
+  return new Uint8Array(await data.arrayBuffer());
+}
+
 export async function deleteObject(key: string): Promise<void> {
   const supabase = getSupabaseServerClient();
   await supabase.storage.from(WORKSHOP_FILES_BUCKET).remove([key]);

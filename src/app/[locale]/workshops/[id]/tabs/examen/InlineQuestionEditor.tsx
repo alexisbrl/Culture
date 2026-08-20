@@ -113,7 +113,14 @@ export default function InlineQuestionEditor({
   // image ou audio et rangé au bon endroit (voir questionMedia.tsx).
   const { dragOver, dropError, dropHandlers } = useQuestionMediaDrop(workshopId, (kind, media) => patch({ [kind]: media }));
 
-  const canSave = draft.content.trim().length > 0;
+  // Un énoncé par question, questions liées comprises — le serveur refuse
+  // désormais un groupe qui en manque un (`assertStatements`,
+  // src/lib/workshops/questionIntegrity.ts). Le bouton doit donc s'en apercevoir
+  // ici, sinon l'utilisateur déclencherait un refus qu'il ne verrait pas passer
+  // (les écritures sont optimistes, voir docs/backlog.md).
+  const canSave =
+    draft.content.trim().length > 0 &&
+    draft.parts.every(part => part.content.trim().length > 0);
 
   function patch(p: Partial<Question>) {
     setDraft(d => ({ ...d, ...p }));

@@ -1,0 +1,157 @@
+'use server';
+
+import { requireManager } from '@/lib/authz';
+import * as run from '@/lib/ingest/run';
+import { revalidateWorkshop } from '@/lib/revalidate';
+import * as imports from '@/lib/workshops/imports';
+
+// Logique métier : voir @/lib/ingest/run et @/lib/workshops/imports. Ces
+// wrappers ne portent que l'authz Clerk et la revalidation Next.js. Types
+// redéclarés localement (un fichier `'use server'` ne peut pas réexporter un
+// type importé — piège Turbopack, cf. .claude/rules/server-architecture.md).
+//
+// ─── Droits ──────────────────────────────────────────────────────────────────
+//
+// Génération ET annulation : propriétaire OU gestionnaire (décision du
+// 20/08/2026). Même niveau que la gestion des notions et des fichiers sources
+// dont elles sont issues — celui qui peut écrire le programme à la main peut le
+// faire écrire par l'IA, et le retirer.
+//
+// ─── Une action = une unité bornée ───────────────────────────────────────────
+//
+// Chaque fonction ci-dessous fait UN appel au modèle. C'est le client qui les
+// enchaîne, ce qui évite d'avoir à tenir une fonction serveur ouverte pendant
+// plusieurs minutes (§5.4 du plan). **Appeler dans l'ordre, et grouper par
+// passe** : toutes les notions, puis toutes les questions — le cache de prompt
+// est propre à chaque schéma de sortie, alterner le ferait manquer à chaque
+// fois (§5.2).
+
+export type PlanIssue = { kind: 'chapter' | 'notion' | 'question'; ref?: string; reason: string };
+
+export type StartIngestionResult =
+  | { ok: true; importId: string; chapters: { id: string; name: string }[]; discarded: PlanIssue[]; adjusted: PlanIssue[] }
+  | { ok: false; error: string };
+
+export type ChapterPassResult =
+  | { ok: true; written: number; discarded: PlanIssue[]; adjusted: PlanIssue[] }
+  | { ok: false; error: string };
+
+export type ImportBanner = {
+  importId: string;
+  state: 'cancellable' | 'empty' | 'expired' | 'modified';
+  chapters: number;
+  notions: number;
+  questions: number;
+};
+
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : 'Erreur inattendue';
+}
+
+/** Passe 1 — ouvre le lot, téléverse les documents, écrit les chapitres. */
+export async function startWorkshopIngestion(
+  workshopId: string,
+  fileIds: string[],
+  scope: Record<string, unknown> = {},
+): Promise<StartIngestionResult> {
+  const ctx = await requireManager(workshopId);
+  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
+  if (fileIds.length === 0) return { ok: false, error: 'Aucun fichier sélectionné' };
+
+  try {
+    const result = await run.startIngestion(workshopId, ctx.userId, fileIds, { scope });
+    revalidateWorkshop();
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: message(error) };
+  }
+}
+
+/** Passe 2 — les notions d'un chapitre. */
+export async function ingestChapterNotions(
+  workshopId: string,
+  importId: string,
+  chapter: { id: string; name: string },
+): Promise<ChapterPassResult> {
+  const ctx = await requireManager(workshopId);
+  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
+
+  try {
+    const result = await run.ingestChapterNotions(workshopId, ctx.userId, importId, chapter);
+    revalidateWorkshop();
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: message(error) };
+  }
+}
+
+/** Passe 3 — les questions d'un chapitre. Le contexte vient du bouton par lequel
+ *  l'utilisateur est entré, jamais du modèle. */
+export async function ingestChapterQuestions(
+  workshopId: string,
+  importId: string,
+  chapter: { id: string; name: string },
+  context: 'parcours' | 'exam',
+): Promise<ChapterPassResult> {
+  const ctx = await requireManager(workshopId);
+  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
+
+  try {
+    const result = await run.ingestChapterQuestions(workshopId, ctx.userId, importId, chapter, context);
+    revalidateWorkshop();
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: message(error) };
+  }
+}
+
+/** Ce qu'il faut pour afficher — ou non — le bandeau d'annulation. Renvoie
+ *  `null` quand il n'y a rien à proposer : aucun import, ou lot déjà annulé,
+ *  expiré, ou modifié depuis. */
+export async function getImportBanner(workshopId: string): Promise<ImportBanner | null> {
+  if (!(await requireManager(workshopId))) return null;
+
+  try {
+    const importId = await imports.latestImportId(workshopId);
+    if (!importId) return null;
+
+    const summary = await imports.getImportSummary(workshopId, importId);
+    if (summary.state !== 'cancellable') return null;
+
+    return {
+      importId,
+      state: summary.state,
+      chapters: summary.chapters,
+      notions: summary.notions,
+      questions: summary.questions,
+    };
+  } catch {
+    // Le bandeau est un confort : s'il échoue, il ne doit pas empêcher la page
+    // de s'afficher.
+    return null;
+  }
+}
+
+export async function cancelWorkshopImport(
+  workshopId: string,
+  importId: string,
+): Promise<{ ok: true; chapters: number; notions: number; questionGroups: number } | { ok: false; error: string }> {
+  const ctx = await requireManager(workshopId);
+  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
+
+  try {
+    const result = await imports.cancelImport(workshopId, importId);
+    if (!result.cancelled) {
+      const reasons: Record<string, string> = {
+        empty: 'Cet import a déjà été annulé',
+        expired: 'Passé 24 h, un import ne peut plus être annulé',
+        modified: 'Un élément de cet import a été modifié depuis : il ne peut plus être annulé d’un bloc',
+      };
+      return { ok: false, error: reasons[result.reason] ?? 'Annulation impossible' };
+    }
+    revalidateWorkshop();
+    return { ok: true, chapters: result.chapters, notions: result.notions, questionGroups: result.questionGroups };
+  } catch (error) {
+    return { ok: false, error: message(error) };
+  }
+}
