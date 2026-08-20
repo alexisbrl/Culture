@@ -26,8 +26,14 @@ jobs:
 
   # Vérification des types + bundle. `next build` régénère next-env.d.ts et les types
   # de routes PUIS exécute la validation TypeScript — c'est notre typecheck fiable.
-  # Nécessite les mêmes variables d'environnement que Vercel : à renseigner dans
-  # GitHub → Settings → Secrets and variables → Actions (Repository secrets).
+  # Le dépôt ne définit AUCUN secret : les `secrets.*` ci-dessous se résolvent en
+  # chaîne vide, et c'est assumé (constaté le 20/08/2026). `next build` compile sans
+  # identifiants valides, et rien ici ne consulte Clerk/Supabase/Resend au moment du
+  # build — toutes les routes applicatives sont rendues à la demande. Ce job vérifie
+  # donc la compilation et les types, pas l'accès aux services. Les références sont
+  # conservées pour le jour où un build en aurait réellement besoin ; les renseigner
+  # alors TOUS d'un bloc (GitHub → Settings → Secrets and variables → Actions), jamais
+  # un seul — voir CLAUDE.md §7.
   build:
     runs-on: ubuntu-latest
     steps:
