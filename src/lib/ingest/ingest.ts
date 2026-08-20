@@ -50,26 +50,20 @@ export type IngestResult = {
   adjusted: PlanIssue[];
 };
 
-/** Écrit un plan dans un atelier, sous une étiquette d'import annulable.
- *
- *  `actorId` est l'identifiant Clerk **déjà résolu** par le wrapper `'use
- *  server'` : ce module ne fait pas d'authz, comme tout `lib/`
- *  (.claude/rules/server-architecture.md). L'appelant a vérifié les droits. */
-export async function ingestWorkshopPlan(
+// Dans tout ce module, `actorId` est l'identifiant Clerk **déjà résolu** par le
+// wrapper `'use server'` : rien ici ne fait d'authz, comme tout `lib/`
+// (.claude/rules/server-architecture.md). L'appelant a vérifié les droits.
+
+/** Ouvre un lot d'import. Séparé de l'écriture parce que l'ingestion réelle
+ *  s'étale sur plusieurs appels serveur bornés (§5.4) : l'étiquette doit exister
+ *  avant la première passe, et survivre entre les appels. */
+export async function createImport(
   workshopId: string,
   actorId: string,
-  raw: unknown,
   meta: IngestMeta = {},
-): Promise<IngestResult> {
+): Promise<string> {
   const supabase = getSupabaseServerClient();
-
-  // L'existant sert deux fois : au modèle pour ne pas dupliquer (§8), et ici
-  // pour qu'une référence vers une notion déjà en base ne soit pas prise pour
-  // une référence pendante.
-  const existing = await loadExistingRefs(workshopId);
-  const plan = parsePlan(raw, existing);
-
-  const { data: importRow, error: importError } = await supabase
+  const { data, error } = await supabase
     .from('ai_imports')
     .insert({
       workshop_id: workshopId,
@@ -82,9 +76,50 @@ export async function ingestWorkshopPlan(
     })
     .select('id')
     .single();
-  if (importError || !importRow) throw new Error(importError?.message ?? 'import non créé');
+  if (error || !data) throw new Error(error?.message ?? 'import non créé');
+  return data.id as string;
+}
 
-  const importId = importRow.id as string;
+/** Ajoute la consommation d'un appel au total du lot. Un import s'étalant sur
+ *  25 appels, le coût ne se connaît qu'en cumulant — et c'est ce cumul qui
+ *  servira de base aux quotas (§9). */
+export async function addImportUsage(
+  importId: string,
+  usage: { inputTokens: number; outputTokens: number; cacheCreationTokens: number; cachedTokens: number },
+): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('ai_imports')
+    .select('input_tokens, output_tokens, cached_tokens')
+    .eq('id', importId)
+    .single();
+  if (error || !data) throw new Error(error?.message ?? 'import introuvable');
+
+  // Les tokens écrits dans le cache comptent comme de l'entrée : ils sont
+  // facturés (~1,25×), et les ignorer donnerait un coût largement sous-évalué.
+  await supabase
+    .from('ai_imports')
+    .update({
+      input_tokens: (data.input_tokens as number) + usage.inputTokens + usage.cacheCreationTokens,
+      output_tokens: (data.output_tokens as number) + usage.outputTokens,
+      cached_tokens: (data.cached_tokens as number) + usage.cachedTokens,
+    })
+    .eq('id', importId);
+}
+
+export async function ingestWorkshopPlan(
+  workshopId: string,
+  actorId: string,
+  raw: unknown,
+  meta: IngestMeta = {},
+): Promise<IngestResult> {
+  // L'existant sert deux fois : au modèle pour ne pas dupliquer (§8), et ici
+  // pour qu'une référence vers une notion déjà en base ne soit pas prise pour
+  // une référence pendante.
+  const existing = await loadExistingRefs(workshopId);
+  const plan = parsePlan(raw, existing);
+
+  const importId = await createImport(workshopId, actorId, meta);
 
   try {
     const chapterIds = await insertChapters(workshopId, actorId, importId, plan.chapters);
@@ -112,7 +147,7 @@ export async function ingestWorkshopPlan(
 }
 
 /** Chapitres et notions déjà en base, pour que le plan puisse les référencer. */
-async function loadExistingRefs(workshopId: string): Promise<ExistingRefs> {
+export async function loadExistingRefs(workshopId: string): Promise<ExistingRefs> {
   const supabase = getSupabaseServerClient();
   const [chapters, notions] = await Promise.all([
     supabase.from('workshop_chapters').select('id').eq('workshop_id', workshopId),
@@ -136,7 +171,7 @@ function resolve(ref: string | undefined, created: Map<string, string>): string 
   return created.get(ref) ?? ref;
 }
 
-async function insertChapters(
+export async function insertChapters(
   workshopId: string,
   actorId: string,
   importId: string,
@@ -177,7 +212,7 @@ async function insertChapters(
   return created;
 }
 
-async function insertNotions(
+export async function insertNotions(
   workshopId: string,
   actorId: string,
   importId: string,
@@ -226,7 +261,7 @@ type PlanGroupInput = {
 /** Écrit les groupes, leurs questions et les liens de notions. Renvoie le nombre
  *  de QUESTIONS écrites (et non de groupes) : c'est ce volume-là qui compte pour
  *  l'utilisateur comme pour les quotas. */
-async function insertGroups(
+export async function insertGroups(
   workshopId: string,
   importId: string,
   groups: PlanGroupInput[],

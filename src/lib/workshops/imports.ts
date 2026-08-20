@@ -182,6 +182,21 @@ export async function getImportSummary(workshopId: string, importId: string): Pr
   return { state: importCancelState(rows), ...counts, questions };
 }
 
+/** Le dernier import de l'atelier, s'il en existe un. Sert au bandeau : on ne
+ *  propose l'annulation que du lot le plus récent — remonter plus loin n'aurait
+ *  pas de sens, les 24 h ayant de toute façon expiré. */
+export async function latestImportId(workshopId: string): Promise<string | null> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('ai_imports')
+    .select('id')
+    .eq('workshop_id', workshopId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (error) throw new Error(error.message);
+  return (data?.[0]?.id as string | undefined) ?? null;
+}
+
 export type CancelImportResult =
   | { cancelled: true; chapters: number; notions: number; questionGroups: number }
   | { cancelled: false; reason: Exclude<ImportCancelState, 'cancellable'> };
