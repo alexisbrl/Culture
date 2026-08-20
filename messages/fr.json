@@ -220,7 +220,7 @@
     "button": "Envoyer le message",
     "sending": "Envoi en cours...",
     "success": "Message reçu ! On vous répond sous 24h.",
-    "error": "Erreur lors de l'envoi. Essayez contact@culture.com"
+    "error": "Erreur lors de l'envoi. Essayez contact@get-culture.com"
   },
   "footer": {
     "tagline": "L'apprentissage, réinventé.",
@@ -1185,7 +1185,7 @@
       "intro": "L'atelier « {workshop} » a été mis en corbeille par {actionBy}.",
       "warning": "⏳ Cet atelier sera définitivement supprimé dans 7 jours si aucune restauration n'est effectuée.",
       "restore": "Si c'est une erreur, restaurez l'atelier depuis la corbeille, tout en bas de votre tableau de bord.",
-      "restoreCta": "Ouvrir scellow.com"
+      "restoreCta": "Ouvrir get-culture.com"
     }
   },
   "ai": {

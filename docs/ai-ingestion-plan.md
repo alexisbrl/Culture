@@ -792,7 +792,7 @@ ce qui a été saisi à la main.
 | `upsert` par identifiant fourni par le client | Un identifiant généré qui entre en collision avec une question existante **l'écrase silencieusement** (§12.1, tourné vers les données manuelles). |
 | Ré-écritures de masse (`saveQuestions`) | Elles touchent des lignes existantes, pas seulement les nouvelles. |
 
-Le contexte aggrave : la base est **partagée avec scellow.com**, il n'y a pas de
+Le contexte aggrave : la base est **partagée avec get-culture.com**, il n'y a pas de
 transaction (§10), et les `on delete cascade` propagent une suppression aux
 questions et à leurs liens.
 

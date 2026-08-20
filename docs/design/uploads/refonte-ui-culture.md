@@ -1,6 +1,6 @@
 # Refonte UI Culture — Cahier de refonte & méthode
 
-> Document de pilotage de la refonte de l'interface de Culture (scellow.com).
+> Document de pilotage de la refonte de l'interface de Culture (get-culture.com).
 > Usage : (1) feuille de route à suivre, (2) brief à transmettre à Claude Design phase par phase, (3) consignes d'implémentation pour Claude Code.
 > Rédigé le 12/07/2026, à partir de l'audit visuel du site en production et du brief d'Alexis.
 
