@@ -15,7 +15,7 @@
 
 import { getTranslations } from 'next-intl/server';
 
-export const EMAIL_FROM = 'Culture <onboarding@resend.dev>';
+export const EMAIL_FROM = 'Culture <noreply@get-culture.com>';
 
 export type EmailLocale = 'fr' | 'en';
 export type EmailContent = { subject: string; html: string };
