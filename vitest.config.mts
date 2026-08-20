@@ -9,7 +9,7 @@ import { defineConfig } from 'vitest/config';
 // exposé à l'extérieur (`questionGroup.ts`), sur lequel toute l'ingestion repose.
 //
 // Rien ici ne touche au réseau ni à Supabase : la base est partagée avec
-// scellow.com (voir docs/backlog.md), un test ne doit jamais pouvoir l'atteindre.
+// get-culture.com (voir docs/backlog.md), un test ne doit jamais pouvoir l'atteindre.
 // Un module qui a besoin d'un client Supabase se teste en lui passant un double,
 // jamais en laissant `getSupabaseServerClient()` s'exécuter.
 export default defineConfig({

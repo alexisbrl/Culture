@@ -31,7 +31,7 @@ function layout(title: string, contentHtml: string): string {
       <h2 style="color: #111827; font-size: 18px;">${title}</h2>
       ${contentHtml}
       <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
-      <p style="color: #d1d5db; font-size: 12px; text-align: center;">© Culture · scellow.com</p>
+      <p style="color: #d1d5db; font-size: 12px; text-align: center;">© Culture · get-culture.com</p>
     </div>
   `;
 }
@@ -79,7 +79,7 @@ export async function workshopTrashedEmail(args: {
       </div>
       ${p(t('trashed.restore'))}
       <div style="text-align: center; margin: 24px 0;">
-        <a href="https://scellow.com" style="display: inline-block; background: #5f8a3f; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 14px; padding: 12px 24px; border-radius: 10px;">${t('trashed.restoreCta')}</a>
+        <a href="https://get-culture.com" style="display: inline-block; background: #5f8a3f; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 14px; padding: 12px 24px; border-radius: 10px;">${t('trashed.restoreCta')}</a>
       </div>
     `),
   };

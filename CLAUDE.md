@@ -45,7 +45,7 @@ PDF en priorité pour la V1. Les autres formats (Word, PowerPoint, audio, vidéo
 Cette opération ne doit jamais pouvoir être annulée, quelle que soit la situation. Implémentation (trigger DB, mécanisme de test à retirer avant Stripe) : `.claude/rules/server-architecture.md`.
 
 ### Migrations de base de données : jamais de destruction avant déploiement du code
-La base Supabase (`hhkmrejjksjpfetwefju`) est **partagée par le code local ET le code déployé en production** (scellow.com). Une migration prend effet **immédiatement**, alors qu'un changement de code n'est en ligne qu'après `push → PR → merge dans main → déploiement Vercel`.
+La base Supabase (`hhkmrejjksjpfetwefju`) est **partagée par le code local ET le code déployé en production** (get-culture.com). Une migration prend effet **immédiatement**, alors qu'un changement de code n'est en ligne qu'après `push → PR → merge dans main → déploiement Vercel`.
 
 **Règle de séquencement « expand / contract » :**
 - **Ajouter** une colonne/table (expand) : sans danger à tout moment (le code déployé l'ignore).

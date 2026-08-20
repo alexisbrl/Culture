@@ -220,7 +220,7 @@
     "button": "Send message",
     "sending": "Sending...",
     "success": "Message received! We'll reply within 24h.",
-    "error": "Error sending. Try contact@culture.com"
+    "error": "Error sending. Try contact@get-culture.com"
   },
   "footer": {
     "tagline": "Learning, reinvented.",
@@ -1185,7 +1185,7 @@
       "intro": "The workshop “{workshop}” was moved to trash by {actionBy}.",
       "warning": "⏳ This workshop will be permanently deleted in 7 days unless it is restored.",
       "restore": "If this was a mistake, restore the workshop from the trash, at the very bottom of your dashboard.",
-      "restoreCta": "Open scellow.com"
+      "restoreCta": "Open get-culture.com"
     }
   },
   "ai": {

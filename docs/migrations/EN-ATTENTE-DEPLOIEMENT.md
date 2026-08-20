@@ -9,7 +9,7 @@
 ## Pourquoi ce fichier existe
 
 La base Supabase (`hhkmrejjksjpfetwefju`) est partagée par le code local **et**
-le code déployé sur scellow.com. Une migration prend effet immédiatement, un
+le code déployé sur get-culture.com. Une migration prend effet immédiatement, un
 changement de code seulement après `push → PR → merge → déploiement Vercel`.
 
 Les migrations **additives** (ajouter une colonne, une table) sont donc appliquées
