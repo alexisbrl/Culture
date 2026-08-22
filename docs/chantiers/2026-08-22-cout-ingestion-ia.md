@@ -127,7 +127,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
 
 ## Tâches
 
-- [ ] **T1 — Donner une portée au bloc « existant »**
+- [x] **T1 — Donner une portée au bloc « existant »**
   - `existingContentBlock` reçoit une portée et ne rend que ce que la passe
     utilise : les chapitres seuls en passe chapitres, les notions du chapitre
     traité en passe notions, les énoncés des seules notions traitées en passe
@@ -283,6 +283,8 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
 
 ## Journal
 <!-- Append-only. Une ligne par tâche terminée : date, tâche, commit, note. -->
+
+- 22/08/2026 — T1 — `8a0ff35` — `existingContentBlock(existing, scope)` ; `ExistingContent.questions` devient `{ content, notionIds }[]` (le filtrage par notion l'exige).
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
