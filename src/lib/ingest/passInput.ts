@@ -45,3 +45,43 @@ export function batchNotions<T>(notions: T[], size = NOTIONS_PER_QUESTION_BATCH)
   for (let i = 0; i < notions.length; i += size) batches.push(notions.slice(i, i + size));
   return batches;
 }
+
+// ─── La relance de la passe chapitres ────────────────────────────────────────
+//
+// Le nombre de chapitres est **le multiplicateur de tout ce qui suit** : 28 au
+// lieu de 6, c'est ×4,7 sur les passes notions et questions (§16.15). C'est le
+// paramètre le plus rentable à surveiller, et un appel de plus en économise des
+// centaines.
+//
+// Ce que ce mécanisme n'est PAS : un point d'arrêt. Aucune validation humaine
+// n'intervient entre deux passes, jamais — refus produit explicite (§16.18).
+// Si la seconde réponse dépasse encore, **on écrit ce qu'elle donne** et on
+// continue.
+
+/** Au-delà, on soupçonne un découpage en sous-parties plutôt qu'en chapitres.
+ *  Nombre ABSOLU, jamais rapporté au nombre de documents : un cours de 8
+ *  chapitres peut tenir dans un seul PDF (§16.18). */
+export const MAX_PLAUSIBLE_CHAPTERS = 12;
+
+export function needsChapterRetry(chapterCount: number): boolean {
+  return chapterCount > MAX_PLAUSIBLE_CHAPTERS;
+}
+
+/** Enchaîne **au plus deux** appels de la passe chapitres.
+ *
+ *  L'appelant fournit l'appel (`attempt`) et sait compter ses chapitres
+ *  (`countOf`) : cette fonction ne connaît ni le fournisseur ni la base, ce qui
+ *  la rend testable avec un fournisseur factice. Elle ne lève jamais pour un
+ *  nombre trop élevé — la seconde réponse fait foi quelle qu'elle soit. */
+export async function withChapterRetry<R>(
+  attempt: (retry: { previousCount: number } | undefined) => Promise<R>,
+  countOf: (result: R) => number,
+): Promise<{ result: R; attempts: number }> {
+  const first = await attempt(undefined);
+  const count = countOf(first);
+  if (!needsChapterRetry(count)) return { result: first, attempts: 1 };
+
+  // Une seule relance, jamais deux : on ne compte pas le résultat de celle-ci.
+  const second = await attempt({ previousCount: count });
+  return { result: second, attempts: 2 };
+}

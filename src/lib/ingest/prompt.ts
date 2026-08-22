@@ -183,7 +183,7 @@ export const PLAUSIBLE_CHAPTERS = { min: 3, max: 8 } as const;
  *  « Chapitre 6.pdf » : on lui demandait de subdiviser un cours, il a subdivisé
  *  — 28 chapitres au lieu de 6, soit ×4,7 sur tout ce qui suit (§16.15). C'est
  *  la consigne qui était fausse, pas le modèle. */
-export function chaptersInstruction(fileNames: string[] = []): string {
+export function chaptersInstruction(fileNames: string[] = [], retry?: { previousCount: number }): string {
   const corpus =
     fileNames.length > 1
       ? `Tu as reçu ${fileNames.length} documents. Ils forment UN SEUL cours, pas ${fileNames.length} cours distincts :
@@ -198,7 +198,21 @@ Découpe l'ENSEMBLE globalement. Un document n'est pas un chapitre : un même do
 `
         : '';
 
-  return `${corpus}Découpe ce cours en CHAPITRES : ses grandes parties, dans l'ordre où elles se lisent.
+  // La relance est posée en TÊTE, avant même la consigne : c'est la première
+  // chose que le modèle doit savoir de cet appel. Elle ne remplace pas la
+  // consigne — le second appel ne voit pas le premier, l'API est sans état
+  // (§16.8).
+  const again = retry
+    ? `Tu viens de proposer ${retry.previousCount} chapitres pour ce cours, bien au-delà de l'ordre de grandeur habituel.
+
+Reprends le découpage depuis le début. Certains de ces ${retry.previousCount} chapitres sont probablement des SOUS-PARTIES d'un même chapitre : deux parties qui traitent du même sujet, ou qui s'enchaînent dans une même progression, n'en forment qu'un. Regroupe-les.
+
+Ce n'est pas un ordre de réduire à tout prix : si le cours justifie réellement ce nombre — un programme annuel, par exemple —, garde-le. Mais vérifie-le d'abord.
+
+`
+    : '';
+
+  return `${again}${corpus}Découpe ce cours en CHAPITRES : ses grandes parties, dans l'ordre où elles se lisent.
 
 Un chapitre est une unité d'enseignement, pas une section de mise en page : deux sous-parties qui traitent du même sujet forment un seul chapitre. Vise le découpage qu'un enseignant ferait pour organiser sa progression.
 

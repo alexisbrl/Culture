@@ -58,7 +58,7 @@ function instructionFor(scope: IngestScope, fileNames: string[]): string {
       // Les noms de fichiers sont dans la consigne, pas seulement dans les blocs
       // `document` : c'est là que le modèle peut apprendre qu'ils forment un
       // seul cours (§16.15).
-      return chaptersInstruction(fileNames);
+      return chaptersInstruction(fileNames, scope.retry);
     case 'notions':
       return notionsInstruction(scope.chapter);
     case 'questions':

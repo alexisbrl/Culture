@@ -48,7 +48,12 @@ export type PreparedDocument = {
 /** Ce qu'on demande au modèle. Une passe à la fois : on ne lui fait jamais
  *  produire le programme entier d'un coup (§5.1). */
 export type IngestScope =
-  | { pass: 'chapters' }
+  | {
+      pass: 'chapters';
+      /** Présent au SECOND essai seulement : le nombre de chapitres rendu au
+       *  premier, que la consigne rappelle au modèle (§16.18). */
+      retry?: { previousCount: number };
+    }
   | { pass: 'notions'; chapter: { id: string; name: string } }
   | {
       pass: 'questions';

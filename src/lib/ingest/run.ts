@@ -44,7 +44,7 @@ import {
   insertNotions,
   loadExistingRefs,
 } from './ingest';
-import { batchNotions } from './passInput';
+import { batchNotions, withChapterRetry } from './passInput';
 import { parsePlan, type PlanIssue } from './planSchema';
 import { MAX_QUESTIONS_PER_IMPORT, type ExistingContent } from './prompt';
 import { createClaudeProvider } from './providers/claude';
@@ -212,11 +212,23 @@ export async function startIngestion(
   });
 
   const existing = await loadExistingChapters(workshopId);
-  const result = await provider.documentToPlan(prepared, existing, { pass: 'chapters' });
-  await addImportUsage(importId, result.usage);
-
   const refs = await loadExistingRefs(workshopId);
-  const plan = parsePlan(result.plan, refs);
+
+  // Un découpage trop fin est le multiplicateur de tout ce qui suit (§16.15) :
+  // au-delà de 12 chapitres, on relance UNE fois avec une consigne resserrée.
+  // Si la seconde réponse dépasse encore, on écrit ce qu'elle donne — jamais de
+  // blocage, jamais de troisième appel, et surtout aucune validation humaine
+  // (§16.18).
+  const { result: plan } = await withChapterRetry(
+    async (retry) => {
+      const attempt = await provider.documentToPlan(prepared, existing, { pass: 'chapters', retry });
+      // Les deux essais sont facturés : les deux sont comptés.
+      await addImportUsage(importId, attempt.usage);
+      return parsePlan(attempt.plan, refs);
+    },
+    (parsed) => parsed.chapters.length,
+  );
+
   const created = await insertChapters(workshopId, actorId, importId, plan.chapters);
 
   return {

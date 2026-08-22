@@ -206,6 +206,21 @@ describe('chaptersInstruction — N documents, UN SEUL cours (§16.15)', () => {
     expect(instruction).not.toContain('1 documents');
   });
 
+  it('la consigne de relance rappelle le nombre obtenu et demande de regrouper', () => {
+    // Elle ne remplace pas la consigne : l'API est sans état, le second appel
+    // ne voit pas le premier (§16.8).
+    const instruction = chaptersInstruction(sept, { previousCount: 28 });
+    expect(instruction).toContain('28 chapitres');
+    expect(instruction).toMatch(/SOUS-PARTIES/);
+    expect(instruction).toContain('CHAPITRES');
+    // Et elle reste une invitation à vérifier, pas un ordre de réduire.
+    expect(instruction).toMatch(/pas un ordre de réduire/);
+  });
+
+  it('sans relance, la consigne n’en dit pas un mot', () => {
+    expect(chaptersInstruction(sept)).not.toMatch(/SOUS-PARTIES/);
+  });
+
   it('sans nom de fichier, la consigne reste utilisable', () => {
     const instruction = chaptersInstruction();
     expect(instruction).toContain('CHAPITRES');
