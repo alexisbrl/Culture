@@ -1,9 +1,13 @@
 # Plan d'implémentation — génération du programme par IA
 
-> Conception arrêtée le 20/07/2026, **révisée le 19/08/2026** (session de cadrage
-> avec Alexis) : décisions produit tranchées, prérequis réévalués contre le code
-> réel, méthode d'appel au modèle ajoutée. **Aucun code écrit à ce jour.** À lire
-> en entier avant d'écrire la première ligne.
+> Conception arrêtée le 20/07/2026, révisée le 19/08/2026 (décisions produit
+> tranchées, prérequis réévalués contre le code réel, méthode d'appel au modèle
+> ajoutée), **puis le 22/08/2026 — voir §16**, qui enregistre ce que la montée en
+> volume impose de changer. À lire en entier avant d'écrire la première ligne.
+>
+> **Les §1 à §14 décrivent un pipeline aujourd'hui écrit et branché dans l'app**
+> (PR #41, 21/08/2026) — la mention « aucun code écrit à ce jour » qui figurait
+> ici n'a plus cours, sauf pour §16, qui n'est encore que de la conception.
 >
 > Contexte technique associé : `.claude/rules/server-architecture.md` (pattern
 > `lib/` + wrapper, authz, revalidation), `docs/product-spec.md` (§ Programme
@@ -923,3 +927,263 @@ représentent l'essentiel du travail. Le jour où le modèle arrive, il ne reste
      ce n'est pas une décision à laisser au hasard d'un rappel de calendrier.
 5. **Pas de clé en CI** : les tests unitaires ne doivent jamais appeler l'API
    réelle — ils valident le pipeline avec des plans écrits à la main (§12.2).
+
+---
+
+## 16. Révision du 22/08/2026 — montée en volume, parallélisme, recharge automatique
+
+> Session de cadrage avec Alexis. Le pipeline des §5 à §11 **fonctionne** et est
+> branché dans l'app (§14, étape 7). Cette section ne le remet pas en cause :
+> elle enregistre ce qui casse quand on multiplie la volumétrie par ~45, et ce
+> que ça impose de changer. **Aucun code écrit à ce jour pour cette section.**
+
+### 16.1 Le déclencheur : la volumétrie cible change
+
+Décision produit : viser de l'ordre de **15 questions de niveau Bloom 1 et 3 de
+niveau 2 par notion**, contre 1 par niveau aujourd'hui (`QUESTIONS_PER_NOTION = 4`).
+
+**Le chiffre exact n'est pas le sujet** — c'est un ordre de grandeur, dérivé du
+fait qu'un entraînement fait ~10 questions : il faut un stock de départ qui ne
+s'épuise pas au deuxième passage. **Les niveaux 3 et 4 sont volontairement
+laissés de côté au démarrage**, non par choix pédagogique mais par optimisation :
+couvrir les quatre niveaux à cette densité demanderait ~60 questions par notion,
+et la plupart ne seraient jamais posées. Ils relèveront de la recharge (§16.6).
+
+Projection sur un cours à 12 chapitres × ~10 notions (hypothèse de travail, à
+mesurer sur un cours réel) :
+
+| | Aujourd'hui | Cible |
+|---|---|---|
+| Questions | 480 visées, **plafonnées à 50** | ~2 160 |
+| Appels au modèle | 25 | ~132 |
+| Durée en séquentiel | ~25 min | **~2 h 30** |
+
+### 16.2 Trois choses cassent avant le coût
+
+1. **`MAX_QUESTIONS_PER_IMPORT = 50`** (`prompt.ts`) bloque à 2 % de la cible.
+   Plafond de débit délibéré, à relever — mais il doit rester : c'est la seule
+   garantie contre une boucle qui part en vrille (§14, garde-fou 3).
+2. **`MAX_TOKENS = 32 000`** (`providers/claude.ts`). Une question pèse ~200
+   tokens de sortie ; un chapitre de 10 notions × 18 questions ≈ 36 000 tokens,
+   au-delà du plafond, raisonnement compris. **L'unité de travail de la passe 3
+   doit passer du chapitre à la notion** (18 questions ≈ 3 600 tokens).
+3. **La durée.** 2 h 30 d'onglet ouvert n'est pas une expérience, c'est une
+   panne. Voir §16.5.
+
+### 16.3 Le vrai poste de coût : le bloc « existant »
+
+`existingContentBlock` (`prompt.ts`) transmet **tout l'existant de l'atelier à
+chaque appel**, et il est placé **après** le marqueur de cache — donc facturé
+plein tarif, à chaque fois. À 100 questions c'est invisible ; à 2 160 énoncés le
+bloc pèse ~75 000 tokens, soit **~0,37 $ par appel**, ~20 $ sur un import.
+
+**Le mécanisme anti-doublon coûterait alors plus cher que la génération.**
+
+**Décision : restreindre le bloc à ce que la passe utilise réellement.**
+
+| Passe | Ce qu'on transmet |
+|---|---|
+| Chapitres | les chapitres existants, rien d'autre |
+| Notions | les notions **du chapitre traité** |
+| Questions | les énoncés **des seules notions traitées** |
+
+Conséquence assumée : **les questions sans notion ne sont jamais transmises**,
+donc jamais protégées du doublon. Coût accepté — elles ne sont de toute façon
+tirées par aucun exercice (§11).
+
+Tenue à l'échelle : même à 100+ questions sur une notion, la liste restreinte
+pèse ~3 500 tokens. Le mécanisme tient longtemps sans vecteurs (§16.9).
+
+### 16.4 Router modèle et effort par tâche — oui, mais en groupant
+
+L'idée d'adapter le modèle et l'`effort` à la difficulté réelle de chaque passe
+est retenue. **Avec une contrainte structurante : le cache de prompt est « scopé »
+au modèle, sans échappatoire.** Changer de modèle invalide les trois niveaux de
+cache — chaque modèle utilisé paie donc sa propre écriture de cache (~0,45 $ pour
+un cours de 70 k tokens sur Opus).
+
+**Règle : grouper par configuration d'appel** — c'est la généralisation de la
+règle « grouper par passe » déjà mesurée le 20/08 (§5.2). Tous les appels
+partageant (modèle, effort, schéma de sortie) doivent s'enchaîner sans en
+intercaler d'autres. Router par niveau de Bloom **à l'intérieur d'un chapitre**
+serait le pire cas : une écriture de cache par question.
+
+⚠️ **À mesurer avant de compter dessus** : `effort` vit dans `output_config`, le
+même objet que `format` — dont on a déjà mesuré (§5.2) qu'il segmente le cache.
+Rien ne dit que faire varier `effort` soit gratuit. Le vérifier par
+`usage.cache_read_input_tokens` avant d'en faire une stratégie.
+
+**Correction d'intuition à consigner** : l'idée initiale plaçait Haiku sur les
+chapitres et Opus sur les notions. C'est à l'envers. Le découpage en chapitres
+est **le jugement le plus structurant du pipeline** — un mauvais découpage
+empoisonne les deux passes suivantes — et il ne coûte qu'**un seul appel**.
+Rédiger 15 QCM de mémorisation sur une notion déjà extraite est, à l'inverse, la
+tâche la plus mécanique et la plus répétée. Le gradient va donc dans l'autre
+sens : **modèle fort là où c'est structurant et rare, modèle économique là où
+c'est mécanique et massif.**
+
+### 16.5 Parallélisme : ce qui l'empêchait, et ce qui le débloque
+
+Rien dans la conception n'interdit le parallélisme — les appels d'une même passe
+sont indépendants. Le séquentiel vient du choix d'unités bornées enchaînées par
+le client (§5.4), pas d'une contrainte du fournisseur.
+
+**Le piège à connaître :** une entrée de cache ne devient lisible qu'une fois la
+première réponse **commencée**. N appels lancés en parallèle sur le même préfixe
+paient donc tous plein tarif — personne ne lit ce que les autres écrivent encore.
+
+**La parade :** un appel de préchauffage à **`max_tokens: 0`** avant la volée. Il
+déclenche le prefill, écrit le cache, revient immédiatement, et ne facture aucun
+token de sortie. Ensuite seulement, lancer la volée.
+
+Séquence retenue : préchauffage → volée parallèle bornée (~8–10 en vol) →
+gestion des 429 en respectant l'en-tête `retry-after`. Ramène ~132 appels de
+2 h 30 à ~15 min.
+
+Le plafond devient alors les limites de débit de l'organisation (requêtes/min,
+tokens d'entrée/min, tokens de sortie/min selon le palier) — jamais approchées
+aujourd'hui.
+
+### 16.6 Recharge automatique, et pourquoi le navigateur ne suffit plus
+
+**Le besoin nouveau :** quand le stock de questions d'un couple (notion, niveau
+de Bloom) s'épuise parce que les élèves progressent, en regénérer.
+
+**C'est ce besoin — et non la durée — qui sort la boucle du navigateur.** Le
+choix de §5.4 reste juste pour ce qu'il visait : une action déclenchée par un
+gestionnaire, qui regarde sa barre de progression. Une recharge automatique n'a
+**par définition aucun onglet ouvert** : elle se déclenche pendant qu'un élève
+travaille, dans une session qui n'est pas celle d'un gestionnaire.
+
+Donc :
+
+- **L'import interactif reste dans le navigateur** — avec le parallélisme de
+  §16.5, il redescend à ~15 min, ce qui est tenable et garde la progression
+  réelle.
+- **La recharge va ailleurs.** Deux options, la seconde préférée :
+  1. une route planifiée (Vercel cron) qui traite une file d'attente ;
+  2. la **Batch API** — dépôt d'un lot, récupération sous 24 h, **50 % du prix**.
+     Une recharge n'est jamais urgente. Aucune fonction serveur longue à tenir,
+     et le coût est lissé par construction.
+
+### 16.7 Génération paresseuse par chapitre
+
+**Décision :** ne pas générer les questions de tout le cours à l'import. Générer
+celles du chapitre 1 ; celles du chapitre N à la première utilisation.
+
+**Contrainte :** ça ne doit pas faire attendre l'élève. La réponse n'est pas
+d'accélérer la génération, c'est de **ne jamais la mettre sur le chemin
+critique** : pendant que l'élève travaille le chapitre N, le N+1 se prépare en
+tâche de fond. Même mécanisme que la recharge (§16.6), même file d'attente.
+
+### 16.8 Mémoire : il n'y en a pas, et les fichiers ne s'effacent jamais
+
+À consigner parce que c'est contre-intuitif :
+
+- **L'API est sans état.** Aucune mémoire entre deux appels. Tout est renvoyé à
+  chaque fois. Le bloc « existant » (§16.3) *est* la mémoire, écrite à la main.
+- **Le cache de prompt n'est pas une mémoire** : c'est une remise sur des octets
+  déjà envoyés, TTL 1 h.
+- **Les fichiers de la Files API persistent** sous le compte jusqu'à suppression
+  explicite. Un nouveau téléversement **n'efface pas les anciens**.
+
+⚠️ **Écart relevé le 22/08/2026 :** `providers/claude.ts` n'appelle que
+`files.upload`, jamais de suppression. **Chaque ingestion, chaque nouvel essai,
+chaque import annulé laisse donc ses PDF chez le fournisseur, indéfiniment.**
+Deux conséquences : accumulation de stockage, et un écart avec ce qu'on pourrait
+affirmer à un utilisateur sur la durée de conservation de ses documents.
+À traiter : supprimer les `file_ids` d'un import à son annulation, et prévoir
+leur nettoyage après un import terminé.
+
+### 16.9 Vecteurs : toujours pas maintenant, et la raison a changé
+
+§3 concluait « ne rien vectoriser » parce que RAG est contre-productif pour une
+ingestion exhaustive. **Cette raison tient toujours.** S'y ajoute une raison
+nouvelle : le découpage du bloc existant (§16.3) règle le problème de coût que
+les vecteurs auraient réglé, **sans nouveau fournisseur**.
+
+Les vecteurs redeviendront intéressants quand deux besoins se présenteront — et
+ils se servent du même index :
+
+1. **Doublon sémantique** — une liste littérale ne voit pas qu'une question
+   reformulée est la même.
+2. **Recherche sémantique pour le traducteur d'examen** (§16.11) — « trigo » qui
+   retrouve « triangles rectangles ».
+
+À noter pour la décision RGPD future : **Anthropic n'a pas de modèle
+d'embedding** et renvoie vers **Voyage AI** — donc un sous-traitant de plus à
+déclarer. (OpenAI, à l'inverse, expose ses propres embeddings ; c'est une
+différence réelle entre les deux fournisseurs, à peser le jour venu.)
+
+### 16.10 Génération d'examen : l'IA traduit, SQL sélectionne
+
+**Décision d'architecture.** Le modèle ne choisit jamais les questions. Il
+**traduit une demande en langage naturel en paramètres**, sortie structurée
+Zod — le même mécanisme que `wireSchema.ts`, en beaucoup plus petit :
+
+```
+"faiut un exam de 2h sur la trigo avec 1à question"
+   ↓ un appel, ~30 noms de chapitres en entrée (pas 2 000 énoncés)
+{ durée: 120, chapitres: [...], nombre: 10, niveaux: {...} }
+   ↓ SQL
+les questions, tirées de la banque
+```
+
+**Pourquoi pas laisser le modèle choisir :** il faudrait lui envoyer les 2 000
+énoncés à chaque examen (le problème de coût de §16.3, en pire), le résultat ne
+serait pas reproductible, et il inventerait des identifiants. La sélection est un
+travail de base de données ; la compréhension d'une phrase mal orthographiée est
+un travail de modèle. Chacun le sien.
+
+Le chemin de jointure existe déjà : `exam_question_items` (qui porte
+`bloom_level`) → `exam_question_item_bricks` → `workshop_bricks.chapter_id`.
+
+### 16.11 Demande ciblée sur un énoncé ou un libellé
+
+Postgres sait faire de la recherche plein texte sur `exam_question_items.content`
+et sur les libellés. Le traducteur renvoie un filtre textuel, SQL l'applique.
+« La question sur le théorème de Pythagore » fonctionne.
+
+**Limite à assumer :** le plein texte matche des mots, pas du sens. « La question
+sur le triangle rectangle » ne trouvera pas un énoncé formulé autour de
+« hypoténuse ». C'est précisément là que les vecteurs (§16.9) gagneraient — et
+c'est le même index que pour le doublon sémantique. Un investissement, deux
+usages : c'est ce qui décidera du moment.
+
+### 16.12 Variantes d'examen : l'aléatoire reproductible
+
+**Besoin :** plusieurs versions d'un même examen (anti-triche), sans changer la
+demande.
+
+**Décision :** tri déterministe par graine — `order by md5(i.id || :seed)` — et
+la graine est **stockée sur l'examen**. Version A = graine 1, version B = graine
+2. Reproductible, donc réimprimable à l'identique des mois plus tard, ce que
+`order by random()` (utilisé aujourd'hui pour le tirage d'exercice) ne permet
+pas.
+
+**Ne pas demander la graine au modèle** : un modèle est un mauvais générateur
+d'aléa, et ce serait un appel payant pour ce que `crypto.randomUUID()` fait
+gratuitement.
+
+### 16.13 Ordre de chantier arrêté
+
+1. **Restreindre le bloc « existant » par passe** (§16.3). Indépendant, gain
+   immédiat, **prérequis à toute montée en volume**.
+2. **Passer la passe 3 à la notion** + relever `MAX_QUESTIONS_PER_IMPORT` +
+   répartition Bloom paramétrable (§16.1, §16.2).
+3. **Préchauffage + volée parallèle bornée** (§16.5). Mesurer
+   `cache_read_input_tokens` pour valider que le cache est bien lu.
+4. **File d'attente hors navigateur + Batch API** pour la recharge et la
+   génération paresseuse (§16.6, §16.7).
+5. **Nettoyage des fichiers Files API** (§16.8).
+6. **Traducteur de demande + sélection SQL + graine** (§16.10 à §16.12).
+
+### 16.14 Encore ouvert après cette session
+
+1. **`effort` segmente-t-il le cache ?** (§16.4) — à mesurer, ça conditionne tout
+   le routage par tâche.
+2. **Le nombre réel de notions par chapitre** sur un cours réel — toutes les
+   projections de coût en dépendent.
+3. **Quel modèle sur quelle passe**, une fois (1) mesuré.
+4. **Où vit la file d'attente** (§16.6) : table Supabase + cron Vercel, ou
+   uniquement Batch API.
