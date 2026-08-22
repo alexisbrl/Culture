@@ -13,6 +13,8 @@ import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import {
   ingestChapterNotions,
   ingestChapterQuestions,
+  prepareWorkshopIngestion,
+  releaseWorkshopImportFiles,
   startWorkshopIngestion,
   type PlanIssue,
 } from '@/app/actions/aiIngest';
@@ -63,6 +65,10 @@ export function useWorkshopFiles(workshopId: string): DialogFile[] | null {
 
 type Phase =
   | { step: 'select' }
+  // ⚠️ TEMPORAIRE — phase de test : les deux étapes ci-dessous (préparation et
+  // confirmation du coût) partent d'un bloc avec `src/lib/ingest/cost.ts`.
+  | { step: 'preparing' }
+  | { step: 'confirm'; importId: string; corpusTokens: number | null; estimatedUsd: number | null }
   | { step: 'running'; label: string; done: number; total: number }
   | { step: 'done' }
   | { step: 'error'; message: string };
@@ -88,14 +94,35 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   const [counts, setCounts] = useState({ chapters: 0, notions: 0, questions: 0 });
   const [issues, setIssues] = useState<{ discarded: PlanIssue[]; adjusted: PlanIssue[] }>({ discarded: [], adjusted: [] });
 
-  const running = phase.step === 'running';
+  // Le téléversement en cours n'est pas interruptible proprement : on ferme la
+  // sortie tant qu'il dure, comme pendant la génération.
+  const running = phase.step === 'running' || phase.step === 'preparing';
   const context = forcedContext ?? 'parcours';
 
   function toggleFile(id: string) {
     setSelected((prev) => (prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]));
   }
 
-  async function generate() {
+  /** ⚠️ TEMPORAIRE — phase de test. Téléverse et mesure, puis attend un clic.
+   *  Le téléversement est gratuit ; le premier appel au modèle, non — c'est
+   *  pour ça que l'estimation peut se faire ici sans rien dépenser. */
+  async function prepare() {
+    setPhase({ step: 'preparing' });
+    const prepared = await prepareWorkshopIngestion(workshopId, selected, {
+      notions: withNotions,
+      questions: withQuestions,
+      context,
+    });
+    if (!prepared.ok) return setPhase({ step: 'error', message: prepared.error });
+    setPhase({
+      step: 'confirm',
+      importId: prepared.importId,
+      corpusTokens: prepared.corpusTokens,
+      estimatedUsd: prepared.estimatedUsd,
+    });
+  }
+
+  async function generate(importId: string) {
     const discarded: PlanIssue[] = [];
     const adjusted: PlanIssue[] = [];
     const tally = { chapters: 0, notions: 0, questions: 0 };
@@ -104,11 +131,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     const totalSteps = 1 + (withNotions ? 1 : 0) + (withQuestions ? 1 : 0);
     setPhase({ step: 'running', label: t('progress.chapters'), done: 0, total: totalSteps });
 
-    const start = await startWorkshopIngestion(workshopId, selected, {
-      notions: withNotions,
-      questions: withQuestions,
-      context,
-    });
+    const start = await startWorkshopIngestion(workshopId, importId);
     if (!start.ok) return setPhase({ step: 'error', message: start.error });
 
     discarded.push(...start.discarded);
@@ -120,7 +143,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     if (withNotions) {
       for (const [i, chapter] of start.chapters.entries()) {
         setPhase({ step: 'running', label: t('progress.notions', { chapter: chapter.name, i: i + 1, n: start.chapters.length }), done: 1, total: totalSteps });
-        const result = await ingestChapterNotions(workshopId, start.importId, chapter);
+        const result = await ingestChapterNotions(workshopId, importId, chapter, start.chapters.length);
         if (!result.ok) return setPhase({ step: 'error', message: result.error });
         discarded.push(...result.discarded);
         adjusted.push(...result.adjusted);
@@ -129,15 +152,29 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       }
     }
 
+    // Les documents ont fini de servir : la passe questions ne les reçoit plus
+    // (§16.3), et rien ne s'efface tout seul chez le fournisseur (§16.8). On les
+    // rend ici plutôt qu'à la toute fin, pour que ça arrive même si les
+    // questions échouent. Volontairement non attendu — c'est du ménage.
+    void releaseWorkshopImportFiles(workshopId, importId);
+
     if (withQuestions) {
       for (const [i, chapter] of start.chapters.entries()) {
-        setPhase({ step: 'running', label: t('progress.questions', { chapter: chapter.name, i: i + 1, n: start.chapters.length }), done: 2, total: totalSteps });
-        const result = await ingestChapterQuestions(workshopId, start.importId, chapter, context);
-        if (!result.ok) return setPhase({ step: 'error', message: result.error });
-        discarded.push(...result.discarded);
-        adjusted.push(...result.adjusted);
-        tally.questions += result.written;
-        setCounts({ ...tally });
+        // Un appel par LOT de notions, pas par chapitre (§16.2) : le nombre de
+        // lots n'est connu qu'à la réponse du premier, d'où la boucle ouverte.
+        let batchIndex = 0;
+        let batches = 1;
+        while (batchIndex < batches) {
+          setPhase({ step: 'running', label: t('progress.questions', { chapter: chapter.name, i: i + 1, n: start.chapters.length }), done: 2, total: totalSteps });
+          const result = await ingestChapterQuestions(workshopId, importId, chapter, context, batchIndex);
+          if (!result.ok) return setPhase({ step: 'error', message: result.error });
+          batches = result.batches;
+          discarded.push(...result.discarded);
+          adjusted.push(...result.adjusted);
+          tally.questions += result.written;
+          setCounts({ ...tally });
+          batchIndex += 1;
+        }
       }
     }
 
@@ -204,11 +241,43 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
 
             <Actions>
               <Ghost onClick={onClose}>{t('cancel')}</Ghost>
-              <Primary onClick={generate} disabled={selected.length === 0}>
+              <Primary onClick={prepare} disabled={selected.length === 0}>
                 {t('generate')}
               </Primary>
             </Actions>
           </>
+        )}
+
+        {/* ⚠️ TEMPORAIRE — phase de test : les deux blocs qui suivent partent
+            d'un bloc avec `src/lib/ingest/cost.ts`. */}
+        {phase.step === 'preparing' && (
+          <div style={{ padding: '4px 0 8px' }}>
+            <ProgressBar value={0} max={1} label={t('estimate.preparing')} />
+            <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 14 }}>{t('estimate.preparingHint')}</p>
+          </div>
+        )}
+
+        {phase.step === 'confirm' && (
+          <div>
+            <SectionLabel>{t('estimate.heading')}</SectionLabel>
+            <div style={{ padding: '10px 12px', borderRadius: radius.md, background: ink(0.03), marginBottom: 10 }}>
+              <p style={{ fontSize: 13.5, color: palette.ink, margin: 0 }}>
+                {phase.corpusTokens === null
+                  ? t('estimate.unknownSize')
+                  : t('estimate.size', { tokens: Math.round(phase.corpusTokens / 1000) })}
+              </p>
+              <p style={{ fontSize: 15, fontWeight: 600, color: palette.ink, margin: '6px 0 0' }}>
+                {phase.estimatedUsd === null
+                  ? t('estimate.unknownCost')
+                  : t('estimate.cost', { usd: phase.estimatedUsd.toFixed(2) })}
+              </p>
+            </div>
+            <Hint>{t('estimate.disclaimer')}</Hint>
+            <Actions>
+              <Ghost onClick={onClose}>{t('cancel')}</Ghost>
+              <Primary onClick={() => generate(phase.importId)}>{t('estimate.confirm')}</Primary>
+            </Actions>
+          </div>
         )}
 
         {phase.step === 'running' && (

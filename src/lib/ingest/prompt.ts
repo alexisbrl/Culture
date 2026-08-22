@@ -21,22 +21,64 @@
 // une question de moins, pas une donnée corrompue — et l'intégrité, elle, est
 // refusée côté serveur (`questionIntegrity.ts`).
 
-/** Questions visées par notion : une par niveau de Bloom (décision du
- *  19/08/2026, confirmée le 20). Provisoire et assumé comme tel. */
-export const QUESTIONS_PER_NOTION = 4;
+/** Les quatre niveaux de Bloom qu'on sait produire, et ce qu'ils demandent. */
+export const BLOOM_LEVELS = [1, 2, 3, 4] as const;
+export type BloomLevel = (typeof BLOOM_LEVELS)[number];
+
+const BLOOM_VERBS: Record<BloomLevel, string> = {
+  1: 'mémoriser',
+  2: 'comprendre',
+  3: 'appliquer',
+  4: 'analyser ou créer',
+};
+
+/** Combien de questions viser par notion, **par niveau de Bloom**.
+ *
+ *  C'était « une par niveau », soit 4 — un stock qui s'épuise au deuxième
+ *  entraînement, puisqu'un entraînement fait ~10 questions (§16.1). Les niveaux
+ *  3 et 4 sont à zéro **par optimisation, pas par choix pédagogique** : les
+ *  couvrir à cette densité demanderait ~60 questions par notion dont la plupart
+ *  ne seraient jamais posées. Ils relèveront de la recharge automatique. */
+export type BloomDistribution = Record<BloomLevel, number>;
+
+export const DEFAULT_BLOOM_DISTRIBUTION: BloomDistribution = { 1: 8, 2: 4, 3: 0, 4: 0 };
+
+/** Le total visé par notion — somme de la répartition, jamais un second réglage
+ *  à tenir en accord avec elle. */
+export function questionsPerNotion(distribution: BloomDistribution = DEFAULT_BLOOM_DISTRIBUTION): number {
+  return BLOOM_LEVELS.reduce((sum, level) => sum + Math.max(0, distribution[level]), 0);
+}
 
 /** Plafond de questions par ingestion. Plafond de DÉBIT, pas de notions : les
  *  notions sont la matière du produit, on ne les limite pas. La cible reste
  *  500 à 1000 (§9) — c'est pourquoi rien dans le pipeline ne suppose « tout le
- *  lot dans une seule réponse ». */
-export const MAX_QUESTIONS_PER_IMPORT = 50;
+ *  lot dans une seule réponse ».
+ *
+ *  À 50, il bloquait à 2 % de la volumétrie cible (§16.2). Relevé à 300 **le
+ *  temps des tests** : c'est un garde-fou contre une boucle qui part en vrille,
+ *  il doit rester bas tant que les coûts réels ne sont pas constatés. */
+export const MAX_QUESTIONS_PER_IMPORT = 300;
 
 export type ExistingContent = {
   chapters: { id: string; name: string }[];
   notions: { id: string; title: string; chapterId: string | null }[];
-  /** Énoncés déjà présents — pour ne pas reposer la même question. */
-  questions: string[];
+  /** Énoncés déjà présents, avec les notions qu'ils font travailler — pour ne pas
+   *  reposer la même question, et pour pouvoir ne transmettre que les énoncés
+   *  qui concernent la passe en cours. */
+  questions: { content: string; notionIds: string[] }[];
 };
+
+/** La portée du bloc « existant » : ce que la passe en cours utilise réellement,
+ *  et rien de plus (§16.3).
+ *
+ *  ⚠️ C'est le poste de coût numéro un du pipeline. Transmettre tout l'atelier à
+ *  chaque appel pèse ~75 000 tokens à 2 160 énoncés, facturés plein tarif (le
+ *  bloc est placé après le marqueur de cache) : le mécanisme anti-doublon
+ *  coûterait alors plus cher que la génération elle-même. */
+export type ExistingScope =
+  | { pass: 'chapters' }
+  | { pass: 'notions'; chapterId: string }
+  | { pass: 'questions'; notionIds: string[] };
 
 const SYSTEM = `Tu construis le programme pédagogique d'un atelier à partir de ses documents sources.
 
@@ -56,39 +98,125 @@ export function systemPrompt(): string {
   return SYSTEM;
 }
 
-/** L'existant de l'atelier, transmis à CHAQUE appel pour que le modèle complète
- *  au lieu de dupliquer (§8). Les identifiants réels servent de références : une
- *  question peut ainsi se rattacher à une notion déjà en base. */
-export function existingContentBlock(existing: ExistingContent): string {
-  if (existing.chapters.length === 0 && existing.notions.length === 0 && existing.questions.length === 0) {
-    return "L'atelier est vide : rien n'existe encore.";
+/** Ce que la portée retient de l'existant. Fonction pure et séparée du rendu :
+ *  c'est elle qui porte la règle de coût, elle mérite d'être lisible seule. */
+function inScope(existing: ExistingContent, scope: ExistingScope): {
+  chapters: ExistingContent['chapters'];
+  notions: ExistingContent['notions'];
+  questions: string[];
+} {
+  switch (scope.pass) {
+    case 'chapters':
+      // Les chapitres existants, rien d'autre : la passe ne peut créer que des
+      // chapitres, les notions et les questions ne l'aideraient en rien.
+      return { chapters: existing.chapters, notions: [], questions: [] };
+    case 'notions':
+      return {
+        chapters: [],
+        notions: existing.notions.filter((n) => n.chapterId === scope.chapterId),
+        questions: [],
+      };
+    case 'questions': {
+      // Conséquence assumée (§16.3) : une question **sans notion** n'est jamais
+      // transmise, donc jamais protégée du doublon. Elle n'est de toute façon
+      // tirée par aucun exercice (§11).
+      const wanted = new Set(scope.notionIds);
+      return {
+        chapters: [],
+        notions: [],
+        questions: existing.questions.filter((q) => q.notionIds.some((id) => wanted.has(id))).map((q) => q.content),
+      };
+    }
+  }
+}
+
+/** L'existant de l'atelier **restreint à la portée de la passe**, pour que le
+ *  modèle complète au lieu de dupliquer (§8) sans qu'on lui repaie l'atelier
+ *  entier à chaque appel (§16.3). Les identifiants réels servent de références :
+ *  une question peut ainsi se rattacher à une notion déjà en base. */
+export function existingContentBlock(existing: ExistingContent, scope: ExistingScope): string {
+  const kept = inScope(existing, scope);
+
+  if (kept.chapters.length === 0 && kept.notions.length === 0 && kept.questions.length === 0) {
+    switch (scope.pass) {
+      case 'chapters':
+        return "L'atelier est vide : rien n'existe encore.";
+      case 'notions':
+        return "Ce chapitre est vide : aucune notion n'y existe encore.";
+      case 'questions':
+        return "Aucune question ne porte encore sur ces notions : la liste est vide.";
+    }
   }
 
   const lines: string[] = ["Ce qui existe DÉJÀ dans l'atelier. Tu ne le recrées pas ; tu le complètes."];
 
-  if (existing.chapters.length > 0) {
+  if (kept.chapters.length > 0) {
     lines.push('', 'Chapitres (référence — nom) :');
-    for (const c of existing.chapters) lines.push(`- ${c.id} — ${c.name}`);
+    for (const c of kept.chapters) lines.push(`- ${c.id} — ${c.name}`);
   }
 
-  if (existing.notions.length > 0) {
+  if (kept.notions.length > 0) {
     lines.push('', 'Notions (référence — texte) :');
-    for (const n of existing.notions) lines.push(`- ${n.id} — ${n.title}`);
+    for (const n of kept.notions) lines.push(`- ${n.id} — ${n.title}`);
   }
 
-  if (existing.questions.length > 0) {
+  if (kept.questions.length > 0) {
     lines.push('', 'Questions déjà posées — ne les repose pas, même reformulées :');
-    for (const q of existing.questions) lines.push(`- ${q}`);
+    for (const q of kept.questions) lines.push(`- ${q}`);
   }
 
   return lines.join('\n');
 }
 
-/** Passe 1 — les chapitres. */
-export function chaptersInstruction(): string {
-  return `Découpe le document en CHAPITRES : les grandes parties du cours, dans l'ordre où elles se lisent.
+/** Ordre de grandeur annoncé au modèle pour la passe chapitres. **Une
+ *  indication, pas une contrainte** : un programme annuel en compte
+ *  légitimement plus (§16.18). C'est le nombre ABSOLU qui sert de repère,
+ *  jamais un rapport au nombre de documents — un cours de 8 chapitres peut
+ *  tenir dans un seul PDF. */
+export const PLAUSIBLE_CHAPTERS = { min: 3, max: 8 } as const;
+
+/** Passe 1 — les chapitres.
+ *
+ *  ⚠️ **La consigne dit combien de documents il y a, et qu'ils forment un seul
+ *  cours.** Sa version précédente disait « Découpe **le** document » au
+ *  singulier alors qu'il en recevait sept, nommés « Chapitre 1.pdf » à
+ *  « Chapitre 6.pdf » : on lui demandait de subdiviser un cours, il a subdivisé
+ *  — 28 chapitres au lieu de 6, soit ×4,7 sur tout ce qui suit (§16.15). C'est
+ *  la consigne qui était fausse, pas le modèle. */
+export function chaptersInstruction(fileNames: string[] = [], retry?: { previousCount: number }): string {
+  const corpus =
+    fileNames.length > 1
+      ? `Tu as reçu ${fileNames.length} documents. Ils forment UN SEUL cours, pas ${fileNames.length} cours distincts :
+${fileNames.map((name) => `- ${name}`).join('\n')}
+
+Découpe l'ENSEMBLE globalement. Un document n'est pas un chapitre : un même document peut en contenir plusieurs, et un chapitre peut s'étendre sur plusieurs documents. Leurs noms de fichiers ne sont pas un découpage, ils ne t'engagent à rien.
+
+`
+      : fileNames.length === 1
+        ? `Tu as reçu un seul document, « ${fileNames[0]} », qui porte l'intégralité du cours.
+
+`
+        : '';
+
+  // La relance est posée en TÊTE, avant même la consigne : c'est la première
+  // chose que le modèle doit savoir de cet appel. Elle ne remplace pas la
+  // consigne — le second appel ne voit pas le premier, l'API est sans état
+  // (§16.8).
+  const again = retry
+    ? `Tu viens de proposer ${retry.previousCount} chapitres pour ce cours, bien au-delà de l'ordre de grandeur habituel.
+
+Reprends le découpage depuis le début. Certains de ces ${retry.previousCount} chapitres sont probablement des SOUS-PARTIES d'un même chapitre : deux parties qui traitent du même sujet, ou qui s'enchaînent dans une même progression, n'en forment qu'un. Regroupe-les.
+
+Ce n'est pas un ordre de réduire à tout prix : si le cours justifie réellement ce nombre — un programme annuel, par exemple —, garde-le. Mais vérifie-le d'abord.
+
+`
+    : '';
+
+  return `${again}${corpus}Découpe ce cours en CHAPITRES : ses grandes parties, dans l'ordre où elles se lisent.
 
 Un chapitre est une unité d'enseignement, pas une section de mise en page : deux sous-parties qui traitent du même sujet forment un seul chapitre. Vise le découpage qu'un enseignant ferait pour organiser sa progression.
+
+Ordre de grandeur : un cours en compte typiquement ${PLAUSIBLE_CHAPTERS.min} à ${PLAUSIBLE_CHAPTERS.max}, davantage pour un programme annuel. C'est une indication et non une limite — dépasse-la si le contenu le justifie vraiment.
 
 Donne à chacun une référence courte et unique (ch1, ch2…), et un nom de 120 caractères maximum.`;
 }
@@ -104,22 +232,52 @@ Découpe assez fin pour qu'on puisse interroger chaque notion séparément, mais
 Chaque notion porte \`chapterRef\` = ${chapter.id}. Ne produis que les notions de CE chapitre.`;
 }
 
-/** Passe 3 — les questions d'un chapitre, ancrées sur ses notions. */
+/** La règle de volumétrie, en une phrase pour le modèle. Un niveau à zéro n'y
+ *  figure pas du tout : le mentionner pour dire « aucune » attire l'attention
+ *  sur ce qu'on ne veut justement pas voir produit. */
+export function bloomInstruction(distribution: BloomDistribution = DEFAULT_BLOOM_DISTRIBUTION): string {
+  const parts = BLOOM_LEVELS.filter((level) => distribution[level] > 0).map(
+    (level) => `${distribution[level]} de niveau ${level} (${BLOOM_VERBS[level]})`,
+  );
+  if (parts.length === 0) return 'Ne produis aucune question.';
+
+  const total = questionsPerNotion(distribution);
+  const enumeration = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} et ${parts[parts.length - 1]}`;
+  return `Pour CHAQUE notion à couvrir : ${enumeration}, soit ${total} questions par notion. N'en produis pas d'autres niveaux.`;
+}
+
+/** Passe 3 — les questions d'un lot de notions, ancrées sur elles. */
 export function questionsInstruction(input: {
   chapter: { id: string; name: string };
   notions: { id: string; title: string }[];
+  /** Les autres notions du chapitre, en contexte seulement (§16.21). La passe ne
+   *  reçoit plus les documents : ce sont elles qui remplacent le cours. */
+  neighbours?: { id: string; title: string }[];
   /** Nombre de questions restant avant le plafond de l'import. */
   budget: number;
+  /** Répartition visée par niveau de Bloom. Paramétrable pour pouvoir la régler
+   *  sans toucher au prompt (§16.1). */
+  distribution?: BloomDistribution;
 }): string {
   const list = input.notions.map((n) => `- ${n.id} — ${n.title}`).join('\n');
+  const neighbours = input.neighbours ?? [];
+
+  // Le contexte vient APRÈS les notions à couvrir et se termine par un rappel :
+  // sans lui, le modèle interroge ce qu'il lit et déborde du lot.
+  const context =
+    neighbours.length > 0
+      ? `\nAutres notions du même chapitre, pour le contexte UNIQUEMENT — tu ne poses aucune question dessus :
+${neighbours.map((n) => `- ${n.title}`).join('\n')}
+`
+      : '';
 
   return `Rédige les QUESTIONS qui font travailler les notions du chapitre « ${input.chapter.name} ».
 
 Notions à couvrir :
 ${list}
-
+${context}
 Règles de production :
-- ${QUESTIONS_PER_NOTION} questions par notion, une par niveau de Bloom : 1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser ou créer.
+- ${bloomInstruction(input.distribution)}
 - Chaque question porte dans \`notionRefs\` la ou les notions qu'elle fait travailler, avec les références ci-dessus. Une question sans notion ne sera jamais posée à personne.
 - Varie les types de réponse. Attention : \`qcs\` et \`qcm\` sont LE MÊME TYPE pour le candidat — un QCM, dont une seule ou plusieurs propositions sont correctes. Alterner entre les deux n'est pas varier : la variété se joue entre QCM, réponse textuelle et liste.
 - Pour un QCM : des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien, elle se raye d'office.

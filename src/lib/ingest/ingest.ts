@@ -96,7 +96,8 @@ export async function addImportUsage(
   if (error || !data) throw new Error(error?.message ?? 'import introuvable');
 
   // Les tokens écrits dans le cache comptent comme de l'entrée : ils sont
-  // facturés (~1,25×), et les ignorer donnerait un coût largement sous-évalué.
+  // facturés plus cher qu'elle (1,25× en TTL 5 minutes, 2× en TTL 1 h), et les
+  // ignorer donnerait un coût largement sous-évalué.
   await supabase
     .from('ai_imports')
     .update({

@@ -48,12 +48,31 @@ export type PreparedDocument = {
 /** Ce qu'on demande au modèle. Une passe à la fois : on ne lui fait jamais
  *  produire le programme entier d'un coup (§5.1). */
 export type IngestScope =
-  | { pass: 'chapters' }
-  | { pass: 'notions'; chapter: { id: string; name: string } }
+  | {
+      pass: 'chapters';
+      /** Présent au SECOND essai seulement : le nombre de chapitres rendu au
+       *  premier, que la consigne rappelle au modèle (§16.18). */
+      retry?: { previousCount: number };
+    }
+  | {
+      pass: 'notions';
+      chapter: { id: string; name: string };
+      /** Combien d'appels de cette passe partagent les mêmes documents — c'est
+       *  le nombre de chapitres de l'import. Sert **uniquement** à décider si le
+       *  marqueur de cache est rentable (§16.17) : à un seul chapitre, il serait
+       *  une perte sèche de 25 %. */
+      plannedCalls?: number;
+    }
   | {
       pass: 'questions';
       chapter: { id: string; name: string };
+      /** Les notions à faire travailler par ce lot de questions. */
       notions: { id: string; title: string }[];
+      /** Les AUTRES notions du même chapitre, en contexte seulement (§16.21).
+       *  C'est ce qui remplace le cours : la notion suffit pour les niveaux 1 et
+       *  2 de Bloom, ses voisines apportent ce qu'il faut pour les niveaux 3 et
+       *  4. Quelques milliers de tokens, contre 680 000 pour le corpus. */
+      neighbours: { id: string; title: string }[];
       budget: number;
     };
 
@@ -65,9 +84,15 @@ export type ProviderResult = {
     /** Tokens facturés plein tarif — ni mis en cache, ni lus depuis le cache. */
     inputTokens: number;
     outputTokens: number;
-    /** Tokens **écrits** dans le cache (facturés ~1,25×). Un document volumineux
-     *  atterrit ici au premier appel : sans cette mesure, on croit à tort que
-     *  l'appel n'a presque rien coûté en entrée. */
+    /** Tokens **écrits** dans le cache. Un document volumineux atterrit ici au
+     *  premier appel : sans cette mesure, on croit à tort que l'appel n'a
+     *  presque rien coûté en entrée.
+     *
+     *  ⚠️ **Le tarif dépend du TTL, et l'écart est de 60 %** : une écriture
+     *  coûte **2× l'entrée en TTL 1 h**, 1,25× en TTL 5 minutes (le défaut, et
+     *  ce que le code utilise depuis §16.17). Seuil de rentabilité :
+     *  3 lectures en TTL 1 h, 2 en TTL 5 minutes — en dessous, poser un
+     *  marqueur coûte plus cher que ne pas en poser. */
     cacheCreationTokens: number;
     /** Tokens **servis** par le cache (~0,1×). À zéro d'un appel à l'autre alors
      *  que le document ne change pas, un invalidateur traîne dans le préfixe
@@ -86,6 +111,25 @@ export type PlanProvider = {
    *  stockage : une simple mise en forme, les octets restant portés par la
    *  poignée. */
   prepare(documents: SourceDocument[]): Promise<PreparedDocument[]>;
+
+  /** Combien de tokens le corpus occupera-t-il en entrée.
+   *
+   *  ⚠️ TEMPORAIRE — phase de test : sert à annoncer un coût avant de dépenser
+   *  (§16.15). Chez Claude, `countTokens` est **gratuit** et a ses propres
+   *  limites de débit (vérifié le 22/08/2026). Un fournisseur incapable de
+   *  compter peut renvoyer `null` : on affichera « inconnu » plutôt que de
+   *  bloquer. */
+  countCorpus(documents: PreparedDocument[]): Promise<number | null>;
+
+  /** Rend les documents au fournisseur — l'inverse de `prepare`.
+   *
+   *  ⚠️ **Rien ne s'efface tout seul** : chez Claude, un fichier téléversé
+   *  persiste sous le compte jusqu'à suppression explicite, et un nouveau
+   *  téléversement n'efface pas les anciens (§16.8). L'opération est gratuite.
+   *  Passer par `releaseDocuments` (`src/lib/ingest/release.ts`) plutôt que
+   *  d'appeler ceci directement : un ménage raté ne doit jamais faire échouer
+   *  ce qu'il accompagne. */
+  release(documents: PreparedDocument[]): Promise<void>;
 
   documentToPlan(
     documents: PreparedDocument[],

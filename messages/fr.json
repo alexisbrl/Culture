@@ -1226,6 +1226,17 @@
     },
     "button": "générer par IA",
     "chooseAi": "par IA",
-    "chooseManual": "manuellement"
+    "chooseManual": "manuellement",
+    "estimate": {
+      "heading": "Avant de lancer",
+      "preparing": "Préparation des documents et mesure du corpus…",
+      "preparingHint": "Rien n’est encore facturé : le téléversement et le comptage sont gratuits.",
+      "size": "Corpus mesuré : environ {tokens} milliers de tokens.",
+      "unknownSize": "Taille du corpus : impossible à mesurer.",
+      "cost": "Coût estimé : environ {usd} $",
+      "unknownCost": "Coût estimé : inconnu.",
+      "disclaimer": "Estimation indicative, calculée sur un cours de 8 chapitres et 10 notions par chapitre. Le coût réel dépend de ce que les documents contiennent.",
+      "confirm": "lancer la génération"
+    }
   }
 }
