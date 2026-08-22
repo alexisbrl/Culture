@@ -46,6 +46,24 @@ export function batchNotions<T>(notions: T[], size = NOTIONS_PER_QUESTION_BATCH)
   return batches;
 }
 
+// ─── Le marqueur de cache ────────────────────────────────────────────────────
+//
+// Le cache existait pour répondre à « on renvoie le même cours 25 fois ». Une
+// fois qu'on cesse de le faire (T3), il ne reste presque rien à mettre en
+// cache — et **un marqueur posé sur un contenu jamais relu coûte 1,25× au lieu
+// de 1×**, soit une perte sèche de 25 % sur cet appel (§16.17).
+//
+// L'exception est réelle : un PDF qui porte plusieurs chapitres est relu une
+// fois par chapitre à la passe notions. Là, le cache paie.
+
+/** Le marqueur ne se pose que si le contenu sert à **plus d'un appel**.
+ *
+ *  Seuil de rentabilité en TTL 5 minutes : 2 lectures (1,25× + 0,1× contre 2×).
+ *  En dessous, on paie l'écriture pour rien. */
+export function shouldCacheDocuments(documentUses: number): boolean {
+  return documentUses > 1;
+}
+
 // ─── La relance de la passe chapitres ────────────────────────────────────────
 //
 // Le nombre de chapitres est **le multiplicateur de tout ce qui suit** : 28 au

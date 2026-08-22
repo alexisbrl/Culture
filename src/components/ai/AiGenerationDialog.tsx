@@ -120,7 +120,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     if (withNotions) {
       for (const [i, chapter] of start.chapters.entries()) {
         setPhase({ step: 'running', label: t('progress.notions', { chapter: chapter.name, i: i + 1, n: start.chapters.length }), done: 1, total: totalSteps });
-        const result = await ingestChapterNotions(workshopId, start.importId, chapter);
+        const result = await ingestChapterNotions(workshopId, start.importId, chapter, start.chapters.length);
         if (!result.ok) return setPhase({ step: 'error', message: result.error });
         discarded.push(...result.discarded);
         adjusted.push(...result.adjusted);

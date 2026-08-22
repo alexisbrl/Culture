@@ -246,13 +246,17 @@ export async function ingestChapterNotions(
   actorId: string,
   importId: string,
   chapter: { id: string; name: string },
+  /** Nombre de chapitres de l'import : décide si le marqueur de cache est
+   *  rentable (§16.17). Vient du client, qui l'a déjà — une valeur fausse ne
+   *  peut que faire manquer ou gaspiller un cache, jamais fausser le résultat. */
+  plannedCalls = 1,
   options: { provider?: PlanProvider } = {},
 ): Promise<ChapterPassResult> {
   const provider = options.provider ?? createClaudeProvider();
 
   const prepared = await preparedOf(importId);
   const existing = await loadChapterNotions(workshopId, chapter.id);
-  const result = await provider.documentToPlan(prepared, existing, { pass: 'notions', chapter });
+  const result = await provider.documentToPlan(prepared, existing, { pass: 'notions', chapter, plannedCalls });
   await addImportUsage(importId, result.usage);
 
   const refs = await loadExistingRefs(workshopId);

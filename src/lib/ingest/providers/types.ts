@@ -54,7 +54,15 @@ export type IngestScope =
        *  premier, que la consigne rappelle au modèle (§16.18). */
       retry?: { previousCount: number };
     }
-  | { pass: 'notions'; chapter: { id: string; name: string } }
+  | {
+      pass: 'notions';
+      chapter: { id: string; name: string };
+      /** Combien d'appels de cette passe partagent les mêmes documents — c'est
+       *  le nombre de chapitres de l'import. Sert **uniquement** à décider si le
+       *  marqueur de cache est rentable (§16.17) : à un seul chapitre, il serait
+       *  une perte sèche de 25 %. */
+      plannedCalls?: number;
+    }
   | {
       pass: 'questions';
       chapter: { id: string; name: string };

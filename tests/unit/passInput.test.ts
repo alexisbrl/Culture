@@ -5,6 +5,7 @@ import {
   documentsForPass,
   MAX_PLAUSIBLE_CHAPTERS,
   needsChapterRetry,
+  shouldCacheDocuments,
   NOTIONS_PER_QUESTION_BATCH,
   withChapterRetry,
 } from '@/lib/ingest/passInput';
@@ -202,3 +203,20 @@ describe('withChapterRetry — une relance, jamais deux (§16.18)', () => {
 function chapterCount(result: { plan: unknown }): number {
   return (result.plan as { chapters: unknown[] }).chapters.length;
 }
+
+describe('shouldCacheDocuments — le marqueur n’est pas gratuit (§16.17)', () => {
+  it('un document utilisé une seule fois ne reçoit pas de marqueur', () => {
+    // Le poser coûterait 1,25× au lieu de 1× : une perte sèche de 25 %.
+    expect(shouldCacheDocuments(1)).toBe(false);
+  });
+
+  it('aucun document du tout : rien à mettre en cache', () => {
+    expect(shouldCacheDocuments(0)).toBe(false);
+  });
+
+  it('deux lectures ou plus : le cache paie', () => {
+    // Seuil de rentabilité en TTL 5 minutes : 1,25× + 0,1× contre 2×.
+    expect(shouldCacheDocuments(2)).toBe(true);
+    expect(shouldCacheDocuments(12)).toBe(true);
+  });
+});

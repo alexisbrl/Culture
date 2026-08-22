@@ -76,12 +76,15 @@ export async function ingestChapterNotions(
   workshopId: string,
   importId: string,
   chapter: { id: string; name: string },
+  /** Nombre de chapitres de l'import — sert uniquement à décider si le marqueur
+   *  de cache est rentable (§16.17), jamais au contenu produit. */
+  plannedCalls = 1,
 ): Promise<ChapterPassResult> {
   const ctx = await requireManager(workshopId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
-    const result = await run.ingestChapterNotions(workshopId, ctx.userId, importId, chapter);
+    const result = await run.ingestChapterNotions(workshopId, ctx.userId, importId, chapter, plannedCalls);
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {

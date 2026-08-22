@@ -34,7 +34,7 @@ import {
   type ExistingContent,
   type ExistingScope,
 } from '@/lib/ingest/prompt';
-import { documentsForPass } from '@/lib/ingest/passInput';
+import { documentsForPass, shouldCacheDocuments } from '@/lib/ingest/passInput';
 import { wireChaptersOutput, wireGroupsOutput, wireNotionsOutput } from '@/lib/ingest/wireSchema';
 
 import type {
@@ -163,6 +163,26 @@ function existingScopeFor(scope: IngestScope): ExistingScope {
   }
 }
 
+/** Combien d'appels partagent les mêmes documents, pour cette passe.
+ *
+ *  ⚠️ Rappel de §16.22 : un préfixe trop court ne se met **pas** en cache, et
+ *  sans erreur — 4 096 tokens minimum sur Haiku 4.5, 1 024 sur Sonnet 5. Un
+ *  marqueur posé sur un petit corpus peut donc n'avoir aucun effet. */
+function documentUsesOf(scope: IngestScope): number {
+  switch (scope.pass) {
+    case 'chapters':
+      // Un seul appel sur ce préfixe (deux si relance, mais on ne le sait pas
+      // d'avance et une relance reste l'exception).
+      return 1;
+    case 'notions':
+      // Un appel par chapitre, tous sur les mêmes documents.
+      return scope.plannedCalls ?? 1;
+    case 'questions':
+      // Aucun document depuis T3 : rien à mettre en cache.
+      return 0;
+  }
+}
+
 function outputSchemaFor(scope: IngestScope) {
   switch (scope.pass) {
     case 'chapters':
@@ -218,6 +238,12 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
       // `document` n'est posé — donc aucun marqueur de cache non plus.
       const sent = documentsForPass(scope.pass, documents);
 
+      // Poser un marqueur sur un contenu jamais relu coûte 25 % de plus que ne
+      // rien poser (§16.17). On ne le pose donc que si les mêmes documents
+      // servent à plus d'un appel — en pratique, la passe notions d'un import à
+      // plusieurs chapitres.
+      const cacheable = shouldCacheDocuments(documentUsesOf(scope));
+
       // ⚠️ ORDRE CRITIQUE. Le cache est un préfixe : les documents d'abord (le
       // même à chaque appel), l'existant et la consigne ensuite. Inverser
       // reviendrait à ne jamais toucher le cache.
@@ -226,8 +252,11 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
         source: { type: 'file', file_id: doc.ref },
         title: doc.fileName,
         // Le marqueur ne va que sur le DERNIER document : il met en cache tout
-        // ce qui le précède, système compris.
-        ...(i === sent.length - 1 ? { cache_control: { type: 'ephemeral' as const, ttl: '1h' as const } } : {}),
+        // ce qui le précède, système compris. TTL par défaut (5 minutes) : le
+        // TTL d'une heure se justifiait quand une ingestion s'étalait sur des
+        // dizaines d'appels sur le même cours, et son écriture coûte 2× l'entrée
+        // au lieu de 1,25× (§16.16).
+        ...(cacheable && i === sent.length - 1 ? { cache_control: { type: 'ephemeral' as const } } : {}),
       }));
 
       content.push({ type: 'text', text: existingContentBlock(existing, existingScopeFor(scope)) });
