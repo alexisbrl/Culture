@@ -223,7 +223,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
   - Fichiers : `src/lib/ingest/providers/claude.ts`, `tests/unit/`
   - Dépend de : rien
 
-- [ ] **T9 — TTL 5 minutes et marqueur de cache conditionnel**
+- [x] **T9 — TTL 5 minutes et marqueur de cache conditionnel**
   - Le TTL passe de `1h` à 5 minutes (défaut, donc `cache_control` sans `ttl`). Le
     marqueur n'est posé que si le document servira à **plus d'un appel** — sinon
     c'est une perte sèche de 25 % sur cet appel (§16.17).
@@ -292,6 +292,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
 - 22/08/2026 — T6 — `336977d` — `chaptersInstruction(fileNames)` + `PLAUSIBLE_CHAPTERS` (3–8) ; les noms viennent de `sent`, dans `claude.ts`.
 - 22/08/2026 — T7 — `1edaa6a` — `withChapterRetry` (pur, dans `passInput.ts`) enveloppe l'appel ; `MAX_PLAUSIBLE_CHAPTERS = 12` ; les 2 essais sont comptés dans l'usage.
 - 22/08/2026 — T8 — `42f5720` — `selectModel` + `PASS_MODELS` + `tuningFor` dans `claude.ts` ; `createClaudeProvider` accepte désormais un objet d'options (l'ancienne signature à clé nue reste acceptée).
+- 22/08/2026 — T9 — `303074d` — `shouldCacheDocuments` ; le nombre de chapitres descend du dialogue jusqu'au scope `notions` (`plannedCalls`) pour décider du marqueur.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
