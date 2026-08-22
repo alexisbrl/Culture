@@ -232,7 +232,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
   - Fichiers : `src/lib/ingest/providers/claude.ts`, `tests/unit/`
   - Dépend de : T3
 
-- [ ] **T10 — Estimation de coût bloquante avant lancement**
+- [x] **T10 — Estimation de coût bloquante avant lancement**
   - ⚠️ **Piège d'ordonnancement, à ne pas rater** : pour estimer avant de lancer,
     les documents doivent déjà être chez le fournisseur. Découpe donc
     `startIngestion` en **deux** actions : une préparation (téléversement via
@@ -293,6 +293,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
 - 22/08/2026 — T7 — `1edaa6a` — `withChapterRetry` (pur, dans `passInput.ts`) enveloppe l'appel ; `MAX_PLAUSIBLE_CHAPTERS = 12` ; les 2 essais sont comptés dans l'usage.
 - 22/08/2026 — T8 — `42f5720` — `selectModel` + `PASS_MODELS` + `tuningFor` dans `claude.ts` ; `createClaudeProvider` accepte désormais un objet d'options (l'ancienne signature à clé nue reste acceptée).
 - 22/08/2026 — T9 — `303074d` — `shouldCacheDocuments` ; le nombre de chapitres descend du dialogue jusqu'au scope `notions` (`plannedCalls`) pour décider du marqueur.
+- 22/08/2026 — T10 — `da6fb21` — `prepareIngestion` / `startIngestion(importId)` ; `cost.ts` (pur) ; `PlanProvider.countCorpus` ; `corpusTokens` rangé dans `ai_imports.scope`. Rendu non vérifié — l’écran exige un téléversement réel chez le fournisseur.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
@@ -303,6 +304,18 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
   « quels documents reçoit une passe » est donc extraite en fonction pure, testée
   seule **et** posée en garde dans `claude.ts` — un appelant distrait ne peut plus
   rouvrir le robinet.
+- **T10 — les hypothèses de coût sont écrites, nommées et testées.** On ne sait
+  pas combien de chapitres un cours contient avant de l'avoir lu : l'estimation
+  suppose 8 chapitres et 10 notions par chapitre (`COST_ASSUMPTIONS`), pris dans
+  le haut de la fourchette plausible — mieux vaut annoncer trop que trop peu. Le
+  texte affiché dit explicitement sur quoi le calcul repose.
+- **T10 — un comptage raté n'empêche pas l'ingestion.** `countCorpus` renvoie
+  `null`, le dialogue affiche « coût inconnu », et la bascule de modèle joue par
+  prudence (T8). Bloquer sur l'échec d'un confort serait pire que le confort.
+- **T10 — réessayer après une erreur re-téléverse les documents.** Le bouton
+  « réessayer » ramène à la sélection, donc à un nouveau `prepareIngestion`. Les
+  fichiers du premier essai restent chez le fournisseur jusqu'à T11 ; le
+  téléversement est gratuit, seul le stockage s'accumule.
 - **T8 — les réglages d'appel deviennent dépendants du modèle (`tuningFor`).**
   Découvert en vérifiant la doc de l'API : **Haiku 4.5 refuse
   `output_config.effort` (400) et ignore la réflexion adaptative** — elle s'y
