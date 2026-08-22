@@ -140,7 +140,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
   - Fichiers : `src/lib/ingest/prompt.ts`, `tests/unit/prompt.test.ts`
   - Dépend de : rien
 
-- [ ] **T2 — Restreindre les chargeurs**
+- [x] **T2 — Restreindre les chargeurs**
   - `loadExistingContent` (aujourd'hui une seule fonction qui lit tout l'atelier)
     devient trois chargeurs, un par passe, alignés sur les portées de T1.
   - Critère d'acceptation : aucun chargeur ne fait plus de `select` sans filtre de
@@ -285,6 +285,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
 <!-- Append-only. Une ligne par tâche terminée : date, tâche, commit, note. -->
 
 - 22/08/2026 — T1 — `8a0ff35` — `existingContentBlock(existing, scope)` ; `ExistingContent.questions` devient `{ content, notionIds }[]` (le filtrage par notion l'exige).
+- 22/08/2026 — T2 — `db8998c` — 3 chargeurs dans `run.ts` ; celui des questions part de `exam_question_item_bricks` (c'est la table qui porte le filtre `brick_id`).
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
