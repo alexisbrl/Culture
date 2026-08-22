@@ -228,6 +228,12 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
       );
     },
 
+    async release(documents: PreparedDocument[]): Promise<void> {
+      // En parallèle : ce sont des suppressions indépendantes, gratuites, et on
+      // ne veut pas allonger une annulation de N allers-retours séquentiels.
+      await Promise.all(documents.map((doc) => client.beta.files.delete(doc.ref, { betas: [FILES_BETA] })));
+    },
+
     // ⚠️ TEMPORAIRE — phase de test (voir `src/lib/ingest/cost.ts`).
     async countCorpus(documents: PreparedDocument[]): Promise<number | null> {
       if (documents.length === 0) return 0;

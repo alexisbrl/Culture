@@ -38,6 +38,9 @@ function recordingProvider(): PlanProvider & { calls: { documents: PreparedDocum
     async prepare(documents) {
       return documents.map((d) => ({ key: d.key, fileName: d.fileName, mimeType: d.mimeType, ref: d.fileName }));
     },
+    async release() {
+      // Rien à faire : ce fichier ne teste pas le ménage (voir release.test.ts).
+    },
     async countCorpus(documents) {
       // Un compteur factice : 1 000 tokens par document, de quoi vérifier les
       // enchaînements sans rien mesurer de réel.

@@ -14,6 +14,7 @@ import {
   ingestChapterNotions,
   ingestChapterQuestions,
   prepareWorkshopIngestion,
+  releaseWorkshopImportFiles,
   startWorkshopIngestion,
   type PlanIssue,
 } from '@/app/actions/aiIngest';
@@ -150,6 +151,12 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         setCounts({ ...tally });
       }
     }
+
+    // Les documents ont fini de servir : la passe questions ne les reçoit plus
+    // (§16.3), et rien ne s'efface tout seul chez le fournisseur (§16.8). On les
+    // rend ici plutôt qu'à la toute fin, pour que ça arrive même si les
+    // questions échouent. Volontairement non attendu — c'est du ménage.
+    void releaseWorkshopImportFiles(workshopId, importId);
 
     if (withQuestions) {
       for (const [i, chapter] of start.chapters.entries()) {

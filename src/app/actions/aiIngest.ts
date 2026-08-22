@@ -154,6 +154,21 @@ export async function ingestChapterQuestions(
   }
 }
 
+/** Rend les documents au fournisseur, une fois qu'aucune passe n'en a plus
+ *  besoin — c'est-à-dire dès la fin de la passe notions (T3 : la passe questions
+ *  ne les reçoit plus).
+ *
+ *  Rien ne s'efface tout seul chez le fournisseur (§16.8), et un ménage raté ne
+ *  doit jamais faire échouer l'import : cette action ne renvoie donc pas
+ *  d'erreur, juste ce qui s'est passé. */
+export async function releaseWorkshopImportFiles(
+  workshopId: string,
+  importId: string,
+): Promise<{ released: boolean }> {
+  if (!(await requireManager(workshopId))) return { released: false };
+  return { released: await run.releaseImportDocuments(importId) };
+}
+
 /** Ce qu'il faut pour afficher — ou non — le bandeau d'annulation. Renvoie
  *  `null` quand il n'y a rien à proposer : aucun import, ou lot déjà annulé,
  *  expiré, ou modifié depuis. */
@@ -198,6 +213,14 @@ export async function cancelWorkshopImport(
       };
       return { ok: false, error: reasons[result.reason] ?? 'Annulation impossible' };
     }
+
+    // Le lot est retiré : ses documents n'ont plus de raison d'être chez le
+    // fournisseur (§16.8). APRÈS l'annulation, jamais avant — une annulation
+    // refusée doit laisser l'import intact, documents compris. La ligne
+    // `ai_imports` est conservée par `cancelImport`, les poignées sont donc
+    // encore là. Un échec de suppression est journalisé, jamais remonté.
+    await run.releaseImportDocuments(importId);
+
     revalidateWorkshop();
     return { ok: true, chapters: result.chapters, notions: result.notions, questionGroups: result.questionGroups };
   } catch (error) {

@@ -115,6 +115,16 @@ export type PlanProvider = {
    *  bloquer. */
   countCorpus(documents: PreparedDocument[]): Promise<number | null>;
 
+  /** Rend les documents au fournisseur — l'inverse de `prepare`.
+   *
+   *  ⚠️ **Rien ne s'efface tout seul** : chez Claude, un fichier téléversé
+   *  persiste sous le compte jusqu'à suppression explicite, et un nouveau
+   *  téléversement n'efface pas les anciens (§16.8). L'opération est gratuite.
+   *  Passer par `releaseDocuments` (`src/lib/ingest/release.ts`) plutôt que
+   *  d'appeler ceci directement : un ménage raté ne doit jamais faire échouer
+   *  ce qu'il accompagne. */
+  release(documents: PreparedDocument[]): Promise<void>;
+
   documentToPlan(
     documents: PreparedDocument[],
     existing: ExistingContent,

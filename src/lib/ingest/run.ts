@@ -46,6 +46,7 @@ import {
 } from './ingest';
 import { batchNotions, withChapterRetry } from './passInput';
 import { parsePlan, type PlanIssue } from './planSchema';
+import { releaseDocuments } from './release';
 import { MAX_QUESTIONS_PER_IMPORT, type ExistingContent } from './prompt';
 import { createClaudeProvider } from './providers/claude';
 import type { PlanProvider, PreparedDocument } from './providers/types';
@@ -278,6 +279,26 @@ export async function startIngestion(
     discarded: plan.discarded,
     adjusted: plan.adjusted,
   };
+}
+
+/** Rend au fournisseur les documents d'un lot. Appelée à **deux** moments : à
+ *  l'annulation d'un import, et en fin d'import réussi — une fois la passe
+ *  notions terminée, plus aucune passe n'a besoin des documents (conséquence
+ *  directe de T3). Ne lève jamais. */
+export async function releaseImportDocuments(
+  importId: string,
+  options: { provider?: PlanProvider } = {},
+): Promise<boolean> {
+  try {
+    const prepared = await preparedOf(importId);
+    const provider = options.provider ?? createClaudeProvider();
+    return await releaseDocuments(provider, prepared);
+  } catch (error) {
+    // Même un import introuvable ou une clé API manquante ne doit pas remonter :
+    // on ne fait ici que du ménage.
+    console.warn('[ingest] documents non rendus :', error instanceof Error ? error.message : error);
+    return false;
+  }
 }
 
 /** Passe 2, pour UN chapitre. Le chapitre est déjà en base : son identifiant
