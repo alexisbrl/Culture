@@ -34,9 +34,23 @@ export const MAX_QUESTIONS_PER_IMPORT = 50;
 export type ExistingContent = {
   chapters: { id: string; name: string }[];
   notions: { id: string; title: string; chapterId: string | null }[];
-  /** Énoncés déjà présents — pour ne pas reposer la même question. */
-  questions: string[];
+  /** Énoncés déjà présents, avec les notions qu'ils font travailler — pour ne pas
+   *  reposer la même question, et pour pouvoir ne transmettre que les énoncés
+   *  qui concernent la passe en cours. */
+  questions: { content: string; notionIds: string[] }[];
 };
+
+/** La portée du bloc « existant » : ce que la passe en cours utilise réellement,
+ *  et rien de plus (§16.3).
+ *
+ *  ⚠️ C'est le poste de coût numéro un du pipeline. Transmettre tout l'atelier à
+ *  chaque appel pèse ~75 000 tokens à 2 160 énoncés, facturés plein tarif (le
+ *  bloc est placé après le marqueur de cache) : le mécanisme anti-doublon
+ *  coûterait alors plus cher que la génération elle-même. */
+export type ExistingScope =
+  | { pass: 'chapters' }
+  | { pass: 'notions'; chapterId: string }
+  | { pass: 'questions'; notionIds: string[] };
 
 const SYSTEM = `Tu construis le programme pédagogique d'un atelier à partir de ses documents sources.
 
@@ -56,29 +70,71 @@ export function systemPrompt(): string {
   return SYSTEM;
 }
 
-/** L'existant de l'atelier, transmis à CHAQUE appel pour que le modèle complète
- *  au lieu de dupliquer (§8). Les identifiants réels servent de références : une
- *  question peut ainsi se rattacher à une notion déjà en base. */
-export function existingContentBlock(existing: ExistingContent): string {
-  if (existing.chapters.length === 0 && existing.notions.length === 0 && existing.questions.length === 0) {
-    return "L'atelier est vide : rien n'existe encore.";
+/** Ce que la portée retient de l'existant. Fonction pure et séparée du rendu :
+ *  c'est elle qui porte la règle de coût, elle mérite d'être lisible seule. */
+function inScope(existing: ExistingContent, scope: ExistingScope): {
+  chapters: ExistingContent['chapters'];
+  notions: ExistingContent['notions'];
+  questions: string[];
+} {
+  switch (scope.pass) {
+    case 'chapters':
+      // Les chapitres existants, rien d'autre : la passe ne peut créer que des
+      // chapitres, les notions et les questions ne l'aideraient en rien.
+      return { chapters: existing.chapters, notions: [], questions: [] };
+    case 'notions':
+      return {
+        chapters: [],
+        notions: existing.notions.filter((n) => n.chapterId === scope.chapterId),
+        questions: [],
+      };
+    case 'questions': {
+      // Conséquence assumée (§16.3) : une question **sans notion** n'est jamais
+      // transmise, donc jamais protégée du doublon. Elle n'est de toute façon
+      // tirée par aucun exercice (§11).
+      const wanted = new Set(scope.notionIds);
+      return {
+        chapters: [],
+        notions: [],
+        questions: existing.questions.filter((q) => q.notionIds.some((id) => wanted.has(id))).map((q) => q.content),
+      };
+    }
+  }
+}
+
+/** L'existant de l'atelier **restreint à la portée de la passe**, pour que le
+ *  modèle complète au lieu de dupliquer (§8) sans qu'on lui repaie l'atelier
+ *  entier à chaque appel (§16.3). Les identifiants réels servent de références :
+ *  une question peut ainsi se rattacher à une notion déjà en base. */
+export function existingContentBlock(existing: ExistingContent, scope: ExistingScope): string {
+  const kept = inScope(existing, scope);
+
+  if (kept.chapters.length === 0 && kept.notions.length === 0 && kept.questions.length === 0) {
+    switch (scope.pass) {
+      case 'chapters':
+        return "L'atelier est vide : rien n'existe encore.";
+      case 'notions':
+        return "Ce chapitre est vide : aucune notion n'y existe encore.";
+      case 'questions':
+        return "Aucune question ne porte encore sur ces notions : la liste est vide.";
+    }
   }
 
   const lines: string[] = ["Ce qui existe DÉJÀ dans l'atelier. Tu ne le recrées pas ; tu le complètes."];
 
-  if (existing.chapters.length > 0) {
+  if (kept.chapters.length > 0) {
     lines.push('', 'Chapitres (référence — nom) :');
-    for (const c of existing.chapters) lines.push(`- ${c.id} — ${c.name}`);
+    for (const c of kept.chapters) lines.push(`- ${c.id} — ${c.name}`);
   }
 
-  if (existing.notions.length > 0) {
+  if (kept.notions.length > 0) {
     lines.push('', 'Notions (référence — texte) :');
-    for (const n of existing.notions) lines.push(`- ${n.id} — ${n.title}`);
+    for (const n of kept.notions) lines.push(`- ${n.id} — ${n.title}`);
   }
 
-  if (existing.questions.length > 0) {
+  if (kept.questions.length > 0) {
     lines.push('', 'Questions déjà posées — ne les repose pas, même reformulées :');
-    for (const q of existing.questions) lines.push(`- ${q}`);
+    for (const q of kept.questions) lines.push(`- ${q}`);
   }
 
   return lines.join('\n');

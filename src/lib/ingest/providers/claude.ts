@@ -31,6 +31,7 @@ import {
   questionsInstruction,
   systemPrompt,
   type ExistingContent,
+  type ExistingScope,
 } from '@/lib/ingest/prompt';
 import { wireChaptersOutput, wireGroupsOutput, wireNotionsOutput } from '@/lib/ingest/wireSchema';
 
@@ -58,6 +59,20 @@ function instructionFor(scope: IngestScope): string {
       return notionsInstruction(scope.chapter);
     case 'questions':
       return questionsInstruction({ chapter: scope.chapter, notions: scope.notions, budget: scope.budget });
+  }
+}
+
+/** La portée de la passe, traduite en portée du bloc « existant » (§16.3). Le
+ *  fournisseur est le seul à connaître les deux formes : le prompt ignore les
+ *  documents, la passe ignore le rendu. */
+function existingScopeFor(scope: IngestScope): ExistingScope {
+  switch (scope.pass) {
+    case 'chapters':
+      return { pass: 'chapters' };
+    case 'notions':
+      return { pass: 'notions', chapterId: scope.chapter.id };
+    case 'questions':
+      return { pass: 'questions', notionIds: scope.notions.map((n) => n.id) };
   }
 }
 
@@ -108,7 +123,7 @@ export function createClaudeProvider(apiKey = process.env.ANTHROPIC_API_KEY): Pl
         ...(i === documents.length - 1 ? { cache_control: { type: 'ephemeral' as const, ttl: '1h' as const } } : {}),
       }));
 
-      content.push({ type: 'text', text: existingContentBlock(existing) });
+      content.push({ type: 'text', text: existingContentBlock(existing, existingScopeFor(scope)) });
       content.push({ type: 'text', text: instructionFor(scope) });
 
       const stream = client.beta.messages.stream({

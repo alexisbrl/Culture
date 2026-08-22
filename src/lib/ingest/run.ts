@@ -67,7 +67,7 @@ async function loadExistingContent(workshopId: string): Promise<ExistingContent>
     supabase.from('workshop_bricks').select('id, title, chapter_id').eq('workshop_id', workshopId),
     supabase
       .from('exam_question_items')
-      .select('content, exam_questions!inner(workshop_id)')
+      .select('content, exam_questions!inner(workshop_id), exam_question_item_bricks(brick_id)')
       .eq('exam_questions.workshop_id', workshopId),
   ]);
   if (chapters.error) throw new Error(chapters.error.message);
@@ -81,7 +81,10 @@ async function loadExistingContent(workshopId: string): Promise<ExistingContent>
       title: n.title as string,
       chapterId: (n.chapter_id as string | null) ?? null,
     })),
-    questions: (questions.data ?? []).map((q) => q.content as string),
+    questions: (questions.data ?? []).map((q) => ({
+      content: q.content as string,
+      notionIds: ((q.exam_question_item_bricks as { brick_id: string }[] | null) ?? []).map((l) => l.brick_id),
+    })),
   };
 }
 

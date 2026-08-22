@@ -30,21 +30,80 @@ describe('systemPrompt — stabilité (condition du cache)', () => {
 
 describe('existingContentBlock — compléter, pas dupliquer', () => {
   it('le dit clairement quand l’atelier est vide', () => {
-    expect(existingContentBlock(empty)).toContain('vide');
+    expect(existingContentBlock(empty, { pass: 'chapters' })).toContain('vide');
+    expect(existingContentBlock(empty, { pass: 'notions', chapterId: 'ch1' })).toContain('vide');
+    expect(existingContentBlock(empty, { pass: 'questions', notionIds: ['n1'] })).toContain('vide');
   });
 
   it('transmet les identifiants réels, qui servent de références', () => {
     // C'est ce qui permet à une question de se rattacher à une notion DÉJÀ en
     // base plutôt que d'en créer un doublon.
-    const block = existingContentBlock({
-      chapters: [{ id: 'ch-uuid', name: 'Les fleuves' }],
-      notions: [{ id: 'n-uuid', title: 'La Loire est le plus long fleuve de France', chapterId: 'ch-uuid' }],
-      questions: ['Quel est le plus long fleuve de France ?'],
-    });
-    expect(block).toContain('ch-uuid');
-    expect(block).toContain('n-uuid');
+    const block = existingContentBlock(
+      {
+        chapters: [{ id: 'ch-uuid', name: 'Les fleuves' }],
+        notions: [{ id: 'n-uuid', title: 'La Loire est le plus long fleuve de France', chapterId: 'ch-uuid' }],
+        questions: [{ content: 'Quel est le plus long fleuve de France ?', notionIds: ['n-uuid'] }],
+      },
+      { pass: 'questions', notionIds: ['n-uuid'] },
+    );
     expect(block).toContain('Quel est le plus long fleuve de France ?');
     expect(block).toMatch(/complètes|recrées/);
+  });
+});
+
+describe('existingContentBlock — la portée, poste de coût numéro un (§16.3)', () => {
+  const atelier: ExistingContent = {
+    chapters: [
+      { id: 'ch1', name: 'Les fleuves' },
+      { id: 'ch2', name: 'Les montagnes' },
+    ],
+    notions: [
+      { id: 'n1', title: 'La Loire est le plus long fleuve de France', chapterId: 'ch1' },
+      { id: 'n2', title: 'La Seine traverse Paris', chapterId: 'ch1' },
+      { id: 'n3', title: 'Le mont Blanc culmine à 4 806 m', chapterId: 'ch2' },
+      { id: 'n4', title: 'Notion orpheline', chapterId: null },
+    ],
+    questions: [
+      { content: 'Énoncé sur la Loire', notionIds: ['n1'] },
+      { content: 'Énoncé sur la Seine', notionIds: ['n2'] },
+      { content: 'Énoncé sur le mont Blanc', notionIds: ['n3'] },
+      { content: 'Énoncé sans notion', notionIds: [] },
+    ],
+  };
+
+  it('passe chapitres : les chapitres seuls', () => {
+    const block = existingContentBlock(atelier, { pass: 'chapters' });
+    expect(block).toContain('Les fleuves');
+    expect(block).toContain('Les montagnes');
+    expect(block).not.toContain('La Loire');
+    expect(block).not.toContain('Énoncé');
+  });
+
+  it('passe notions : les notions du chapitre traité, et rien du reste', () => {
+    const block = existingContentBlock(atelier, { pass: 'notions', chapterId: 'ch1' });
+    expect(block).toContain('La Loire');
+    expect(block).toContain('La Seine');
+    expect(block).not.toContain('mont Blanc');
+    expect(block).not.toContain('orpheline');
+    expect(block).not.toContain('Énoncé');
+  });
+
+  it('passe questions : les énoncés des notions données, aucun autre', () => {
+    // Le critère de T1 : ce qui coûtait ~75 000 tokens par appel à 2 160
+    // énoncés n'en pèse plus que quelques milliers.
+    const block = existingContentBlock(atelier, { pass: 'questions', notionIds: ['n1'] });
+    expect(block).toContain('Énoncé sur la Loire');
+    expect(block).not.toContain('Énoncé sur la Seine');
+    expect(block).not.toContain('Énoncé sur le mont Blanc');
+    // Ni les notions ni les chapitres : la consigne les porte déjà.
+    expect(block).not.toContain('ch1');
+  });
+
+  it('passe questions : une question sans notion n’est jamais transmise', () => {
+    // Conséquence assumée de §16.3 — elle n'est protégée du doublon par rien,
+    // et n'est de toute façon tirée par aucun exercice (§11).
+    const block = existingContentBlock(atelier, { pass: 'questions', notionIds: ['n1', 'n2', 'n3'] });
+    expect(block).not.toContain('Énoncé sans notion');
   });
 });
 
