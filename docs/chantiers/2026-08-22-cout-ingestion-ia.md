@@ -148,7 +148,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
   - Fichiers : `src/lib/ingest/run.ts`
   - Dépend de : T1
 
-- [ ] **T3 — La passe questions ne reçoit plus les documents**
+- [x] **T3 — La passe questions ne reçoit plus les documents**
   - `ingestChapterQuestions` cesse d'appeler `preparedOf` : le fournisseur reçoit
     un tableau de documents **vide**. `claude.ts` doit alors ne poser aucun bloc
     `document` ni aucun marqueur de cache.
@@ -286,9 +286,20 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
 
 - 22/08/2026 — T1 — `8a0ff35` — `existingContentBlock(existing, scope)` ; `ExistingContent.questions` devient `{ content, notionIds }[]` (le filtrage par notion l'exige).
 - 22/08/2026 — T2 — `db8998c` — 3 chargeurs dans `run.ts` ; celui des questions part de `exam_question_item_bricks` (c'est la table qui porte le filtre `brick_id`).
+- 22/08/2026 — T3 — `2263420` — nouveau module pur `src/lib/ingest/passInput.ts` (`documentsForPass`) ; `IngestScope` questions gagne `neighbours`, encore vide avant T4.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
+
+- **T3 — un module pur `passInput.ts` plutôt qu'un test qui traverse `run.ts`.**
+  Le critère demandait un test à fournisseur factice ; or `ingestChapterQuestions`
+  exécute `getSupabaseServerClient()`, interdit en test (CLAUDE.md §7). La règle
+  « quels documents reçoit une passe » est donc extraite en fonction pure, testée
+  seule **et** posée en garde dans `claude.ts` — un appelant distrait ne peut plus
+  rouvrir le robinet.
+- **T3 — les notions voisines sont données sans leur référence.** Les cibles
+  portent leur identifiant, les voisines seulement leur texte : le modèle ne peut
+  pas rattacher une question à une notion hors du lot.
 
 ## Tâches bloquées
 <!-- Tâches abandonnées après 2 échecs, avec le motif et ce qui a été tenté. -->
