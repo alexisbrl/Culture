@@ -183,7 +183,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
   - Fichiers : `src/lib/ingest/prompt.ts`, `tests/unit/prompt.test.ts`
   - Dépend de : rien (peut se faire avant T1 si besoin)
 
-- [ ] **T6 — Consigne chapitres : N documents = UN SEUL cours**
+- [x] **T6 — Consigne chapitres : N documents = UN SEUL cours**
   - `chaptersInstruction` reçoit la liste des noms de fichiers et dit
     explicitement que **l'ensemble forme un seul cours** à découper globalement —
     pas un cours par document. Elle donne aussi l'ordre de grandeur souple :
@@ -289,6 +289,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
 - 22/08/2026 — T3 — `2263420` — nouveau module pur `src/lib/ingest/passInput.ts` (`documentsForPass`) ; `IngestScope` questions gagne `neighbours`, encore vide avant T4.
 - 22/08/2026 — T4 — `03f2a44` — `ingestChapterQuestions(…, batchIndex)` renvoie `batches` ; le client boucle dessus. Rendu non vérifié dans le navigateur — exercer le dialogue exige un import réel, donc de l'argent.
 - 22/08/2026 — T5 — `a42297e` — `BloomDistribution` + `bloomInstruction()` dans `prompt.ts` ; `questionsInstruction` accepte `distribution`, le défaut reste 8/4/0/0.
+- 22/08/2026 — T6 — `336977d` — `chaptersInstruction(fileNames)` + `PLAUSIBLE_CHAPTERS` (3–8) ; les noms viennent de `sent`, dans `claude.ts`.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
