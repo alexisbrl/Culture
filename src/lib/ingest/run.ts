@@ -58,34 +58,76 @@ export type ChapterPassResult = {
   adjusted: PlanIssue[];
 };
 
-/** Ce que le modèle doit connaître de l'atelier à chaque appel (§8). */
-async function loadExistingContent(workshopId: string): Promise<ExistingContent> {
+// ─── Trois chargeurs, un par passe ───────────────────────────────────────────
+//
+// Il n'y en avait qu'un, qui lisait l'atelier entier pour les trois passes. Ce
+// n'était pas seulement du gaspillage de requête : tout ce qu'il rapportait
+// partait au modèle, facturé plein tarif, à chaque appel (§16.3). Chaque
+// chargeur ci-dessous est donc **borné par un filtre**, et rend un
+// `ExistingContent` volontairement partiel — la portée du bloc (`ExistingScope`)
+// jetterait de toute façon le reste.
+
+const EMPTY: ExistingContent = { chapters: [], notions: [], questions: [] };
+
+/** Passe 1 — les chapitres existants. Seul chargeur sans filtre plus étroit que
+ *  l'atelier : la passe raisonne justement sur l'ensemble du programme. */
+async function loadExistingChapters(workshopId: string): Promise<ExistingContent> {
   const supabase = getSupabaseServerClient();
-  const [chapters, notions, questions] = await Promise.all([
-    supabase.from('workshop_chapters').select('id, name').eq('workshop_id', workshopId).order('position'),
-    // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
-    supabase.from('workshop_bricks').select('id, title, chapter_id').eq('workshop_id', workshopId),
-    supabase
-      .from('exam_question_items')
-      .select('content, exam_questions!inner(workshop_id), exam_question_item_bricks(brick_id)')
-      .eq('exam_questions.workshop_id', workshopId),
-  ]);
-  if (chapters.error) throw new Error(chapters.error.message);
-  if (notions.error) throw new Error(notions.error.message);
-  if (questions.error) throw new Error(questions.error.message);
+  const { data, error } = await supabase
+    .from('workshop_chapters')
+    .select('id, name')
+    .eq('workshop_id', workshopId)
+    .order('position');
+  if (error) throw new Error(error.message);
+
+  return { ...EMPTY, chapters: (data ?? []).map((c) => ({ id: c.id as string, name: c.name as string })) };
+}
+
+/** Passe 2 — les notions **du chapitre traité**. */
+async function loadChapterNotions(workshopId: string, chapterId: string): Promise<ExistingContent> {
+  const supabase = getSupabaseServerClient();
+  // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
+  const { data, error } = await supabase
+    .from('workshop_bricks')
+    .select('id, title, chapter_id')
+    .eq('workshop_id', workshopId)
+    .eq('chapter_id', chapterId);
+  if (error) throw new Error(error.message);
 
   return {
-    chapters: (chapters.data ?? []).map((c) => ({ id: c.id as string, name: c.name as string })),
-    notions: (notions.data ?? []).map((n) => ({
+    ...EMPTY,
+    notions: (data ?? []).map((n) => ({
       id: n.id as string,
       title: n.title as string,
       chapterId: (n.chapter_id as string | null) ?? null,
     })),
-    questions: (questions.data ?? []).map((q) => ({
-      content: q.content as string,
-      notionIds: ((q.exam_question_item_bricks as { brick_id: string }[] | null) ?? []).map((l) => l.brick_id),
-    })),
   };
+}
+
+/** Passe 3 — les énoncés portant sur **les seules notions traitées**. On part de
+ *  la table de liens, pas des questions : c'est elle qui porte le filtre. */
+async function loadNotionQuestions(notionIds: string[]): Promise<ExistingContent> {
+  if (notionIds.length === 0) return EMPTY;
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('exam_question_item_bricks')
+    .select('item_id, brick_id, exam_question_items!inner(content)')
+    .in('brick_id', notionIds);
+  if (error) throw new Error(error.message);
+
+  // Une question reliée à deux des notions demandées ne doit apparaître qu'une
+  // fois : on regroupe par question, pas par lien.
+  const byItem = new Map<string, { content: string; notionIds: string[] }>();
+  for (const row of data ?? []) {
+    const itemId = row.item_id as string;
+    const item = row.exam_question_items as unknown as { content: string } | null;
+    const entry = byItem.get(itemId) ?? { content: item?.content ?? '', notionIds: [] };
+    entry.notionIds.push(row.brick_id as string);
+    byItem.set(itemId, entry);
+  }
+
+  return { ...EMPTY, questions: [...byItem.values()] };
 }
 
 /** Les documents déjà remis au fournisseur pour ce lot. Les poignées sont
@@ -156,7 +198,7 @@ export async function startIngestion(
     fileIds: prepared as unknown as string[],
   });
 
-  const existing = await loadExistingContent(workshopId);
+  const existing = await loadExistingChapters(workshopId);
   const result = await provider.documentToPlan(prepared, existing, { pass: 'chapters' });
   await addImportUsage(importId, result.usage);
 
@@ -184,7 +226,7 @@ export async function ingestChapterNotions(
   const provider = options.provider ?? createClaudeProvider();
 
   const prepared = await preparedOf(importId);
-  const existing = await loadExistingContent(workshopId);
+  const existing = await loadChapterNotions(workshopId, chapter.id);
   const result = await provider.documentToPlan(prepared, existing, { pass: 'notions', chapter });
   await addImportUsage(importId, result.usage);
 
@@ -225,7 +267,7 @@ export async function ingestChapterQuestions(
   if (budget <= 0) return { written: 0, discarded: [], adjusted: [] };
 
   const prepared = await preparedOf(importId);
-  const existing = await loadExistingContent(workshopId);
+  const existing = await loadNotionQuestions(notions.map((n) => n.id));
   const result = await provider.documentToPlan(prepared, existing, {
     pass: 'questions',
     chapter,
