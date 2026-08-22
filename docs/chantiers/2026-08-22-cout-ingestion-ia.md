@@ -252,7 +252,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
     `messages/en.json`, `tests/unit/`
   - Dépend de : T8
 
-- [ ] **T11 — Suppression des fichiers chez le fournisseur**
+- [x] **T11 — Suppression des fichiers chez le fournisseur**
   - `PlanProvider` gagne une méthode `release(documents: PreparedDocument[])`.
     Chez Claude : `client.beta.files.delete`. Ces opérations sont **gratuites**.
   - Appelée à **deux** moments : à l'annulation d'un import
@@ -294,6 +294,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
 - 22/08/2026 — T8 — `42f5720` — `selectModel` + `PASS_MODELS` + `tuningFor` dans `claude.ts` ; `createClaudeProvider` accepte désormais un objet d'options (l'ancienne signature à clé nue reste acceptée).
 - 22/08/2026 — T9 — `303074d` — `shouldCacheDocuments` ; le nombre de chapitres descend du dialogue jusqu'au scope `notions` (`plannedCalls`) pour décider du marqueur.
 - 22/08/2026 — T10 — `da6fb21` — `prepareIngestion` / `startIngestion(importId)` ; `cost.ts` (pur) ; `PlanProvider.countCorpus` ; `corpusTokens` rangé dans `ai_imports.scope`. Rendu non vérifié — l’écran exige un téléversement réel chez le fournisseur.
+- 22/08/2026 — T11 — `1f36d33` — `PlanProvider.release` + module `release.ts` ; appelée après la passe notions (dans le dialogue) et **après** une annulation réussie (`cancelImport` conserve la ligne, donc les poignées).
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
@@ -304,6 +305,14 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
   « quels documents reçoit une passe » est donc extraite en fonction pure, testée
   seule **et** posée en garde dans `claude.ts` — un appelant distrait ne peut plus
   rouvrir le robinet.
+- **T11 — la suppression a lieu APRÈS l'annulation, pas avant.** Une annulation
+  refusée (import expiré ou modifié) doit laisser l'import intact, documents
+  compris — sinon un import encore vivant perdrait ses fichiers. `cancelImport`
+  conserve la ligne `ai_imports`, les poignées sont donc encore lisibles après
+  coup. `cancelImport` lui-même n'a pas été touché : c'est la seule suppression
+  de masse de l'application.
+- **T11 — le ménage de fin d'import part dès la fin de la passe notions**, sans
+  être attendu (`void`). Il a ainsi lieu même si la passe questions échoue.
 - **T10 — les hypothèses de coût sont écrites, nommées et testées.** On ne sait
   pas combien de chapitres un cours contient avant de l'avoir lu : l'estimation
   suppose 8 chapitres et 10 notions par chapitre (`COST_ASSUMPTIONS`), pris dans
