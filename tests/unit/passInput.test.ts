@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { documentsForPass } from '@/lib/ingest/passInput';
+import { batchNotions, documentsForPass, NOTIONS_PER_QUESTION_BATCH } from '@/lib/ingest/passInput';
 import type { ExistingContent } from '@/lib/ingest/prompt';
 import type { IngestScope, PlanProvider, PreparedDocument, ProviderResult } from '@/lib/ingest/providers/types';
 
@@ -83,5 +83,49 @@ describe('passe questions — l’appel capturé ne porte aucun document', () =>
     });
 
     expect(provider.calls[0].documents).toHaveLength(1);
+  });
+});
+
+describe('batchNotions — l’unité de travail de la passe questions', () => {
+  const notions = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `n${i + 1}`, title: `Notion ${i + 1}` }));
+
+  it('un chapitre de 25 notions donne exactement 3 lots (10, 10, 5)', () => {
+    const batches = batchNotions(notions(25));
+    expect(batches.map((b) => b.length)).toEqual([10, 10, 5]);
+  });
+
+  it('un chapitre de 25 notions produit exactement 3 appels au fournisseur', async () => {
+    // Le critère de T4, vérifié bout en bout sur la boucle que fait le client.
+    const provider = recordingProvider();
+    const all = notions(25);
+
+    for (const batch of batchNotions(all)) {
+      const inBatch = new Set(batch.map((n) => n.id));
+      await provider.documentToPlan([], empty, {
+        pass: 'questions',
+        chapter: { id: 'ch1', name: 'Les fleuves' },
+        notions: batch,
+        neighbours: all.filter((n) => !inBatch.has(n.id)),
+        budget: 300,
+      });
+    }
+
+    expect(provider.calls).toHaveLength(3);
+    expect(provider.calls.map((c) => (c.scope.pass === 'questions' ? c.scope.notions.length : -1))).toEqual([10, 10, 5]);
+    // Chaque appel voit le reste du chapitre en contexte, jamais deux fois la
+    // même notion en cible.
+    expect(provider.calls.map((c) => (c.scope.pass === 'questions' ? c.scope.neighbours.length : -1))).toEqual([15, 15, 20]);
+    const cibles = provider.calls.flatMap((c) => (c.scope.pass === 'questions' ? c.scope.notions.map((n) => n.id) : []));
+    expect(new Set(cibles).size).toBe(25);
+  });
+
+  it('aucun lot vide, et le dernier n’est pas complété artificiellement', () => {
+    expect(batchNotions(notions(0))).toEqual([]);
+    expect(batchNotions(notions(1)).map((b) => b.length)).toEqual([1]);
+    expect(batchNotions(notions(NOTIONS_PER_QUESTION_BATCH)).map((b) => b.length)).toEqual([NOTIONS_PER_QUESTION_BATCH]);
+  });
+
+  it('refuse une taille de lot qui ferait une boucle infinie', () => {
+    expect(() => batchNotions(notions(3), 0)).toThrow();
   });
 });

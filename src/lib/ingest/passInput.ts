@@ -25,3 +25,23 @@ export type IngestPass = 'chapters' | 'notions' | 'questions';
 export function documentsForPass(pass: IngestPass, prepared: PreparedDocument[]): PreparedDocument[] {
   return pass === 'questions' ? [] : prepared;
 }
+
+/** Combien de notions par appel de la passe questions.
+ *
+ *  Ni une (le contexte du chapitre serait renvoyé autant de fois qu'il y a de
+ *  notions), ni tout le chapitre (`MAX_TOKENS` est à 32 000 et une notion à la
+ *  volumétrie cible pèse ~2 400 tokens de sortie : un chapitre de 25 notions
+ *  tronquerait la réponse, donc la perdrait, §16.2). Dix est le compromis. */
+export const NOTIONS_PER_QUESTION_BATCH = 10;
+
+/** Découpe les notions d'un chapitre en lots de travail.
+ *
+ *  L'ordre reçu est conservé et fait foi : l'appelant doit le rendre stable
+ *  d'un appel à l'autre, sinon deux lots successifs se recouvriraient — le
+ *  client rappelle la même action une fois par lot. */
+export function batchNotions<T>(notions: T[], size = NOTIONS_PER_QUESTION_BATCH): T[][] {
+  if (size < 1) throw new Error(`Taille de lot invalide : ${size}`);
+  const batches: T[][] = [];
+  for (let i = 0; i < notions.length; i += size) batches.push(notions.slice(i, i + size));
+  return batches;
+}

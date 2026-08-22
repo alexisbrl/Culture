@@ -131,13 +131,21 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
 
     if (withQuestions) {
       for (const [i, chapter] of start.chapters.entries()) {
-        setPhase({ step: 'running', label: t('progress.questions', { chapter: chapter.name, i: i + 1, n: start.chapters.length }), done: 2, total: totalSteps });
-        const result = await ingestChapterQuestions(workshopId, start.importId, chapter, context);
-        if (!result.ok) return setPhase({ step: 'error', message: result.error });
-        discarded.push(...result.discarded);
-        adjusted.push(...result.adjusted);
-        tally.questions += result.written;
-        setCounts({ ...tally });
+        // Un appel par LOT de notions, pas par chapitre (§16.2) : le nombre de
+        // lots n'est connu qu'à la réponse du premier, d'où la boucle ouverte.
+        let batchIndex = 0;
+        let batches = 1;
+        while (batchIndex < batches) {
+          setPhase({ step: 'running', label: t('progress.questions', { chapter: chapter.name, i: i + 1, n: start.chapters.length }), done: 2, total: totalSteps });
+          const result = await ingestChapterQuestions(workshopId, start.importId, chapter, context, batchIndex);
+          if (!result.ok) return setPhase({ step: 'error', message: result.error });
+          batches = result.batches;
+          discarded.push(...result.discarded);
+          adjusted.push(...result.adjusted);
+          tally.questions += result.written;
+          setCounts({ ...tally });
+          batchIndex += 1;
+        }
       }
     }
 

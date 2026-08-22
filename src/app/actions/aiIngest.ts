@@ -36,6 +36,10 @@ export type ChapterPassResult =
   | { ok: true; written: number; discarded: PlanIssue[]; adjusted: PlanIssue[] }
   | { ok: false; error: string };
 
+export type QuestionPassResult =
+  | { ok: true; written: number; discarded: PlanIssue[]; adjusted: PlanIssue[]; batches: number }
+  | { ok: false; error: string };
+
 export type ImportBanner = {
   importId: string;
   state: 'cancellable' | 'empty' | 'expired' | 'modified';
@@ -85,19 +89,23 @@ export async function ingestChapterNotions(
   }
 }
 
-/** Passe 3 — les questions d'un chapitre. Le contexte vient du bouton par lequel
- *  l'utilisateur est entré, jamais du modèle. */
+/** Passe 3 — les questions d'UN LOT de notions d'un chapitre. Le contexte vient
+ *  du bouton par lequel l'utilisateur est entré, jamais du modèle.
+ *
+ *  Le nombre de lots (`batches`) n'est connu qu'ici : le client appelle l'indice
+ *  0, le lit dans la réponse, et rappelle pour les suivants. */
 export async function ingestChapterQuestions(
   workshopId: string,
   importId: string,
   chapter: { id: string; name: string },
   context: 'parcours' | 'exam',
-): Promise<ChapterPassResult> {
+  batchIndex = 0,
+): Promise<QuestionPassResult> {
   const ctx = await requireManager(workshopId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
-    const result = await run.ingestChapterQuestions(workshopId, ctx.userId, importId, chapter, context);
+    const result = await run.ingestChapterQuestions(workshopId, ctx.userId, importId, chapter, context, batchIndex);
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {

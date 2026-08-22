@@ -13,7 +13,13 @@
 //
 //   startIngestion            → crée le lot, écrit les CHAPITRES
 //   ingestChapterNotions(×N)  → pour chaque chapitre, écrit ses NOTIONS
-//   ingestChapterQuestions(×N)→ pour chaque chapitre, écrit ses QUESTIONS
+//   ingestChapterQuestions(×M)→ pour chaque LOT DE NOTIONS, écrit ses QUESTIONS
+//
+// L'unité de la passe 3 est le **lot de ~10 notions**, pas le chapitre : à la
+// volumétrie cible, un chapitre entier dépasserait `MAX_TOKENS` et la réponse
+// serait tronquée, donc perdue (§16.2). Le nombre de lots n'étant connu qu'une
+// fois les notions écrites, chaque appel le renvoie (`batches`) et le client
+// boucle jusque-là.
 //
 // **Grouper les appels par passe**, comme ci-dessus, et non chapitre par
 // chapitre : le cache de prompt est propre à chaque schéma de sortie (mesuré le
@@ -38,6 +44,7 @@ import {
   insertNotions,
   loadExistingRefs,
 } from './ingest';
+import { batchNotions } from './passInput';
 import { parsePlan, type PlanIssue } from './planSchema';
 import { MAX_QUESTIONS_PER_IMPORT, type ExistingContent } from './prompt';
 import { createClaudeProvider } from './providers/claude';
@@ -56,6 +63,12 @@ export type ChapterPassResult = {
   written: number;
   discarded: PlanIssue[];
   adjusted: PlanIssue[];
+};
+
+export type QuestionPassResult = ChapterPassResult & {
+  /** Nombre total de lots de notions pour ce chapitre. Le client rappelle
+   *  l'action pour les indices 1..batches-1. `0` = chapitre sans notion. */
+  batches: number;
 };
 
 // ─── Trois chargeurs, un par passe ───────────────────────────────────────────
@@ -237,34 +250,48 @@ export async function ingestChapterNotions(
   return { written: created.size, discarded: plan.discarded, adjusted: plan.adjusted };
 }
 
-/** Passe 3, pour UN chapitre. Les notions du chapitre lui sont fournies avec
- *  leurs identifiants réels : chaque question naît donc reliée, sans qu'on ait à
- *  l'imposer par une règle. */
+/** Passe 3, pour UN LOT de notions d'un chapitre. Les notions du lot lui sont
+ *  fournies avec leurs identifiants réels : chaque question naît donc reliée,
+ *  sans qu'on ait à l'imposer par une règle. */
 export async function ingestChapterQuestions(
   workshopId: string,
   actorId: string,
   importId: string,
   chapter: { id: string; name: string },
   context: IngestContext,
+  batchIndex = 0,
   options: { provider?: PlanProvider } = {},
-): Promise<ChapterPassResult> {
+): Promise<QuestionPassResult> {
   const provider = options.provider ?? createClaudeProvider();
   const supabase = getSupabaseServerClient();
 
+  // L'ordre doit être **stable d'un appel à l'autre** : le client rappelle cette
+  // action une fois par lot, et un ordre flottant ferait se recouvrir deux lots.
   const { data: notionRows, error } = await supabase
     .from('workshop_bricks')
     .select('id, title')
     .eq('workshop_id', workshopId)
-    .eq('chapter_id', chapter.id);
+    .eq('chapter_id', chapter.id)
+    .order('created_at')
+    .order('id');
   if (error) throw new Error(error.message);
 
-  const notions = (notionRows ?? []).map((n) => ({ id: n.id as string, title: n.title as string }));
+  const all = (notionRows ?? []).map((n) => ({ id: n.id as string, title: n.title as string }));
   // Un chapitre sans notion ne produit rien : une question sans notion ne serait
   // tirée par aucun exercice (§11).
-  if (notions.length === 0) return { written: 0, discarded: [], adjusted: [] };
+  if (all.length === 0) return { written: 0, discarded: [], adjusted: [], batches: 0 };
+
+  const batches = batchNotions(all);
+  const notions = batches[batchIndex];
+  if (!notions) return { written: 0, discarded: [], adjusted: [], batches: batches.length };
 
   const budget = MAX_QUESTIONS_PER_IMPORT - (await questionsWritten(importId));
-  if (budget <= 0) return { written: 0, discarded: [], adjusted: [] };
+  if (budget <= 0) return { written: 0, discarded: [], adjusted: [], batches: batches.length };
+
+  // Les autres notions du chapitre, en contexte seulement (§16.21) : c'est ce
+  // qui remplace le cours pour les niveaux supérieurs de Bloom.
+  const inBatch = new Set(notions.map((n) => n.id));
+  const neighbours = all.filter((n) => !inBatch.has(n.id));
 
   // Aucun document : la passe travaille sur les notions, pas sur le cours
   // (§16.3). C'est le poste d'économie principal de tout le chantier — on ne
@@ -274,7 +301,7 @@ export async function ingestChapterQuestions(
     pass: 'questions',
     chapter,
     notions,
-    neighbours: [],
+    neighbours,
     budget,
   });
   await addImportUsage(importId, result.usage);
@@ -298,5 +325,5 @@ export async function ingestChapterQuestions(
   }
 
   const written = await insertGroups(workshopId, importId, capped, new Map());
-  return { written, discarded: plan.discarded, adjusted: plan.adjusted };
+  return { written, discarded: plan.discarded, adjusted: plan.adjusted, batches: batches.length };
 }
