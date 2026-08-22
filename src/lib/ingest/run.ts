@@ -52,8 +52,13 @@ import type { PlanProvider, PreparedDocument } from './providers/types';
 
 export type IngestContext = 'parcours' | 'exam';
 
-export type StartResult = {
+export type PrepareResult = {
   importId: string;
+  /** Taille du corpus en tokens, `null` si le fournisseur n'a pas su compter. */
+  corpusTokens: number | null;
+};
+
+export type StartResult = {
   chapters: { id: string; name: string }[];
   discarded: PlanIssue[];
   adjusted: PlanIssue[];
@@ -153,6 +158,16 @@ async function preparedOf(importId: string): Promise<PreparedDocument[]> {
   return (data.file_ids as PreparedDocument[]) ?? [];
 }
 
+/** La taille du corpus mesurée à la préparation. Elle décide du modèle (§16.20)
+ *  et vit dans `ai_imports.scope`, du jsonb libre — aucune colonne à ajouter. */
+async function corpusTokensOf(importId: string): Promise<number | null> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
+  if (error || !data) return null;
+  const value = (data.scope as { corpusTokens?: unknown } | null)?.corpusTokens;
+  return typeof value === 'number' ? value : null;
+}
+
 /** Combien de questions ce lot a-t-il déjà produites ? Le plafond porte sur
  *  l'import entier, pas sur un chapitre (§9). */
 async function questionsWritten(importId: string): Promise<number> {
@@ -170,14 +185,23 @@ async function questionsWritten(importId: string): Promise<number> {
   return count ?? 0;
 }
 
-/** Ouvre l'ingestion : téléverse les documents une fois pour toutes, puis écrit
- *  les chapitres. C'est le seul appel qui remet les fichiers au fournisseur. */
-export async function startIngestion(
+/** Ouvre le lot : téléverse les documents **une fois pour toutes**, compte le
+ *  corpus, et s'arrête là.
+ *
+ *  ⚠️ **L'ordre compte, et c'est le piège de cette découpe.** Pour estimer avant
+ *  de lancer, les documents doivent déjà être chez le fournisseur — un
+ *  téléversement est gratuit, un appel au modèle ne l'est pas. D'où deux
+ *  fonctions au lieu d'une : celle-ci prépare et mesure, `startIngestion`
+ *  **réutilise** les poignées. On ne téléverse jamais deux fois.
+ *
+ *  Le comptage est ⚠️ TEMPORAIRE — phase de test (voir `cost.ts`) ; le reste,
+ *  non : le téléversement et la création du lot ont toujours eu lieu ici. */
+export async function prepareIngestion(
   workshopId: string,
   actorId: string,
   fileIds: string[],
   options: { provider?: PlanProvider; scope?: Record<string, unknown> } = {},
-): Promise<StartResult> {
+): Promise<PrepareResult> {
   const provider = options.provider ?? createClaudeProvider();
   const supabase = getSupabaseServerClient();
 
@@ -203,13 +227,31 @@ export async function startIngestion(
   );
 
   const prepared = await provider.prepare(documents);
+  const corpusTokens = await provider.countCorpus(prepared);
 
   // Les poignées sont enregistrées AVANT le premier appel au modèle : si celui-ci
-  // échoue, on ne perd pas le téléversement.
+  // échoue, on ne perd pas le téléversement. La taille du corpus voyage dans
+  // `scope` — c'est du jsonb libre, aucune migration nécessaire — parce que la
+  // passe chapitres en a besoin pour choisir son modèle (§16.20).
   const importId = await createImport(workshopId, actorId, {
-    scope: options.scope,
+    scope: { ...(options.scope ?? {}), corpusTokens },
     fileIds: prepared as unknown as string[],
   });
+
+  return { importId, corpusTokens };
+}
+
+/** Passe 1 — écrit les CHAPITRES, en réutilisant les documents déjà téléversés
+ *  par `prepareIngestion`. */
+export async function startIngestion(
+  workshopId: string,
+  actorId: string,
+  importId: string,
+  options: { provider?: PlanProvider } = {},
+): Promise<StartResult> {
+  const corpusTokens = await corpusTokensOf(importId);
+  const provider = options.provider ?? createClaudeProvider({ corpusTokens: corpusTokens ?? undefined });
+  const prepared = await preparedOf(importId);
 
   const existing = await loadExistingChapters(workshopId);
   const refs = await loadExistingRefs(workshopId);
@@ -232,7 +274,6 @@ export async function startIngestion(
   const created = await insertChapters(workshopId, actorId, importId, plan.chapters);
 
   return {
-    importId,
     chapters: plan.chapters.map((c) => ({ id: created.get(c.ref) ?? c.ref, name: c.name })),
     discarded: plan.discarded,
     adjusted: plan.adjusted,

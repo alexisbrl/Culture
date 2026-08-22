@@ -228,6 +228,36 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
       );
     },
 
+    // ⚠️ TEMPORAIRE — phase de test (voir `src/lib/ingest/cost.ts`).
+    async countCorpus(documents: PreparedDocument[]): Promise<number | null> {
+      if (documents.length === 0) return 0;
+      try {
+        // Compté avec le modèle de la passe chapitres : c'est celle qui lit tout
+        // le corpus, et donc celle dont la fenêtre décide de la bascule.
+        const counted = await client.beta.messages.countTokens({
+          model: wantedFor('chapters'),
+          betas: [FILES_BETA],
+          system: [{ type: 'text', text: systemPrompt() }],
+          messages: [
+            {
+              role: 'user',
+              content: documents.map((doc) => ({
+                type: 'document' as const,
+                source: { type: 'file' as const, file_id: doc.ref },
+                title: doc.fileName,
+              })),
+            },
+          ],
+        });
+        return counted.input_tokens;
+      } catch (error) {
+        // Un comptage raté ne doit jamais empêcher une ingestion : on l'annonce
+        // comme inconnu, la bascule de modèle jouera par prudence.
+        console.warn('[ingest] comptage du corpus impossible :', error instanceof Error ? error.message : error);
+        return null;
+      }
+    },
+
     async documentToPlan(
       documents: PreparedDocument[],
       existing: ExistingContent,

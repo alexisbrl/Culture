@@ -1,6 +1,9 @@
 'use server';
 
 import { requireManager } from '@/lib/authz';
+// ⚠️ TEMPORAIRE — phase de test : ces deux imports partent avec l'estimation.
+import { estimateIngestionCost } from '@/lib/ingest/cost';
+import { PASS_MODELS } from '@/lib/ingest/providers/claude';
 import * as run from '@/lib/ingest/run';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import * as imports from '@/lib/workshops/imports';
@@ -29,7 +32,12 @@ import * as imports from '@/lib/workshops/imports';
 export type PlanIssue = { kind: 'chapter' | 'notion' | 'question'; ref?: string; reason: string };
 
 export type StartIngestionResult =
-  | { ok: true; importId: string; chapters: { id: string; name: string }[]; discarded: PlanIssue[]; adjusted: PlanIssue[] }
+  | { ok: true; chapters: { id: string; name: string }[]; discarded: PlanIssue[]; adjusted: PlanIssue[] }
+  | { ok: false; error: string };
+
+/** ⚠️ TEMPORAIRE — phase de test (voir `src/lib/ingest/cost.ts`). */
+export type PrepareIngestionResult =
+  | { ok: true; importId: string; corpusTokens: number | null; estimatedUsd: number | null }
   | { ok: false; error: string };
 
 export type ChapterPassResult =
@@ -52,18 +60,48 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : 'Erreur inattendue';
 }
 
-/** Passe 1 — ouvre le lot, téléverse les documents, écrit les chapitres. */
-export async function startWorkshopIngestion(
+/** Étape 0 — ouvre le lot, téléverse les documents, et **annonce le coût**.
+ *
+ *  ⚠️ **TEMPORAIRE — phase de test.** L'estimation existe parce qu'un import
+ *  réel a coûté ~20 $ sans produire une question (§16.15) ; elle disparaîtra
+ *  avec `src/lib/ingest/cost.ts`. Le téléversement, lui, reste : c'est la
+ *  découpe qui rend l'estimation possible sans téléverser deux fois. */
+export async function prepareWorkshopIngestion(
   workshopId: string,
   fileIds: string[],
   scope: Record<string, unknown> = {},
-): Promise<StartIngestionResult> {
+): Promise<PrepareIngestionResult> {
   const ctx = await requireManager(workshopId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
   if (fileIds.length === 0) return { ok: false, error: 'Aucun fichier sélectionné' };
 
   try {
-    const result = await run.startIngestion(workshopId, ctx.userId, fileIds, { scope });
+    const { importId, corpusTokens } = await run.prepareIngestion(workshopId, ctx.userId, fileIds, { scope });
+    const estimatedUsd =
+      corpusTokens === null
+        ? null
+        : estimateIngestionCost({
+            corpusTokens,
+            models: PASS_MODELS,
+            withNotions: scope.notions !== false,
+            withQuestions: scope.questions !== false,
+          }).usd;
+    return { ok: true, importId, corpusTokens, estimatedUsd };
+  } catch (error) {
+    return { ok: false, error: message(error) };
+  }
+}
+
+/** Passe 1 — écrit les chapitres, à partir du lot déjà préparé. */
+export async function startWorkshopIngestion(
+  workshopId: string,
+  importId: string,
+): Promise<StartIngestionResult> {
+  const ctx = await requireManager(workshopId);
+  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
+
+  try {
+    const result = await run.startIngestion(workshopId, ctx.userId, importId);
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {

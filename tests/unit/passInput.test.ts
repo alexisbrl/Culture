@@ -38,6 +38,11 @@ function recordingProvider(): PlanProvider & { calls: { documents: PreparedDocum
     async prepare(documents) {
       return documents.map((d) => ({ key: d.key, fileName: d.fileName, mimeType: d.mimeType, ref: d.fileName }));
     },
+    async countCorpus(documents) {
+      // Un compteur factice : 1 000 tokens par document, de quoi vérifier les
+      // enchaînements sans rien mesurer de réel.
+      return documents.length * 1_000;
+    },
     async documentToPlan(documents, _existing, scope): Promise<ProviderResult> {
       calls.push({ documents, scope });
       return { plan: {}, usage: { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cachedTokens: 0 } };

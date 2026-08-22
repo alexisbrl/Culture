@@ -106,6 +106,15 @@ export type PlanProvider = {
    *  poignée. */
   prepare(documents: SourceDocument[]): Promise<PreparedDocument[]>;
 
+  /** Combien de tokens le corpus occupera-t-il en entrée.
+   *
+   *  ⚠️ TEMPORAIRE — phase de test : sert à annoncer un coût avant de dépenser
+   *  (§16.15). Chez Claude, `countTokens` est **gratuit** et a ses propres
+   *  limites de débit (vérifié le 22/08/2026). Un fournisseur incapable de
+   *  compter peut renvoyer `null` : on affichera « inconnu » plutôt que de
+   *  bloquer. */
+  countCorpus(documents: PreparedDocument[]): Promise<number | null>;
+
   documentToPlan(
     documents: PreparedDocument[],
     existing: ExistingContent,

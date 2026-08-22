@@ -1226,6 +1226,17 @@
     },
     "button": "generate with AI",
     "chooseAi": "with AI",
-    "chooseManual": "manually"
+    "chooseManual": "manually",
+    "estimate": {
+      "heading": "Before you start",
+      "preparing": "Preparing the documents and measuring the corpus…",
+      "preparingHint": "Nothing is billed yet: uploading and counting are free.",
+      "size": "Measured corpus: about {tokens} thousand tokens.",
+      "unknownSize": "Corpus size: could not be measured.",
+      "cost": "Estimated cost: about ${usd}",
+      "unknownCost": "Estimated cost: unknown.",
+      "disclaimer": "Rough estimate, based on a course of 8 chapters and 10 notions per chapter. The real cost depends on what the documents contain.",
+      "confirm": "start generating"
+    }
   }
 }
