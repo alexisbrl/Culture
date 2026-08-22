@@ -171,7 +171,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
   - Fichiers : `src/lib/ingest/run.ts`, `src/components/ai/AiGenerationDialog.tsx`
   - Dépend de : T3
 
-- [ ] **T5 — Volumétrie paramétrable**
+- [x] **T5 — Volumétrie paramétrable**
   - `QUESTIONS_PER_NOTION` (aujourd'hui `4`) devient une **répartition par niveau
     de Bloom**, défaut `{1: 8, 2: 4, 3: 0, 4: 0}`. `MAX_QUESTIONS_PER_IMPORT`
     passe de `50` à `300`.
@@ -288,6 +288,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
 - 22/08/2026 — T2 — `db8998c` — 3 chargeurs dans `run.ts` ; celui des questions part de `exam_question_item_bricks` (c'est la table qui porte le filtre `brick_id`).
 - 22/08/2026 — T3 — `2263420` — nouveau module pur `src/lib/ingest/passInput.ts` (`documentsForPass`) ; `IngestScope` questions gagne `neighbours`, encore vide avant T4.
 - 22/08/2026 — T4 — `03f2a44` — `ingestChapterQuestions(…, batchIndex)` renvoie `batches` ; le client boucle dessus. Rendu non vérifié dans le navigateur — exercer le dialogue exige un import réel, donc de l'argent.
+- 22/08/2026 — T5 — `a42297e` — `BloomDistribution` + `bloomInstruction()` dans `prompt.ts` ; `questionsInstruction` accepte `distribution`, le défaut reste 8/4/0/0.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
