@@ -1178,12 +1178,244 @@ gratuitement.
 5. **Nettoyage des fichiers Files API** (§16.8).
 6. **Traducteur de demande + sélection SQL + graine** (§16.10 à §16.12).
 
+> ⚠️ **Cet ordre est celui d'avant le test réel.** Les §16.15 à §16.22 le
+> précisent et en corrigent plusieurs points — lire ces sections avant d'exécuter
+> quoi que ce soit d'ici. Le périmètre effectivement retenu pour le premier
+> chantier est celui de §16.23.
+
 ### 16.14 Encore ouvert après cette session
 
-1. **`effort` segmente-t-il le cache ?** (§16.4) — à mesurer, ça conditionne tout
-   le routage par tâche.
-2. **Le nombre réel de notions par chapitre** sur un cours réel — toutes les
-   projections de coût en dépendent.
-3. **Quel modèle sur quelle passe**, une fois (1) mesuré.
+1. ~~**`effort` segmente-t-il le cache ?**~~ ✅ **répondu le 22/08/2026** (§16.22)
+   — non : seuls un changement de modèle et un changement de définition d'outils
+   forcent une reconstruction. `effort` ne se rend pas dans le préfixe.
+2. **Le nombre réel de notions par chapitre** — première mesure le 22/08 : **845
+   notions pour 28 chapitres**, soit ~30 par chapitre, sur un corpus de 680 k
+   tokens (§16.15). À reprendre une fois le découpage en chapitres corrigé, le
+   chiffre par chapitre n'ayant pas de sens tant que les chapitres sont faux.
+3. **Quel modèle sur quelle passe** — méthode arrêtée (§16.20) : Haiku partout
+   d'abord, montée en gamme au cas par cas. Reste à mesurer.
 4. **Où vit la file d'attente** (§16.6) : table Supabase + cron Vercel, ou
-   uniquement Batch API.
+   uniquement Batch API. **Volontairement hors du premier chantier** (§16.23).
+5. **Le seuil de découpage séquentiel** (§3) n'est plus théorique : 680 k tokens
+   occupent 68 % de la fenêtre de 1 M. Un cours nettement plus gros ne passera pas.
+
+### 16.15 Le test réel du 22/08/2026 — ce qu'il a coûté et ce qu'il a appris
+
+Premier import réel, sur un cours de mécanique en 7 PDF. **~20 $ dépensés, zéro
+question produite.** Chiffres exacts relevés dans `ai_imports`
+(import `a9d456ec-5982-4f5c-be2e-fd57a5cbb10f`, **à conserver** : il servira de
+cas de test le jour où l'IA saura retravailler des chapitres périmés) :
+
+| Mesure | Valeur |
+|---|---|
+| Tokens lus en cache | 6 818 067 |
+| Entrée + écritures de cache | 1 909 363 |
+| Tokens de sortie | 119 761 |
+| Chapitres créés | **28** (attendus : 6) |
+| Notions créées | **845** |
+| Questions | 0 |
+
+**Le chiffre qui explique tout : ~680 000 tokens par appel**, soit **9,6× le
+cours de SVT** (70 648 tokens) sur lequel toute la tarification du §9 est
+calculée. La projection à 3,20 $ était juste — pour un corpus dix fois plus petit.
+
+**Trois enseignements :**
+
+1. **On relit tout le cours pour écrire une question sur une phrase.** Voir
+   §16.3 : la passe questions n'a besoin que de la notion (autoportante par
+   construction) et de ses voisines de chapitre. Projection à cette échelle :
+   845 notions × 18 questions aurait coûté **~287 $ en lectures de cache seules**,
+   contre **~8,50 $** une fois le contexte restreint.
+2. **Le nombre de chapitres est un multiplicateur.** 28 au lieu de 6, c'est ×4,7
+   sur tout ce qui suit. C'est le paramètre le plus rentable à surveiller.
+3. **La consigne était fausse, pas le modèle.** `chaptersInstruction` dit
+   « Découpe **le** document » au singulier alors qu'il en reçoit sept, dont les
+   titres sont littéralement « Chapitre 1.pdf » à « Chapitre 6.pdf ». On lui
+   demande de subdiviser un cours : il subdivise.
+
+### 16.16 Correction de tarif : une écriture de cache en TTL 1 h coûte 2×, pas 1,25×
+
+**Le §9 sous-estime ce poste de 60 %.** Il chiffre l'écriture de cache à
+6,25 $/M, qui est le tarif du **TTL 5 minutes** (1,25× l'entrée). Le code utilise
+`ttl: '1h'` (`providers/claude.ts`), dont l'écriture coûte **2× l'entrée, soit
+10 $/M**. Seuil de rentabilité : 3 lectures en TTL 1 h (2× + 0,2× contre 3×),
+contre 2 lectures en TTL 5 min (1,25× + 0,1× contre 2×).
+
+### 16.17 Conséquence inattendue : le cache devient presque inutile
+
+Une fois §16.3 appliqué, chaque contenu n'est plus lu qu'une fois :
+
+| Passe | Ce qu'elle lit | Nombre de lectures |
+|---|---|---|
+| Chapitres | tout le corpus | **1** |
+| Notions | le document de son chapitre | 1 par chapitre |
+| Questions | ~2 k tokens de notions | jamais deux fois le même |
+
+Le cache existait pour répondre à « on renvoie le même cours 25 fois ». Quand on
+cesse de le faire, il n'y a plus rien à mettre en cache — et **un marqueur posé
+sur un contenu jamais relu coûte 1,25× au lieu de 1×**, soit une perte sèche.
+
+**Exception, et elle est réelle :** un PDF contenant plusieurs chapitres est relu
+une fois par chapitre à la passe notions. Là, le cache paie.
+
+**Décision : TTL 5 minutes, et marqueur posé uniquement quand le document servira
+à plus d'un appel.** L'argument qui justifiait le TTL 1 h (« l'ingestion s'étale
+sur plusieurs minutes ») disparaît avec le parallélisme de §16.5.
+
+### 16.18 Aiguillage des chapitres : pas de validation humaine, jamais
+
+**Refus produit explicite d'Alexis (22/08/2026) :** faire intervenir l'humain
+entre deux passes **casse la magie du produit**. Un point d'arrêt n'est envisagé
+qu'en tout dernier recours, si rien d'autre ne marche. Cela **annule** la piste
+« validation après les chapitres » évoquée en séance.
+
+À essayer dans cet ordre, tout automatique :
+
+1. **Corriger la consigne** — dire qu'il y a N documents, donner leurs noms, et
+   préciser que **l'ensemble forme UN SEUL cours** à découper globalement. Sur le
+   corpus du 22/08, cela seul aurait probablement suffi.
+2. **Donner un ordre de grandeur souple** — un cours fait typiquement **3 à 8
+   chapitres**, davantage pour un programme annuel. Une indication, pas une
+   contrainte : le modèle doit pouvoir en sortir si c'est justifié.
+3. **Un second essai automatique** si le résultat sort largement de ces bornes :
+   une relance unique, avec une consigne resserrée qui lui rappelle le nombre
+   obtenu et lui demande de reconsidérer si certains chapitres ne sont pas des
+   sous-parties. Un appel de plus, invisible, qui en économise des centaines.
+
+⚠️ **Heuristique écartée le 22/08 :** comparer le nombre de chapitres au **nombre
+de documents**. Objection d'Alexis, décisive — un cours de 8 chapitres peut tenir
+dans un seul PDF. Le signal valable est le **nombre absolu** de chapitres comparé
+à la plage plausible, jamais un rapport au nombre de fichiers.
+
+### 16.19 Seuils de recharge : absolus, pas en pourcentage
+
+**Arbitré le 22/08/2026, contre la proposition initiale.** Un seuil en pourcentage
+fait recharger les gros ateliers plus tôt que les petits, ce qui n'a pas de sens :
+ce qui compte pour un élève, c'est **combien de questions il lui reste**, pas
+quelle fraction du stock.
+
+Règle retenue, par couple (notion, niveau de Bloom) :
+
+- déclencher quand il reste **moins de ~10 questions** à ce niveau sur cette
+  notion ;
+- **et regarder un cran au-dessus** : maintenir un stock minimal (~3 à 5) au
+  niveau de Bloom supérieur, pour qu'un élève qui progresse ne trouve pas le
+  niveau suivant à sec. Sans ça on est en retard d'un cran en permanence.
+
+Chiffres à régler à l'usage ; c'est le principe qui est arrêté — **déclencher sur
+ce qu'il reste, pour avoir de l'avance plutôt que du retard.**
+
+### 16.20 Choix de modèle : Haiku d'abord, et une contrainte dure
+
+**Décision de méthode (Alexis, 22/08) :** tester **Haiku 4.5 sur chaque passe**,
+et ne monter en gamme que là où il se révèle insuffisant. Le modèle doit donc être
+**paramétrable par passe**, pas codé en dur.
+
+⚠️ **Contrainte dure : Haiku 4.5 a une fenêtre de 200 K tokens.** Le corpus du
+22/08 en fait 680 K. Sur la passe chapitres, l'appel est **refusé**, pas mauvais —
+ce n'est pas une question de qualité et aucun réglage ne le contourne.
+
+| Passe | Entrée après §16.3 | Haiku 4.5 |
+|---|---|---|
+| Chapitres | tout le corpus (680 K sur ce cas) | ❌ impossible → Sonnet 5 ou Opus 5 |
+| Notions | un document (~100 K) | ✅ testable |
+| Questions | les notions (~2–5 K) | ✅ testable, et c'est là qu'il rapporte le plus |
+
+Pour juger Haiku sur la passe chapitres malgré tout : le faire sur un corpus
+inférieur à 200 K (`Cours SVT.pdf`, 70 K, convient).
+
+**Repère de sortie :** la passe questions est dominée par la **sortie**, pas
+l'entrée. C'est le prix de sortie qui décide — 5 $/M sur Haiku contre 25 $ sur
+Opus, soit ~15 $ contre ~76 $ sur 3 M de tokens produits.
+
+**Autre repère, pour plus tard :** ce constat resserre l'écart avec un fournisseur
+tiers. Une fois §16.3 appliqué, la différence entre Haiku et un modèle chinois est
+bien plus étroite qu'entre Opus et Haiku — **mesurer avant d'ouvrir un dossier de
+migration** (et de perdre la lecture native des PDF, §4).
+
+### 16.21 Ce que la vectorisation est, et n'est pas
+
+Consigné parce que la question est revenue plusieurs fois en séance.
+
+- **Un embedding n'est pas un format de document.** C'est ~1 000 nombres codant le
+  *sens* d'un texte. Ça sert à **retrouver**, jamais à **fabriquer**.
+- **Vectoriser ne règle pas la question des images.** La chaîne est toujours
+  `PDF → texte → vecteur` : il faut avoir déjà extrait le texte — donc déjà perdu
+  les schémas — pour vectoriser. La vectorisation arrive **après** le problème.
+- **Le vecteur ne remplace jamais le texte**, il se range à côté : la notion reste
+  la source de vérité, le vecteur est un index régénérable.
+- **La notion seule suffit pour Bloom 1–2.** Pour 3–4, ce qui manque n'est pas un
+  vecteur mais **les notions voisines du même chapitre** (~2 500 tokens, gratuit à
+  cette échelle). Les vecteurs serviraient à relier des notions **entre**
+  chapitres — raffinement, pas prérequis.
+- **Piste retenue pour le jour venu : un modèle d'embedding à poids ouverts,
+  exécuté sur notre serveur** (`voyage-4-nano`, Apache 2.0). Aucun fournisseur,
+  aucune clé, **aucune donnée qui sort** — ça simplifie le RGPD au lieu de le
+  compliquer.
+
+### 16.22 Cache : ce qui est confirmé
+
+- **Indexé sur les octets exacts du prompt.** Deux ateliers créés en parallèle ont
+  deux entrées distinctes qui ne se voient pas : aucune interférence, aucune fuite,
+  rien à gérer. Corollaire : **aucune mutualisation possible** — chaque atelier
+  paie sa propre écriture.
+- **Seuls un changement de modèle et un changement de définition d'outils forcent
+  une reconstruction complète.** Faire varier `effort` est gratuit : il ne se rend
+  pas dans le préfixe. Ce qui avait été mesuré le 20/08 (« le cache est par schéma
+  de sortie ») est cohérent — le schéma de sortie structurée se rend à la même
+  position que les outils.
+- **Limites :** 4 marqueurs par requête ; préfixe minimum pour qu'une entrée se
+  crée (512 tokens sur Opus 5, 1 024 sur Sonnet 5, 4 096 sur Haiku 4.5) — en
+  dessous, rien ne se met en cache **sans erreur**.
+- **Files API :** 500 Mo par fichier, **100 Go par organisation**, opérations
+  (téléversement, listage, suppression) **gratuites**. Les 10 fichiers accumulés
+  (18,8 Mo, dont un doublon) ont été supprimés le 22/08/2026.
+
+### 16.23 Premier chantier : périmètre retenu, et ce qui reste après
+
+**Dans le chantier** (arrêté le 22/08/2026) :
+
+| # | Tâche | Référence |
+|---|---|---|
+| 1 | Restreindre le contexte de chaque passe — la passe questions ne reçoit plus les documents, mais les notions traitées **et leurs voisines du chapitre** | §16.3, §16.21 |
+| 2 | Consigne chapitres : N documents nommés = **un seul cours**, ordre de grandeur souple 3–8 | §16.18 |
+| 3 | Second essai automatique hors bornes, **jamais de blocage humain** | §16.18 |
+| 4 | Passe questions à la notion ; `MAX_QUESTIONS_PER_IMPORT` et `QUESTIONS_PER_NOTION` paramétrables | §16.1, §16.2 |
+| 5 | Modèle **paramétrable par passe**, défaut Haiku 4.5 là où la fenêtre le permet | §16.20 |
+| 6 | TTL 5 min ; marqueur de cache uniquement si le document sert à plus d'un appel | §16.17 |
+| 7 | Estimation de coût par `countTokens` avant lancement — **temporaire, phase de test** | §16.15 |
+| 8 | Suppression des `file_ids` à l'annulation d'un import | §16.8 |
+| 9 | Corriger le tarif d'écriture de cache au §9 | §16.16 |
+
+**Explicitement hors du chantier** — à faire ensuite, avec supervision :
+
+1. **La file d'attente serveur** (§16.6, §16.7). Écartée du travail autonome pour
+   une raison précise : il s'agit de construire **une boucle qui dépense de
+   l'argent toute seule**. Une erreur de bornage ne s'interrompt pas d'elle-même
+   et se découvre sur la facture. C'est la seule tâche de la liste qui ne se
+   rattrape pas.
+   - Sous-décision : table Supabase + cron, ou Batch API seule.
+   - **Garder le chemin navigateur en parallèle** tant que le serveur n'est pas
+     validé. Coût quasi nul : la file appellerait **les mêmes server actions**,
+     déjà découpées en unités bornées (§5.4). Ce n'est pas une réécriture, c'est
+     un second appelant.
+2. **Parallélisme + préchauffage `max_tokens: 0`** (§16.5). Techniquement simple,
+   mais à mesurer sur un vrai import — donc après le chantier, une fois les coûts
+   redescendus.
+3. **Recharge automatique** (§16.19) : seuils absolus par couple (notion, niveau),
+   plus le stock d'avance au niveau supérieur.
+4. **Génération paresseuse par chapitre** (§16.7), qui dépend de (1).
+5. **Mesure des modèles** (§16.20) : Haiku sur chaque passe, montée en gamme au
+   cas par cas. Impossible sur la passe chapitres au-delà de 200 K tokens.
+6. **Générateur d'examen** : traducteur de demande + sélection SQL (§16.10),
+   recherche plein texte sur énoncés et libellés (§16.11).
+7. **Versions d'examen par graine** (§16.12) — **volontairement différé** : le
+   générateur n'existe pas encore, et l'ajout est une migration purement additive
+   (une colonne `seed`), donc sans coût à attendre.
+8. **Nettoyage périodique des fichiers Files API** — le chantier ne traite que
+   l'annulation d'un import ; un balayage des fichiers orphelins reste à prévoir
+   si on reste chez Anthropic (§16.8).
+9. **Vectorisation** (§16.21) — quand le doublon sémantique ou la recherche
+   sémantique deviendront des besoins réels. Piste retenue : modèle à poids
+   ouverts exécuté sur notre serveur.
+10. **Le chat** — domaine distinct, sa propre cloison de fournisseur.
