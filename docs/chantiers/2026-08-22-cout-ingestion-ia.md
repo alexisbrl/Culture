@@ -210,7 +210,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
   - Fichiers : `src/lib/ingest/run.ts`, `src/lib/ingest/prompt.ts`, `tests/unit/`
   - Dépend de : T6
 
-- [ ] **T8 — Modèle paramétrable par passe + bascule automatique**
+- [x] **T8 — Modèle paramétrable par passe + bascule automatique**
   - `MODEL` (constante en dur) devient une configuration par passe, défaut
     **Haiku 4.5** partout. Si le corpus dépasse la fenêtre du modèle choisi
     (200 000 tokens pour Haiku 4.5), bascule automatique sur **Sonnet 5**, avec
@@ -291,6 +291,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
 - 22/08/2026 — T5 — `a42297e` — `BloomDistribution` + `bloomInstruction()` dans `prompt.ts` ; `questionsInstruction` accepte `distribution`, le défaut reste 8/4/0/0.
 - 22/08/2026 — T6 — `336977d` — `chaptersInstruction(fileNames)` + `PLAUSIBLE_CHAPTERS` (3–8) ; les noms viennent de `sent`, dans `claude.ts`.
 - 22/08/2026 — T7 — `1edaa6a` — `withChapterRetry` (pur, dans `passInput.ts`) enveloppe l'appel ; `MAX_PLAUSIBLE_CHAPTERS = 12` ; les 2 essais sont comptés dans l'usage.
+- 22/08/2026 — T8 — `42f5720` — `selectModel` + `PASS_MODELS` + `tuningFor` dans `claude.ts` ; `createClaudeProvider` accepte désormais un objet d'options (l'ancienne signature à clé nue reste acceptée).
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
@@ -301,6 +302,17 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
   « quels documents reçoit une passe » est donc extraite en fonction pure, testée
   seule **et** posée en garde dans `claude.ts` — un appelant distrait ne peut plus
   rouvrir le robinet.
+- **T8 — les réglages d'appel deviennent dépendants du modèle (`tuningFor`).**
+  Découvert en vérifiant la doc de l'API : **Haiku 4.5 refuse
+  `output_config.effort` (400) et ignore la réflexion adaptative** — elle s'y
+  règle par `budget_tokens` (8 000 retenus, < `max_tokens`). Passer Haiku en
+  défaut sans ça aurait fait échouer *tous* les appels, pas seulement les gros.
+- **T8 — corpus de taille inconnue ⇒ on bascule.** Tant que T10 ne mesure pas le
+  corpus, les passes qui envoient des documents partent sur Sonnet 5 : un appel
+  refusé pour dépassement de fenêtre est un aller-retour perdu. La passe
+  questions, qui n'envoie aucun document, reste sur Haiku quoi qu'il arrive.
+- **T8 — repli sur Sonnet 5 et non Opus 5** : même fenêtre d'un million, trois
+  fois moins cher en entrée.
 - **T4 — le nombre de lots est renvoyé par l'appel, pas demandé avant.** Le client
   ne peut pas le connaître (les notions viennent d'être écrites par la passe 2).
   Plutôt qu'un aller-retour supplémentaire, chaque réponse porte `batches` et le
