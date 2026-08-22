@@ -2,7 +2,7 @@
 
 **Feuille de route :** docs/chantiers/2026-08-22-cout-ingestion-ia.md
 **Branche :** feat/cout-ingestion-ia
-**PR :** <à compléter>
+**PR :** https://github.com/alexisbrl/Culture/pull/45
 **Démarré le :** 2026-08-22
 
 ---

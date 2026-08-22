@@ -1,7 +1,7 @@
 # Chantier : réduire drastiquement le coût de l'ingestion IA
 
 **Branche :** `feat/cout-ingestion-ia`
-**PR :** <à compléter à l'ouverture>
+**PR :** https://github.com/alexisbrl/Culture/pull/45
 **Cadré le :** 2026-08-22
 
 > ⚠️ **Branche partie de `docs/revision-ingestion-volume`, pas de `main`.** C'est
