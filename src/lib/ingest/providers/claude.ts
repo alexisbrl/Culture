@@ -33,6 +33,7 @@ import {
   type ExistingContent,
   type ExistingScope,
 } from '@/lib/ingest/prompt';
+import { documentsForPass } from '@/lib/ingest/passInput';
 import { wireChaptersOutput, wireGroupsOutput, wireNotionsOutput } from '@/lib/ingest/wireSchema';
 
 import type {
@@ -58,7 +59,12 @@ function instructionFor(scope: IngestScope): string {
     case 'notions':
       return notionsInstruction(scope.chapter);
     case 'questions':
-      return questionsInstruction({ chapter: scope.chapter, notions: scope.notions, budget: scope.budget });
+      return questionsInstruction({
+        chapter: scope.chapter,
+        notions: scope.notions,
+        neighbours: scope.neighbours,
+        budget: scope.budget,
+      });
   }
 }
 
@@ -111,16 +117,21 @@ export function createClaudeProvider(apiKey = process.env.ANTHROPIC_API_KEY): Pl
       existing: ExistingContent,
       scope: IngestScope,
     ): Promise<ProviderResult> {
+      // Dernière barrière avant la facture : la passe questions ne reçoit aucun
+      // document, quoi qu'on lui passe (§16.3). Sans documents, aucun bloc
+      // `document` n'est posé — donc aucun marqueur de cache non plus.
+      const sent = documentsForPass(scope.pass, documents);
+
       // ⚠️ ORDRE CRITIQUE. Le cache est un préfixe : les documents d'abord (le
       // même à chaque appel), l'existant et la consigne ensuite. Inverser
       // reviendrait à ne jamais toucher le cache.
-      const content: Anthropic.Beta.BetaContentBlockParam[] = documents.map((doc, i) => ({
+      const content: Anthropic.Beta.BetaContentBlockParam[] = sent.map((doc, i) => ({
         type: 'document',
         source: { type: 'file', file_id: doc.ref },
         title: doc.fileName,
         // Le marqueur ne va que sur le DERNIER document : il met en cache tout
         // ce qui le précède, système compris.
-        ...(i === documents.length - 1 ? { cache_control: { type: 'ephemeral' as const, ttl: '1h' as const } } : {}),
+        ...(i === sent.length - 1 ? { cache_control: { type: 'ephemeral' as const, ttl: '1h' as const } } : {}),
       }));
 
       content.push({ type: 'text', text: existingContentBlock(existing, existingScopeFor(scope)) });

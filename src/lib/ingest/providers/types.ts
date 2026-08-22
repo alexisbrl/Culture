@@ -53,7 +53,13 @@ export type IngestScope =
   | {
       pass: 'questions';
       chapter: { id: string; name: string };
+      /** Les notions à faire travailler par ce lot de questions. */
       notions: { id: string; title: string }[];
+      /** Les AUTRES notions du même chapitre, en contexte seulement (§16.21).
+       *  C'est ce qui remplace le cours : la notion suffit pour les niveaux 1 et
+       *  2 de Bloom, ses voisines apportent ce qu'il faut pour les niveaux 3 et
+       *  4. Quelques milliers de tokens, contre 680 000 pour le corpus. */
+      neighbours: { id: string; title: string }[];
       budget: number;
     };
 

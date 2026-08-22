@@ -127,6 +127,31 @@ describe('instructions de passe', () => {
     expect(instruction).toContain('12');
   });
 
+  it('la passe questions donne les notions voisines en contexte, sans les interroger', () => {
+    // Elle ne reçoit plus les documents (§16.3) : les voisines du chapitre sont
+    // ce qui remplace le cours pour les niveaux 3 et 4 de Bloom (§16.21).
+    const instruction = questionsInstruction({
+      chapter: { id: 'ch1', name: 'Les fleuves' },
+      notions: [{ id: 'n1', title: 'La Loire est le plus long fleuve de France' }],
+      neighbours: [{ id: 'n2', title: 'La Seine traverse Paris' }],
+      budget: 12,
+    });
+    expect(instruction).toContain('La Seine traverse Paris');
+    expect(instruction).toMatch(/contexte/i);
+    // La voisine est un contexte, pas une cible : sa référence n'est pas donnée,
+    // le modèle ne peut donc pas y rattacher une question.
+    expect(instruction).not.toContain('n2');
+  });
+
+  it('sans voisine, la passe questions ne mentionne aucun contexte', () => {
+    const instruction = questionsInstruction({
+      chapter: { id: 'ch1', name: 'Les fleuves' },
+      notions: [{ id: 'n1', title: 'La Loire…' }],
+      budget: 12,
+    });
+    expect(instruction).not.toMatch(/Autres notions du même chapitre/);
+  });
+
   it('la passe questions dit ce qu’une question sans notion implique', () => {
     // C'est le seul endroit où le modèle peut l'apprendre : rien côté serveur ne
     // l'y oblige (une question sans notion reste permise).

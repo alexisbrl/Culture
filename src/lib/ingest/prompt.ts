@@ -164,16 +164,29 @@ Chaque notion porte \`chapterRef\` = ${chapter.id}. Ne produis que les notions d
 export function questionsInstruction(input: {
   chapter: { id: string; name: string };
   notions: { id: string; title: string }[];
+  /** Les autres notions du chapitre, en contexte seulement (§16.21). La passe ne
+   *  reçoit plus les documents : ce sont elles qui remplacent le cours. */
+  neighbours?: { id: string; title: string }[];
   /** Nombre de questions restant avant le plafond de l'import. */
   budget: number;
 }): string {
   const list = input.notions.map((n) => `- ${n.id} — ${n.title}`).join('\n');
+  const neighbours = input.neighbours ?? [];
+
+  // Le contexte vient APRÈS les notions à couvrir et se termine par un rappel :
+  // sans lui, le modèle interroge ce qu'il lit et déborde du lot.
+  const context =
+    neighbours.length > 0
+      ? `\nAutres notions du même chapitre, pour le contexte UNIQUEMENT — tu ne poses aucune question dessus :
+${neighbours.map((n) => `- ${n.title}`).join('\n')}
+`
+      : '';
 
   return `Rédige les QUESTIONS qui font travailler les notions du chapitre « ${input.chapter.name} ».
 
 Notions à couvrir :
 ${list}
-
+${context}
 Règles de production :
 - ${QUESTIONS_PER_NOTION} questions par notion, une par niveau de Bloom : 1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser ou créer.
 - Chaque question porte dans \`notionRefs\` la ou les notions qu'elle fait travailler, avec les références ci-dessus. Une question sans notion ne sera jamais posée à personne.

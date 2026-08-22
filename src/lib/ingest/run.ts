@@ -266,12 +266,15 @@ export async function ingestChapterQuestions(
   const budget = MAX_QUESTIONS_PER_IMPORT - (await questionsWritten(importId));
   if (budget <= 0) return { written: 0, discarded: [], adjusted: [] };
 
-  const prepared = await preparedOf(importId);
+  // Aucun document : la passe travaille sur les notions, pas sur le cours
+  // (§16.3). C'est le poste d'économie principal de tout le chantier — on ne
+  // téléverse rien, on ne relit rien, on ne paie donc rien pour le corpus.
   const existing = await loadNotionQuestions(notions.map((n) => n.id));
-  const result = await provider.documentToPlan(prepared, existing, {
+  const result = await provider.documentToPlan([], existing, {
     pass: 'questions',
     chapter,
     notions,
+    neighbours: [],
     budget,
   });
   await addImportUsage(importId, result.usage);
