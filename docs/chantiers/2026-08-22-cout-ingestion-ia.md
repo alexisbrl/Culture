@@ -161,7 +161,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
     `src/lib/ingest/providers/types.ts`, `tests/unit/`
   - Dépend de : T2
 
-- [ ] **T4 — Passe questions par lots de ~10 notions**
+- [x] **T4 — Passe questions par lots de ~10 notions**
   - L'unité de travail passe du chapitre au **lot de notions**. Le dialogue boucle
     sur les lots.
   - Critère d'acceptation : un chapitre de 25 notions produit **exactement 3
@@ -287,6 +287,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
 - 22/08/2026 — T1 — `8a0ff35` — `existingContentBlock(existing, scope)` ; `ExistingContent.questions` devient `{ content, notionIds }[]` (le filtrage par notion l'exige).
 - 22/08/2026 — T2 — `db8998c` — 3 chargeurs dans `run.ts` ; celui des questions part de `exam_question_item_bricks` (c'est la table qui porte le filtre `brick_id`).
 - 22/08/2026 — T3 — `2263420` — nouveau module pur `src/lib/ingest/passInput.ts` (`documentsForPass`) ; `IngestScope` questions gagne `neighbours`, encore vide avant T4.
+- 22/08/2026 — T4 — `03f2a44` — `ingestChapterQuestions(…, batchIndex)` renvoie `batches` ; le client boucle dessus. Rendu non vérifié dans le navigateur — exercer le dialogue exige un import réel, donc de l'argent.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
@@ -297,6 +298,13 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
   « quels documents reçoit une passe » est donc extraite en fonction pure, testée
   seule **et** posée en garde dans `claude.ts` — un appelant distrait ne peut plus
   rouvrir le robinet.
+- **T4 — le nombre de lots est renvoyé par l'appel, pas demandé avant.** Le client
+  ne peut pas le connaître (les notions viennent d'être écrites par la passe 2).
+  Plutôt qu'un aller-retour supplémentaire, chaque réponse porte `batches` et le
+  client boucle jusque-là ; un chapitre sans notion rend `0` et s'arrête.
+- **T4 — la barre de progression reste étiquetée au chapitre.** Un libellé par lot
+  aurait demandé de nouvelles chaînes i18n pour un gain nul : l'utilisateur voit
+  déjà les compteurs monter.
 - **T3 — les notions voisines sont données sans leur référence.** Les cibles
   portent leur identifiant, les voisines seulement leur texte : le modèle ne peut
   pas rattacher une question à une notion hors du lot.
