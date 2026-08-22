@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  bloomInstruction,
   chaptersInstruction,
+  DEFAULT_BLOOM_DISTRIBUTION,
   existingContentBlock,
+  MAX_QUESTIONS_PER_IMPORT,
   notionsInstruction,
   questionsInstruction,
+  questionsPerNotion,
   systemPrompt,
-  QUESTIONS_PER_NOTION,
+  type BloomDistribution,
   type ExistingContent,
 } from '@/lib/ingest/prompt';
 import { GENERATED_RESPONSE_TYPES, wireGroupsOutput, wireNotionsOutput } from '@/lib/ingest/wireSchema';
@@ -123,7 +127,6 @@ describe('instructions de passe', () => {
     });
     expect(instruction).toContain('n1');
     expect(instruction).toContain('n2');
-    expect(instruction).toContain(String(QUESTIONS_PER_NOTION));
     expect(instruction).toContain('12');
   });
 
@@ -195,5 +198,53 @@ describe('wireSchema — ce qu’on autorise le modèle à produire', () => {
   it('exige la référence de chapitre sur une notion', () => {
     expect(wireNotionsOutput.safeParse({ notions: [{ ref: 'n1', title: 'T' }] }).success).toBe(false);
     expect(wireNotionsOutput.safeParse({ notions: [{ ref: 'n1', title: 'T', chapterRef: 'ch1' }] }).success).toBe(true);
+  });
+});
+
+describe('volumétrie — répartition de Bloom paramétrable (§16.1)', () => {
+  it('le défaut est 8 / 4 / 0 / 0, soit 12 questions par notion', () => {
+    expect(DEFAULT_BLOOM_DISTRIBUTION).toEqual({ 1: 8, 2: 4, 3: 0, 4: 0 });
+    expect(questionsPerNotion()).toBe(12);
+  });
+
+  it('le plafond de débit est à 300 le temps des tests', () => {
+    // Garde-fou volontairement bas : c'est la seule barrière contre une boucle
+    // qui part en vrille (§16.2).
+    expect(MAX_QUESTIONS_PER_IMPORT).toBe(300);
+  });
+
+  it('un niveau à zéro n’apparaît pas dans l’instruction', () => {
+    const instruction = bloomInstruction();
+    expect(instruction).toContain('8 de niveau 1');
+    expect(instruction).toContain('4 de niveau 2');
+    expect(instruction).not.toMatch(/niveau 3/);
+    expect(instruction).not.toMatch(/niveau 4/);
+  });
+
+  it('changer la répartition change l’instruction produite', () => {
+    const autre: BloomDistribution = { 1: 2, 2: 0, 3: 5, 4: 1 };
+    const instruction = bloomInstruction(autre);
+    expect(instruction).toContain('2 de niveau 1');
+    expect(instruction).toContain('5 de niveau 3');
+    expect(instruction).toContain('1 de niveau 4');
+    expect(instruction).not.toMatch(/niveau 2/);
+    expect(instruction).toContain('8 questions par notion');
+    expect(instruction).not.toBe(bloomInstruction());
+  });
+
+  it('la passe questions reprend la répartition qu’on lui donne', () => {
+    const instruction = questionsInstruction({
+      chapter: { id: 'ch1', name: 'Les fleuves' },
+      notions: [{ id: 'n1', title: 'La Loire…' }],
+      budget: 300,
+      distribution: { 1: 3, 2: 0, 3: 0, 4: 0 },
+    });
+    expect(instruction).toContain('3 de niveau 1');
+    expect(instruction).not.toContain('8 de niveau 1');
+  });
+
+  it('une répartition entièrement à zéro ne demande rien', () => {
+    expect(bloomInstruction({ 1: 0, 2: 0, 3: 0, 4: 0 })).toMatch(/aucune question/i);
+    expect(questionsPerNotion({ 1: 0, 2: 0, 3: 0, 4: 0 })).toBe(0);
   });
 });
