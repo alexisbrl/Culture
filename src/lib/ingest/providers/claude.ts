@@ -18,8 +18,9 @@
 // • **Sortie structurée** — le modèle ne peut produire que du conforme au
 //   schéma. `parsePlan` reste le contrôle à la réception : la contrainte porte
 //   sur la génération, pas sur ce qu'on accepte d'écrire en base.
-// • **Réflexion adaptative + effort élevé** — découper un cours en notions est
-//   un vrai travail de raisonnement, pas une extraction mécanique.
+// • **Réflexion** — découper un cours en notions est un vrai travail de
+//   raisonnement, pas une extraction mécanique. Sa forme dépend du modèle
+//   retenu, et ce n'est pas cosmétique : voir `tuningFor`.
 
 import Anthropic, { toFile } from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
@@ -44,13 +45,90 @@ import type {
   SourceDocument,
 } from './types';
 
-const MODEL = 'claude-opus-5';
 const FILES_BETA = 'files-api-2025-04-14';
 
 /** Généreux : une passe « questions » sur un gros chapitre produit un JSON long,
  *  et une réponse tronquée est une réponse perdue. Le streaming évite que ce
  *  plafond ne se paie en délai d'attente HTTP. */
 const MAX_TOKENS = 32_000;
+
+// ─── Le modèle, par passe ────────────────────────────────────────────────────
+//
+// Il était en dur (`claude-opus-5`) sur les trois passes. Deux raisons de le
+// rendre paramétrable (§16.20) :
+//
+// 1. **Le gradient va à l'envers de l'intuition.** Le découpage en chapitres est
+//    le jugement le plus structurant du pipeline — un mauvais découpage
+//    empoisonne les deux passes suivantes — et il ne coûte qu'UN appel. Rédiger
+//    des QCM de mémorisation sur une notion déjà extraite est la tâche la plus
+//    mécanique et la plus répétée. Modèle fort là où c'est structurant et rare,
+//    économique là où c'est mécanique et massif.
+// 2. **La passe questions est dominée par la SORTIE**, pas l'entrée : 5 $/M sur
+//    Haiku contre 25 $ sur Opus, soit ~15 $ contre ~76 $ sur 3 M de tokens
+//    produits. C'est là que le choix de modèle rapporte le plus.
+//
+// Méthode arrêtée avec Alexis : Haiku 4.5 partout, on ne monte en gamme que là
+// où il se révèle insuffisant.
+
+export const MODELS = {
+  haiku: 'claude-haiku-4-5',
+  sonnet: 'claude-sonnet-5',
+  opus: 'claude-opus-5',
+} as const;
+
+export type ModelId = (typeof MODELS)[keyof typeof MODELS];
+
+/** ⚠️ **Fenêtre de contexte — contrainte DURE, sans rapport avec la qualité.**
+ *  Un corpus qui dépasse la fenêtre ne donne pas un mauvais résultat : l'appel
+ *  est purement **refusé**, et aucun réglage ne le contourne. Le corpus du
+ *  22/08/2026 fait 680 000 tokens, soit 3,4× la fenêtre de Haiku. */
+const CONTEXT_WINDOW: Record<ModelId, number> = {
+  [MODELS.haiku]: 200_000,
+  [MODELS.sonnet]: 1_000_000,
+  [MODELS.opus]: 1_000_000,
+};
+
+/** Le modèle voulu pour chaque passe. Haiku 4.5 partout : c'est l'hypothèse à
+ *  tester, pas une conclusion (§16.20). */
+export const PASS_MODELS: Record<IngestScope['pass'], ModelId> = {
+  chapters: MODELS.haiku,
+  notions: MODELS.haiku,
+  questions: MODELS.haiku,
+};
+
+/** Le repli quand la fenêtre du modèle voulu ne suffit pas. Sonnet 5 et non
+ *  Opus 5 : même fenêtre d'un million, trois fois moins cher en entrée. */
+export const OVERSIZE_FALLBACK: ModelId = MODELS.sonnet;
+
+/** (modèle souhaité, taille du corpus) → modèle retenu. **Fonction pure.**
+ *
+ *  On réserve `MAX_TOKENS` sur la fenêtre : elle porte l'entrée ET la sortie,
+ *  et une réponse tronquée est une réponse perdue. Une taille inconnue se passe
+ *  en `Infinity` — on bascule alors par prudence, un appel refusé coûtant un
+ *  aller-retour pour rien. */
+export function selectModel(wanted: ModelId, corpusTokens: number): ModelId {
+  const usable = CONTEXT_WINDOW[wanted] - MAX_TOKENS;
+  if (corpusTokens <= usable) return wanted;
+  // Jamais d'escalade au-delà du repli : s'il ne suffit pas non plus, c'est le
+  // corpus qui est hors normes, et le découpage séquentiel est un autre sujet.
+  return OVERSIZE_FALLBACK;
+}
+
+/** Les réglages d'appel dépendent du modèle, et pas cosmétiquement.
+ *
+ *  ⚠️ **Haiku 4.5 est antérieur à la réflexion adaptative** : `output_config.effort`
+ *  y est **refusé (400)**, et la réflexion s'y règle par `budget_tokens`, qui doit
+ *  rester inférieur à `max_tokens`. Envoyer à Haiku la forme utilisée pour Opus
+ *  ferait échouer **tous** les appels, pas seulement les gros. */
+function tuningFor(model: ModelId): {
+  thinking: Anthropic.Beta.BetaThinkingConfigParam;
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+} {
+  if (model === MODELS.haiku) {
+    return { thinking: { type: 'enabled', budget_tokens: 8_000 } };
+  }
+  return { thinking: { type: 'adaptive' }, effort: 'high' };
+}
 
 function instructionFor(scope: IngestScope, fileNames: string[]): string {
   switch (scope.pass) {
@@ -96,9 +174,24 @@ function outputSchemaFor(scope: IngestScope) {
   }
 }
 
-export function createClaudeProvider(apiKey = process.env.ANTHROPIC_API_KEY): PlanProvider {
+export type ClaudeProviderOptions = {
+  apiKey?: string;
+  /** Taille mesurée du corpus, en tokens (`messages.countTokens`). Absente, on
+   *  la traite comme inconnue et on bascule par prudence sur le modèle à grande
+   *  fenêtre : un appel refusé pour dépassement est un aller-retour perdu. */
+  corpusTokens?: number;
+  /** Modèle voulu par passe, pour pouvoir en essayer un autre sans toucher au
+   *  code (§16.20). */
+  models?: Partial<Record<IngestScope['pass'], ModelId>>;
+};
+
+export function createClaudeProvider(options: ClaudeProviderOptions | string = {}): PlanProvider {
+  const opts = typeof options === 'string' ? { apiKey: options } : options;
+  const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY manquante');
   const client = new Anthropic({ apiKey });
+
+  const wantedFor = (pass: IngestScope['pass']): ModelId => opts.models?.[pass] ?? PASS_MODELS[pass];
 
   return {
     name: 'claude',
@@ -140,14 +233,28 @@ export function createClaudeProvider(apiKey = process.env.ANTHROPIC_API_KEY): Pl
       content.push({ type: 'text', text: existingContentBlock(existing, existingScopeFor(scope)) });
       content.push({ type: 'text', text: instructionFor(scope, sent.map((doc) => doc.fileName)) });
 
+      // Une passe sans document ne lit rien du corpus : sa taille ne la contraint
+      // pas, et Haiku y reste possible quelle que soit celle du cours.
+      const wanted = wantedFor(scope.pass);
+      const model = sent.length === 0 ? wanted : selectModel(wanted, opts.corpusTokens ?? Number.POSITIVE_INFINITY);
+      if (model !== wanted) {
+        // Trace demandée : la bascule est silencieuse sinon, et on croirait
+        // mesurer Haiku alors qu'on mesure Sonnet.
+        console.info(
+          `[ingest] passe ${scope.pass} : ${wanted} écarté (corpus ${opts.corpusTokens ?? 'inconnu'} tokens), bascule sur ${model}`,
+        );
+      }
+      const tuning = tuningFor(model);
+
       const stream = client.beta.messages.stream({
-        model: MODEL,
+        model,
         max_tokens: MAX_TOKENS,
         betas: [FILES_BETA],
         system: [{ type: 'text', text: systemPrompt() }],
-        thinking: { type: 'adaptive' },
+        thinking: tuning.thinking,
         output_config: {
-          effort: 'high',
+          // `effort` est absent sur Haiku 4.5 : il y est refusé (voir `tuningFor`).
+          ...(tuning.effort ? { effort: tuning.effort } : {}),
           format: zodOutputFormat(outputSchemaFor(scope)),
         },
         messages: [{ role: 'user', content }],
