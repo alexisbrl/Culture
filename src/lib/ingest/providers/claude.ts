@@ -52,10 +52,13 @@ const FILES_BETA = 'files-api-2025-04-14';
  *  plafond ne se paie en délai d'attente HTTP. */
 const MAX_TOKENS = 32_000;
 
-function instructionFor(scope: IngestScope): string {
+function instructionFor(scope: IngestScope, fileNames: string[]): string {
   switch (scope.pass) {
     case 'chapters':
-      return chaptersInstruction();
+      // Les noms de fichiers sont dans la consigne, pas seulement dans les blocs
+      // `document` : c'est là que le modèle peut apprendre qu'ils forment un
+      // seul cours (§16.15).
+      return chaptersInstruction(fileNames);
     case 'notions':
       return notionsInstruction(scope.chapter);
     case 'questions':
@@ -135,7 +138,7 @@ export function createClaudeProvider(apiKey = process.env.ANTHROPIC_API_KEY): Pl
       }));
 
       content.push({ type: 'text', text: existingContentBlock(existing, existingScopeFor(scope)) });
-      content.push({ type: 'text', text: instructionFor(scope) });
+      content.push({ type: 'text', text: instructionFor(scope, sent.map((doc) => doc.fileName)) });
 
       const stream = client.beta.messages.stream({
         model: MODEL,

@@ -7,6 +7,7 @@ import {
   existingContentBlock,
   MAX_QUESTIONS_PER_IMPORT,
   notionsInstruction,
+  PLAUSIBLE_CHAPTERS,
   questionsInstruction,
   questionsPerNotion,
   systemPrompt,
@@ -170,6 +171,45 @@ describe('instructions de passe', () => {
     const instruction = chaptersInstruction();
     expect(instruction).not.toMatch(/notion/i);
     expect(instruction).not.toMatch(/question/i);
+  });
+});
+
+describe('chaptersInstruction — N documents, UN SEUL cours (§16.15)', () => {
+  const sept = ['Chapitre 1.pdf', 'Chapitre 2.pdf', 'Chapitre 3.pdf', 'Chapitre 4.pdf', 'Chapitre 5.pdf', 'Chapitre 6.pdf', 'Annexes.pdf'];
+
+  it('nomme les documents reçus', () => {
+    // Sans eux, le modèle ne sait pas ce qu'il tient : le test réel du
+    // 22/08/2026 a rendu 28 chapitres pour 7 fichiers nommés « Chapitre N.pdf ».
+    const instruction = chaptersInstruction(sept);
+    for (const name of sept) expect(instruction).toContain(name);
+  });
+
+  it('dit que l’ensemble forme un seul cours, à découper globalement', () => {
+    const instruction = chaptersInstruction(sept);
+    expect(instruction).toContain('UN SEUL cours');
+    expect(instruction).toContain('7 documents');
+    expect(instruction).toMatch(/ENSEMBLE globalement/);
+    expect(instruction).toMatch(/document n’est pas un chapitre|document n'est pas un chapitre/);
+  });
+
+  it('donne la borne 3 à 8, explicitement souple', () => {
+    const instruction = chaptersInstruction(sept);
+    expect(instruction).toContain(String(PLAUSIBLE_CHAPTERS.min));
+    expect(instruction).toContain(String(PLAUSIBLE_CHAPTERS.max));
+    expect(instruction).toMatch(/indication et non une limite/);
+  });
+
+  it('un document unique n’est pas annoncé au pluriel', () => {
+    const instruction = chaptersInstruction(['Cours SVT.pdf']);
+    expect(instruction).toContain('Cours SVT.pdf');
+    expect(instruction).toContain('un seul document');
+    expect(instruction).not.toContain('1 documents');
+  });
+
+  it('sans nom de fichier, la consigne reste utilisable', () => {
+    const instruction = chaptersInstruction();
+    expect(instruction).toContain('CHAPITRES');
+    expect(instruction).toContain(String(PLAUSIBLE_CHAPTERS.max));
   });
 });
 

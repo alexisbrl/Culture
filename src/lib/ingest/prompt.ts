@@ -168,11 +168,41 @@ export function existingContentBlock(existing: ExistingContent, scope: ExistingS
   return lines.join('\n');
 }
 
-/** Passe 1 — les chapitres. */
-export function chaptersInstruction(): string {
-  return `Découpe le document en CHAPITRES : les grandes parties du cours, dans l'ordre où elles se lisent.
+/** Ordre de grandeur annoncé au modèle pour la passe chapitres. **Une
+ *  indication, pas une contrainte** : un programme annuel en compte
+ *  légitimement plus (§16.18). C'est le nombre ABSOLU qui sert de repère,
+ *  jamais un rapport au nombre de documents — un cours de 8 chapitres peut
+ *  tenir dans un seul PDF. */
+export const PLAUSIBLE_CHAPTERS = { min: 3, max: 8 } as const;
+
+/** Passe 1 — les chapitres.
+ *
+ *  ⚠️ **La consigne dit combien de documents il y a, et qu'ils forment un seul
+ *  cours.** Sa version précédente disait « Découpe **le** document » au
+ *  singulier alors qu'il en recevait sept, nommés « Chapitre 1.pdf » à
+ *  « Chapitre 6.pdf » : on lui demandait de subdiviser un cours, il a subdivisé
+ *  — 28 chapitres au lieu de 6, soit ×4,7 sur tout ce qui suit (§16.15). C'est
+ *  la consigne qui était fausse, pas le modèle. */
+export function chaptersInstruction(fileNames: string[] = []): string {
+  const corpus =
+    fileNames.length > 1
+      ? `Tu as reçu ${fileNames.length} documents. Ils forment UN SEUL cours, pas ${fileNames.length} cours distincts :
+${fileNames.map((name) => `- ${name}`).join('\n')}
+
+Découpe l'ENSEMBLE globalement. Un document n'est pas un chapitre : un même document peut en contenir plusieurs, et un chapitre peut s'étendre sur plusieurs documents. Leurs noms de fichiers ne sont pas un découpage, ils ne t'engagent à rien.
+
+`
+      : fileNames.length === 1
+        ? `Tu as reçu un seul document, « ${fileNames[0]} », qui porte l'intégralité du cours.
+
+`
+        : '';
+
+  return `${corpus}Découpe ce cours en CHAPITRES : ses grandes parties, dans l'ordre où elles se lisent.
 
 Un chapitre est une unité d'enseignement, pas une section de mise en page : deux sous-parties qui traitent du même sujet forment un seul chapitre. Vise le découpage qu'un enseignant ferait pour organiser sa progression.
+
+Ordre de grandeur : un cours en compte typiquement ${PLAUSIBLE_CHAPTERS.min} à ${PLAUSIBLE_CHAPTERS.max}, davantage pour un programme annuel. C'est une indication et non une limite — dépasse-la si le contenu le justifie vraiment.
 
 Donne à chacun une référence courte et unique (ch1, ch2…), et un nom de 120 caractères maximum.`;
 }
