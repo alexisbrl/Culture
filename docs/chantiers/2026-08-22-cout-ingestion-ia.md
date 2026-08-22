@@ -198,7 +198,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
     `tests/unit/prompt.test.ts`
   - Dépend de : rien
 
-- [ ] **T7 — Relance automatique au-delà de 12 chapitres**
+- [x] **T7 — Relance automatique au-delà de 12 chapitres**
   - Si la passe 1 rend plus de **12** chapitres, `startIngestion` relance **une
     seule fois** avec une instruction resserrée qui rappelle le nombre obtenu et
     demande de reconsidérer si certains chapitres ne sont pas des sous-parties.
@@ -290,6 +290,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
 - 22/08/2026 — T4 — `03f2a44` — `ingestChapterQuestions(…, batchIndex)` renvoie `batches` ; le client boucle dessus. Rendu non vérifié dans le navigateur — exercer le dialogue exige un import réel, donc de l'argent.
 - 22/08/2026 — T5 — `a42297e` — `BloomDistribution` + `bloomInstruction()` dans `prompt.ts` ; `questionsInstruction` accepte `distribution`, le défaut reste 8/4/0/0.
 - 22/08/2026 — T6 — `336977d` — `chaptersInstruction(fileNames)` + `PLAUSIBLE_CHAPTERS` (3–8) ; les noms viennent de `sent`, dans `claude.ts`.
+- 22/08/2026 — T7 — `1edaa6a` — `withChapterRetry` (pur, dans `passInput.ts`) enveloppe l'appel ; `MAX_PLAUSIBLE_CHAPTERS = 12` ; les 2 essais sont comptés dans l'usage.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
