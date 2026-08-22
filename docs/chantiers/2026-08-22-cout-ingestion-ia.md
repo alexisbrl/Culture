@@ -269,7 +269,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
     `src/lib/ingest/run.ts`, `src/app/actions/aiIngest.ts`, `tests/unit/`
   - Dépend de : T4
 
-- [ ] **T12 — Corriger le tarif d'écriture de cache**
+- [x] **T12 — Corriger le tarif d'écriture de cache**
   - Une écriture de cache en TTL 1 h coûte **2× le prix d'entrée (10 $/M)**, pas
     1,25× (6,25 $/M) qui est le tarif du TTL 5 minutes.
   - **Deux endroits, pas un** : le §9 de `docs/ai-ingestion-plan.md` (tableau de
@@ -295,6 +295,7 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
 - 22/08/2026 — T9 — `303074d` — `shouldCacheDocuments` ; le nombre de chapitres descend du dialogue jusqu'au scope `notions` (`plannedCalls`) pour décider du marqueur.
 - 22/08/2026 — T10 — `da6fb21` — `prepareIngestion` / `startIngestion(importId)` ; `cost.ts` (pur) ; `PlanProvider.countCorpus` ; `corpusTokens` rangé dans `ai_imports.scope`. Rendu non vérifié — l’écran exige un téléversement réel chez le fournisseur.
 - 22/08/2026 — T11 — `1f36d33` — `PlanProvider.release` + module `release.ts` ; appelée après la passe notions (dans le dialogue) et **après** une annulation réussie (`cancelImport` conserve la ligne, donc les poignées).
+- 22/08/2026 — T12 — `b947c1d` — §9 du plan refait (deux colonnes de TTL, seuil de rentabilité) ; commentaires de `cacheCreationTokens` et `addImportUsage` corrigés.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
@@ -305,6 +306,12 @@ Rien de ce qui suit ne doit être commencé, même si ça paraît naturel :
   « quels documents reçoit une passe » est donc extraite en fonction pure, testée
   seule **et** posée en garde dans `claude.ts` — un appelant distrait ne peut plus
   rouvrir le robinet.
+- **T12 — il reste des « 1,25 » dans le dépôt, et c'est voulu.** Le critère
+  demandait de faire disparaître les « 1,25 » *associés à une écriture de cache*.
+  Ceux qui subsistent (`cost.ts`, `passInput.ts`, leurs tests) sont **justes** :
+  c'est bien le multiplicateur du TTL 5 minutes, celui que le code utilise depuis
+  T9, et chacun le dit explicitement. Les faux — ceux qui affirmaient « ~1,25× »
+  sans condition alors que le code était en TTL 1 h — ont été corrigés.
 - **T11 — la suppression a lieu APRÈS l'annulation, pas avant.** Une annulation
   refusée (import expiré ou modifié) doit laisser l'import intact, documents
   compris — sinon un import encore vivant perdrait ses fichiers. `cancelImport`
