@@ -533,22 +533,36 @@ prompt. Elles ne sont **pas** vérifiées par un refus serveur (§11).
 
 ### Coût — mesuré, plus estimé (20/08/2026)
 
+> ⚠️ **Tarif d'écriture corrigé le 22/08/2026 — les chiffres ci-dessous ont été
+> refaits.** La première version de ce paragraphe chiffrait l'écriture de cache à
+> 6,25 $/M, qui est le tarif du **TTL 5 minutes** (1,25× l'entrée). Le code
+> utilisait alors `ttl: '1h'`, dont l'écriture coûte **2× l'entrée, soit
+> 10 $/M** : ce poste était sous-estimé de 60 % (§16.16). Depuis T9 du chantier
+> « coût de l'ingestion », le code est repassé en TTL 5 minutes — les deux
+> colonnes sont donc données.
+
 Base réelle : « Cours SVT.pdf » de l'atelier de test pèse **70 648 tokens**
-(document entier, pages rendues en images comprises). Un appel coûte donc
-**0,449 $ en écriture de cache** et **0,042 $ en lecture** — rapport de 10,7.
+(document entier, pages rendues en images comprises). Sur `claude-opus-5`, un
+appel coûte donc **0,71 $ en écriture de cache en TTL 1 h** (0,44 $ en TTL 5
+minutes) et **0,042 $ en lecture**.
 
 Projection pour ce cours avec 12 chapitres, `claude-opus-5` ($5/M en entrée,
-$6,25/M en écriture de cache, $0,50/M en lecture, $25/M en sortie) :
+$0,50/M en lecture, $25/M en sortie) :
 
-| | Appels | Coût |
-|---|---|---|
-| Écritures de cache (une par schéma de sortie) | 3 | 1,31 $ |
-| Lectures de cache | 22 | 0,77 $ |
-| Sortie (~1 000 questions et notions) | — | ~1,10 $ |
-| **Total par ingestion** | 25 | **~3,20 $** |
+| | Appels | TTL 1 h (10 $/M) | TTL 5 min (6,25 $/M) |
+|---|---|---|---|
+| Écritures de cache (une par schéma de sortie) | 3 | 2,12 $ | 1,31 $ |
+| Lectures de cache | 22 | 0,77 $ | 0,77 $ |
+| Sortie (~1 000 questions et notions) | — | ~1,10 $ | ~1,10 $ |
+| **Total par ingestion** | 25 | **~4,00 $** | **~3,20 $** |
+
+**Seuil de rentabilité du cache** : il faut **3 lectures en TTL 1 h** (2× + 0,2×
+contre 3× sans cache) et **2 lectures en TTL 5 minutes** (1,25× + 0,1× contre 2×).
+En dessous, poser un marqueur coûte plus cher que ne pas en poser — c'est ce qui
+a conduit au marqueur conditionnel de §16.17.
 
 Sans le groupement par passe (§5.2), les 25 appels seraient autant d'écritures :
-**~11 $**, soit 3,4 fois plus.
+**~11 $** au tarif TTL 5 minutes, ~17 $ en TTL 1 h.
 
 Deux points à garder en tête : ce cours n'est pas un cas extrême (un cours de 150
 pages pèsera davantage), et **une ingestion vaut donc l'équivalent d'un tiers

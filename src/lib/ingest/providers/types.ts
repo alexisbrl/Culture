@@ -84,9 +84,15 @@ export type ProviderResult = {
     /** Tokens facturés plein tarif — ni mis en cache, ni lus depuis le cache. */
     inputTokens: number;
     outputTokens: number;
-    /** Tokens **écrits** dans le cache (facturés ~1,25×). Un document volumineux
-     *  atterrit ici au premier appel : sans cette mesure, on croit à tort que
-     *  l'appel n'a presque rien coûté en entrée. */
+    /** Tokens **écrits** dans le cache. Un document volumineux atterrit ici au
+     *  premier appel : sans cette mesure, on croit à tort que l'appel n'a
+     *  presque rien coûté en entrée.
+     *
+     *  ⚠️ **Le tarif dépend du TTL, et l'écart est de 60 %** : une écriture
+     *  coûte **2× l'entrée en TTL 1 h**, 1,25× en TTL 5 minutes (le défaut, et
+     *  ce que le code utilise depuis §16.17). Seuil de rentabilité :
+     *  3 lectures en TTL 1 h, 2 en TTL 5 minutes — en dessous, poser un
+     *  marqueur coûte plus cher que ne pas en poser. */
     cacheCreationTokens: number;
     /** Tokens **servis** par le cache (~0,1×). À zéro d'un appel à l'autre alors
      *  que le document ne change pas, un invalidateur traîne dans le préfixe
