@@ -36,11 +36,13 @@ export type ChapterStructureResult =
   | {
       ok: true;
       chapters: { id: string; name: string }[];
-      /** Combien de notions ont été rangées dans un chapitre. */
-      assigned: number;
       discarded: PlanIssue[];
       adjusted: PlanIssue[];
     }
+  | { ok: false; error: string };
+
+export type AssignPassResult =
+  | { ok: true; assigned: number; batches: number; discarded: PlanIssue[]; adjusted: PlanIssue[] }
   | { ok: false; error: string };
 
 export type PrepareIngestionResult =
@@ -112,10 +114,10 @@ export async function ingestDocumentNotions(
   }
 }
 
-/** Passe 2 — écrit les chapitres **et y range les notions**.
+/** Passe 2 — écrit les chapitres, et les SITUE dans le cours.
  *
- *  Un seul appel pour les deux, parce que le modèle ne peut pas ranger dans des
- *  chapitres qu'il n'a pas encore nommés. */
+ *  Elle ne range rien : ranger 500 notions dans une seule réponse dépasserait le
+ *  plafond de sortie. Le rangement est une passe à part, découpée en lots. */
 export async function ingestWorkshopChapters(
   workshopId: string,
   importId: string,
@@ -132,7 +134,49 @@ export async function ingestWorkshopChapters(
   }
 }
 
-/** Passe 3 — les questions d'UN LOT de notions d'un chapitre. Le contexte vient
+/** Passe 3 — le rangement d'UN LOT de notions.
+ *
+ *  Le nombre de lots n'est connu qu'ici : le client appelle l'indice 0, le lit
+ *  dans la réponse, et rappelle pour les suivants. */
+export async function ingestWorkshopAssignments(
+  workshopId: string,
+  importId: string,
+  batchIndex = 0,
+): Promise<AssignPassResult> {
+  const ctx = await requireManager(workshopId);
+  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
+
+  try {
+    const result = await run.ingestAssignments(workshopId, ctx.userId, importId, batchIndex);
+    revalidateWorkshop();
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: message(error) };
+  }
+}
+
+/** La fin de l'import : cacher les chapitres que l'import a vidés, effacer ce
+ *  qu'il a créé et jamais rangé.
+ *
+ *  ⚠️ **Après le dernier lot de rangement, jamais avant** : à mi-parcours,
+ *  toutes les notions sont encore sans chapitre et le ménage les emporterait
+ *  toutes. Ne renvoie pas d'erreur — c'est du ménage, il ne doit pas faire
+ *  échouer un import réussi. */
+export async function finishWorkshopIngestion(
+  workshopId: string,
+  importId: string,
+): Promise<{ hidden: number; removed: number }> {
+  if (!(await requireManager(workshopId))) return { hidden: 0, removed: 0 };
+
+  const result = await run.finishIngestion(workshopId, importId);
+  revalidateWorkshop();
+  return {
+    hidden: result.hidden.length,
+    removed: result.removedChapters + result.removedNotions,
+  };
+}
+
+/** Passe 4 — les questions d'UN LOT de notions d'un chapitre. Le contexte vient
  *  du bouton par lequel l'utilisateur est entré, jamais du modèle.
  *
  *  Le nombre de lots (`batches`) n'est connu qu'ici : le client appelle l'indice

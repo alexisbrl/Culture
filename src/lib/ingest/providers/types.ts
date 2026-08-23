@@ -72,6 +72,31 @@ export type IngestScope =
       document: { index: number; fileName: string };
     }
   | {
+      /** Le RANGEMENT : où va chaque notion. Passe séparée de « chapitres »
+       *  depuis le 24/08/2026 — voir `wireSchema.ts` pour le pourquoi.
+       *
+       *  Elle ne reçoit **aucun document** : nommer les chapitres demande le
+       *  cours, les ranger non. Ce qui remplace le cours, ce sont deux nombres —
+       *  la page d'où vient la notion, et les pages que couvre le chapitre. */
+      pass: 'assign';
+      /** Les notions de CE lot, avec leur provenance quand on l'a. */
+      notions: { id: string; title: string; sourceDocument?: string | null; page?: number | null }[];
+      /** TOUS les chapitres du programme — le lot doit pouvoir ranger n'importe où. */
+      chapters: {
+        id: string;
+        name: string;
+        sourceDocument?: string | null;
+        pageStart?: number | null;
+        pageEnd?: number | null;
+      }[];
+      /** Les ressemblances repérées **mécaniquement** entre une notion de ce lot
+       *  et une notion déjà présente. Le calcul ne décide rien : il signale, et
+       *  c'est le modèle qui tranche si la ressemblance est justifiée (une
+       *  notion voisine mais distincte) ou non (une redite, à laisser sans
+       *  chapitre). */
+      similar: { notionId: string; other: string; proximity: number }[];
+    }
+  | {
       pass: 'questions';
       chapter: { id: string; name: string };
       /** Les notions à faire travailler par ce lot de questions. */

@@ -1226,8 +1226,9 @@
     "close": "fermer",
     "retry": "réessayer",
     "progress": {
-      "chapters": "Découpage en chapitres et rangement des notions…",
+      "chapters": "Découpage du cours en chapitres…",
       "notionsDocuments": "Notions — {done}/{n} documents lus",
+      "assign": "Rangement des notions — {done}/{n} lots",
       "questionsCount": "Questions — {done}/{n} lots traités",
       "questionsBatch": "Questions — {chapter} ({i}/{n}) · lot {b}/{nb}"
     },

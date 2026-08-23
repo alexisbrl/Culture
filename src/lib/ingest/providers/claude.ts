@@ -29,6 +29,7 @@ import {
   chaptersInstruction,
   userHintBlock,
   existingContentBlock,
+  assignInstruction,
   notionsInstruction,
   questionsInstruction,
   systemPrompt,
@@ -36,7 +37,12 @@ import {
   type ExistingScope,
 } from '@/lib/ingest/prompt';
 import { documentsForPass, shouldCacheDocuments } from '@/lib/ingest/passInput';
-import { wireChaptersOutput, wireGroupsOutput, wireNotionsOutput } from '@/lib/ingest/wireSchema';
+import {
+  wireAssignmentsOutput,
+  wireChaptersOutput,
+  wireGroupsOutput,
+  wireNotionsOutput,
+} from '@/lib/ingest/wireSchema';
 
 import type {
   IngestScope,
@@ -94,6 +100,10 @@ const CONTEXT_WINDOW: Record<ModelId, number> = {
 export const PASS_MODELS: Record<IngestScope['pass'], ModelId> = {
   chapters: MODELS.haiku,
   notions: MODELS.haiku,
+  // Le rangement est la tâche la plus mécanique du pipeline — croiser une page
+  // et une liste de chapitres — et la plus répétée. C'est exactement le profil
+  // du modèle économique (§16.4).
+  assign: MODELS.haiku,
   questions: MODELS.haiku,
 };
 
@@ -193,6 +203,12 @@ function instructionFor(scope: IngestScope, fileNames: string[]): string {
       return chaptersInstruction(fileNames, scope.notions, scope.retry);
     case 'notions':
       return notionsInstruction(scope.document);
+    case 'assign':
+      return assignInstruction({
+        notions: scope.notions,
+        chapters: scope.chapters,
+        similar: scope.similar,
+      });
     case 'questions':
       return questionsInstruction({
         chapter: scope.chapter,
@@ -212,6 +228,8 @@ function existingScopeFor(scope: IngestScope): ExistingScope {
       return { pass: 'chapters' };
     case 'notions':
       return { pass: 'notions' };
+    case 'assign':
+      return { pass: 'assign' };
     case 'questions':
       return { pass: 'questions', notionIds: scope.notions.map((n) => n.id) };
   }
@@ -232,8 +250,9 @@ function documentUsesOf(scope: IngestScope): number {
       // Un appel par DOCUMENT, et chacun ne porte que le sien : aucun préfixe
       // commun, donc rien à relire. Le corpus part une fois en tout.
       return 1;
+    case 'assign':
     case 'questions':
-      // Aucun document depuis T3 : rien à mettre en cache.
+      // Aucun document : rien à mettre en cache.
       return 0;
   }
 }
@@ -244,6 +263,8 @@ function outputSchemaFor(scope: IngestScope) {
       return wireChaptersOutput;
     case 'notions':
       return wireNotionsOutput;
+    case 'assign':
+      return wireAssignmentsOutput;
     case 'questions':
       return wireGroupsOutput;
   }

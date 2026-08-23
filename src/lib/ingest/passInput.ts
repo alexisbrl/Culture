@@ -8,7 +8,7 @@
 
 import type { PreparedDocument } from './providers/types';
 
-export type IngestPass = 'chapters' | 'notions' | 'questions';
+export type IngestPass = 'chapters' | 'notions' | 'assign' | 'questions';
 
 /** Les documents qu'une passe reçoit.
  *
@@ -29,7 +29,9 @@ export function documentsForPass(
    *  travaille document par document depuis l'inversion du 23/08/2026. */
   documentIndex?: number,
 ): PreparedDocument[] {
-  if (pass === 'questions') return [];
+  // Ni le rangement ni les questions ne reçoivent de document : le premier
+  // travaille sur des pages et des titres, le second sur des notions (§16.3).
+  if (pass === 'questions' || pass === 'assign') return [];
 
   // La passe notions ne reçoit QUE son document. C'est l'unité de travail qui
   // remplace le chapitre : elle ne demande aucun jugement au modèle, elle est

@@ -139,6 +139,48 @@ export function findExistingMatch<T>(
   return best;
 }
 
+/** Le seuil à partir duquel on POSE LA QUESTION au modèle, au lieu de trancher.
+ *
+ *  ⚠️ **Il n'a pas le même rôle que `NEAR_DUPLICATE`, et c'est pour ça qu'il est
+ *  bien plus bas.** Un seuil qui décide doit être sévère : une erreur coûte du
+ *  contenu pédagogique réel. Un seuil qui ne fait que signaler peut être
+ *  généreux — un signalement de trop ne coûte que quelques mots dans une
+ *  consigne, et le modèle l'écarte en le lisant.
+ *
+ *  C'est le déplacement décidé le 24/08/2026 : le calcul repère la ressemblance,
+ *  le modèle juge si elle est justifiée. Chacun à ce qu'il sait faire — comparer
+ *  des mots pour l'un, comprendre deux phrases pour l'autre.
+ *
+ *  **0,40 est calé pour attraper le cas limite**, pas pour rester prudent : les
+ *  deux notions « Pic de la Mirandole » du cours d'histoire mesurent 0,43. Elles
+ *  portent bien deux faits distincts — c'est justement pour ça qu'on veut les
+ *  soumettre : le calcul ne peut pas le savoir, le modèle si. Un seuil qui ne
+ *  les verrait pas ne servirait qu'aux cas déjà évidents. */
+export const SIMILAR_ENOUGH_TO_ASK = 0.4;
+
+/** Les paires à soumettre au jugement du modèle.
+ *
+ *  Ne rend RIEN d'autre qu'une liste : aucune décision n'est prise ici. Une
+ *  notion peut apparaître plusieurs fois si elle ressemble à plusieurs autres —
+ *  le modèle les verra toutes, ce qui vaut mieux que d'en choisir une pour lui. */
+export function flagSimilar<A, B>(
+  candidates: readonly A[],
+  others: readonly B[],
+  titleOfCandidate: (a: A) => string,
+  titleOfOther: (b: B) => string,
+  threshold = SIMILAR_ENOUGH_TO_ASK,
+): { candidate: A; other: B; proximity: number }[] {
+  const flagged: { candidate: A; other: B; proximity: number }[] = [];
+  for (const candidate of candidates) {
+    const title = titleOfCandidate(candidate);
+    for (const other of others) {
+      const score = proximity(title, titleOfOther(other));
+      if (score >= threshold) flagged.push({ candidate, other, proximity: score });
+    }
+  }
+  return flagged.sort((a, b) => b.proximity - a.proximity);
+}
+
 export type DuplicateVerdict<T> = {
   kept: T[];
   /** Les écartées, avec la notion existante qui les rend redondantes — pour que

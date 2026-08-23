@@ -1226,8 +1226,9 @@
     "close": "close",
     "retry": "try again",
     "progress": {
-      "chapters": "Splitting into chapters and filing the notions…",
+      "chapters": "Splitting the course into chapters…",
       "notionsDocuments": "Notions — {done}/{n} documents read",
+      "assign": "Filing the notions — {done}/{n} batches",
       "questionsCount": "Questions — {done}/{n} batches done",
       "questionsBatch": "Questions — {chapter} ({i}/{n}) · batch {b}/{nb}"
     },

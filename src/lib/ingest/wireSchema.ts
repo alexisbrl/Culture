@@ -80,6 +80,17 @@ export const wireGroupSchema = z.object({
 export const wireChapterSchema = z.object({
   ref: z.string().describe('Clé locale unique de ce chapitre dans ce plan.'),
   name: z.string().describe('Nom du chapitre, 120 caractères maximum.'),
+  sourceDocument: z
+    .string()
+    .describe("Nom du document où ce chapitre commence. Chaîne vide si tu ne peux pas le dire."),
+  pageStart: z
+    .number()
+    .int()
+    .describe('Première page approximative du chapitre dans ce document. 0 si tu ne peux pas le dire.'),
+  pageEnd: z
+    .number()
+    .int()
+    .describe('Dernière page approximative du chapitre. 0 si tu ne peux pas le dire.'),
 });
 
 /** ⚠️ Une notion naît SANS chapitre (feuille de route « notions d'abord », §3).
@@ -94,6 +105,10 @@ export const wireNotionSchema = z.object({
   title: z
     .string()
     .describe("La notion en UNE phrase de 280 caractères maximum, autoportante et vérifiable."),
+  page: z
+    .number()
+    .int()
+    .describe("Page du document d'où vient cette notion. 0 si tu ne peux pas la déterminer."),
 });
 
 /** Ranger une notion dans un chapitre.
@@ -116,16 +131,25 @@ export const wireAssignmentSchema = z.object({
 // Une sortie par passe : on ne demande jamais au modèle de produire le programme
 // entier d'un coup (docs/ai-ingestion-plan.md §5.1).
 //
-// La sortie « chapitres » porte DEUX listes, et c'est le cœur de l'inversion :
-// le modèle définit les boîtes ET dit ce qu'on met dedans, dans le même appel —
-// il ne pourrait pas ranger dans des chapitres qu'il n'a pas encore nommés.
-export const wireChaptersOutput = z.object({
-  chapters: z.array(wireChapterSchema),
-  assignments: z.array(wireAssignmentSchema),
-});
+// ⚠️ **Les chapitres et le rangement sont DEUX passes** (24/08/2026). Elles ont
+// d'abord été fondues en un seul appel — le modèle nommait et rangeait d'un
+// coup — et ça ne tient pas à l'échelle : ranger 500 notions, c'est produire 500
+// lignes dans une seule réponse, bien au-delà du plafond de sortie. La réponse
+// serait tronquée, donc perdue. C'est le mur qu'a déjà rencontré la passe
+// questions, et la parade est la même : des lots.
+//
+// On ne peut pas découper en lots un appel qui doit AUSSI décider de la
+// structure, puisque la structure ne se décide qu'une fois. La séparation n'est
+// donc pas une alternative aux appels multiples : c'est ce qui les autorise.
+//
+// Bénéfice au passage : nommer les chapitres demande le cours, les ranger non —
+// la passe rangement se passe donc entièrement des documents.
+export const wireChaptersOutput = z.object({ chapters: z.array(wireChapterSchema) });
+export const wireAssignmentsOutput = z.object({ assignments: z.array(wireAssignmentSchema) });
 export const wireNotionsOutput = z.object({ notions: z.array(wireNotionSchema) });
 export const wireGroupsOutput = z.object({ groups: z.array(wireGroupSchema) });
 
 export type WireChaptersOutput = z.infer<typeof wireChaptersOutput>;
+export type WireAssignmentsOutput = z.infer<typeof wireAssignmentsOutput>;
 export type WireNotionsOutput = z.infer<typeof wireNotionsOutput>;
 export type WireGroupsOutput = z.infer<typeof wireGroupsOutput>;

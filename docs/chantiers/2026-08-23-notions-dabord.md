@@ -163,9 +163,23 @@ c'est ce qui rend la mise à jour impossible.
 
 ```
 ① notions   (documents, 1 appel par document, en parallèle)
-② chapitres (documents AUSSI) + affectation de chaque notion
-③ questions (sans document, inchangé)
+② chapitres (documents AUSSI) — nomme, ordonne et SITUE, ne range rien
+③ rangement (sans document, par lots de 50 notions, en parallèle)
+④ questions (sans document, par lots de 10 notions)
 ```
+
+**② et ③ ont été séparées le 24/08/2026.** Ranger 500 notions, c'est produire
+500 lignes dans une seule réponse : bien au-delà du plafond de sortie, donc une
+réponse tronquée, donc perdue — le mur qu'a déjà rencontré la passe questions.
+On ne peut pas découper en lots un appel qui doit AUSSI décider de la structure,
+puisque la structure ne se décide qu'une fois : **la séparation n'est pas une
+alternative aux appels multiples, c'est ce qui les autorise.**
+
+Bénéfice : nommer les chapitres demande le cours, les ranger non. Le rangement
+se passe donc entièrement des documents — ce qui les remplace, c'est la
+**provenance** : la page d'où vient la notion, les pages que couvre le chapitre.
+Deux nombres par élément contre 680 000 tokens de corpus. ⚠️ La page **indique**,
+le contenu **décide** : un chapitre ne s'arrête pas au bas d'une page.
 
 **Même nombre de passes.** La passe chapitres garde les documents — décision du
 23/08/2026, contre une première version de cette feuille de route qui les lui
@@ -346,7 +360,11 @@ Deux garde-fous :
       **autorisation portée par chaque opération**, vérifiée à l'exécution sur le
       compte connecté — jamais par un paramètre venu du modèle.
 
-- [ ] **T2 bis — Ménage de fin d'import.** *(module écrit et testé en T2 ; reste à le brancher en fin d'import.)* Effacer ce que cet import a créé et
+- [x] **T2 bis — Ménage de fin d'import.** ✅ 24/08/2026. Branché dans
+      `finishIngestion`, appelé après le DERNIER lot de rangement — à
+      mi-parcours il emporterait toutes les notions. Cache au passage les
+      chapitres que l'import a vidés (relevé `populatedBefore` au premier lot,
+      pour distinguer « vidé par cet import » de « déjà vide avant »). Effacer ce que cet import a créé et
       n'a jamais rattaché (§3). Filtre sur `import_id` **et** absence de
       rattachement, exécuté **une fois l'import terminé**, jamais entre deux
       passes.

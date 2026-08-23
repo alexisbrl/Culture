@@ -4,6 +4,8 @@ import {
   NEAR_DUPLICATE,
   dropNearDuplicates,
   findExistingMatch,
+  flagSimilar,
+  SIMILAR_ENOUGH_TO_ASK,
   proximity,
   significantWords,
 } from '@/lib/ingest/duplicates';
@@ -180,5 +182,68 @@ describe('findExistingMatch — le doublon de CHAPITRE se redirige, il ne s’é
 
   it('ne trouve rien dans une liste vide', () => {
     expect(findExistingMatch('Un chapitre', [], nameOf)).toBeNull();
+  });
+});
+
+describe('flagSimilar — signaler, pas trancher', () => {
+  it('remonte les paires assez proches pour mériter une question', () => {
+    const flagged = flagSimilar(
+      [{ id: 'n1', title: CHIFFRES_NOUVELLE }],
+      [{ title: CHIFFRES_ANCIENNE }, { title: AUTEURS_ROMAINS }],
+      (c) => c.title,
+      (o) => o.title,
+    );
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0].other.title).toBe(CHIFFRES_ANCIENNE);
+  });
+
+  it('signale BIEN PLUS largement que le seuil qui décide', () => {
+    // C'est tout le déplacement du 24/08/2026 : un seuil qui tranche doit être
+    // sévère (une erreur coûte du contenu), un seuil qui signale peut être
+    // généreux (une erreur coûte trois mots dans une consigne). Les deux
+    // notions « Pic de la Mirandole » sont sous le seuil de décision — donc
+    // jamais écartées — mais au-dessus de celui du signalement.
+    expect(proximity(PIC_CORPS_BEAU, PIC_CORPS_CARRE)).toBeLessThan(NEAR_DUPLICATE);
+    expect(proximity(PIC_CORPS_BEAU, PIC_CORPS_CARRE)).toBeGreaterThanOrEqual(SIMILAR_ENOUGH_TO_ASK);
+
+    const flagged = flagSimilar(
+      [{ id: 'n1', title: PIC_CORPS_CARRE }],
+      [{ title: PIC_CORPS_BEAU }],
+      (c) => c.title,
+      (o) => o.title,
+    );
+    expect(flagged).toHaveLength(1);
+  });
+
+  it('classe les paires les plus proches d’abord', () => {
+    const flagged = flagSimilar(
+      [{ id: 'n1', title: LIVRE_NOUVELLE }],
+      [{ title: PIC_CORPS_BEAU }, { title: LIVRE_ANCIENNE }],
+      (c) => c.title,
+      (o) => o.title,
+      0.1,
+    );
+    expect(flagged[0].other.title).toBe(LIVRE_ANCIENNE);
+  });
+
+  it('rend une notion plusieurs fois si elle ressemble à plusieurs autres', () => {
+    // On ne choisit pas pour le modèle : il voit toutes les paires.
+    const flagged = flagSimilar(
+      [{ id: 'n1', title: LIVRE_NOUVELLE }],
+      [{ title: LIVRE_ANCIENNE }, { title: 'Les améliorations du livre augmentent la diffusion.' }],
+      (c) => c.title,
+      (o) => o.title,
+      0.2,
+    );
+    expect(flagged).toHaveLength(2);
+  });
+
+  it('ne signale rien quand rien ne se ressemble', () => {
+    expect(flagSimilar(
+      [{ id: 'n1', title: AUTEURS_ROMAINS }],
+      [{ title: LIVRE_ANCIENNE }],
+      (c) => c.title,
+      (o) => o.title,
+    )).toEqual([]);
   });
 });

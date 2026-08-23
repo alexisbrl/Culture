@@ -14,8 +14,10 @@ import { MAX_QUESTIONS_PER_IMPORT as MAX_QUESTIONS } from '@/lib/ingest/prompt';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import {
+  finishWorkshopIngestion,
   ingestChapterQuestions,
   ingestDocumentNotions,
+  ingestWorkshopAssignments,
   ingestWorkshopChapters,
   prepareWorkshopIngestion,
   releaseWorkshopImportFiles,
@@ -172,9 +174,14 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // chapitres ensuite. Les notions sont le cœur d'un atelier, les chapitres
     // ne sont que des boîtes — décider les boîtes en premier rendait toute mise
     // à jour impossible (feuille de route « notions d'abord »).
+    // Le RANGEMENT est un étage à part entière, pas une conséquence : il tourne
+    // dès qu'il y a quelque chose à placer — des notions neuves, ou une
+    // structure qui vient de changer.
+    const withAssign = withNotions || withChapters;
     const steps = [
       ...(withNotions ? ['notions' as const] : []),
       ...(withChapters ? ['chapters' as const] : []),
+      ...(withAssign ? ['assign' as const] : []),
       ...(withQuestions ? ['questions' as const] : []),
     ];
     const totalSteps = steps.length;
@@ -240,6 +247,49 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       // Le compteur affiche ce que CET import a créé, pas le total de l'atelier.
       tally.chapters = structure.chapters.length;
       setCounts({ ...tally });
+    }
+
+    // ── Étage 3 : le rangement, par lots ──
+    //
+    // Il ne reçoit aucun document : ce qui remplace le cours, c'est la page d'où
+    // vient chaque notion et les pages que couvre chaque chapitre. C'est aussi
+    // ici que les ressemblances repérées mécaniquement sont soumises au
+    // jugement du modèle — le calcul signale, le modèle tranche.
+    if (withAssign) {
+      let error: string | null = null;
+      const showAssign = (done: number, total: number) => setPhase({
+        step: 'running',
+        label: t('progress.assign', { done, n: total }),
+        done: stepAt('assign') + (total > 0 ? done / total : 0),
+        total: totalSteps,
+      });
+
+      showAssign(0, 1);
+      // Le nombre de lots n'est connu qu'à la réponse du premier : on le fait
+      // seul, puis on lance tout le reste en parallèle.
+      const first = await ingestWorkshopAssignments(workshopId, importId, 0);
+      if (!first.ok) return setPhase({ step: 'error', message: first.error });
+      discarded.push(...first.discarded);
+      adjusted.push(...first.adjusted);
+      showAssign(1, first.batches || 1);
+
+      if (first.batches > 1) {
+        const rest = Array.from({ length: first.batches - 1 }, (_, i) => i + 1);
+        let done = 1;
+        await mapWithConcurrency(rest, INGEST_CONCURRENCY, async (index) => {
+          const result = await ingestWorkshopAssignments(workshopId, importId, index);
+          if (!result.ok) { error ??= result.error; return; }
+          discarded.push(...result.discarded);
+          adjusted.push(...result.adjusted);
+          showAssign(++done, first.batches);
+        });
+      }
+      if (error) return setPhase({ step: 'error', message: error });
+
+      // ⚠️ **Ici et pas avant.** Cacher les chapitres que l'import a vidés et
+      // effacer ce qu'il a créé sans jamais le ranger n'a de sens qu'une fois
+      // TOUT rangé : à mi-parcours, chaque notion est encore sans chapitre.
+      await finishWorkshopIngestion(workshopId, importId);
     }
 
     // Les documents ont fini de servir : les deux premiers étages les portaient,

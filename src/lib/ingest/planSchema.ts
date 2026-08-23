@@ -83,6 +83,13 @@ const chapterSchema = z.object({
   ref: refSchema,
   name: z.string().trim().min(1).max(120), // CHAPTER_NAME_MAX
   position: z.number().int().min(0).optional(),
+  // Provenance : sur quelles pages ce chapitre court, à peu près. C'est ce qui
+  // permet à la passe RANGEMENT de se passer du cours (§ migration du
+  // 24/08/2026). Toujours facultatif — un chapitre écrit à la main n'en a pas,
+  // et un modèle qui ne sait pas doit pouvoir se taire plutôt qu'inventer.
+  sourceDocument: z.string().trim().max(255).optional(),
+  pageStart: z.coerce.number().int().min(0).optional(),
+  pageEnd: z.coerce.number().int().min(0).optional(),
 });
 
 const notionSchema = z.object({
@@ -90,6 +97,10 @@ const notionSchema = z.object({
   // Une notion n'a plus qu'UN texte depuis le 19/08/2026 (280 caractères).
   title: z.string().trim().min(1).max(280), // NOTION_TITLE_MAX
   chapterRef: refSchema.optional(),
+  // D'où elle vient. Le document est ajouté par l'appelant (il sait lequel il
+  // traite) ; la page vient du modèle, qui seul l'a sous les yeux.
+  sourceDocument: z.string().trim().max(255).optional(),
+  page: z.coerce.number().int().min(0).optional(),
 });
 
 /** Ranger une notion existante dans un chapitre — ou l'en sortir.

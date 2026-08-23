@@ -78,6 +78,7 @@ export type ExistingContent = {
 export type ExistingScope =
   | { pass: 'chapters' }
   | { pass: 'notions' }
+  | { pass: 'assign' }
   | { pass: 'questions'; notionIds: string[] };
 
 const SYSTEM = `Tu construis le programme pédagogique d'un atelier à partir de ses documents sources.
@@ -117,6 +118,11 @@ function inScope(existing: ExistingContent, scope: ExistingScope): {
       // là. La réponse reste dans le contrat — on en range une, on laisse
       // l'autre sans chapitre.
       return { chapters: existing.chapters, notions: existing.notions, questions: [] };
+    case 'assign':
+      // Rien. La passe rangement reçoit ses notions et ses chapitres par sa
+      // consigne, avec leur provenance : le bloc « existant » ferait double
+      // emploi et doublerait la facture.
+      return { chapters: [], notions: [], questions: [] };
     case 'notions':
       // TOUTES les notions de l'atelier, et non plus celles d'un chapitre : la
       // passe travaille document par document, elle n'a aucun chapitre de
@@ -154,6 +160,8 @@ export function existingContentBlock(existing: ExistingContent, scope: ExistingS
         return "L'atelier est vide : rien n'existe encore.";
       case 'notions':
         return "L'atelier ne contient encore aucune notion.";
+      case 'assign':
+        return '';
       case 'questions':
         return "Aucune question ne porte encore sur ces notions : la liste est vide.";
     }
@@ -271,16 +279,9 @@ Ordre de grandeur : un cours en compte typiquement ${PLAUSIBLE_CHAPTERS.min} à 
 
 Donne à chacun une référence courte et unique (ch1, ch2…), et un nom de 120 caractères maximum. Un chapitre qui existe déjà se réutilise en reprenant SA référence telle quelle, sans le recréer.
 
-Puis RANGE LES NOTIONS. Elles ont été extraites avant les chapitres et n'appartiennent encore à aucun d'eux : c'est ici qu'on décide où chacune va.
+**Situe chaque chapitre dans le cours** : le document où il commence, sa première et sa dernière page approximatives. Une autre étape s'en servira pour ranger les notions sans avoir à relire le cours. Approximatif suffit largement ; mets 0 quand tu ne peux vraiment pas dire.
 
-Pour chaque notion de la liste, produis une affectation qui reprend sa référence à l'identique et donne le chapitre où la placer.
-
-Trois règles :
-- **Tu ne peux ni créer ni modifier une notion ici.** Tu ranges celles qui existent, rien d'autre. N'invente aucune référence.
-- **Une notion qui n'a plus sa place dans le cours reçoit un chapitre vide** — elle sort du programme sans être perdue.
-- **Deux notions qui disent la même chose** (elles viennent de documents différents qui se recouvrent) : range-en UNE, et laisse l'autre avec un chapitre vide. Ne les fusionne pas, ne les réécris pas.
-
-N'oublie aucune notion : une notion absente de tes affectations reste là où elle est, ce qui n'est presque jamais ce que tu veux.
+**Tu ne ranges rien ici** : les notions ci-dessous sont là pour que tu saches ce que le cours contient réellement, pas pour que tu les distribues. Une autre étape s'en charge.
 
 ${notionsToArrange(notions)}`;
 }
@@ -331,6 +332,81 @@ export function notionsToArrange(notions: { id: string; title: string }[]): stri
   const lines = notions.map((n) => `- ${n.id} — ${n.title}`);
   return `Les ${notions.length} notions à répartir (référence — texte) :
 ${lines.join('\n')}`;
+}
+
+/** Passe 3 — le RANGEMENT d'un lot de notions.
+ *
+ *  ⚠️ **Elle ne reçoit aucun document**, et c'est tout son intérêt. Ce qui
+ *  remplace le cours, ce sont deux nombres : la page d'où vient la notion, et
+ *  les pages que couvre le chapitre. Renvoyer le corpus pour décider où va une
+ *  phrase de 280 caractères serait refaire l'erreur de coût du 22/08/2026.
+ *
+ *  ⚠️ **La page indique, le contenu décide.** Un chapitre ne s'arrête pas au bas
+ *  d'une page : une notion du haut de la page 40 appartient souvent encore au
+ *  chapitre précédent. Si l'indication était donnée comme une règle, le modèle
+ *  rangerait mécaniquement au numéro et cesserait de lire la notion — on
+ *  obtiendrait des rangements plausibles mais faux, c'est-à-dire invisibles à
+ *  l'œil. La consigne dit donc explicitement qu'on peut s'en écarter.
+ *
+ *  ⚠️ **Les ressemblances sont SIGNALÉES, pas appliquées.** Le calcul (voir
+ *  `duplicates.ts`) est bon pour repérer que deux phrases se ressemblent,
+ *  mauvais pour juger si c'est une redite ou un fait de plus. C'est ici que ça
+ *  se tranche, et le perdant n'est pas détruit : il reste sans chapitre. */
+export function assignInstruction(input: {
+  notions: { id: string; title: string; sourceDocument?: string | null; page?: number | null }[];
+  chapters: {
+    id: string;
+    name: string;
+    sourceDocument?: string | null;
+    pageStart?: number | null;
+    pageEnd?: number | null;
+  }[];
+  similar: { notionId: string; other: string; proximity: number }[];
+}): string {
+  const chapters = input.chapters.length === 0
+    ? "Aucun chapitre n'existe : laisse toutes les notions sans chapitre."
+    : input.chapters
+        .map((c) => {
+          const span = c.pageStart && c.pageEnd
+            ? ` — ${c.sourceDocument ? `${c.sourceDocument}, ` : ''}pages ~${c.pageStart} à ~${c.pageEnd}`
+            : '';
+          return `- ${c.id} — ${c.name}${span}`;
+        })
+        .join('\n');
+
+  const notions = input.notions
+    .map((n) => {
+      const from = n.page ? ` [${n.sourceDocument ?? 'document'}, page ${n.page}]` : '';
+      return `- ${n.id} — ${n.title}${from}`;
+    })
+    .join('\n');
+
+  const doubts = input.similar.length === 0
+    ? ''
+    : `
+
+RESSEMBLANCES REPÉRÉES. Un calcul automatique a trouvé que ces notions ressemblent à une notion déjà présente dans l'atelier. **Ce calcul ne juge rien** : il compare des mots, il ne sait pas si c'est le même fait. C'est à toi de trancher, notion par notion.
+
+${input.similar.map((s) => `- ${s.notionId} ressemble à : « ${s.other} »`).join('\n')}
+
+Pour chacune :
+- si elle apporte un FAIT VÉRIFIABLE DE PLUS — quelque chose qu'on pourrait demander et dont la réponse n'est pas dans l'autre —, la ressemblance est justifiée : range-la normalement ;
+- si elle dit la même chose autrement, c'est une redite : donne-lui un chapitre VIDE. Elle ne sera pas perdue, elle sortira simplement du programme.`;
+
+  return `Range chaque notion de cette liste dans le chapitre qui lui convient.
+
+LES CHAPITRES DISPONIBLES :
+${chapters}
+
+LES NOTIONS À RANGER :
+${notions}
+
+Les pages sont **une indication, pas une règle**. Un chapitre ne s'arrête pas proprement au bas d'une page : une notion du haut d'une page peut très bien appartenir au chapitre précédent, et une notion isolée peut relever d'un chapitre situé ailleurs dans le cours. **En cas de désaccord entre la page et le contenu, c'est le contenu qui décide.** Une notion sans page se range sur son seul contenu.
+
+Trois règles :
+- **Tu ne peux ni créer ni modifier une notion, ni créer un chapitre.** Tu ranges ce qui existe. N'invente aucune référence, recopie-les à l'identique.
+- **Réponds pour CHAQUE notion de la liste** : une notion absente de ta réponse reste là où elle est, ce qui n'est presque jamais voulu.
+- **Une notion qui n'a sa place dans aucun chapitre reçoit un chapitre vide.** Elle reste consultable, hors du programme.${doubts}`;
 }
 
 /** La règle de volumétrie, en une phrase pour le modèle. Un niveau à zéro n'y

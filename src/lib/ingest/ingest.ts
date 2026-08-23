@@ -218,11 +218,97 @@ export async function applyAssignments(
   return moved;
 }
 
+/** Efface ce que cet import a créé et que personne n'a jamais rangé.
+ *
+ *  ⚠️ **C'est la seule suppression du système, et elle est bornée par le plan
+ *  qu'on lui passe** — jamais par un filtre écrit ici. Le calcul de ce qui est
+ *  effaçable vit dans `planImportCleanup` (`src/lib/program/operations.ts`),
+ *  module pur et testé, précisément pour que la règle « créé par cet import ET
+ *  jamais rattaché » soit vérifiable sans base. Cette fonction ne fait
+ *  qu'exécuter.
+ *
+ *  Le filtre sur `workshop_id` est une ceinture de plus : les identifiants
+ *  viennent d'un calcul local, mais une suppression ne se protège jamais trop. */
+export async function removeOrphans(
+  workshopId: string,
+  cleanup: { chapterIds: string[]; notionIds: string[] },
+): Promise<void> {
+  const supabase = getSupabaseServerClient();
+
+  // Les notions d'abord : un chapitre ne peut être effacé qu'une fois vide.
+  if (cleanup.notionIds.length > 0) {
+    const { error } = await supabase
+      .from('workshop_bricks')
+      .delete()
+      .eq('workshop_id', workshopId)
+      .in('id', cleanup.notionIds);
+    if (error) throw new Error(error.message);
+  }
+
+  if (cleanup.chapterIds.length > 0) {
+    const { error } = await supabase
+      .from('workshop_chapters')
+      .delete()
+      .eq('workshop_id', workshopId)
+      .in('id', cleanup.chapterIds);
+    if (error) throw new Error(error.message);
+  }
+}
+
+/** Cache les chapitres que CET import vient de vider.
+ *
+ *  ⚠️ « Vider » se mesure, il ne se devine pas. Un chapitre vide à l'arrivée
+ *  n'est pas forcément un chapitre vidé : il pouvait l'être déjà avant (le
+ *  document ne le couvrait pas), et le cacher serait alors une décision qu'on
+ *  n'a pas prise. D'où `populatedBefore` — la liste des chapitres qui portaient
+ *  des notions AVANT le rangement, relevée au début de celui-ci.
+ *
+ *  Trois cas, et un seul mène ici (feuille de route §5) :
+ *    • il existait, il portait des notions, l'import les a toutes déplacées
+ *      → **caché**, et c'est automatique parce que c'est réversible d'un clic ;
+ *    • il a été créé par cet import et n'a rien reçu → effacé par le ménage,
+ *      personne ne l'a jamais vu (`planImportCleanup`) ;
+ *    • l'utilisateur l'avait vidé lui-même → on n'y touche pas. */
+export async function hideEmptiedChapters(
+  workshopId: string,
+  populatedBefore: readonly string[],
+): Promise<string[]> {
+  if (populatedBefore.length === 0) return [];
+
+  const supabase = getSupabaseServerClient();
+  const { data: remaining, error } = await supabase
+    .from('workshop_bricks')
+    .select('chapter_id')
+    .eq('workshop_id', workshopId)
+    .in('chapter_id', [...populatedBefore]);
+  if (error) throw new Error(error.message);
+
+  const stillPopulated = new Set((remaining ?? []).map((r) => r.chapter_id as string));
+  const emptied = populatedBefore.filter((id) => !stillPopulated.has(id));
+  if (emptied.length === 0) return [];
+
+  const { error: hideError } = await supabase
+    .from('workshop_chapters')
+    .update({ hidden: true, updated_at: new Date().toISOString() })
+    .eq('workshop_id', workshopId)
+    .in('id', emptied);
+  if (hideError) throw new Error(hideError.message);
+
+  return emptied;
+}
+
 export async function insertChapters(
   workshopId: string,
   actorId: string,
   importId: string,
-  chapters: { ref: string; name: string; position?: number }[],
+  chapters: {
+    ref: string;
+    name: string;
+    position?: number;
+    sourceDocument?: string;
+    pageStart?: number;
+    pageEnd?: number;
+  }[],
 ): Promise<Map<string, string>> {
   const created = new Map<string, string>();
   if (chapters.length === 0) return created;
@@ -249,6 +335,13 @@ export async function insertChapters(
         import_id: importId,
         name: c.name,
         position: base + (c.position ?? i),
+        // Provenance : sur quelles pages court ce chapitre. C'est ce qui permet
+        // à la passe rangement de se passer du cours. `|| null` et non `?? null`
+        // : le modèle rend 0 quand il ne sait pas, et un 0 stocké se lirait
+        // comme « page zéro » alors qu'il veut dire « je ne sais pas ».
+        source_document: c.sourceDocument || null,
+        page_start: c.pageStart || null,
+        page_end: c.pageEnd || null,
         // `created_at`/`updated_at` volontairement absents — voir l'en-tête.
       })),
     )
@@ -263,7 +356,7 @@ export async function insertNotions(
   workshopId: string,
   actorId: string,
   importId: string,
-  notions: { ref: string; title: string; chapterRef?: string }[],
+  notions: { ref: string; title: string; chapterRef?: string; sourceDocument?: string; page?: number }[],
   chapterIds: Map<string, string>,
 ): Promise<Map<string, string>> {
   const created = new Map<string, string>();
@@ -279,6 +372,9 @@ export async function insertNotions(
         import_id: importId,
         title: n.title,
         chapter_id: resolve(n.chapterRef, chapterIds),
+        // Même réserve que pour les chapitres : 0 veut dire « je ne sais pas ».
+        source_document: n.sourceDocument || null,
+        source_page: n.page || null,
       })),
     )
     .select('id');

@@ -42,16 +42,20 @@
 import { readObject } from '@/lib/storage';
 import { getSupabaseServerClient } from '@/lib/supabase';
 
+import { planImportCleanup } from '@/lib/program/operations';
+
 import {
   addImportUsage,
   applyAssignments,
   createImport,
+  hideEmptiedChapters,
   insertChapters,
   insertGroups,
   insertNotions,
   loadExistingRefs,
+  removeOrphans,
 } from './ingest';
-import { dropNearDuplicates, findExistingMatch } from './duplicates';
+import { flagSimilar, findExistingMatch } from './duplicates';
 import { batchNotions, withChapterRetry } from './passInput';
 import { parsePlan, type PlanIssue } from './planSchema';
 import { releaseDocuments } from './release';
@@ -73,8 +77,15 @@ export type PrepareResult = {
 
 export type ChapterStructureResult = {
   chapters: { id: string; name: string }[];
-  /** Combien de notions ont été rangées. */
+  discarded: PlanIssue[];
+  adjusted: PlanIssue[];
+};
+
+export type AssignPassResult = {
+  /** Combien de notions ce lot a rangées. */
   assigned: number;
+  /** Nombre total de lots — le client boucle jusque-là. */
+  batches: number;
   discarded: PlanIssue[];
   adjusted: PlanIssue[];
 };
@@ -449,18 +460,11 @@ export async function ingestChapters(
 
   const created = new Map([...(await insertChapters(workshopId, actorId, importId, fresh)), ...reused]);
 
-  // ⚠️ Les affectations sont appliquées APRÈS l'insertion : elles désignent les
-  // chapitres par leur référence locale (`ch1`), qui n'a d'identifiant réel
-  // qu'une fois la ligne écrite. `created` fait la traduction ; une référence
-  // qui n'y figure pas est déjà un identifiant existant, et passe telle quelle.
-  const assigned = await applyAssignments(workshopId, plan.assignments, created);
-
   return {
     // Seuls les chapitres RÉELLEMENT créés sont comptés : un doublon redirigé
     // vers un chapitre existant n'est pas une création, et l'annoncer comme
     // telle ferait croire à un programme qui a doublé de taille.
     chapters: fresh.map((c) => ({ id: created.get(c.ref) ?? c.ref, name: c.name })),
-    assigned,
     discarded: plan.discarded,
     adjusted: plan.adjusted,
   };
@@ -483,6 +487,213 @@ export async function releaseImportDocuments(
     // on ne fait ici que du ménage.
     console.warn('[ingest] documents non rendus :', error instanceof Error ? error.message : error);
     return false;
+  }
+}
+
+/** Combien de notions par appel de rangement.
+ *
+ *  Bien plus que pour les questions (10), parce que la sortie est minuscule :
+ *  une affectation, c'est deux identifiants, là où une question porte un énoncé,
+ *  ses propositions et ses critères de correction. Cinquante affectations
+ *  tiennent très largement sous le plafond de sortie. */
+export const NOTIONS_PER_ASSIGN_BATCH = 50;
+
+/** Les chapitres VISIBLES du programme, avec leur plage de pages.
+ *
+ *  Les chapitres cachés sont exclus : on ne range pas dans une boîte qu'on a
+ *  mise de côté. Un chapitre caché qui redevient pertinent se restaure d'abord. */
+async function loadVisibleChapters(workshopId: string) {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('workshop_chapters')
+    .select('id, name, source_document, page_start, page_end')
+    .eq('workshop_id', workshopId)
+    .eq('hidden', false)
+    .order('position');
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((c) => ({
+    id: c.id as string,
+    name: c.name as string,
+    sourceDocument: c.source_document as string | null,
+    pageStart: c.page_start as number | null,
+    pageEnd: c.page_end as number | null,
+  }));
+}
+
+/** Toutes les notions de l'atelier avec leur provenance, dans un ordre STABLE.
+ *
+ *  Stable est impératif : le client rappelle cette passe une fois par lot, et un
+ *  ordre flottant ferait se recouvrir deux lots — certaines notions traitées
+ *  deux fois, d'autres jamais. */
+async function loadNotionsToArrange(workshopId: string) {
+  const supabase = getSupabaseServerClient();
+  // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
+  const { data, error } = await supabase
+    .from('workshop_bricks')
+    .select('id, title, chapter_id, import_id, source_document, source_page')
+    .eq('workshop_id', workshopId)
+    .order('created_at')
+    .order('id');
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((n) => ({
+    id: n.id as string,
+    title: n.title as string,
+    chapterId: (n.chapter_id as string | null) ?? null,
+    importId: (n.import_id as string | null) ?? null,
+    sourceDocument: n.source_document as string | null,
+    page: n.source_page as number | null,
+  }));
+}
+
+/** Relève, AVANT le rangement, quels chapitres portaient des notions.
+ *
+ *  C'est la seule façon de distinguer plus tard « vidé par cet import » de
+ *  « déjà vide avant » — un chapitre que le cours ne couvrait pas ne doit pas
+ *  être caché sous prétexte qu'il l'est resté. Rangé dans `ai_imports.scope`,
+ *  du jsonb libre : aucune migration. */
+async function snapshotPopulatedChapters(workshopId: string, importId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const [{ data: scopeRow }, notions] = await Promise.all([
+    supabase.from('ai_imports').select('scope').eq('id', importId).single(),
+    loadNotionsToArrange(workshopId),
+  ]);
+
+  const scope = (scopeRow?.scope as Record<string, unknown> | null) ?? {};
+  // Le premier lot fait foi : les suivants ne doivent pas écraser le relevé par
+  // un état déjà modifié par eux-mêmes.
+  if (Array.isArray(scope.populatedBefore)) return;
+
+  const populated = [...new Set(notions.map((n) => n.chapterId).filter((id): id is string => !!id))];
+  await supabase
+    .from('ai_imports')
+    .update({ scope: { ...scope, populatedBefore: populated } })
+    .eq('id', importId);
+}
+
+async function populatedBeforeOf(importId: string): Promise<string[]> {
+  const supabase = getSupabaseServerClient();
+  const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
+  const scope = (data?.scope as Record<string, unknown> | null) ?? {};
+  return Array.isArray(scope.populatedBefore) ? (scope.populatedBefore as string[]) : [];
+}
+
+/** Passe 3 — le RANGEMENT d'UN LOT de notions.
+ *
+ *  Séparée de la passe chapitres le 24/08/2026, pour une raison de volume :
+ *  ranger 500 notions, c'est produire 500 lignes dans une seule réponse, bien
+ *  au-delà du plafond de sortie — la réponse serait tronquée, donc perdue. On ne
+ *  peut pas découper en lots un appel qui doit AUSSI décider de la structure,
+ *  puisque la structure ne se décide qu'une fois : la séparation n'est donc pas
+ *  une alternative aux appels multiples, c'est ce qui les autorise.
+ *
+ *  Elle ne reçoit **aucun document**, et c'est là que la provenance paie : deux
+ *  nombres par élément remplacent 680 000 tokens de corpus. */
+export async function ingestAssignments(
+  workshopId: string,
+  actorId: string,
+  importId: string,
+  batchIndex = 0,
+  options: { provider?: PlanProvider } = {},
+): Promise<AssignPassResult> {
+  const userHint = await userHintOf(importId);
+  const provider = options.provider ?? createClaudeProvider({ userHint });
+
+  // Au premier lot seulement : on fige l'état d'avant, pour savoir à la fin
+  // quels chapitres CET import a vidés.
+  if (batchIndex === 0) await snapshotPopulatedChapters(workshopId, importId);
+
+  const [all, chapters] = await Promise.all([
+    loadNotionsToArrange(workshopId),
+    loadVisibleChapters(workshopId),
+  ]);
+  const batches = batchNotions(all, NOTIONS_PER_ASSIGN_BATCH);
+  const batch = batches[batchIndex];
+  if (!batch || chapters.length === 0) {
+    return { assigned: 0, batches: batches.length, discarded: [], adjusted: [] };
+  }
+
+  // ⚠️ Les ressemblances sont calculées sur l'atelier ENTIER, pas sur le lot :
+  // deux notions proches peuvent tomber dans deux lots différents, et le lot qui
+  // porte la candidate doit voir la paire. Ne sont soumises au jugement que les
+  // notions **créées par cet import** — deux anciennes qui se ressemblent sont
+  // une décision déjà prise, pas notre affaire.
+  const fresh = batch.filter((n) => n.importId === importId);
+  const freshIds = new Set(fresh.map((n) => n.id));
+  const others = all.filter((n) => !freshIds.has(n.id));
+  const similar = flagSimilar(fresh, others, (n) => n.title, (n) => n.title).map((f) => ({
+    notionId: f.candidate.id,
+    other: f.other.title,
+    proximity: f.proximity,
+  }));
+
+  const result = await provider.documentToPlan([], EMPTY, {
+    pass: 'assign',
+    notions: batch.map((n) => ({
+      id: n.id,
+      title: n.title,
+      sourceDocument: n.sourceDocument,
+      page: n.page,
+    })),
+    chapters,
+    similar,
+  });
+  await addImportUsage(importId, result.usage);
+
+  const refs = await loadExistingRefs(workshopId);
+  const plan = parsePlanLogged('rangement', result.plan, refs);
+
+  // Les chapitres sont déjà en base : leurs références SONT leurs identifiants,
+  // il n'y a rien à traduire.
+  const assigned = await applyAssignments(workshopId, plan.assignments, new Map());
+
+  return { assigned, batches: batches.length, discarded: plan.discarded, adjusted: plan.adjusted };
+}
+
+/** La fin de l'import : ce qui se déduit sans modèle, une fois tout rangé.
+ *
+ *  À n'appeler qu'une seule fois, **après le dernier lot de rangement**. Les
+ *  deux gestes qu'elle porte seraient destructeurs plus tôt : à mi-parcours,
+ *  toutes les notions sont encore sans chapitre.
+ *
+ *  ⚠️ Ne lève jamais. C'est du ménage : un import réussi ne doit pas être
+ *  annoncé en échec parce qu'un chapitre n'a pas pu être caché. */
+export async function finishIngestion(
+  workshopId: string,
+  importId: string,
+): Promise<{ hidden: string[]; removedChapters: number; removedNotions: number }> {
+  try {
+    const populatedBefore = await populatedBeforeOf(importId);
+    const hidden = await hideEmptiedChapters(workshopId, populatedBefore);
+
+    const supabase = getSupabaseServerClient();
+    const [notions, chapterRows] = await Promise.all([
+      loadNotionsToArrange(workshopId),
+      supabase.from('workshop_chapters').select('id, import_id').eq('workshop_id', workshopId),
+    ]);
+
+    const cleanup = planImportCleanup(
+      {
+        chapters: (chapterRows.data ?? []).map((c) => ({
+          id: c.id as string,
+          importId: (c.import_id as string | null) ?? null,
+        })),
+        notions: notions.map((n) => ({ id: n.id, chapterId: n.chapterId, importId: n.importId })),
+      },
+      importId,
+    );
+    await removeOrphans(workshopId, cleanup);
+
+    return {
+      hidden,
+      removedChapters: cleanup.chapterIds.length,
+      removedNotions: cleanup.notionIds.length,
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.warn('[ingest] menage de fin incomplet :', detail);
+    return { hidden: [], removedChapters: 0, removedNotions: 0 };
   }
 }
 
@@ -531,36 +742,31 @@ export async function ingestDocumentNotions(
   const refs = await loadExistingRefs(workshopId);
   const plan = parsePlanLogged('notions', result.plan, refs);
 
-  // ⚠️ **Le filet anti-doublon, et il se relit ICI, pas plus haut.** L'existant
-  // transmis au modèle a été lu AVANT l'appel ; entre-temps, les autres
-  // documents du même import ont pu écrire leurs propres notions — ils tournent
-  // en parallèle et ne se voient pas. Une relecture juste avant l'écriture est
-  // le seul moment où le recouvrement entre documents est visible.
+  // ⚠️ **On écrit TOUT ce que le modèle rend, y compris les redites** — décision
+  // du 24/08/2026. La version précédente écartait ici les notions trop proches
+  // d'une existante : c'était le seul endroit du dispositif où du contenu
+  // disparaissait sans que personne n'ait jugé, et ça obligeait à régler un
+  // seuil au millimètre puisqu'un faux positif y coûtait du contenu réel.
   //
-  // La consigne ne suffit pas : mesuré sur un import réel, le modèle laisse
-  // passer les redites qui réordonnent les mêmes faits (voir `duplicates.ts`).
-  const before = await loadAllNotions(workshopId);
-  const { kept, dropped } = dropNearDuplicates(
-    plan.notions,
-    before.notions.map((n) => n.title),
-    (n) => n.title,
-  );
-
+  // Le doute est désormais reporté sur la passe RANGEMENT, qui le soumet au
+  // modèle : lui seul sait dire si deux phrases proches portent le même fait ou
+  // un fait de plus. Le perdant n'est pas détruit, il reste sans chapitre — et
+  // s'il vient de cet import, le ménage de fin le ramassera.
+  //
   // `new Map()` : aucun chapitre à résoudre, et le schéma n'en propose plus.
-  const created = await insertNotions(workshopId, actorId, importId, kept, new Map());
+  const created = await insertNotions(
+    workshopId,
+    actorId,
+    importId,
+    // La provenance est posée ICI et non par le modèle : c'est l'appelant qui
+    // sait quel document il traite, lui ne fait que rendre la page.
+    plan.notions.map((n) => ({ ...n, sourceDocument: document.fileName })),
+    new Map(),
+  );
 
   return {
     written: created.size,
-    // Les redites rejoignent le journal des écartés : l'utilisateur voit
-    // combien, et laquelle faisait doublon. Jamais un filtrage silencieux.
-    discarded: [
-      ...plan.discarded,
-      ...dropped.map((d) => ({
-        kind: 'notion' as const,
-        ref: d.candidate.ref,
-        reason: `redit une notion existante (« ${d.matched.slice(0, 80)}… »)`,
-      })),
-    ],
+    discarded: plan.discarded,
     adjusted: plan.adjusted,
     documents: prepared.length,
   };

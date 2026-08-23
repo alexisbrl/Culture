@@ -51,10 +51,11 @@ describe('selectModel — (modèle voulu, taille du corpus) → modèle retenu',
 });
 
 describe('PASS_MODELS — Haiku d’abord, partout (§16.20)', () => {
-  it('les trois passes visent Haiku 4.5', () => {
+  it('les quatre passes visent Haiku 4.5', () => {
     expect(PASS_MODELS).toEqual({
       chapters: MODELS.haiku,
       notions: MODELS.haiku,
+      assign: MODELS.haiku,
       questions: MODELS.haiku,
     });
   });

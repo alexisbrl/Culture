@@ -186,19 +186,15 @@ describe('instructions de passe', () => {
     expect(instruction).toMatch(/jamais posée/);
   });
 
-  it('la passe chapitres range les notions, et ne parle pas de questions', () => {
+  it('la passe chapitres SITUE les chapitres et ne range rien', () => {
+    // Le rangement est une passe à part depuis le 24/08/2026 : ranger 500
+    // notions dans une seule réponse dépasserait le plafond de sortie.
     const instruction = chaptersInstruction([], [{ id: 'n1', title: 'La Loire est le plus long fleuve' }]);
-    expect(instruction).toMatch(/RANGE LES NOTIONS/);
+    expect(instruction).toMatch(/Situe chaque chapitre/);
+    expect(instruction).toMatch(/Tu ne ranges rien ici/);
+    // Les notions restent visibles : elles disent ce que le cours contient.
     expect(instruction).toContain('La Loire');
     expect(instruction).not.toMatch(/question/i);
-  });
-
-  it('la passe chapitres interdit explicitement de créer ou modifier une notion', () => {
-    // C'est le contrat : elle attribue, elle ne crée rien. Sans cette phrase,
-    // rien n'empêche le modèle d'inventer une notion qu'aucun document n'a
-    // produite.
-    const instruction = chaptersInstruction([], []);
-    expect(instruction).toMatch(/ni créer ni modifier une notion/);
   });
 });
 
@@ -283,10 +279,12 @@ describe('wireSchema — ce qu’on autorise le modèle à produire', () => {
     expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [{ ...question, bloomLevel: 3 }] }] }).success).toBe(true);
   });
 
-  it('une notion naît SANS chapitre — le champ a disparu du contrat', () => {
+  it('une notion naît SANS chapitre, et porte sa page', () => {
     // Au moment où les notions sont extraites, aucun chapitre n'existe encore.
-    // Le rangement est une instruction séparée (les affectations).
-    expect(wireNotionsOutput.safeParse({ notions: [{ ref: 'n1', title: 'T' }] }).success).toBe(true);
+    // Le rangement est une passe séparée — et c'est la PAGE qui lui permet de se
+    // passer du cours.
+    expect(wireNotionsOutput.safeParse({ notions: [{ ref: 'n1', title: 'T' }] }).success).toBe(false);
+    expect(wireNotionsOutput.safeParse({ notions: [{ ref: 'n1', title: 'T', page: 12 }] }).success).toBe(true);
   });
 });
 
