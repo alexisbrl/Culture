@@ -271,9 +271,14 @@ Deux garde-fous :
   ce qui rend le changement traçable et la suppression manuelle facile ensuite.
   - **Il s'affiche sous les chapitres visibles**, signalé comme les autres
     changements apportés par l'IA.
-  - **C'est l'IA qui le pose, pas l'utilisateur** — non par méfiance, mais parce
-    qu'on n'offre **aucun bouton « cacher »** dans l'interface. Un utilisateur
-    qui veut se débarrasser d'un chapitre le supprime.
+  - **Aucun bouton « cacher » dans l'interface** — décision de sobriété, PAS une
+    restriction de droits (précisé le 23/08/2026). Un gestionnaire qui demande
+    à l'IA de cacher un chapitre en a parfaitement le droit ; l'écran, lui, ne
+    propose que « supprimer ».
+  - **Réarranger et cacher restent deux opérations distinctes** côté serveur.
+    Non pour restreindre qui que ce soit — ils ont les mêmes droits — mais parce
+    qu'ils n'ont pas le même effet : réordonner est cosmétique, cacher retire du
+    contenu du programme. Deux traces, deux annulations possibles.
   - **Un bouton « restaurer » le remet dans le programme**, et il est ouvert aux
     deux : l'utilisateur remet ce qu'il veut garder, l'IA doit pouvoir défaire un
     import annulé. Un import ultérieur peut de nouveau l'écarter s'il n'est plus

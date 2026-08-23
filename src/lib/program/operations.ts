@@ -30,10 +30,11 @@
 //
 //   • `role`   — le rang minimum dans l'atelier (src/lib/authz.ts).
 //   • `actors` — QUI a le droit de la demander. Ce n'est pas la même question.
-//                Cacher un chapitre est réservé à l'IA : non par méfiance, mais
-//                parce que l'interface n'offre pas de bouton « cacher ». Le
-//                restaurer est ouvert aux deux — l'utilisateur remet ce qu'il
-//                veut garder, l'IA défait un import annulé.
+//                Aujourd'hui aucune opération n'est fermée à un demandeur : ce
+//                qui distingue l'IA de l'humain, c'est ce que l'interface leur
+//                propose, pas ce que le serveur leur permet. L'axe existe pour
+//                le jour où la distinction sera réelle — un traitement de fond
+//                (`system`) en est déjà un cas.
 //
 // ⚠️ Le rôle n'est JAMAIS un paramètre venu de la conversation. Il est relu à
 // l'exécution, sur le compte connecté, à chaque tour — voir la revue des sept
@@ -85,22 +86,32 @@ export type ProgramOperation =
    *  sont plus d'actualité » sont **un seul geste**, et c'est bien ce que fait
    *  la passe chapitres : elle émet les deux dans le même souffle.
    *
-   *  Ils restent DEUX opérations pour une raison concrète, pas par purisme : les
-   *  fusionner rendrait le fait de cacher accessible à quiconque peut
-   *  réordonner — c'est-à-dire à l'utilisateur, à qui on a justement décidé de
-   *  n'offrir aucun bouton « cacher ». Un geste côté produit, deux autorisations
-   *  côté serveur. */
+   *  Ils restent DEUX opérations parce qu'ils n'ont pas le même EFFET :
+   *  réordonner est cosmétique et sans conséquence, cacher retire du contenu du
+   *  programme et change ce que les élèves voient de leur progression. Deux
+   *  effets, deux traces, deux annulations possibles. Les fusionner ferait
+   *  qu'un simple réarrangement emporterait silencieusement le pouvoir de vider
+   *  un programme. Un geste côté produit, deux opérations côté serveur. */
   | { kind: 'reorder_chapters'; chapterIds: string[] }
   /** Écarte un chapitre : lui et ses notions sortent du programme, mais restent
-   *  consultables sous les chapitres visibles. Réservé à l'IA — l'interface
-   *  n'offre aucun moyen de cacher un chapitre à la main. */
+   *  consultables sous les chapitres visibles.
+   *
+   *  ⚠️ **L'interface n'offre volontairement pas de bouton « cacher »** — c'est
+   *  un choix de sobriété, pas une restriction de droits (arbitrage du
+   *  23/08/2026). L'opération reste donc ouverte à l'humain : un gestionnaire
+   *  qui la demande depuis le chat a exactement les mêmes droits que celui qui
+   *  réordonne. Ne pas en déduire qu'on peut ajouter le bouton — l'absence de
+   *  bouton est la décision, l'ouverture de l'opération n'est que sa
+   *  conséquence côté serveur. */
   | { kind: 'hide_chapter'; chapterId: string }
   /** Remet un chapitre caché dans le programme — le bouton « restaurer ».
    *
    *  Ouvert aux deux : l'utilisateur restaure ce qu'il veut garder, et l'IA doit
    *  pouvoir le faire aussi, ne serait-ce que pour défaire un import annulé.
-   *  L'asymétrie avec `hide_chapter` n'est donc pas une règle de sécurité, c'est
-   *  une décision d'interface — on n'offre pas de bouton « cacher ». */
+   *
+   *  Contrairement à `hide_chapter`, celle-ci a son bouton dans l'interface. La
+   *  dissymétrie est entièrement côté écran : côté serveur, les deux ont les
+   *  mêmes droits. */
   | { kind: 'restore_chapter'; chapterId: string };
 
 export type OperationKind = ProgramOperation['kind'];
@@ -125,7 +136,7 @@ export const OPERATION_RULES: Record<OperationKind, OperationRule> = {
   create_questions: { role: 'manager', actors: ['ai', 'human', 'system'] },
   attach_question: { role: 'manager', actors: ['ai', 'human'] },
   reorder_chapters: { role: 'manager', actors: ['ai', 'human'] },
-  hide_chapter: { role: 'manager', actors: ['ai'] },
+  hide_chapter: { role: 'manager', actors: ['ai', 'human'] },
   restore_chapter: { role: 'manager', actors: ['ai', 'human'] },
 };
 

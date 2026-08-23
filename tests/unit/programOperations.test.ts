@@ -20,10 +20,13 @@ import {
 // qui peut détruire des données saisies à la main.
 
 describe('catalogue des opérations', () => {
-  it('cacher un chapitre est réservé à l’IA — l’utilisateur n’a aucun bouton pour le faire', () => {
+  it('cacher un chapitre est ouvert aux deux — l’absence de bouton est esthétique, pas un droit', () => {
+    // Arbitrage du 23/08/2026 : l'interface ne propose pas de bouton « cacher »
+    // par sobriété. Un gestionnaire qui le demande depuis le chat a les mêmes
+    // droits que celui qui réordonne.
     expect(isOperationAllowed('hide_chapter', 'ai', 'manager')).toBe(true);
-    expect(isOperationAllowed('hide_chapter', 'human', 'manager')).toBe(false);
-    expect(isOperationAllowed('hide_chapter', 'human', 'owner')).toBe(false);
+    expect(isOperationAllowed('hide_chapter', 'human', 'manager')).toBe(true);
+    expect(isOperationAllowed('hide_chapter', 'human', 'member')).toBe(false);
   });
 
   it('restaurer est ouvert aux deux — l’IA doit pouvoir défaire un import annulé', () => {
@@ -31,12 +34,14 @@ describe('catalogue des opérations', () => {
     expect(isOperationAllowed('restore_chapter', 'ai', 'manager')).toBe(true);
   });
 
-  it('réarranger et cacher restent DEUX opérations — sinon l’utilisateur pourrait cacher', () => {
-    // Côté produit c'est un seul geste (« réarranger les chapitres »), et la
-    // passe chapitres émet bien les deux ensemble. Les fusionner rendrait le
-    // fait de cacher accessible à quiconque peut réordonner.
-    expect(isOperationAllowed('reorder_chapters', 'human', 'manager')).toBe(true);
-    expect(isOperationAllowed('hide_chapter', 'human', 'manager')).toBe(false);
+  it('réarranger et cacher restent DEUX opérations — deux effets, deux traces', () => {
+    // Côté produit c'est un seul geste, et la passe chapitres émet bien les deux
+    // ensemble. Ils restent séparés parce que réordonner est cosmétique tandis
+    // que cacher retire du contenu du programme : les fusionner ferait qu'un
+    // réarrangement emporte le pouvoir de vider un programme.
+    const kinds = Object.keys(OPERATION_RULES);
+    expect(kinds).toContain('reorder_chapters');
+    expect(kinds).toContain('hide_chapter');
   });
 
   it('un candidat ne peut RIEN, quel que soit le demandeur', () => {
@@ -74,9 +79,17 @@ describe('authorizeOperations', () => {
   ];
 
   it('garde ce qui est permis et refuse le reste — sans perdre le lot', () => {
+    // Le traitement de fond ne peut que rédiger des questions : tout le reste
+    // du lot lui est refusé, un par un, sans que le lot soit perdu.
+    const { allowed, refused } = authorizeOperations(ops, 'system', 'manager');
+    expect(allowed).toEqual([]);
+    expect(refused.map((r) => r.reason)).toEqual(['actor_not_allowed', 'actor_not_allowed', 'actor_not_allowed']);
+  });
+
+  it('un gestionnaire humain obtient tout le lot', () => {
     const { allowed, refused } = authorizeOperations(ops, 'human', 'manager');
-    expect(allowed.map((o) => o.kind)).toEqual(['create_notion', 'assign_notion']);
-    expect(refused).toEqual([{ kind: 'hide_chapter', reason: 'actor_not_allowed' }]);
+    expect(allowed).toHaveLength(3);
+    expect(refused).toEqual([]);
   });
 
   it('refuse tout à un candidat, avec le bon motif', () => {
