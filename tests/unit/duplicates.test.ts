@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   NEAR_DUPLICATE,
   dropNearDuplicates,
+  findExistingMatch,
   proximity,
   significantWords,
 } from '@/lib/ingest/duplicates';
@@ -139,5 +140,45 @@ describe('dropNearDuplicates', () => {
 
   it('un lot vide ne rend rien et ne lève pas', () => {
     expect(dropNearDuplicates([], [LIVRE_ANCIENNE], titleOf)).toEqual({ kept: [], dropped: [] });
+  });
+});
+
+describe('findExistingMatch — le doublon de CHAPITRE se redirige, il ne s’écarte pas', () => {
+  const chapitres = [
+    { id: 'c1', name: "L'Europe, foyer de peuplement et d'émigration" },
+    { id: 'c2', name: "La citoyenneté et l'Empire à Rome du I° au III° siècle après JC" },
+    { id: 'c3', name: "Les hommes de la Renaissance et l'humanisme" },
+  ];
+  const nameOf = (c: { name: string }) => c.name;
+
+  it('reconnaît un chapitre existant proposé sous une forme raccourcie', () => {
+    const found = findExistingMatch("L'Europe, foyer de peuplement", chapitres, nameOf);
+    expect(found?.match.id).toBe('c1');
+  });
+
+  it('ne confond pas deux chapitres réellement distincts du même cours', () => {
+    expect(findExistingMatch("L'élargissement du monde du XV° au XVI° siècle", chapitres, nameOf)).toBeNull();
+    expect(findExistingMatch('La Révolution française', chapitres, nameOf)).toBeNull();
+  });
+
+  it('rend l’élément entier, parce que l’appelant a besoin de son identifiant', () => {
+    // C'est toute la différence avec les notions : un chapitre en double n'est
+    // pas jeté, sa référence est redirigée vers celui qui existe — sinon les
+    // notions qu'on venait de lui affecter se retrouveraient orphelines.
+    const found = findExistingMatch("Les hommes de la Renaissance et l'humanisme", chapitres, nameOf);
+    expect(found?.match).toEqual(chapitres[2]);
+    expect(found?.proximity).toBe(1);
+  });
+
+  it('retient le plus proche quand deux existants s’en rapprochent', () => {
+    const found = findExistingMatch("L'Europe, foyer de peuplement et d'émigration", [
+      { id: 'a', name: "L'Europe" },
+      { id: 'b', name: "L'Europe, foyer de peuplement et d'émigration" },
+    ], nameOf, 0.2);
+    expect(found?.match.id).toBe('b');
+  });
+
+  it('ne trouve rien dans une liste vide', () => {
+    expect(findExistingMatch('Un chapitre', [], nameOf)).toBeNull();
   });
 });

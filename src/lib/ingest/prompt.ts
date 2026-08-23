@@ -311,11 +311,7 @@ Découpe assez fin pour qu'on puisse interroger chaque notion séparément, mais
 
 RÉUTILISE plutôt que de recréer. Avant d'écrire une notion, cherche dans la liste ci-dessus si le fait y est déjà.
 
-**Cherche sur les FAITS, pas sur les phrases.** Compare ce que la notion contient — les chiffres, les noms propres, les dates, les termes techniques — et non la façon dont elle est tournée. Une notion existante qui énonce les mêmes éléments dans un ORDRE DIFFÉRENT, ou avec des SYNONYMES, reste la même notion.
-
-Deux pièges observés, à éviter absolument :
-- les mêmes chiffres présentés à l'envers (« A produit X, contre Y auparavant » et « auparavant Y ; ensuite X ») : c'est la même notion ;
-- la même énumération avec d'autres mots (« dimensions réduites, pas d'enluminures » et « format réduit, abandon de l'enluminure ») : c'est la même notion.
+**Cherche sur les FAITS, pas sur les phrases.** Compare ce que la notion contient — les chiffres, les noms propres, les dates, les termes techniques — et non la façon dont elle est tournée. Une notion existante qui énonce les mêmes éléments dans un ORDRE DIFFÉRENT, ou avec des SYNONYMES, reste la même notion : c'est ainsi que passent la plupart des doublons.
 
 Ne produis une notion voisine d'une existante QUE si elle apporte un FAIT VÉRIFIABLE DE PLUS : quelque chose qu'on pourrait demander à un élève et dont la réponse ne figure pas dans l'ancienne.
 

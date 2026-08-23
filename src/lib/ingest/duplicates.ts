@@ -104,6 +104,41 @@ export function proximity(a: string, b: string): number {
  *  faits distincts — et c'est l'erreur la plus coûteuse des deux. */
 export const NEAR_DUPLICATE = 0.6;
 
+/** Le seuil pour un NOM DE CHAPITRE, plus haut que pour une notion.
+ *
+ *  Un titre est court : deux titres partagent peu de mots, donc la moindre
+ *  ressemblance pèse lourd dans l'indice. « L'Europe, foyer de peuplement » et
+ *  « L'Europe, foyer de peuplement et d'émigration » atteignent 0,75, tandis que
+ *  deux chapitres réellement distincts d'un même cours tombent sous 0,2 — l'écart
+ *  est encore plus net que pour les notions, ce qui autorise un seuil sévère.
+ *
+ *  Sévère est ici le bon réglage **parce que l'erreur n'est pas symétrique** :
+ *  fusionner deux chapitres distincts mélangerait leurs notions, ce qui se
+ *  répare mal ; laisser passer un doublon de chapitre se corrige d'un
+ *  glisser-déposer. */
+export const NEAR_DUPLICATE_TITLE = 0.7;
+
+/** L'élément existant que ce titre redit, s'il y en a un.
+ *
+ *  Rend l'ÉLÉMENT et non le titre, parce que l'appelant a besoin de son
+ *  identifiant : un chapitre proposé en double n'est pas écarté, il est
+ *  **redirigé** vers celui qui existe (voir `ingestChapters`). Écarter suffirait
+ *  pour une notion — rien n'en dépend encore — mais orphelinerait toutes les
+ *  notions qu'on venait de lui affecter. */
+export function findExistingMatch<T>(
+  title: string,
+  existing: readonly T[],
+  titleOf: (item: T) => string,
+  threshold = NEAR_DUPLICATE_TITLE,
+): { match: T; proximity: number } | null {
+  let best: { match: T; proximity: number } | null = null;
+  for (const item of existing) {
+    const score = proximity(title, titleOf(item));
+    if (score >= threshold && (!best || score > best.proximity)) best = { match: item, proximity: score };
+  }
+  return best;
+}
+
 export type DuplicateVerdict<T> = {
   kept: T[];
   /** Les écartées, avec la notion existante qui les rend redondantes — pour que

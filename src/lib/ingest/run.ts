@@ -51,7 +51,7 @@ import {
   insertNotions,
   loadExistingRefs,
 } from './ingest';
-import { dropNearDuplicates } from './duplicates';
+import { dropNearDuplicates, findExistingMatch } from './duplicates';
 import { batchNotions, withChapterRetry } from './passInput';
 import { parsePlan, type PlanIssue } from './planSchema';
 import { releaseDocuments } from './release';
@@ -423,7 +423,31 @@ export async function ingestChapters(
     (parsed) => parsed.chapters.map((c) => c.name),
   );
 
-  const created = await insertChapters(workshopId, actorId, importId, plan.chapters);
+  // ⚠️ **Un chapitre proposé en double est REDIRIGÉ, jamais écarté.**
+  //
+  // `insertChapters` écrivait tout ce que le modèle rendait, sans rien comparer
+  // à l'existant : la consigne était le seul rempart (fragilité repérée le
+  // 22/08/2026). Le même outil de ressemblance que pour les notions ferme le
+  // trou — mais la conduite à tenir n'est pas la même. Écarter une notion en
+  // double ne coûte rien, rien n'en dépend encore ; écarter un CHAPITRE
+  // orphelinerait toutes les notions qu'on venait de lui affecter. On ne le crée
+  // donc pas, et sa référence pointe vers le chapitre existant : les
+  // affectations atterrissent au bon endroit sans le savoir.
+  const reused = new Map<string, string>();
+  const fresh = plan.chapters.filter((c) => {
+    const found = findExistingMatch(c.name, chaptersOnly.chapters, (ch) => ch.name);
+    if (!found) return true;
+    reused.set(c.ref, found.match.id);
+    // Jamais silencieux : l'utilisateur doit pouvoir constater la fusion.
+    plan.adjusted.push({
+      kind: 'chapter',
+      ref: c.ref,
+      reason: `chapitre déjà présent (« ${found.match.name} ») — notions rangées dedans plutôt que dans un doublon`,
+    });
+    return false;
+  });
+
+  const created = new Map([...(await insertChapters(workshopId, actorId, importId, fresh)), ...reused]);
 
   // ⚠️ Les affectations sont appliquées APRÈS l'insertion : elles désignent les
   // chapitres par leur référence locale (`ch1`), qui n'a d'identifiant réel
@@ -432,7 +456,10 @@ export async function ingestChapters(
   const assigned = await applyAssignments(workshopId, plan.assignments, created);
 
   return {
-    chapters: plan.chapters.map((c) => ({ id: created.get(c.ref) ?? c.ref, name: c.name })),
+    // Seuls les chapitres RÉELLEMENT créés sont comptés : un doublon redirigé
+    // vers un chapitre existant n'est pas une création, et l'annoncer comme
+    // telle ferait croire à un programme qui a doublé de taille.
+    chapters: fresh.map((c) => ({ id: created.get(c.ref) ?? c.ref, name: c.name })),
     assigned,
     discarded: plan.discarded,
     adjusted: plan.adjusted,
