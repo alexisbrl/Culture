@@ -353,7 +353,13 @@ ${lines.join('\n')}`;
  *  mauvais pour juger si c'est une redite ou un fait de plus. C'est ici que ça
  *  se tranche, et le perdant n'est pas détruit : il reste sans chapitre. */
 export function assignInstruction(input: {
-  notions: { id: string; title: string; sourceDocument?: string | null; page?: number | null }[];
+  notions: {
+    id: string;
+    title: string;
+    sourceDocument?: string | null;
+    page?: number | null;
+    currentChapterId?: string | null;
+  }[];
   chapters: {
     id: string;
     name: string;
@@ -377,7 +383,8 @@ export function assignInstruction(input: {
   const notions = input.notions
     .map((n) => {
       const from = n.page ? ` [${n.sourceDocument ?? 'document'}, page ${n.page}]` : '';
-      return `- ${n.id} — ${n.title}${from}`;
+      const now = n.currentChapterId ? ` (actuellement dans ${n.currentChapterId})` : '';
+      return `- ${n.id} — ${n.title}${from}${now}`;
     })
     .join('\n');
 
@@ -402,6 +409,8 @@ ${chapters}
 
 LES NOTIONS À RANGER :
 ${notions}
+
+**Une notion déjà rangée reste où elle est, sauf raison de la déplacer.** Quand la mention « actuellement dans » figure, ce rangement a été décidé avant toi — parfois à la main par l'utilisateur. Reconduis-le, sauf si le contenu de la notion contredit clairement le chapitre où elle se trouve. Reconduire est une réponse pleinement valide, et c'est la plus fréquente sur un atelier déjà organisé.
 
 Les pages sont **une indication, pas une règle**. Un chapitre ne s'arrête pas proprement au bas d'une page : une notion du haut d'une page peut très bien appartenir au chapitre précédent, et une notion isolée peut relever d'un chapitre situé ailleurs dans le cours. **En cas de désaccord entre la page et le contenu, c'est le contenu qui décide.** Une notion sans page se range sur son seul contenu.
 

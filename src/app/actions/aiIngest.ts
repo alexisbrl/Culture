@@ -42,7 +42,15 @@ export type ChapterStructureResult =
   | { ok: false; error: string };
 
 export type AssignPassResult =
-  | { ok: true; assigned: number; batches: number; discarded: PlanIssue[]; adjusted: PlanIssue[] }
+  | {
+      ok: true;
+      assigned: number;
+      /** Questions en sommeil récupérées plutôt que réécrites. */
+      recycled: number;
+      batches: number;
+      discarded: PlanIssue[];
+      adjusted: PlanIssue[];
+    }
   | { ok: false; error: string };
 
 export type PrepareIngestionResult =

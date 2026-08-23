@@ -398,6 +398,23 @@ describe('assignInstruction — la page range, elle ne juge pas', () => {
     expect(instruction).not.toContain('Une notion sans provenance. [');
   });
 
+  it('dit où la notion se trouve DÉJÀ, et demande de l’y laisser', () => {
+    // Sans ça, le modèle range chaque notion de zéro à chaque import — y compris
+    // celles que l'utilisateur a placées à la main, qu'il défaisait en silence.
+    const instruction = assignInstruction({
+      ...base,
+      notions: [{ ...base.notions[0], currentChapterId: 'c1' }],
+    });
+    expect(instruction).toContain('(actuellement dans c1)');
+    expect(instruction).toMatch(/reste où elle est, sauf raison de la déplacer/);
+    expect(instruction).toMatch(/Reconduire est une réponse pleinement valide/);
+  });
+
+  it('ne dit rien de son chapitre quand elle n’en a pas', () => {
+    // La mention n'apparaît que sur la LIGNE de la notion : l'explication
+    // générale, elle, parle forcément de « actuellement dans ».
+    expect(assignInstruction(base)).not.toContain('(actuellement dans');
+  });
   it('le dit quand il n’y a aucun chapitre où ranger', () => {
     const instruction = assignInstruction({ notions: base.notions, chapters: [], similar: [] });
     expect(instruction).toMatch(/Aucun chapitre n'existe/);

@@ -53,6 +53,7 @@ import {
   insertGroups,
   insertNotions,
   loadExistingRefs,
+  reattachQuestions,
   removeOrphans,
 } from './ingest';
 import { flagSimilar, findExistingMatch } from './duplicates';
@@ -84,6 +85,9 @@ export type ChapterStructureResult = {
 export type AssignPassResult = {
   /** Combien de notions ce lot a rangées. */
   assigned: number;
+  /** Combien de questions en sommeil ont été rattachées à la notion qui
+   *  remplace celle dont elles dépendaient. */
+  recycled: number;
   /** Nombre total de lots — le client boucle jusque-là. */
   batches: number;
   discarded: PlanIssue[];
@@ -633,7 +637,7 @@ export async function ingestAssignments(
   const batches = batchNotions(all, NOTIONS_PER_ASSIGN_BATCH);
   const batch = batches[batchIndex];
   if (!batch || chapters.length === 0) {
-    return { assigned: 0, batches: batches.length, discarded: [], adjusted: [] };
+    return { assigned: 0, recycled: 0, batches: batches.length, discarded: [], adjusted: [] };
   }
 
   // ⚠️ Les ressemblances sont calculées sur l'atelier ENTIER, pas sur le lot :
@@ -644,7 +648,8 @@ export async function ingestAssignments(
   const fresh = batch.filter((n) => n.importId === importId);
   const freshIds = new Set(fresh.map((n) => n.id));
   const others = all.filter((n) => !freshIds.has(n.id));
-  const similar = flagSimilar(fresh, others, (n) => n.title, (n) => n.title).map((f) => ({
+  const pairs = flagSimilar(fresh, others, (n) => n.title, (n) => n.title);
+  const similar = pairs.map((f) => ({
     notionId: f.candidate.id,
     other: f.other.title,
     proximity: f.proximity,
@@ -657,6 +662,7 @@ export async function ingestAssignments(
       title: n.title,
       sourceDocument: n.sourceDocument,
       page: n.page,
+      currentChapterId: n.chapterId,
     })),
     chapters,
     similar,
@@ -670,7 +676,43 @@ export async function ingestAssignments(
   // il n'y a rien à traduire.
   const assigned = await applyAssignments(workshopId, plan.assignments, new Map());
 
-  return { assigned, batches: batches.length, discarded: plan.discarded, adjusted: plan.adjusted };
+  // ─── Récupérer les questions en sommeil ───────────────────────────────────
+  //
+  // Quand le modèle tranche une ressemblance en faveur de la NOUVELLE notion,
+  // l'ancienne sort du programme — et ses questions avec elle. Elles dorment :
+  // elles existent encore, mais plus rien ne les tire. Or elles portent
+  // exactement le fait que la nouvelle notion énonce.
+  //
+  // On les rattache donc à celle qui reste, AVANT que la passe questions ne se
+  // mette à rédiger. Récupérer coûte une écriture ; faire réécrire coûte un
+  // appel au modèle et produit un doublon de plus.
+  //
+  // ⚠️ La paire est connue sans rien redemander au modèle : c'est celle qu'on
+  // lui a soumise. Sa décision se lit dans l'état final des deux notions —
+  // celle qui a un chapitre a gagné.
+  const touched = [...new Set(pairs.flatMap((f) => [f.candidate.id, f.other.id]))];
+  const settled = touched.length > 0 ? await loadNotionsToArrange(workshopId) : [];
+  const chapterOf = new Map(settled.map((n) => [n.id, n.chapterId]));
+
+  let recycled = 0;
+  for (const pair of pairs) {
+    const winner = chapterOf.get(pair.candidate.id);
+    const loser = chapterOf.get(pair.other.id);
+    // La nouvelle est rangée, l'ancienne ne l'est plus : les questions de
+    // l'ancienne suivent. L'inverse (l'ancienne garde sa place) n'appelle rien —
+    // ses questions n'ont jamais cessé de servir.
+    if (winner && loser === null) {
+      recycled += await reattachQuestions(pair.other.id, pair.candidate.id);
+    }
+  }
+
+  return {
+    assigned,
+    recycled,
+    batches: batches.length,
+    discarded: plan.discarded,
+    adjusted: plan.adjusted,
+  };
 }
 
 /** La fin de l'import : ce qui se déduit sans modèle, une fois tout rangé.

@@ -218,6 +218,43 @@ export async function applyAssignments(
   return moved;
 }
 
+/** Rattache les questions d'une notion écartée à celle qui la remplace.
+ *
+ *  ⚠️ **Récupérer, puis seulement rédiger.** Une question accrochée à une notion
+ *  sortie du programme DORT : elle existe encore, mais plus rien ne la tire. Si
+ *  une notion active dit la même chose, la rattacher coûte une écriture — la
+ *  faire réécrire coûte un appel au modèle ET produit un doublon de plus. C'est
+ *  pour ça que ça se fait AVANT la passe questions, jamais après.
+ *
+ *  L'énoncé n'est JAMAIS réécrit, et le lien vers l'ancienne notion n'est pas
+ *  retiré : on ajoute, on ne défait pas. Si l'ancienne notion est restaurée un
+ *  jour, sa question est toujours là.
+ *
+ *  Rend le nombre de questions effectivement récupérées. */
+export async function reattachQuestions(from: string, to: string): Promise<number> {
+  if (from === to) return 0;
+  const supabase = getSupabaseServerClient();
+
+  const [{ data: source, error }, { data: already }] = await Promise.all([
+    supabase.from('exam_question_item_bricks').select('item_id').eq('brick_id', from),
+    supabase.from('exam_question_item_bricks').select('item_id').eq('brick_id', to),
+  ]);
+  if (error) throw new Error(error.message);
+
+  const linked = new Set((already ?? []).map((r) => r.item_id as string));
+  const toLink = (source ?? [])
+    .map((r) => r.item_id as string)
+    .filter((itemId) => !linked.has(itemId));
+  if (toLink.length === 0) return 0;
+
+  const { error: insertError } = await supabase
+    .from('exam_question_item_bricks')
+    .insert(toLink.map((itemId) => ({ item_id: itemId, brick_id: to })));
+  if (insertError) throw new Error(insertError.message);
+
+  return toLink.length;
+}
+
 /** Efface ce que cet import a créé et que personne n'a jamais rangé.
  *
  *  ⚠️ **C'est la seule suppression du système, et elle est bornée par le plan

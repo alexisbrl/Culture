@@ -91,7 +91,20 @@ export type IngestScope =
        *  la page d'où vient la notion, et les pages que couvre le chapitre. */
       pass: 'assign';
       /** Les notions de CE lot, avec leur provenance quand on l'a. */
-      notions: { id: string; title: string; sourceDocument?: string | null; page?: number | null }[];
+      notions: {
+        id: string;
+        title: string;
+        sourceDocument?: string | null;
+        page?: number | null;
+        /** Le chapitre où elle se trouve AUJOURD'HUI, s'il y en a un.
+         *
+         *  ⚠️ Sans lui, le modèle range chaque notion de zéro à chaque import —
+         *  y compris celles que l'utilisateur a placées à la main, qu'il
+         *  défaisait donc en silence. Limite connue et assumée : on sait dire où
+         *  une notion est, pas QUI l'y a mise. Une notion rangée par l'IA puis
+         *  déplacée à la main est indiscernable d'une notion jamais touchée. */
+        currentChapterId?: string | null;
+      }[];
       /** TOUS les chapitres du programme — le lot doit pouvoir ranger n'importe où. */
       chapters: {
         id: string;

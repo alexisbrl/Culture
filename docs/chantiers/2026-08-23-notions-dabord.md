@@ -380,7 +380,12 @@ Deux garde-fous :
       passe ①, consigne de réutilisation, critère du fait vérifiable. Mesurer le
       poids réel du bloc avant de l'optimiser.
 
-- [ ] **T5 — Recyclage des questions.** Étape de récupération des questions en
+- [x] **T5 — Recyclage des questions.** ✅ 24/08/2026. Déclenché dans la passe
+      rangement, donc AVANT toute rédaction. La paire gagnante/perdante est
+      connue sans rien redemander au modèle : c'est celle qu'on lui a soumise,
+      et sa décision se lit dans l'état final des deux notions. Le lien vers
+      l'ancienne notion n'est pas retiré — on ajoute, on ne défait pas.
+      Ancienne description : Étape de récupération des questions en
       sommeil **avant** toute rédaction, dans la passe ③.
 
 - [~] **T6 — UI.** Chapitres cachés et bouton « restaurer » ✅ 24/08/2026,
