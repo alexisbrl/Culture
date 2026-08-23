@@ -20,6 +20,14 @@ import type { ExistingContent } from '@/lib/ingest/prompt';
 
 /** Un document source, déjà lu depuis le stockage de l'atelier. */
 export type SourceDocument = {
+  /** Identifiant du fichier dans l'atelier (`workshop_files.id`).
+   *
+   *  ⚠️ **C'est LUI qui identifie un document, jamais son nom.** Un nom ne
+   *  distingue pas « cours.pdf » de « cours.pdf » remis à jour — le cas le plus
+   *  fréquent — alors que l'identifiant change dès que le fichier est remplacé,
+   *  et survit à un simple renommage. Tout ce qui doit savoir « est-ce encore le
+   *  même document ? » se fonde là-dessus (voir la provenance des notions). */
+  fileId: string;
   /** Clé de stockage (`workshop_files.storage_path`), pour la traçabilité. */
   key: string;
   fileName: string;
@@ -39,6 +47,9 @@ export type SourceDocument = {
  *  ailleurs. L'appelant ne l'interprète pas, il se contente de le conserver
  *  (`ai_imports.file_ids`) pour que les passes suivantes le réutilisent. */
 export type PreparedDocument = {
+  /** Voir `SourceDocument.fileId` : l'identité d'un document, ce n'est pas son
+   *  nom. Conservé dans `ai_imports.file_ids` avec le reste. */
+  fileId: string;
   key: string;
   fileName: string;
   mimeType: string;
@@ -48,12 +59,77 @@ export type PreparedDocument = {
 /** Ce qu'on demande au modèle. Une passe à la fois : on ne lui fait jamais
  *  produire le programme entier d'un coup (§5.1). */
 export type IngestScope =
-  | { pass: 'chapters' }
-  | { pass: 'notions'; chapter: { id: string; name: string } }
+  | {
+      pass: 'chapters';
+      /** Les notions à répartir — TOUTES celles de l'atelier, celles que la
+       *  passe précédente vient d'extraire comme celles qu'il portait déjà.
+       *
+       *  C'est l'entrée principale de la passe depuis l'inversion du
+       *  23/08/2026 : elle ne nomme plus seulement des boîtes, elle dit ce
+       *  qu'on met dedans. */
+      notions: { id: string; title: string }[];
+      /** Présent au SECOND essai seulement : le nombre de chapitres rendu au
+       *  premier, que la consigne rappelle au modèle (§16.18). */
+      retry?: { previous: string[] };
+    }
+  | {
+      pass: 'notions';
+      /** Le document traité par CET appel — l'unité de travail de la passe.
+       *
+       *  Un appel par document, et chacun ne reçoit que le sien : le corpus ne
+       *  part donc qu'une fois au total, au lieu d'une fois par chapitre. Il
+       *  n'y a plus rien à mettre en cache, et c'est moins cher que le cache
+       *  qu'on remplace. */
+      document: { index: number; fileName: string };
+    }
+  | {
+      /** Le RANGEMENT : où va chaque notion. Passe séparée de « chapitres »
+       *  depuis le 24/08/2026 — voir `wireSchema.ts` pour le pourquoi.
+       *
+       *  Elle ne reçoit **aucun document** : nommer les chapitres demande le
+       *  cours, les ranger non. Ce qui remplace le cours, ce sont deux nombres —
+       *  la page d'où vient la notion, et les pages que couvre le chapitre. */
+      pass: 'assign';
+      /** Les notions de CE lot, avec leur provenance quand on l'a. */
+      notions: {
+        id: string;
+        title: string;
+        sourceDocument?: string | null;
+        page?: number | null;
+        /** Le chapitre où elle se trouve AUJOURD'HUI, s'il y en a un.
+         *
+         *  ⚠️ Sans lui, le modèle range chaque notion de zéro à chaque import —
+         *  y compris celles que l'utilisateur a placées à la main, qu'il
+         *  défaisait donc en silence. Limite connue et assumée : on sait dire où
+         *  une notion est, pas QUI l'y a mise. Une notion rangée par l'IA puis
+         *  déplacée à la main est indiscernable d'une notion jamais touchée. */
+        currentChapterId?: string | null;
+      }[];
+      /** TOUS les chapitres du programme — le lot doit pouvoir ranger n'importe où. */
+      chapters: {
+        id: string;
+        name: string;
+        sourceDocument?: string | null;
+        pageStart?: number | null;
+        pageEnd?: number | null;
+      }[];
+      /** Les ressemblances repérées **mécaniquement** entre une notion de ce lot
+       *  et une notion déjà présente. Le calcul ne décide rien : il signale, et
+       *  c'est le modèle qui tranche si la ressemblance est justifiée (une
+       *  notion voisine mais distincte) ou non (une redite, à laisser sans
+       *  chapitre). */
+      similar: { notionId: string; other: string; proximity: number }[];
+    }
   | {
       pass: 'questions';
       chapter: { id: string; name: string };
+      /** Les notions à faire travailler par ce lot de questions. */
       notions: { id: string; title: string }[];
+      /** Les AUTRES notions du même chapitre, en contexte seulement (§16.21).
+       *  C'est ce qui remplace le cours : la notion suffit pour les niveaux 1 et
+       *  2 de Bloom, ses voisines apportent ce qu'il faut pour les niveaux 3 et
+       *  4. Quelques milliers de tokens, contre 680 000 pour le corpus. */
+      neighbours: { id: string; title: string }[];
       budget: number;
     };
 
@@ -65,9 +141,15 @@ export type ProviderResult = {
     /** Tokens facturés plein tarif — ni mis en cache, ni lus depuis le cache. */
     inputTokens: number;
     outputTokens: number;
-    /** Tokens **écrits** dans le cache (facturés ~1,25×). Un document volumineux
-     *  atterrit ici au premier appel : sans cette mesure, on croit à tort que
-     *  l'appel n'a presque rien coûté en entrée. */
+    /** Tokens **écrits** dans le cache. Un document volumineux atterrit ici au
+     *  premier appel : sans cette mesure, on croit à tort que l'appel n'a
+     *  presque rien coûté en entrée.
+     *
+     *  ⚠️ **Le tarif dépend du TTL, et l'écart est de 60 %** : une écriture
+     *  coûte **2× l'entrée en TTL 1 h**, 1,25× en TTL 5 minutes (le défaut, et
+     *  ce que le code utilise depuis §16.17). Seuil de rentabilité :
+     *  3 lectures en TTL 1 h, 2 en TTL 5 minutes — en dessous, poser un
+     *  marqueur coûte plus cher que ne pas en poser. */
     cacheCreationTokens: number;
     /** Tokens **servis** par le cache (~0,1×). À zéro d'un appel à l'autre alors
      *  que le document ne change pas, un invalidateur traîne dans le préfixe
@@ -86,6 +168,25 @@ export type PlanProvider = {
    *  stockage : une simple mise en forme, les octets restant portés par la
    *  poignée. */
   prepare(documents: SourceDocument[]): Promise<PreparedDocument[]>;
+
+  /** Combien de tokens le corpus occupera-t-il en entrée.
+   *
+   *  ⚠️ TEMPORAIRE — phase de test : sert à annoncer un coût avant de dépenser
+   *  (§16.15). Chez Claude, `countTokens` est **gratuit** et a ses propres
+   *  limites de débit (vérifié le 22/08/2026). Un fournisseur incapable de
+   *  compter peut renvoyer `null` : on affichera « inconnu » plutôt que de
+   *  bloquer. */
+  countCorpus(documents: PreparedDocument[]): Promise<number | null>;
+
+  /** Rend les documents au fournisseur — l'inverse de `prepare`.
+   *
+   *  ⚠️ **Rien ne s'efface tout seul** : chez Claude, un fichier téléversé
+   *  persiste sous le compte jusqu'à suppression explicite, et un nouveau
+   *  téléversement n'efface pas les anciens (§16.8). L'opération est gratuite.
+   *  Passer par `releaseDocuments` (`src/lib/ingest/release.ts`) plutôt que
+   *  d'appeler ceci directement : un ménage raté ne doit jamais faire échouer
+   *  ce qu'il accompagne. */
+  release(documents: PreparedDocument[]): Promise<void>;
 
   documentToPlan(
     documents: PreparedDocument[],

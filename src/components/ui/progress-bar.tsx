@@ -19,6 +19,13 @@ type ProgressBarProps = {
   valueText?: string
   tone?: keyof typeof TONES
   size?: keyof typeof SIZE_CLASSES
+  /** Pour une tâche longue dont l'avancement arrive par à-coups (une ingestion
+   *  IA avance d'un cran toutes les dizaines de secondes). Deux effets, qui vont
+   *  ensemble : la largeur se déplace **lentement** vers sa nouvelle valeur au
+   *  lieu de sauter, et une vague traverse le remplissage en continu. La vague
+   *  ne représente rien — elle dit que le travail est en cours, ce que la barre
+   *  immobile ne disait pas. */
+  animated?: boolean
   className?: string
 }
 
@@ -31,6 +38,7 @@ function ProgressBar({
   valueText,
   tone = "green",
   size = "md",
+  animated = false,
   className,
 }: ProgressBarProps) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100))
@@ -51,14 +59,38 @@ function ProgressBar({
         aria-valuenow={value}
         aria-valuemax={max}
         className={cn(
-          "overflow-hidden rounded-[var(--radius-pill)] bg-[var(--cream-sunken)] shadow-[var(--shadow-inset)]",
+          "relative overflow-hidden rounded-[var(--radius-pill)] bg-[var(--cream-sunken)] shadow-[var(--shadow-inset)]",
           SIZE_CLASSES[size]
         )}
       >
         <div
-          className="h-full rounded-[var(--radius-pill)] transition-[width] duration-[var(--dur-slow)] ease-[var(--ease-out)]"
+          className={cn(
+            "h-full rounded-[var(--radius-pill)] transition-[width] ease-[var(--ease-out)]",
+            // 1,6 s contre ~0,3 s : un pas de 10 % se lit comme un mouvement,
+            // pas comme un saut. C'est long pour une barre ordinaire, et c'est
+            // le but ici — il n'y a pas de pas suivant avant longtemps.
+            animated ? "duration-[1600ms]" : "duration-[var(--dur-slow)]"
+          )}
           style={{ width: `${pct}%`, background: TONES[tone] ?? TONES.green }}
         />
+        {animated && (
+          // ⚠️ **La vague balaie la PISTE, pas le remplissage.** Posée dans le
+          // remplissage (sa première version), elle était invisible tant que
+          // celui-ci était vide — c'est-à-dire précisément au moment le plus
+          // long et le plus inquiétant : le tout premier appel au modèle, avant
+          // le moindre cran. La barre paraissait morte pendant une minute.
+          //
+          // `aria-hidden` : c'est un signe de vie, pas une information — le
+          // `role="progressbar"` du parent porte déjà la valeur réelle.
+          <span
+            aria-hidden
+            className="progress-wave absolute inset-y-0 left-0 w-2/5"
+            style={{
+              background: `linear-gradient(90deg, transparent, ${TONES.light}, transparent)`,
+              opacity: 0.55,
+            }}
+          />
+        )}
       </div>
     </div>
   )

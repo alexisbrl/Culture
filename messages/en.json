@@ -771,7 +771,12 @@
       "promote": "promote",
       "demote": "demote",
       "exclude": "remove",
-      "actions": "member actions"
+      "actions": "member actions",
+      "excludeConfirmTitle": "Remove {name} from the workshop?",
+      "excludeConfirmDesc": "They will lose access to the workshop and their progress. They will have to be invited again to come back.",
+      "searchPlaceholder": "search a member…",
+      "searchClear": "clear search",
+      "searchEmpty": "no member matches this search"
     },
     "groups": {
       "title": "Groups",
@@ -785,6 +790,8 @@
       "namePlaceholder": "group name…",
       "newGroup": "new group",
       "filterAll": "all members",
+      "noGroup": "no group",
+      "emptyNoGroup": "every member belongs to at least one group",
       "inGroupCount": "In group ({count})",
       "otherMembersCount": "Other members ({count})",
       "otherMembers": "other members",
@@ -880,7 +887,11 @@
       "empty": "No chapters yet.",
       "count": "{count, plural, =0 {no chapters} one {# chapter} other {# chapters}}",
       "deleteTitle": "Delete this chapter?",
-      "deleteDesc": "“{name}” will be deleted and its pot will disappear from the programme. Its notions are not deleted: they move back to “no chapter”."
+      "deleteDesc": "“{name}” will be deleted and its pot will disappear from the programme. Its notions are not deleted: they move back to “no chapter”.",
+      "hiddenTitle": "Set aside by AI",
+      "hiddenHint": "This chapter is no longer covered by the workshop documents. It no longer counts towards the programme, but nothing is lost.",
+      "restore": "Restore",
+      "restoreFailed": "Could not restore this chapter"
     }
   },
   "workshop": {
@@ -1201,15 +1212,29 @@
       "questionsParcours": "The learning path questions",
       "questionsExam": "The exam bank questions"
     },
-    "questionsNeedNotions": "Questions attach to notions: without them, none would ever be asked.",
+    "hint": {
+      "label": "DETAILS (OPTIONAL)",
+      "placeholder": "e.g. split by themes, there are 4 — the document calls them “Units”.",
+      "help": "What the AI cannot guess: how many parts you expect, the level of splitting (broad themes or sub-chapters), the word used in the document, the students’ level. This takes precedence over our defaults."
+    },
+    "provider": {
+      "label": "MODEL FOR QUESTIONS",
+      "claude": "Claude (Haiku)",
+      "deepseek": "DeepSeek",
+      "help": "Only affects question writing, which does not read the documents. Chapters and notions stay on Claude, the only one that reads PDFs without losing their diagrams."
+    },
+    "needsChapters": "Without generating chapters, the AI fills in the ones already in the workshop. If there are none, there is nothing to fill in and the step is skipped.",
+    "questionsNeedNotions": "Questions attach to the notions of a chapter: without notions, the chapters created here will be empty and no question can be written.",
     "generate": "generate",
     "cancel": "cancel",
     "close": "close",
     "retry": "try again",
     "progress": {
-      "chapters": "Reading the document and splitting it into chapters…",
-      "notions": "Notions — {chapter} ({i}/{n})",
-      "questions": "Questions — {chapter} ({i}/{n})"
+      "chapters": "Splitting the course into chapters…",
+      "notionsDocuments": "Notions — {done}/{n} documents read",
+      "assign": "Filing the notions — {done}/{n} batches",
+      "questionsCount": "Questions — {done}/{n} batches done",
+      "questionsBatch": "Questions — {chapter} ({i}/{n}) · batch {b}/{nb}"
     },
     "keepOpen": "Keep this tab open: generation stops if you close it. Whatever was written stays, and stays undoable.",
     "runningCounts": "{chapters} chapters · {notions} notions · {questions} questions",
@@ -1226,6 +1251,10 @@
     },
     "button": "generate with AI",
     "chooseAi": "with AI",
-    "chooseManual": "manually"
+    "chooseManual": "manually",
+    "estimate": {
+      "preparing": "Preparing the documents…",
+      "preparingHint": "The documents are sent to the provider; generation starts right after."
+    }
   }
 }

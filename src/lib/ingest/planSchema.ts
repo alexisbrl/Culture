@@ -3,7 +3,7 @@
 //
 // ─── Ce que décrit un plan ───────────────────────────────────────────────────
 //
-//   { chapters: [...], notions: [...], groups: [...] }
+//   { chapters: [...], notions: [...], assignments: [...], groups: [...] }
 //
 // avec des **clés de référence locales** (`ref`) et non des identifiants : une
 // source extérieure ne peut pas connaître des identifiants qui n'existent pas
@@ -44,7 +44,7 @@ import { parseResponseType, type ResponseType } from '@/lib/workshops/examTypes'
 
 export type PlanIssue = {
   /** Ce qui est concerné, pour un message lisible. */
-  kind: 'chapter' | 'notion' | 'question';
+  kind: 'chapter' | 'notion' | 'assignment' | 'question';
   /** La clé locale fournie par la source, quand elle en a fourni une. */
   ref?: string;
   reason: string;
@@ -66,6 +66,8 @@ export type ExistingRefs = {
 export type ParsedPlan = {
   chapters: PlanChapter[];
   notions: PlanNotion[];
+  /** Notions existantes à ranger — ne crée rien, ne détruit rien. */
+  assignments: PlanAssignment[];
   groups: PlanGroup[];
   /** Éléments écartés : inexploitables. */
   discarded: PlanIssue[];
@@ -81,6 +83,13 @@ const chapterSchema = z.object({
   ref: refSchema,
   name: z.string().trim().min(1).max(120), // CHAPTER_NAME_MAX
   position: z.number().int().min(0).optional(),
+  // Provenance : sur quelles pages ce chapitre court, à peu près. C'est ce qui
+  // permet à la passe RANGEMENT de se passer du cours (§ migration du
+  // 24/08/2026). Toujours facultatif — un chapitre écrit à la main n'en a pas,
+  // et un modèle qui ne sait pas doit pouvoir se taire plutôt qu'inventer.
+  sourceDocument: z.string().trim().max(255).optional(),
+  pageStart: z.coerce.number().int().min(0).optional(),
+  pageEnd: z.coerce.number().int().min(0).optional(),
 });
 
 const notionSchema = z.object({
@@ -88,6 +97,30 @@ const notionSchema = z.object({
   // Une notion n'a plus qu'UN texte depuis le 19/08/2026 (280 caractères).
   title: z.string().trim().min(1).max(280), // NOTION_TITLE_MAX
   chapterRef: refSchema.optional(),
+  // D'où elle vient. Le document est ajouté par l'appelant (il sait lequel il
+  // traite) ; la page vient du modèle, qui seul l'a sous les yeux.
+  sourceDocument: z.string().trim().max(255).optional(),
+  page: z.coerce.number().int().min(0).optional(),
+});
+
+/** Ranger une notion existante dans un chapitre — ou l'en sortir.
+ *
+ *  C'est l'opération `assign_notion` du catalogue
+ *  (`src/lib/program/operations.ts`), exprimée sur le fil. Une affectation ne
+ *  crée rien et ne détruit rien : c'est le seul geste par lequel un import
+ *  réorganise un atelier existant, et il est réversible par nature.
+ *
+ *  `chapterRef` vide (ou absent) = **sans chapitre**, un état légal et voulu :
+ *  la notion garde son contenu, ses questions et la progression acquise, elle
+ *  sort simplement du programme. */
+const assignmentSchema = z.object({
+  notionRef: refSchema,
+  chapterRef: z
+    .string()
+    .trim()
+    .max(64)
+    .optional()
+    .transform((v) => (v ? v : undefined)),
 });
 
 /** Type de réponse : les anciens noms sont réparés, un nom inventé est rejeté.
@@ -137,6 +170,7 @@ const groupSchema = z.object({
 });
 
 export type PlanChapter = z.infer<typeof chapterSchema>;
+export type PlanAssignment = z.infer<typeof assignmentSchema>;
 export type PlanNotion = z.infer<typeof notionSchema>;
 export type PlanQuestion = z.infer<typeof questionSchema>;
 export type PlanGroup = z.infer<typeof groupSchema>;
@@ -147,6 +181,7 @@ export type PlanGroup = z.infer<typeof groupSchema>;
 export const planSchema = z.object({
   chapters: z.array(chapterSchema).default([]),
   notions: z.array(notionSchema).default([]),
+  assignments: z.array(assignmentSchema).default([]),
   groups: z.array(groupSchema).default([]),
 });
 
@@ -171,7 +206,7 @@ function refOf(raw: unknown): string | undefined {
 /** Lit un plan venu de n'importe où, sans jamais lui faire confiance et sans
  *  jamais tout perdre pour un élément fautif.
  *
- *  Trois passes, dans cet ordre — chacune s'appuie sur ce que la précédente a
+ *  Quatre passes, dans cet ordre — chacune s'appuie sur ce que la précédente a
  *  retenu, ce qui est aussi la raison pour laquelle une référence pendante se
  *  détecte ici et pas dans le schéma :
  *
@@ -179,7 +214,9 @@ function refOf(raw: unknown): string | undefined {
  *    2. notions    → une référence de chapitre inconnue est RETIRÉE (la notion
  *       reste, « sans chapitre » est un état légal — c'est même le sas prévu
  *       pour l'ingestion, voir docs/product-spec.md) ;
- *    3. groupes    → une référence de notion inconnue est retirée de la
+ *    3. affectations → ranger une notion existante ; une référence inconnue,
+ *       de notion comme de chapitre, écarte l'affectation sans rien changer.
+ *    4. groupes    → une référence de notion inconnue est retirée de la
  *       question ; la question, elle, est conservée.
  *
  *  Pourquoi retirer la référence plutôt qu'écarter l'élément : écarter perdrait
@@ -235,7 +272,58 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
     notions.push(notion);
   }
 
-  // 3. Groupes de questions
+  // 3. Affectations — ranger une notion QUI EXISTE DÉJÀ.
+  //
+  //    Contrairement aux notions ci-dessus, `notionRef` doit être une référence
+  //    CONNUE : une affectation ne peut rien créer. Une notion inconnue est donc
+  //    écartée, jamais « réparée » en création — c'est la règle du fichier (on ne
+  //    répare que ce qui a un mapping fondé), et c'est ce qui empêche la passe
+  //    chapitres d'inventer du contenu qu'aucun document n'a produit.
+  //
+  //    Un chapitre inconnu est écarté aussi, et surtout PAS ramené à « sans
+  //    chapitre » : ce serait sortir une notion du programme sur une faute de
+  //    frappe, c'est-à-dire la perte silencieuse qu'on cherche à rendre
+  //    impossible. Ne rien faire laisse la notion là où elle est.
+  const assignments: PlanAssignment[] = [];
+  const assigned = new Set<string>();
+  for (const item of asArray(root.assignments)) {
+    const result = assignmentSchema.safeParse(item);
+    if (!result.success) {
+      discarded.push({ kind: 'assignment', reason: firstMessage(result.error) });
+      continue;
+    }
+    const assignment = result.data;
+    if (!notionRefs.has(assignment.notionRef)) {
+      discarded.push({
+        kind: 'assignment',
+        ref: assignment.notionRef,
+        reason: 'notion inconnue — une affectation ne crée rien',
+      });
+      continue;
+    }
+    if (assignment.chapterRef && !chapterRefs.has(assignment.chapterRef)) {
+      discarded.push({
+        kind: 'assignment',
+        ref: assignment.notionRef,
+        reason: `chapitre inconnu (${assignment.chapterRef}) — notion laissée où elle est`,
+      });
+      continue;
+    }
+    // Deux affectations pour la même notion : la première fait foi. Appliquer la
+    // seconde ferait dépendre le résultat de l'ordre d'un tableau JSON.
+    if (assigned.has(assignment.notionRef)) {
+      discarded.push({
+        kind: 'assignment',
+        ref: assignment.notionRef,
+        reason: 'notion déjà rangée dans ce plan',
+      });
+      continue;
+    }
+    assigned.add(assignment.notionRef);
+    assignments.push(assignment);
+  }
+
+  // 4. Groupes de questions
   const groups: PlanGroup[] = [];
   const groupRefs = new Set<string>();
   for (const item of asArray(root.groups)) {
@@ -266,5 +354,5 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
     groups.push(group);
   }
 
-  return { chapters, notions, groups, discarded, adjusted };
+  return { chapters, notions, assignments, groups, discarded, adjusted };
 }

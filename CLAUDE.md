@@ -14,6 +14,11 @@ Si tu n'es pas certain d'une information (API, comportement d'une lib, structure
 ### Poser des questions avant d'exécuter
 **Après CHAQUE prompt de l'utilisateur**, avant d'exécuter quoi que ce soit, identifie systématiquement les ambiguïtés. S'il y en a — même mineures — pose tes questions de clarification et attends la réponse avant de commencer. N'exécute jamais sans avoir compris l'intention précise. S'il n'y a vraiment aucune ambiguïté, tu peux exécuter directement.
 
+### Parler produit, jamais code
+L'utilisateur **ne lit jamais le code** — il ne développe pas, il décide. Aucune réponse ne doit contenir de nom de fichier, de fonction, de table ou de colonne, ni d'extrait de code, sauf s'il le demande explicitement. On parle de « le bouton d'annulation », « la liste des chapitres », jamais de leur nom technique.
+
+Les réponses sont **courtes** : la recommandation, sa raison en une phrase, et la question qui bloque s'il y en a une. Pas de reformulation de ce qu'il vient de dire, pas d'éventail d'options — on recommande. Recadrage du 23/08/2026, après un week-end perdu à des échanges illisibles pour lui.
+
 ### Icônes : Lucide React uniquement
 Toujours utiliser exclusivement les icônes de `lucide-react`. Ne jamais créer d'icônes SVG inline custom, ne jamais utiliser d'autres librairies d'icônes. Si une icône Lucide ne correspond pas exactement au besoin, prendre la plus proche ou un emoji texte — jamais du SVG personnalisé.
 

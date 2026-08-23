@@ -1,0 +1,213 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  allowedOperations,
+  authorizeOperations,
+  isOperationAllowed,
+  OPERATION_RULES,
+  planImportCleanup,
+  type ImportProduce,
+  type OperationKind,
+  type ProgramOperation,
+} from '@/lib/program/operations';
+
+// Le contrat des opérations sur le programme (feuille de route
+// docs/chantiers/2026-08-23-notions-dabord.md, T2).
+//
+// Pourquoi ce module est testé alors que la discipline du projet est de ne pas
+// tout tester (CLAUDE.md §7) : les deux critères sont réunis. C'est le contrat
+// d'une entrée non fiable (l'IA, demain un chat), et il gouverne une opération
+// qui peut détruire des données saisies à la main.
+
+describe('catalogue des opérations', () => {
+  it('cacher un chapitre est ouvert aux deux — l’absence de bouton est esthétique, pas un droit', () => {
+    // Arbitrage du 23/08/2026 : l'interface ne propose pas de bouton « cacher »
+    // par sobriété. Un gestionnaire qui le demande depuis le chat a les mêmes
+    // droits que celui qui réordonne.
+    expect(isOperationAllowed('hide_chapter', 'ai', 'manager')).toBe(true);
+    expect(isOperationAllowed('hide_chapter', 'human', 'manager')).toBe(true);
+    expect(isOperationAllowed('hide_chapter', 'human', 'member')).toBe(false);
+  });
+
+  it('restaurer est ouvert aux deux — l’IA doit pouvoir défaire un import annulé', () => {
+    expect(isOperationAllowed('restore_chapter', 'human', 'manager')).toBe(true);
+    expect(isOperationAllowed('restore_chapter', 'ai', 'manager')).toBe(true);
+  });
+
+  it('réarranger et cacher restent DEUX opérations — deux effets, deux traces', () => {
+    // Côté produit c'est un seul geste, et la passe chapitres émet bien les deux
+    // ensemble. Ils restent séparés parce que réordonner est cosmétique tandis
+    // que cacher retire du contenu du programme : les fusionner ferait qu'un
+    // réarrangement emporte le pouvoir de vider un programme.
+    const kinds = Object.keys(OPERATION_RULES);
+    expect(kinds).toContain('reorder_chapters');
+    expect(kinds).toContain('hide_chapter');
+  });
+
+  it('un candidat ne peut RIEN, quel que soit le demandeur', () => {
+    expect(allowedOperations('human', 'member')).toEqual([]);
+    expect(allowedOperations('ai', 'member')).toEqual([]);
+  });
+
+  it('un propriétaire a au moins tout ce qu’un gestionnaire a', () => {
+    const manager = allowedOperations('human', 'manager');
+    const owner = allowedOperations('human', 'owner');
+    for (const kind of manager) expect(owner).toContain(kind);
+  });
+
+  it('aucune opération n’est ouverte à tous les auteurs par inadvertance', () => {
+    // La table est exhaustive (Record sur OperationKind) : ce test garde le
+    // sens, pas la forme — une opération ne doit jamais arriver sans auteur.
+    for (const [kind, rule] of Object.entries(OPERATION_RULES)) {
+      expect(rule.actors.length, kind).toBeGreaterThan(0);
+      expect(rule.role, kind).not.toBe('member');
+    }
+  });
+
+  it('la recharge automatique passe par la MÊME opération que la création', () => {
+    // Plan d'ingestion §16.6 : seul le critère d'entrée change (quelles notions),
+    // jamais l'opération. `system` n'a le droit que de celle-là.
+    expect(allowedOperations('system', 'manager')).toEqual(['create_questions']);
+  });
+});
+
+describe('authorizeOperations', () => {
+  const ops: ProgramOperation[] = [
+    { kind: 'create_notion', title: 'Date de naissance de Napoléon' },
+    { kind: 'hide_chapter', chapterId: 'c1' },
+    { kind: 'assign_notion', notionId: 'n1', chapterId: 'c2' },
+  ];
+
+  it('garde ce qui est permis et refuse le reste — sans perdre le lot', () => {
+    // Le traitement de fond ne peut que rédiger des questions : tout le reste
+    // du lot lui est refusé, un par un, sans que le lot soit perdu.
+    const { allowed, refused } = authorizeOperations(ops, 'system', 'manager');
+    expect(allowed).toEqual([]);
+    expect(refused.map((r) => r.reason)).toEqual(['actor_not_allowed', 'actor_not_allowed', 'actor_not_allowed']);
+  });
+
+  it('un gestionnaire humain obtient tout le lot', () => {
+    const { allowed, refused } = authorizeOperations(ops, 'human', 'manager');
+    expect(allowed).toHaveLength(3);
+    expect(refused).toEqual([]);
+  });
+
+  it('refuse tout à un candidat, avec le bon motif', () => {
+    const { allowed, refused } = authorizeOperations(ops, 'ai', 'member');
+    expect(allowed).toEqual([]);
+    expect(refused.every((r) => r.reason === 'role_too_low')).toBe(true);
+  });
+
+  it('refuse une opération hors catalogue au lieu de la laisser passer', () => {
+    const forged = [{ kind: 'delete_notion', notionId: 'n1' }] as unknown as ProgramOperation[];
+    const { allowed, refused } = authorizeOperations(forged, 'ai', 'owner');
+    expect(allowed).toEqual([]);
+    expect(refused).toEqual([{ kind: 'delete_notion', reason: 'unknown_operation' }]);
+  });
+
+  it('un catalogue vide ne rend rien et ne lève pas', () => {
+    expect(authorizeOperations([], 'ai', 'manager')).toEqual({ allowed: [], refused: [] });
+  });
+});
+
+describe('planImportCleanup', () => {
+  const IMPORT = 'imp-1';
+
+  it('efface ce que CET import a créé et que le modèle a EXPLICITEMENT écarté', () => {
+    const produce: ImportProduce = {
+      chapters: [{ id: 'c-new', importId: IMPORT }],
+      notions: [{ id: 'n-orphan', chapterId: null, importId: IMPORT }],
+    };
+    expect(planImportCleanup(produce, IMPORT, ['n-orphan'])).toEqual({
+      chapterIds: ['c-new'],
+      notionIds: ['n-orphan'],
+    });
+  });
+
+  it('n’efface AUCUNE notion que le modèle n’a jamais examinée', () => {
+    // La faille corrigée le 24/08/2026. « Créé par cet import et sans chapitre »
+    // recouvre deux situations que rien ne distingue en base : la redite écartée
+    // (déchet) et la notion jamais examinée — rangement interrompu, en échec, ou
+    // atelier sans le moindre chapitre où ranger. Dans ce dernier cas, le ménage
+    // effaçait TOUT ce que l'import venait de produire.
+    const produce: ImportProduce = {
+      chapters: [],
+      notions: [
+        { id: 'n1', chapterId: null, importId: IMPORT },
+        { id: 'n2', chapterId: null, importId: IMPORT },
+      ],
+    };
+    expect(planImportCleanup(produce, IMPORT).notionIds).toEqual([]);
+    expect(planImportCleanup(produce, IMPORT, []).notionIds).toEqual([]);
+    // Seule celle qui a été jugée part.
+    expect(planImportCleanup(produce, IMPORT, ['n2']).notionIds).toEqual(['n2']);
+  });
+
+  it('ne touche JAMAIS à ce qui existait avant, même écarté', () => {
+    // Une notion mise « sans chapitre » par un import précédent est une décision
+    // prise et consultable — pas du déchet.
+    const produce: ImportProduce = {
+      chapters: [{ id: 'c-old', importId: 'imp-0' }],
+      notions: [
+        { id: 'n-old-orphan', chapterId: null, importId: 'imp-0' },
+        { id: 'n-manual', chapterId: null, importId: null },
+      ],
+    };
+    expect(planImportCleanup(produce, IMPORT)).toEqual({ chapterIds: [], notionIds: [] });
+  });
+
+  it('conserve un chapitre VIDÉ qui existait avant — il porte peut-être un titre écrit à la main', () => {
+    const produce: ImportProduce = {
+      chapters: [{ id: 'c-old-empty', importId: 'imp-0' }],
+      notions: [],
+    };
+    expect(planImportCleanup(produce, IMPORT).chapterIds).toEqual([]);
+  });
+
+  it('conserve ce que l’import a créé ET rangé', () => {
+    const produce: ImportProduce = {
+      chapters: [{ id: 'c-new', importId: IMPORT }],
+      notions: [{ id: 'n-new', chapterId: 'c-new', importId: IMPORT }],
+    };
+    expect(planImportCleanup(produce, IMPORT)).toEqual({ chapterIds: [], notionIds: [] });
+  });
+
+  it('un chapitre de cet import reste s’il héberge une notion venue d’ailleurs', () => {
+    const produce: ImportProduce = {
+      chapters: [{ id: 'c-new', importId: IMPORT }],
+      notions: [{ id: 'n-old', chapterId: 'c-new', importId: 'imp-0' }],
+    };
+    expect(planImportCleanup(produce, IMPORT).chapterIds).toEqual([]);
+  });
+
+  it('appelé entre deux passes, il ne peut plus rien emporter', () => {
+    // Les notions naissent à la passe ① sans chapitre et ne sont rangées qu'à la
+    // passe ③. Avant le 24/08/2026, un appel à mi-parcours les effaçait toutes ;
+    // le filtre « explicitement écartées » rend le calendrier non critique — il
+    // reste préférable d'appeler à la fin, ce n'est plus destructeur autrement.
+    const midImport: ImportProduce = {
+      chapters: [],
+      notions: [
+        { id: 'n1', chapterId: null, importId: IMPORT },
+        { id: 'n2', chapterId: null, importId: IMPORT },
+      ],
+    };
+    expect(planImportCleanup(midImport, IMPORT).notionIds).toEqual([]);
+  });
+
+  it('un import qui n’a rien produit ne propose rien', () => {
+    expect(planImportCleanup({ chapters: [], notions: [] }, IMPORT)).toEqual({
+      chapterIds: [],
+      notionIds: [],
+    });
+  });
+});
+
+describe('le catalogue est fermé', () => {
+  it('ne contient aucune opération de suppression ni de réécriture', () => {
+    const kinds = Object.keys(OPERATION_RULES) as OperationKind[];
+    for (const kind of kinds) {
+      expect(kind).not.toMatch(/delete|remove|update|rewrite|merge/);
+    }
+  });
+});

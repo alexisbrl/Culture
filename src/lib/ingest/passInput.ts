@@ -1,0 +1,150 @@
+// Ce que chaque passe reçoit en entrée — module PUR, sans réseau ni base.
+//
+// Ces règles décidaient jusqu'ici du coût de l'ingestion sans être écrites nulle
+// part : elles étaient dispersées entre l'orchestration (`run.ts`) et le
+// fournisseur (`providers/claude.ts`), donc intestables. Les réunir ici les rend
+// vérifiables sans clé API — et c'est le seul endroit où lire « qu'est-ce qui
+// part au modèle, et pourquoi ».
+
+import type { PreparedDocument } from './providers/types';
+
+export type IngestPass = 'chapters' | 'notions' | 'assign' | 'questions';
+
+/** Les documents qu'une passe reçoit.
+ *
+ *  **La passe questions n'en reçoit aucun** (§16.3, §16.21). Une notion est
+ *  autoportante par construction — c'est la définition qu'en donne la passe 2 —
+ *  et ce qui manque pour les niveaux supérieurs de Bloom n'est pas le cours mais
+ *  les notions voisines du même chapitre. Renvoyer le corpus pour rédiger une
+ *  question sur une phrase de 280 caractères, c'est ce qui a coûté ~20 $ pour
+ *  zéro question le 22/08/2026 : à l'échelle du corpus de test, ~287 $ de
+ *  lectures de cache contre ~8,50 $ sans les documents.
+ *
+ *  Posée en garde côté fournisseur, et pas seulement à l'appel : un appelant
+ *  distrait ne doit pas pouvoir rouvrir le robinet. */
+export function documentsForPass(
+  pass: IngestPass,
+  prepared: PreparedDocument[],
+  /** Index du document à traiter — **obligatoire pour la passe notions**, qui
+   *  travaille document par document depuis l'inversion du 23/08/2026. */
+  documentIndex?: number,
+): PreparedDocument[] {
+  // Ni le rangement ni les questions ne reçoivent de document : le premier
+  // travaille sur des pages et des titres, le second sur des notions (§16.3).
+  if (pass === 'questions' || pass === 'assign') return [];
+
+  // La passe notions ne reçoit QUE son document. C'est l'unité de travail qui
+  // remplace le chapitre : elle ne demande aucun jugement au modèle, elle est
+  // stable d'un import à l'autre, et elle parallélise sans amorçage.
+  //
+  // Effet de bord heureux : le corpus n'est plus envoyé qu'UNE fois au total sur
+  // cette passe, au lieu d'une fois par chapitre. C'est moins cher qu'une
+  // lecture de cache — voir `shouldCacheDocuments`.
+  if (pass === 'notions') {
+    if (documentIndex === undefined) {
+      throw new Error('documentsForPass: la passe notions exige un index de document');
+    }
+    const document = prepared[documentIndex];
+    return document ? [document] : [];
+  }
+
+  // La passe chapitres, elle, les reçoit TOUS : sans le cours, le modèle invente
+  // des intitulés au lieu de reprendre ceux du document, et ne sait pas d'où
+  // viennent les notions qu'on lui demande de répartir.
+  return prepared;
+}
+
+/** Combien de notions par appel de la passe questions.
+ *
+ *  Ni une (le contexte du chapitre serait renvoyé autant de fois qu'il y a de
+ *  notions), ni tout le chapitre (`MAX_TOKENS` est à 32 000 et une notion à la
+ *  volumétrie cible pèse ~2 400 tokens de sortie : un chapitre de 25 notions
+ *  tronquerait la réponse, donc la perdrait, §16.2). Dix est le compromis. */
+export const NOTIONS_PER_QUESTION_BATCH = 10;
+
+/** Découpe les notions d'un chapitre en lots de travail.
+ *
+ *  L'ordre reçu est conservé et fait foi : l'appelant doit le rendre stable
+ *  d'un appel à l'autre, sinon deux lots successifs se recouvriraient — le
+ *  client rappelle la même action une fois par lot. */
+export function batchNotions<T>(notions: T[], size = NOTIONS_PER_QUESTION_BATCH): T[][] {
+  if (size < 1) throw new Error(`Taille de lot invalide : ${size}`);
+  const batches: T[][] = [];
+  for (let i = 0; i < notions.length; i += size) batches.push(notions.slice(i, i + size));
+  return batches;
+}
+
+// ─── Le marqueur de cache ────────────────────────────────────────────────────
+//
+// Le cache existait pour répondre à « on renvoie le même cours 25 fois ». Une
+// fois qu'on cesse de le faire (T3), il ne reste presque rien à mettre en
+// cache — et **un marqueur posé sur un contenu jamais relu coûte 1,25× au lieu
+// de 1×**, soit une perte sèche de 25 % sur cet appel (§16.17).
+//
+// **Depuis l'inversion des passes (23/08/2026), il ne reste PLUS AUCUN cas où le
+// marqueur paie sur les documents**, et c'est une bonne nouvelle :
+//
+//   • passe notions  — un appel par document, chacun ne portant que le sien :
+//     aucun préfixe commun, donc rien à relire. Le corpus part une fois en tout,
+//     ce qui est moins cher qu'une écriture suivie de lectures ;
+//   • passe chapitres — un seul appel, donc aucune relecture par définition ;
+//   • passe questions — aucun document du tout (§16.3).
+//
+// La fonction reste : elle est le garde qui évite qu'on repose un marqueur par
+// réflexe le jour où une passe redeviendra multi-appels sur le même contenu.
+
+/** Le marqueur ne se pose que si le contenu sert à **plus d'un appel**.
+ *
+ *  Seuil de rentabilité en TTL 5 minutes : 2 lectures (1,25× + 0,1× contre 2×).
+ *  En dessous, on paie l'écriture pour rien. */
+export function shouldCacheDocuments(documentUses: number): boolean {
+  return documentUses > 1;
+}
+
+// ─── La relance de la passe chapitres ────────────────────────────────────────
+//
+// Le nombre de chapitres est **le multiplicateur de tout ce qui suit** : 28 au
+// lieu de 6, c'est ×4,7 sur les passes notions et questions (§16.15). C'est le
+// paramètre le plus rentable à surveiller, et un appel de plus en économise des
+// centaines.
+//
+// Ce que ce mécanisme n'est PAS : un point d'arrêt. Aucune validation humaine
+// n'intervient entre deux passes, jamais — refus produit explicite (§16.18).
+//
+// Ce n'est pas non plus une CORRECTION imposée. Le second appel reçoit le
+// découpage proposé et la consigne de l'utilisateur, et on lui demande de le
+// **vérifier** : s'il est justifié — un programme annuel, un cours découpé en
+// thèmes eux-mêmes subdivisés —, il le reconduit tel quel. On ne rabote un
+// découpage que lorsqu'il est effectivement trop fin (22/08/2026).
+
+/** Au-delà, on soupçonne un découpage en sous-parties plutôt qu'en chapitres.
+ *  Nombre ABSOLU, jamais rapporté au nombre de documents : un cours de 8
+ *  chapitres peut tenir dans un seul PDF (§16.18). */
+export const MAX_PLAUSIBLE_CHAPTERS = 16;
+
+export function needsChapterRetry(chapterCount: number): boolean {
+  return chapterCount > MAX_PLAUSIBLE_CHAPTERS;
+}
+
+/** Enchaîne **au plus deux** appels de la passe chapitres.
+ *
+ *  L'appelant fournit l'appel (`attempt`) et sait compter ses chapitres
+ *  (`countOf`) : cette fonction ne connaît ni le fournisseur ni la base, ce qui
+ *  la rend testable avec un fournisseur factice. Elle ne lève jamais pour un
+ *  nombre trop élevé — la seconde réponse fait foi quelle qu'elle soit. */
+export async function withChapterRetry<R>(
+  attempt: (retry: { previous: string[] } | undefined) => Promise<R>,
+  countOf: (result: R) => number,
+  namesOf: (result: R) => string[],
+): Promise<{ result: R; attempts: number }> {
+  const first = await attempt(undefined);
+  const count = countOf(first);
+  if (!needsChapterRetry(count)) return { result: first, attempts: 1 };
+
+  // Une seule relance, jamais deux : on ne compte pas le résultat de celle-ci.
+  // Les NOMS partent, pas seulement le nombre : sans eux, le modèle ne peut pas
+  // juger si « 32 » recouvre 32 sous-parties d'un même thème ou 32 sujets
+  // réellement distincts — il ne saurait qu'obéir.
+  const second = await attempt({ previous: namesOf(first) });
+  return { result: second, attempts: 2 };
+}

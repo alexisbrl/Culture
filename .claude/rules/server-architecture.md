@@ -37,6 +37,8 @@ Point d'entrée unique après une mutation. `revalidateWorkshop()` (page atelier
 
 Toute la base est accédée **exclusivement côté serveur** via la service role key (`getSupabaseServerClient`, `src/lib/supabase.ts`), qui bypass la RLS. Aucune table n'est lue/écrite depuis le client avec la clé anon. Conséquence : **toutes les tables ont la RLS activée, sans aucune policy** — c'est normal et voulu, à ne PAS « corriger » en ajoutant des policies (inutile tant que l'accès reste 100% server-side). Si un jour un accès client avec la clé anon est ajouté, il faudra alors écrire des policies pour les tables concernées.
 
+C'est ce modèle qui a fait écarter **Supabase Realtime** pour le rafraîchissement en direct des écrans (22/08/2026) : écouter la base depuis le navigateur imposerait un JWT Clerk→Supabase et des policies sur chaque table exposée, c'est-à-dire ouvrir précisément ce qui est fermé ici. La fraîcheur passe donc par un sondage léger des server actions existantes — `useLiveData`, voir `.claude/rules/frontend-patterns.md`. Corollaire pratique : **une donnée qu'on veut voir arriver en direct doit avoir une server action de lecture qui se rappelle sans effet de bord** ; c'est le seul prérequis côté serveur.
+
 ## Types Supabase générés — `src/lib/database.types.ts`
 
 **Généré** (MCP Supabase `generate_typescript_types` ou `supabase gen types typescript --project-id hhkmrejjksjpfetwefju`) — ne jamais l'éditer à la main, le régénérer après chaque migration. Les types métier de `src/lib/supabase.ts` (`Workshop`, `WorkshopMember`…) en dérivent (`Tables<'workshops'>`…) pour ne pas diverger des colonnes réelles. Le client Supabase lui-même reste non typé (`createClient` sans generic) — voir `docs/backlog.md` pour le chantier de typage complet.

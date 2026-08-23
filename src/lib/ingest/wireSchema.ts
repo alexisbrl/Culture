@@ -80,22 +80,76 @@ export const wireGroupSchema = z.object({
 export const wireChapterSchema = z.object({
   ref: z.string().describe('Clé locale unique de ce chapitre dans ce plan.'),
   name: z.string().describe('Nom du chapitre, 120 caractères maximum.'),
+  sourceDocument: z
+    .string()
+    .describe("Nom du document où ce chapitre commence. Chaîne vide si tu ne peux pas le dire."),
+  pageStart: z
+    .number()
+    .int()
+    .describe('Première page approximative du chapitre dans ce document. 0 si tu ne peux pas le dire.'),
+  pageEnd: z
+    .number()
+    .int()
+    .describe('Dernière page approximative du chapitre. 0 si tu ne peux pas le dire.'),
 });
 
+/** ⚠️ Une notion naît SANS chapitre (feuille de route « notions d'abord », §3).
+ *
+ *  Le champ `chapterRef` a disparu d'ici le 23/08/2026 : au moment où les
+ *  notions sont extraites, aucun chapitre n'existe encore. Le rangement est une
+ *  instruction séparée (`wireAssignmentSchema`), ce qui est exactement le
+ *  contrat des opérations — créer et attribuer sont deux gestes distincts
+ *  (`src/lib/program/operations.ts`). */
 export const wireNotionSchema = z.object({
   ref: z.string().describe('Clé locale unique de cette notion dans ce plan.'),
   title: z
     .string()
     .describe("La notion en UNE phrase de 280 caractères maximum, autoportante et vérifiable."),
-  chapterRef: z.string().describe("Référence du chapitre auquel elle appartient."),
+  page: z
+    .number()
+    .int()
+    .describe("Page du document d'où vient cette notion. 0 si tu ne peux pas la déterminer."),
+});
+
+/** Ranger une notion dans un chapitre.
+ *
+ *  `notionRef` désigne une notion qui EXISTE DÉJÀ — celles qu'on vient
+ *  d'extraire des documents comme celles que l'atelier portait avant. C'est ce
+ *  qui rend la mise à jour possible : réorganiser un atelier, c'est n'émettre
+ *  que des affectations. */
+export const wireAssignmentSchema = z.object({
+  notionRef: z
+    .string()
+    .describe("Identifiant de la notion à ranger, recopié tel quel depuis la liste des notions fournie."),
+  chapterRef: z
+    .string()
+    .describe(
+      "Référence du chapitre où la ranger, parmi ceux de cette réponse. Chaîne vide pour laisser la notion hors du programme (elle reste consultable, sans chapitre).",
+    ),
 });
 
 // Une sortie par passe : on ne demande jamais au modèle de produire le programme
 // entier d'un coup (docs/ai-ingestion-plan.md §5.1).
+//
+// ⚠️ **Les chapitres et le rangement sont DEUX passes** (24/08/2026). Elles ont
+// d'abord été fondues en un seul appel — le modèle nommait et rangeait d'un
+// coup — et ça ne tient pas à l'échelle : ranger 500 notions, c'est produire 500
+// lignes dans une seule réponse, bien au-delà du plafond de sortie. La réponse
+// serait tronquée, donc perdue. C'est le mur qu'a déjà rencontré la passe
+// questions, et la parade est la même : des lots.
+//
+// On ne peut pas découper en lots un appel qui doit AUSSI décider de la
+// structure, puisque la structure ne se décide qu'une fois. La séparation n'est
+// donc pas une alternative aux appels multiples : c'est ce qui les autorise.
+//
+// Bénéfice au passage : nommer les chapitres demande le cours, les ranger non —
+// la passe rangement se passe donc entièrement des documents.
 export const wireChaptersOutput = z.object({ chapters: z.array(wireChapterSchema) });
+export const wireAssignmentsOutput = z.object({ assignments: z.array(wireAssignmentSchema) });
 export const wireNotionsOutput = z.object({ notions: z.array(wireNotionSchema) });
 export const wireGroupsOutput = z.object({ groups: z.array(wireGroupSchema) });
 
 export type WireChaptersOutput = z.infer<typeof wireChaptersOutput>;
+export type WireAssignmentsOutput = z.infer<typeof wireAssignmentsOutput>;
 export type WireNotionsOutput = z.infer<typeof wireNotionsOutput>;
 export type WireGroupsOutput = z.infer<typeof wireGroupsOutput>;

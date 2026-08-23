@@ -96,7 +96,8 @@ export async function addImportUsage(
   if (error || !data) throw new Error(error?.message ?? 'import introuvable');
 
   // Les tokens écrits dans le cache comptent comme de l'entrée : ils sont
-  // facturés (~1,25×), et les ignorer donnerait un coût largement sous-évalué.
+  // facturés plus cher qu'elle (1,25× en TTL 5 minutes, 2× en TTL 1 h), et les
+  // ignorer donnerait un coût largement sous-évalué.
   await supabase
     .from('ai_imports')
     .update({
@@ -171,11 +172,194 @@ function resolve(ref: string | undefined, created: Map<string, string>): string 
   return created.get(ref) ?? ref;
 }
 
+/** Range des notions existantes dans leurs chapitres — l'opération `assign_notion`
+ *  du catalogue (`src/lib/program/operations.ts`), appliquée en base.
+ *
+ *  ⚠️ C'est la SEULE écriture de l'ingestion qui touche à des lignes qui
+ *  existaient avant elle, et c'est pour ça qu'elle ne touche qu'à **une seule
+ *  colonne** : `chapter_id`. Le titre d'une notion, ses questions et la
+ *  progression acquise ne sont jamais atteints — un `update` plus large ici
+ *  romprait le contrat (« l'IA crée et attribue, elle ne réécrit pas »).
+ *
+ *  Le filtre sur `workshop_id` n'est pas décoratif : les références viennent du
+ *  modèle, donc d'une source non fiable. Sans lui, un identifiant recopié depuis
+ *  un autre atelier y déplacerait une notion.
+ *
+ *  Une écriture par chapitre visé plutôt qu'une par notion : le nombre de
+ *  requêtes suit le nombre de chapitres (quelques unités), pas le nombre de
+ *  notions (plusieurs centaines).
+ *
+ *  ⚠️ **Une affectation qui ne change rien n'est PAS un déplacement.** Le modèle
+ *  répond pour chaque notion du lot, y compris celles qu'il laisse où elles
+ *  sont — c'est même le cas le plus fréquent sur un atelier déjà organisé. Les
+ *  écrire quand même ferait deux dégâts : `updated_at` bougerait sur des lignes
+ *  intactes (ce qui, seul, rendrait l'import non annulable), et l'écran
+ *  annoncerait comme « déplacée » une notion qui n'a pas bougé.
+ *
+ *  Rend donc les identifiants **réellement** déplacés, jamais un compte. */
+export async function applyAssignments(
+  workshopId: string,
+  assignments: { notionRef: string; chapterRef?: string }[],
+  chapterIds: Map<string, string>,
+  /** Où chaque notion se trouve AVANT — c'est ce qui distingue un déplacement
+   *  d'une reconduction. Une notion absente de cette table est traitée comme
+   *  inconnue, donc écrite. */
+  current: Map<string, string | null> = new Map(),
+): Promise<string[]> {
+  if (assignments.length === 0) return [];
+
+  const supabase = getSupabaseServerClient();
+  const byChapter = new Map<string | null, string[]>();
+  for (const a of assignments) {
+    const chapterId = resolve(a.chapterRef, chapterIds);
+    if (current.has(a.notionRef) && current.get(a.notionRef) === chapterId) continue;
+    const bucket = byChapter.get(chapterId);
+    if (bucket) bucket.push(a.notionRef);
+    else byChapter.set(chapterId, [a.notionRef]);
+  }
+
+  const moved: string[] = [];
+  for (const [chapterId, notionIds] of byChapter) {
+    const { data, error } = await supabase
+      .from('workshop_bricks')
+      .update({ chapter_id: chapterId, updated_at: new Date().toISOString() })
+      .eq('workshop_id', workshopId)
+      .in('id', notionIds)
+      .select('id');
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) moved.push(row.id as string);
+  }
+  return moved;
+}
+
+/** Rattache les questions d'une notion écartée à celle qui la remplace.
+ *
+ *  ⚠️ **Récupérer, puis seulement rédiger.** Une question accrochée à une notion
+ *  sortie du programme DORT : elle existe encore, mais plus rien ne la tire. Si
+ *  une notion active dit la même chose, la rattacher coûte une écriture — la
+ *  faire réécrire coûte un appel au modèle ET produit un doublon de plus. C'est
+ *  pour ça que ça se fait AVANT la passe questions, jamais après.
+ *
+ *  L'énoncé n'est JAMAIS réécrit, et le lien vers l'ancienne notion n'est pas
+ *  retiré : on ajoute, on ne défait pas. Si l'ancienne notion est restaurée un
+ *  jour, sa question est toujours là.
+ *
+ *  Rend le nombre de questions effectivement récupérées. */
+export async function reattachQuestions(from: string, to: string): Promise<number> {
+  if (from === to) return 0;
+  const supabase = getSupabaseServerClient();
+
+  const [{ data: source, error }, { data: already }] = await Promise.all([
+    supabase.from('exam_question_item_bricks').select('item_id').eq('brick_id', from),
+    supabase.from('exam_question_item_bricks').select('item_id').eq('brick_id', to),
+  ]);
+  if (error) throw new Error(error.message);
+
+  const linked = new Set((already ?? []).map((r) => r.item_id as string));
+  const toLink = (source ?? [])
+    .map((r) => r.item_id as string)
+    .filter((itemId) => !linked.has(itemId));
+  if (toLink.length === 0) return 0;
+
+  const { error: insertError } = await supabase
+    .from('exam_question_item_bricks')
+    .insert(toLink.map((itemId) => ({ item_id: itemId, brick_id: to })));
+  if (insertError) throw new Error(insertError.message);
+
+  return toLink.length;
+}
+
+/** Efface ce que cet import a créé et que personne n'a jamais rangé.
+ *
+ *  ⚠️ **C'est la seule suppression du système, et elle est bornée par le plan
+ *  qu'on lui passe** — jamais par un filtre écrit ici. Le calcul de ce qui est
+ *  effaçable vit dans `planImportCleanup` (`src/lib/program/operations.ts`),
+ *  module pur et testé, précisément pour que la règle « créé par cet import ET
+ *  jamais rattaché » soit vérifiable sans base. Cette fonction ne fait
+ *  qu'exécuter.
+ *
+ *  Le filtre sur `workshop_id` est une ceinture de plus : les identifiants
+ *  viennent d'un calcul local, mais une suppression ne se protège jamais trop. */
+export async function removeOrphans(
+  workshopId: string,
+  cleanup: { chapterIds: string[]; notionIds: string[] },
+): Promise<void> {
+  const supabase = getSupabaseServerClient();
+
+  // Les notions d'abord : un chapitre ne peut être effacé qu'une fois vide.
+  if (cleanup.notionIds.length > 0) {
+    const { error } = await supabase
+      .from('workshop_bricks')
+      .delete()
+      .eq('workshop_id', workshopId)
+      .in('id', cleanup.notionIds);
+    if (error) throw new Error(error.message);
+  }
+
+  if (cleanup.chapterIds.length > 0) {
+    const { error } = await supabase
+      .from('workshop_chapters')
+      .delete()
+      .eq('workshop_id', workshopId)
+      .in('id', cleanup.chapterIds);
+    if (error) throw new Error(error.message);
+  }
+}
+
+/** Cache les chapitres que CET import vient de vider.
+ *
+ *  ⚠️ « Vider » se mesure, il ne se devine pas. Un chapitre vide à l'arrivée
+ *  n'est pas forcément un chapitre vidé : il pouvait l'être déjà avant (le
+ *  document ne le couvrait pas), et le cacher serait alors une décision qu'on
+ *  n'a pas prise. D'où `populatedBefore` — la liste des chapitres qui portaient
+ *  des notions AVANT le rangement, relevée au début de celui-ci.
+ *
+ *  Trois cas, et un seul mène ici (feuille de route §5) :
+ *    • il existait, il portait des notions, l'import les a toutes déplacées
+ *      → **caché**, et c'est automatique parce que c'est réversible d'un clic ;
+ *    • il a été créé par cet import et n'a rien reçu → effacé par le ménage,
+ *      personne ne l'a jamais vu (`planImportCleanup`) ;
+ *    • l'utilisateur l'avait vidé lui-même → on n'y touche pas. */
+export async function hideEmptiedChapters(
+  workshopId: string,
+  populatedBefore: readonly string[],
+): Promise<string[]> {
+  if (populatedBefore.length === 0) return [];
+
+  const supabase = getSupabaseServerClient();
+  const { data: remaining, error } = await supabase
+    .from('workshop_bricks')
+    .select('chapter_id')
+    .eq('workshop_id', workshopId)
+    .in('chapter_id', [...populatedBefore]);
+  if (error) throw new Error(error.message);
+
+  const stillPopulated = new Set((remaining ?? []).map((r) => r.chapter_id as string));
+  const emptied = populatedBefore.filter((id) => !stillPopulated.has(id));
+  if (emptied.length === 0) return [];
+
+  const { error: hideError } = await supabase
+    .from('workshop_chapters')
+    .update({ hidden: true, updated_at: new Date().toISOString() })
+    .eq('workshop_id', workshopId)
+    .in('id', emptied);
+  if (hideError) throw new Error(hideError.message);
+
+  return emptied;
+}
+
 export async function insertChapters(
   workshopId: string,
   actorId: string,
   importId: string,
-  chapters: { ref: string; name: string; position?: number }[],
+  chapters: {
+    ref: string;
+    name: string;
+    position?: number;
+    sourceDocument?: string;
+    pageStart?: number;
+    pageEnd?: number;
+  }[],
 ): Promise<Map<string, string>> {
   const created = new Map<string, string>();
   if (chapters.length === 0) return created;
@@ -202,6 +386,13 @@ export async function insertChapters(
         import_id: importId,
         name: c.name,
         position: base + (c.position ?? i),
+        // Provenance : sur quelles pages court ce chapitre. C'est ce qui permet
+        // à la passe rangement de se passer du cours. `|| null` et non `?? null`
+        // : le modèle rend 0 quand il ne sait pas, et un 0 stocké se lirait
+        // comme « page zéro » alors qu'il veut dire « je ne sais pas ».
+        source_document: c.sourceDocument || null,
+        page_start: c.pageStart || null,
+        page_end: c.pageEnd || null,
         // `created_at`/`updated_at` volontairement absents — voir l'en-tête.
       })),
     )
@@ -216,7 +407,7 @@ export async function insertNotions(
   workshopId: string,
   actorId: string,
   importId: string,
-  notions: { ref: string; title: string; chapterRef?: string }[],
+  notions: { ref: string; title: string; chapterRef?: string; sourceDocument?: string; page?: number }[],
   chapterIds: Map<string, string>,
 ): Promise<Map<string, string>> {
   const created = new Map<string, string>();
@@ -232,6 +423,9 @@ export async function insertNotions(
         import_id: importId,
         title: n.title,
         chapter_id: resolve(n.chapterRef, chapterIds),
+        // Même réserve que pour les chapitres : 0 veut dire « je ne sais pas ».
+        source_document: n.sourceDocument || null,
+        source_page: n.page || null,
       })),
     )
     .select('id');

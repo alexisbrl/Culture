@@ -463,6 +463,8 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          source_document: string | null
+          source_page: number | null
           import_id: string | null
           title: string
           updated_at: string
@@ -473,6 +475,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          source_document?: string | null
+          source_page?: number | null
           import_id?: string | null
           title: string
           updated_at?: string
@@ -483,6 +487,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          source_document?: string | null
+          source_page?: number | null
           import_id?: string | null
           title?: string
           updated_at?: string
@@ -516,9 +522,13 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          hidden: boolean
           id: string
           import_id: string | null
+          page_end: number | null
+          page_start: number | null
           name: string
+          source_document: string | null
           position: number
           updated_at: string
           workshop_id: string
@@ -526,9 +536,13 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          hidden?: boolean
           id?: string
           import_id?: string | null
+          page_end: number | null
+          page_start: number | null
           name: string
+          source_document?: string | null
           position?: number
           updated_at?: string
           workshop_id: string
@@ -536,9 +550,13 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          hidden?: boolean
           id?: string
           import_id?: string | null
+          page_end?: number | null
+          page_start?: number | null
           name?: string
+          source_document?: string | null
           position?: number
           updated_at?: string
           workshop_id?: string
