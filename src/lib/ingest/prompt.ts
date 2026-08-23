@@ -309,12 +309,20 @@ Découpe assez fin pour qu'on puisse interroger chaque notion séparément, mais
 
 **Ne range rien dans un chapitre** : à ce stade il n'y en a pas, et ce n'est pas ton travail ici.
 
-RÉUTILISE plutôt que de recréer. Pour chaque notion que tu t'apprêtes à produire, regarde la liste des notions existantes ci-dessus :
-- si l'une d'elles porte DÉJÀ le même fait, ne la reproduis pas — même si tu l'aurais formulée autrement. Une reformulation n'apporte rien et crée un doublon ;
-- ne produis une notion voisine d'une existante QUE si elle apporte un FAIT VÉRIFIABLE DE PLUS, c'est-à-dire quelque chose qu'on pourrait demander et qui ne figure pas dans l'ancienne.
+RÉUTILISE plutôt que de recréer. Avant d'écrire une notion, cherche dans la liste ci-dessus si le fait y est déjà.
+
+**Cherche sur les FAITS, pas sur les phrases.** Compare ce que la notion contient — les chiffres, les noms propres, les dates, les termes techniques — et non la façon dont elle est tournée. Une notion existante qui énonce les mêmes éléments dans un ORDRE DIFFÉRENT, ou avec des SYNONYMES, reste la même notion.
+
+Deux pièges observés, à éviter absolument :
+- les mêmes chiffres présentés à l'envers (« A produit X, contre Y auparavant » et « auparavant Y ; ensuite X ») : c'est la même notion ;
+- la même énumération avec d'autres mots (« dimensions réduites, pas d'enluminures » et « format réduit, abandon de l'enluminure ») : c'est la même notion.
+
+Ne produis une notion voisine d'une existante QUE si elle apporte un FAIT VÉRIFIABLE DE PLUS : quelque chose qu'on pourrait demander à un élève et dont la réponse ne figure pas dans l'ancienne.
 
 Exemple de ce qu'il faut faire : « date de naissance de Napoléon » existe, le document donne aussi sa date de mort → tu produis « dates de naissance et de mort de Napoléon », qui porte un fait de plus.
-Exemple de ce qu'il ne faut PAS faire : « le jour où la nuit est la plus longue » existe, tu écris « définition du solstice d'hiver » → même fait, autres mots, aucun ajout. Tu ne produis rien.`;
+Exemple de ce qu'il ne faut PAS faire : « le jour où la nuit est la plus longue » existe, tu écris « définition du solstice d'hiver » → même fait, autres mots, aucun ajout. Tu ne produis rien.
+
+Dans le doute, ne produis pas : une notion manquante se rattrape au prochain import, un doublon reste et encombre l'atelier.`;
 }
 
 /** La liste des notions à répartir, telle que la passe chapitres la reçoit.

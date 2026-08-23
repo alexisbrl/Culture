@@ -51,6 +51,7 @@ import {
   insertNotions,
   loadExistingRefs,
 } from './ingest';
+import { dropNearDuplicates } from './duplicates';
 import { batchNotions, withChapterRetry } from './passInput';
 import { parsePlan, type PlanIssue } from './planSchema';
 import { releaseDocuments } from './release';
@@ -502,12 +503,37 @@ export async function ingestDocumentNotions(
 
   const refs = await loadExistingRefs(workshopId);
   const plan = parsePlanLogged('notions', result.plan, refs);
+
+  // ⚠️ **Le filet anti-doublon, et il se relit ICI, pas plus haut.** L'existant
+  // transmis au modèle a été lu AVANT l'appel ; entre-temps, les autres
+  // documents du même import ont pu écrire leurs propres notions — ils tournent
+  // en parallèle et ne se voient pas. Une relecture juste avant l'écriture est
+  // le seul moment où le recouvrement entre documents est visible.
+  //
+  // La consigne ne suffit pas : mesuré sur un import réel, le modèle laisse
+  // passer les redites qui réordonnent les mêmes faits (voir `duplicates.ts`).
+  const before = await loadAllNotions(workshopId);
+  const { kept, dropped } = dropNearDuplicates(
+    plan.notions,
+    before.notions.map((n) => n.title),
+    (n) => n.title,
+  );
+
   // `new Map()` : aucun chapitre à résoudre, et le schéma n'en propose plus.
-  const created = await insertNotions(workshopId, actorId, importId, plan.notions, new Map());
+  const created = await insertNotions(workshopId, actorId, importId, kept, new Map());
 
   return {
     written: created.size,
-    discarded: plan.discarded,
+    // Les redites rejoignent le journal des écartés : l'utilisateur voit
+    // combien, et laquelle faisait doublon. Jamais un filtrage silencieux.
+    discarded: [
+      ...plan.discarded,
+      ...dropped.map((d) => ({
+        kind: 'notion' as const,
+        ref: d.candidate.ref,
+        reason: `redit une notion existante (« ${d.matched.slice(0, 80)}… »)`,
+      })),
+    ],
     adjusted: plan.adjusted,
     documents: prepared.length,
   };

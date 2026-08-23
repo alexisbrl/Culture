@@ -236,6 +236,18 @@ point est raté, le système perd toute confiance.
 
 ### Notions
 
+**Mesuré le 23/08/2026 : la consigne seule ne suffit pas.** Sur un premier
+import réel (cours d'histoire, 37 notions produites pour un chapitre qui en
+portait 20), deux redites franches sont passées — les mêmes chiffres lus à
+l'envers, et la même énumération avec des synonymes. Le modèle applique le
+critère quand le contenu diffère, et le rate quand l'ancienne notion dit la même
+chose dans un ORDRE différent : il ne la reconnaît pas dans la liste.
+
+D'où **un filet mécanique en plus de la consigne** (`src/lib/ingest/duplicates.ts`) :
+une candidate trop proche d'une notion existante est écartée avant sa création.
+Seuil calibré sur les cas réels, journalisé, jamais silencieux — et volontairement
+conservateur, un faux positif perdant du contenu pédagogique réel.
+
 La passe ① reçoit les **notions existantes** de l'atelier avec pour consigne de
 **réutiliser plutôt que recréer**, arbitrée par le critère du fait vérifiable
 (§2).
