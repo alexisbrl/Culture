@@ -166,6 +166,7 @@ describe('withChapterRetry — une relance, jamais deux (§16.18)', () => {
     return withChapterRetry(
       (retry) => provider.documentToPlan([], empty, { pass: 'chapters', retry }),
       (result) => (result.plan as { chapters: unknown[] }).chapters.length,
+      (result) => (result.plan as { chapters: { name: string }[] }).chapters.map((c) => c.name),
     );
   }
 
@@ -195,14 +196,28 @@ describe('withChapterRetry — une relance, jamais deux (§16.18)', () => {
     expect(provider.calls[0].scope.pass === 'chapters' && provider.calls[0].scope.retry).toBeUndefined();
   });
 
-  it('la relance rappelle au modèle le nombre qu’il vient de rendre', async () => {
+  it('la relance rend au modèle SES PROPRES chapitres, pas seulement leur nombre', async () => {
+    // Sans les noms, le modèle ne peut pas juger si « 28 » recouvre 28
+    // sous-parties d'un même thème ou 28 sujets distincts : il ne saurait
+    // qu'obéir, et raboterait un découpage parfois justifié.
     const provider = chapterProvider([28, 6]);
     await pass(provider);
     const second = provider.calls[1].scope;
-    expect(second.pass === 'chapters' && second.retry?.previousCount).toBe(28);
+    const previous = second.pass === 'chapters' ? second.retry?.previous : undefined;
+    expect(previous).toHaveLength(28);
+    expect(previous?.[0]).toBe('Chapitre 1');
   });
 
-  it('12 ne déclenche rien, 13 déclenche', () => {
+  it('un découpage reconduit à l’identique est accepté, pas re-relancé', async () => {
+    // La relance est une vérification : si le modèle confirme son découpage,
+    // c'est une réponse valide — jamais un troisième appel.
+    const provider = chapterProvider([28, 28]);
+    const { attempts } = await pass(provider);
+    expect(attempts).toBe(2);
+    expect(provider.calls).toHaveLength(2);
+  });
+
+  it('le seuil de relance ne se déclenche qu’au-delà du plausible', () => {
     expect(needsChapterRetry(MAX_PLAUSIBLE_CHAPTERS)).toBe(false);
     expect(needsChapterRetry(MAX_PLAUSIBLE_CHAPTERS + 1)).toBe(true);
   });

@@ -73,13 +73,17 @@ export function shouldCacheDocuments(documentUses: number): boolean {
 //
 // Ce que ce mécanisme n'est PAS : un point d'arrêt. Aucune validation humaine
 // n'intervient entre deux passes, jamais — refus produit explicite (§16.18).
-// Si la seconde réponse dépasse encore, **on écrit ce qu'elle donne** et on
-// continue.
+//
+// Ce n'est pas non plus une CORRECTION imposée. Le second appel reçoit le
+// découpage proposé et la consigne de l'utilisateur, et on lui demande de le
+// **vérifier** : s'il est justifié — un programme annuel, un cours découpé en
+// thèmes eux-mêmes subdivisés —, il le reconduit tel quel. On ne rabote un
+// découpage que lorsqu'il est effectivement trop fin (22/08/2026).
 
 /** Au-delà, on soupçonne un découpage en sous-parties plutôt qu'en chapitres.
  *  Nombre ABSOLU, jamais rapporté au nombre de documents : un cours de 8
  *  chapitres peut tenir dans un seul PDF (§16.18). */
-export const MAX_PLAUSIBLE_CHAPTERS = 12;
+export const MAX_PLAUSIBLE_CHAPTERS = 16;
 
 export function needsChapterRetry(chapterCount: number): boolean {
   return chapterCount > MAX_PLAUSIBLE_CHAPTERS;
@@ -92,14 +96,18 @@ export function needsChapterRetry(chapterCount: number): boolean {
  *  la rend testable avec un fournisseur factice. Elle ne lève jamais pour un
  *  nombre trop élevé — la seconde réponse fait foi quelle qu'elle soit. */
 export async function withChapterRetry<R>(
-  attempt: (retry: { previousCount: number } | undefined) => Promise<R>,
+  attempt: (retry: { previous: string[] } | undefined) => Promise<R>,
   countOf: (result: R) => number,
+  namesOf: (result: R) => string[],
 ): Promise<{ result: R; attempts: number }> {
   const first = await attempt(undefined);
   const count = countOf(first);
   if (!needsChapterRetry(count)) return { result: first, attempts: 1 };
 
   // Une seule relance, jamais deux : on ne compte pas le résultat de celle-ci.
-  const second = await attempt({ previousCount: count });
+  // Les NOMS partent, pas seulement le nombre : sans eux, le modèle ne peut pas
+  // juger si « 32 » recouvre 32 sous-parties d'un même thème ou 32 sujets
+  // réellement distincts — il ne saurait qu'obéir.
+  const second = await attempt({ previous: namesOf(first) });
   return { result: second, attempts: 2 };
 }

@@ -28,7 +28,10 @@ type Props = {
 export default function AiGenerationButton({ workshopId, forcedContext = null, compact = false, onDone }: Props) {
   const t = useTranslations('ai');
   const [open, setOpen] = useState(false);
-  const files = useWorkshopFiles(workshopId);
+  // `open` en second argument : la liste est relue à chaque ouverture, donc un
+  // document téléversé (ou supprimé) juste avant est pris en compte sans avoir à
+  // recharger la page.
+  const files = useWorkshopFiles(workshopId, open);
 
   return (
     <>

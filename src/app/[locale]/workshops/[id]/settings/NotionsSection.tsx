@@ -314,7 +314,33 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
       // Les notions du chapitre ne sont pas supprimées : elles retombent dans
       // « sans chapitre » (FK en `on delete set null`).
       setNotions((prev) => prev.map((n) => (n.chapterId === target.id ? { ...n, chapterId: null } : n)));
-      if (selectedChapterId === target.id) setSelectedChapterId(UNASSIGNED);
+      // Où atterrir quand c'est le chapitre affiché qu'on vient de supprimer.
+      // La règle suit ce qui s'est réellement passé, elle n'est pas un repli
+      // par défaut : basculer systématiquement sur « sans chapitre » plantait
+      // l'écran sur un groupe VIDE quand on supprimait un chapitre sans notion
+      // — et comme l'entrée « sans chapitre » ne s'affiche que si elle contient
+      // quelque chose *ou* si elle est sélectionnée, elle n'apparaissait alors
+      // que parce qu'on venait de la sélectionner. Le rechargement réparait
+      // l'affichage, ce qui est la signature d'un état client incohérent.
+      if (selectedChapterId === target.id) {
+        const index = chapters.findIndex((c) => c.id === target.id);
+        const remaining = chapters.filter((c) => c.id !== target.id);
+        const orphans = notions.some((n) => n.chapterId === target.id || !n.chapterId);
+        if (notions.some((n) => n.chapterId === target.id)) {
+          // Des notions viennent de retomber dans « sans chapitre » : y aller,
+          // c'est montrer où elles sont parties.
+          setSelectedChapterId(UNASSIGNED);
+        } else if (remaining.length > 0) {
+          // Rien n'a bougé : prendre la place laissée vide — le chapitre suivant,
+          // ou le précédent si on supprimait le dernier de la liste.
+          setSelectedChapterId(remaining[Math.min(index, remaining.length - 1)].id);
+        } else {
+          // Plus aucun chapitre : « sans chapitre » seulement s'il y a vraiment
+          // des notions à y voir, sinon aucune sélection (l'écran invite alors
+          // à créer un chapitre).
+          setSelectedChapterId(orphans ? UNASSIGNED : null);
+        }
+      }
     } else {
       setError(result.error ?? t('err.delete'));
     }

@@ -52,7 +52,7 @@ export type IngestScope =
       pass: 'chapters';
       /** Présent au SECOND essai seulement : le nombre de chapitres rendu au
        *  premier, que la consigne rappelle au modèle (§16.18). */
-      retry?: { previousCount: number };
+      retry?: { previous: string[] };
     }
   | {
       pass: 'notions';

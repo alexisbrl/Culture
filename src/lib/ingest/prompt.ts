@@ -173,7 +173,7 @@ export function existingContentBlock(existing: ExistingContent, scope: ExistingS
  *  légitimement plus (§16.18). C'est le nombre ABSOLU qui sert de repère,
  *  jamais un rapport au nombre de documents — un cours de 8 chapitres peut
  *  tenir dans un seul PDF. */
-export const PLAUSIBLE_CHAPTERS = { min: 3, max: 8 } as const;
+export const PLAUSIBLE_CHAPTERS = { min: 3, max: 16 } as const;
 
 /** Passe 1 — les chapitres.
  *
@@ -183,7 +183,30 @@ export const PLAUSIBLE_CHAPTERS = { min: 3, max: 8 } as const;
  *  « Chapitre 6.pdf » : on lui demandait de subdiviser un cours, il a subdivisé
  *  — 28 chapitres au lieu de 6, soit ×4,7 sur tout ce qui suit (§16.15). C'est
  *  la consigne qui était fausse, pas le modèle. */
-export function chaptersInstruction(fileNames: string[] = [], retry?: { previousCount: number }): string {
+/** La consigne libre écrite par l'utilisateur dans le dialogue, rendue pour le
+ *  modèle. **Fonction pure.**
+ *
+ *  Elle est posée en TÊTE de la consigne de chaque passe et présentée comme
+ *  prioritaire : c'est la seule chose du prompt qui connaisse ce cours-ci. Un
+ *  utilisateur qui écrit « découpe par thèmes, il y en a 4 » ou « les parties
+ *  s'appellent Séquences dans le document » en sait plus que n'importe quelle
+ *  règle générale qu'on pourrait écrire ici.
+ *
+ *  **Elle ne peut pas tout, et le prompt le dit** : elle oriente le découpage,
+ *  la granularité, le vocabulaire — elle ne lève ni le plafond de questions, ni
+ *  le contexte imposé par le bouton d'entrée, qui sont appliqués à l'écriture et
+ *  non demandés au modèle (§8, §9). Une consigne vide ne rend rien du tout,
+ *  plutôt qu'une section vide qui ferait du bruit dans le préfixe. */
+export function userHintBlock(hint?: string): string {
+  const trimmed = (hint ?? '').trim();
+  if (!trimmed) return '';
+  return `CONSIGNE DE L'UTILISATEUR — elle porte sur CE cours et prime sur les indications générales qui suivent :
+« ${trimmed} »
+
+`;
+}
+
+export function chaptersInstruction(fileNames: string[] = [], retry?: { previous: string[] }): string {
   const corpus =
     fileNames.length > 1
       ? `Tu as reçu ${fileNames.length} documents. Ils forment UN SEUL cours, pas ${fileNames.length} cours distincts :
@@ -202,12 +225,23 @@ Découpe l'ENSEMBLE globalement. Un document n'est pas un chapitre : un même do
   // chose que le modèle doit savoir de cet appel. Elle ne remplace pas la
   // consigne — le second appel ne voit pas le premier, l'API est sans état
   // (§16.8).
+  // ⚠️ **C'est une VÉRIFICATION, pas une correction.** La version précédente
+  // ordonnait de reprendre le découpage : le modèle obéissait, y compris quand
+  // le découpage était bon. Ici on lui rend son propre travail et on lui demande
+  // de le juger — reconduire à l'identique est une réponse valide et annoncée
+  // comme telle. Beaucoup de cours sont légitimement découpés en thèmes
+  // eux-mêmes subdivisés, et ce nombre-là n'a pas à être raboté.
   const again = retry
-    ? `Tu viens de proposer ${retry.previousCount} chapitres pour ce cours, bien au-delà de l'ordre de grandeur habituel.
+    ? `Tu viens de proposer ce découpage en ${retry.previous.length} parties :
+${retry.previous.map((name, i) => `${i + 1}. ${name}`).join('\n')}
 
-Reprends le découpage depuis le début. Certains de ces ${retry.previousCount} chapitres sont probablement des SOUS-PARTIES d'un même chapitre : deux parties qui traitent du même sujet, ou qui s'enchaînent dans une même progression, n'en forment qu'un. Regroupe-les.
+C'est au-delà de l'ordre de grandeur habituel. **Vérifie-le, ne le refais pas par principe.**
 
-Ce n'est pas un ordre de réduire à tout prix : si le cours justifie réellement ce nombre — un programme annuel, par exemple —, garde-le. Mais vérifie-le d'abord.
+Deux issues, toutes deux acceptables :
+- Le découpage est justifié — le cours couvre réellement autant de sujets distincts, ou l'utilisateur a demandé ce niveau de détail. **Reconduis-le tel quel**, en gardant les mêmes noms.
+- Certaines de ces parties sont des SOUS-PARTIES d'une même unité — elles traitent du même sujet, ou s'enchaînent dans une même progression. Regroupe celles-là, et celles-là seulement.
+
+Ne réduis pas ce qui n'a pas à l'être : un découpage juste que tu rabotes fait perdre du contenu, et rien ne le rattrapera ensuite.
 
 `
     : '';
@@ -216,7 +250,9 @@ Ce n'est pas un ordre de réduire à tout prix : si le cours justifie réellemen
 
 Un chapitre est une unité d'enseignement, pas une section de mise en page : deux sous-parties qui traitent du même sujet forment un seul chapitre. Vise le découpage qu'un enseignant ferait pour organiser sa progression.
 
-Ordre de grandeur : un cours en compte typiquement ${PLAUSIBLE_CHAPTERS.min} à ${PLAUSIBLE_CHAPTERS.max}, davantage pour un programme annuel. C'est une indication et non une limite — dépasse-la si le contenu le justifie vraiment.
+**Le mot « chapitre » est le nôtre, pas celui du document.** Un cours nomme ses grandes parties comme il veut — thèmes, séquences, modules, parties, unités —, ou ne les nomme pas du tout. Ce qu'on te demande est un NIVEAU DE DÉCOUPAGE, pas la recherche d'un mot. Si le cours s'organise en thèmes contenant eux-mêmes des chapitres, les deux niveaux sont des découpages possibles : choisis celui qui correspond à la demande de l'utilisateur, et à défaut de demande, celui des grandes parties.
+
+Ordre de grandeur : un cours en compte typiquement ${PLAUSIBLE_CHAPTERS.min} à ${PLAUSIBLE_CHAPTERS.max}, davantage pour un programme annuel ou un découpage fin explicitement demandé. C'est une indication et non une limite — dépasse-la si le contenu ou la demande le justifient.
 
 Donne à chacun une référence courte et unique (ch1, ch2…), et un nom de 120 caractères maximum.`;
 }

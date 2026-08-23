@@ -130,7 +130,9 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   // chargés d'avance pour que le dialogue s'ouvre déjà rempli.
   const [choosing, setChoosing] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const aiFiles = useWorkshopFiles(workshopId ?? '');
+  // `generating` en second argument : la liste est relue à chaque ouverture du
+  // dialogue (voir `useWorkshopFiles`), pas seulement au montage de la page.
+  const aiFiles = useWorkshopFiles(workshopId ?? '', generating);
   // Les deux familles optionnelles ramenées à des valeurs neutres : le reste du
   // composant s'écrit alors sans condition, seuls l'affichage des sections
   // concernées et les rappels regardent leur présence.

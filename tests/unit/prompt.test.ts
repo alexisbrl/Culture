@@ -206,15 +206,20 @@ describe('chaptersInstruction — N documents, UN SEUL cours (§16.15)', () => {
     expect(instruction).not.toContain('1 documents');
   });
 
-  it('la consigne de relance rappelle le nombre obtenu et demande de regrouper', () => {
+  it('la relance REND son découpage au modèle et lui demande de le juger', () => {
     // Elle ne remplace pas la consigne : l'API est sans état, le second appel
     // ne voit pas le premier (§16.8).
-    const instruction = chaptersInstruction(sept, { previousCount: 28 });
-    expect(instruction).toContain('28 chapitres');
+    const previous = Array.from({ length: 28 }, (_, i) => `Partie ${i + 1}`);
+    const instruction = chaptersInstruction(sept, { previous });
+    // Les noms, pas seulement le nombre : c'est ce qui rend le jugement possible.
+    expect(instruction).toContain('28 parties');
+    expect(instruction).toContain('1. Partie 1');
+    expect(instruction).toContain('28. Partie 28');
     expect(instruction).toMatch(/SOUS-PARTIES/);
     expect(instruction).toContain('CHAPITRES');
-    // Et elle reste une invitation à vérifier, pas un ordre de réduire.
-    expect(instruction).toMatch(/pas un ordre de réduire/);
+    // Et surtout : reconduire à l'identique doit être annoncé comme valide.
+    expect(instruction).toMatch(/Reconduis-le tel quel/);
+    expect(instruction).toMatch(/ne le refais pas par principe/);
   });
 
   it('sans relance, la consigne n’en dit pas un mot', () => {

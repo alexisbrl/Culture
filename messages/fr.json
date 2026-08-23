@@ -771,7 +771,12 @@
       "promote": "promouvoir",
       "demote": "rétrograder",
       "exclude": "exclure",
-      "actions": "actions du membre"
+      "actions": "actions du membre",
+      "excludeConfirmTitle": "Exclure {name} de l'atelier ?",
+      "excludeConfirmDesc": "Cette personne perdra l'accès à l'atelier et sa progression. Elle devra être réinvitée pour revenir.",
+      "searchPlaceholder": "rechercher un membre…",
+      "searchClear": "effacer la recherche",
+      "searchEmpty": "aucun membre ne correspond à cette recherche"
     },
     "groups": {
       "title": "Groupes",
@@ -785,6 +790,8 @@
       "namePlaceholder": "nom du groupe…",
       "newGroup": "nouveau groupe",
       "filterAll": "tous les membres",
+      "noGroup": "sans groupe",
+      "emptyNoGroup": "tous les membres appartiennent à au moins un groupe",
       "inGroupCount": "Dans le groupe ({count})",
       "otherMembersCount": "Autres membres ({count})",
       "otherMembers": "autres membres",
@@ -1201,7 +1208,19 @@
       "questionsParcours": "Les questions du parcours",
       "questionsExam": "Les questions de la banque d’examen"
     },
-    "questionsNeedNotions": "Les questions se rattachent aux notions : sans elles, aucune ne serait jamais posée.",
+    "hint": {
+      "label": "PRÉCISIONS (FACULTATIF)",
+      "placeholder": "ex. : découpe par thèmes, il y en a 4 — dans le document ils sont appelés « Séquences ».",
+      "help": "Ce que l’IA ne peut pas deviner : le nombre de parties attendu, le niveau de découpage (grands thèmes ou sous-chapitres), le mot employé dans le document, le niveau des élèves. Cette consigne prime sur nos réglages par défaut."
+    },
+    "provider": {
+      "label": "MODÈLE POUR LES QUESTIONS",
+      "claude": "Claude (Haiku)",
+      "deepseek": "DeepSeek",
+      "help": "Ne concerne que la rédaction des questions, qui ne lit pas les documents. Les chapitres et les notions restent sur Claude, seul à lire les PDF sans en perdre les schémas."
+    },
+    "needsChapters": "Sans générer les chapitres, l’IA complète ceux qui existent déjà dans l’atelier. S’il n’y en a aucun, il n’y a rien à compléter et l’étape est sautée.",
+    "questionsNeedNotions": "Les questions se rattachent aux notions du chapitre : sans notions, les chapitres créés ici seront vides et aucune question ne pourra être écrite.",
     "generate": "générer",
     "cancel": "annuler",
     "close": "fermer",
@@ -1209,7 +1228,10 @@
     "progress": {
       "chapters": "Lecture du document et découpage en chapitres…",
       "notions": "Notions — {chapter} ({i}/{n})",
-      "questions": "Questions — {chapter} ({i}/{n})"
+      "questions": "Questions — {chapter} ({i}/{n})",
+      "notionsCount": "Notions — {done}/{n} chapitres traités",
+      "questionsCount": "Questions — {done}/{n} lots traités",
+      "questionsBatch": "Questions — {chapter} ({i}/{n}) · lot {b}/{nb}"
     },
     "keepOpen": "Garde cet onglet ouvert : la génération s’interrompt s’il est fermé. Ce qui a déjà été écrit reste, et reste annulable.",
     "runningCounts": "{chapters} chapitres · {notions} notions · {questions} questions",
@@ -1228,15 +1250,8 @@
     "chooseAi": "par IA",
     "chooseManual": "manuellement",
     "estimate": {
-      "heading": "Avant de lancer",
-      "preparing": "Préparation des documents et mesure du corpus…",
-      "preparingHint": "Rien n’est encore facturé : le téléversement et le comptage sont gratuits.",
-      "size": "Corpus mesuré : environ {tokens} milliers de tokens.",
-      "unknownSize": "Taille du corpus : impossible à mesurer.",
-      "cost": "Coût estimé : environ {usd} $",
-      "unknownCost": "Coût estimé : inconnu.",
-      "disclaimer": "Estimation indicative, calculée sur un cours de 8 chapitres et 10 notions par chapitre. Le coût réel dépend de ce que les documents contiennent.",
-      "confirm": "lancer la génération"
+      "preparing": "Préparation des documents…",
+      "preparingHint": "Les documents sont envoyés au fournisseur ; la génération démarre juste après."
     }
   }
 }

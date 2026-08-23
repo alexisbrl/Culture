@@ -771,7 +771,12 @@
       "promote": "promote",
       "demote": "demote",
       "exclude": "remove",
-      "actions": "member actions"
+      "actions": "member actions",
+      "excludeConfirmTitle": "Remove {name} from the workshop?",
+      "excludeConfirmDesc": "They will lose access to the workshop and their progress. They will have to be invited again to come back.",
+      "searchPlaceholder": "search a member…",
+      "searchClear": "clear search",
+      "searchEmpty": "no member matches this search"
     },
     "groups": {
       "title": "Groups",
@@ -785,6 +790,8 @@
       "namePlaceholder": "group name…",
       "newGroup": "new group",
       "filterAll": "all members",
+      "noGroup": "no group",
+      "emptyNoGroup": "every member belongs to at least one group",
       "inGroupCount": "In group ({count})",
       "otherMembersCount": "Other members ({count})",
       "otherMembers": "other members",
@@ -1201,7 +1208,19 @@
       "questionsParcours": "The learning path questions",
       "questionsExam": "The exam bank questions"
     },
-    "questionsNeedNotions": "Questions attach to notions: without them, none would ever be asked.",
+    "hint": {
+      "label": "DETAILS (OPTIONAL)",
+      "placeholder": "e.g. split by themes, there are 4 — the document calls them “Units”.",
+      "help": "What the AI cannot guess: how many parts you expect, the level of splitting (broad themes or sub-chapters), the word used in the document, the students’ level. This takes precedence over our defaults."
+    },
+    "provider": {
+      "label": "MODEL FOR QUESTIONS",
+      "claude": "Claude (Haiku)",
+      "deepseek": "DeepSeek",
+      "help": "Only affects question writing, which does not read the documents. Chapters and notions stay on Claude, the only one that reads PDFs without losing their diagrams."
+    },
+    "needsChapters": "Without generating chapters, the AI fills in the ones already in the workshop. If there are none, there is nothing to fill in and the step is skipped.",
+    "questionsNeedNotions": "Questions attach to the notions of a chapter: without notions, the chapters created here will be empty and no question can be written.",
     "generate": "generate",
     "cancel": "cancel",
     "close": "close",
@@ -1209,7 +1228,10 @@
     "progress": {
       "chapters": "Reading the document and splitting it into chapters…",
       "notions": "Notions — {chapter} ({i}/{n})",
-      "questions": "Questions — {chapter} ({i}/{n})"
+      "questions": "Questions — {chapter} ({i}/{n})",
+      "notionsCount": "Notions — {done}/{n} chapters done",
+      "questionsCount": "Questions — {done}/{n} batches done",
+      "questionsBatch": "Questions — {chapter} ({i}/{n}) · batch {b}/{nb}"
     },
     "keepOpen": "Keep this tab open: generation stops if you close it. Whatever was written stays, and stays undoable.",
     "runningCounts": "{chapters} chapters · {notions} notions · {questions} questions",
@@ -1228,15 +1250,8 @@
     "chooseAi": "with AI",
     "chooseManual": "manually",
     "estimate": {
-      "heading": "Before you start",
-      "preparing": "Preparing the documents and measuring the corpus…",
-      "preparingHint": "Nothing is billed yet: uploading and counting are free.",
-      "size": "Measured corpus: about {tokens} thousand tokens.",
-      "unknownSize": "Corpus size: could not be measured.",
-      "cost": "Estimated cost: about ${usd}",
-      "unknownCost": "Estimated cost: unknown.",
-      "disclaimer": "Rough estimate, based on a course of 8 chapters and 10 notions per chapter. The real cost depends on what the documents contain.",
-      "confirm": "start generating"
+      "preparing": "Preparing the documents…",
+      "preparingHint": "The documents are sent to the provider; generation starts right after."
     }
   }
 }

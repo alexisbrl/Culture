@@ -48,7 +48,8 @@ import { batchNotions, withChapterRetry } from './passInput';
 import { parsePlan, type PlanIssue } from './planSchema';
 import { releaseDocuments } from './release';
 import { MAX_QUESTIONS_PER_IMPORT, type ExistingContent } from './prompt';
-import { createClaudeProvider } from './providers/claude';
+import { createClaudeProvider, type ModelId } from './providers/claude';
+import { createDeepSeekProvider } from './providers/deepseek';
 import type { PlanProvider, PreparedDocument } from './providers/types';
 
 export type IngestContext = 'parcours' | 'exam';
@@ -169,6 +170,92 @@ async function corpusTokensOf(importId: string): Promise<number | null> {
   return typeof value === 'number' ? value : null;
 }
 
+/** Les modèles dont la fenêtre s'est révélée trop petite pour CE corpus.
+ *
+ *  Un refus coûte un aller-retour ; le mémoriser fait qu'on ne le paie qu'une
+ *  fois pour tout le lot. C'est nécessaire parce que **chaque appel est une
+ *  server action distincte** — la passe notions en fait une par chapitre — donc
+ *  un fournisseur neuf à chaque fois, sans mémoire de ce que le précédent a
+ *  appris. Vit dans `ai_imports.scope`, du jsonb libre : aucune migration.
+ *
+ *  On enregistre le MODÈLE écarté, pas un booléen « corpus trop gros » : trop
+ *  gros pour qui ? La fenêtre est une propriété du modèle, et le jour où
+ *  `PASS_MODELS` change, un booléen mentirait tandis que cette liste reste vraie. */
+/** La consigne libre de l'utilisateur, saisie au lancement et rangée dans le
+ *  `scope` de l'import — donc relue par CHAQUE passe, y compris celles qui
+ *  s'exécutent dans des server actions ultérieures. */
+async function userHintOf(importId: string): Promise<string | undefined> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
+  if (error || !data) return undefined;
+  const value = (data.scope as { hint?: unknown } | null)?.hint;
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+/** Le fournisseur choisi au lancement pour la passe QUESTIONS.
+ *
+ *  Seule cette passe est concernée : elle ne reçoit aucun document, donc rien
+ *  n'y dépend de la lecture des PDF, que DeepSeek ne sait pas faire (voir
+ *  `providers/deepseek.ts`). Les passes chapitres et notions restent sur Claude
+ *  quoi qu'il arrive — le choix ne leur est même pas proposé.
+ *
+ *  Repli sur Claude à la moindre valeur inattendue : une chaîne inconnue rangée
+ *  dans le `scope` ne doit pas faire échouer un import. */
+async function questionsProviderOf(importId: string): Promise<'claude' | 'deepseek'> {
+  const supabase = getSupabaseServerClient();
+  const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
+  return (data?.scope as { questionsProvider?: unknown } | null)?.questionsProvider === 'deepseek'
+    ? 'deepseek'
+    : 'claude';
+}
+
+async function oversizeModelsOf(importId: string): Promise<ModelId[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
+  if (error || !data) return [];
+  const value = (data.scope as { oversizeModels?: unknown } | null)?.oversizeModels;
+  return Array.isArray(value) ? value.filter((m): m is ModelId => typeof m === 'string') : [];
+}
+
+/** Ajoute un modèle à cette liste, sans écraser le reste du `scope`.
+ *
+ *  Lecture-modification-écriture : deux appels concurrents pourraient se
+ *  chevaucher, mais le client enchaîne les passes une par une, et le pire cas
+ *  (une écriture perdue) ne coûte qu'un aller-retour de plus. */
+async function recordOversizeModel(importId: string, model: ModelId): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
+  const scope = (data?.scope as Record<string, unknown> | null) ?? {};
+  const current = Array.isArray(scope.oversizeModels) ? (scope.oversizeModels as string[]) : [];
+  if (current.includes(model)) return;
+  await supabase
+    .from('ai_imports')
+    .update({ scope: { ...scope, oversizeModels: [...current, model] } })
+    .eq('id', importId);
+}
+
+/** `parsePlan`, mais qui **dit ce qu'il jette**.
+ *
+ *  Les rejets étaient jusqu'ici renvoyés au client et nulle part ailleurs : une
+ *  passe qui écarte tout produisait « 0 question » sans laisser la moindre trace
+ *  côté serveur, donc rien à examiner après coup (constaté le 22/08/2026 sur un
+ *  import qui a rendu 4 chapitres, 76 notions et zéro question). Le motif exact
+ *  existe pourtant — `planSchema` le formule — il ne sortait simplement pas.
+ *
+ *  On journalise les cinq premiers : assez pour reconnaître un motif répété,
+ *  pas assez pour noyer la sortie sur un plan entièrement invalide. */
+function parsePlanLogged(pass: string, raw: unknown, refs: Parameters<typeof parsePlan>[1]) {
+  const plan = parsePlan(raw, refs);
+  if (plan.discarded.length > 0) {
+    const apercu = plan.discarded.slice(0, 5).map((i) => `${i.kind}${i.ref ? ` (${i.ref})` : ''} : ${i.reason}`);
+    console.warn(`[ingest] passe ${pass} : ${plan.discarded.length} élément(s) écarté(s) — ${apercu.join(' | ')}`);
+  }
+  if (plan.adjusted.length > 0) {
+    console.info(`[ingest] passe ${pass} : ${plan.adjusted.length} élément(s) corrigé(s)`);
+  }
+  return plan;
+}
+
 /** Combien de questions ce lot a-t-il déjà produites ? Le plafond porte sur
  *  l'import entier, pas sur un chapitre (§9). */
 async function questionsWritten(importId: string): Promise<number> {
@@ -250,8 +337,15 @@ export async function startIngestion(
   importId: string,
   options: { provider?: PlanProvider } = {},
 ): Promise<StartResult> {
-  const corpusTokens = await corpusTokensOf(importId);
-  const provider = options.provider ?? createClaudeProvider({ corpusTokens: corpusTokens ?? undefined });
+  const [corpusTokens, oversizeModels, userHint] = await Promise.all([
+    corpusTokensOf(importId), oversizeModelsOf(importId), userHintOf(importId),
+  ]);
+  const provider = options.provider ?? createClaudeProvider({
+    corpusTokens: corpusTokens ?? undefined,
+    oversizeModels,
+    userHint,
+    onOversize: (model) => recordOversizeModel(importId, model),
+  });
   const prepared = await preparedOf(importId);
 
   const existing = await loadExistingChapters(workshopId);
@@ -267,9 +361,10 @@ export async function startIngestion(
       const attempt = await provider.documentToPlan(prepared, existing, { pass: 'chapters', retry });
       // Les deux essais sont facturés : les deux sont comptés.
       await addImportUsage(importId, attempt.usage);
-      return parsePlan(attempt.plan, refs);
+      return parsePlanLogged('chapitres', attempt.plan, refs);
     },
     (parsed) => parsed.chapters.length,
+    (parsed) => parsed.chapters.map((c) => c.name),
   );
 
   const created = await insertChapters(workshopId, actorId, importId, plan.chapters);
@@ -314,7 +409,19 @@ export async function ingestChapterNotions(
   plannedCalls = 1,
   options: { provider?: PlanProvider } = {},
 ): Promise<ChapterPassResult> {
-  const provider = options.provider ?? createClaudeProvider();
+  // La passe notions porte les documents (`documentsForPass`), elle est donc
+  // soumise à la fenêtre — et elle est appelée une fois PAR CHAPITRE. Sans la
+  // mémoire des refus, chaque chapitre redemanderait à Haiku un corpus dont le
+  // premier appel a déjà établi qu'il n'y rentre pas.
+  const [corpusTokens, oversizeModels, userHint] = await Promise.all([
+    corpusTokensOf(importId), oversizeModelsOf(importId), userHintOf(importId),
+  ]);
+  const provider = options.provider ?? createClaudeProvider({
+    corpusTokens: corpusTokens ?? undefined,
+    oversizeModels,
+    userHint,
+    onOversize: (model) => recordOversizeModel(importId, model),
+  });
 
   const prepared = await preparedOf(importId);
   const existing = await loadChapterNotions(workshopId, chapter.id);
@@ -322,7 +429,7 @@ export async function ingestChapterNotions(
   await addImportUsage(importId, result.usage);
 
   const refs = await loadExistingRefs(workshopId);
-  const plan = parsePlan(result.plan, refs);
+  const plan = parsePlanLogged('notions', result.plan, refs);
   const created = await insertNotions(workshopId, actorId, importId, plan.notions, new Map());
 
   return { written: created.size, discarded: plan.discarded, adjusted: plan.adjusted };
@@ -338,9 +445,11 @@ export async function ingestChapterQuestions(
   chapter: { id: string; name: string },
   context: IngestContext,
   batchIndex = 0,
-  options: { provider?: PlanProvider } = {},
+  options: { provider?: PlanProvider; budgetShare?: number } = {},
 ): Promise<QuestionPassResult> {
-  const provider = options.provider ?? createClaudeProvider();
+  const [userHint, choice] = await Promise.all([userHintOf(importId), questionsProviderOf(importId)]);
+  const provider = options.provider
+    ?? (choice === 'deepseek' ? createDeepSeekProvider({ userHint }) : createClaudeProvider({ userHint }));
   const supabase = getSupabaseServerClient();
 
   // L'ordre doit être **stable d'un appel à l'autre** : le client rappelle cette
@@ -363,7 +472,15 @@ export async function ingestChapterQuestions(
   const notions = batches[batchIndex];
   if (!notions) return { written: 0, discarded: [], adjusted: [], batches: batches.length };
 
-  const budget = MAX_QUESTIONS_PER_IMPORT - (await questionsWritten(importId));
+  // ⚠️ **Le plafond ne tient plus tout seul dès que les appels sont parallèles.**
+  // Il se calcule à partir de ce qui est DÉJÀ écrit : quatre appels lancés
+  // ensemble lisent le même compteur, se croient chacun seuls, et peuvent donc
+  // écrire quatre fois le plafond. D'où la part que l'appelant impose — lui seul
+  // sait combien d'appels il a en vol. On garde le minimum des deux : le serveur
+  // reste l'autorité (un client qui demanderait 10 000 ne les obtiendrait pas),
+  // la part n'est qu'une restriction supplémentaire.
+  const alreadyWritten = await questionsWritten(importId);
+  const budget = Math.min(MAX_QUESTIONS_PER_IMPORT - alreadyWritten, options.budgetShare ?? Number.POSITIVE_INFINITY);
   if (budget <= 0) return { written: 0, discarded: [], adjusted: [], batches: batches.length };
 
   // Les autres notions du chapitre, en contexte seulement (§16.21) : c'est ce
@@ -385,7 +502,7 @@ export async function ingestChapterQuestions(
   await addImportUsage(importId, result.usage);
 
   const refs = await loadExistingRefs(workshopId);
-  const plan = parsePlan(result.plan, refs);
+  const plan = parsePlanLogged('questions', result.plan, refs);
 
   // Le contexte n'est pas demandé au modèle : il est imposé par le bouton par
   // lequel l'utilisateur est entré (liste du parcours ou banque d'examen, §8).

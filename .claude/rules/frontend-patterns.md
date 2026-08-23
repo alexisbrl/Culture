@@ -87,6 +87,26 @@ Mise en œuvre : écoute `mousedown` **en capture sur `document`** — elle pass
 
 Les modales sont hors du jeu, au clic comme au défilement : `Modal` marque sa racine d'un `data-modal-layer`, que le hook ignore. Elles se posent au-dessus des panneaux et gèrent leur propre sortie ; sans ce repère, un bouton de confirmation rendu dans un portail (donc hors de l'arbre du panneau) passerait pour un clic ailleurs et serait avalé avant d'être reçu.
 
+## Fraîcheur des données sans rafraîchir la page — `useLiveData`
+
+Règle de site posée le 22/08/2026 : **ce qui arrive de l'extérieur s'affiche sans que l'utilisateur ait à rafraîchir**, comme un mail qui tombe. Point d'entrée unique : `useLiveData` (`src/lib/useLiveData.ts`), qui rappelle simplement la server action ayant déjà servi au premier chargement.
+
+```tsx
+const live = useLiveData(() => getJoinRequests(workshopId), setJoinRequests);
+// …après une modification locale réussie :
+live.invalidate();
+```
+
+**Sondage, pas push — et c'est une décision, pas un pis-aller.** Un vrai temps réel (Supabase Realtime) supposerait d'ouvrir un accès Supabase côté navigateur : intégration Clerk→Supabase, policies RLS sur chaque table exposée, publication realtime. Or toute la base est lue exclusivement côté serveur avec la service role key, RLS active *sans aucune policy*, et c'est voulu (`server-architecture.md`). Le sondage ne touche ni au serveur ni au modèle de sécurité. Coût du compromis : jusqu'à 30 s de retard **quand l'onglet est au premier plan**, et zéro dès qu'on y revient — le seul moment où l'on regarde.
+
+Trois comportements que le hook tient et qu'il ne faut pas réécrire à la main :
+
+- **Un onglet caché n'est pas sondé.** L'intervalle est démonté sur `visibilitychange` et remonté au retour, précédé d'une relecture immédiate. Un onglet oublié toute la nuit ne coûte rien.
+- **`invalidate()` après toute modification locale réussie.** Une lecture partie *avant* la mutation peut revenir *après* : sans ce jeton, la demande qu'on vient d'accepter réapparaît quelques secondes plus tard. C'est le piège principal, et il ne se voit pas en test manuel rapide.
+- **Jamais deux lectures en parallèle**, et un plancher d'une seconde entre deux (`focus` et `visibilitychange` se déclenchent tous les deux au retour sur l'onglet).
+
+**Ce qu'on ne sonde pas : ce que l'utilisateur est en train de manipuler.** Sonder ce qui *arrive* (demandes d'adhésion, invitations, notifications), jamais ce qu'on *édite*. Une liste qui se réordonne sous les doigts fait perdre la ligne qu'on visait — d'où, dans `MembersSection`, la liste des membres qui n'est volontairement pas sondée, et la répartition « dans le groupe / autres membres » qui reste figée tant qu'on ne change pas de groupe (`frozenPartition`). Un sondage ne doit pas défaire ces garanties.
+
 ## Ajouter un type de réponse à une question
 
 **Ne pas se contenter de toucher l'éditeur.** Un type de réponse touche onze endroits — l'union TypeScript, une contrainte en base, le menu de l'éditeur, la feuille A4, l'exercice du parcours et sa liste blanche de réglages, la correction, l'i18n… dont deux qui échouent **en silence** si on les oublie. La liste complète et ordonnée est dans `.claude/rules/server-architecture.md` § « Ajouter (ou retirer) un type de réponse ».

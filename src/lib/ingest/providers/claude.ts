@@ -27,6 +27,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 
 import {
   chaptersInstruction,
+  userHintBlock,
   existingContentBlock,
   notionsInstruction,
   questionsInstruction,
@@ -103,15 +104,68 @@ export const OVERSIZE_FALLBACK: ModelId = MODELS.sonnet;
 /** (modèle souhaité, taille du corpus) → modèle retenu. **Fonction pure.**
  *
  *  On réserve `MAX_TOKENS` sur la fenêtre : elle porte l'entrée ET la sortie,
- *  et une réponse tronquée est une réponse perdue. Une taille inconnue se passe
- *  en `Infinity` — on bascule alors par prudence, un appel refusé coûtant un
- *  aller-retour pour rien. */
+ *  et une réponse tronquée est une réponse perdue.
+ *
+ *  N'est appelée que lorsque la taille est **connue**. Une taille inconnue ne
+ *  passe plus par ici : on essaie le modèle voulu et on reprend sur
+ *  `OVERSIZE_FALLBACK` si l'appel est refusé (voir `isContextWindowOverflow`). */
 export function selectModel(wanted: ModelId, corpusTokens: number): ModelId {
   const usable = CONTEXT_WINDOW[wanted] - MAX_TOKENS;
   if (corpusTokens <= usable) return wanted;
   // Jamais d'escalade au-delà du repli : s'il ne suffit pas non plus, c'est le
   // corpus qui est hors normes, et le découpage séquentiel est un autre sujet.
   return OVERSIZE_FALLBACK;
+}
+
+/** Le modèle retenu pour UN appel, tout compris. **Fonction pure**, et le seul
+ *  endroit où cette décision se prend.
+ *
+ *  Trois entrées, dans l'ordre où elles font autorité :
+ *
+ *  1. **Aucun document ⇒ le modèle voulu, sans condition.** Une passe qui ne
+ *     porte pas les documents ne lit rien du corpus : sa fenêtre n'est pas en
+ *     jeu. C'est le cas de la passe questions (`documentsForPass`), qui garde
+ *     donc Haiku **même après** que le cours entier l'a fait refuser sur les
+ *     passes précédentes — ce n'est pas un effet de bord, c'est la conséquence
+ *     directe d'avoir cessé de lui envoyer les documents.
+ *  2. **Un refus déjà constaté vaut mesure.** Il a coûté un aller-retour ; on
+ *     ne le repaie pas, et il prime sur une taille estimée.
+ *  3. **Taille connue ⇒ on tranche ; inconnue ⇒ on essaie.** Renoncer d'avance
+ *     sur une taille inconnue revenait à n'utiliser Haiku jamais, la mesure
+ *     étant toujours absente (voir `isContextWindowOverflow`). */
+export function modelForCall(
+  wanted: ModelId,
+  documentCount: number,
+  corpusTokens?: number,
+  oversize: readonly ModelId[] = [],
+): ModelId {
+  if (documentCount === 0) return wanted;
+  if (oversize.includes(wanted)) return OVERSIZE_FALLBACK;
+  if (corpusTokens === undefined) return wanted;
+  return selectModel(wanted, corpusTokens);
+}
+
+/** Le seul refus qui justifie de reprendre sur un modèle à plus grande fenêtre :
+ *  le corpus ne tient pas dans celle du modèle essayé. **Fonction pure.**
+ *
+ *  Volontairement étroite. Un `400` veut dire « requête invalide », ce qui
+ *  recouvre aussi bien un corpus trop gros qu'une erreur de notre part — et
+ *  `tuningFor` documente précisément une de ces erreurs : la forme de réflexion
+ *  d'Opus envoyée à Haiku est refusée sur **tous** les appels. Reprendre sur
+ *  n'importe quel `400` ferait donc passer chaque import sur Sonnet en silence,
+ *  en donnant l'apparence du bon fonctionnement. On ne reconnaît que la fenêtre,
+ *  et tout le reste remonte.
+ *
+ *  Les formulations acceptées sont celles de l'API (« prompt is too long: 285000
+ *  tokens > 200000 maximum », « input length and max_tokens exceed context
+ *  limit »). Si elles changent, le repli cesse d'agir et l'erreur remonte
+ *  telle quelle : on perd la reprise, jamais la vérité. */
+export function isContextWindowOverflow(error: unknown): boolean {
+  if (!(error instanceof Anthropic.APIError) || error.status !== 400) return false;
+  const text = String(error.message ?? '').toLowerCase();
+  if (text.includes('prompt is too long')) return true;
+  if (text.includes('exceed') && text.includes('context')) return true;
+  return text.includes('context') && text.includes('too long');
 }
 
 /** Les réglages d'appel dépendent du modèle, et pas cosmétiquement.
@@ -196,13 +250,31 @@ function outputSchemaFor(scope: IngestScope) {
 
 export type ClaudeProviderOptions = {
   apiKey?: string;
-  /** Taille mesurée du corpus, en tokens (`messages.countTokens`). Absente, on
-   *  la traite comme inconnue et on bascule par prudence sur le modèle à grande
-   *  fenêtre : un appel refusé pour dépassement est un aller-retour perdu. */
+  /** Taille mesurée du corpus, en tokens. Absente, on ne renonce pas au modèle
+   *  voulu : on l'essaie, et on ne bascule que si la fenêtre est réellement
+   *  dépassée. En pratique elle est toujours absente depuis le retrait de
+   *  l'estimation de coût — le comptage de tokens n'accepte pas les documents
+   *  désignés par `file_id`. Le paramètre reste : il évite un aller-retour
+   *  perdu le jour où une mesure fiable existera. */
   corpusTokens?: number;
   /** Modèle voulu par passe, pour pouvoir en essayer un autre sans toucher au
    *  code (§16.20). */
   models?: Partial<Record<IngestScope['pass'], ModelId>>;
+  /** Modèles dont la fenêtre s'est **déjà** révélée trop petite pour ce corpus,
+   *  lors d'un appel précédent du même import. Un refus est une mesure : une
+   *  fois qu'on l'a payé, on ne le repaie pas. Sans ça, chaque appel de la passe
+   *  notions (une server action par chapitre, donc un fournisseur neuf à chaque
+   *  fois) redemanderait à Haiku un corpus dont on sait déjà qu'il ne rentre
+   *  pas — un aller-retour perdu par chapitre. */
+  oversizeModels?: readonly ModelId[];
+  /** Consigne libre écrite par l'utilisateur dans le dialogue. Posée en tête de
+   *  la consigne de CHAQUE passe : elle peut porter sur le découpage comme sur
+   *  la façon de rédiger les notions ou les questions. */
+  userHint?: string;
+  /** Appelé quand un modèle vient de refuser le corpus faute de fenêtre.
+   *  L'appelant décide quoi en faire — le fournisseur, lui, ne connaît pas la
+   *  base. `run.ts` s'en sert pour l'écrire dans le lot d'import. */
+  onOversize?: (model: ModelId) => void | Promise<void>;
 };
 
 export function createClaudeProvider(options: ClaudeProviderOptions | string = {}): PlanProvider {
@@ -212,6 +284,10 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
   const client = new Anthropic({ apiKey });
 
   const wantedFor = (pass: IngestScope['pass']): ModelId => opts.models?.[pass] ?? PASS_MODELS[pass];
+
+  // Enrichi en cours de route par les refus de CE fournisseur, en plus de ceux
+  // que l'appelant a retrouvés du lot d'import.
+  const oversize = new Set<ModelId>(opts.oversizeModels ?? []);
 
   return {
     name: 'claude',
@@ -296,36 +372,72 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
       }));
 
       content.push({ type: 'text', text: existingContentBlock(existing, existingScopeFor(scope)) });
-      content.push({ type: 'text', text: instructionFor(scope, sent.map((doc) => doc.fileName)) });
+      // ⚠️ La consigne de l'utilisateur est collée en tête de l'instruction, donc
+      // APRÈS le marqueur de cache : elle varie d'un import à l'autre et n'a
+      // rien à faire dans le préfixe stable (voir l'en-tête de `prompt.ts`).
+      content.push({ type: 'text', text: userHintBlock(opts.userHint) + instructionFor(scope, sent.map((doc) => doc.fileName)) });
 
-      // Une passe sans document ne lit rien du corpus : sa taille ne la contraint
-      // pas, et Haiku y reste possible quelle que soit celle du cours.
       const wanted = wantedFor(scope.pass);
-      const model = sent.length === 0 ? wanted : selectModel(wanted, opts.corpusTokens ?? Number.POSITIVE_INFINITY);
+      // Taille connue : on tranche sans appeler (fonction pure, gratuite).
+      // Taille inconnue : on **essaie** le modèle voulu au lieu de renoncer.
+      // C'est l'inverse du choix initial, et pour une raison mesurée : la taille
+      // était TOUJOURS inconnue (le comptage de tokens n'accepte pas les
+      // documents désignés par `file_id`, cf. le retrait de l'estimation de coût
+      // le 22/08/2026), si bien que la prudence s'appliquait à tous les imports
+      // et que le « Haiku partout » de PASS_MODELS n'était jamais respecté sur
+      // les passes qui portent les documents. Le prix d'un essai raté est **un
+      // aller-retour**, pas des tokens : un dépassement de fenêtre est refusé
+      // avant toute inférence, et les documents sont déjà chez le fournisseur,
+      // donc la requête refusée ne transporte que des identifiants.
+      const model = modelForCall(wanted, sent.length, opts.corpusTokens, [...oversize]);
       if (model !== wanted) {
         // Trace demandée : la bascule est silencieuse sinon, et on croirait
         // mesurer Haiku alors qu'on mesure Sonnet.
-        console.info(
-          `[ingest] passe ${scope.pass} : ${wanted} écarté (corpus ${opts.corpusTokens ?? 'inconnu'} tokens), bascule sur ${model}`,
-        );
+        const cause = oversize.has(wanted) ? 'refus déjà constaté' : `corpus ${opts.corpusTokens} tokens`;
+        console.info(`[ingest] passe ${scope.pass} : ${wanted} écarté (${cause}), bascule sur ${model}`);
       }
-      const tuning = tuningFor(model);
 
-      const stream = client.beta.messages.stream({
-        model,
-        max_tokens: MAX_TOKENS,
-        betas: [FILES_BETA],
-        system: [{ type: 'text', text: systemPrompt() }],
-        thinking: tuning.thinking,
-        output_config: {
-          // `effort` est absent sur Haiku 4.5 : il y est refusé (voir `tuningFor`).
-          ...(tuning.effort ? { effort: tuning.effort } : {}),
-          format: zodOutputFormat(outputSchemaFor(scope)),
-        },
-        messages: [{ role: 'user', content }],
-      });
+      const call = (id: ModelId) => {
+        const tuning = tuningFor(id);
+        return client.beta.messages.stream({
+          model: id,
+          max_tokens: MAX_TOKENS,
+          betas: [FILES_BETA],
+          system: [{ type: 'text', text: systemPrompt() }],
+          thinking: tuning.thinking,
+          output_config: {
+            // `effort` est absent sur Haiku 4.5 : il y est refusé (voir `tuningFor`).
+            ...(tuning.effort ? { effort: tuning.effort } : {}),
+            format: zodOutputFormat(outputSchemaFor(scope)),
+          },
+          messages: [{ role: 'user', content }],
+        }).finalMessage();
+      };
 
-      const message = await stream.finalMessage();
+      let message: Anthropic.Beta.BetaMessage;
+      try {
+        message = await call(model);
+      } catch (error) {
+        // **Un seul motif de reprise, et il est étroit : la fenêtre.** Ne jamais
+        // élargir aux 400 en général — `tuningFor` documente qu'une mauvaise
+        // forme de réflexion envoyée à Haiku est refusée sur *tous* les appels,
+        // gros comme petits ; un repli sur 400 quelconque masquerait ce bug en
+        // faisant passer chaque import sur Sonnet sans que rien ne le dise.
+        if (model === OVERSIZE_FALLBACK || !isContextWindowOverflow(error)) throw error;
+        console.info(
+          `[ingest] passe ${scope.pass} : ${model} a refusé le corpus (fenêtre dépassée), reprise sur ${OVERSIZE_FALLBACK}`,
+        );
+        // Retenu tout de suite, et pour tout le lot : les appels suivants iront
+        // droit au repli. Une écriture ratée ne coûte que des allers-retours
+        // perdus — jamais l'import, qui continue.
+        oversize.add(model);
+        try {
+          await opts.onOversize?.(model);
+        } catch (err) {
+          console.warn('[ingest] refus de fenêtre non mémorisé :', err instanceof Error ? err.message : err);
+        }
+        message = await call(OVERSIZE_FALLBACK);
+      }
 
       const text = message.content
         .filter((block): block is Anthropic.Beta.BetaTextBlock => block.type === 'text')

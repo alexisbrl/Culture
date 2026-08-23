@@ -558,6 +558,29 @@
   }
 }
 
+
+/* Vague de la barre de progression (voir `ProgressBar animated`).
+
+   Une ingestion IA passe des dizaines de secondes entre deux avancées : la
+   barre reste alors strictement immobile, et rien ne distingue « ça travaille »
+   de « c'est planté ». La vague ne représente aucune donnée — elle dit
+   seulement que le travail est en cours, et elle va de gauche à droite, dans le
+   sens de la progression.
+
+   Crête en `--green-400` et non en blanc : la palette n'a pas de blanc pur, et
+   un reflet blanc sur l'aplat vert se verrait comme un défaut de rendu. */
+@keyframes progress-wave {
+  from { transform: translateX(-120%); }
+  to   { transform: translateX(320%); }
+}
+.progress-wave {
+  animation: progress-wave 2.6s linear infinite;
+}
+/* Le mouvement est décoratif : il se coupe entièrement quand la personne a
+   demandé moins d'animations, sans que la barre perde son information. */
+@media (prefers-reduced-motion: reduce) {
+  .progress-wave { animation: none; opacity: 0; }
+}
 /* Balancement léger des arbres du Jardin (voir tree-sway-tool/resultat) */
 @keyframes tree-sway {
   0%, 100% { transform: rotate(-1.6deg); }
@@ -574,3 +597,4 @@
 @media (prefers-reduced-motion: reduce) {
   .tree-sway { animation: none; }
 }
+
