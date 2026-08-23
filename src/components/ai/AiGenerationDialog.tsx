@@ -199,7 +199,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       let error: string | null = null;
       const showNotions = (done: number) => setPhase({
         step: 'running',
-        label: t('progress.notionsCount', { done, n: documents }),
+        label: t('progress.notionsDocuments', { done, n: documents }),
         done: stepAt('notions') + done / documents,
         total: totalSteps,
       });

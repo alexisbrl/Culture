@@ -1226,10 +1226,8 @@
     "close": "close",
     "retry": "try again",
     "progress": {
-      "chapters": "Reading the document and splitting it into chapters…",
-      "notions": "Notions — {chapter} ({i}/{n})",
-      "questions": "Questions — {chapter} ({i}/{n})",
-      "notionsCount": "Notions — {done}/{n} chapters done",
+      "chapters": "Splitting into chapters and filing the notions…",
+      "notionsDocuments": "Notions — {done}/{n} documents read",
       "questionsCount": "Questions — {done}/{n} batches done",
       "questionsBatch": "Questions — {chapter} ({i}/{n}) · batch {b}/{nb}"
     },

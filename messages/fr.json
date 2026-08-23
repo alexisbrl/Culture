@@ -1226,10 +1226,8 @@
     "close": "fermer",
     "retry": "réessayer",
     "progress": {
-      "chapters": "Lecture du document et découpage en chapitres…",
-      "notions": "Notions — {chapter} ({i}/{n})",
-      "questions": "Questions — {chapter} ({i}/{n})",
-      "notionsCount": "Notions — {done}/{n} chapitres traités",
+      "chapters": "Découpage en chapitres et rangement des notions…",
+      "notionsDocuments": "Notions — {done}/{n} documents lus",
       "questionsCount": "Questions — {done}/{n} lots traités",
       "questionsBatch": "Questions — {chapter} ({i}/{n}) · lot {b}/{nb}"
     },
