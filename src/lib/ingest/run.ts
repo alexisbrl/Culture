@@ -525,7 +525,14 @@ async function loadVisibleChapters(workshopId: string) {
  *
  *  Stable est impératif : le client rappelle cette passe une fois par lot, et un
  *  ordre flottant ferait se recouvrir deux lots — certaines notions traitées
- *  deux fois, d'autres jamais. */
+ *  deux fois, d'autres jamais.
+ *
+ *  ⚠️ **Une page périmée est retirée, pas transmise.** Un numéro de page ne veut
+ *  rien dire seul : il ne vaut que RELATIVEMENT à un document. Si le document
+ *  d'origine n'est plus dans l'atelier — supprimé, remplacé par une nouvelle
+ *  version du cours —, la page pointe vers quelque chose qui n'existe plus. La
+ *  transmettre quand même serait pire que de ne rien transmettre : le modèle
+ *  rangerait sur une indication fausse, en la croyant précise. */
 async function loadNotionsToArrange(workshopId: string) {
   const supabase = getSupabaseServerClient();
   // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
@@ -537,14 +544,24 @@ async function loadNotionsToArrange(workshopId: string) {
     .order('id');
   if (error) throw new Error(error.message);
 
-  return (data ?? []).map((n) => ({
-    id: n.id as string,
-    title: n.title as string,
-    chapterId: (n.chapter_id as string | null) ?? null,
-    importId: (n.import_id as string | null) ?? null,
-    sourceDocument: n.source_document as string | null,
-    page: n.source_page as number | null,
-  }));
+  const { data: files } = await supabase
+    .from('workshop_files')
+    .select('name')
+    .eq('workshop_id', workshopId);
+  const present = new Set((files ?? []).map((f) => f.name as string));
+
+  return (data ?? []).map((n) => {
+    const source = n.source_document as string | null;
+    const stillThere = !!source && present.has(source);
+    return {
+      id: n.id as string,
+      title: n.title as string,
+      chapterId: (n.chapter_id as string | null) ?? null,
+      importId: (n.import_id as string | null) ?? null,
+      sourceDocument: stillThere ? source : null,
+      page: stillThere ? (n.source_page as number | null) : null,
+    };
+  });
 }
 
 /** Relève, AVANT le rangement, quels chapitres portaient des notions.

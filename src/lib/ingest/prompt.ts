@@ -391,7 +391,9 @@ ${input.similar.map((s) => `- ${s.notionId} ressemble à : « ${s.other} »`).jo
 
 Pour chacune :
 - si elle apporte un FAIT VÉRIFIABLE DE PLUS — quelque chose qu'on pourrait demander et dont la réponse n'est pas dans l'autre —, la ressemblance est justifiée : range-la normalement ;
-- si elle dit la même chose autrement, c'est une redite : donne-lui un chapitre VIDE. Elle ne sera pas perdue, elle sortira simplement du programme.`;
+- si elle dit la même chose autrement, c'est une redite : donne-lui un chapitre VIDE. Elle ne sera pas perdue, elle sortira simplement du programme.
+
+⚠️ **La page ne prouve JAMAIS que deux notions sont différentes.** Un cours énonce souvent le même fait à deux endroits — une fois en introduction, une fois en conclusion — et les deux extractions n'en font qu'une seule notion. Ne te sers de la page que pour RANGER, jamais pour juger si deux notions se distinguent : ça se décide sur le contenu, et sur lui seul.`;
 
   return `Range chaque notion de cette liste dans le chapitre qui lui convient.
 

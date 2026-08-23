@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  assignInstruction,
   bloomInstruction,
   chaptersInstruction,
   DEFAULT_BLOOM_DISTRIBUTION,
@@ -333,5 +334,72 @@ describe('volumétrie — répartition de Bloom paramétrable (§16.1)', () => {
   it('une répartition entièrement à zéro ne demande rien', () => {
     expect(bloomInstruction({ 1: 0, 2: 0, 3: 0, 4: 0 })).toMatch(/aucune question/i);
     expect(questionsPerNotion({ 1: 0, 2: 0, 3: 0, 4: 0 })).toBe(0);
+  });
+});
+
+describe('assignInstruction — la page range, elle ne juge pas', () => {
+  const base = {
+    notions: [{ id: 'n1', title: 'La Loire est le plus long fleuve de France.', sourceDocument: 'cours.pdf', page: 12 }],
+    chapters: [{ id: 'c1', name: 'Les fleuves', sourceDocument: 'cours.pdf', pageStart: 10, pageEnd: 20 }],
+    similar: [],
+  };
+
+  it('donne la provenance de chaque notion et la plage de chaque chapitre', () => {
+    const instruction = assignInstruction(base);
+    expect(instruction).toContain('cours.pdf, page 12');
+    expect(instruction).toContain('pages ~10 à ~20');
+  });
+
+  it('dit explicitement que le CONTENU prime sur la page', () => {
+    // Sans cette phrase, le modèle range au numéro et cesse de lire la notion :
+    // on obtiendrait des rangements plausibles mais faux, donc invisibles.
+    const instruction = assignInstruction(base);
+    expect(instruction).toMatch(/indication, pas une règle/);
+    expect(instruction).toMatch(/c'est le contenu qui décide/i);
+  });
+
+  it('interdit de conclure « pages différentes, donc notions différentes »', () => {
+    // Un cours énonce souvent le même fait deux fois — introduction puis
+    // conclusion. Les deux extractions n'en font qu'une seule notion.
+    const instruction = assignInstruction({
+      ...base,
+      similar: [{ notionId: 'n1', other: 'Le plus long fleuve français est la Loire.', proximity: 0.7 }],
+    });
+    expect(instruction).toMatch(/ne prouve JAMAIS que deux notions sont différentes/);
+  });
+
+  it('ne parle de ressemblances que s’il y en a', () => {
+    expect(assignInstruction(base)).not.toMatch(/RESSEMBLANCES/);
+    expect(
+      assignInstruction({ ...base, similar: [{ notionId: 'n1', other: 'Autre', proximity: 0.5 }] }),
+    ).toMatch(/RESSEMBLANCES REPÉRÉES/);
+  });
+
+  it('dit au modèle que le calcul ne juge rien — c’est lui qui tranche', () => {
+    const instruction = assignInstruction({
+      ...base,
+      similar: [{ notionId: 'n1', other: 'Autre', proximity: 0.5 }],
+    });
+    expect(instruction).toMatch(/Ce calcul ne juge rien/);
+    expect(instruction).toMatch(/FAIT VÉRIFIABLE DE PLUS/);
+  });
+
+  it('se passe de provenance sans broncher', () => {
+    // Les notions d'avant le 24/08/2026 n'en ont pas, et une page périmée est
+    // retirée avant d'arriver ici.
+    const instruction = assignInstruction({
+      notions: [{ id: 'n1', title: 'Une notion sans provenance.' }],
+      chapters: [{ id: 'c1', name: 'Un chapitre' }],
+      similar: [],
+    });
+    // La ligne de la notion ne porte aucune provenance entre crochets — le mot
+    // « page » reste ailleurs, dans l'explication générale.
+    expect(instruction).toContain('- n1 — Une notion sans provenance.');
+    expect(instruction).not.toContain('Une notion sans provenance. [');
+  });
+
+  it('le dit quand il n’y a aucun chapitre où ranger', () => {
+    const instruction = assignInstruction({ notions: base.notions, chapters: [], similar: [] });
+    expect(instruction).toMatch(/Aucun chapitre n'existe/);
   });
 });
