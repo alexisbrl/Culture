@@ -246,9 +246,29 @@ export type ImportCleanup = {
  *  À ne pas confondre avec le chapitre VIDÉ (feuille de route §5) : celui-là
  *  existait avant l'import, porte peut-être un titre écrit à la main, et on le
  *  conserve. C'est exactement ce que la condition sur `importId` distingue. */
-export function planImportCleanup(produce: ImportProduce, importId: string): ImportCleanup {
+export function planImportCleanup(
+  produce: ImportProduce,
+  importId: string,
+  /** Les notions que le modèle a **explicitement** laissées sans chapitre.
+   *
+   *  ⚠️ **Sans ce filtre, le ménage est une bombe.** « Créé par cet import et
+   *  sans chapitre » décrit deux situations que rien ne distingue en base : la
+   *  notion que le modèle a écartée comme redite (déchet, à effacer) — et la
+   *  notion qu'il n'a **jamais examinée**, parce que le rangement s'est arrêté
+   *  avant elle, a échoué, ou n'a trouvé aucun chapitre où ranger. Effacer la
+   *  seconde détruit du contenu que personne n'a jugé.
+   *
+   *  Le cas limite qui l'a révélé : générer des notions sur un atelier SANS
+   *  chapitre. Le rangement n'a nulle part où ranger, il ne range rien, et le
+   *  ménage effaçait alors **la totalité de ce que l'import venait de produire**.
+   *
+   *  Une liste vide n'efface donc aucune notion — le silence ne vaut jamais
+   *  autorisation de supprimer. */
+  explicitlyUnassigned: readonly string[] = [],
+): ImportCleanup {
+  const judged = new Set(explicitlyUnassigned);
   const notionIds = produce.notions
-    .filter((n) => n.importId === importId && n.chapterId === null)
+    .filter((n) => n.importId === importId && n.chapterId === null && judged.has(n.id))
     .map((n) => n.id);
 
   const occupied = new Set(

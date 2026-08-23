@@ -113,15 +113,34 @@ describe('authorizeOperations', () => {
 describe('planImportCleanup', () => {
   const IMPORT = 'imp-1';
 
-  it('efface ce que CET import a créé et que personne n’a rangé', () => {
+  it('efface ce que CET import a créé et que le modèle a EXPLICITEMENT écarté', () => {
     const produce: ImportProduce = {
       chapters: [{ id: 'c-new', importId: IMPORT }],
       notions: [{ id: 'n-orphan', chapterId: null, importId: IMPORT }],
     };
-    expect(planImportCleanup(produce, IMPORT)).toEqual({
+    expect(planImportCleanup(produce, IMPORT, ['n-orphan'])).toEqual({
       chapterIds: ['c-new'],
       notionIds: ['n-orphan'],
     });
+  });
+
+  it('n’efface AUCUNE notion que le modèle n’a jamais examinée', () => {
+    // La faille corrigée le 24/08/2026. « Créé par cet import et sans chapitre »
+    // recouvre deux situations que rien ne distingue en base : la redite écartée
+    // (déchet) et la notion jamais examinée — rangement interrompu, en échec, ou
+    // atelier sans le moindre chapitre où ranger. Dans ce dernier cas, le ménage
+    // effaçait TOUT ce que l'import venait de produire.
+    const produce: ImportProduce = {
+      chapters: [],
+      notions: [
+        { id: 'n1', chapterId: null, importId: IMPORT },
+        { id: 'n2', chapterId: null, importId: IMPORT },
+      ],
+    };
+    expect(planImportCleanup(produce, IMPORT).notionIds).toEqual([]);
+    expect(planImportCleanup(produce, IMPORT, []).notionIds).toEqual([]);
+    // Seule celle qui a été jugée part.
+    expect(planImportCleanup(produce, IMPORT, ['n2']).notionIds).toEqual(['n2']);
   });
 
   it('ne touche JAMAIS à ce qui existait avant, même écarté', () => {
@@ -161,10 +180,11 @@ describe('planImportCleanup', () => {
     expect(planImportCleanup(produce, IMPORT).chapterIds).toEqual([]);
   });
 
-  it('appelé entre deux passes, il effacerait TOUT le travail — le piège documenté', () => {
+  it('appelé entre deux passes, il ne peut plus rien emporter', () => {
     // Les notions naissent à la passe ① sans chapitre et ne sont rangées qu'à la
-    // passe ②. Ce test ne valide pas un comportement souhaitable : il fige la
-    // raison pour laquelle l'appel n'a lieu qu'à la fin de l'import.
+    // passe ③. Avant le 24/08/2026, un appel à mi-parcours les effaçait toutes ;
+    // le filtre « explicitement écartées » rend le calendrier non critique — il
+    // reste préférable d'appeler à la fin, ce n'est plus destructeur autrement.
     const midImport: ImportProduce = {
       chapters: [],
       notions: [
@@ -172,7 +192,7 @@ describe('planImportCleanup', () => {
         { id: 'n2', chapterId: null, importId: IMPORT },
       ],
     };
-    expect(planImportCleanup(midImport, IMPORT).notionIds).toEqual(['n1', 'n2']);
+    expect(planImportCleanup(midImport, IMPORT).notionIds).toEqual([]);
   });
 
   it('un import qui n’a rien produit ne propose rien', () => {

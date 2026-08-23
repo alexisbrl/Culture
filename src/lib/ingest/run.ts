@@ -598,23 +598,51 @@ async function snapshotPopulatedChapters(workshopId: string, importId: string): 
     .eq('id', importId);
 }
 
-/** Mémorise les notions RÉELLEMENT déplacées par cet import.
+/** Mémorise ce que ce lot de rangement a décidé.
  *
- *  Rangé dans `ai_imports.scope` (jsonb libre, aucune migration) et cumulé d'un
- *  lot à l'autre. C'est ce que l'écran lira pour marquer ce qui a bougé — et
- *  c'est pour ça qu'on n'y met que les vrais déplacements : annoncer comme
- *  « déplacée » une notion restée dans son chapitre ferait douter de tout le
- *  reste de l'affichage. */
-async function recordMoved(importId: string, notionIds: readonly string[]): Promise<void> {
-  if (notionIds.length === 0) return;
+ *  Deux listes, cumulées d'un lot à l'autre dans `ai_imports.scope` (jsonb
+ *  libre, aucune migration) :
+ *    • `movedNotions` — les notions RÉELLEMENT déplacées, que l'écran marquera.
+ *      Annoncer comme « déplacée » une notion restée dans son chapitre ferait
+ *      douter de tout le reste de l'affichage.
+ *    • `setAsideNotions` — celles que le modèle a explicitement laissées sans
+ *      chapitre. C'est la seule chose que le ménage de fin pourra effacer.
+ *
+ *  ⚠️ **Lecture-modification-écriture, et les lots tournent en parallèle** :
+ *  deux lots qui aboutissent en même temps peuvent s'écraser l'un l'autre. La
+ *  conséquence est bénigne pour `movedNotions` (un marquage manquant) mais pas
+ *  pour `setAsideNotions` : une perte y fait seulement *moins* effacer, jamais
+ *  plus — l'erreur va donc du bon côté. À reprendre par une écriture atomique
+ *  côté base le jour où ça compte (voir docs/backlog.md). */
+async function recordProgress(
+  importId: string,
+  entries: { movedNotions: readonly string[]; setAsideNotions: readonly string[] },
+): Promise<void> {
+  if (entries.movedNotions.length === 0 && entries.setAsideNotions.length === 0) return;
   const supabase = getSupabaseServerClient();
   const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
   const scope = (data?.scope as Record<string, unknown> | null) ?? {};
-  const previous = Array.isArray(scope.movedNotions) ? (scope.movedNotions as string[]) : [];
+  const merge = (key: string, added: readonly string[]) => {
+    const previous = Array.isArray(scope[key]) ? (scope[key] as string[]) : [];
+    return [...new Set([...previous, ...added])];
+  };
   await supabase
     .from('ai_imports')
-    .update({ scope: { ...scope, movedNotions: [...new Set([...previous, ...notionIds])] } })
+    .update({
+      scope: {
+        ...scope,
+        movedNotions: merge('movedNotions', entries.movedNotions),
+        setAsideNotions: merge('setAsideNotions', entries.setAsideNotions),
+      },
+    })
     .eq('id', importId);
+}
+
+async function setAsideOf(importId: string): Promise<string[]> {
+  const supabase = getSupabaseServerClient();
+  const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
+  const scope = (data?.scope as Record<string, unknown> | null) ?? {};
+  return Array.isArray(scope.setAsideNotions) ? (scope.setAsideNotions as string[]) : [];
 }
 
 async function populatedBeforeOf(importId: string): Promise<string[]> {
@@ -688,8 +716,15 @@ export async function ingestAssignments(
   });
   await addImportUsage(importId, result.usage);
 
-  const refs = await loadExistingRefs(workshopId);
-  const plan = parsePlanLogged('rangement', result.plan, refs);
+  // ⚠️ Les références de chapitre acceptables sont les VISIBLES, pas toutes
+  // celles de l'atelier. `loadExistingRefs` rend aussi les chapitres cachés :
+  // un modèle qui en nommerait un — il ne les a pas vus, mais rien ne
+  // l'empêche de recopier un identifiant croisé ailleurs — y rangerait des
+  // notions, qui disparaîtraient du programme sans que personne ne l'ait voulu.
+  const plan = parsePlanLogged('rangement', result.plan, {
+    chapterIds: chapters.map((c) => c.id),
+    notionIds: all.map((n) => n.id),
+  });
 
   // Les chapitres sont déjà en base : leurs références SONT leurs identifiants,
   // il n'y a rien à traduire. En revanche on passe l'état AVANT : une notion
@@ -697,7 +732,11 @@ export async function ingestAssignments(
   // être réécrite ni apparaître comme un changement.
   const before = new Map(all.map((n) => [n.id, n.chapterId]));
   const movedIds = await applyAssignments(workshopId, plan.assignments, new Map(), before);
-  await recordMoved(importId, movedIds);
+  // Ce que le modèle a EXPLICITEMENT écarté — la seule chose que le ménage de
+  // fin aura le droit d'effacer. Voir `planImportCleanup` : une notion qu'il n'a
+  // jamais examinée ne doit pas être confondue avec une redite.
+  const setAside = plan.assignments.filter((a) => !a.chapterRef).map((a) => a.notionRef);
+  await recordProgress(importId, { movedNotions: movedIds, setAsideNotions: setAside });
 
   // ─── Récupérer les questions en sommeil ───────────────────────────────────
   //
@@ -769,6 +808,9 @@ export async function finishIngestion(
         notions: notions.map((n) => ({ id: n.id, chapterId: n.chapterId, importId: n.importId })),
       },
       importId,
+      // Seules les notions que le modèle a explicitement écartées. Une notion
+      // qu'il n'a jamais examinée reste, quoi qu'il arrive.
+      await setAsideOf(importId),
     );
     await removeOrphans(workshopId, cleanup);
 
