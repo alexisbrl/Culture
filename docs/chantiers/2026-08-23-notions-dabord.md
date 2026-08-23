@@ -269,6 +269,15 @@ Deux garde-fous :
 - **Chapitre caché.** Un chapitre qui n'est plus d'actualité est **caché**, avec
   les notions qu'il contient. Ni supprimé, ni vidé : l'ensemble reste consultable,
   ce qui rend le changement traçable et la suppression manuelle facile ensuite.
+  - **Il s'affiche sous les chapitres visibles**, signalé comme les autres
+    changements apportés par l'IA.
+  - **C'est l'IA qui le pose, pas l'utilisateur** — non par méfiance, mais parce
+    qu'on n'offre **aucun bouton « cacher »** dans l'interface. Un utilisateur
+    qui veut se débarrasser d'un chapitre le supprime.
+  - **Un bouton « restaurer » le remet dans le programme**, et il est ouvert aux
+    deux : l'utilisateur remet ce qu'il veut garder, l'IA doit pouvoir défaire un
+    import annulé. Un import ultérieur peut de nouveau l'écarter s'il n'est plus
+    couvert par les documents.
 - **Notion écartée = notion sans chapitre.** Pas d'état « caché » propre à la
   notion : « sans chapitre » est déjà exactement ça, et le concept existe déjà
   (`workshop_bricks.chapter_id` est `null`-able, la colonne « sans chapitre »
@@ -311,7 +320,7 @@ Deux garde-fous :
       programme (parcours, examen, maîtrise) part avec T6, qui apporte le moyen
       d'en cacher un ; filtrer avant serait du code sans moyen de le vérifier.
 
-- [ ] **T2 — Écrire le contrat en dur, côté serveur.** Un module pur qui prend
+- [x] **T2 — Écrire le contrat en dur, côté serveur.** ✅ 23/08/2026. Un module pur qui prend
       « l'atelier tel qu'il est » + « ce que l'IA propose » et rend la liste des
       opérations — **créer** et **(dés)attribuer** uniquement. Aucune autre
       opération ne doit être exprimable. C'est le cœur : il est écrit et testé
