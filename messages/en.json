@@ -887,7 +887,11 @@
       "empty": "No chapters yet.",
       "count": "{count, plural, =0 {no chapters} one {# chapter} other {# chapters}}",
       "deleteTitle": "Delete this chapter?",
-      "deleteDesc": "“{name}” will be deleted and its pot will disappear from the programme. Its notions are not deleted: they move back to “no chapter”."
+      "deleteDesc": "“{name}” will be deleted and its pot will disappear from the programme. Its notions are not deleted: they move back to “no chapter”.",
+      "hiddenTitle": "Set aside by AI",
+      "hiddenHint": "This chapter is no longer covered by the workshop documents. It no longer counts towards the programme, but nothing is lost.",
+      "restore": "Restore",
+      "restoreFailed": "Could not restore this chapter"
     }
   },
   "workshop": {

@@ -14,6 +14,14 @@ export type Chapter = {
   name: string;
   position: number;
   notionCount: number;
+  /** Chapitre mis à l'écart : lui et ses notions sortent du programme, mais
+   *  restent consultables sous les chapitres visibles.
+   *
+   *  ⚠️ **Seule l'ingestion IA le pose**, quand un import vide un chapitre —
+   *  l'interface n'offre pas de bouton « cacher » (décision de sobriété du
+   *  23/08/2026, pas une restriction de droits). Elle offre en revanche
+   *  « restaurer », qui est l'unique geste humain sur cet état. */
+  hidden: boolean;
 };
 
 export const CHAPTER_NAME_MAX = 120;
@@ -32,7 +40,7 @@ export async function listChapters(workshopId: string): Promise<Chapter[]> {
   const [{ data: chapters, error }, { data: notions }] = await Promise.all([
     supabase
       .from('workshop_chapters')
-      .select('id, name, position')
+      .select('id, name, position, hidden')
       .eq('workshop_id', workshopId)
       .order('position', { ascending: true }),
     supabase.from('workshop_bricks').select('chapter_id').eq('workshop_id', workshopId),
@@ -53,7 +61,28 @@ export async function listChapters(workshopId: string): Promise<Chapter[]> {
     name: c.name,
     position: c.position,
     notionCount: countMap[c.id] ?? 0,
+    hidden: c.hidden === true,
   }));
+}
+
+/** Remet un chapitre caché dans le programme — le bouton « restaurer ».
+ *
+ *  Le seul geste humain sur cet état, et il est unidirectionnel : rien dans
+ *  l'interface ne permet de cacher à la main. Un import ultérieur peut en
+ *  revanche l'écarter de nouveau s'il n'est plus couvert par les documents. */
+export async function restoreChapter(
+  workshopId: string,
+  chapterId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase
+    .from('workshop_chapters')
+    .update({ hidden: false, updated_at: new Date().toISOString() })
+    .eq('workshop_id', workshopId)
+    .eq('id', chapterId);
+
+  if (error) return { success: false, error: error.message };
+  return { success: true };
 }
 
 export async function createChapter(
@@ -88,7 +117,12 @@ export async function createChapter(
     return { success: false, error: 'Erreur lors de la création' };
   }
 
-  return { success: true, chapter: { id: data.id, name: data.name, position: data.position, notionCount: 0 } };
+  // Un chapitre créé à la main naît visible : `hidden` n'est posé que par un
+  // import qui vide un chapitre existant.
+  return {
+    success: true,
+    chapter: { id: data.id, name: data.name, position: data.position, notionCount: 0, hidden: false },
+  };
 }
 
 export async function renameChapter(

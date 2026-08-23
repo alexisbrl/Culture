@@ -348,6 +348,7 @@ export async function prepareIngestion(
       const bytes = await readObject(f.storage_path as string);
       if (!bytes) throw new Error(`Fichier illisible : ${f.name}`);
       return {
+        fileId: f.id as string,
         key: f.storage_path as string,
         fileName: f.name as string,
         mimeType: f.mime_type as string,
@@ -546,20 +547,24 @@ async function loadNotionsToArrange(workshopId: string) {
 
   const { data: files } = await supabase
     .from('workshop_files')
-    .select('name')
+    .select('id, name')
     .eq('workshop_id', workshopId);
-  const present = new Set((files ?? []).map((f) => f.name as string));
+  // Identifiant → nom. La provenance stocke l'identifiant (seul stable) et
+  // l'affichage veut le nom : la table de correspondance se fait ici, au moment
+  // de s'en servir, jamais figée à l'écriture.
+  const names = new Map((files ?? []).map((f) => [f.id as string, f.name as string]));
 
   return (data ?? []).map((n) => {
     const source = n.source_document as string | null;
-    const stillThere = !!source && present.has(source);
+    const name = source ? names.get(source) : undefined;
     return {
       id: n.id as string,
       title: n.title as string,
       chapterId: (n.chapter_id as string | null) ?? null,
       importId: (n.import_id as string | null) ?? null,
-      sourceDocument: stillThere ? source : null,
-      page: stillThere ? (n.source_page as number | null) : null,
+      // Document disparu ou remplacé → provenance retirée, pas devinée.
+      sourceDocument: name ?? null,
+      page: name ? (n.source_page as number | null) : null,
     };
   });
 }
@@ -777,7 +782,9 @@ export async function ingestDocumentNotions(
     importId,
     // La provenance est posée ICI et non par le modèle : c'est l'appelant qui
     // sait quel document il traite, lui ne fait que rendre la page.
-    plan.notions.map((n) => ({ ...n, sourceDocument: document.fileName })),
+    // L'IDENTIFIANT, pas le nom : un « cours.pdf » remis à jour porte le même
+    // nom et n'est plus le même document. Le nom est relu à l'affichage.
+    plan.notions.map((n) => ({ ...n, sourceDocument: document.fileId })),
     new Map(),
   );
 

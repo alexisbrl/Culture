@@ -12,6 +12,7 @@ export type Chapter = {
   name: string;
   position: number;
   notionCount: number;
+  hidden: boolean;
 };
 
 // Lecture ouverte à tous les membres : les chapitres pilotent les pots de
@@ -20,6 +21,21 @@ export type Chapter = {
 export async function getWorkshopChapters(workshopId: string): Promise<Chapter[]> {
   if (!(await requireMember(workshopId))) return [];
   return await chaptersLib.listChapters(workshopId);
+}
+
+/** Remet un chapitre caché dans le programme.
+ *
+ *  Il n'existe pas d'action symétrique : cacher est réservé à l'ingestion IA,
+ *  parce que l'interface ne propose pas ce bouton (voir `chapters.ts`). */
+export async function restoreWorkshopChapter(
+  workshopId: string,
+  chapterId: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+
+  const result = await chaptersLib.restoreChapter(workshopId, chapterId);
+  if (result.success) revalidateWorkshop();
+  return result;
 }
 
 export async function createWorkshopChapter(

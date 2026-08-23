@@ -308,7 +308,12 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // Le coût en découle et il est assumé : un atelier de douze chapitres
     // déclenche douze séries d'appels de la passe questions, même si un seul
     // chapitre est nouveau (arbitrage du 22/08/2026).
-    const chapters = (await getWorkshopChapters(workshopId)).map((c) => ({ id: c.id, name: c.name }));
+    // Les chapitres écartés sont hors programme : on ne leur écrit pas de
+    // questions. Ils n'ont de toute façon plus de notions, mais la règle doit
+    // être explicite — un chapitre restauré plus tard les recevra.
+    const chapters = (await getWorkshopChapters(workshopId))
+      .filter((c) => !c.hidden)
+      .map((c) => ({ id: c.id, name: c.name }));
 
     if (withQuestions && chapters.length > 0) {
       let error: string | null = null;

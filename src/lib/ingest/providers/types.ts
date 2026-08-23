@@ -20,6 +20,14 @@ import type { ExistingContent } from '@/lib/ingest/prompt';
 
 /** Un document source, déjà lu depuis le stockage de l'atelier. */
 export type SourceDocument = {
+  /** Identifiant du fichier dans l'atelier (`workshop_files.id`).
+   *
+   *  ⚠️ **C'est LUI qui identifie un document, jamais son nom.** Un nom ne
+   *  distingue pas « cours.pdf » de « cours.pdf » remis à jour — le cas le plus
+   *  fréquent — alors que l'identifiant change dès que le fichier est remplacé,
+   *  et survit à un simple renommage. Tout ce qui doit savoir « est-ce encore le
+   *  même document ? » se fonde là-dessus (voir la provenance des notions). */
+  fileId: string;
   /** Clé de stockage (`workshop_files.storage_path`), pour la traçabilité. */
   key: string;
   fileName: string;
@@ -39,6 +47,9 @@ export type SourceDocument = {
  *  ailleurs. L'appelant ne l'interprète pas, il se contente de le conserver
  *  (`ai_imports.file_ids`) pour que les passes suivantes le réutilisent. */
 export type PreparedDocument = {
+  /** Voir `SourceDocument.fileId` : l'identité d'un document, ce n'est pas son
+   *  nom. Conservé dans `ai_imports.file_ids` avec le reste. */
+  fileId: string;
   key: string;
   fileName: string;
   mimeType: string;

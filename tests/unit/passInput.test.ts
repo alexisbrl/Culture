@@ -21,6 +21,7 @@ import type { IngestScope, PlanProvider, PreparedDocument, ProviderResult } from
 // prévu par `options.provider` (CLAUDE.md §7).
 
 const doc = (ref: string): PreparedDocument => ({
+  fileId: `file-${ref}`,
   key: `cours/${ref}.pdf`,
   fileName: `${ref}.pdf`,
   mimeType: 'application/pdf',
@@ -36,7 +37,7 @@ function recordingProvider(): PlanProvider & { calls: { documents: PreparedDocum
     calls,
     name: 'factice',
     async prepare(documents) {
-      return documents.map((d) => ({ key: d.key, fileName: d.fileName, mimeType: d.mimeType, ref: d.fileName }));
+      return documents.map((d) => ({ fileId: d.fileId, key: d.key, fileName: d.fileName, mimeType: d.mimeType, ref: d.fileName }));
     },
     async release() {
       // Rien à faire : ce fichier ne teste pas le ménage (voir release.test.ts).
@@ -74,7 +75,7 @@ describe('passe questions — l’appel capturé ne porte aucun document', () =>
   it('documents.length === 0 chez le fournisseur', async () => {
     const provider = recordingProvider();
     const prepared = await provider.prepare([
-      { key: 'cours/ch1.pdf', fileName: 'ch1.pdf', mimeType: 'application/pdf', bytes: new Uint8Array([1]) },
+      { fileId: 'file-ch1', key: 'cours/ch1.pdf', fileName: 'ch1.pdf', mimeType: 'application/pdf', bytes: new Uint8Array([1]) },
     ]);
 
     await provider.documentToPlan(documentsForPass('questions', prepared), empty, {

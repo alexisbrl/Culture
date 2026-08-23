@@ -2,7 +2,7 @@
 
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { ChevronDown, EllipsisVertical, GripVertical, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, EllipsisVertical, EyeOff, GripVertical, Loader2, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { palette, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AiGenerationButton from '@/components/ai/AiGenerationButton';
@@ -17,6 +17,7 @@ import {
 import {
   createWorkshopChapter,
   renameWorkshopChapter,
+  restoreWorkshopChapter,
   deleteWorkshopChapter,
   reorderWorkshopChapters,
   type Chapter,
@@ -160,7 +161,9 @@ function NotionForm({
       <SelectMenu
         items={[
           { value: '', label: t('notions.noChapter') },
-          ...chapters.map((c) => ({ value: c.id, label: c.name })),
+          // Pas les chapitres écartés : on ne range pas dans une boîte mise de
+          // côté. Pour y remettre une notion, on restaure d'abord le chapitre.
+          ...chapters.filter((c) => !c.hidden).map((c) => ({ value: c.id, label: c.name })),
         ]}
         value={chapterId}
         onSelect={(next) => setChapterId(next)}
@@ -440,6 +443,18 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
 
   const unassignedNotions = notions.filter((n) => !n.chapterId || !chapters.some((c) => c.id === n.chapterId));
   const showUnassignedEntry = unassignedNotions.length > 0 || selectedChapterId === UNASSIGNED;
+  // Les chapitres écartés vivent SOUS les autres, jamais mêlés à eux : c'est ce
+  // qui rend un changement d'atelier lisible d'un coup d'œil.
+  const hiddenChapters = chapters.filter((c) => c.hidden);
+
+  async function handleRestoreChapter(chapterId: string) {
+    setChapterSaving(true);
+    const result = await restoreWorkshopChapter(workshopId, chapterId);
+    setChapterSaving(false);
+    if (!result.success) return setError(result.error ?? t('chapters.restoreFailed'));
+    setChapters((prev) => prev.map((c) => (c.id === chapterId ? { ...c, hidden: false } : c)));
+    setSelectedChapterId(chapterId);
+  }
   const activeNotions = selectedChapterId === UNASSIGNED
     ? unassignedNotions
     : notions.filter((n) => n.chapterId === selectedChapterId);
@@ -605,7 +620,11 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
                 <div style={emptyRowStyle}>{t('chapters.empty')}</div>
               )}
 
+              {/* On boucle sur TOUS les chapitres et on saute les cachés, plutôt
+                  que de filtrer la liste : les indices servent au réordonnancement
+                  par glisser-déposer, et les décaler les casserait. */}
               {chapters.map((chapter, i) => {
+                if (chapter.hidden) return null;
                 const isActive = selectedChapterId === chapter.id;
                 if (editingChapterId === chapter.id) {
                   return (
@@ -696,6 +715,72 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
                     </div>
                   </div>
                 </div>
+              )}
+
+              {/* ── Les chapitres écartés par l'IA ──
+                  Sous les autres, séparés par un intitulé : un import qui change
+                  l'atelier doit se lire d'un coup d'œil. Ils restent cliquables
+                  (on veut pouvoir regarder ce qu'ils contenaient) mais ne sont ni
+                  déplaçables ni cibles de dépôt — on ne range pas dans une boîte
+                  qu'on a mise de côté.
+
+                  Un seul bouton : « restaurer ». Il n'a pas de symétrique, parce
+                  que l'interface n'offre pas de « cacher » — décision de sobriété
+                  du 23/08/2026, pas une restriction de droits. */}
+              {hiddenChapters.length > 0 && (
+                <>
+                  <div
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '10px 10px 6px', borderTop: `1px solid ${palette.line}`,
+                      fontSize: 11.5, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase',
+                      color: palette.inkFaint, background: palette.surfaceSunken,
+                    }}
+                  >
+                    <EyeOff size={13} strokeWidth={2} />
+                    {t('chapters.hiddenTitle')}
+                  </div>
+                  {hiddenChapters.map((chapter) => (
+                    <div
+                      key={chapter.id}
+                      onClick={() => setSelectedChapterId(chapter.id)}
+                      style={{
+                        position: 'relative', display: 'flex', alignItems: 'center', gap: 10,
+                        minHeight: ROW_MIN_HEIGHT, padding: '8px 6px 8px 10px', cursor: 'pointer',
+                        background: selectedChapterId === chapter.id ? palette.surfaceSunken : 'transparent',
+                      }}
+                    >
+                      <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: selectedChapterId === chapter.id ? palette.green : 'transparent' }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Tooltip content={t('chapters.hiddenHint')}>
+                          <ClippedText
+                            text={chapter.name}
+                            style={{ fontSize: 14, fontWeight: 600, color: palette.inkMuted, textDecoration: 'line-through', textDecorationColor: palette.inkFaint }}
+                          />
+                        </Tooltip>
+                        <div style={{ fontSize: 12, color: palette.inkFaint }}>
+                          {t('notions.count', { count: chapter.notionCount })}
+                        </div>
+                      </div>
+                      <Tooltip content={t('chapters.restore')}>
+                        <button
+                          type="button"
+                          aria-label={t('chapters.restore')}
+                          disabled={chapterSaving}
+                          onClick={(e) => { e.stopPropagation(); handleRestoreChapter(chapter.id); }}
+                          className="hover:bg-[var(--green-tint)]"
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: 28, height: 28, flexShrink: 0, cursor: chapterSaving ? 'default' : 'pointer',
+                            border: 'none', borderRadius: 8, background: 'transparent', color: palette.greenBrand,
+                          }}
+                        >
+                          <RotateCcw size={15} strokeWidth={2} />
+                        </button>
+                      </Tooltip>
+                    </div>
+                  ))}
+                </>
               )}
             </div>
           </div>

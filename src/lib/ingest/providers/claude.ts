@@ -321,7 +321,7 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
             file: await toFile(Buffer.from(doc.bytes), doc.fileName, { type: doc.mimeType }),
             betas: [FILES_BETA],
           });
-          return { key: doc.key, fileName: doc.fileName, mimeType: doc.mimeType, ref: uploaded.id };
+          return { fileId: doc.fileId, key: doc.key, fileName: doc.fileName, mimeType: doc.mimeType, ref: uploaded.id };
         }),
       );
     },

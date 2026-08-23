@@ -38,7 +38,7 @@ describe('createDeepSeekProvider — passe questions uniquement', () => {
   });
 
   it('refuse un appel qui porterait des documents', async () => {
-    const doc = { key: 'k', fileName: 'f.pdf', mimeType: 'application/pdf', ref: 'r' };
+    const doc = { fileId: 'f1', key: 'k', fileName: 'f.pdf', mimeType: 'application/pdf', ref: 'r' };
     await expect(provider().documentToPlan([doc], empty, questionsScope)).rejects.toThrow(/documents/);
   });
 

@@ -383,7 +383,11 @@ Deux garde-fous :
 - [ ] **T5 — Recyclage des questions.** Étape de récupération des questions en
       sommeil **avant** toute rédaction, dans la passe ③.
 
-- [ ] **T6 — UI.** Chapitre caché (masquer / réafficher, affichage distinct),
+- [~] **T6 — UI.** Chapitres cachés et bouton « restaurer » ✅ 24/08/2026,
+      vérifiés de bout en bout dans l'app. **Reste le marquage « nouveau » /
+      « recyclé »**, qui demande de rendre le dernier import lisible dans
+      l'écran — pièce à part.
+      Ancienne description : Chapitre caché (masquer / réafficher, affichage distinct),
       chapitre vide conservé, et **marquage « nouveau » / « recyclé, venait
       d'ici »** sur ce qu'un import vient de produire. C'est ce marquage qui fait
       qu'on fait confiance au résultat après une mise à jour.

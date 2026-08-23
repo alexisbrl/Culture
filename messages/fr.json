@@ -887,7 +887,11 @@
       "empty": "Aucun chapitre pour l'instant.",
       "count": "{count, plural, =0 {aucun chapitre} one {# chapitre} other {# chapitres}}",
       "deleteTitle": "Supprimer ce chapitre ?",
-      "deleteDesc": "« {name} » sera supprimé et son pot disparaîtra du programme. Ses notions ne sont pas supprimées : elles repassent dans « sans chapitre »."
+      "deleteDesc": "« {name} » sera supprimé et son pot disparaîtra du programme. Ses notions ne sont pas supprimées : elles repassent dans « sans chapitre ».",
+      "hiddenTitle": "Écartés par l’IA",
+      "hiddenHint": "Ce chapitre n’est plus couvert par les documents de l’atelier. Il ne compte plus dans le programme, mais rien n’est perdu.",
+      "restore": "Restaurer",
+      "restoreFailed": "Impossible de restaurer ce chapitre"
     }
   },
   "workshop": {

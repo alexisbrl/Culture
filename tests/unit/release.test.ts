@@ -12,6 +12,7 @@ import type { PlanProvider, PreparedDocument } from '@/lib/ingest/providers/type
 // pu être effacé serait absurde — le lot, lui, a bien été retiré.
 
 const doc = (ref: string): PreparedDocument => ({
+  fileId: `file-${ref}`,
   key: `cours/${ref}.pdf`,
   fileName: `${ref}.pdf`,
   mimeType: 'application/pdf',
