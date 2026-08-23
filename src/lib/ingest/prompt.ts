@@ -77,7 +77,7 @@ export type ExistingContent = {
  *  coûterait alors plus cher que la génération elle-même. */
 export type ExistingScope =
   | { pass: 'chapters' }
-  | { pass: 'notions'; chapterId: string }
+  | { pass: 'notions' }
   | { pass: 'questions'; notionIds: string[] };
 
 const SYSTEM = `Tu construis le programme pédagogique d'un atelier à partir de ses documents sources.
@@ -107,15 +107,26 @@ function inScope(existing: ExistingContent, scope: ExistingScope): {
 } {
   switch (scope.pass) {
     case 'chapters':
-      // Les chapitres existants, rien d'autre : la passe ne peut créer que des
-      // chapitres, les notions et les questions ne l'aideraient en rien.
-      return { chapters: existing.chapters, notions: [], questions: [] };
+      // Les chapitres existants ET TOUTES les notions : depuis l'inversion du
+      // 23/08/2026, cette passe ne se contente plus de nommer des boîtes, elle
+      // RÉPARTIT. Elle a donc besoin de la liste de ce qu'elle range — c'est
+      // son entrée principale, pas un supplément.
+      //
+      // C'est aussi le seul endroit du pipeline qui voit toutes les notions
+      // d'un coup : les redites entre deux documents ne peuvent se repérer que
+      // là. La réponse reste dans le contrat — on en range une, on laisse
+      // l'autre sans chapitre.
+      return { chapters: existing.chapters, notions: existing.notions, questions: [] };
     case 'notions':
-      return {
-        chapters: [],
-        notions: existing.notions.filter((n) => n.chapterId === scope.chapterId),
-        questions: [],
-      };
+      // TOUTES les notions de l'atelier, et non plus celles d'un chapitre : la
+      // passe travaille document par document, elle n'a aucun chapitre de
+      // référence. C'est ce qui lui permet de RÉUTILISER une notion existante
+      // au lieu de la recréer sous d'autres mots.
+      //
+      // Poids réel à surveiller sans s'en alarmer : un titre pèse ~40 tokens,
+      // 500 notions ~20 000 — sans commune mesure avec les énoncés de questions
+      // qui avaient fait exploser le coût (§16.3).
+      return { chapters: [], notions: existing.notions, questions: [] };
     case 'questions': {
       // Conséquence assumée (§16.3) : une question **sans notion** n'est jamais
       // transmise, donc jamais protégée du doublon. Elle n'est de toute façon
@@ -142,7 +153,7 @@ export function existingContentBlock(existing: ExistingContent, scope: ExistingS
       case 'chapters':
         return "L'atelier est vide : rien n'existe encore.";
       case 'notions':
-        return "Ce chapitre est vide : aucune notion n'y existe encore.";
+        return "L'atelier ne contient encore aucune notion.";
       case 'questions':
         return "Aucune question ne porte encore sur ces notions : la liste est vide.";
     }
@@ -206,7 +217,11 @@ export function userHintBlock(hint?: string): string {
 `;
 }
 
-export function chaptersInstruction(fileNames: string[] = [], retry?: { previous: string[] }): string {
+export function chaptersInstruction(
+  fileNames: string[] = [],
+  notions: { id: string; title: string }[] = [],
+  retry?: { previous: string[] },
+): string {
   const corpus =
     fileNames.length > 1
       ? `Tu as reçu ${fileNames.length} documents. Ils forment UN SEUL cours, pas ${fileNames.length} cours distincts :
@@ -254,18 +269,64 @@ Un chapitre est une unité d'enseignement, pas une section de mise en page : deu
 
 Ordre de grandeur : un cours en compte typiquement ${PLAUSIBLE_CHAPTERS.min} à ${PLAUSIBLE_CHAPTERS.max}, davantage pour un programme annuel ou un découpage fin explicitement demandé. C'est une indication et non une limite — dépasse-la si le contenu ou la demande le justifient.
 
-Donne à chacun une référence courte et unique (ch1, ch2…), et un nom de 120 caractères maximum.`;
+Donne à chacun une référence courte et unique (ch1, ch2…), et un nom de 120 caractères maximum. Un chapitre qui existe déjà se réutilise en reprenant SA référence telle quelle, sans le recréer.
+
+Puis RANGE LES NOTIONS. Elles ont été extraites avant les chapitres et n'appartiennent encore à aucun d'eux : c'est ici qu'on décide où chacune va.
+
+Pour chaque notion de la liste, produis une affectation qui reprend sa référence à l'identique et donne le chapitre où la placer.
+
+Trois règles :
+- **Tu ne peux ni créer ni modifier une notion ici.** Tu ranges celles qui existent, rien d'autre. N'invente aucune référence.
+- **Une notion qui n'a plus sa place dans le cours reçoit un chapitre vide** — elle sort du programme sans être perdue.
+- **Deux notions qui disent la même chose** (elles viennent de documents différents qui se recouvrent) : range-en UNE, et laisse l'autre avec un chapitre vide. Ne les fusionne pas, ne les réécris pas.
+
+N'oublie aucune notion : une notion absente de tes affectations reste là où elle est, ce qui n'est presque jamais ce que tu veux.
+
+${notionsToArrange(notions)}`;
 }
 
-/** Passe 2 — les notions d'un chapitre. */
-export function notionsInstruction(chapter: { id: string; name: string }): string {
-  return `Extrais les NOTIONS du chapitre « ${chapter.name} » (référence : ${chapter.id}).
+/** Passe 1 — les notions d'UN document.
+ *
+ *  ⚠️ **Cette passe est passée première le 23/08/2026.** Elle ne connaît plus
+ *  aucun chapitre : les notions naissent sans rangement, et c'est la passe
+ *  chapitres qui les répartit ensuite. C'est ce qui rend la mise à jour d'un
+ *  atelier possible — au niveau du chapitre, le modèle ne peut pas savoir que
+ *  « 1950-2000 » et « 1940-1990 » sont la même boîte redécoupée ; au niveau de
+ *  la notion, la question ne se pose pas.
+ *
+ *  ⚠️ **La réutilisation est le point critique de tout le dispositif.** Si le
+ *  modèle recrée sous d'autres mots ce qui existe déjà, l'atelier gonfle à
+ *  chaque import et le système perd toute confiance. Le critère donné ici est
+ *  volontairement OBJECTIF — « apporte-t-elle un fait vérifiable de plus ? » —
+ *  et surtout pas « est-ce mieux formulé », question à laquelle un modèle
+ *  répond oui presque à chaque fois. */
+export function notionsInstruction(document: { fileName: string }): string {
+  return `Extrais les NOTIONS du document « ${document.fileName} ». Traite-le en entier ; ne t'occupe d'aucun autre document.
 
 Une notion est l'unité minimale de connaissance : UNE idée, en UNE phrase de 280 caractères maximum, autoportante et vérifiable. « La Loire est le plus long fleuve de France » est une notion ; « Les fleuves » n'en est pas une, c'est un thème.
 
 Découpe assez fin pour qu'on puisse interroger chaque notion séparément, mais pas au point de séparer une idée en deux moitiés qui ne veulent plus rien dire seules.
 
-Chaque notion porte \`chapterRef\` = ${chapter.id}. Ne produis que les notions de CE chapitre.`;
+**Ne range rien dans un chapitre** : à ce stade il n'y en a pas, et ce n'est pas ton travail ici.
+
+RÉUTILISE plutôt que de recréer. Pour chaque notion que tu t'apprêtes à produire, regarde la liste des notions existantes ci-dessus :
+- si l'une d'elles porte DÉJÀ le même fait, ne la reproduis pas — même si tu l'aurais formulée autrement. Une reformulation n'apporte rien et crée un doublon ;
+- ne produis une notion voisine d'une existante QUE si elle apporte un FAIT VÉRIFIABLE DE PLUS, c'est-à-dire quelque chose qu'on pourrait demander et qui ne figure pas dans l'ancienne.
+
+Exemple de ce qu'il faut faire : « date de naissance de Napoléon » existe, le document donne aussi sa date de mort → tu produis « dates de naissance et de mort de Napoléon », qui porte un fait de plus.
+Exemple de ce qu'il ne faut PAS faire : « le jour où la nuit est la plus longue » existe, tu écris « définition du solstice d'hiver » → même fait, autres mots, aucun ajout. Tu ne produis rien.`;
+}
+
+/** La liste des notions à répartir, telle que la passe chapitres la reçoit.
+ *
+ *  Séparée de la consigne parce qu'elle VARIE d'un appel à l'autre alors que la
+ *  consigne, elle, est stable — la garder à part évite de croire qu'on peut
+ *  mettre l'ensemble dans le préfixe mis en cache. */
+export function notionsToArrange(notions: { id: string; title: string }[]): string {
+  if (notions.length === 0) return "Aucune notion à répartir : l'atelier n'en contient pas encore.";
+  const lines = notions.map((n) => `- ${n.id} — ${n.title}`);
+  return `Les ${notions.length} notions à répartir (référence — texte) :
+${lines.join('\n')}`;
 }
 
 /** La règle de volumétrie, en une phrase pour le modèle. Un niveau à zéro n'y

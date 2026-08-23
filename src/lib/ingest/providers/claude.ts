@@ -190,9 +190,9 @@ function instructionFor(scope: IngestScope, fileNames: string[]): string {
       // Les noms de fichiers sont dans la consigne, pas seulement dans les blocs
       // `document` : c'est là que le modèle peut apprendre qu'ils forment un
       // seul cours (§16.15).
-      return chaptersInstruction(fileNames, scope.retry);
+      return chaptersInstruction(fileNames, scope.notions, scope.retry);
     case 'notions':
-      return notionsInstruction(scope.chapter);
+      return notionsInstruction(scope.document);
     case 'questions':
       return questionsInstruction({
         chapter: scope.chapter,
@@ -211,7 +211,7 @@ function existingScopeFor(scope: IngestScope): ExistingScope {
     case 'chapters':
       return { pass: 'chapters' };
     case 'notions':
-      return { pass: 'notions', chapterId: scope.chapter.id };
+      return { pass: 'notions' };
     case 'questions':
       return { pass: 'questions', notionIds: scope.notions.map((n) => n.id) };
   }
@@ -229,8 +229,9 @@ function documentUsesOf(scope: IngestScope): number {
       // d'avance et une relance reste l'exception).
       return 1;
     case 'notions':
-      // Un appel par chapitre, tous sur les mêmes documents.
-      return scope.plannedCalls ?? 1;
+      // Un appel par DOCUMENT, et chacun ne porte que le sien : aucun préfixe
+      // commun, donc rien à relire. Le corpus part une fois en tout.
+      return 1;
     case 'questions':
       // Aucun document depuis T3 : rien à mettre en cache.
       return 0;
@@ -348,7 +349,7 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
       // Dernière barrière avant la facture : la passe questions ne reçoit aucun
       // document, quoi qu'on lui passe (§16.3). Sans documents, aucun bloc
       // `document` n'est posé — donc aucun marqueur de cache non plus.
-      const sent = documentsForPass(scope.pass, documents);
+      const sent = documentsForPass(scope.pass, documents, scope.pass === 'notions' ? scope.document.index : undefined);
 
       // Poser un marqueur sur un contenu jamais relu coûte 25 % de plus que ne
       // rien poser (§16.17). On ne le pose donc que si les mêmes documents

@@ -204,3 +204,96 @@ describe('parsePlan — entrée franchement hostile', () => {
     expect(plan.chapters[0]).not.toHaveProperty('id');
   });
 });
+
+// ─── Les affectations : ranger, sans rien créer ni détruire ──────────────────
+//
+// C'est le geste par lequel un import réorganise un atelier existant (feuille de
+// route docs/chantiers/2026-08-23-notions-dabord.md, §2). Il ne peut RIEN faire
+// d'autre que déplacer une notion d'une boîte à une autre — et c'est ce que ces
+// tests figent.
+
+describe('affectations — le seul geste qui touche à l’existant', () => {
+  const existing = { chapterIds: ['ch-existant'], notionIds: ['n-existante'] };
+
+  it('range une notion existante dans un chapitre que le plan vient de créer', () => {
+    const plan = parsePlan(
+      {
+        chapters: [{ ref: 'ch1', name: 'Athlétisme 1940-1990' }],
+        assignments: [{ notionRef: 'n-existante', chapterRef: 'ch1' }],
+      },
+      existing,
+    );
+    expect(plan.assignments).toEqual([{ notionRef: 'n-existante', chapterRef: 'ch1' }]);
+    expect(plan.discarded).toEqual([]);
+  });
+
+  it('un chapitre vide sort la notion du programme — un état légal, pas une erreur', () => {
+    const plan = parsePlan({ assignments: [{ notionRef: 'n-existante', chapterRef: '' }] }, existing);
+    expect(plan.assignments).toEqual([{ notionRef: 'n-existante', chapterRef: undefined }]);
+    expect(plan.discarded).toEqual([]);
+  });
+
+  it('ÉCARTE une affectation qui vise une notion inconnue — elle ne peut rien créer', () => {
+    // Sans ça, la passe chapitres pourrait faire apparaître du contenu qu'aucun
+    // document n'a produit.
+    const plan = parsePlan(
+      { chapters: [{ ref: 'ch1', name: 'Un' }], assignments: [{ notionRef: 'inventée', chapterRef: 'ch1' }] },
+      existing,
+    );
+    expect(plan.assignments).toEqual([]);
+    expect(plan.discarded[0]).toMatchObject({ kind: 'assignment', ref: 'inventée' });
+  });
+
+  it('un chapitre inconnu laisse la notion OÙ ELLE EST, il ne la sort pas du programme', () => {
+    // Le repli « sans chapitre » serait une perte silencieuse sur une faute de
+    // frappe. Ne rien faire est le seul comportement sûr.
+    const plan = parsePlan({ assignments: [{ notionRef: 'n-existante', chapterRef: 'ch-jamais-vu' }] }, existing);
+    expect(plan.assignments).toEqual([]);
+    expect(plan.discarded[0].reason).toMatch(/laissée où elle est/);
+  });
+
+  it('deux affectations pour la même notion : la première fait foi', () => {
+    // Appliquer la seconde ferait dépendre le résultat de l'ordre d'un tableau.
+    const plan = parsePlan(
+      {
+        chapters: [{ ref: 'ch1', name: 'Un' }, { ref: 'ch2', name: 'Deux' }],
+        assignments: [
+          { notionRef: 'n-existante', chapterRef: 'ch1' },
+          { notionRef: 'n-existante', chapterRef: 'ch2' },
+        ],
+      },
+      existing,
+    );
+    expect(plan.assignments).toEqual([{ notionRef: 'n-existante', chapterRef: 'ch1' }]);
+    expect(plan.discarded).toHaveLength(1);
+  });
+
+  it('range aussi une notion que CE plan vient de créer', () => {
+    // Le cas de l'import complet : les notions naissent à la passe précédente,
+    // mais un plan qui porterait les deux doit rester cohérent.
+    const plan = parsePlan({
+      chapters: [{ ref: 'ch1', name: 'Un' }],
+      notions: [{ ref: 'n1', title: 'La Loire est le plus long fleuve de France' }],
+      assignments: [{ notionRef: 'n1', chapterRef: 'ch1' }],
+    });
+    expect(plan.assignments).toEqual([{ notionRef: 'n1', chapterRef: 'ch1' }]);
+  });
+
+  it('une affectation malformée est écartée seule, le reste du plan survit', () => {
+    const plan = parsePlan(
+      {
+        chapters: [{ ref: 'ch1', name: 'Un' }],
+        assignments: [{ chapterRef: 'ch1' }, { notionRef: 'n-existante', chapterRef: 'ch1' }],
+      },
+      existing,
+    );
+    expect(plan.assignments).toHaveLength(1);
+    expect(plan.chapters).toHaveLength(1);
+    expect(plan.discarded).toHaveLength(1);
+  });
+
+  it('un plan sans affectations n’en invente pas', () => {
+    expect(parsePlan({}).assignments).toEqual([]);
+    expect(planSchema.parse({}).assignments).toEqual([]);
+  });
+});

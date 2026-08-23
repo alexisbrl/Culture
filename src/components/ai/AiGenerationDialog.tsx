@@ -14,11 +14,11 @@ import { MAX_QUESTIONS_PER_IMPORT as MAX_QUESTIONS } from '@/lib/ingest/prompt';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import {
-  ingestChapterNotions,
   ingestChapterQuestions,
+  ingestDocumentNotions,
+  ingestWorkshopChapters,
   prepareWorkshopIngestion,
   releaseWorkshopImportFiles,
-  startWorkshopIngestion,
   type PlanIssue,
 } from '@/app/actions/aiIngest';
 
@@ -36,10 +36,15 @@ import {
 //     reste annulable ; c'est le prix assumé de l'approche, à revoir le jour où
 //     une vraie tâche de fond existera.
 //
-// **L'ordre des boucles n'est pas décoratif** : toutes les notions, PUIS toutes
-// les questions. Le cache de prompt est propre à chaque schéma de sortie, donc
-// alterner chapitre par chapitre le ferait manquer à chaque fois — sur douze
-// chapitres, ~3 $ contre ~11 $ (mesuré, §5.2).
+// **L'ordre des étages a été inversé le 23/08/2026** : les NOTIONS d'abord
+// (document par document), les CHAPITRES ensuite (qui les rangent), les
+// questions enfin. Les notions sont le cœur d'un atelier, les chapitres ne
+// sont que des boîtes — décider les boîtes en premier rendait toute mise à
+// jour impossible (docs/chantiers/2026-08-23-notions-dabord.md).
+//
+// **Grouper par étage reste impératif** : le cache de prompt est propre à
+// chaque schéma de sortie, donc alterner les étages le ferait manquer à chaque
+// fois — sur douze chapitres, ~3 $ contre ~11 $ (mesuré, §5.2).
 
 /** Ce que l'API accepte aujourd'hui (§6). Les autres formats restent visibles
  *  mais non sélectionnables : mieux vaut le dire à la sélection qu'échouer au
@@ -147,10 +152,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       questionsProvider,
     });
     if (!prepared.ok) return setPhase({ step: 'error', message: prepared.error });
-    await generate(prepared.importId);
+    await generate(prepared.importId, prepared.documents);
   }
 
-  async function generate(importId: string) {
+  async function generate(importId: string, documents: number) {
     const discarded: PlanIssue[] = [];
     const adjusted: PlanIssue[] = [];
     const tally = { chapters: 0, notions: 0, questions: 0 };
@@ -162,9 +167,14 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // erreur, pas un blocage : il n'y a simplement rien à quoi se rattacher.
     // Décocher « chapitres » ne veut donc pas dire « atelier vide », ça veut
     // dire « garde ceux qui existent et complète-les ».
+    //
+    // ⚠️ **L'ordre a été inversé le 23/08/2026** : les notions d'abord, les
+    // chapitres ensuite. Les notions sont le cœur d'un atelier, les chapitres
+    // ne sont que des boîtes — décider les boîtes en premier rendait toute mise
+    // à jour impossible (feuille de route « notions d'abord »).
     const steps = [
-      ...(withChapters ? ['chapters' as const] : []),
       ...(withNotions ? ['notions' as const] : []),
+      ...(withChapters ? ['chapters' as const] : []),
       ...(withQuestions ? ['questions' as const] : []),
     ];
     const totalSteps = steps.length;
@@ -172,83 +182,83 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // chapitres, les notions occupent le premier cran, pas le deuxième.
     const stepAt = (name: (typeof steps)[number]) => Math.max(0, steps.indexOf(name));
 
-    // ── Étage 1 : les chapitres ──
-    // Cochés, on les génère ; décochés, on garde ceux de l'atelier tels quels.
-    if (withChapters) {
-      setPhase({ step: 'running', label: t('progress.chapters'), done: stepAt('chapters'), total: totalSteps });
-      const start = await startWorkshopIngestion(workshopId, importId);
-      if (!start.ok) return setPhase({ step: 'error', message: start.error });
-      discarded.push(...start.discarded);
-      adjusted.push(...start.adjusted);
-      // Le compteur affiche ce que CET import a créé, pas le total de l'atelier.
-      tally.chapters = start.chapters.length;
-      setCounts({ ...tally });
-    }
-
-    // ⚠️ **Le socle des deux étages suivants est l'atelier ENTIER**, pas ce que
-    // l'exécution vient de créer — et c'est relu en base, après l'insertion des
-    // nouveaux chapitres, pour que les deux se retrouvent dans la même liste.
+    // ── Étage 1 : les notions, document par document ──
     //
-    // C'est ce qui fait qu'ajouter un chapitre à un atelier qui en a déjà un
-    // complète les DEUX : le nouveau part de zéro, l'ancien se voit proposer ce
-    // qui lui manque (chaque passe reçoit son existant et complète au lieu de
-    // dupliquer). Auparavant on ne bouclait que sur `start.chapters`, si bien
-    // qu'un chapitre déjà en place n'était jamais enrichi par un nouveau
-    // document — et, incohérence révélatrice, décocher « chapitres » donnait le
-    // comportement attendu tandis que le cocher restreignait le champ.
+    // Elles naissent SANS chapitre — à ce stade il n'en existe pas. Le document
+    // est l'unité de travail : elle ne demande aucun jugement au modèle, elle
+    // est stable d'un import à l'autre, et chaque appel ne porte que son propre
+    // document.
     //
-    // Le coût en découle et il est assumé : un atelier de douze chapitres
-    // déclenche douze appels de la passe notions, même si un seul chapitre est
-    // nouveau. C'est le prix de « compléter l'atelier » plutôt que « remplir ce
-    // qu'on vient de créer » (arbitrage du 22/08/2026).
-    const chapters = (await getWorkshopChapters(workshopId)).map((c) => ({ id: c.id, name: c.name }));
-
-    // ⚠️ Grouper par passe, jamais par chapitre — voir l'en-tête du fichier.
-    if (withNotions && chapters.length > 0) {
+    // ⚠️ **Plus d'appel d'amorçage, et ce n'est pas un oubli.** L'ancienne passe
+    // envoyait TOUS les documents à CHAQUE appel : il fallait qu'un premier
+    // appel parte seul pour écrire le cache que les suivants liraient. Ici deux
+    // appels ne partagent aucun préfixe — le corpus part une seule fois au
+    // total, ce qui est moins cher que l'écriture de cache qu'on remplace. Tout
+    // peut donc partir ensemble.
+    if (withNotions && documents > 0) {
       let error: string | null = null;
-
-      const runChapter = async (chapter: (typeof chapters)[number]) => {
-        const result = await ingestChapterNotions(workshopId, importId, chapter, chapters.length);
-        if (!result.ok) { error ??= result.error; return; }
-        discarded.push(...result.discarded);
-        adjusted.push(...result.adjusted);
-        tally.notions += result.written;
-        setCounts({ ...tally });
-      };
       const showNotions = (done: number) => setPhase({
         step: 'running',
-        label: t('progress.notionsCount', { done, n: chapters.length }),
-        done: stepAt('notions') + done / chapters.length,
+        label: t('progress.notionsCount', { done, n: documents }),
+        done: stepAt('notions') + done / documents,
         total: totalSteps,
       });
 
       showNotions(0);
-      // ⚠️ **Le premier chapitre part SEUL, et ce n'est pas un détail de style.**
-      // Cette passe porte les documents, et le marqueur de cache est posé sur
-      // eux : c'est le premier appel qui écrit le cache, les suivants le lisent
-      // à 10 % du prix. Lancer les quatre ensemble ferait rater le cache aux
-      // quatre — quatre écritures plein tarif au lieu d'une écriture et trois
-      // lectures. On paie donc un appel d'attente pour amorcer, et on
-      // parallélise le reste : la seule chose qu'on perd est le temps d'un
-      // appel, la seule chose qu'on gagnerait à tout lancer d'un coup.
-      await runChapter(chapters[0]);
-      showNotions(1);
-      if (!error && chapters.length > 1) {
-        await mapWithConcurrency(
-          chapters.slice(1),
-          INGEST_CONCURRENCY,
-          runChapter,
-          (done) => showNotions(1 + done),
-        );
-      }
+      await mapWithConcurrency(
+        Array.from({ length: documents }, (_, i) => i),
+        INGEST_CONCURRENCY,
+        async (index) => {
+          const result = await ingestDocumentNotions(workshopId, importId, index);
+          if (!result.ok) { error ??= result.error; return; }
+          discarded.push(...result.discarded);
+          adjusted.push(...result.adjusted);
+          tally.notions += result.written;
+          setCounts({ ...tally });
+        },
+        (done) => showNotions(done),
+      );
       if (error) return setPhase({ step: 'error', message: error });
     }
 
-    // Les documents ont fini de servir : la passe questions ne les reçoit plus
-    // (§16.3), et rien ne s'efface tout seul chez le fournisseur (§16.8). On les
-    // rend ici plutôt qu'à la toute fin, pour que ça arrive même si les
-    // questions échouent. Volontairement non attendu — c'est du ménage.
+    // ── Étage 2 : les chapitres, ET le rangement des notions ──
+    //
+    // Un seul appel pour les deux : le modèle ne peut pas ranger dans des
+    // chapitres qu'il n'a pas encore nommés. C'est aussi le seul moment du
+    // pipeline qui voit toutes les notions d'un coup, donc le seul où une redite
+    // entre deux documents peut se repérer.
+    //
+    // Décoché, on garde le programme tel quel : les notions qui viennent d'être
+    // créées restent sans chapitre, consultables, et un import ultérieur pourra
+    // les ranger.
+    if (withChapters) {
+      setPhase({ step: 'running', label: t('progress.chapters'), done: stepAt('chapters'), total: totalSteps });
+      const structure = await ingestWorkshopChapters(workshopId, importId);
+      if (!structure.ok) return setPhase({ step: 'error', message: structure.error });
+      discarded.push(...structure.discarded);
+      adjusted.push(...structure.adjusted);
+      // Le compteur affiche ce que CET import a créé, pas le total de l'atelier.
+      tally.chapters = structure.chapters.length;
+      setCounts({ ...tally });
+    }
+
+    // Les documents ont fini de servir : les deux premiers étages les portaient,
+    // la passe questions ne les reçoit plus (§16.3), et rien ne s'efface tout
+    // seul chez le fournisseur (§16.8). On les rend ici plutôt qu'à la toute
+    // fin, pour que ça arrive même si les questions échouent. Volontairement non
+    // attendu — c'est du ménage.
     void releaseWorkshopImportFiles(workshopId, importId);
+
+    // ⚠️ **Le socle de la passe questions est l'atelier ENTIER**, pas ce que
+    // l'exécution vient de créer — et il est relu en base APRÈS le rangement,
+    // pour que les chapitres nouveaux et anciens se retrouvent dans la même
+    // liste. C'est ce qui fait qu'un import complète les DEUX : le nouveau part
+    // de zéro, l'ancien se voit proposer ce qui lui manque.
+    //
+    // Le coût en découle et il est assumé : un atelier de douze chapitres
+    // déclenche douze séries d'appels de la passe questions, même si un seul
+    // chapitre est nouveau (arbitrage du 22/08/2026).
+    const chapters = (await getWorkshopChapters(workshopId)).map((c) => ({ id: c.id, name: c.name }));
 
     if (withQuestions && chapters.length > 0) {
       let error: string | null = null;

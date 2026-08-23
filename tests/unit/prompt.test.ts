@@ -36,7 +36,7 @@ describe('systemPrompt — stabilité (condition du cache)', () => {
 describe('existingContentBlock — compléter, pas dupliquer', () => {
   it('le dit clairement quand l’atelier est vide', () => {
     expect(existingContentBlock(empty, { pass: 'chapters' })).toContain('vide');
-    expect(existingContentBlock(empty, { pass: 'notions', chapterId: 'ch1' })).toContain('vide');
+    expect(existingContentBlock(empty, { pass: 'notions' })).toContain('aucune notion');
     expect(existingContentBlock(empty, { pass: 'questions', notionIds: ['n1'] })).toContain('vide');
   });
 
@@ -76,20 +76,28 @@ describe('existingContentBlock — la portée, poste de coût numéro un (§16.3
     ],
   };
 
-  it('passe chapitres : les chapitres seuls', () => {
+  it('passe chapitres : les chapitres ET les notions — mais jamais les énoncés', () => {
+    // Depuis l'inversion, cette passe ne nomme plus seulement des boîtes : elle
+    // RÉPARTIT. La liste des notions est son entrée principale.
     const block = existingContentBlock(atelier, { pass: 'chapters' });
     expect(block).toContain('Les fleuves');
     expect(block).toContain('Les montagnes');
-    expect(block).not.toContain('La Loire');
+    expect(block).toContain('La Loire');
+    // Les énoncés restent dehors : ils pèsent ~75 000 tokens et n'aident en
+    // rien à ranger une notion (§16.3).
     expect(block).not.toContain('Énoncé');
   });
 
-  it('passe notions : les notions du chapitre traité, et rien du reste', () => {
-    const block = existingContentBlock(atelier, { pass: 'notions', chapterId: 'ch1' });
+  it('passe notions : TOUTES les notions de l’atelier, chapitre ou pas', () => {
+    // Depuis l'inversion du 23/08/2026, la passe travaille document par document
+    // et n'a aucun chapitre de référence : le filtre par chapitre n'aurait plus
+    // de sens, et surtout il laisserait recréer ailleurs ce qui existe ici.
+    const block = existingContentBlock(atelier, { pass: 'notions' });
     expect(block).toContain('La Loire');
     expect(block).toContain('La Seine');
-    expect(block).not.toContain('mont Blanc');
-    expect(block).not.toContain('orpheline');
+    expect(block).toContain('mont Blanc');
+    expect(block).toContain('orpheline');
+    // Les énoncés, eux, restent hors de portée : c'est le poste de coût nº 1.
     expect(block).not.toContain('Énoncé');
   });
 
@@ -113,11 +121,22 @@ describe('existingContentBlock — la portée, poste de coût numéro un (§16.3
 });
 
 describe('instructions de passe', () => {
-  it('la passe notions cible UN chapitre et impose sa référence', () => {
-    const instruction = notionsInstruction({ id: 'ch-uuid', name: 'Les fleuves' });
-    expect(instruction).toContain('Les fleuves');
-    expect(instruction).toContain('ch-uuid');
+  it('la passe notions cible UN document et ne range dans aucun chapitre', () => {
+    const instruction = notionsInstruction({ fileName: 'Chapitre 3.pdf' });
+    expect(instruction).toContain('Chapitre 3.pdf');
     expect(instruction).toContain('280');
+    // Le rangement est le travail de la passe suivante, et la consigne le dit.
+    expect(instruction).toMatch(/Ne range rien/);
+  });
+
+  it('la passe notions donne le critère OBJECTIF de réutilisation', () => {
+    // « Est-ce mieux formulé ? » ferait doubler l'atelier à chaque import : le
+    // modèle répond oui presque à chaque fois. « Apporte-t-elle un fait
+    // vérifiable de plus ? » se tranche.
+    const instruction = notionsInstruction({ fileName: 'cours.pdf' });
+    expect(instruction).toMatch(/FAIT VÉRIFIABLE DE PLUS/);
+    expect(instruction).toMatch(/RÉUTILISE/);
+    expect(instruction).not.toMatch(/mieux formulé/);
   });
 
   it('la passe questions liste les notions à couvrir et rappelle le budget', () => {
@@ -167,10 +186,19 @@ describe('instructions de passe', () => {
     expect(instruction).toMatch(/jamais posée/);
   });
 
-  it('la passe chapitres ne parle ni de notions ni de questions', () => {
-    const instruction = chaptersInstruction();
-    expect(instruction).not.toMatch(/notion/i);
+  it('la passe chapitres range les notions, et ne parle pas de questions', () => {
+    const instruction = chaptersInstruction([], [{ id: 'n1', title: 'La Loire est le plus long fleuve' }]);
+    expect(instruction).toMatch(/RANGE LES NOTIONS/);
+    expect(instruction).toContain('La Loire');
     expect(instruction).not.toMatch(/question/i);
+  });
+
+  it('la passe chapitres interdit explicitement de créer ou modifier une notion', () => {
+    // C'est le contrat : elle attribue, elle ne crée rien. Sans cette phrase,
+    // rien n'empêche le modèle d'inventer une notion qu'aucun document n'a
+    // produite.
+    const instruction = chaptersInstruction([], []);
+    expect(instruction).toMatch(/ni créer ni modifier une notion/);
   });
 });
 
@@ -210,7 +238,7 @@ describe('chaptersInstruction — N documents, UN SEUL cours (§16.15)', () => {
     // Elle ne remplace pas la consigne : l'API est sans état, le second appel
     // ne voit pas le premier (§16.8).
     const previous = Array.from({ length: 28 }, (_, i) => `Partie ${i + 1}`);
-    const instruction = chaptersInstruction(sept, { previous });
+    const instruction = chaptersInstruction(sept, [], { previous });
     // Les noms, pas seulement le nombre : c'est ce qui rend le jugement possible.
     expect(instruction).toContain('28 parties');
     expect(instruction).toContain('1. Partie 1');
@@ -255,9 +283,10 @@ describe('wireSchema — ce qu’on autorise le modèle à produire', () => {
     expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [{ ...question, bloomLevel: 3 }] }] }).success).toBe(true);
   });
 
-  it('exige la référence de chapitre sur une notion', () => {
-    expect(wireNotionsOutput.safeParse({ notions: [{ ref: 'n1', title: 'T' }] }).success).toBe(false);
-    expect(wireNotionsOutput.safeParse({ notions: [{ ref: 'n1', title: 'T', chapterRef: 'ch1' }] }).success).toBe(true);
+  it('une notion naît SANS chapitre — le champ a disparu du contrat', () => {
+    // Au moment où les notions sont extraites, aucun chapitre n'existe encore.
+    // Le rangement est une instruction séparée (les affectations).
+    expect(wireNotionsOutput.safeParse({ notions: [{ ref: 'n1', title: 'T' }] }).success).toBe(true);
   });
 });
 

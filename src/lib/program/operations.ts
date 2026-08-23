@@ -79,6 +79,18 @@ export type ProgramOperation =
    *  n'est JAMAIS réécrit — s'il ne colle pas, on crée une question et
    *  l'ancienne reste où elle est. */
   | { kind: 'attach_question'; questionItemId: string; notionIds: string[] }
+  /** Réordonne les chapitres du programme.
+   *
+   *  Vue de l'utilisateur, « réarranger les chapitres » et « écarter ceux qui ne
+   *  sont plus d'actualité » sont **un seul geste**, et c'est bien ce que fait
+   *  la passe chapitres : elle émet les deux dans le même souffle.
+   *
+   *  Ils restent DEUX opérations pour une raison concrète, pas par purisme : les
+   *  fusionner rendrait le fait de cacher accessible à quiconque peut
+   *  réordonner — c'est-à-dire à l'utilisateur, à qui on a justement décidé de
+   *  n'offrir aucun bouton « cacher ». Un geste côté produit, deux autorisations
+   *  côté serveur. */
+  | { kind: 'reorder_chapters'; chapterIds: string[] }
   /** Écarte un chapitre : lui et ses notions sortent du programme, mais restent
    *  consultables sous les chapitres visibles. Réservé à l'IA — l'interface
    *  n'offre aucun moyen de cacher un chapitre à la main. */
@@ -112,6 +124,7 @@ export const OPERATION_RULES: Record<OperationKind, OperationRule> = {
   assign_notion: { role: 'manager', actors: ['ai', 'human'] },
   create_questions: { role: 'manager', actors: ['ai', 'human', 'system'] },
   attach_question: { role: 'manager', actors: ['ai', 'human'] },
+  reorder_chapters: { role: 'manager', actors: ['ai', 'human'] },
   hide_chapter: { role: 'manager', actors: ['ai'] },
   restore_chapter: { role: 'manager', actors: ['ai', 'human'] },
 };

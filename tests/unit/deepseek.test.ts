@@ -28,12 +28,12 @@ describe('createDeepSeekProvider — passe questions uniquement', () => {
   });
 
   it('REFUSE la passe chapitres au lieu de la servir dégradée', async () => {
-    await expect(provider().documentToPlan([], empty, { pass: 'chapters' })).rejects.toThrow(/passe chapters/);
+    await expect(provider().documentToPlan([], empty, { pass: 'chapters', notions: [] })).rejects.toThrow(/passe chapters/);
   });
 
   it('REFUSE la passe notions', async () => {
     await expect(
-      provider().documentToPlan([], empty, { pass: 'notions', chapter: { id: 'ch1', name: 'C' } }),
+      provider().documentToPlan([], empty, { pass: 'notions', document: { index: 0, fileName: 'cours.pdf' } }),
     ).rejects.toThrow(/passe notions/);
   });
 

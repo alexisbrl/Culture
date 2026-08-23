@@ -11,9 +11,15 @@
 //
 // ─── L'ordre d'appel n'est pas libre ─────────────────────────────────────────
 //
-//   startIngestion            → crée le lot, écrit les CHAPITRES
-//   ingestChapterNotions(×N)  → pour chaque chapitre, écrit ses NOTIONS
+//   ingestDocumentNotions(×D) → pour chaque DOCUMENT, écrit ses NOTIONS
+//   ingestChapters            → écrit les CHAPITRES et Y RANGE les notions
 //   ingestChapterQuestions(×M)→ pour chaque LOT DE NOTIONS, écrit ses QUESTIONS
+//
+// ⚠️ **Les deux premières ont été inversées le 23/08/2026** (feuille de route
+// docs/chantiers/2026-08-23-notions-dabord.md). Les notions sont le cœur d'un
+// atelier, les chapitres ne sont que des boîtes : décider les boîtes en premier
+// rendait toute mise à jour impossible, le modèle ne pouvant pas reconnaître un
+// chapitre existant sous un découpage redécoupé.
 //
 // L'unité de la passe 3 est le **lot de ~10 notions**, pas le chapitre : à la
 // volumétrie cible, un chapitre entier dépasserait `MAX_TOKENS` et la réponse
@@ -38,6 +44,7 @@ import { getSupabaseServerClient } from '@/lib/supabase';
 
 import {
   addImportUsage,
+  applyAssignments,
   createImport,
   insertChapters,
   insertGroups,
@@ -56,12 +63,17 @@ export type IngestContext = 'parcours' | 'exam';
 
 export type PrepareResult = {
   importId: string;
+  /** Nombre de documents du lot — le client sait ainsi combien d'appels la
+   *  passe notions demande, sans avoir à relire la base. */
+  documents: number;
   /** Taille du corpus en tokens, `null` si le fournisseur n'a pas su compter. */
   corpusTokens: number | null;
 };
 
-export type StartResult = {
+export type ChapterStructureResult = {
   chapters: { id: string; name: string }[];
+  /** Combien de notions ont été rangées. */
+  assigned: number;
   discarded: PlanIssue[];
   adjusted: PlanIssue[];
 };
@@ -70,6 +82,12 @@ export type ChapterPassResult = {
   written: number;
   discarded: PlanIssue[];
   adjusted: PlanIssue[];
+};
+
+export type NotionPassResult = ChapterPassResult & {
+  /** Nombre total de documents de ce lot — le client boucle jusque-là. Rendu
+   *  par chaque appel plutôt que supposé : lui seul relit la base. */
+  documents: number;
 };
 
 export type QuestionPassResult = ChapterPassResult & {
@@ -103,15 +121,27 @@ async function loadExistingChapters(workshopId: string): Promise<ExistingContent
   return { ...EMPTY, chapters: (data ?? []).map((c) => ({ id: c.id as string, name: c.name as string })) };
 }
 
-/** Passe 2 — les notions **du chapitre traité**. */
-async function loadChapterNotions(workshopId: string, chapterId: string): Promise<ExistingContent> {
+/** TOUTES les notions de l'atelier — servent à deux passes, pour deux raisons.
+ *
+ *  • Passe notions : ne pas recréer ce qui existe déjà. Le filtre par chapitre
+ *    d'avant l'inversion n'a plus de sens — la passe travaille document par
+ *    document, elle n'a aucun chapitre de référence, et une notion peut très
+ *    bien exister ailleurs dans l'atelier.
+ *  • Passe chapitres : c'est la liste de ce qu'elle range. Son entrée
+ *    principale, pas un supplément.
+ *
+ *  L'ordre est **stable** (création puis identifiant) : sans ça, deux appels
+ *  successifs verraient la même liste dans deux ordres, ce qui suffit à faire
+ *  varier une réponse et à faire manquer un cache. */
+async function loadAllNotions(workshopId: string): Promise<ExistingContent> {
   const supabase = getSupabaseServerClient();
   // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
   const { data, error } = await supabase
     .from('workshop_bricks')
     .select('id, title, chapter_id')
     .eq('workshop_id', workshopId)
-    .eq('chapter_id', chapterId);
+    .order('created_at')
+    .order('id');
   if (error) throw new Error(error.message);
 
   return {
@@ -326,17 +356,33 @@ export async function prepareIngestion(
     fileIds: prepared as unknown as string[],
   });
 
-  return { importId, corpusTokens };
+  return { importId, documents: prepared.length, corpusTokens };
 }
 
-/** Passe 1 — écrit les CHAPITRES, en réutilisant les documents déjà téléversés
- *  par `prepareIngestion`. */
-export async function startIngestion(
+/** Passe 2 — écrit les CHAPITRES **et y range les notions**.
+ *
+ *  Anciennement `startIngestion`, et anciennement première : depuis le
+ *  23/08/2026 elle passe après l'extraction des notions (feuille de route
+ *  « notions d'abord », §3). Ce n'est pas un détail d'ordonnancement — c'est ce
+ *  qui rend une mise à jour possible. Au niveau du chapitre, le modèle ne peut
+ *  pas reconnaître qu'un « athlétisme 1950-2000 » et un « athlétisme 1940-1990 »
+ *  sont la même boîte redécoupée, et il en créerait quatre.
+ *
+ *  Un seul appel, et il porte les documents : sans le cours, le modèle invente
+ *  des intitulés au lieu de reprendre ceux du document, et ne sait pas d'où
+ *  viennent les notions qu'on lui demande de répartir.
+ *
+ *  C'est aussi le seul moment du pipeline qui voit **toutes** les notions d'un
+ *  coup — donc le seul où les redites entre deux documents peuvent se repérer.
+ *  La réponse reste dans le contrat : on en range une, l'autre reste sans
+ *  chapitre, et le ménage de fin d'import s'en occupe si personne ne l'a créée
+ *  avant cet import. */
+export async function ingestChapters(
   workshopId: string,
   actorId: string,
   importId: string,
   options: { provider?: PlanProvider } = {},
-): Promise<StartResult> {
+): Promise<ChapterStructureResult> {
   const [corpusTokens, oversizeModels, userHint] = await Promise.all([
     corpusTokensOf(importId), oversizeModelsOf(importId), userHintOf(importId),
   ]);
@@ -348,17 +394,26 @@ export async function startIngestion(
   });
   const prepared = await preparedOf(importId);
 
-  const existing = await loadExistingChapters(workshopId);
-  const refs = await loadExistingRefs(workshopId);
+  const [chaptersOnly, notionsOnly, refs] = await Promise.all([
+    loadExistingChapters(workshopId),
+    loadAllNotions(workshopId),
+    loadExistingRefs(workshopId),
+  ]);
+  const existing: ExistingContent = { ...chaptersOnly, notions: notionsOnly.notions };
+  const toArrange = notionsOnly.notions.map((n) => ({ id: n.id, title: n.title }));
 
   // Un découpage trop fin est le multiplicateur de tout ce qui suit (§16.15) :
-  // au-delà de 12 chapitres, on relance UNE fois avec une consigne resserrée.
-  // Si la seconde réponse dépasse encore, on écrit ce qu'elle donne — jamais de
-  // blocage, jamais de troisième appel, et surtout aucune validation humaine
-  // (§16.18).
+  // au-delà du seuil, on relance UNE fois — une VÉRIFICATION, pas une
+  // correction imposée. Si la seconde réponse dépasse encore, on écrit ce
+  // qu'elle donne : jamais de blocage, jamais de troisième appel, et surtout
+  // aucune validation humaine (§16.18).
   const { result: plan } = await withChapterRetry(
     async (retry) => {
-      const attempt = await provider.documentToPlan(prepared, existing, { pass: 'chapters', retry });
+      const attempt = await provider.documentToPlan(prepared, existing, {
+        pass: 'chapters',
+        notions: toArrange,
+        retry,
+      });
       // Les deux essais sont facturés : les deux sont comptés.
       await addImportUsage(importId, attempt.usage);
       return parsePlanLogged('chapitres', attempt.plan, refs);
@@ -369,8 +424,15 @@ export async function startIngestion(
 
   const created = await insertChapters(workshopId, actorId, importId, plan.chapters);
 
+  // ⚠️ Les affectations sont appliquées APRÈS l'insertion : elles désignent les
+  // chapitres par leur référence locale (`ch1`), qui n'a d'identifiant réel
+  // qu'une fois la ligne écrite. `created` fait la traduction ; une référence
+  // qui n'y figure pas est déjà un identifiant existant, et passe telle quelle.
+  const assigned = await applyAssignments(workshopId, plan.assignments, created);
+
   return {
     chapters: plan.chapters.map((c) => ({ id: created.get(c.ref) ?? c.ref, name: c.name })),
+    assigned,
     discarded: plan.discarded,
     adjusted: plan.adjusted,
   };
@@ -396,43 +458,59 @@ export async function releaseImportDocuments(
   }
 }
 
-/** Passe 2, pour UN chapitre. Le chapitre est déjà en base : son identifiant
- *  réel sert de référence au modèle, qui n'a donc aucune clé locale à inventer. */
-export async function ingestChapterNotions(
+/** Passe 1, pour UN document. Les notions naissent **sans chapitre** : à ce
+ *  stade il n'en existe aucun, et c'est la passe suivante qui les range.
+ *
+ *  Le document est l'unité de travail parce qu'elle ne demande aucun jugement au
+ *  modèle, qu'elle est stable d'un import à l'autre, et qu'elle parallélise sans
+ *  amorçage — il n'y a plus de cache à amorcer, chaque appel ne portant que son
+ *  propre document.
+ *
+ *  ⚠️ Limite connue et acceptée : un document unique et énorme retombe sur un
+ *  seul appel. À traiter le jour où le cas se présente, pas avant. */
+export async function ingestDocumentNotions(
   workshopId: string,
   actorId: string,
   importId: string,
-  chapter: { id: string; name: string },
-  /** Nombre de chapitres de l'import : décide si le marqueur de cache est
-   *  rentable (§16.17). Vient du client, qui l'a déjà — une valeur fausse ne
-   *  peut que faire manquer ou gaspiller un cache, jamais fausser le résultat. */
-  plannedCalls = 1,
+  documentIndex: number,
   options: { provider?: PlanProvider } = {},
-): Promise<ChapterPassResult> {
-  // La passe notions porte les documents (`documentsForPass`), elle est donc
-  // soumise à la fenêtre — et elle est appelée une fois PAR CHAPITRE. Sans la
-  // mémoire des refus, chaque chapitre redemanderait à Haiku un corpus dont le
-  // premier appel a déjà établi qu'il n'y rentre pas.
-  const [corpusTokens, oversizeModels, userHint] = await Promise.all([
-    corpusTokensOf(importId), oversizeModelsOf(importId), userHintOf(importId),
-  ]);
-  const provider = options.provider ?? createClaudeProvider({
-    corpusTokens: corpusTokens ?? undefined,
-    oversizeModels,
-    userHint,
-    onOversize: (model) => recordOversizeModel(importId, model),
-  });
+): Promise<NotionPassResult> {
+  // Ni `corpusTokens` ni `oversizeModels` ici, et c'est délibéré : cet appel ne
+  // porte qu'UN document, pas le corpus. Hériter du refus mesuré sur l'ensemble
+  // ferait basculer sur un modèle plus cher une charge qui tient largement dans
+  // la fenêtre du modèle économique. Un document réellement trop gros sera
+  // refusé pour ce qu'il est, à son propre appel.
+  const userHint = await userHintOf(importId);
+  const provider = options.provider ?? createClaudeProvider({ userHint });
 
   const prepared = await preparedOf(importId);
-  const existing = await loadChapterNotions(workshopId, chapter.id);
-  const result = await provider.documentToPlan(prepared, existing, { pass: 'notions', chapter, plannedCalls });
+  const document = prepared[documentIndex];
+  if (!document) {
+    return { written: 0, discarded: [], adjusted: [], documents: prepared.length };
+  }
+
+  // TOUTES les notions de l'atelier, pas celles d'un chapitre : c'est le
+  // mécanisme anti-doublon, et c'est le point critique du dispositif. Un modèle
+  // qui recrée sous d'autres mots ce qui existe déjà fait gonfler l'atelier à
+  // chaque import.
+  const existing = await loadAllNotions(workshopId);
+  const result = await provider.documentToPlan(prepared, existing, {
+    pass: 'notions',
+    document: { index: documentIndex, fileName: document.fileName },
+  });
   await addImportUsage(importId, result.usage);
 
   const refs = await loadExistingRefs(workshopId);
   const plan = parsePlanLogged('notions', result.plan, refs);
+  // `new Map()` : aucun chapitre à résoudre, et le schéma n'en propose plus.
   const created = await insertNotions(workshopId, actorId, importId, plan.notions, new Map());
 
-  return { written: created.size, discarded: plan.discarded, adjusted: plan.adjusted };
+  return {
+    written: created.size,
+    discarded: plan.discarded,
+    adjusted: plan.adjusted,
+    documents: prepared.length,
+  };
 }
 
 /** Passe 3, pour UN LOT de notions d'un chapitre. Les notions du lot lui sont

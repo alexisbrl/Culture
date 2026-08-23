@@ -26,18 +26,29 @@ import * as imports from '@/lib/workshops/imports';
 // est propre à chaque schéma de sortie, alterner le ferait manquer à chaque
 // fois (§5.2).
 
-export type PlanIssue = { kind: 'chapter' | 'notion' | 'question'; ref?: string; reason: string };
+export type PlanIssue = {
+  kind: 'chapter' | 'notion' | 'assignment' | 'question';
+  ref?: string;
+  reason: string;
+};
 
-export type StartIngestionResult =
-  | { ok: true; chapters: { id: string; name: string }[]; discarded: PlanIssue[]; adjusted: PlanIssue[] }
+export type ChapterStructureResult =
+  | {
+      ok: true;
+      chapters: { id: string; name: string }[];
+      /** Combien de notions ont été rangées dans un chapitre. */
+      assigned: number;
+      discarded: PlanIssue[];
+      adjusted: PlanIssue[];
+    }
   | { ok: false; error: string };
 
 export type PrepareIngestionResult =
-  | { ok: true; importId: string }
+  | { ok: true; importId: string; documents: number }
   | { ok: false; error: string };
 
-export type ChapterPassResult =
-  | { ok: true; written: number; discarded: PlanIssue[]; adjusted: PlanIssue[] }
+export type NotionPassResult =
+  | { ok: true; written: number; discarded: PlanIssue[]; adjusted: PlanIssue[]; documents: number }
   | { ok: false; error: string };
 
 export type QuestionPassResult =
@@ -73,23 +84,27 @@ export async function prepareWorkshopIngestion(
   if (fileIds.length === 0) return { ok: false, error: 'Aucun fichier sélectionné' };
 
   try {
-    const { importId } = await run.prepareIngestion(workshopId, ctx.userId, fileIds, { scope });
-    return { ok: true, importId };
+    const { importId, documents } = await run.prepareIngestion(workshopId, ctx.userId, fileIds, { scope });
+    return { ok: true, importId, documents };
   } catch (error) {
     return { ok: false, error: message(error) };
   }
 }
 
-/** Passe 1 — écrit les chapitres, à partir du lot déjà préparé. */
-export async function startWorkshopIngestion(
+/** Passe 1 — les notions d'UN document.
+ *
+ *  Les notions naissent sans chapitre : à ce stade il n'en existe aucun. C'est
+ *  la passe suivante qui les range (feuille de route « notions d'abord »). */
+export async function ingestDocumentNotions(
   workshopId: string,
   importId: string,
-): Promise<StartIngestionResult> {
+  documentIndex: number,
+): Promise<NotionPassResult> {
   const ctx = await requireManager(workshopId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
-    const result = await run.startIngestion(workshopId, ctx.userId, importId);
+    const result = await run.ingestDocumentNotions(workshopId, ctx.userId, importId, documentIndex);
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
@@ -97,20 +112,19 @@ export async function startWorkshopIngestion(
   }
 }
 
-/** Passe 2 — les notions d'un chapitre. */
-export async function ingestChapterNotions(
+/** Passe 2 — écrit les chapitres **et y range les notions**.
+ *
+ *  Un seul appel pour les deux, parce que le modèle ne peut pas ranger dans des
+ *  chapitres qu'il n'a pas encore nommés. */
+export async function ingestWorkshopChapters(
   workshopId: string,
   importId: string,
-  chapter: { id: string; name: string },
-  /** Nombre de chapitres de l'import — sert uniquement à décider si le marqueur
-   *  de cache est rentable (§16.17), jamais au contenu produit. */
-  plannedCalls = 1,
-): Promise<ChapterPassResult> {
+): Promise<ChapterStructureResult> {
   const ctx = await requireManager(workshopId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
-    const result = await run.ingestChapterNotions(workshopId, ctx.userId, importId, chapter, plannedCalls);
+    const result = await run.ingestChapters(workshopId, ctx.userId, importId);
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {

@@ -172,6 +172,52 @@ function resolve(ref: string | undefined, created: Map<string, string>): string 
   return created.get(ref) ?? ref;
 }
 
+/** Range des notions existantes dans leurs chapitres — l'opération `assign_notion`
+ *  du catalogue (`src/lib/program/operations.ts`), appliquée en base.
+ *
+ *  ⚠️ C'est la SEULE écriture de l'ingestion qui touche à des lignes qui
+ *  existaient avant elle, et c'est pour ça qu'elle ne touche qu'à **une seule
+ *  colonne** : `chapter_id`. Le titre d'une notion, ses questions et la
+ *  progression acquise ne sont jamais atteints — un `update` plus large ici
+ *  romprait le contrat (« l'IA crée et attribue, elle ne réécrit pas »).
+ *
+ *  Le filtre sur `workshop_id` n'est pas décoratif : les références viennent du
+ *  modèle, donc d'une source non fiable. Sans lui, un identifiant recopié depuis
+ *  un autre atelier y déplacerait une notion.
+ *
+ *  Une écriture par chapitre visé plutôt qu'une par notion : le nombre de
+ *  requêtes suit le nombre de chapitres (quelques unités), pas le nombre de
+ *  notions (plusieurs centaines). */
+export async function applyAssignments(
+  workshopId: string,
+  assignments: { notionRef: string; chapterRef?: string }[],
+  chapterIds: Map<string, string>,
+): Promise<number> {
+  if (assignments.length === 0) return 0;
+
+  const supabase = getSupabaseServerClient();
+  const byChapter = new Map<string | null, string[]>();
+  for (const a of assignments) {
+    const chapterId = resolve(a.chapterRef, chapterIds);
+    const bucket = byChapter.get(chapterId);
+    if (bucket) bucket.push(a.notionRef);
+    else byChapter.set(chapterId, [a.notionRef]);
+  }
+
+  let moved = 0;
+  for (const [chapterId, notionIds] of byChapter) {
+    const { data, error } = await supabase
+      .from('workshop_bricks')
+      .update({ chapter_id: chapterId, updated_at: new Date().toISOString() })
+      .eq('workshop_id', workshopId)
+      .in('id', notionIds)
+      .select('id');
+    if (error) throw new Error(error.message);
+    moved += (data ?? []).length;
+  }
+  return moved;
+}
+
 export async function insertChapters(
   workshopId: string,
   actorId: string,

@@ -22,8 +22,34 @@ export type IngestPass = 'chapters' | 'notions' | 'questions';
  *
  *  Posée en garde côté fournisseur, et pas seulement à l'appel : un appelant
  *  distrait ne doit pas pouvoir rouvrir le robinet. */
-export function documentsForPass(pass: IngestPass, prepared: PreparedDocument[]): PreparedDocument[] {
-  return pass === 'questions' ? [] : prepared;
+export function documentsForPass(
+  pass: IngestPass,
+  prepared: PreparedDocument[],
+  /** Index du document à traiter — **obligatoire pour la passe notions**, qui
+   *  travaille document par document depuis l'inversion du 23/08/2026. */
+  documentIndex?: number,
+): PreparedDocument[] {
+  if (pass === 'questions') return [];
+
+  // La passe notions ne reçoit QUE son document. C'est l'unité de travail qui
+  // remplace le chapitre : elle ne demande aucun jugement au modèle, elle est
+  // stable d'un import à l'autre, et elle parallélise sans amorçage.
+  //
+  // Effet de bord heureux : le corpus n'est plus envoyé qu'UNE fois au total sur
+  // cette passe, au lieu d'une fois par chapitre. C'est moins cher qu'une
+  // lecture de cache — voir `shouldCacheDocuments`.
+  if (pass === 'notions') {
+    if (documentIndex === undefined) {
+      throw new Error('documentsForPass: la passe notions exige un index de document');
+    }
+    const document = prepared[documentIndex];
+    return document ? [document] : [];
+  }
+
+  // La passe chapitres, elle, les reçoit TOUS : sans le cours, le modèle invente
+  // des intitulés au lieu de reprendre ceux du document, et ne sait pas d'où
+  // viennent les notions qu'on lui demande de répartir.
+  return prepared;
 }
 
 /** Combien de notions par appel de la passe questions.
@@ -53,8 +79,17 @@ export function batchNotions<T>(notions: T[], size = NOTIONS_PER_QUESTION_BATCH)
 // cache — et **un marqueur posé sur un contenu jamais relu coûte 1,25× au lieu
 // de 1×**, soit une perte sèche de 25 % sur cet appel (§16.17).
 //
-// L'exception est réelle : un PDF qui porte plusieurs chapitres est relu une
-// fois par chapitre à la passe notions. Là, le cache paie.
+// **Depuis l'inversion des passes (23/08/2026), il ne reste PLUS AUCUN cas où le
+// marqueur paie sur les documents**, et c'est une bonne nouvelle :
+//
+//   • passe notions  — un appel par document, chacun ne portant que le sien :
+//     aucun préfixe commun, donc rien à relire. Le corpus part une fois en tout,
+//     ce qui est moins cher qu'une écriture suivie de lectures ;
+//   • passe chapitres — un seul appel, donc aucune relecture par définition ;
+//   • passe questions — aucun document du tout (§16.3).
+//
+// La fonction reste : elle est le garde qui évite qu'on repose un marqueur par
+// réflexe le jour où une passe redeviendra multi-appels sur le même contenu.
 
 /** Le marqueur ne se pose que si le contenu sert à **plus d'un appel**.
  *

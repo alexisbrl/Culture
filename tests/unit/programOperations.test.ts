@@ -31,6 +31,14 @@ describe('catalogue des opérations', () => {
     expect(isOperationAllowed('restore_chapter', 'ai', 'manager')).toBe(true);
   });
 
+  it('réarranger et cacher restent DEUX opérations — sinon l’utilisateur pourrait cacher', () => {
+    // Côté produit c'est un seul geste (« réarranger les chapitres »), et la
+    // passe chapitres émet bien les deux ensemble. Les fusionner rendrait le
+    // fait de cacher accessible à quiconque peut réordonner.
+    expect(isOperationAllowed('reorder_chapters', 'human', 'manager')).toBe(true);
+    expect(isOperationAllowed('hide_chapter', 'human', 'manager')).toBe(false);
+  });
+
   it('un candidat ne peut RIEN, quel que soit le demandeur', () => {
     expect(allowedOperations('human', 'member')).toEqual([]);
     expect(allowedOperations('ai', 'member')).toEqual([]);

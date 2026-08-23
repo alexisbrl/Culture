@@ -82,17 +82,47 @@ export const wireChapterSchema = z.object({
   name: z.string().describe('Nom du chapitre, 120 caractères maximum.'),
 });
 
+/** ⚠️ Une notion naît SANS chapitre (feuille de route « notions d'abord », §3).
+ *
+ *  Le champ `chapterRef` a disparu d'ici le 23/08/2026 : au moment où les
+ *  notions sont extraites, aucun chapitre n'existe encore. Le rangement est une
+ *  instruction séparée (`wireAssignmentSchema`), ce qui est exactement le
+ *  contrat des opérations — créer et attribuer sont deux gestes distincts
+ *  (`src/lib/program/operations.ts`). */
 export const wireNotionSchema = z.object({
   ref: z.string().describe('Clé locale unique de cette notion dans ce plan.'),
   title: z
     .string()
     .describe("La notion en UNE phrase de 280 caractères maximum, autoportante et vérifiable."),
-  chapterRef: z.string().describe("Référence du chapitre auquel elle appartient."),
+});
+
+/** Ranger une notion dans un chapitre.
+ *
+ *  `notionRef` désigne une notion qui EXISTE DÉJÀ — celles qu'on vient
+ *  d'extraire des documents comme celles que l'atelier portait avant. C'est ce
+ *  qui rend la mise à jour possible : réorganiser un atelier, c'est n'émettre
+ *  que des affectations. */
+export const wireAssignmentSchema = z.object({
+  notionRef: z
+    .string()
+    .describe("Identifiant de la notion à ranger, recopié tel quel depuis la liste des notions fournie."),
+  chapterRef: z
+    .string()
+    .describe(
+      "Référence du chapitre où la ranger, parmi ceux de cette réponse. Chaîne vide pour laisser la notion hors du programme (elle reste consultable, sans chapitre).",
+    ),
 });
 
 // Une sortie par passe : on ne demande jamais au modèle de produire le programme
 // entier d'un coup (docs/ai-ingestion-plan.md §5.1).
-export const wireChaptersOutput = z.object({ chapters: z.array(wireChapterSchema) });
+//
+// La sortie « chapitres » porte DEUX listes, et c'est le cœur de l'inversion :
+// le modèle définit les boîtes ET dit ce qu'on met dedans, dans le même appel —
+// il ne pourrait pas ranger dans des chapitres qu'il n'a pas encore nommés.
+export const wireChaptersOutput = z.object({
+  chapters: z.array(wireChapterSchema),
+  assignments: z.array(wireAssignmentSchema),
+});
 export const wireNotionsOutput = z.object({ notions: z.array(wireNotionSchema) });
 export const wireGroupsOutput = z.object({ groups: z.array(wireGroupSchema) });
 

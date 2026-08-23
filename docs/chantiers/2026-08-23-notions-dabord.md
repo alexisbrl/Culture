@@ -329,19 +329,19 @@ Deux garde-fous :
       **autorisation portée par chaque opération**, vérifiée à l'exécution sur le
       compte connecté — jamais par un paramètre venu du modèle.
 
-- [ ] **T2 bis — Ménage de fin d'import.** Effacer ce que cet import a créé et
+- [ ] **T2 bis — Ménage de fin d'import.** *(module écrit et testé en T2 ; reste à le brancher en fin d'import.)* Effacer ce que cet import a créé et
       n'a jamais rattaché (§3). Filtre sur `import_id` **et** absence de
       rattachement, exécuté **une fois l'import terminé**, jamais entre deux
       passes.
 
-- [ ] **T3 — Inverser les passes ① et ②.** Passe notions par document (documents
+- [x] **T3 — Inverser les passes ① et ②.** ✅ 23/08/2026. Passe notions par document (documents
       + marqueur de cache), puis passe chapitres — **qui garde les documents** —
       produisant le découpage **et** l'affectation de chaque notion. Adapter
       `passInput.ts` (`documentsForPass` : `questions` reste la seule passe sans
       document), `prompt.ts`, `run.ts`, `planSchema.ts`. Mesurer la lecture de
       cache de la passe ② au passage.
 
-- [ ] **T4 — Recyclage des notions.** Transmettre les notions existantes à la
+- [x] **T4 — Recyclage des notions.** ✅ 23/08/2026. Transmettre les notions existantes à la
       passe ①, consigne de réutilisation, critère du fait vérifiable. Mesurer le
       poids réel du bloc avant de l'optimiser.
 

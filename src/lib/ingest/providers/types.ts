@@ -50,18 +50,26 @@ export type PreparedDocument = {
 export type IngestScope =
   | {
       pass: 'chapters';
+      /** Les notions à répartir — TOUTES celles de l'atelier, celles que la
+       *  passe précédente vient d'extraire comme celles qu'il portait déjà.
+       *
+       *  C'est l'entrée principale de la passe depuis l'inversion du
+       *  23/08/2026 : elle ne nomme plus seulement des boîtes, elle dit ce
+       *  qu'on met dedans. */
+      notions: { id: string; title: string }[];
       /** Présent au SECOND essai seulement : le nombre de chapitres rendu au
        *  premier, que la consigne rappelle au modèle (§16.18). */
       retry?: { previous: string[] };
     }
   | {
       pass: 'notions';
-      chapter: { id: string; name: string };
-      /** Combien d'appels de cette passe partagent les mêmes documents — c'est
-       *  le nombre de chapitres de l'import. Sert **uniquement** à décider si le
-       *  marqueur de cache est rentable (§16.17) : à un seul chapitre, il serait
-       *  une perte sèche de 25 %. */
-      plannedCalls?: number;
+      /** Le document traité par CET appel — l'unité de travail de la passe.
+       *
+       *  Un appel par document, et chacun ne reçoit que le sien : le corpus ne
+       *  part donc qu'une fois au total, au lieu d'une fois par chapitre. Il
+       *  n'y a plus rien à mettre en cache, et c'est moins cher que le cache
+       *  qu'on remplace. */
+      document: { index: number; fileName: string };
     }
   | {
       pass: 'questions';

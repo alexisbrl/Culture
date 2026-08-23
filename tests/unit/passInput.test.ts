@@ -61,8 +61,8 @@ describe('documentsForPass — ce qui part au modèle', () => {
     expect(documentsForPass('chapters', prepared)).toEqual(prepared);
   });
 
-  it('la passe notions reçoit les documents', () => {
-    expect(documentsForPass('notions', prepared)).toEqual(prepared);
+  it('la passe notions ne reçoit que le document de son index', () => {
+    expect(documentsForPass('notions', prepared, 0)).toEqual([prepared[0]]);
   });
 
   it('la passe questions n’en reçoit AUCUN', () => {
@@ -89,16 +89,36 @@ describe('passe questions — l’appel capturé ne porte aucun document', () =>
     expect(provider.calls[0].documents).toHaveLength(0);
   });
 
-  it('la passe notions, elle, les reçoit encore', async () => {
+  it('la passe notions ne reçoit QUE son document, pas le corpus', async () => {
+    // C'est ce qui remplace le cache : le corpus part une seule fois au total,
+    // au lieu d'une fois par chapitre dont on relisait les 90 %.
     const provider = recordingProvider();
-    const prepared = [doc('ch1')];
+    const prepared = [doc('a'), doc('b'), doc('c')];
 
-    await provider.documentToPlan(documentsForPass('notions', prepared), empty, {
+    await provider.documentToPlan(documentsForPass('notions', prepared, 1), empty, {
       pass: 'notions',
-      chapter: { id: 'ch1', name: 'Les fleuves' },
+      document: { index: 1, fileName: 'b' },
     });
 
     expect(provider.calls[0].documents).toHaveLength(1);
+    expect(provider.calls[0].documents[0].fileName).toBe('b.pdf');
+  });
+
+  it('la passe chapitres, elle, les reçoit TOUS', () => {
+    // Sans le cours, le modèle invente des intitulés au lieu de reprendre ceux
+    // du document, et ne sait pas d'où viennent les notions à répartir.
+    const prepared = [doc('a'), doc('b')];
+    expect(documentsForPass('chapters', prepared)).toHaveLength(2);
+  });
+
+  it('un index de document hors bornes ne rend rien, il ne lève pas', () => {
+    expect(documentsForPass('notions', [doc('a')], 7)).toEqual([]);
+  });
+
+  it('la passe notions SANS index est une erreur de programmation, pas un défaut', () => {
+    // Retomber silencieusement sur « tous les documents » rouvrirait le poste
+    // de coût que l'inversion vient de fermer.
+    expect(() => documentsForPass('notions', [doc('a')])).toThrow(/index/);
   });
 });
 
@@ -161,10 +181,10 @@ describe('withChapterRetry — une relance, jamais deux (§16.18)', () => {
     return provider;
   }
 
-  /** Ce que fait `startIngestion`, sans la base : appeler, compter, relancer. */
+  /** Ce que fait `ingestChapters`, sans la base : appeler, compter, relancer. */
   async function pass(provider: ReturnType<typeof chapterProvider>) {
     return withChapterRetry(
-      (retry) => provider.documentToPlan([], empty, { pass: 'chapters', retry }),
+      (retry) => provider.documentToPlan([], empty, { pass: 'chapters', notions: [], retry }),
       (result) => (result.plan as { chapters: unknown[] }).chapters.length,
       (result) => (result.plan as { chapters: { name: string }[] }).chapters.map((c) => c.name),
     );
