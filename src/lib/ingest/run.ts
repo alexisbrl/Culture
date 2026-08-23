@@ -598,6 +598,25 @@ async function snapshotPopulatedChapters(workshopId: string, importId: string): 
     .eq('id', importId);
 }
 
+/** Mémorise les notions RÉELLEMENT déplacées par cet import.
+ *
+ *  Rangé dans `ai_imports.scope` (jsonb libre, aucune migration) et cumulé d'un
+ *  lot à l'autre. C'est ce que l'écran lira pour marquer ce qui a bougé — et
+ *  c'est pour ça qu'on n'y met que les vrais déplacements : annoncer comme
+ *  « déplacée » une notion restée dans son chapitre ferait douter de tout le
+ *  reste de l'affichage. */
+async function recordMoved(importId: string, notionIds: readonly string[]): Promise<void> {
+  if (notionIds.length === 0) return;
+  const supabase = getSupabaseServerClient();
+  const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
+  const scope = (data?.scope as Record<string, unknown> | null) ?? {};
+  const previous = Array.isArray(scope.movedNotions) ? (scope.movedNotions as string[]) : [];
+  await supabase
+    .from('ai_imports')
+    .update({ scope: { ...scope, movedNotions: [...new Set([...previous, ...notionIds])] } })
+    .eq('id', importId);
+}
+
 async function populatedBeforeOf(importId: string): Promise<string[]> {
   const supabase = getSupabaseServerClient();
   const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
@@ -673,8 +692,12 @@ export async function ingestAssignments(
   const plan = parsePlanLogged('rangement', result.plan, refs);
 
   // Les chapitres sont déjà en base : leurs références SONT leurs identifiants,
-  // il n'y a rien à traduire.
-  const assigned = await applyAssignments(workshopId, plan.assignments, new Map());
+  // il n'y a rien à traduire. En revanche on passe l'état AVANT : une notion
+  // reconduite dans son propre chapitre n'est pas un déplacement, et ne doit ni
+  // être réécrite ni apparaître comme un changement.
+  const before = new Map(all.map((n) => [n.id, n.chapterId]));
+  const movedIds = await applyAssignments(workshopId, plan.assignments, new Map(), before);
+  await recordMoved(importId, movedIds);
 
   // ─── Récupérer les questions en sommeil ───────────────────────────────────
   //
@@ -707,7 +730,7 @@ export async function ingestAssignments(
   }
 
   return {
-    assigned,
+    assigned: movedIds.length,
     recycled,
     batches: batches.length,
     discarded: plan.discarded,

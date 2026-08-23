@@ -410,7 +410,7 @@ ${chapters}
 LES NOTIONS À RANGER :
 ${notions}
 
-**Une notion déjà rangée reste où elle est, sauf raison de la déplacer.** Quand la mention « actuellement dans » figure, ce rangement a été décidé avant toi — parfois à la main par l'utilisateur. Reconduis-le, sauf si le contenu de la notion contredit clairement le chapitre où elle se trouve. Reconduire est une réponse pleinement valide, et c'est la plus fréquente sur un atelier déjà organisé.
+La mention « actuellement dans » dit où la notion se trouve aujourd'hui. **C'est une information, pas une consigne** : tu peux parfaitement la déplacer si un autre chapitre lui convient mieux, et reconduire son rangement est tout aussi valide. Elle est surtout utile quand la notion n'a **aucune provenance** — sans page ni document, c'est parfois le seul indice disponible. Ne la laisse jamais l'emporter sur le contenu.
 
 Les pages sont **une indication, pas une règle**. Un chapitre ne s'arrête pas proprement au bas d'une page : une notion du haut d'une page peut très bien appartenir au chapitre précédent, et une notion isolée peut relever d'un chapitre situé ailleurs dans le cours. **En cas de désaccord entre la page et le contenu, c'est le contenu qui décide.** Une notion sans page se range sur son seul contenu.
 

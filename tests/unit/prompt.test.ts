@@ -398,16 +398,19 @@ describe('assignInstruction — la page range, elle ne juge pas', () => {
     expect(instruction).not.toContain('Une notion sans provenance. [');
   });
 
-  it('dit où la notion se trouve DÉJÀ, et demande de l’y laisser', () => {
-    // Sans ça, le modèle range chaque notion de zéro à chaque import — y compris
-    // celles que l'utilisateur a placées à la main, qu'il défaisait en silence.
+  it('dit où la notion se trouve déjà — comme une information, pas une consigne', () => {
+    // L'IA DOIT pouvoir déplacer une notion existante, y compris rangée à la
+    // main : le rangement actuel l'informe, il ne le lie pas. Il sert surtout
+    // quand la notion n'a plus de provenance — c'est alors le seul indice.
     const instruction = assignInstruction({
       ...base,
       notions: [{ ...base.notions[0], currentChapterId: 'c1' }],
     });
     expect(instruction).toContain('(actuellement dans c1)');
-    expect(instruction).toMatch(/reste où elle est, sauf raison de la déplacer/);
-    expect(instruction).toMatch(/Reconduire est une réponse pleinement valide/);
+    expect(instruction).toMatch(/une information, pas une consigne/);
+    expect(instruction).toMatch(/aucune provenance/);
+    // Et surtout : rien qui en fasse un argument décisif.
+    expect(instruction).not.toMatch(/sauf raison de la déplacer/);
   });
 
   it('ne dit rien de son chapitre quand elle n’en a pas', () => {

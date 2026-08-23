@@ -187,24 +187,38 @@ function resolve(ref: string | undefined, created: Map<string, string>): string 
  *
  *  Une écriture par chapitre visé plutôt qu'une par notion : le nombre de
  *  requêtes suit le nombre de chapitres (quelques unités), pas le nombre de
- *  notions (plusieurs centaines). */
+ *  notions (plusieurs centaines).
+ *
+ *  ⚠️ **Une affectation qui ne change rien n'est PAS un déplacement.** Le modèle
+ *  répond pour chaque notion du lot, y compris celles qu'il laisse où elles
+ *  sont — c'est même le cas le plus fréquent sur un atelier déjà organisé. Les
+ *  écrire quand même ferait deux dégâts : `updated_at` bougerait sur des lignes
+ *  intactes (ce qui, seul, rendrait l'import non annulable), et l'écran
+ *  annoncerait comme « déplacée » une notion qui n'a pas bougé.
+ *
+ *  Rend donc les identifiants **réellement** déplacés, jamais un compte. */
 export async function applyAssignments(
   workshopId: string,
   assignments: { notionRef: string; chapterRef?: string }[],
   chapterIds: Map<string, string>,
-): Promise<number> {
-  if (assignments.length === 0) return 0;
+  /** Où chaque notion se trouve AVANT — c'est ce qui distingue un déplacement
+   *  d'une reconduction. Une notion absente de cette table est traitée comme
+   *  inconnue, donc écrite. */
+  current: Map<string, string | null> = new Map(),
+): Promise<string[]> {
+  if (assignments.length === 0) return [];
 
   const supabase = getSupabaseServerClient();
   const byChapter = new Map<string | null, string[]>();
   for (const a of assignments) {
     const chapterId = resolve(a.chapterRef, chapterIds);
+    if (current.has(a.notionRef) && current.get(a.notionRef) === chapterId) continue;
     const bucket = byChapter.get(chapterId);
     if (bucket) bucket.push(a.notionRef);
     else byChapter.set(chapterId, [a.notionRef]);
   }
 
-  let moved = 0;
+  const moved: string[] = [];
   for (const [chapterId, notionIds] of byChapter) {
     const { data, error } = await supabase
       .from('workshop_bricks')
@@ -213,7 +227,7 @@ export async function applyAssignments(
       .in('id', notionIds)
       .select('id');
     if (error) throw new Error(error.message);
-    moved += (data ?? []).length;
+    for (const row of data ?? []) moved.push(row.id as string);
   }
   return moved;
 }
