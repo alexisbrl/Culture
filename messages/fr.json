@@ -1201,17 +1201,10 @@
   },
   "ai": {
     "title": "Générer par IA",
-    "subtitle": "À partir des documents de l’atelier, l’IA construit les chapitres, les notions, puis les questions.",
+    "subtitle": "L’IA complète cet atelier : ce qui existe déjà est réutilisé, jamais refait.",
     "files": "Documents sources",
     "noFiles": "Aucun document dans cet atelier. Ajoute un PDF ou un fichier texte dans Ressources.",
     "unsupported": "Format pas encore pris en charge par la génération (PDF et texte uniquement)",
-    "whatToGenerate": "Ce qu’il faut générer",
-    "scope": {
-      "chapters": "Les chapitres",
-      "notions": "Les notions de chaque chapitre",
-      "questionsParcours": "Les questions du parcours",
-      "questionsExam": "Les questions de la banque d’examen"
-    },
     "hint": {
       "label": "PRÉCISIONS (FACULTATIF)",
       "placeholder": "ex. : découpe par thèmes, il y en a 4 — dans le document ils sont appelés « Séquences ».",
@@ -1223,8 +1216,6 @@
       "deepseek": "DeepSeek",
       "help": "Ne concerne que la rédaction des questions, qui ne lit pas les documents. Les chapitres et les notions restent sur Claude, seul à lire les PDF sans en perdre les schémas."
     },
-    "needsChapters": "Sans générer les chapitres, l’IA complète ceux qui existent déjà dans l’atelier. S’il n’y en a aucun, il n’y a rien à compléter et l’étape est sautée.",
-    "questionsNeedNotions": "Les questions se rattachent aux notions du chapitre : sans notions, les chapitres créés ici seront vides et aucune question ne pourra être écrite.",
     "generate": "générer",
     "cancel": "annuler",
     "close": "fermer",
@@ -1255,6 +1246,16 @@
     "estimate": {
       "preparing": "Préparation des documents…",
       "preparingHint": "Les documents sont envoyés au fournisseur ; la génération démarre juste après."
+    },
+    "plan": {
+      "program": "L’IA va lire les documents, en extraire les notions, les ranger en chapitres, puis écrire les questions du parcours. Ce qui existe déjà est complété, jamais refait.",
+      "programThenQuestions": "Cet atelier n’a encore aucune notion au programme : l’IA va d’abord le construire à partir des documents, puis écrire les questions de cette liste.",
+      "parcoursQuestions": "L’IA va compléter les questions du parcours pour les notions qui n’ont pas encore leur compte. Les documents ne sont pas relus.",
+      "examQuestions": "L’IA va écrire des questions d’examen sur l’ensemble du programme — chacune croisant plusieurs notions, certaines s’enchaînant. Les documents ne sont pas relus."
+    },
+    "examCount": {
+      "label": "NOMBRE DE QUESTIONS",
+      "help": "Pour tout le programme, pas par chapitre. Un tiers d’entre elles s’enchaîneront par groupes de deux ou trois. Relancer en ajoute autant, sans reposer celles qui existent."
     }
   }
 }

@@ -34,11 +34,20 @@ const BLOOM_VERBS: Record<BloomLevel, string> = {
 
 /** Combien de questions viser par notion, **par niveau de Bloom**.
  *
+ *  ⚠️ **Cette règle est celle du PARCOURS, pas de l'examen** (arbitrage du
+ *  24/08/2026). Les deux listes n'ont pas la même unité de compte, et c'est ce
+ *  qui les rend complémentaires :
+ *
+ *    • parcours — un stock PAR NOTION, une question = une notion, et on répète
+ *      jusqu'à ce que la notion soit sue ;
+ *    • examen  — un nombre TOTAL de questions pour tout le programme, chacune
+ *      croisant plusieurs notions (`EXAM_*` plus bas).
+ *
  *  C'était « une par niveau », soit 4 — un stock qui s'épuise au deuxième
  *  entraînement, puisqu'un entraînement fait ~10 questions (§16.1). Les niveaux
  *  3 et 4 sont à zéro **par optimisation, pas par choix pédagogique** : les
  *  couvrir à cette densité demanderait ~60 questions par notion dont la plupart
- *  ne seraient jamais posées. Ils relèveront de la recharge automatique. */
+ *  ne seraient jamais posées. C'est l'examen qui les porte. */
 export type BloomDistribution = Record<BloomLevel, number>;
 
 export const DEFAULT_BLOOM_DISTRIBUTION: BloomDistribution = { 1: 8, 2: 4, 3: 0, 4: 0 };
@@ -58,6 +67,64 @@ export function questionsPerNotion(distribution: BloomDistribution = DEFAULT_BLO
  *  temps des tests** : c'est un garde-fou contre une boucle qui part en vrille,
  *  il doit rester bas tant que les coûts réels ne sont pas constatés. */
 export const MAX_QUESTIONS_PER_IMPORT = 300;
+
+// ─── L'examen : une volumétrie qui ne se compte pas par notion ───────────────
+//
+// Décidé le 24/08/2026. Un examen n'est pas un entraînement : il ÉCHANTILLONNE
+// le programme au lieu de le couvrir. On demande donc un nombre TOTAL de
+// questions pour tout l'atelier — 40 par défaut, que l'atelier ait trois
+// chapitres ou trente — et chaque question croise plusieurs notions au lieu
+// d'en travailler une seule. C'est l'exact inverse du parcours, et c'est ce qui
+// évite que les deux listes ne se ressemblent.
+
+/** Nombre de questions d'examen proposé par défaut. Modifiable à chaque
+ *  génération dans le dialogue : c'est au moment de lancer qu'on sait si on veut
+ *  un contrôle de dix questions ou un examen blanc de soixante. */
+export const DEFAULT_EXAM_QUESTIONS = 40;
+
+/** Borne de saisie. Le plafond de débit d'un import (`MAX_QUESTIONS_PER_IMPORT`)
+ *  reste au-dessus et fait foi. */
+export const EXAM_QUESTIONS_RANGE = { min: 5, max: 200 } as const;
+
+/** Combien de questions par appel au modèle.
+ *
+ *  Même raison que les lots de notions du parcours : une réponse tronquée est
+ *  une réponse perdue (§16.2). Dix questions d'examen — qui portent des énoncés
+ *  plus longs que celles du parcours — tiennent largement dans la sortie, et le
+ *  découpage rend les appels parallélisables. */
+export const EXAM_QUESTIONS_PER_CALL = 10;
+
+/** La part des questions rassemblées en groupes qui s'enchaînent.
+ *
+ *  Un tiers (arbitrage du 24/08/2026) : assez pour qu'un examen comporte de
+ *  vrais enchaînements, pas au point d'en faire un dossier à traiter d'un bloc. */
+export function examGroupedCount(budget: number): number {
+  return Math.round(budget / 3);
+}
+
+/** Taille d'un groupe. Deux ou trois questions : au-delà, un candidat qui rate
+ *  la première perd tout le bloc. */
+export const EXAM_GROUP_SIZE = { min: 2, max: 3 } as const;
+
+/** La répartition de Bloom d'un examen, **en proportions** et non en nombres
+ *  fixes : le total est un réglage de l'utilisateur, la répartition non.
+ *
+ *  Le niveau 1 (mémoriser) est absent : c'est le régime du parcours, qui en
+ *  produit huit par notion. Un examen dont les questions croisent plusieurs
+ *  notions ne peut pas se contenter de restitution — ce serait dépenser un appel
+ *  au modèle pour refaire ce que le parcours fait mieux et moins cher. */
+export const EXAM_BLOOM_MIX: Record<2 | 3 | 4, number> = { 2: 0.25, 3: 0.5, 4: 0.25 };
+
+/** Traduit le mélange en nombres entiers pour un budget donné.
+ *
+ *  Le reste de l'arrondi va au niveau 3 : c'est le niveau dominant, et c'est
+ *  celui dont une unité de plus ou de moins déséquilibre le moins l'examen. */
+export function examBloomCounts(budget: number): Record<2 | 3 | 4, number> {
+  const safe = Math.max(0, Math.floor(budget));
+  const level2 = Math.round(safe * EXAM_BLOOM_MIX[2]);
+  const level4 = Math.round(safe * EXAM_BLOOM_MIX[4]);
+  return { 2: level2, 3: Math.max(0, safe - level2 - level4), 4: level4 };
+}
 
 export type ExistingContent = {
   chapters: { id: string; name: string }[];
@@ -79,7 +146,12 @@ export type ExistingScope =
   | { pass: 'chapters' }
   | { pass: 'notions' }
   | { pass: 'assign' }
-  | { pass: 'questions'; notionIds: string[] };
+  | { pass: 'questions'; notionIds: string[] }
+  /** L'examen ne filtre pas par notion : ce qu'il ne faut pas reposer, c'est ce
+   *  qui est déjà DANS CETTE LISTE, quelle que soit la notion. Le chargeur
+   *  borne déjà la liste ; filtrer une seconde fois ici ne ferait que perdre des
+   *  énoncés en route. */
+  | { pass: 'exam' };
 
 const SYSTEM = `Tu construis le programme pédagogique d'un atelier à partir de ses documents sources.
 
@@ -144,6 +216,8 @@ function inScope(existing: ExistingContent, scope: ExistingScope): {
         questions: existing.questions.filter((q) => q.notionIds.some((id) => wanted.has(id))).map((q) => q.content),
       };
     }
+    case 'exam':
+      return { chapters: [], notions: [], questions: existing.questions.map((q) => q.content) };
   }
 }
 
@@ -164,6 +238,8 @@ export function existingContentBlock(existing: ExistingContent, scope: ExistingS
         return '';
       case 'questions':
         return "Aucune question ne porte encore sur ces notions : la liste est vide.";
+      case 'exam':
+        return "La liste d'examen est vide : tout est à écrire.";
     }
   }
 
@@ -221,6 +297,24 @@ export function userHintBlock(hint?: string): string {
   if (!trimmed) return '';
   return `CONSIGNE DE L'UTILISATEUR — elle porte sur CE cours et prime sur les indications générales qui suivent :
 « ${trimmed} »
+
+`;
+}
+
+/** À qui s'adresse ce programme.
+ *
+ *  Le nom et la description de l'atelier sont la SEULE chose qui distingue un
+ *  BTS matériaux d'un cours de quatrième — et jusqu'au 24/08/2026, le modèle ne
+ *  les avait jamais sous les yeux au moment de rédiger les questions. Il ne les
+ *  déduisait donc que du vocabulaire des notions, ce qui marche pour le domaine
+ *  mais jamais pour le NIVEAU attendu. Quelques dizaines de tokens pour le levier
+ *  le moins cher du pipeline. */
+export type WorkshopIdentity = { name: string; description?: string | null };
+
+export function workshopBlock(workshop?: WorkshopIdentity | null): string {
+  if (!workshop?.name?.trim()) return '';
+  const description = (workshop.description ?? '').trim();
+  return `L'atelier s'intitule « ${workshop.name.trim()} »${description ? `, décrit ainsi par son auteur : « ${description} »` : ''}. Écris pour CE public : le niveau d'exigence, le vocabulaire et les exemples doivent lui correspondre.
 
 `;
 }
@@ -434,10 +528,27 @@ export function bloomInstruction(distribution: BloomDistribution = DEFAULT_BLOOM
   return `Pour CHAQUE notion à couvrir : ${enumeration}, soit ${total} questions par notion. N'en produis pas d'autres niveaux.`;
 }
 
+/** La règle de ressemblance entre questions, commune aux deux listes.
+ *
+ *  ⚠️ **Elle est l'INVERSE de celle des notions, et ce n'est pas une
+ *  incohérence** (arbitrage du 24/08/2026). Deux notions qui disent la même
+ *  chose sont un doublon à éliminer ; deux questions qui font travailler le même
+ *  fait sont exactement ce qu'on veut — on n'apprend pas une addition en la
+ *  posant une seule fois. « Combien font 5 + 2 » et « combien font 5 + 1 » sont
+ *  deux questions, pas un doublon.
+ *
+ *  Conséquence assumée : **on ne vérifie nulle part la similarité entre
+ *  questions**. Le calcul de ressemblance (`duplicates.ts`) ne sert qu'aux
+ *  notions. Ici, la seule exigence est de varier autant que possible, et de
+ *  reformuler au minimum. */
+const VARIATION_RULE =
+  "Deux questions peuvent porter sur le même fait — c'est même souhaitable, on n'apprend pas en répondant une seule fois. Mais elles doivent DIFFÉRER : change l'angle, l'exemple, les valeurs, la forme de la réponse. Reformuler à l'identique ne compte pas comme une question de plus.";
+
 /** Passe 3 — les questions d'un lot de notions, ancrées sur elles. */
 export function questionsInstruction(input: {
   chapter: { id: string; name: string };
-  notions: { id: string; title: string }[];
+  workshop?: WorkshopIdentity | null;
+  notions: { id: string; title: string; missing?: number }[];
   /** Les autres notions du chapitre, en contexte seulement (§16.21). La passe ne
    *  reçoit plus les documents : ce sont elles qui remplacent le cours. */
   neighbours?: { id: string; title: string }[];
@@ -447,7 +558,16 @@ export function questionsInstruction(input: {
    *  sans toucher au prompt (§16.1). */
   distribution?: BloomDistribution;
 }): string {
-  const list = input.notions.map((n) => `- ${n.id} — ${n.title}`).join('\n');
+  // Le nombre qui MANQUE, et non le nombre déjà écrit : c'est ce que le modèle
+  // doit produire, et le lui faire calculer serait une soustraction de plus à
+  // rater. Absent quand la notion part de zéro — dire « ajoute 12 » à côté d'une
+  // consigne qui dit déjà 12 n'apporte rien et brouille la règle générale.
+  const list = input.notions
+    .map((n) => {
+      const missing = typeof n.missing === 'number' && n.missing > 0 ? ` [il en manque ${n.missing}]` : '';
+      return `- ${n.id} — ${n.title}${missing}`;
+    })
+    .join('\n');
   const neighbours = input.neighbours ?? [];
 
   // Le contexte vient APRÈS les notions à couvrir et se termine par un rappel :
@@ -459,7 +579,7 @@ ${neighbours.map((n) => `- ${n.title}`).join('\n')}
 `
       : '';
 
-  return `Rédige les QUESTIONS qui font travailler les notions du chapitre « ${input.chapter.name} ».
+  return `${workshopBlock(input.workshop)}Rédige les QUESTIONS D'ENTRAÎNEMENT qui font travailler les notions du chapitre « ${input.chapter.name} ».
 
 Notions à couvrir :
 ${list}
@@ -467,9 +587,80 @@ ${context}
 Règles de production :
 - ${bloomInstruction(input.distribution)}
 - Chaque question porte dans \`notionRefs\` la ou les notions qu'elle fait travailler, avec les références ci-dessus. Une question sans notion ne sera jamais posée à personne.
-- Varie les types de réponse. Attention : \`qcs\` et \`qcm\` sont LE MÊME TYPE pour le candidat — un QCM, dont une seule ou plusieurs propositions sont correctes. Alterner entre les deux n'est pas varier : la variété se joue entre QCM, réponse textuelle et liste.
-- Pour un QCM : des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien, elle se raye d'office.
+- **Une question, une notion.** Ici, chaque question est tirée seule, en révision : elle doit se répondre avec SA notion et rien d'autre.
+- **Uniquement des QCM** (\`qcs\` ou \`qcm\` selon qu'une seule ou plusieurs propositions sont correctes). C'est le seul type que l'application sait corriger toute seule, et une réponse qu'elle ne sait pas corriger ne fait progresser personne. Les réponses libres ont leur place à l'examen, pas ici.
+- Des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien, elle se raye d'office.
+- ${VARIATION_RULE}
+- Chaque groupe ne contient qu'UNE question : en entraînement, rien n'est enchaîné.
 - N'excède pas ${input.budget} questions au total.
 
 Une bonne question se répond avec la notion et rien d'autre : ni piège de formulation, ni connaissance extérieure au document.`;
+}
+
+/** Passe EXAMEN — un nombre fixe de questions pour tout le programme.
+ *
+ *  ─── Ce qui la sépare de la passe parcours ─────────────────────────────────
+ *
+ *  Tout, sauf le format de sortie. Elle ne raisonne pas par notion mais par
+ *  PROGRAMME : elle reçoit une tranche entière (des chapitres avec leurs
+ *  notions) et un budget de questions, à elle de choisir où frapper. Une
+ *  question d'examen croise plusieurs notions — c'est ce croisement qui fait la
+ *  difficulté, et c'est ce que le parcours ne produit jamais.
+ *
+ *  ─── Les groupes, et l'exception qu'ils font à la règle d'autonomie ────────
+ *
+ *  Le bloc système exige qu'une question se comprenne seule. Un groupe la
+ *  contredit délibérément : ses questions s'enchaînent et la première pose le
+ *  décor. L'exception doit être ÉCRITE ici, sinon le modèle tranche en faveur
+ *  de la règle générale et rend des groupes dont les questions sont
+ *  indépendantes — c'est-à-dire pas des groupes.
+ *
+ *  ⚠️ Un groupe ne porte **aucun énoncé commun** : la base n'en a pas (elle ne
+ *  partage qu'une image ou un son), et on a choisi de ne pas en ajouter
+ *  (24/08/2026). Le contexte vit donc dans la PREMIÈRE question du groupe. */
+export function examInstruction(input: {
+  workshop?: WorkshopIdentity | null;
+  /** La tranche de programme couverte par CET appel, dans l'ordre du cours. */
+  chapters: { name: string; notions: { id: string; title: string }[] }[];
+  /** Nombre de questions à écrire dans cet appel. */
+  budget: number;
+}): string {
+  const program = input.chapters
+    .map((c) => `## ${c.name}\n${c.notions.map((n) => `- ${n.id} — ${n.title}`).join('\n')}`)
+    .join('\n\n');
+
+  const bloom = examBloomCounts(input.budget);
+  const mix = ([2, 3, 4] as const)
+    .filter((level) => bloom[level] > 0)
+    .map((level) => `${bloom[level]} de niveau ${level} (${BLOOM_VERBS[level]})`)
+    .join(', ');
+
+  const grouped = examGroupedCount(input.budget);
+  const groups =
+    grouped >= EXAM_GROUP_SIZE.min
+      ? `- **Environ ${grouped} de ces questions sont RASSEMBLÉES EN GROUPES** de ${EXAM_GROUP_SIZE.min} à ${EXAM_GROUP_SIZE.max} questions qui s'enchaînent, le reste étant des questions isolées (un groupe d'une seule question).
+- Dans un groupe, les questions se suivent et se répondent dans l'ordre : la PREMIÈRE pose le décor — la situation, les données, l'extrait, le cas — et les suivantes s'appuient dessus sans le répéter. Elles seront toujours présentées ensemble et dans cet ordre. C'est la seule exception à la règle d'autonomie : c'est le GROUPE qui se comprend seul, pas chacune de ses questions.
+- Un groupe n'a pas d'énoncé commun séparé : tout ce qui est nécessaire aux questions suivantes est écrit dans la première.`
+      : '- Chaque groupe ne contient qu\'une question : le budget de cet appel est trop court pour un enchaînement.';
+
+  return `${workshopBlock(input.workshop)}Rédige les QUESTIONS D'EXAMEN qui évaluent cette partie du programme.
+
+Un examen n'est pas un entraînement : il ÉCHANTILLONNE. Tu ne couvres pas toutes les notions ci-dessous — tu choisis celles qui méritent d'être évaluées, et tu les fais travailler ENSEMBLE.
+
+LE PROGRAMME À ÉVALUER :
+
+${program}
+
+Règles de production :
+- Écris **exactement ${input.budget} questions**, pas une de plus.
+- **Chaque question croise PLUSIEURS notions** dès que c'est possible : c'est ce qui distingue un examen d'une série de questions de cours. Une question qui ne porte que sur une seule notion doit être l'exception, pas la règle.
+- Répartition visée : ${mix}. Aucune question de simple restitution : le parcours s'en charge.
+- Chaque question porte dans \`notionRefs\` TOUTES les notions qu'elle fait travailler, avec les références ci-dessus. Une question sans notion ne sera jamais retenue.
+${groups}
+- Varie les types de réponse : QCM, réponse textuelle, liste. L'examen se corrige à la main, la réponse libre y est donc pleinement à sa place — c'est même elle qui permet d'évaluer un raisonnement.
+- Pour un QCM : des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien.
+- Pour une réponse libre : renseigne les critères de correction — ce qui est attendu, ce qui est accepté. C'est ce que le correcteur aura sous les yeux.
+- ${VARIATION_RULE}
+
+Tu n'inventes aucun fait : tout ce qu'une question demande doit se déduire des notions ci-dessus.`;
 }

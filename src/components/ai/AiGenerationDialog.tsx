@@ -10,15 +10,20 @@ import { ProgressBar } from '@/components/ui/progress-bar';
 import { Tooltip } from '@/components/ui/tooltip';
 import { ink, palette, radius } from '@/lib/theme';
 import { INGEST_CONCURRENCY, QUESTIONS_CONCURRENCY, mapWithConcurrency } from '@/lib/ingest/concurrency';
-import { MAX_QUESTIONS_PER_IMPORT as MAX_QUESTIONS } from '@/lib/ingest/prompt';
+import {
+  DEFAULT_EXAM_QUESTIONS,
+  EXAM_QUESTIONS_RANGE,
+  MAX_QUESTIONS_PER_IMPORT as MAX_QUESTIONS,
+} from '@/lib/ingest/prompt';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import {
   finishWorkshopIngestion,
-  ingestChapterQuestions,
   ingestDocumentNotions,
+  ingestParcoursQuestions,
   ingestWorkshopAssignments,
   ingestWorkshopChapters,
+  ingestWorkshopExamQuestions,
   prepareWorkshopIngestion,
   releaseWorkshopImportFiles,
   type PlanIssue,
@@ -118,15 +123,17 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
 
   const usable = files.filter((f) => isSupported(f.mimeType));
   const [selected, setSelected] = useState<string[]>(usable.map((f) => f.id));
+  // Le programme déjà en place, lu à l'ouverture. `null` = on ne sait pas
+  // encore : le dialogue ne peut pas décider de ce qu'il va faire avant de
+  // l'avoir, donc il attend plutôt que de supposer.
+  const [visibleNotions, setVisibleNotions] = useState<number | null>(null);
+  const [examCount, setExamCount] = useState(DEFAULT_EXAM_QUESTIONS);
   // ⚠️ TEMPORAIRE — phase de test. Le fournisseur de la passe questions est
   // exposé le temps de comparer Claude et DeepSeek sur un vrai corpus ; il n'a
   // pas vocation à rester un choix d'utilisateur. Seule cette passe est
   // concernée : elle ne reçoit aucun document (voir `providers/deepseek.ts`).
   const [questionsProvider, setQuestionsProvider] = useState<'claude' | 'deepseek'>('claude');
   const [hint, setHint] = useState('');
-  const [withChapters, setWithChapters] = useState(true);
-  const [withNotions, setWithNotions] = useState(true);
-  const [withQuestions, setWithQuestions] = useState(true);
   const [phase, setPhase] = useState<Phase>({ step: 'select' });
   const [counts, setCounts] = useState({ chapters: 0, notions: 0, questions: 0 });
   const [issues, setIssues] = useState<{ discarded: PlanIssue[]; adjusted: PlanIssue[] }>({ discarded: [], adjusted: [] });
@@ -136,6 +143,41 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   const running = phase.step === 'running' || phase.step === 'preparing';
   const context = forcedContext ?? 'parcours';
 
+  // ─── Ce que ce lancement va faire, et qui n'est plus une case à cocher ────
+  //
+  // Les trois cases ont disparu le 24/08/2026 : personne n'a à décider quelles
+  // étapes lancer, c'est le point d'entrée qui le dit.
+  //
+  //   • Paramètres           → tout, à chaque fois. Un atelier se construit d'un
+  //                            trait, et les étapes déjà faites se complètent au
+  //                            lieu de se refaire.
+  //   • Liste de questions   → seulement des questions, DANS CETTE LISTE.
+  //
+  // …avec un rattrapage : demander des questions à un atelier qui n'a aucune
+  // notion au programme ne produirait rien du tout — il n'y a rien à faire
+  // travailler. Dans ce seul cas, on construit d'abord le programme, puis on
+  // écrit les questions. Les notions sans chapitre et celles des chapitres
+  // écartés ne comptent pas : elles sont hors programme.
+  const needsProgram = forcedContext === null || visibleNotions === 0;
+  const needsFiles = needsProgram;
+
+  // La liste des chapitres porte déjà le compte de notions et l'état écarté :
+  // pas besoin d'une lecture dédiée. Montée à l'ouverture — le dialogue n'est
+  // rendu que lorsqu'il est ouvert.
+  useEffect(() => {
+    let cancelled = false;
+    getWorkshopChapters(workshopId)
+      .then((chapters) => {
+        if (cancelled) return;
+        setVisibleNotions(chapters.filter((c) => !c.hidden).reduce((sum, c) => sum + c.notionCount, 0));
+      })
+      // Compte inconnu → on retombe sur le chemin complet, qui produit un
+      // résultat correct dans tous les cas. L'inverse (supposer un programme
+      // qui n'existe pas) ne produirait rien du tout.
+      .catch(() => { if (!cancelled) setVisibleNotions(0); });
+    return () => { cancelled = true; };
+  }, [workshopId]);
+
   function toggleFile(id: string) {
     setSelected((prev) => (prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]));
   }
@@ -143,11 +185,13 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   /** Téléverse les documents, puis enchaîne directement sur la génération. */
   async function prepare() {
     setPhase({ step: 'preparing' });
-    const prepared = await prepareWorkshopIngestion(workshopId, selected, {
-      chapters: withChapters,
-      notions: withNotions,
-      questions: withQuestions,
+    const prepared = await prepareWorkshopIngestion(workshopId, needsFiles ? selected : [], {
+      // Le périmètre n'est plus un choix : il se déduit du point d'entrée. On le
+      // range quand même dans le lot, c'est lui qu'on relira pour comprendre ce
+      // qu'un import a voulu faire.
+      program: needsProgram,
       context,
+      examQuestions: context === 'exam' ? examCount : undefined,
       // Rangée dans le `scope` de l'import : chaque passe la relit depuis la
       // base, y compris celles qui s'exécutent dans des appels ultérieurs.
       hint: hint.trim(),
@@ -162,13 +206,12 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     const adjusted: PlanIssue[] = [];
     const tally = { chapters: 0, notions: 0, questions: 0 };
 
-    // ─── Les trois étages sont indépendants, et chacun se saute tout seul ───
+    // ─── Les étages, et ce qui décide de leur présence ──────────────────────
     //
-    // Chaque étage naît de celui du dessus. On ne génère QUE ce qui est coché,
-    // et un étage coché dont le prédécesseur manque est **sauté** — pas une
-    // erreur, pas un blocage : il n'y a simplement rien à quoi se rattacher.
-    // Décocher « chapitres » ne veut donc pas dire « atelier vide », ça veut
-    // dire « garde ceux qui existent et complète-les ».
+    // Plus aucun choix d'étage : le point d'entrée décide (voir `needsProgram`).
+    // Ce qui existe déjà n'est jamais refait — chaque étage COMPLÈTE : les
+    // chapitres en place sont réutilisés, les notions déjà rangées le restent,
+    // et les notions déjà pourvues de questions ne sont pas repassées au modèle.
     //
     // ⚠️ **L'ordre a été inversé le 23/08/2026** : les notions d'abord, les
     // chapitres ensuite. Les notions sont le cœur d'un atelier, les chapitres
@@ -177,12 +220,14 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // Le RANGEMENT est un étage à part entière, pas une conséquence : il tourne
     // dès qu'il y a quelque chose à placer — des notions neuves, ou une
     // structure qui vient de changer.
-    const withAssign = withNotions || withChapters;
+    const withNotions = needsProgram;
+    const withChapters = needsProgram;
+    const withAssign = needsProgram;
     const steps = [
       ...(withNotions ? ['notions' as const] : []),
       ...(withChapters ? ['chapters' as const] : []),
       ...(withAssign ? ['assign' as const] : []),
-      ...(withQuestions ? ['questions' as const] : []),
+      'questions' as const,
     ];
     const totalSteps = steps.length;
     // Le rang d'un étage dans la barre dépend de ce qui est coché : sans les
@@ -299,15 +344,82 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // attendu — c'est du ménage.
     void releaseWorkshopImportFiles(workshopId, importId);
 
-    // ⚠️ **Le socle de la passe questions est l'atelier ENTIER**, pas ce que
+    // ─── Étage 4 : les questions, et deux régimes qui n'ont rien en commun ───
+    //
+    // • EXAMEN   — un nombre TOTAL de questions pour tout le programme (40 par
+    //              défaut, réglable ci-dessus), chacune croisant plusieurs
+    //              notions, un tiers en groupes qui s'enchaînent. Le découpage
+    //              porte sur le budget, et la matière suit : chaque appel reçoit
+    //              une tranche contiguë du cours.
+    // • PARCOURS — douze questions PAR NOTION, une notion par question. Le
+    //              découpage porte sur la matière, chapitre par chapitre.
+    //
+    // Deux régimes, deux passes serveur (24/08/2026). Les fondre reviendrait à
+    // fabriquer deux listes qui se ressemblent, alors que leur intérêt est
+    // justement d'être complémentaires.
+    if (context === 'exam') {
+      let error: string | null = null;
+      let doneCalls = 0;
+      let totalCalls = 1;
+
+      const showExam = () => setPhase({
+        step: 'running',
+        label: t('progress.questionsCount', { done: doneCalls, n: totalCalls }),
+        done: stepAt('questions') + doneCalls / Math.max(1, totalCalls),
+        total: totalSteps,
+      });
+
+      const runSlice = async (sliceIndex: number) => {
+        // Même raison que pour le parcours : le serveur ne voit qu'un appel à la
+        // fois, seul le client sait combien il en a en vol.
+        const remaining = MAX_QUESTIONS - tally.questions;
+        if (remaining <= 0) return null;
+        const share = Math.max(1, Math.floor(remaining / QUESTIONS_CONCURRENCY));
+        const result = await ingestWorkshopExamQuestions(workshopId, importId, sliceIndex, share);
+        doneCalls += 1;
+        if (!result.ok) { error ??= result.error; showExam(); return null; }
+        discarded.push(...result.discarded);
+        adjusted.push(...result.adjusted);
+        tally.questions += result.written;
+        setCounts({ ...tally });
+        showExam();
+        return result;
+      };
+
+      showExam();
+      // Le nombre de tranches n'est connu qu'à la réponse de la première : elle
+      // part seule, les suivantes ensemble.
+      const first = await runSlice(0);
+      if (error) return setPhase({ step: 'error', message: error });
+
+      const slices = first?.batches ?? 0;
+      if (slices > 1) {
+        totalCalls = slices;
+        showExam();
+        await mapWithConcurrency(
+          Array.from({ length: slices - 1 }, (_, i) => i + 1),
+          QUESTIONS_CONCURRENCY,
+          runSlice,
+        );
+      }
+      if (error) return setPhase({ step: 'error', message: error });
+
+      setIssues({ discarded, adjusted });
+      setPhase({ step: 'done' });
+      onDone?.();
+      return;
+    }
+
+    // ⚠️ **Le socle de la passe parcours est l'atelier ENTIER**, pas ce que
     // l'exécution vient de créer — et il est relu en base APRÈS le rangement,
     // pour que les chapitres nouveaux et anciens se retrouvent dans la même
     // liste. C'est ce qui fait qu'un import complète les DEUX : le nouveau part
     // de zéro, l'ancien se voit proposer ce qui lui manque.
     //
     // Le coût en découle et il est assumé : un atelier de douze chapitres
-    // déclenche douze séries d'appels de la passe questions, même si un seul
-    // chapitre est nouveau (arbitrage du 22/08/2026).
+    // déclenche douze séries d'appels, même si un seul chapitre est nouveau
+    // (arbitrage du 22/08/2026). Le serveur y répond en n'envoyant au modèle que
+    // les notions dont le stock n'est pas au complet.
     // Les chapitres écartés sont hors programme : on ne leur écrit pas de
     // questions. Ils n'ont de toute façon plus de notions, mais la règle doit
     // être explicite — un chapitre restauré plus tard les recevra.
@@ -315,7 +427,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       .filter((c) => !c.hidden)
       .map((c) => ({ id: c.id, name: c.name }));
 
-    if (withQuestions && chapters.length > 0) {
+    if (chapters.length > 0) {
       let error: string | null = null;
 
       // Le nombre de lots d'un chapitre n'est connu qu'à la réponse du premier
@@ -347,7 +459,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         const remaining = MAX_QUESTIONS - tally.questions;
         if (remaining <= 0) return null;
         const share = Math.max(1, Math.floor(remaining / QUESTIONS_CONCURRENCY));
-        const result = await ingestChapterQuestions(workshopId, importId, job.chapter, context, job.batchIndex, share);
+        const result = await ingestParcoursQuestions(workshopId, importId, job.chapter, job.batchIndex, share);
         doneCalls += 1;
         if (!result.ok) { error ??= result.error; showQuestions(); return null; }
         discarded.push(...result.discarded);
@@ -392,6 +504,25 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
 
         {phase.step === 'select' && (
           <>
+            {/* Ce que ce lancement va faire, dit d'une phrase. Il n'y a plus rien
+                à cocher, donc il faut le dire — sans quoi le même bouton ferait
+                deux choses différentes sans jamais l'annoncer. */}
+            <div style={{ marginBottom: 18 }}>
+              <Hint>
+                {forcedContext === null
+                  ? t('plan.program')
+                  : needsProgram
+                    ? t('plan.programThenQuestions')
+                    : t(forcedContext === 'exam' ? 'plan.examQuestions' : 'plan.parcoursQuestions')}
+              </Hint>
+            </div>
+
+            {/* Les documents ne servent qu'à écrire des notions. Une génération
+                de questions seule n'en a aucun besoin — elle travaille sur les
+                notions déjà extraites — et les proposer laisserait croire
+                qu'elle relit le cours, donc qu'elle le facture. */}
+            {needsFiles && (
+            <>
             <SectionLabel>{t('files')}</SectionLabel>
             {files.length === 0 && <Hint>{t('noFiles')}</Hint>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
@@ -422,31 +553,45 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
               })}
             </div>
 
-            <SectionLabel>{t('whatToGenerate')}</SectionLabel>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
-              {/* Les trois cases sont libres, y compris celle-ci. Décocher les
-                  chapitres ne vide pas l'atelier : ça veut dire « garde ceux qui
-                  existent et complète-les ». Et une case cochée dont le
-                  prédécesseur manque est sautée à l'exécution, pas refusée à la
-                  saisie — c'est au moment de générer qu'on sait ce que contient
-                  vraiment l'atelier. */}
-              <Checkbox checked={withChapters} onChange={() => setWithChapters((v) => !v)} label={<Label>{t('scope.chapters')}</Label>} />
-              <Checkbox checked={withNotions} onChange={() => setWithNotions((v) => !v)} label={<Label>{t('scope.notions')}</Label>} />
-              {/* **Cochable même sans les notions.** Une case qu'on ne peut pas
-                  cocher n'explique rien : elle laisse croire à une panne. Chaque
-                  étage naît de celui du dessus — une question se rattache à une
-                  notion, une notion à un chapitre — et c'est ça qu'il faut dire.
-                  On laisse donc choisir, et on annonce la conséquence. */}
-              <Checkbox
-                checked={withQuestions}
-                onChange={() => setWithQuestions((v) => !v)}
-                label={<Label>{t(forcedContext === 'exam' ? 'scope.questionsExam' : 'scope.questionsParcours')}</Label>}
-              />
-              {/* On annonce la dépendance manquante la plus HAUTE : sans
-                  chapitres, parler des notions ne servirait à rien. */}
-              {!withChapters && (withNotions || withQuestions) && <Hint>{t('needsChapters')}</Hint>}
-              {withChapters && withQuestions && !withNotions && <Hint>{t('questionsNeedNotions')}</Hint>}
-            </div>
+            </>
+            )}
+
+            {/* Le nombre de questions d'examen — le seul réglage qui reste, et
+                le seul qui n'a pas de bonne valeur par défaut universelle : un
+                contrôle de dix questions et un examen blanc de soixante sortent
+                du même bouton. Le parcours, lui, n'en a pas besoin : son volume
+                se déduit du nombre de notions. */}
+            {context === 'exam' && (
+              <>
+                <SectionLabel>{t('examCount.label')}</SectionLabel>
+                <input
+                  type="number"
+                  value={examCount}
+                  min={EXAM_QUESTIONS_RANGE.min}
+                  max={EXAM_QUESTIONS_RANGE.max}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    // Champ vide ou saisie en cours : on ne corrige rien tant
+                    // que la valeur n'est pas un nombre, sinon on empêche
+                    // d'effacer pour retaper.
+                    if (Number.isNaN(value)) return;
+                    setExamCount(value);
+                  }}
+                  onBlur={() => setExamCount((v) =>
+                    Math.min(EXAM_QUESTIONS_RANGE.max, Math.max(EXAM_QUESTIONS_RANGE.min, Math.round(v) || DEFAULT_EXAM_QUESTIONS)),
+                  )}
+                  style={{
+                    width: 90, boxSizing: 'border-box', fontFamily: 'inherit', fontSize: 13,
+                    padding: '8px 10px', borderRadius: radius.md,
+                    border: `1px solid ${ink(0.12)}`, background: palette.surfaceInput,
+                    color: palette.ink, outline: 'none',
+                  }}
+                />
+                <div style={{ marginTop: 6, marginBottom: 20 }}>
+                  <Hint>{t('examCount.help')}</Hint>
+                </div>
+              </>
+            )}
 
             {/* ⚠️ TEMPORAIRE — phase de test : comparer les deux fournisseurs sur
                 un vrai corpus. Seule la passe questions est concernée, et c'est
@@ -505,9 +650,11 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
 
             <Actions>
               <Ghost onClick={onClose}>{t('cancel')}</Ghost>
-              {/* Rien de coché, rien à faire : sans ça le bouton lançait un
-                  import qui ne produisait rien et n'affichait aucune étape. */}
-              <Primary onClick={prepare} disabled={selected.length === 0 || !(withChapters || withNotions || withQuestions)}>
+              {/* Deux blocages, et un seul se voit : sans document quand il en
+                  faut un, il n'y a rien à lire ; tant que le programme n'est pas
+                  lu, on ne sait pas encore quoi lancer — mieux vaut attendre une
+                  fraction de seconde que partir sur la mauvaise voie. */}
+              <Primary onClick={prepare} disabled={visibleNotions === null || (needsFiles && selected.length === 0)}>
                 {t('generate')}
               </Primary>
             </Actions>
@@ -574,10 +721,6 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return <span style={{ fontSize: 13.5, color: palette.inkMuted }}>{children}</span>;
 }
 
 function Hint({ children }: { children: React.ReactNode }) {

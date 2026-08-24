@@ -31,6 +31,7 @@ import {
   existingContentBlock,
   assignInstruction,
   notionsInstruction,
+  examInstruction,
   questionsInstruction,
   systemPrompt,
   type ExistingContent,
@@ -105,6 +106,7 @@ export const PASS_MODELS: Record<IngestScope['pass'], ModelId> = {
   // du modèle économique (§16.4).
   assign: MODELS.haiku,
   questions: MODELS.haiku,
+  exam: MODELS.haiku,
 };
 
 /** Le repli quand la fenêtre du modèle voulu ne suffit pas. Sonnet 5 et non
@@ -212,8 +214,15 @@ function instructionFor(scope: IngestScope, fileNames: string[]): string {
     case 'questions':
       return questionsInstruction({
         chapter: scope.chapter,
-        notions: scope.notions,
+        workshop: scope.workshop,
+        notions: scope.notions.map((n) => ({ ...n, missing: scope.missing?.[n.id] })),
         neighbours: scope.neighbours,
+        budget: scope.budget,
+      });
+    case 'exam':
+      return examInstruction({
+        workshop: scope.workshop,
+        chapters: scope.chapters,
         budget: scope.budget,
       });
   }
@@ -232,6 +241,13 @@ function existingScopeFor(scope: IngestScope): ExistingScope {
       return { pass: 'assign' };
     case 'questions':
       return { pass: 'questions', notionIds: scope.notions.map((n) => n.id) };
+    case 'exam':
+      // La liste d'examen ENTIÈRE, et non les questions des notions de la
+      // tranche : une question d'examen croise plusieurs notions, et la tranche
+      // suivante piochera dans les mêmes chapitres. Le chargeur
+      // (`loadExamQuestions`) rend déjà exactement ce qu'il faut — la portée ne
+      // doit donc rien retirer de plus.
+      return { pass: 'exam' };
   }
 }
 
@@ -252,6 +268,7 @@ function documentUsesOf(scope: IngestScope): number {
       return 1;
     case 'assign':
     case 'questions':
+    case 'exam':
       // Aucun document : rien à mettre en cache.
       return 0;
   }
@@ -266,6 +283,7 @@ function outputSchemaFor(scope: IngestScope) {
     case 'assign':
       return wireAssignmentsOutput;
     case 'questions':
+    case 'exam':
       return wireGroupsOutput;
   }
 }

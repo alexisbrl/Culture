@@ -91,7 +91,9 @@ export async function prepareWorkshopIngestion(
 ): Promise<PrepareIngestionResult> {
   const ctx = await requireManager(workshopId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
-  if (fileIds.length === 0) return { ok: false, error: 'Aucun fichier sélectionné' };
+  // Aucun fichier est un cas VALIDE depuis le 24/08/2026 : ajouter des questions
+  // à une liste ne relit pas le cours, donc ne téléverse rien. C'est le dialogue
+  // qui exige un document quand la génération en demande un.
 
   try {
     const { importId, documents } = await run.prepareIngestion(workshopId, ctx.userId, fileIds, { scope });
@@ -184,27 +186,51 @@ export async function finishWorkshopIngestion(
   };
 }
 
-/** Passe 4 — les questions d'UN LOT de notions d'un chapitre. Le contexte vient
- *  du bouton par lequel l'utilisateur est entré, jamais du modèle.
+/** Passe 4a — les questions d'ENTRAÎNEMENT d'un lot de notions d'un chapitre.
  *
  *  Le nombre de lots (`batches`) n'est connu qu'ici : le client appelle l'indice
- *  0, le lit dans la réponse, et rappelle pour les suivants. */
-export async function ingestChapterQuestions(
+ *  0, le lit dans la réponse, et rappelle pour les suivants. `batches: 0` veut
+ *  dire qu'il n'y avait rien à écrire — chapitre sans notion, ou notions déjà
+ *  pourvues de leur stock. */
+export async function ingestParcoursQuestions(
   workshopId: string,
   importId: string,
   chapter: { id: string; name: string },
-  context: 'parcours' | 'exam',
   batchIndex = 0,
   /** Part du plafond de questions réservée à CET appel. Indispensable dès que
    *  le client lance plusieurs lots en parallèle : sans elle, chacun croirait
-   *  disposer du plafond entier (voir `run.ingestChapterQuestions`). */
+   *  disposer du plafond entier (voir `run.ingestParcoursQuestions`). */
   budgetShare?: number,
 ): Promise<QuestionPassResult> {
   const ctx = await requireManager(workshopId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
-    const result = await run.ingestChapterQuestions(workshopId, ctx.userId, importId, chapter, context, batchIndex, { budgetShare });
+    const result = await run.ingestParcoursQuestions(workshopId, ctx.userId, importId, chapter, batchIndex, { budgetShare });
+    revalidateWorkshop();
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: message(error) };
+  }
+}
+
+/** Passe 4b — les questions d'EXAMEN d'une tranche du programme.
+ *
+ *  Rien de commun avec la précédente sinon le format de sortie : elle ne compte
+ *  pas par notion mais rend un nombre total de questions pour tout le programme,
+ *  chacune croisant plusieurs notions (§ examen, 24/08/2026). Le nombre de
+ *  tranches se lit dans la réponse du premier appel, comme partout ailleurs. */
+export async function ingestWorkshopExamQuestions(
+  workshopId: string,
+  importId: string,
+  sliceIndex = 0,
+  budgetShare?: number,
+): Promise<QuestionPassResult> {
+  const ctx = await requireManager(workshopId);
+  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
+
+  try {
+    const result = await run.ingestExamQuestions(workshopId, ctx.userId, importId, sliceIndex, { budgetShare });
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {

@@ -11,9 +11,20 @@
 //
 // ─── L'ordre d'appel n'est pas libre ─────────────────────────────────────────
 //
-//   ingestDocumentNotions(×D) → pour chaque DOCUMENT, écrit ses NOTIONS
-//   ingestChapters            → écrit les CHAPITRES et Y RANGE les notions
-//   ingestChapterQuestions(×M)→ pour chaque LOT DE NOTIONS, écrit ses QUESTIONS
+//   ingestDocumentNotions(×D)  → pour chaque DOCUMENT, écrit ses NOTIONS
+//   ingestChapters             → écrit les CHAPITRES
+//   ingestAssignments(×L)      → RANGE les notions dans les chapitres
+//   ingestParcoursQuestions(×M)→ pour chaque LOT DE NOTIONS, ses questions d'entraînement
+//
+// …et, sur une voie séparée qui ne s'enchaîne à rien :
+//
+//   ingestExamQuestions(×T)    → pour chaque TRANCHE du programme, ses questions d'examen
+//
+// Les deux dernières produisent le même objet — des questions — et n'ont rien
+// d'autre en commun (24/08/2026). Le parcours compte par NOTION (douze chacune,
+// une notion par question) ; l'examen compte par PROGRAMME (un total fixe pour
+// tout l'atelier, chaque question croisant plusieurs notions, un tiers en
+// groupes qui s'enchaînent). Deux régimes, deux passes.
 //
 // ⚠️ **Les deux premières ont été inversées le 23/08/2026** (feuille de route
 // docs/chantiers/2026-08-23-notions-dabord.md). Les notions sont le cœur d'un
@@ -57,10 +68,17 @@ import {
   removeOrphans,
 } from './ingest';
 import { flagSimilar, findExistingMatch } from './duplicates';
-import { batchNotions, withChapterRetry } from './passInput';
+import { batchNotions, examSliceCount, sliceProgram, splitBudget, withChapterRetry } from './passInput';
 import { parsePlan, type PlanIssue } from './planSchema';
 import { releaseDocuments } from './release';
-import { MAX_QUESTIONS_PER_IMPORT, type ExistingContent } from './prompt';
+import {
+  DEFAULT_EXAM_QUESTIONS,
+  EXAM_QUESTIONS_PER_CALL,
+  MAX_QUESTIONS_PER_IMPORT,
+  questionsPerNotion,
+  type ExistingContent,
+  type WorkshopIdentity,
+} from './prompt';
 import { createClaudeProvider, type ModelId } from './providers/claude';
 import { createDeepSeekProvider } from './providers/deepseek';
 import type { PlanProvider, PreparedDocument } from './providers/types';
@@ -170,15 +188,23 @@ async function loadAllNotions(workshopId: string): Promise<ExistingContent> {
   };
 }
 
-/** Passe 3 — les énoncés portant sur **les seules notions traitées**. On part de
- *  la table de liens, pas des questions : c'est elle qui porte le filtre. */
+/** Passe questions du PARCOURS — les énoncés portant sur **les seules notions
+ *  traitées**. On part de la table de liens, pas des questions : c'est elle qui
+ *  porte le filtre.
+ *
+ *  ⚠️ **Filtré sur la liste d'entraînement, et c'est indispensable** (24/08/2026).
+ *  Sans ce filtre, la passe recevait aussi les questions d'examen — deux listes
+ *  qui n'ont ni la même volumétrie ni le même régime, et dont la ressemblance
+ *  n'est pas un défaut. Pire, à la volumétrie cible, verser une liste dans
+ *  l'autre était le retour exact du poste de coût de §16.3. */
 async function loadNotionQuestions(notionIds: string[]): Promise<ExistingContent> {
   if (notionIds.length === 0) return EMPTY;
 
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from('exam_question_item_bricks')
-    .select('item_id, brick_id, exam_question_items!inner(content)')
+    .select('item_id, brick_id, exam_question_items!inner(content, exam_questions!inner(context))')
+    .eq('exam_question_items.exam_questions.context', 'parcours')
     .in('brick_id', notionIds);
   if (error) throw new Error(error.message);
 
@@ -194,6 +220,118 @@ async function loadNotionQuestions(notionIds: string[]): Promise<ExistingContent
   }
 
   return { ...EMPTY, questions: [...byItem.values()] };
+}
+
+/** Passe EXAMEN — la liste d'examen **en entier**, et non les seules questions
+ *  des notions traitées.
+ *
+ *  Le filtre par notion n'aurait ici aucun sens : une question d'examen croise
+ *  plusieurs notions et la tranche suivante piochera dans les mêmes chapitres.
+ *  Ce qu'il faut éviter, c'est de reposer une question déjà présente DANS CETTE
+ *  LISTE, quelle que soit la notion. La liste est bornée par nature — quelques
+ *  dizaines de questions — et le plafond n'est là que pour un atelier qui aurait
+ *  accumulé des années d'examens. */
+const EXAM_CONTEXT_CAP = 400;
+
+async function loadExamQuestions(workshopId: string): Promise<ExistingContent> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('exam_questions')
+    .select('id, exam_question_items(content)')
+    .eq('workshop_id', workshopId)
+    .eq('context', 'exam')
+    .order('created_at', { ascending: false })
+    .limit(EXAM_CONTEXT_CAP);
+  if (error) throw new Error(error.message);
+
+  const questions = (data ?? []).flatMap((group) => {
+    const items = (group.exam_question_items ?? []) as unknown as { content: string }[];
+    return items
+      .map((item) => (item.content ?? '').trim())
+      .filter((content) => content.length > 0)
+      // Aucune notion : la portée `exam` ne filtre pas (voir `ExistingScope`),
+      // et prétendre le contraire ferait croire à un filtre qui n'existe pas.
+      .map((content) => ({ content, notionIds: [] as string[] }));
+  });
+
+  return { ...EMPTY, questions };
+}
+
+/** Combien de questions d'ENTRAÎNEMENT portent déjà sur chaque notion.
+ *
+ *  C'est ce qui permet de ne demander au modèle que ce qui manque, plutôt que de
+ *  lui faire relire une notion déjà pourvue. Le même compteur servira à la
+ *  recharge automatique (§16.6), qui n'est rien d'autre que cette passe
+ *  déclenchée par un stock épuisé au lieu d'un bouton. */
+async function parcoursQuestionCounts(notionIds: string[]): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (notionIds.length === 0) return counts;
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('exam_question_item_bricks')
+    .select('brick_id, exam_question_items!inner(id, exam_questions!inner(context))')
+    .eq('exam_question_items.exam_questions.context', 'parcours')
+    .in('brick_id', notionIds);
+  if (error) throw new Error(error.message);
+
+  for (const row of data ?? []) {
+    const id = row.brick_id as string;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** Le nom et la description de l'atelier — le seul indice de NIVEAU dont le
+ *  modèle dispose au moment de rédiger (voir `workshopBlock`). */
+async function loadWorkshopIdentity(workshopId: string): Promise<WorkshopIdentity | null> {
+  const supabase = getSupabaseServerClient();
+  const { data } = await supabase.from('workshops').select('name, description').eq('id', workshopId).maybeSingle();
+  if (!data) return null;
+  return { name: (data.name as string) ?? '', description: (data.description as string | null) ?? null };
+}
+
+/** Le programme tel qu'un candidat le voit : les chapitres VISIBLES, dans
+ *  l'ordre du cours, avec leurs notions.
+ *
+ *  Les chapitres écartés et les notions sans chapitre en sont absents — ils ne
+ *  font pas partie du programme, donc rien ne les évalue. C'est la même règle
+ *  que la passe questions du parcours, énoncée une seule fois ici. */
+async function loadVisibleProgram(
+  workshopId: string,
+): Promise<{ id: string; name: string; notions: { id: string; title: string }[] }[]> {
+  const supabase = getSupabaseServerClient();
+  const [{ data: chapterRows, error: chapterError }, { data: notionRows, error: notionError }] = await Promise.all([
+    supabase
+      .from('workshop_chapters')
+      .select('id, name, hidden')
+      .eq('workshop_id', workshopId)
+      .order('position')
+      .order('id'),
+    // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
+    supabase
+      .from('workshop_bricks')
+      .select('id, title, chapter_id')
+      .eq('workshop_id', workshopId)
+      .order('created_at')
+      .order('id'),
+  ]);
+  if (chapterError) throw new Error(chapterError.message);
+  if (notionError) throw new Error(notionError.message);
+
+  const byChapter = new Map<string, { id: string; title: string }[]>();
+  for (const n of notionRows ?? []) {
+    const chapterId = n.chapter_id as string | null;
+    if (!chapterId) continue;
+    const bucket = byChapter.get(chapterId) ?? [];
+    bucket.push({ id: n.id as string, title: n.title as string });
+    byChapter.set(chapterId, bucket);
+  }
+
+  return (chapterRows ?? [])
+    .filter((c) => c.hidden !== true)
+    .map((c) => ({ id: c.id as string, name: c.name as string, notions: byChapter.get(c.id as string) ?? [] }))
+    .filter((c) => c.notions.length > 0);
 }
 
 /** Les documents déjà remis au fournisseur pour ce lot. Les poignées sont
@@ -339,13 +477,27 @@ export async function prepareIngestion(
   const provider = options.provider ?? createClaudeProvider();
   const supabase = getSupabaseServerClient();
 
-  const { data: files, error } = await supabase
-    .from('workshop_files')
-    .select('id, name, mime_type, storage_path')
-    .eq('workshop_id', workshopId)
-    .in('id', fileIds);
+  // ─── Un lot SANS document est légitime ──────────────────────────────────
+  //
+  // Depuis le 24/08/2026, ajouter des questions à une liste ne relit pas le
+  // cours : la passe travaille sur les notions déjà extraites (§16.3). Ce
+  // lancement-là n'a donc aucun document à téléverser, et exiger un fichier
+  // reviendrait à faire payer un corpus dont personne ne se sert.
+  //
+  // La distinction n'est pas « zéro fichier demandé » mais « des fichiers
+  // demandés, aucun trouvé » : la seconde est une vraie panne — fichier
+  // supprimé entre-temps, identifiant erroné — et doit continuer d'échouer.
+  const { data: files, error } = fileIds.length === 0
+    ? { data: [], error: null }
+    : await supabase
+        .from('workshop_files')
+        .select('id, name, mime_type, storage_path')
+        .eq('workshop_id', workshopId)
+        .in('id', fileIds);
   if (error) throw new Error(error.message);
-  if (!files || files.length === 0) throw new Error('Aucun fichier exploitable pour la génération');
+  if (fileIds.length > 0 && (!files || files.length === 0)) {
+    throw new Error('Aucun fichier exploitable pour la génération');
+  }
 
   const documents = await Promise.all(
     files.map(async (f) => {
@@ -906,15 +1058,15 @@ export async function ingestDocumentNotions(
 /** Passe 3, pour UN LOT de notions d'un chapitre. Les notions du lot lui sont
  *  fournies avec leurs identifiants réels : chaque question naît donc reliée,
  *  sans qu'on ait à l'imposer par une règle. */
-export async function ingestChapterQuestions(
+export async function ingestParcoursQuestions(
   workshopId: string,
   actorId: string,
   importId: string,
   chapter: { id: string; name: string },
-  context: IngestContext,
   batchIndex = 0,
   options: { provider?: PlanProvider; budgetShare?: number } = {},
 ): Promise<QuestionPassResult> {
+  const context: IngestContext = 'parcours';
   const [userHint, choice] = await Promise.all([userHintOf(importId), questionsProviderOf(importId)]);
   const provider = options.provider
     ?? (choice === 'deepseek' ? createDeepSeekProvider({ userHint }) : createClaudeProvider({ userHint }));
@@ -931,9 +1083,33 @@ export async function ingestChapterQuestions(
     .order('id');
   if (error) throw new Error(error.message);
 
-  const all = (notionRows ?? []).map((n) => ({ id: n.id as string, title: n.title as string }));
+  const chapterNotions = (notionRows ?? []).map((n) => ({ id: n.id as string, title: n.title as string }));
   // Un chapitre sans notion ne produit rien : une question sans notion ne serait
   // tirée par aucun exercice (§11).
+  if (chapterNotions.length === 0) return { written: 0, discarded: [], adjusted: [], batches: 0 };
+
+  // ─── Ce qu'on cible, et pourquoi ça dépend de la consigne ────────────────
+  //
+  // Sans consigne, on sait exactement quoi demander : les notions dont le stock
+  // n'est pas au complet. C'est plus précis, moins cher, et c'est la forme
+  // qu'aura la recharge automatique (§16.6) — elle ne sera que cette passe,
+  // déclenchée par un stock épuisé au lieu d'un bouton.
+  //
+  // Avec une consigne, on ne peut PAS deviner ce qu'elle vise : « fais des
+  // questions sur la Révolution » ne dit rien du stock de chaque notion, et un
+  // ciblage sur les seules notions incomplètes écarterait silencieusement
+  // exactement ce que l'utilisateur demande. On envoie donc large et c'est le
+  // modèle qui choisit (arbitrage du 24/08/2026).
+  const counts = await parcoursQuestionCounts(chapterNotions.map((n) => n.id));
+  const target = questionsPerNotion();
+  const missing: Record<string, number> = {};
+  for (const notion of chapterNotions) {
+    missing[notion.id] = Math.max(0, target - (counts.get(notion.id) ?? 0));
+  }
+
+  const all = (userHint ?? '').trim() ? chapterNotions : chapterNotions.filter((n) => missing[n.id] > 0);
+  // Chapitre déjà pourvu de bout en bout : rien à faire, et surtout aucun appel
+  // au modèle à payer pour s'entendre répondre qu'il n'y a rien à ajouter.
   if (all.length === 0) return { written: 0, discarded: [], adjusted: [], batches: 0 };
 
   const batches = batchNotions(all);
@@ -959,13 +1135,18 @@ export async function ingestChapterQuestions(
   // Aucun document : la passe travaille sur les notions, pas sur le cours
   // (§16.3). C'est le poste d'économie principal de tout le chantier — on ne
   // téléverse rien, on ne relit rien, on ne paie donc rien pour le corpus.
-  const existing = await loadNotionQuestions(notions.map((n) => n.id));
+  const [existing, workshop] = await Promise.all([
+    loadNotionQuestions(notions.map((n) => n.id)),
+    loadWorkshopIdentity(workshopId),
+  ]);
   const result = await provider.documentToPlan([], existing, {
     pass: 'questions',
     chapter,
+    workshop,
     notions,
     neighbours,
     budget,
+    missing,
   });
   await addImportUsage(importId, result.usage);
 
@@ -989,4 +1170,115 @@ export async function ingestChapterQuestions(
 
   const written = await insertGroups(workshopId, importId, capped, new Map());
   return { written, discarded: plan.discarded, adjusted: plan.adjusted, batches: batches.length };
+}
+
+/** Le nombre de questions d'examen demandé au lancement, rangé dans le `scope`
+ *  de l'import comme la consigne libre — donc relu par chaque tranche, y compris
+ *  celles qui s'exécutent dans des appels ultérieurs. */
+async function examTargetOf(importId: string): Promise<number> {
+  const supabase = getSupabaseServerClient();
+  const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
+  const value = (data?.scope as { examQuestions?: unknown } | null)?.examQuestions;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : DEFAULT_EXAM_QUESTIONS;
+}
+
+/** Passe EXAMEN — une TRANCHE du programme, pour une part du budget.
+ *
+ *  ─── Pourquoi elle ne ressemble pas à la passe parcours ────────────────────
+ *
+ *  Le parcours compte par notion : douze questions chacune, et on boucle sur les
+ *  notions. L'examen compte par PROGRAMME : quarante questions pour tout
+ *  l'atelier, qu'il ait trois chapitres ou trente, et chacune croise plusieurs
+ *  notions. Ce sont deux régimes, pas deux réglages du même — d'où deux passes
+ *  (arbitrage du 24/08/2026).
+ *
+ *  ─── Ce que découpe le découpage ───────────────────────────────────────────
+ *
+ *  Le BUDGET d'abord (dix questions par appel, pour ne pas tronquer la réponse),
+ *  et la matière suit : chaque appel reçoit une tranche contiguë du cours. Deux
+ *  appels ne voient donc jamais la même partie du programme et ne peuvent pas
+ *  écrire deux fois la même question — ce qui compte d'autant plus qu'ils
+ *  tournent en parallèle et qu'aucun ne voit ce que l'autre vient d'écrire.
+ *
+ *  Ne reçoit **aucun document** : comme la passe parcours, elle lit le
+ *  programme, jamais le cours (§16.3). */
+export async function ingestExamQuestions(
+  workshopId: string,
+  actorId: string,
+  importId: string,
+  sliceIndex = 0,
+  options: { provider?: PlanProvider; budgetShare?: number; target?: number } = {},
+): Promise<QuestionPassResult> {
+  const [userHint, choice, scopeTarget] = await Promise.all([
+    userHintOf(importId),
+    questionsProviderOf(importId),
+    examTargetOf(importId),
+  ]);
+  const provider = options.provider
+    ?? (choice === 'deepseek' ? createDeepSeekProvider({ userHint }) : createClaudeProvider({ userHint }));
+
+  const target = options.target ?? scopeTarget;
+  const program = await loadVisibleProgram(workshopId);
+  // Aucun programme visible : rien à évaluer. C'est le cas que le dialogue
+  // intercepte en amont — il construit l'atelier d'abord — mais la passe doit
+  // savoir se taire plutôt que d'appeler le modèle pour rien.
+  if (program.length === 0) return { written: 0, discarded: [], adjusted: [], batches: 0 };
+
+  // `sliceProgram` peut rendre MOINS de tranches que demandé quand le programme
+  // compte moins de notions que d'appels prévus. C'est sa découpe qui fait foi
+  // pour la répartition du budget : la calculer sur le nombre demandé laisserait
+  // des questions dans une tranche qui n'existe pas.
+  const slices = sliceProgram(program, examSliceCount(target, EXAM_QUESTIONS_PER_CALL));
+  const budgets = splitBudget(target, slices.length);
+
+  const chapters = slices[sliceIndex];
+  if (!chapters) return { written: 0, discarded: [], adjusted: [], batches: slices.length };
+
+  // Même garde que la passe parcours : le plafond de l'import est l'autorité, la
+  // part du budget n'est qu'une restriction de plus. Des appels parallèles qui
+  // liraient tous le même compteur se croiraient chacun seuls.
+  const alreadyWritten = await questionsWritten(importId);
+  const budget = Math.min(
+    MAX_QUESTIONS_PER_IMPORT - alreadyWritten,
+    budgets[sliceIndex] ?? 0,
+    options.budgetShare ?? Number.POSITIVE_INFINITY,
+  );
+  if (budget <= 0) return { written: 0, discarded: [], adjusted: [], batches: slices.length };
+
+  const [existing, workshop] = await Promise.all([
+    loadExamQuestions(workshopId),
+    loadWorkshopIdentity(workshopId),
+  ]);
+
+  const result = await provider.documentToPlan([], existing, {
+    pass: 'exam',
+    chapters,
+    budget,
+    workshop,
+  });
+  await addImportUsage(importId, result.usage);
+
+  const refs = await loadExistingRefs(workshopId);
+  const plan = parsePlanLogged('examen', result.plan, refs);
+
+  // Le contexte vient du bouton, jamais du modèle (§8) — ici, la banque
+  // d'examen.
+  const groups = plan.groups.map((g) => ({ ...g, context: 'exam' as const }));
+
+  const capped: typeof groups = [];
+  let remaining = budget;
+  for (const group of groups) {
+    if (remaining <= 0) break;
+    // On coupe à la question près, jamais au groupe : un groupe amputé de sa
+    // dernière question reste cohérent, puisque c'est la PREMIÈRE qui porte le
+    // contexte dont les autres dépendent.
+    const questions = group.questions.slice(0, remaining);
+    remaining -= questions.length;
+    capped.push({ ...group, questions });
+  }
+
+  const written = await insertGroups(workshopId, importId, capped, new Map());
+  return { written, discarded: plan.discarded, adjusted: plan.adjusted, batches: slices.length };
 }
