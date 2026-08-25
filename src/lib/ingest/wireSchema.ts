@@ -144,25 +144,35 @@ export const wireAssignmentSchema = z.object({
 //
 // Bénéfice au passage : nommer les chapitres demande le cours, les ranger non —
 // la passe rangement se passe donc entièrement des documents.
-/** Un chapitre EXISTANT que le nouveau cours ne couvre plus (25/08/2026).
+/** L'ARCHITECTURE du programme après cet import (25/08/2026) : chaque chapitre
+ *  avec son rang, et le rang 0 pour ceux que le cours ne couvre plus.
  *
- *  ⚠️ **C'est une déclaration POSITIVE, jamais une absence.** On aurait pu
- *  demander l'architecture complète et écarter tout ce qui n'y figure pas :
- *  l'oubli d'une ligne aurait alors retiré une partie du programme. Ici, oublier
- *  ne fait rien — le chapitre reste. C'est la seule forme où la panne la plus
- *  banale d'un modèle (omettre un élément d'une longue liste) est inoffensive. */
-export const wireDiscardSchema = z.object({
+ *  ⚠️ **Le rang 0 est une déclaration POSITIVE, jamais une absence.** On aurait
+ *  pu écarter tout ce qui ne figure pas dans la liste : l'oubli d'une ligne
+ *  aurait alors amputé le programme, et omettre un élément d'une longue liste
+ *  est la panne la plus banale d'un modèle. Ici, un chapitre absent de la liste
+ *  garde sa place et reste — l'oubli ne coûte rien.
+ *
+ *  Demander le rang de CHACUN plutôt qu'une simple liste d'écartés n'est pas
+ *  cosmétique : ça oblige à statuer sur chaque chapitre existant, là où une
+ *  liste d'écartés se remplit au gré de ce que le modèle remarque. */
+export const wireChapterRankSchema = z.object({
   ref: z
     .string()
-    .describe("Identifiant d'un chapitre DÉJÀ EXISTANT, recopié tel quel depuis la liste de l'atelier. Jamais un chapitre de cette réponse."),
+    .describe("Un chapitre : soit l'identifiant d'un chapitre DÉJÀ EXISTANT recopié tel quel, soit la référence d'un chapitre de cette réponse."),
+  rank: z
+    .number()
+    .int()
+    .min(0)
+    .describe("Sa place dans le programme, à partir de 1 et dans l'ordre du cours. 0 signifie que le cours ne le couvre plus : il sort du programme, avec ce qu'il contient. Réservé aux chapitres existants."),
   reason: z
     .string()
-    .describe("En quelques mots, pourquoi le cours ne le couvre plus. S'affiche à l'utilisateur."),
+    .describe("Uniquement pour un rang 0 : en quelques mots, pourquoi le cours ne le couvre plus. S'affiche à l'utilisateur. Chaîne vide sinon."),
 });
 
 export const wireChaptersOutput = z.object({
   chapters: z.array(wireChapterSchema),
-  discardChapters: z.array(wireDiscardSchema),
+  chapterOrder: z.array(wireChapterRankSchema),
 });
 export const wireAssignmentsOutput = z.object({ assignments: z.array(wireAssignmentSchema) });
 export const wireNotionsOutput = z.object({ notions: z.array(wireNotionSchema) });

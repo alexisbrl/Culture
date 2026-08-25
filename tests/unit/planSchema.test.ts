@@ -298,48 +298,65 @@ describe('affectations — le seul geste qui touche à l’existant', () => {
   });
 });
 
-// ─── Écarter un chapitre : la seule décision du plan qui RETIRE du programme ──
+// ─── L'architecture : la seule décision du plan qui RETIRE du programme ──────
 //
 // Testé parce que c'est le contrat d'une entrée non fiable et que la faute
 // possible est la plus chère du lot : retirer du programme une partie que
-// personne n'a demandé à retirer. Deux invariants, et ils tiennent tout :
-// une référence inconnue ne fait rien, une référence de la réponse elle-même
-// ne fait rien.
-describe('parsePlan — chapitres à écarter', () => {
-  it('retient une référence qui existe en base', () => {
+// personne n'a demandé à retirer. Trois invariants tiennent tout — une
+// référence inconnue ne fait rien, une référence de la réponse elle-même ne
+// peut pas être écartée, et ne rien dire d'un chapitre le laisse en place.
+describe('parsePlan — architecture du programme', () => {
+  it('retient le rang d’un chapitre qui existe en base', () => {
     const plan = parsePlan(
-      { discardChapters: [{ ref: 'c1', reason: 'plus traité' }] },
+      { chapterOrder: [{ ref: 'c1', rank: 2 }] },
       { chapterIds: ['c1'] },
     );
-    expect(plan.discardChapters).toEqual([{ ref: 'c1', reason: 'plus traité' }]);
+    expect(plan.chapterOrder).toEqual([{ ref: 'c1', rank: 2, reason: '' }]);
+  });
+
+  it('retient un rang 0 avec sa raison', () => {
+    const plan = parsePlan(
+      { chapterOrder: [{ ref: 'c1', rank: 0, reason: 'plus traité' }] },
+      { chapterIds: ['c1'] },
+    );
+    expect(plan.chapterOrder).toEqual([{ ref: 'c1', rank: 0, reason: 'plus traité' }]);
   });
 
   it('ignore une référence inconnue, et le dit', () => {
-    const plan = parsePlan({ discardChapters: [{ ref: 'inventé' }] }, { chapterIds: ['c1'] });
-    expect(plan.discardChapters).toEqual([]);
+    const plan = parsePlan({ chapterOrder: [{ ref: 'inventé', rank: 0 }] }, { chapterIds: ['c1'] });
+    expect(plan.chapterOrder).toEqual([]);
     expect(plan.discarded.some((d) => d.ref === 'inventé')).toBe(true);
   });
 
   it('refuse d’écarter un chapitre créé dans la même réponse', () => {
-    // Sans quoi le modèle pourrait proposer une structure puis en retirer une
-    // partie dans le même souffle, sur des références que rien ne situe.
+    // Sans quoi une référence neuve — que rien ne situe en base — pourrait
+    // retirer du programme.
     const plan = parsePlan(
-      { chapters: [{ ref: 'ch1', name: 'Nouveau' }], discardChapters: [{ ref: 'ch1' }] },
+      { chapters: [{ ref: 'ch1', name: 'Nouveau' }], chapterOrder: [{ ref: 'ch1', rank: 0 }] },
       { chapterIds: ['c1'] },
     );
-    expect(plan.discardChapters).toEqual([]);
+    expect(plan.chapterOrder).toEqual([]);
   });
 
-  it('ne fait rien quand le modèle n’en nomme aucun', () => {
-    // L'invariant qui rend l'omission inoffensive : ne rien dire ne retire rien.
-    expect(parsePlan({ chapters: [] }, { chapterIds: ['c1', 'c2'] }).discardChapters).toEqual([]);
+  it('accepte de RANGER un chapitre créé dans la même réponse', () => {
+    const plan = parsePlan(
+      { chapters: [{ ref: 'ch1', name: 'Nouveau' }], chapterOrder: [{ ref: 'ch1', rank: 1 }] },
+      { chapterIds: ['c1'] },
+    );
+    expect(plan.chapterOrder).toEqual([{ ref: 'ch1', rank: 1, reason: '' }]);
+  });
+
+  it('ne fait rien quand le modèle ne dit rien', () => {
+    // L'invariant qui rend l'omission inoffensive : ne rien dire ne retire rien
+    // et ne déplace rien.
+    expect(parsePlan({ chapters: [] }, { chapterIds: ['c1', 'c2'] }).chapterOrder).toEqual([]);
   });
 
   it('ne compte qu’une fois une référence répétée', () => {
     const plan = parsePlan(
-      { discardChapters: [{ ref: 'c1' }, { ref: 'c1' }] },
+      { chapterOrder: [{ ref: 'c1', rank: 1 }, { ref: 'c1', rank: 0 }] },
       { chapterIds: ['c1'] },
     );
-    expect(plan.discardChapters).toHaveLength(1);
+    expect(plan.chapterOrder).toEqual([{ ref: 'c1', rank: 1, reason: '' }]);
   });
 });

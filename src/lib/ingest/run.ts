@@ -68,6 +68,7 @@ import {
   reattachQuestions,
   removeOrphans,
 } from './ingest';
+import { reorderChapters } from '@/lib/workshops/chapters';
 import { MAX_NOTIONS_PER_WORKSHOP, countNotions } from '@/lib/workshops/notions';
 import { dropRepeatedQuestions, flagSimilar, findExistingMatch } from './duplicates';
 import { batchNotions, examSliceCount, sliceProgram, splitBudget, splitUnplaced, withChapterRetry } from './passInput';
@@ -679,9 +680,26 @@ export async function ingestChapters(
   // un chapitre qu'on vient d'écarter ; celles qui n'ont plus leur place
   // ailleurs y resteront, hors programme, ce qui rend le changement lisible.
   const byId = new Map(chaptersOnly.chapters.map((c) => [c.id, c.name]));
-  const discardedChapters = await hideChapters(workshopId, plan.discardChapters.map((d) => d.ref));
+  const outOfProgram = plan.chapterOrder.filter((c) => c.rank === 0).map((c) => c.ref);
+
+  // ⚠️ **Le garde-fou du tout-ou-rien.** Écarter CHAQUE chapitre existant en un
+  // import n'est presque jamais une décision : c'est un modèle qui a mal lu sa
+  // consigne, ou un document sans rapport déposé par erreur. Le cas légitime —
+  // remplacer intégralement le cours d'un atelier — existe, mais il se fait en
+  // deux fois, et il vaut mieux le demander deux fois que vider un programme
+  // sur un malentendu. On n'applique rien, et on le DIT.
+  const wipesEverything =
+    chaptersOnly.chapters.length > 0 && outOfProgram.length >= chaptersOnly.chapters.length;
+  if (wipesEverything) {
+    plan.adjusted.push({
+      kind: 'chapter',
+      reason: `l'IA proposait d'écarter les ${outOfProgram.length} chapitres de l'atelier — rien n'a été écarté, un programme ne se vide pas d'un seul import`,
+    });
+  }
+
+  const discardedChapters = wipesEverything ? [] : await hideChapters(workshopId, outOfProgram);
   for (const id of discardedChapters) {
-    const reason = plan.discardChapters.find((d) => d.ref === id)?.reason?.trim();
+    const reason = plan.chapterOrder.find((c) => c.ref === id)?.reason?.trim();
     plan.adjusted.push({
       kind: 'chapter',
       ref: id,
@@ -691,6 +709,18 @@ export async function ingestChapters(
 
   const created = new Map([...(await insertChapters(workshopId, actorId, importId, fresh)), ...reused]);
 
+  // ─── L'ordre du programme ─────────────────────────────────────────────────
+  //
+  // Les rangs sont RELATIFS : on ne lit que leur ordre, jamais leur valeur — un
+  // modèle qui numérote 10, 20, 30 dit la même chose que 1, 2, 3. Les chapitres
+  // que le modèle n'a pas rangés suivent, dans l'ordre où ils étaient : ne rien
+  // dire d'un chapitre, c'est le laisser où il est.
+  //
+  // `reorderChapters` exige la liste COMPLÈTE — chapitres écartés compris, ils
+  // ont eux aussi une position — et réécrit toutes les places d'un coup, ce qui
+  // interdit les trous et les doublons.
+  await applyChapterOrder(workshopId, plan.chapterOrder, created);
+
   return {
     // Seuls les chapitres RÉELLEMENT créés sont comptés : un doublon redirigé
     // vers un chapitre existant n'est pas une création, et l'annoncer comme
@@ -699,6 +729,50 @@ export async function ingestChapters(
     discarded: plan.discarded,
     adjusted: plan.adjusted,
   };
+}
+
+/** Écrit l'ordre du programme d'après les rangs rendus par le modèle.
+ *
+ *  Ne lève jamais : l'ordre est cosmétique (`operations.ts`), et un import
+ *  réussi ne doit pas être annoncé en échec parce qu'un chapitre est resté à sa
+ *  place. */
+async function applyChapterOrder(
+  workshopId: string,
+  order: readonly { ref: string; rank: number }[],
+  created: ReadonlyMap<string, string>,
+): Promise<void> {
+  const ranked = order.filter((c) => c.rank > 0);
+  if (ranked.length === 0) return;
+
+  try {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from('workshop_chapters')
+      .select('id')
+      .eq('workshop_id', workshopId)
+      .order('position')
+      .order('id');
+    if (error) throw new Error(error.message);
+
+    const all = (data ?? []).map((c) => c.id as string);
+    const known = new Set(all);
+    const wanted: string[] = [];
+    const placed = new Set<string>();
+
+    for (const entry of [...ranked].sort((a, b) => a.rank - b.rank)) {
+      // Une référence de cette réponse devient l'identifiant réellement créé ;
+      // une référence existante est déjà un identifiant.
+      const id = created.get(entry.ref) ?? entry.ref;
+      if (!known.has(id) || placed.has(id)) continue;
+      placed.add(id);
+      wanted.push(id);
+    }
+    if (wanted.length === 0) return;
+
+    await reorderChapters(workshopId, [...wanted, ...all.filter((id) => !placed.has(id))]);
+  } catch (error) {
+    console.warn('[ingest] ordre des chapitres inchangé :', error instanceof Error ? error.message : error);
+  }
 }
 
 /** Rend au fournisseur les documents d'un lot. Appelée à **deux** moments : à

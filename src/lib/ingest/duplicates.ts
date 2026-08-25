@@ -250,13 +250,20 @@ export type RepeatedQuestion = { content: string; other: string; proximity: numb
  *  n'ont rien de commun pédagogiquement ; une question de parcours reformulée
  *  autrement dans un examen est légitime — on veut justement voir si la notion
  *  est comprise et pas seulement mémorisée. Le seul cas à écarter est le MOT À
- *  MOT.
+ *  MOT, et c'est pour ça que la valeur est **1 exactement**.
  *
- *  0,95 sur un recouvrement de mots signifiants revient à exiger le même
- *  vocabulaire à un mot près. Le seuil des titres (0,70) attrapait, sur un
- *  énoncé un peu long, deux questions ne différant que par un nombre : c'était
- *  un faux positif qui coûtait une question payée. */
-export const VERBATIM_REPEAT = 0.95;
+ *  1 ne veut PAS dire « caractère pour caractère » : la mesure ignore déjà la
+ *  ponctuation, les accents, la casse, les mots-outils et l'ordre des mots. Elle
+ *  attrape donc bien la même question reponctuée ou remise dans un autre ordre.
+ *  Ce qu'elle laisse passer, c'est un mot de différence — et un mot de
+ *  différence, dans une question, change souvent tout (un nombre, une date, un
+ *  nom).
+ *
+ *  Le palier intermédiaire (0,95) a été essayé puis abandonné le même jour : il
+ *  ne se distingue de 1 que sur les énoncés de plus de vingt mots signifiants,
+ *  où il tolère un mot d'écart. Autant dire qu'il ajoutait de l'imprécision là
+ *  où on ne cherche que la copie. */
+export const VERBATIM_REPEAT = 1;
 
 /** Retire d'un lot de groupes les questions qui redisent un énoncé déjà écrit
  *  ailleurs.

@@ -1777,12 +1777,31 @@ lequel des deux mécanismes est le plus élégant, c'est **où vit l'information
 Faire décider le rangement, c'était poser la question à l'étape qui en sait le
 moins. La déclaration remonte donc à la passe chapitres.
 
-**Elle est POSITIVE, et c'est tout le dispositif.** On aurait pu demander
-l'architecture complète et écarter ce qui n'y figure pas : l'oubli d'une ligne
-aurait alors amputé le programme, et l'omission sur une longue liste est la
-panne la plus banale d'un modèle. Ici, ne rien dire ne fait rien. Deux
-invariants tiennent le reste, tous deux testés (`planSchema.test.ts`) : une
-référence inconnue est ignorée, une référence créée dans la même réponse aussi.
+**La forme retenue : le rang de chaque chapitre, 0 pour ceux qui sortent.** Le
+modèle rend l'architecture entière — chapitres neufs et anciens mêlés — avec un
+rang par chapitre. Demander le rang de CHACUN plutôt qu'une liste d'écartés
+n'est pas cosmétique : ça oblige à statuer sur chaque chapitre existant, là où
+une liste d'écartés se remplit au gré de ce que le modèle remarque. Au passage,
+l'ordre du programme suit enfin celui du cours mis à jour, ce qu'un import ne
+savait pas faire.
+
+**Et pourtant l'omission reste inoffensive**, ce qui est tout le dispositif : un
+chapitre absent de la liste **garde sa place et reste au programme**. C'est le
+rang 0 qui écarte, jamais l'absence. Trois invariants tiennent le reste, tous
+testés (`planSchema.test.ts`) : une référence inconnue est ignorée, un chapitre
+créé dans la même réponse ne peut pas être écarté (rangé, oui), et ne rien dire
+ne déplace ni ne retire rien.
+
+**Un garde-fou de plus, côté serveur : jamais tous.** Écarter chaque chapitre
+existant en un import n'est presque jamais une décision — c'est une consigne mal
+lue, ou un document sans rapport déposé par erreur. Dans ce cas on n'applique
+rien et on le dit. Le cas légitime (remplacer intégralement le cours d'un
+atelier) existe, mais il se fait en deux fois, et mieux vaut le demander deux
+fois que vider un programme sur un malentendu.
+
+L'ordre, lui, ne lit que la **suite** des rangs, jamais leur valeur : 10, 20, 30
+dit la même chose que 1, 2, 3. Les chapitres non rangés suivent, dans l'ordre où
+ils étaient.
 
 Le cas de la partie qui se resserre se règle du même coup. « Moyen-Orient »
 devient « Israël/Palestine » : le modèle crée le nouveau chapitre ET écarte
@@ -1817,10 +1836,17 @@ vidé en chemin. Aucun n'efface, un clic annule les deux.
    maîtrise, on ne saurait pas distinguer « a mal lu » de « ne sait pas ». Un
    examen cherche à départager. Elle n'est pas encouragée pour autant — rien
    dans la consigne ne la met en avant.
-5. **Le seuil de recopie entre les deux listes est à 0,95, pas à 0,70.** Mesures
-   du 25/08/2026 sur le recouvrement de mots signifiants : deux calculs ne
+5. **Le seuil de recopie entre les deux listes est à 1, pas à 0,70.** Mesures du
+   25/08/2026 sur le recouvrement de mots signifiants : deux calculs ne
    différant que par un nombre tombent à 0,67 sur un énoncé court mais à **0,80**
    sur un énoncé long, et une simple reformulation (« causes principales » →
    « causes majeures ») aussi. Au seuil des titres, on jetait donc des questions
-   payées et légitimes. On ne vise plus que le mot à mot.
-6. Les points 1 et 3 de §17.7 restent ouverts.
+   payées et légitimes. Le palier 0,95 a été essayé le même jour puis abandonné :
+   il ne se distingue de 1 que sur les énoncés de plus de vingt mots signifiants.
+   **1 ne veut pas dire « caractère pour caractère »** — la mesure ignore déjà la
+   ponctuation, les accents, la casse, les mots-outils et l'ordre des mots.
+6. **Les groupes s'écrivent en premier, et comptent 2 à 4 questions** (au lieu de
+   2 à 3, et en ordre de grandeur plutôt qu'en contrat). Écrire les groupes
+   d'abord met la coupe du budget à la fin, là où elle ne peut plus amputer un
+   enchaînement de sa dernière question.
+7. Les points 1 et 3 de §17.7 restent ouverts.

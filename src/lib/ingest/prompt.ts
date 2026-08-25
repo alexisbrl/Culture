@@ -106,9 +106,11 @@ export function examGroupedCount(budget: number): number {
   return Math.round(budget / 3);
 }
 
-/** Taille d'un groupe. Deux ou trois questions : au-delà, un candidat qui rate
- *  la première perd tout le bloc. */
-export const EXAM_GROUP_SIZE = { min: 2, max: 3 } as const;
+/** Taille d'un groupe, **en général** et non par contrat (élargi à 4 le
+ *  25/08/2026). Le risque reste le même — un candidat qui rate la première perd
+ *  le fil du bloc — mais quatre questions restent un enchaînement lisible, et
+ *  imposer trois coupait des raisonnements qui en demandaient un de plus. */
+export const EXAM_GROUP_SIZE = { min: 2, max: 4 } as const;
 
 /** La répartition de Bloom d'un examen, **en proportions** et non en nombres
  *  fixes : le total est un réglage de l'utilisateur, la répartition non.
@@ -397,13 +399,14 @@ Donne à chacun une référence courte et unique (ch1, ch2…), et un nom de 120
 
 **Situe chaque chapitre dans le cours** : le document où il commence, sa première et sa dernière page approximatives. Une autre étape s'en servira pour ranger les notions sans avoir à relire le cours. Approximatif suffit largement ; mets 0 quand tu ne peux vraiment pas dire.
 
-**LES CHAPITRES QUE LE COURS NE COUVRE PLUS.** Une mise à jour retire parfois une partie : le nouveau cours ne la traite plus, ou la remplace par un autre découpage. Nomme ces chapitres-là dans \`discardChapters\`, en recopiant leur identifiant tel quel depuis la liste de l'atelier. Ils sortiront du programme avec ce qu'ils contiennent — rien n'est effacé, et l'utilisateur les restaure d'un clic.
+**L'ORDRE DU PROGRAMME, ET CE QUE LE COURS NE COUVRE PLUS.** Dans \`chapterOrder\`, donne son rang à chaque chapitre — ceux que tu viens de créer comme ceux qui existaient déjà —, à partir de 1 et dans l'ordre où le cours se lit. Seul l'ordre des rangs compte, pas leur valeur.
 
-Deux garde-fous :
-- **N'y mets que ceux dont tu es sûr.** Un chapitre que tu ne nommes pas reste au programme : ne rien dire est toujours la réponse la moins coûteuse, et c'est la bonne quand tu hésites.
-- **Jamais un chapitre de ta propre réponse**, et jamais un chapitre encore couvert par le cours.
+**Le rang 0 veut dire : le cours ne couvre plus ce chapitre.** Il sort du programme avec ce qu'il contient — rien n'est effacé, et l'utilisateur le restaure d'un clic. Trois garde-fous :
+- **Réservé aux chapitres qui existaient déjà.** Jamais un chapitre de ta propre réponse : créer une partie puis l'écarter dans le même souffle n'a aucun sens.
+- **N'y mets que ceux dont tu es sûr.** Un chapitre que tu laisses hors de cette liste garde sa place et reste au programme : ne rien dire est toujours la réponse la moins coûteuse, et c'est la bonne quand tu hésites.
+- **Jamais tous.** Si tu crois devoir écarter l'intégralité du programme existant, c'est que tu as mal lu quelque chose : un cours mis à jour reprend presque toujours une partie du précédent.
 
-Quand le cours traite toujours la même matière sous un autre découpage — une partie qui s'élargit ou se resserre —, la bonne réponse est de **créer le nouveau chapitre ET d'écarter l'ancien**. Les notions encore d'actualité seront rangées dans le nouveau, et celles qui n'y ont plus leur place resteront dans l'ancien, hors programme. C'est ce qui évite de porter deux fois la même partie sous deux noms.
+Quand le cours traite toujours la même matière sous un autre découpage — une partie qui s'élargit ou se resserre —, la bonne réponse est de **créer le nouveau chapitre ET de mettre l'ancien à 0**. Les notions encore d'actualité seront rangées dans le nouveau, et celles qui n'y ont plus leur place resteront dans l'ancien, hors programme. C'est ce qui évite de porter deux fois la même partie sous deux noms.
 
 **Tu ne ranges rien ici** : les notions ci-dessous sont là pour que tu saches ce que le cours contient réellement, pas pour que tu les distribues. Une autre étape s'en charge. C'est aussi pourquoi la décision d'écarter se prend ICI et nulle part ailleurs : l'étape de rangement, elle, n'aura plus les documents sous les yeux, donc aucun moyen de savoir quelle est la bonne version du cours.
 
@@ -709,7 +712,8 @@ export function examInstruction(input: {
   const grouped = examGroupedCount(input.budget);
   const groups =
     grouped >= EXAM_GROUP_SIZE.min
-      ? `- **Environ ${grouped} de ces questions sont RASSEMBLÉES EN GROUPES** de ${EXAM_GROUP_SIZE.min} à ${EXAM_GROUP_SIZE.max} questions qui s'enchaînent, le reste étant des questions isolées (un groupe d'une seule question).
+      ? `- **Écris les GROUPES EN PREMIER**, les questions isolées ensuite. Si le compte doit être coupé, il le sera par la fin : un groupe entamé en dernier perdrait ses dernières questions, et l'enchaînement avec.
+- **Environ ${grouped} de ces questions sont RASSEMBLÉES EN GROUPES** de ${EXAM_GROUP_SIZE.min} à ${EXAM_GROUP_SIZE.max} questions qui s'enchaînent — un ordre de grandeur, pas une règle —, le reste étant des questions isolées (un groupe d'une seule question).
 - Dans un groupe, les questions se suivent et se répondent dans l'ordre : la PREMIÈRE pose le décor — la situation, les données, l'extrait, le cas — et les suivantes s'appuient dessus sans le répéter. Elles seront toujours présentées ensemble et dans cet ordre. C'est la seule exception à la règle d'autonomie : c'est le GROUPE qui se comprend seul, pas chacune de ses questions.
 - Un groupe n'a pas d'énoncé commun séparé : tout ce qui est nécessaire aux questions suivantes est écrit dans la première.`
       : '- Chaque groupe ne contient qu\'une question : le budget de cet appel est trop court pour un enchaînement.';
