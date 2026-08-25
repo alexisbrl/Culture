@@ -1764,12 +1764,14 @@ ne les portera pas davantage au troisième essai.
 
 ### 18.10 Ce qui reste ouvert
 
-1. **Les limites physiques manquent.** Aujourd'hui : 25 Mo par fichier, 5 à 200
-   questions d'examen par lancement, 300 questions par import. Rien ne borne le
-   nombre de documents, la taille totale du corpus, ni le nombre de notions d'un
-   atelier — or c'est le nombre de notions qui décide du volume de la passe
-   questions (douze par notion). À décider : plafond de corpus, plafond de
-   notions par atelier, plafond de documents.
+1. **Le plafond de CORPUS manque encore.** Posé le 25/08/2026 : 2 000 notions
+   par atelier (`MAX_NOTIONS_PER_WORKSHOP`, création manuelle comprise), examen
+   de 1 à 200 énoncés par lancement, 300 questions par import, 25 Mo par
+   fichier. Le compte de documents a été écarté à raison — on contourne en
+   fusionnant tout dans un seul PDF. Reste le seul plafond qui borne vraiment la
+   lecture : **le volume total du corpus**, déjà mesuré à la préparation
+   (`corpusTokens`) mais qui ne refuse rien. À décider : à partir de combien on
+   refuse de lire.
 2. **Deux chapitres qui se recouvrent sans se ressembler ne sont pas
    détectés.** Le rapprochement de noms (seuil 0,7) attrape « L'Europe, foyer de
    peuplement » et sa variante, jamais « la guerre Israël/Palestine » devenue

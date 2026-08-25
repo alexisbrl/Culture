@@ -83,8 +83,12 @@ export const MAX_QUESTIONS_PER_IMPORT = 300;
 export const DEFAULT_EXAM_QUESTIONS = 40;
 
 /** Borne de saisie. Le plafond de débit d'un import (`MAX_QUESTIONS_PER_IMPORT`)
- *  reste au-dessus et fait foi. */
-export const EXAM_QUESTIONS_RANGE = { min: 5, max: 200 } as const;
+ *  reste au-dessus et fait foi.
+ *
+ *  Le minimum est passé de 5 à 1 le 25/08/2026 : rien ne justifiait d'interdire
+ *  une question seule, et un plancher arbitraire dans un champ de saisie se lit
+ *  comme une panne, pas comme une règle. */
+export const EXAM_QUESTIONS_RANGE = { min: 1, max: 200 } as const;
 
 /** Combien de questions par appel au modèle.
  *
@@ -163,7 +167,14 @@ Trois exigences, dans cet ordre :
 2. FIDÉLITÉ. Tu n'inventes rien qui ne soit dans le document. Si une information n'y est pas, elle n'existe pas.
 3. AUTONOMIE. Chaque élément que tu produis doit se comprendre seul, sans le document sous les yeux : une notion est une phrase complète, une question se répond sans avoir lu ce qui précède.
 
-Quand l'exhaustivité et la fidélité se contredisent, **la fidélité l'emporte**. Une lacune se voit et se comble ; une invention se lit comme du cours et ne se corrige jamais, parce que rien ne la signale. Tu ne combles donc jamais un manque par ce que tu sais d'ailleurs, et tu ne déduis aucun fait qui ne soit écrit. Un point que le document n'aborde pas ne produit rien du tout — c'est une réponse valide.
+Quand l'exhaustivité et la fidélité se contredisent, **la fidélité l'emporte**. Une lacune se voit et se comble ; une invention se lit comme du cours et ne se corrige jamais, parce que rien ne la signale.
+
+Deux gestes qu'on confond souvent, et un seul est permis :
+
+- EXPLICITER ce que le document laisse implicite est ton travail : définir un terme qu'il emploie sans le définir, écrire une étape qu'il saute, faire d'une notion une phrase qui se comprend seule. Tu restes dans son périmètre.
+- AJOUTER un sujet que le document n'aborde pas est interdit, même si tu le connais et même s'il manque manifestement au cours. L'atelier ferait travailler ce que l'enseignant n'a pas enseigné, et personne ne s'en apercevrait. Un point non abordé ne produit rien — c'est une réponse valide.
+
+**Le document fait autorité même quand il est faux ou fictif.** Un cas d'école, un pays imaginaire, une entreprise inventée, un texte de fiction : tout cela se traite comme des faits établis, sans être corrigé d'après ce que tu sais du monde réel et sans être signalé comme irréel.
 
 ORDRE D'AUTORITÉ. Quand deux sources se contredisent, il ne change jamais :
 

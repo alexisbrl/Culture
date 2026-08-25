@@ -67,6 +67,7 @@ import {
   reattachQuestions,
   removeOrphans,
 } from './ingest';
+import { MAX_NOTIONS_PER_WORKSHOP, countNotions } from '@/lib/workshops/notions';
 import { dropRepeatedQuestions, flagSimilar, findExistingMatch } from './duplicates';
 import { batchNotions, examSliceCount, sliceProgram, splitBudget, splitUnplaced, withChapterRetry } from './passInput';
 import { parsePlan, type PlanIssue } from './planSchema';
@@ -1117,6 +1118,28 @@ export async function ingestDocumentNotions(
   // un fait de plus. Le perdant n'est pas détruit, il reste sans chapitre — et
   // s'il vient de cet import, le ménage de fin le ramassera.
   //
+  // ─── Le plafond de l'atelier ──────────────────────────────────────────────
+  //
+  // Limite PHYSIQUE (25/08/2026) : c'est le nombre de notions qui commande tout
+  // le volume en aval — douze questions de parcours chacune —, donc c'est là
+  // qu'une boucle emballée se paie. Ce qui dépasse est écarté et DIT : une
+  // notion qui disparaîtrait en silence passerait pour une notion que le modèle
+  // n'a pas su lire.
+  //
+  // Les appels sont parallèles (un par document) et lisent donc chacun un
+  // compte qui peut vieillir d'une fraction de seconde : le plafond peut être
+  // franchi de quelques unités. C'est un garde-fou, pas un invariant — le
+  // dépassement possible est de l'ordre du lot, jamais de l'emballement.
+  const room = MAX_NOTIONS_PER_WORKSHOP - (await countNotions(workshopId));
+  const admitted = room > 0 ? plan.notions.slice(0, room) : [];
+  for (const refused of plan.notions.slice(admitted.length)) {
+    plan.discarded.push({
+      kind: 'notion',
+      ref: refused.ref,
+      reason: `l'atelier a atteint sa limite de ${MAX_NOTIONS_PER_WORKSHOP} notions`,
+    });
+  }
+
   // `new Map()` : aucun chapitre à résoudre, et le schéma n'en propose plus.
   const created = await insertNotions(
     workshopId,
@@ -1126,7 +1149,7 @@ export async function ingestDocumentNotions(
     // sait quel document il traite, lui ne fait que rendre la page.
     // L'IDENTIFIANT, pas le nom : un « cours.pdf » remis à jour porte le même
     // nom et n'est plus le même document. Le nom est relu à l'affichage.
-    plan.notions.map((n) => ({ ...n, sourceDocument: document.fileId })),
+    admitted.map((n) => ({ ...n, sourceDocument: document.fileId })),
     new Map(),
   );
 

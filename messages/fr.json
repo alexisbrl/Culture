@@ -1254,7 +1254,7 @@
     },
     "examCount": {
       "label": "NOMBRE DE QUESTIONS",
-      "help": "Pour tout le programme, pas par chapitre. Un tiers d’entre elles s’enchaîneront par groupes de deux ou trois. Relancer en ajoute autant, sans reposer celles qui existent."
+      "help": "Des énoncés, pour tout le programme et non par chapitre — un ordre de grandeur, pas un compte exact. Un tiers d’entre eux s’enchaîneront par groupes de deux ou trois. Relancer en ajoute autant, sans reposer ce qui existe."
     }
   }
 }

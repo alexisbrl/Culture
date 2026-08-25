@@ -30,6 +30,37 @@ export type Notion = {
  *  la même valeur sert de libellé partout ailleurs dans l'app. */
 export const NOTION_TITLE_MAX = 280;
 
+/** Combien de notions un atelier peut porter, au total (25/08/2026).
+ *
+ *  **Une limite physique, pas une règle pédagogique.** La cible produit est de
+ *  500 à 1 000 notions (§9 du plan d'ingestion) : 2 000 laisse largement passer
+ *  un programme annuel dense et n'arrête que ce qui n'a plus de sens — une
+ *  boucle qui s'emballe, un import relancé en série, un corpus déposé par
+ *  erreur. Elle compte parce que c'est le nombre de notions qui commande TOUT
+ *  le volume en aval : douze questions de parcours par notion, donc douze fois
+ *  la facture.
+ *
+ *  Elle s'applique à la création manuelle comme à l'IA. Une limite qui ne
+ *  vaudrait que pour l'une des deux n'en serait pas une. */
+export const MAX_NOTIONS_PER_WORKSHOP = 2000;
+
+/** Combien de notions cet atelier porte déjà. On lit avant d'écrire, jamais
+ *  après.
+ *
+ *  Compte inconnu → on rend 0, donc on laisse passer. Un plafond qui bloquerait
+ *  sur une lecture ratée transformerait un incident de lecture en panne
+ *  d'écriture, ce qui est bien pire que le dépassement qu'il évite. */
+export async function countNotions(workshopId: string): Promise<number> {
+  const supabase = getSupabaseServerClient();
+  // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
+  const { count, error } = await supabase
+    .from('workshop_bricks')
+    .select('id', { count: 'exact', head: true })
+    .eq('workshop_id', workshopId);
+  if (error) return 0;
+  return count ?? 0;
+}
+
 function validate(title: string): string | null {
   if (!title.trim()) return 'Le texte de la notion est requis';
   if (title.length > NOTION_TITLE_MAX) return `Texte trop long (${NOTION_TITLE_MAX} caractères max)`;
@@ -83,6 +114,10 @@ export async function createNotion(
 
   if (chapterId && !(await chapterBelongsToWorkshop(workshopId, chapterId))) {
     return { success: false, error: 'Chapitre introuvable' };
+  }
+
+  if ((await countNotions(workshopId)) >= MAX_NOTIONS_PER_WORKSHOP) {
+    return { success: false, error: `Cet atelier a atteint sa limite de ${MAX_NOTIONS_PER_WORKSHOP} notions.` };
   }
 
   const supabase = getSupabaseServerClient();
