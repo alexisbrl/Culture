@@ -226,3 +226,69 @@ export function dropNearDuplicates<T>(
 
   return { kept, dropped };
 }
+
+// ─── Une liste ne recopie pas l'autre ────────────────────────────────────────
+//
+// La ressemblance ENTRE QUESTIONS n'est pas un défaut à l'intérieur d'une même
+// liste : on n'apprend pas une addition en la posant une seule fois. Elle en
+// devient un dès qu'on franchit la frontière — une question d'entraînement qui
+// réapparaît telle quelle dans un examen évalue ce qu'on vient de réviser, donc
+// n'évalue rien.
+//
+// ⚠️ **Ça se vérifie ICI, jamais dans le prompt.** Donner au modèle la liste
+// d'entraînement entière pour qu'il l'évite, c'est reverser à chaque appel les
+// ~75 000 tokens qu'on a passé un chantier à retirer (§16.3). Le calcul, lui,
+// est local et gratuit.
+
+export type RepeatedQuestion = { content: string; other: string; proximity: number };
+
+/** Retire d'un lot de groupes les questions qui redisent un énoncé déjà écrit
+ *  ailleurs.
+ *
+ *  ⚠️ **Un groupe amputé de sa PREMIÈRE question ne survit pas.** C'est elle qui
+ *  pose le décor dont les suivantes dépendent (il n'y a pas d'énoncé commun,
+ *  décision du 24/08/2026) : retirer la première et garder les autres
+ *  produirait des questions qui renvoient à une situation absente. Le groupe
+ *  part donc en entier — sauf s'il ne comptait qu'elle, où il n'y a rien de
+ *  plus à perdre.
+ *
+ *  Le seuil est celui des titres, et sévère volontairement : ce qu'on cherche
+ *  ici, c'est la RECOPIE, pas la parenté. Deux questions qui travaillent le même
+ *  fait sous deux angles doivent passer. */
+export function dropRepeatedQuestions<G extends { questions: readonly { content: string }[] }>(
+  groups: readonly G[],
+  seen: readonly string[],
+  threshold = NEAR_DUPLICATE_TITLE,
+): { kept: G[]; removed: RepeatedQuestion[] } {
+  if (seen.length === 0) return { kept: [...groups], removed: [] };
+
+  const kept: G[] = [];
+  const removed: RepeatedQuestion[] = [];
+
+  for (const group of groups) {
+    const verdicts = group.questions.map((q) => findExistingMatch(q.content, seen, (c) => c, threshold));
+    const firstIsRepeat = verdicts[0] !== null && verdicts[0] !== undefined;
+
+    if (firstIsRepeat && group.questions.length > 1) {
+      for (let i = 0; i < group.questions.length; i += 1) {
+        const found = verdicts[i];
+        removed.push({
+          content: group.questions[i].content,
+          other: found ? found.match : (verdicts[0]?.match ?? ''),
+          proximity: found?.proximity ?? verdicts[0]?.proximity ?? 1,
+        });
+      }
+      continue;
+    }
+
+    const questions = group.questions.filter((q, i) => {
+      const found = verdicts[i];
+      if (!found) return true;
+      removed.push({ content: q.content, other: found.match, proximity: found.proximity });
+      return false;
+    });
+    if (questions.length > 0) kept.push({ ...group, questions });
+  }
+
+  return { kept, removed };
+}

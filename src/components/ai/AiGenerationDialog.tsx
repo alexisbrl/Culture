@@ -381,13 +381,13 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         total: totalSteps,
       });
 
-      const runSlice = async (sliceIndex: number) => {
+      const runSlice = async (sliceIndex: number, target?: number) => {
         // Même raison que pour le parcours : le serveur ne voit qu'un appel à la
         // fois, seul le client sait combien il en a en vol.
         const remaining = MAX_QUESTIONS - tally.questions;
         if (remaining <= 0) return null;
-        const share = Math.max(1, Math.floor(remaining / QUESTIONS_CONCURRENCY));
-        const result = await ingestWorkshopExamQuestions(workshopId, importId, sliceIndex, share);
+        const share = target ?? Math.max(1, Math.floor(remaining / QUESTIONS_CONCURRENCY));
+        const result = await ingestWorkshopExamQuestions(workshopId, importId, sliceIndex, share, target);
         doneCalls += 1;
         if (!result.ok) { error ??= result.error; showExam(); return null; }
         discarded.push(...result.discarded);
@@ -415,6 +415,25 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         );
       }
       if (error) return setPhase({ step: 'error', message: error });
+
+      // ─── Le rattrapage ────────────────────────────────────────────────────
+      //
+      // Une question écartée — parce qu'elle redisait une question
+      // d'entraînement, ou parce que le modèle en a rendu moins que demandé —
+      // laisserait l'examen court sans que personne ne l'ait voulu. On redemande
+      // le MANQUE, une seule fois : le second passage ne voit pas le premier
+      // mais relit la banque, donc il ne réécrit pas ce qui vient d'être écrit.
+      //
+      // Une seule tentative, et c'est délibéré : chaque passage coûte un appel,
+      // et un atelier dont le programme ne porte pas quarante questions ne les
+      // portera pas davantage au troisième essai.
+      const short = Math.min(examCount, MAX_QUESTIONS) - tally.questions;
+      if (short > 0) {
+        totalCalls += 1;
+        showExam();
+        await runSlice(0, short);
+        if (error) return setPhase({ step: 'error', message: error });
+      }
 
       setIssues({ discarded, adjusted });
       setPhase({ step: 'done' });

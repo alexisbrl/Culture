@@ -163,6 +163,15 @@ Trois exigences, dans cet ordre :
 2. FIDÉLITÉ. Tu n'inventes rien qui ne soit dans le document. Si une information n'y est pas, elle n'existe pas.
 3. AUTONOMIE. Chaque élément que tu produis doit se comprendre seul, sans le document sous les yeux : une notion est une phrase complète, une question se répond sans avoir lu ce qui précède.
 
+Quand l'exhaustivité et la fidélité se contredisent, **la fidélité l'emporte**. Une lacune se voit et se comble ; une invention se lit comme du cours et ne se corrige jamais, parce que rien ne la signale. Tu ne combles donc jamais un manque par ce que tu sais d'ailleurs, et tu ne déduis aucun fait qui ne soit écrit. Un point que le document n'aborde pas ne produit rien du tout — c'est une réponse valide.
+
+ORDRE D'AUTORITÉ. Quand deux sources se contredisent, il ne change jamais :
+
+1. LES DOCUMENTS DU COURS — ils font foi sur les faits, et sur eux seuls repose ce que tu écris.
+2. LA CONSIGNE DE L'UTILISATEUR — elle fait foi sur la forme du travail : le découpage attendu, le niveau de détail, le vocabulaire à employer.
+3. LE TITRE ET LA DESCRIPTION DE L'ATELIER — une indication sur le public visé et le niveau attendu. Jamais une information sur ce que le cours contient.
+4. CE QUI EXISTE DÉJÀ DANS L'ATELIER — de la matière à compléter, jamais une preuve. Un contenu déjà présent a pu être écrit à partir d'une version précédente du cours : il ne contredit pas un document, il est corrigé par lui.
+
 Tu écris dans la langue du document, pas dans la tienne.`;
 
 /** Le bloc système — strictement identique d'un appel à l'autre, c'est ce qui le
@@ -316,7 +325,7 @@ export function workshopBlock(workshop?: WorkshopIdentity | null): string {
   const description = (workshop.description ?? '').trim();
   return `L'atelier s'intitule « ${workshop.name.trim()} »${description ? `, décrit ainsi par son auteur : « ${description} »` : ''}. Écris pour CE public : le niveau d'exigence, le vocabulaire et les exemples doivent lui correspondre.
 
-Prends-le comme une INDICATION, pas comme une donnée sûre : un intitulé peut être vague, approximatif, ou resté d'une version précédente du cours. S'il contredit ce que disent les notions, ce sont les notions qui font foi.
+C'est une INDICATION SUR LE PUBLIC, pas une source de vérité : un intitulé peut être vague, approximatif, ou resté d'une version précédente du cours. Il te dit à QUI tu t'adresses — jamais ce que le cours contient. Ce que le cours contient, ce sont les notions ci-dessous, et elles seules.
 
 `;
 }
@@ -624,6 +633,8 @@ Règles de production :
 - **Varie les types de réponse.** Le QCM (\`qcs\` ou \`qcm\` selon qu'une seule ou plusieurs propositions sont correctes) reste le format le plus courant en entraînement parce qu'il se traite d'un geste — mais la réponse libre a toute sa place, elle est corrigée elle aussi. Garde-la brève : quelques lignes au plus, jamais une dissertation.
 - Pour une réponse libre : renseigne les critères de correction — ce qui est attendu, ce qui est accepté. C'est là-dessus que la réponse sera jugée.
 - Pour un QCM : des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien, elle se raye d'office.
+- **Une proposition fausse est fausse PAR RAPPORT À LA NOTION.** Elle n'affirme aucun fait extérieur — ni vrai ni faux — que rien ici ne permet de vérifier : c'est par les propositions fausses qu'une invention entre le plus facilement, et personne ne la relira.
+- Pas de « toutes les réponses ci-dessus », pas de « aucune de ces réponses », pas d'énoncé à la forme négative : ce sont des tests de lecture, pas de connaissance.
 - ${VARIATION_RULE}
 - **Une question est seule dans son groupe, sauf si elle est indissociable d'une autre.** C'est le cas normal, et de très loin le plus fréquent. Quand deux ou trois questions ne se comprennent que dans l'ordre — la première pose la situation, les suivantes s'appuient dessus sans la répéter —, rassemble-les dans un même groupe : elles seront toujours posées ensemble, et dans cet ordre. N'en fais jamais un procédé — un groupe dont les questions tiendraient seules n'est pas un groupe.
 - N'excède pas ${input.budget} questions au total.
@@ -694,6 +705,8 @@ ${groups}
 - Varie les types de réponse : QCM, réponse textuelle, liste. La réponse libre est pleinement à sa place ici — c'est elle qui permet d'évaluer un raisonnement, et elle est corrigée comme le reste.
 - **Une question d'examen se donne plus de temps qu'une question d'entraînement du même niveau** : compte 1 à 2 minutes au niveau 2, 3 à 5 minutes aux niveaux 3 et 4. C'est ce temps qui autorise un énoncé plus fourni et une réponse construite.
 - Pour un QCM : des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien.
+- **Une proposition fausse est fausse PAR RAPPORT AUX NOTIONS ci-dessus.** Elle n'affirme aucun fait extérieur — ni vrai ni faux — que rien ici ne permet de vérifier.
+- Pas de « toutes les réponses ci-dessus », pas de « aucune de ces réponses », pas d'énoncé à la forme négative.
 - Pour une réponse libre : renseigne les critères de correction — ce qui est attendu, ce qui est accepté. C'est ce que le correcteur aura sous les yeux.
 - ${VARIATION_RULE}
 

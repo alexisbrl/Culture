@@ -1707,15 +1707,80 @@ quatrième (§17.5) — mais avec sa réserve écrite : un intitulé peut être 
 approximatif, ou resté d'une version précédente du cours. **S'il contredit les
 notions, ce sont les notions qui font foi.**
 
-### 18.7 Ce qui reste ouvert
+### 18.7 L'ordre d'autorité, écrit une fois pour toutes
 
-1. **Rien n'empêche une question d'examen de répéter une question
-   d'entraînement.** Les deux listes ne se voient pas — c'est ce qui a éliminé
-   le poste de coût de §16.3, et ça ne se rediscute pas. La parade, si le cas se
-   présente, est **locale et gratuite** : comparer les énoncés produits à ceux du
-   parcours après coup (`duplicates.ts`), et écarter la répétition dans le
-   compte-rendu d'import. Pas décidé.
-2. **Un chapitre ne peut toujours être écarté qu'automatiquement**, par le
+Le bloc système le porte désormais, donc toutes les passes l'ont sous les yeux :
+
+1. **Les documents du cours** — ils font foi sur les FAITS, et sur eux seuls
+   repose ce qui est écrit.
+2. **La consigne de l'utilisateur** — elle fait foi sur la FORME du travail :
+   découpage attendu, niveau de détail, vocabulaire.
+3. **Le titre et la description de l'atelier** — une indication sur le PUBLIC et
+   le niveau. Jamais une information sur ce que le cours contient.
+4. **Ce qui existe déjà dans l'atelier** — de la matière à compléter, jamais une
+   preuve : un contenu en place a pu être écrit d'après une version précédente
+   du cours, et c'est le document qui le corrige, pas l'inverse.
+
+Le rang 4 corrige une formulation du 25/08/2026 au matin qui faisait des notions
+l'arbitre en cas de contradiction. C'était juste **là où on l'avait écrit** — la
+passe questions, qui ne reçoit aucun document et pour qui les notions sont la
+seule matière disponible —, et faux partout ailleurs : un import sert justement
+à mettre l'atelier à jour, donc à démentir ce qui s'y trouve.
+
+### 18.8 Contre l'invention, la fidélité l'emporte sur l'exhaustivité
+
+Les deux premières exigences du bloc système se contredisent par construction :
+couvrir TOUT le document pousse à combler, n'inventer RIEN pousse à s'abstenir.
+L'arbitrage était implicite, il est maintenant écrit — **la fidélité gagne** :
+une lacune se voit et se comble, une invention se lit comme du cours et ne se
+corrige jamais, parce que rien ne la signale. Un point que le document n'aborde
+pas ne produit rien, et c'est une réponse valide.
+
+Deux règles de plus, là où l'invention entre réellement — **les propositions
+fausses d'un QCM**, que personne ne relit :
+
+- une proposition fausse est fausse PAR RAPPORT À LA NOTION ; elle n'affirme
+  aucun fait extérieur, ni vrai ni faux, que rien ne permet de vérifier ;
+- pas de « toutes les réponses ci-dessus », pas de « aucune de ces réponses »,
+  pas d'énoncé à la forme négative — ce sont des tests de lecture, pas de
+  connaissance.
+
+### 18.9 Un examen ne recopie pas l'entraînement
+
+Les deux listes continuent de ne pas se voir : les verser l'une dans l'autre,
+c'est le poste de coût de §16.3 qui revient. La vérification est donc **locale
+et gratuite**, faite après coup sur les énoncés produits (`dropRepeatedQuestions`,
+`duplicates.ts`), au seuil sévère des titres — ce qu'on cherche est la RECOPIE,
+pas la parenté : deux questions qui travaillent le même fait sous deux angles
+doivent passer.
+
+Un groupe amputé de sa PREMIÈRE question part en entier : c'est elle qui pose le
+décor dont les suivantes dépendent, et il n'y a pas d'énoncé commun (§17.4).
+
+**Le manque est rattrapé, une fois.** Sans ça, un examen de 40 en rendrait 34
+sans le dire. Le rattrapage redemande exactement ce qui manque, en un appel, et
+ne se répète pas : un atelier dont le programme ne porte pas quarante questions
+ne les portera pas davantage au troisième essai.
+
+### 18.10 Ce qui reste ouvert
+
+1. **Les limites physiques manquent.** Aujourd'hui : 25 Mo par fichier, 5 à 200
+   questions d'examen par lancement, 300 questions par import. Rien ne borne le
+   nombre de documents, la taille totale du corpus, ni le nombre de notions d'un
+   atelier — or c'est le nombre de notions qui décide du volume de la passe
+   questions (douze par notion). À décider : plafond de corpus, plafond de
+   notions par atelier, plafond de documents.
+2. **Deux chapitres qui se recouvrent sans se ressembler ne sont pas
+   détectés.** Le rapprochement de noms (seuil 0,7) attrape « L'Europe, foyer de
+   peuplement » et sa variante, jamais « la guerre Israël/Palestine » devenue
+   « la guerre du Moyen-Orient » : les mots n'ont rien de commun. Les notions se
+   répartissent alors entre les deux, aucun ne se vide, aucun n'est écarté — le
+   programme porte deux fois la même partie. La parade la plus simple n'est pas
+   d'écarter mais de **RENOMMER** : la passe chapitres voit tous les chapitres et
+   toutes les notions, elle pourrait reprendre un chapitre existant sous un
+   nouveau nom au lieu d'en créer un voisin. Elle ne sait aujourd'hui que
+   réutiliser à l'identique.
+3. **Un chapitre ne peut toujours être écarté qu'automatiquement**, par le
    constat qu'il s'est vidé. Ni l'IA ni l'interface n'ont de geste « écarter »
    explicite — seulement « restaurer ».
-3. Les points 1 et 3 de §17.7 restent ouverts.
+4. Les points 1 et 3 de §17.7 restent ouverts.

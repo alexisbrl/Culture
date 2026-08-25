@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   NEAR_DUPLICATE,
   dropNearDuplicates,
+  dropRepeatedQuestions,
   findExistingMatch,
   flagSimilar,
   SIMILAR_ENOUGH_TO_ASK,
@@ -245,5 +246,58 @@ describe('flagSimilar — signaler, pas trancher', () => {
       (c) => c.title,
       (o) => o.title,
     )).toEqual([]);
+  });
+});
+
+// ─── Un examen ne recopie pas l'entraînement ─────────────────────────────────
+//
+// Testé ici parce que c'est le contrat d'une entrée non fiable — ce que le
+// modèle vient d'écrire — et parce que la règle décide de ce qui est INSCRIT en
+// banque d'examen. Une erreur de bord retire des questions qu'on a payées.
+describe('dropRepeatedQuestions', () => {
+  const q = (content: string) => ({ content });
+
+  it('laisse passer une question qui ne redit rien', () => {
+    const groups = [{ questions: [q('Quelle est la capitale du Pérou ?')] }];
+    const { kept, removed } = dropRepeatedQuestions(groups, ['Combien font cinq plus deux ?']);
+    expect(kept).toEqual(groups);
+    expect(removed).toEqual([]);
+  });
+
+  it('retire une question isolée qui recopie une question d’entraînement', () => {
+    const seen = ['Quelle est la capitale du Pérou ?'];
+    const { kept, removed } = dropRepeatedQuestions([{ questions: [q('Quelle est la capitale du Pérou ?')] }], seen);
+    expect(kept).toEqual([]);
+    expect(removed).toHaveLength(1);
+    expect(removed[0].other).toBe(seen[0]);
+  });
+
+  it('emporte tout le groupe quand c’est sa PREMIÈRE question qui recopie', () => {
+    // La première pose le décor : la garder seule au rebut laisserait les
+    // suivantes renvoyer à une situation absente.
+    const groups = [{ questions: [q('Quelle est la capitale du Pérou ?'), q('Quel fleuve la traverse ?')] }];
+    const { kept, removed } = dropRepeatedQuestions(groups, ['Quelle est la capitale du Pérou ?']);
+    expect(kept).toEqual([]);
+    expect(removed).toHaveLength(2);
+  });
+
+  it('ne retire que la question fautive quand elle n’est pas la première', () => {
+    const groups = [{ questions: [q('Observe ce relevé de températures.'), q('Combien font cinq plus deux ?')] }];
+    const { kept, removed } = dropRepeatedQuestions(groups, ['Combien font cinq plus deux ?']);
+    expect(kept).toHaveLength(1);
+    expect(kept[0].questions).toEqual([q('Observe ce relevé de températures.')]);
+    expect(removed).toHaveLength(1);
+  });
+
+  it('ne fait rien quand il n’y a pas encore de questions d’entraînement', () => {
+    const groups = [{ questions: [q('Quelle est la capitale du Pérou ?')] }];
+    expect(dropRepeatedQuestions(groups, []).kept).toEqual(groups);
+  });
+
+  it('ne confond pas deux questions qui travaillent le même fait autrement', () => {
+    // Le seuil vise la RECOPIE. Deux angles sur la même addition doivent passer.
+    const groups = [{ questions: [q('Un train part à 14 h et roule trois heures : à quelle heure arrive-t-il ?')] }];
+    const { kept } = dropRepeatedQuestions(groups, ['Combien font quatorze plus trois ?']);
+    expect(kept).toHaveLength(1);
   });
 });

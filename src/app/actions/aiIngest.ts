@@ -225,12 +225,16 @@ export async function ingestWorkshopExamQuestions(
   importId: string,
   sliceIndex = 0,
   budgetShare?: number,
+  /** Remplace le nombre de questions demandé au lancement. Sert au RATTRAPAGE :
+   *  quand des questions ont été écartées, on redemande le manque et rien de
+   *  plus — sans quoi un examen de 40 en rendrait 34 sans le dire. */
+  target?: number,
 ): Promise<QuestionPassResult> {
   const ctx = await requireManager(workshopId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
-    const result = await run.ingestExamQuestions(workshopId, ctx.userId, importId, sliceIndex, { budgetShare });
+    const result = await run.ingestExamQuestions(workshopId, ctx.userId, importId, sliceIndex, { budgetShare, target });
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {

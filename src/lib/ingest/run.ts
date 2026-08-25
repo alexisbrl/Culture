@@ -67,7 +67,7 @@ import {
   reattachQuestions,
   removeOrphans,
 } from './ingest';
-import { flagSimilar, findExistingMatch } from './duplicates';
+import { dropRepeatedQuestions, flagSimilar, findExistingMatch } from './duplicates';
 import { batchNotions, examSliceCount, sliceProgram, splitBudget, splitUnplaced, withChapterRetry } from './passInput';
 import { parsePlan, type PlanIssue } from './planSchema';
 import { releaseDocuments } from './release';
@@ -255,6 +255,34 @@ async function loadExamQuestions(workshopId: string): Promise<ExistingContent> {
   });
 
   return { ...EMPTY, questions };
+}
+
+/** Les énoncés d'ENTRAÎNEMENT de l'atelier, pour vérifier qu'un examen n'en
+ *  recopie aucun (25/08/2026).
+ *
+ *  Rien à voir avec le bloc « existant » : ces énoncés ne partent JAMAIS au
+ *  modèle — les verser dans la passe examen, c'est le poste de coût de §16.3 qui
+ *  revient. Ils ne servent qu'à une comparaison locale, après coup.
+ *
+ *  Le plafond est un garde-fou de requête, pas une règle produit : au-delà, la
+ *  vérification devient partielle, ce qui reste très supérieur à rien. */
+const PARCOURS_CONTEXT_CAP = 3000;
+
+async function loadParcoursContents(workshopId: string): Promise<string[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('exam_questions')
+    .select('id, exam_question_items(content)')
+    .eq('workshop_id', workshopId)
+    .eq('context', 'parcours')
+    .order('created_at', { ascending: false })
+    .limit(PARCOURS_CONTEXT_CAP);
+  if (error) throw new Error(error.message);
+
+  return (data ?? [])
+    .flatMap((group) => ((group.exam_question_items ?? []) as unknown as { content: string }[]))
+    .map((item) => (item.content ?? '').trim())
+    .filter((content) => content.length > 0);
 }
 
 /** Combien de questions d'ENTRAÎNEMENT portent déjà sur chaque notion.
@@ -1322,9 +1350,23 @@ export async function ingestExamQuestions(
   // d'examen.
   const groups = plan.groups.map((g) => ({ ...g, context: 'exam' as const }));
 
-  const capped: typeof groups = [];
+  // ─── Un examen ne recopie pas l'entraînement ──────────────────────────────
+  //
+  // La vérification est LOCALE : les énoncés du parcours ne sont jamais partis
+  // au modèle, et n'ont pas à l'être. Ce qu'on écarte est dit dans le
+  // compte-rendu — une question retirée en silence passerait pour une question
+  // que le modèle n'a pas su écrire.
+  const { kept, removed } = dropRepeatedQuestions(groups, await loadParcoursContents(workshopId));
+  for (const repeat of removed) {
+    plan.discarded.push({
+      kind: 'question',
+      reason: `déjà posée à l'entraînement (« ${repeat.other.slice(0, 80)} ») — une question d'examen qui reprend une révision n'évalue rien`,
+    });
+  }
+
+  const capped: typeof kept = [];
   let remaining = budget;
-  for (const group of groups) {
+  for (const group of kept) {
     if (remaining <= 0) break;
     // On coupe à la question près, jamais au groupe : un groupe amputé de sa
     // dernière question reste cohérent, puisque c'est la PREMIÈRE qui porte le
