@@ -1800,8 +1800,17 @@ atelier) existe, mais il se fait en deux fois, et mieux vaut le demander deux
 fois que vider un programme sur un malentendu.
 
 L'ordre, lui, ne lit que la **suite** des rangs, jamais leur valeur : 10, 20, 30
-dit la même chose que 1, 2, 3. Les chapitres non rangés suivent, dans l'ordre où
-ils étaient.
+dit la même chose que 1, 2, 3. Et il s'applique **TOUT OU RIEN** : on ne
+réordonne que si chaque chapitre encore au programme a reçu un rang. Un
+classement partiel est une consigne ambiguë — les oubliés iraient où ? Les
+pousser en queue détruirait l'ordre que l'utilisateur avait choisi pour eux, et
+« les laisser à leur place » n'a pas de sens puisque les positions sont
+réécrites en bloc. Comme l'ordre est cosmétique, ne rien changer est toujours
+moins grave que remuer un programme sur une réponse incomplète — et c'est dit
+dans le compte-rendu, sans quoi l'ordre paraîtrait n'avoir mystérieusement pas
+bougé. Il n'existe donc jamais deux chapitres à la même place : ou la liste
+complète est réécrite, ou rien ne l'est. Les chapitres écartés ne sont pas
+exigés — ils ne sont plus au programme — et suivent en queue.
 
 Le cas de la partie qui se resserre se règle du même coup. « Moyen-Orient »
 devient « Israël/Palestine » : le modèle crée le nouveau chapitre ET écarte
@@ -1821,9 +1830,14 @@ vidé en chemin. Aucun n'efface, un clic annule les deux.
    complète : 25 Mo par fichier **et 25 Mo par atelier** (le plafond par fichier
    ne bornait rien tant qu'on pouvait en déposer trente), 2 000 notions par
    atelier création manuelle comprise, 1 à 200 énoncés d'examen par lancement,
-   300 questions par import, et le mur de lecture — `MAX_CORPUS_TOKENS`, la plus
-   grande fenêtre dont on dispose moins la réserve de sortie, soit 968 000
-   tokens. Au-delà, on refuse **avant** de créer le lot et on rend les documents.
+   300 questions par import, et le mur de lecture — `MAX_CORPUS_TOKENS` = 868 000
+   tokens : la plus grande fenêtre (1 M) moins la réserve de sortie (32 k,
+   **raisonnement compris** — les tokens de réflexion se prélèvent sur
+   `max_tokens`, ils ne s'ajoutent pas à côté) moins 100 k pour ce que la mesure
+   ne voit pas. Car `countCorpus` ne compte que le socle et les documents,
+   quand l'appel réel porte aussi tout le contexte de l'atelier : au plafond de
+   2 000 notions, ~80 000 tokens invisibles à la mesure. Au-delà du mur, on
+   refuse **avant** de créer le lot et on rend les documents.
    Le compte de documents a été écarté à raison : on le contourne en fusionnant
    tout dans un seul PDF.
 2. ~~Deux chapitres qui se recouvrent sans se ressembler.~~ Réglé par §18.10.

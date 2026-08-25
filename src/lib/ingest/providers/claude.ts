@@ -96,18 +96,35 @@ const CONTEXT_WINDOW: Record<ModelId, number> = {
   [MODELS.opus]: 1_000_000,
 };
 
+/** Ce que la mesure du corpus NE COMPTE PAS, et qu'il faut donc lui réserver.
+ *
+ *  `countCorpus` mesure le socle système et les documents. L'appel réel de la
+ *  passe chapitres porte en plus **tout le contexte de l'atelier** : ses
+ *  chapitres, la consigne libre, et surtout **la liste de toutes ses notions**,
+ *  qui est l'entrée principale de cette passe. Un titre pèse ~40 tokens ; au
+ *  plafond de 2 000 notions par atelier, ça fait ~80 000 tokens que la mesure
+ *  ignore. Sans cette réserve, un corpus déclaré « tout juste bon » ferait
+ *  refuser l'appel — après téléversement, donc trop tard.
+ *
+ *  100 000 : les 80 000 du pire cas, plus de quoi loger chapitres et consigne. */
+const WORKSHOP_CONTEXT_RESERVE = 100_000;
+
 /** Le plus gros corpus qu'on sache LIRE, tous modèles confondus (25/08/2026).
  *
  *  Ce n'est pas un réglage de coût, c'est un mur : la plus grande fenêtre dont
- *  on dispose est d'un million de tokens, elle porte l'entrée ET la sortie, et
- *  `MAX_TOKENS` y est réservé pour la réponse. Au-delà, aucun modèle ne peut
- *  lire le corpus en un appel et aucun réglage ne le contourne.
+ *  on dispose est d'un million de tokens, elle porte l'entrée ET la sortie.
+ *  Deux réserves s'y taillent avant qu'on parle de corpus :
+ *
+ *    • `MAX_TOKENS` pour la réponse — **le raisonnement compris** : les tokens
+ *      de réflexion sont prélevés sur ce budget, pas ajoutés à côté (voir
+ *      `tuningFor`, dont le budget de réflexion reste inférieur à `max_tokens`) ;
+ *    • `WORKSHOP_CONTEXT_RESERVE` pour ce que la mesure ne voit pas.
  *
  *  ⚠️ Il ne borne QUE la passe chapitres — la seule qui reçoive tout le corpus
  *  d'un coup. La passe notions travaille document par document, la fenêtre s'y
  *  applique par document ; les passes suivantes ne reçoivent aucun document. Le
  *  jour où le découpage séquentiel du cours existera, ce plafond tombera. */
-export const MAX_CORPUS_TOKENS = 1_000_000 - MAX_TOKENS;
+export const MAX_CORPUS_TOKENS = 1_000_000 - MAX_TOKENS - WORKSHOP_CONTEXT_RESERVE;
 
 /** Le modèle voulu pour chaque passe. Haiku 4.5 partout : c'est l'hypothèse à
  *  tester, pas une conclusion (§16.20). */

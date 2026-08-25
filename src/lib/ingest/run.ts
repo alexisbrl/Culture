@@ -718,8 +718,16 @@ export async function ingestChapters(
   //
   // `reorderChapters` exige la liste COMPLÈTE — chapitres écartés compris, ils
   // ont eux aussi une position — et réécrit toutes les places d'un coup, ce qui
-  // interdit les trous et les doublons.
-  await applyChapterOrder(workshopId, plan.chapterOrder, created);
+  // interdit les trous et les doublons. Un classement incomplet ne réordonne
+  // rien du tout, et on le dit : sans ça, l'ordre resterait mystérieusement le
+  // même alors que l'IA a bien répondu quelque chose.
+  const reordering = await applyChapterOrder(workshopId, plan.chapterOrder, created);
+  if (reordering.missing > 0) {
+    plan.adjusted.push({
+      kind: 'chapter',
+      reason: `ordre du programme inchangé : l'IA n'a pas classé ${reordering.missing} chapitre${reordering.missing > 1 ? 's' : ''} sur les ${reordering.missing + plan.chapterOrder.filter((c) => c.rank > 0).length}`,
+    });
+  }
 
   return {
     // Seuls les chapitres RÉELLEMENT créés sont comptés : un doublon redirigé
@@ -733,29 +741,43 @@ export async function ingestChapters(
 
 /** Écrit l'ordre du programme d'après les rangs rendus par le modèle.
  *
- *  Ne lève jamais : l'ordre est cosmétique (`operations.ts`), et un import
- *  réussi ne doit pas être annoncé en échec parce qu'un chapitre est resté à sa
- *  place. */
+ *  ⚠️ **TOUT OU RIEN** (25/08/2026). On ne réordonne que si CHAQUE chapitre
+ *  encore au programme a reçu un rang. Un classement partiel est une consigne
+ *  ambiguë : les chapitres oubliés devraient aller… où ? Les pousser à la fin
+ *  détruit l'ordre que l'utilisateur avait choisi pour eux, et les laisser à
+ *  leur ancienne place n'a pas de sens puisque les places sont réécrites en
+ *  bloc. Or l'ordre est cosmétique (`operations.ts`) : ne rien changer est
+ *  toujours moins grave que remuer un programme sur une réponse incomplète.
+ *
+ *  Il n'y a donc **jamais deux chapitres à la même place** : `reorderChapters`
+ *  reçoit la liste complète et réécrit toutes les positions d'un coup, ou on
+ *  n'écrit rien du tout.
+ *
+ *  Les chapitres écartés ne sont pas exigés — ils ne sont plus au programme —
+ *  et suivent en queue, dans l'ordre où ils étaient.
+ *
+ *  Ne lève jamais : un import réussi ne doit pas être annoncé en échec parce
+ *  qu'un chapitre est resté à sa place. */
 async function applyChapterOrder(
   workshopId: string,
   order: readonly { ref: string; rank: number }[],
   created: ReadonlyMap<string, string>,
-): Promise<void> {
+): Promise<{ reordered: boolean; missing: number }> {
   const ranked = order.filter((c) => c.rank > 0);
-  if (ranked.length === 0) return;
+  if (ranked.length === 0) return { reordered: false, missing: 0 };
 
   try {
     const supabase = getSupabaseServerClient();
     const { data, error } = await supabase
       .from('workshop_chapters')
-      .select('id')
+      .select('id, hidden')
       .eq('workshop_id', workshopId)
       .order('position')
       .order('id');
     if (error) throw new Error(error.message);
 
-    const all = (data ?? []).map((c) => c.id as string);
-    const known = new Set(all);
+    const rows = (data ?? []).map((c) => ({ id: c.id as string, hidden: c.hidden === true }));
+    const known = new Set(rows.map((c) => c.id));
     const wanted: string[] = [];
     const placed = new Set<string>();
 
@@ -767,11 +789,15 @@ async function applyChapterOrder(
       placed.add(id);
       wanted.push(id);
     }
-    if (wanted.length === 0) return;
 
-    await reorderChapters(workshopId, [...wanted, ...all.filter((id) => !placed.has(id))]);
+    const missing = rows.filter((c) => !c.hidden && !placed.has(c.id)).length;
+    if (missing > 0 || wanted.length === 0) return { reordered: false, missing };
+
+    await reorderChapters(workshopId, [...wanted, ...rows.map((c) => c.id).filter((id) => !placed.has(id))]);
+    return { reordered: true, missing: 0 };
   } catch (error) {
     console.warn('[ingest] ordre des chapitres inchangé :', error instanceof Error ? error.message : error);
+    return { reordered: false, missing: 0 };
   }
 }
 
