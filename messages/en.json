@@ -1202,9 +1202,6 @@
   "ai": {
     "title": "Generate with AI",
     "subtitle": "The AI completes this workshop: whatever already exists is reused, never redone.",
-    "files": "Source documents",
-    "noFiles": "No document in this workshop. Add a PDF or a text file under Resources.",
-    "unsupported": "Format not supported by generation yet (PDF and text only)",
     "hint": {
       "label": "DETAILS (OPTIONAL)",
       "placeholder": "e.g. split by themes, there are 4 — the document calls them “Units”.",
@@ -1251,7 +1248,9 @@
       "program": "The AI will read the documents, extract the notions, sort them into chapters, then write the practice questions. Whatever already exists is completed, never redone.",
       "programThenQuestions": "This workshop has no notion in its programme yet: the AI will build it from the documents first, then write this list’s questions.",
       "parcoursQuestions": "The AI will top up the practice questions for notions that are still short. The documents are not read again.",
-      "examQuestions": "The AI will write exam questions across the whole programme — each crossing several notions, some following on from one another. The documents are not read again."
+      "examQuestions": "The AI will write exam questions across the whole programme — each crossing several notions, some following on from one another. The documents are not read again.",
+      "questionsOnly": "No readable document in this workshop: the AI will not touch the programme. It will write the practice questions still missing from the existing notions.",
+      "nothing": "Nothing to work from yet: this workshop has neither a readable document nor a notion in its programme. Add a PDF or a text file in Resources."
     },
     "examCount": {
       "label": "NUMBER OF QUESTIONS",

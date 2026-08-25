@@ -7,6 +7,7 @@ import {
   needsChapterRetry,
   shouldCacheDocuments,
   NOTIONS_PER_QUESTION_BATCH,
+  splitUnplaced,
   withChapterRetry,
 } from '@/lib/ingest/passInput';
 import type { ExistingContent } from '@/lib/ingest/prompt';
@@ -262,5 +263,58 @@ describe('shouldCacheDocuments — le marqueur n’est pas gratuit (§16.17)', (
     // Seuil de rentabilité en TTL 5 minutes : 1,25× + 0,1× contre 2×.
     expect(shouldCacheDocuments(2)).toBe(true);
     expect(shouldCacheDocuments(12)).toBe(true);
+  });
+});
+
+// ─── « Aucun chapitre » : une décision, ou un oubli ? ────────────────────────
+//
+// Deux raisons de tester ça ici plutôt que de le regarder dans l'app :
+//   • `setAside` borne la SEULE suppression du système (`planImportCleanup`) —
+//     y laisser entrer une notion que le modèle n'a jamais jugée efface du
+//     travail saisi à la main ;
+//   • `effective` décide d'un `update` par lot : une ligne de trop et une notion
+//     perd son chapitre sans que personne ne l'ait demandé.
+describe('splitUnplaced', () => {
+  const nowhere = new Map<string, string | null>();
+
+  it('écarte une redite, et elle seule', () => {
+    const split = splitUnplaced(
+      [{ notionRef: 'n1' }, { notionRef: 'n2' }],
+      new Set(['n1']),
+      new Map([['n1', 'c1'], ['n2', 'c1']]),
+    );
+    expect(split.setAside).toEqual(['n1']);
+    expect(split.stranded).toEqual(['n2']);
+  });
+
+  it('laisse en place une notion que le modèle n’a pas su ranger', () => {
+    const split = splitUnplaced([{ notionRef: 'n1' }], new Set(), new Map([['n1', 'c1']]));
+    // Ni écartée ni réécrite : sa ligne ne part pas en base du tout.
+    expect(split.setAside).toEqual([]);
+    expect(split.stranded).toEqual(['n1']);
+    expect(split.effective).toEqual([]);
+  });
+
+  it('ne préserve rien pour une notion qui n’était nulle part', () => {
+    const split = splitUnplaced([{ notionRef: 'n1' }], new Set(), nowhere);
+    expect(split.stranded).toEqual([]);
+    // Elle reste dans les écritures : sans chapitre avant, sans chapitre après.
+    expect(split.effective).toEqual([{ notionRef: 'n1' }]);
+  });
+
+  it('ne touche jamais à un rangement qui nomme un chapitre', () => {
+    const assignments = [{ notionRef: 'n1', chapterRef: 'c2' }];
+    const split = splitUnplaced(assignments, new Set(['n1']), new Map([['n1', 'c1']]));
+    expect(split.setAside).toEqual([]);
+    expect(split.stranded).toEqual([]);
+    expect(split.effective).toEqual(assignments);
+  });
+
+  it('une redite sortie de nulle part reste une redite', () => {
+    // Le cas de la notion NEUVE jugée redondante : elle n'a pas de chapitre à
+    // conserver, et le ménage de fin doit pouvoir l'effacer.
+    const split = splitUnplaced([{ notionRef: 'n1' }], new Set(['n1']), nowhere);
+    expect(split.setAside).toEqual(['n1']);
+    expect(split.stranded).toEqual([]);
   });
 });

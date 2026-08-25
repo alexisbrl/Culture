@@ -319,22 +319,34 @@ export async function removeOrphans(
  *      → **caché**, et c'est automatique parce que c'est réversible d'un clic ;
  *    • il a été créé par cet import et n'a rien reçu → effacé par le ménage,
  *      personne ne l'a jamais vu (`planImportCleanup`) ;
- *    • l'utilisateur l'avait vidé lui-même → on n'y touche pas. */
+ *    • l'utilisateur l'avait vidé lui-même → on n'y touche pas.
+ *
+ *  ⚠️ **`stranded` : les notions restées faute de mieux** (25/08/2026). Une
+ *  notion que le modèle n'a rangée nulle part ne quitte plus son chapitre — elle
+ *  y reste, et le chapitre part avec elle. Sans ce paramètre, une seule notion
+ *  laissée en plan suffirait à faire passer le chapitre pour encore vivant : on
+ *  garderait au programme une partie que le cours ne couvre plus, et on
+ *  perdrait le geste qui rend l'import lisible. « Vidé » veut donc dire : plus
+ *  rien dedans, hormis ce que personne n'a su placer ailleurs. */
 export async function hideEmptiedChapters(
   workshopId: string,
   populatedBefore: readonly string[],
+  stranded: readonly string[] = [],
 ): Promise<string[]> {
   if (populatedBefore.length === 0) return [];
 
   const supabase = getSupabaseServerClient();
   const { data: remaining, error } = await supabase
     .from('workshop_bricks')
-    .select('chapter_id')
+    .select('id, chapter_id')
     .eq('workshop_id', workshopId)
     .in('chapter_id', [...populatedBefore]);
   if (error) throw new Error(error.message);
 
-  const stillPopulated = new Set((remaining ?? []).map((r) => r.chapter_id as string));
+  const left = new Set(stranded);
+  const stillPopulated = new Set(
+    (remaining ?? []).filter((r) => !left.has(r.id as string)).map((r) => r.chapter_id as string),
+  );
   const emptied = populatedBefore.filter((id) => !stillPopulated.has(id));
   if (emptied.length === 0) return [];
 

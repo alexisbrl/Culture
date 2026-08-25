@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Sparkles, FileText, AlertTriangle, Check } from 'lucide-react';
+import { Sparkles, AlertTriangle, Check } from 'lucide-react';
 
 import Modal from '@/components/Modal';
 import { ProgressBar } from '@/components/ui/progress-bar';
-import { Tooltip } from '@/components/ui/tooltip';
 import { ink, palette, radius } from '@/lib/theme';
 import { INGEST_CONCURRENCY, QUESTIONS_CONCURRENCY, mapWithConcurrency } from '@/lib/ingest/concurrency';
 import {
@@ -120,14 +119,14 @@ type Props = {
 export default function AiGenerationDialog({ workshopId, files, forcedContext = null, onClose, onDone }: Props) {
   const t = useTranslations('ai');
 
-  // ─── Les documents ne se choisissent plus ────────────────────────────────
+  // ─── Les documents ne se choisissent plus, et ne s'affichent plus ────────
   //
   // La sélection a disparu le 25/08/2026, pour la même raison que les cases
   // d'étapes la veille : un atelier se construit sur TOUT ce qu'on lui a donné.
   // En laisser un de côté produisait un programme incomplet sans que rien ne le
   // dise — et personne n'ouvre ce dialogue pour ne lire qu'une partie de son
-  // cours. La liste reste affichée, en lecture seule : savoir ce que l'IA va
-  // lire est utile, pouvoir l'amputer ne l'était pas.
+  // cours. La liste elle-même est partie dans la foulée : puisqu'on prend tout,
+  // l'énumérer n'apprend rien à personne et allonge un dialogue qu'on veut court.
   const usable = files.filter((f) => isSupported(f.mimeType));
   // Le programme déjà en place, lu à l'ouverture. `null` = on ne sait pas
   // encore : le dialogue ne peut pas décider de ce qu'il va faire avant de
@@ -159,13 +158,24 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   //                            lieu de se refaire.
   //   • Liste de questions   → seulement des questions, DANS CETTE LISTE.
   //
-  // …avec un rattrapage : demander des questions à un atelier qui n'a aucune
-  // notion au programme ne produirait rien du tout — il n'y a rien à faire
-  // travailler. Dans ce seul cas, on construit d'abord le programme, puis on
-  // écrit les questions. Les notions sans chapitre et celles des chapitres
-  // écartés ne comptent pas : elles sont hors programme.
-  const needsProgram = forcedContext === null || visibleNotions === 0;
+  // …avec deux rattrapages, un dans chaque sens :
+  //
+  //   • demander des questions à un atelier qui n'a aucune notion AU PROGRAMME
+  //     ne produirait rien — il n'y a rien à faire travailler. On construit
+  //     donc le programme d'abord, puis on écrit les questions. Les notions sans
+  //     chapitre et celles des chapitres écartés ne comptent pas : elles sont
+  //     hors programme, c'est la définition de leur état ;
+  //   • **sans document lisible, on ne construit rien** (25/08/2026). Un atelier
+  //     qui a déjà ses chapitres et ses notions n'a pas besoin qu'on relise un
+  //     cours pour lui écrire des questions de plus : on saute les trois premiers
+  //     étages et on rédige. Avant, le bouton restait simplement éteint, sans un
+  //     mot — un atelier dont on avait retiré les PDF devenait ingénérable.
+  const hasFiles = usable.length > 0;
+  const needsProgram = hasFiles && (forcedContext === null || visibleNotions === 0);
   const needsFiles = needsProgram;
+  // Ni document ni programme : il n'y a rien à lire et rien à faire travailler.
+  // C'est le seul vrai blocage qui reste.
+  const nothingToDo = !hasFiles && visibleNotions === 0;
 
   // La liste des chapitres porte déjà le compte de notions et l'état écarté :
   // pas besoin d'une lecture dédiée. Montée à l'ouverture — le dialogue n'est
@@ -511,54 +521,17 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 deux choses différentes sans jamais l'annoncer. */}
             <div style={{ marginBottom: 18 }}>
               <Hint>
-                {forcedContext === null
-                  ? t('plan.program')
-                  : needsProgram
-                    ? t('plan.programThenQuestions')
-                    : t(forcedContext === 'exam' ? 'plan.examQuestions' : 'plan.parcoursQuestions')}
+                {nothingToDo
+                  ? t('plan.nothing')
+                  : forcedContext === null
+                    ? needsProgram
+                      ? t('plan.program')
+                      : t('plan.questionsOnly')
+                    : needsProgram
+                      ? t('plan.programThenQuestions')
+                      : t(forcedContext === 'exam' ? 'plan.examQuestions' : 'plan.parcoursQuestions')}
               </Hint>
             </div>
-
-            {/* Les documents ne servent qu'à écrire des notions. Une génération
-                de questions seule n'en a aucun besoin — elle travaille sur les
-                notions déjà extraites — et les montrer laisserait croire qu'elle
-                relit le cours, donc qu'elle le facture.
-
-                Liste en LECTURE SEULE depuis le 25/08/2026 : elle dit ce qui va
-                être lu, elle ne se négocie plus. */}
-            {needsFiles && (
-            <>
-            <SectionLabel>{t('files')}</SectionLabel>
-            {usable.length === 0 && <Hint>{t('noFiles')}</Hint>}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
-              {files.map((file) => {
-                const supported = isSupported(file.mimeType);
-                const row = (
-                  <div
-                    key={file.id}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 6, minWidth: 0,
-                      fontSize: 13.5, color: palette.inkMuted, opacity: supported ? 1 : 0.45,
-                    }}
-                  >
-                    <FileText size={14} color={palette.inkFaint} style={{ flexShrink: 0 }} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {file.name}
-                    </span>
-                  </div>
-                );
-                // Un format non pris en charge reste listé, en plus pâle : le
-                // document existe, il ne sera simplement pas lu, et l'infobulle
-                // dit pourquoi. Le taire ferait croire à un oubli.
-                return supported ? row : (
-                  <Tooltip key={file.id} content={t('unsupported')}>
-                    <span>{row}</span>
-                  </Tooltip>
-                );
-              })}
-            </div>
-            </>
-            )}
 
             {/* Le nombre de questions d'examen — le seul réglage qui reste, et
                 le seul qui n'a pas de bonne valeur par défaut universelle : un
@@ -654,11 +627,11 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
 
             <Actions>
               <Ghost onClick={onClose}>{t('cancel')}</Ghost>
-              {/* Deux blocages, et un seul se voit : sans document quand il en
-                  faut un, il n'y a rien à lire ; tant que le programme n'est pas
-                  lu, on ne sait pas encore quoi lancer — mieux vaut attendre une
-                  fraction de seconde que partir sur la mauvaise voie. */}
-              <Primary onClick={prepare} disabled={visibleNotions === null || (needsFiles && usable.length === 0)}>
+              {/* Deux blocages : tant que le programme n'est pas lu, on ne sait
+                  pas encore quoi lancer — mieux vaut attendre une fraction de
+                  seconde que partir sur la mauvaise voie ; et un atelier sans
+                  document ET sans notion n'offre rien à quoi se raccrocher. */}
+              <Primary onClick={prepare} disabled={visibleNotions === null || nothingToDo}>
                 {t('generate')}
               </Primary>
             </Actions>

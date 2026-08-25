@@ -62,6 +62,59 @@ export function documentsForPass(
  *  notions), ni tout le chapitre (`MAX_TOKENS` est à 32 000 et une notion à la
  *  volumétrie cible pèse ~2 400 tokens de sortie : un chapitre de 25 notions
  *  tronquerait la réponse, donc la perdrait, §16.2). Dix est le compromis. */
+// ─── Ce que « aucun chapitre » veut dire, et pour qui ────────────────────────
+//
+// Le modèle n'a qu'une façon de dire « nulle part » : un chapitre vide. Cette
+// réponse recouvre deux situations qui n'ont rien à voir, et c'est NOUS qui les
+// distinguons — jamais lui. Règle arrêtée le 25/08/2026, ici parce qu'elle
+// décide d'écritures en base et qu'une règle qui décide d'écritures se teste.
+
+export type UnplacedSplit = {
+  /** Les redites — le modèle a tranché une ressemblance en faveur de l'autre.
+   *  Elles sortent du programme, sans chapitre : c'est le seul état d'où le
+   *  bouton « restaurer » ne peut pas les ramener par surprise. */
+  setAside: string[];
+  /** Les notions restées faute de mieux : le modèle n'a rien trouvé, elles
+   *  GARDENT leur chapitre. Il sera écarté avec elles dedans s'il ne reste que
+   *  ça — ce qui rend l'import lisible au lieu de disperser son contenu. */
+  stranded: string[];
+  /** Les rangements à réellement écrire : ceux qui nomment un chapitre, plus
+   *  ceux qui vident une notion qui n'avait déjà rien. Les « restées » en sont
+   *  absentes — on ne réécrit pas ce qu'on veut laisser tel quel. */
+  effective: { notionRef: string; chapterRef?: string }[];
+};
+
+/** Répartit les notions que le modèle n'a rangées nulle part.
+ *
+ *  ⚠️ `redites` ne contient QUE des notions dont la ressemblance lui a été
+ *  soumise. Une notion qu'il n'a jamais eu à juger ne peut pas être écartée par
+ *  accident : dans le doute, elle reste où elle est. C'est ce qui distingue une
+ *  décision d'un oubli, et c'est ce qui borne la seule suppression du système
+ *  (`planImportCleanup`). */
+export function splitUnplaced(
+  assignments: readonly { notionRef: string; chapterRef?: string }[],
+  redites: ReadonlySet<string>,
+  /** Où chaque notion se trouve aujourd'hui. Absente ou `null` = nulle part,
+   *  donc rien à préserver. */
+  currentChapters: ReadonlyMap<string, string | null>,
+): UnplacedSplit {
+  const setAside: string[] = [];
+  const stranded: string[] = [];
+
+  for (const a of assignments) {
+    if (a.chapterRef) continue;
+    if (redites.has(a.notionRef)) setAside.push(a.notionRef);
+    else if (currentChapters.get(a.notionRef)) stranded.push(a.notionRef);
+  }
+
+  const left = new Set(stranded);
+  return {
+    setAside,
+    stranded,
+    effective: assignments.filter((a) => a.chapterRef || !left.has(a.notionRef)),
+  };
+}
+
 export const NOTIONS_PER_QUESTION_BATCH = 10;
 
 /** Découpe les notions d'un chapitre en lots de travail.

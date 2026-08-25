@@ -68,7 +68,7 @@ import {
   removeOrphans,
 } from './ingest';
 import { flagSimilar, findExistingMatch } from './duplicates';
-import { batchNotions, examSliceCount, sliceProgram, splitBudget, withChapterRetry } from './passInput';
+import { batchNotions, examSliceCount, sliceProgram, splitBudget, splitUnplaced, withChapterRetry } from './passInput';
 import { parsePlan, type PlanIssue } from './planSchema';
 import { releaseDocuments } from './release';
 import {
@@ -768,9 +768,21 @@ async function snapshotPopulatedChapters(workshopId: string, importId: string): 
  *  côté base le jour où ça compte (voir docs/backlog.md). */
 async function recordProgress(
   importId: string,
-  entries: { movedNotions: readonly string[]; setAsideNotions: readonly string[] },
+  entries: {
+    movedNotions: readonly string[];
+    setAsideNotions: readonly string[];
+    /** Les notions que le modèle n'a rangées nulle part et qui GARDENT leur
+     *  chapitre. Elles ne sont pas écartées — on ne les efface jamais — mais
+     *  elles ne suffisent plus à faire vivre un chapitre (voir
+     *  `hideEmptiedChapters`). */
+    strandedNotions: readonly string[];
+  },
 ): Promise<void> {
-  if (entries.movedNotions.length === 0 && entries.setAsideNotions.length === 0) return;
+  if (
+    entries.movedNotions.length === 0
+    && entries.setAsideNotions.length === 0
+    && entries.strandedNotions.length === 0
+  ) return;
   const supabase = getSupabaseServerClient();
   const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
   const scope = (data?.scope as Record<string, unknown> | null) ?? {};
@@ -785,6 +797,7 @@ async function recordProgress(
         ...scope,
         movedNotions: merge('movedNotions', entries.movedNotions),
         setAsideNotions: merge('setAsideNotions', entries.setAsideNotions),
+        strandedNotions: merge('strandedNotions', entries.strandedNotions),
       },
     })
     .eq('id', importId);
@@ -795,6 +808,13 @@ async function setAsideOf(importId: string): Promise<string[]> {
   const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
   const scope = (data?.scope as Record<string, unknown> | null) ?? {};
   return Array.isArray(scope.setAsideNotions) ? (scope.setAsideNotions as string[]) : [];
+}
+
+async function strandedOf(importId: string): Promise<string[]> {
+  const supabase = getSupabaseServerClient();
+  const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
+  const scope = (data?.scope as Record<string, unknown> | null) ?? {};
+  return Array.isArray(scope.strandedNotions) ? (scope.strandedNotions as string[]) : [];
 }
 
 async function populatedBeforeOf(importId: string): Promise<string[]> {
@@ -854,6 +874,11 @@ export async function ingestAssignments(
     proximity: f.proximity,
   }));
 
+  // « Actuellement dans » ne nomme que des chapitres que le modèle a sous les
+  // yeux. Une notion logée dans un chapitre écarté verrait sinon citer une
+  // référence absente de sa liste — au mieux du bruit, au pire une invitation à
+  // la recopier et à ranger dans une boîte mise de côté.
+  const visibleIds = new Set(chapters.map((c) => c.id));
   const result = await provider.documentToPlan([], EMPTY, {
     pass: 'assign',
     notions: batch.map((n) => ({
@@ -861,7 +886,7 @@ export async function ingestAssignments(
       title: n.title,
       sourceDocument: n.sourceDocument,
       page: n.page,
-      currentChapterId: n.chapterId,
+      currentChapterId: n.chapterId && visibleIds.has(n.chapterId) ? n.chapterId : null,
     })),
     chapters,
     similar,
@@ -883,12 +908,39 @@ export async function ingestAssignments(
   // reconduite dans son propre chapitre n'est pas un déplacement, et ne doit ni
   // être réécrite ni apparaître comme un changement.
   const before = new Map(all.map((n) => [n.id, n.chapterId]));
-  const movedIds = await applyAssignments(workshopId, plan.assignments, new Map(), before);
-  // Ce que le modèle a EXPLICITEMENT écarté — la seule chose que le ménage de
-  // fin aura le droit d'effacer. Voir `planImportCleanup` : une notion qu'il n'a
-  // jamais examinée ne doit pas être confondue avec une redite.
-  const setAside = plan.assignments.filter((a) => !a.chapterRef).map((a) => a.notionRef);
-  await recordProgress(importId, { movedNotions: movedIds, setAsideNotions: setAside });
+
+  // ─── « Aucun chapitre » ne veut pas dire la même chose pour tout le monde ──
+  //
+  // Décision du 25/08/2026. Le modèle n'a qu'une façon de dire « nulle part » :
+  // un chapitre vide. Mais cette réponse recouvre deux situations qui n'ont rien
+  // à voir, et c'est NOUS qui les distinguons — jamais lui :
+  //
+  //   • une REDITE — on lui a soumis la paire, il a tranché en faveur de l'autre.
+  //     Elle sort du programme, sans chapitre. Il le faut : c'est le seul état
+  //     d'où le bouton « restaurer » ne peut pas la ramener par surprise.
+  //   • tout le reste — il n'a rien trouvé de mieux. Elle RESTE où elle était.
+  //     Une notion neuve n'était nulle part, elle n'y bouge pas ; une ancienne
+  //     garde son chapitre, qui sera écarté avec elle s'il ne reste que ça.
+  //
+  // Ce que ça évite : offrir les chapitres écartés au modèle comme troisième
+  // choix. Ce serait la réponse confortable pour tout ce qu'il ne veut pas
+  // trancher, et le hors-programme grossirait tout seul sous une étiquette qui a
+  // l'air propre. Il ne voit toujours que les chapitres visibles.
+  //
+  // Les redites sont connues sans rien lui redemander : ce sont exactement les
+  // notions dont on lui a soumis la ressemblance quelques lignes plus haut.
+  const redites = new Set(pairs.flatMap((p) => [p.candidate.id, p.other.id]));
+  // Le partage lui-même vit dans `passInput` : il décide d'écritures en base,
+  // donc il se teste sans base (`setAside` borne la seule suppression du
+  // système, une erreur ici efface du travail saisi à la main).
+  const { setAside, stranded, effective } = splitUnplaced(plan.assignments, redites, before);
+
+  const movedIds = await applyAssignments(workshopId, effective, new Map(), before);
+  await recordProgress(importId, {
+    movedNotions: movedIds,
+    setAsideNotions: setAside,
+    strandedNotions: stranded,
+  });
 
   // ─── Récupérer les questions en sommeil ───────────────────────────────────
   //
@@ -943,7 +995,10 @@ export async function finishIngestion(
 ): Promise<{ hidden: string[]; removedChapters: number; removedNotions: number }> {
   try {
     const populatedBefore = await populatedBeforeOf(importId);
-    const hidden = await hideEmptiedChapters(workshopId, populatedBefore);
+    // Les notions restées faute de mieux ne font plus vivre leur chapitre : il
+    // est écarté avec elles dedans, ce qui rend le changement lisible d'un
+    // coup d'œil au lieu de les disperser dans « sans chapitre ».
+    const hidden = await hideEmptiedChapters(workshopId, populatedBefore, await strandedOf(importId));
 
     const supabase = getSupabaseServerClient();
     const [notions, chapterRows] = await Promise.all([

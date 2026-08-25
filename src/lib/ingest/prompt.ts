@@ -316,6 +316,8 @@ export function workshopBlock(workshop?: WorkshopIdentity | null): string {
   const description = (workshop.description ?? '').trim();
   return `L'atelier s'intitule « ${workshop.name.trim()} »${description ? `, décrit ainsi par son auteur : « ${description} »` : ''}. Écris pour CE public : le niveau d'exigence, le vocabulaire et les exemples doivent lui correspondre.
 
+Prends-le comme une INDICATION, pas comme une donnée sûre : un intitulé peut être vague, approximatif, ou resté d'une version précédente du cours. S'il contredit ce que disent les notions, ce sont les notions qui font foi.
+
 `;
 }
 
@@ -528,6 +530,36 @@ export function bloomInstruction(distribution: BloomDistribution = DEFAULT_BLOOM
   return `Pour CHAQUE notion à couvrir : ${enumeration}, soit ${total} questions par notion. N'en produis pas d'autres niveaux.`;
 }
 
+/** Le TEMPS DE RÉPONSE visé, par niveau de Bloom (arbitrage du 25/08/2026).
+ *
+ *  C'est le réglage le plus concret qu'on sache donner sur l'AMPLEUR d'une
+ *  question. « Niveau 2 » ne dit rien de la longueur attendue ; « 30 secondes à
+ *  une minute » la dicte — la taille de l'énoncé, le nombre de propositions, ce
+ *  qu'on demande de produire. Sans lui, le modèle écrit au bon niveau mais au
+ *  format qu'il veut, et un entraînement se met à ressembler à un devoir.
+ *
+ *  ⚠️ Ces durées sont celles du PARCOURS, qui s'enchaîne. L'examen vise plus
+ *  long, et sa règle est écrite dans `examInstruction` : ses questions croisent
+ *  plusieurs notions et vivent aux niveaux 3 et 4, où l'on attend un
+ *  raisonnement construit, pas un réflexe. */
+const PARCOURS_PACE: Record<BloomLevel, string> = {
+  1: '15 à 30 secondes',
+  2: '30 secondes à 1 minute',
+  3: '1 à 2 minutes',
+  4: '2 à 4 minutes',
+};
+
+/** La règle de rythme du parcours, limitée aux niveaux réellement demandés :
+ *  annoncer une durée pour un niveau qu'on ne produit pas attirerait l'attention
+ *  sur ce qu'on ne veut justement pas voir. */
+export function paceInstruction(distribution: BloomDistribution = DEFAULT_BLOOM_DISTRIBUTION): string {
+  const parts = BLOOM_LEVELS.filter((level) => distribution[level] > 0).map(
+    (level) => `${PARCOURS_PACE[level]} au niveau ${level}`,
+  );
+  if (parts.length === 0) return '';
+  return `**Un entraînement s'enchaîne** : vise ${parts.join(', ')}. C'est le temps de réponse attendu, et c'est lui qui dicte l'ampleur de l'énoncé comme celle de la réponse.`;
+}
+
 /** La règle de ressemblance entre questions, commune aux deux listes.
  *
  *  ⚠️ **Elle est l'INVERSE de celle des notions, et ce n'est pas une
@@ -587,11 +619,13 @@ ${context}
 Règles de production :
 - ${bloomInstruction(input.distribution)}
 - Chaque question porte dans \`notionRefs\` la ou les notions qu'elle fait travailler, avec les références ci-dessus. Une question sans notion ne sera jamais posée à personne.
-- **Une question, une notion.** Ici, chaque question est tirée seule, en révision : elle doit se répondre avec SA notion et rien d'autre.
-- **Uniquement des QCM** (\`qcs\` ou \`qcm\` selon qu'une seule ou plusieurs propositions sont correctes). C'est le seul type que l'application sait corriger toute seule, et une réponse qu'elle ne sait pas corriger ne fait progresser personne. Les réponses libres ont leur place à l'examen, pas ici.
-- Des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien, elle se raye d'office.
+- **Une question, une notion.** Ici, une question est tirée pour réviser SA notion : elle doit se répondre avec elle et rien d'autre.
+- ${paceInstruction(input.distribution)}
+- **Varie les types de réponse.** Le QCM (\`qcs\` ou \`qcm\` selon qu'une seule ou plusieurs propositions sont correctes) reste le format le plus courant en entraînement parce qu'il se traite d'un geste — mais la réponse libre a toute sa place, elle est corrigée elle aussi. Garde-la brève : quelques lignes au plus, jamais une dissertation.
+- Pour une réponse libre : renseigne les critères de correction — ce qui est attendu, ce qui est accepté. C'est là-dessus que la réponse sera jugée.
+- Pour un QCM : des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien, elle se raye d'office.
 - ${VARIATION_RULE}
-- Chaque groupe ne contient qu'UNE question : en entraînement, rien n'est enchaîné.
+- **Une question est seule dans son groupe, sauf si elle est indissociable d'une autre.** C'est le cas normal, et de très loin le plus fréquent. Quand deux ou trois questions ne se comprennent que dans l'ordre — la première pose la situation, les suivantes s'appuient dessus sans la répéter —, rassemble-les dans un même groupe : elles seront toujours posées ensemble, et dans cet ordre. N'en fais jamais un procédé — un groupe dont les questions tiendraient seules n'est pas un groupe.
 - N'excède pas ${input.budget} questions au total.
 
 Une bonne question se répond avec la notion et rien d'autre : ni piège de formulation, ni connaissance extérieure au document.`;
@@ -657,7 +691,8 @@ Règles de production :
 - Répartition visée : ${mix}. Aucune question de simple restitution : le parcours s'en charge.
 - Chaque question porte dans \`notionRefs\` TOUTES les notions qu'elle fait travailler, avec les références ci-dessus. Une question sans notion ne sera jamais retenue.
 ${groups}
-- Varie les types de réponse : QCM, réponse textuelle, liste. L'examen se corrige à la main, la réponse libre y est donc pleinement à sa place — c'est même elle qui permet d'évaluer un raisonnement.
+- Varie les types de réponse : QCM, réponse textuelle, liste. La réponse libre est pleinement à sa place ici — c'est elle qui permet d'évaluer un raisonnement, et elle est corrigée comme le reste.
+- **Une question d'examen se donne plus de temps qu'une question d'entraînement du même niveau** : compte 1 à 2 minutes au niveau 2, 3 à 5 minutes aux niveaux 3 et 4. C'est ce temps qui autorise un énoncé plus fourni et une réponse construite.
 - Pour un QCM : des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien.
 - Pour une réponse libre : renseigne les critères de correction — ce qui est attendu, ce qui est accepté. C'est ce que le correcteur aura sous les yeux.
 - ${VARIATION_RULE}

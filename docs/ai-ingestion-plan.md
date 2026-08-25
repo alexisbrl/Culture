@@ -1589,12 +1589,12 @@ réponse générale.
    est en place, il ne manque que le déclencheur — un stock épuisé plutôt qu'un
    bouton. C'est toujours « une boucle qui dépense de l'argent toute seule »,
    donc toujours hors travail autonome (§16.23).
-2. **Les notions rangées dans un chapitre écarté sont encore soumises au
-   rangement.** Sans effet aujourd'hui — un chapitre n'est caché que lorsqu'il a
-   été vidé, donc il n'en contient aucune — mais le jour où un chapitre pourra
-   être caché en gardant ses notions, l'IA les ramènerait dans les chapitres
-   visibles. La règle manquante : une notion d'un chapitre écarté ne se re-range
-   pas.
+2. ~~**Les notions rangées dans un chapitre écarté sont encore soumises au
+   rangement.**~~ Tranché le 25/08/2026, et dans l'autre sens : elles y restent
+   soumises, **et c'est voulu** — si un nouveau document couvre à nouveau la
+   matière, la notion revient au programme au lieu d'être recréée en double. Ce
+   qui a changé, c'est ce qui arrive quand elle ne trouve rien : elle ne bouge
+   plus (§18.2).
 3. **Un chapitre écarté ne l'est que dans les Paramètres** : le parcours,
    l'examen et la maîtrise continuent de l'afficher aux élèves. À brancher avant
    toute mise en ligne (`docs/backlog.md`).
@@ -1615,3 +1615,107 @@ figurent toujours, en plus pâle et avec leur infobulle — les taire ferait cro
 
 Un seul blocage subsiste, et il n'a pas changé de nature : aucun document
 lisible quand il en faut un, et le bouton reste éteint.
+
+---
+
+## 18. Révision du 25/08/2026 — le programme reste lisible d'un import à l'autre
+
+### 18.1 Les documents disparaissent du dialogue
+
+Suite directe de §17.8 : après les cases, c'est la LISTE elle-même qui part.
+Puisque tout ce qui est lisible est lu, l'énumérer n'apprend rien et allonge un
+dialogue qu'on veut court.
+
+Deux conséquences, dont une qui corrige un défaut :
+
+- **Sans document lisible, on ne construit plus rien — on rédige.** Un atelier
+  qui a déjà ses chapitres et ses notions n'a pas besoin qu'on relise un cours
+  pour lui écrire des questions de plus : les trois premiers étages sont sautés,
+  la passe questions travaille seule. Avant, le bouton restait éteint **sans un
+  mot** : un atelier dont on avait retiré les PDF devenait ingénérable.
+- **Un seul blocage subsiste** : ni document lisible, ni notion au programme. Il
+  n'y a alors rien à lire et rien à faire travailler, et le dialogue le dit.
+
+### 18.2 Une notion que l'IA ne range pas ne bouge plus
+
+Le modèle n'a qu'une façon de dire « nulle part » : un chapitre vide. Cette
+réponse recouvrait deux situations qu'on confondait, et qu'on distingue
+désormais **côté serveur, jamais côté modèle** :
+
+| Ce que le modèle dit | Ce que ça veut dire | Ce qu'on en fait |
+|---|---|---|
+| pas de chapitre, notion dont la RESSEMBLANCE lui a été soumise | c'est une redite, il a tranché en faveur de l'autre | sans chapitre — hors programme, et effaçable par le ménage de fin |
+| pas de chapitre, tout le reste | il n'a rien trouvé de mieux | **elle reste où elle était** |
+
+Le chapitre suit ses notions : un chapitre dont il ne reste que des notions que
+personne n'a su placer est **écarté avec elles dedans**. « Vidé » veut donc dire
+désormais : plus rien, hormis ce que personne n'a su placer ailleurs.
+
+Ce que ça achète : un import se lit d'un coup d'œil. La partie que le cours ne
+couvre plus est là, barrée, avec son contenu — au lieu d'être dispersée dans un
+« sans chapitre » qui mélangeait les redites volontaires et les orphelines.
+Et le bouton « restaurer » redevient honnête : il rend une partie avec ses
+notions, jamais une boîte vide, et **jamais une redite**, qui est le seul état
+d'où il ne peut rien ramener par surprise.
+
+Ce qu'on a refusé au passage : offrir les chapitres écartés au modèle comme
+troisième choix de rangement. Ce serait la réponse confortable pour tout ce
+qu'il ne veut pas trancher, et le hors-programme grossirait tout seul sous une
+étiquette qui a l'air propre. Il ne voit toujours QUE les chapitres visibles —
+et depuis cette révision, on ne lui dit même plus « actuellement dans X » quand
+X est écarté : citer une référence absente de sa liste est au mieux du bruit.
+
+La règle de partage est pure et testée (`splitUnplaced`, `passInput.ts`) : elle
+décide d'écritures par lot, et `setAside` borne la seule suppression du système.
+
+### 18.3 Les groupes ne sont plus réservés à l'examen
+
+Un groupe, c'est un ensemble de questions **indissociables**. Rien là-dedans
+n'appartient à l'examen : le parcours tire déjà des GROUPES, pas des questions —
+l'écrasante majorité comptent une seule question, et l'écran sait depuis
+toujours enchaîner les suivantes. Seul le prompt l'interdisait.
+
+La consigne dit donc maintenant l'inverse : une question est seule dans son
+groupe, **sauf** si deux ou trois ne se comprennent que dans l'ordre. Avec un
+garde-fou explicite — un groupe dont les questions tiendraient seules n'est pas
+un groupe.
+
+### 18.4 Le parcours retrouve la réponse libre
+
+La correction est assistée par IA dans les deux listes : le QCM n'est plus le
+seul format qu'on sache corriger, et le réserver à l'entraînement n'avait plus
+de raison d'être. La consigne demande donc de **varier** — le QCM reste le
+format le plus fréquent parce qu'il se traite d'un geste, mais une réponse libre
+de quelques lignes est légitime, avec ses critères de correction.
+
+### 18.5 Le temps de réponse, réglage le plus concret qu'on sache donner
+
+« Niveau 2 » ne dit rien de la longueur attendue ; « 30 secondes à une minute »
+la dicte — taille de l'énoncé, nombre de propositions, ampleur de la réponse.
+
+| Niveau | Parcours | Examen |
+|---|---|---|
+| 1 (mémoriser) | 15 à 30 s | — (le parcours s'en charge) |
+| 2 (comprendre) | 30 s à 1 min | 1 à 2 min |
+| 3 (appliquer) | 1 à 2 min | 3 à 5 min |
+| 4 (analyser, créer) | 2 à 4 min | 3 à 5 min |
+
+### 18.6 Le nom de l'atelier est une indication, pas une preuve
+
+Il reste transmis — c'est la seule chose qui distingue un BTS d'une classe de
+quatrième (§17.5) — mais avec sa réserve écrite : un intitulé peut être vague,
+approximatif, ou resté d'une version précédente du cours. **S'il contredit les
+notions, ce sont les notions qui font foi.**
+
+### 18.7 Ce qui reste ouvert
+
+1. **Rien n'empêche une question d'examen de répéter une question
+   d'entraînement.** Les deux listes ne se voient pas — c'est ce qui a éliminé
+   le poste de coût de §16.3, et ça ne se rediscute pas. La parade, si le cas se
+   présente, est **locale et gratuite** : comparer les énoncés produits à ceux du
+   parcours après coup (`duplicates.ts`), et écarter la répétition dans le
+   compte-rendu d'import. Pas décidé.
+2. **Un chapitre ne peut toujours être écarté qu'automatiquement**, par le
+   constat qu'il s'est vidé. Ni l'IA ni l'interface n'ont de geste « écarter »
+   explicite — seulement « restaurer ».
+3. Les points 1 et 3 de §17.7 restent ouverts.
