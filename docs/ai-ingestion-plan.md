@@ -1762,27 +1762,65 @@ sans le dire. Le rattrapage redemande exactement ce qui manque, en un appel, et
 ne se répète pas : un atelier dont le programme ne porte pas quarante questions
 ne les portera pas davantage au troisième essai.
 
-### 18.10 Ce qui reste ouvert
+### 18.10 C'est la passe CHAPITRES qui écarte, parce qu'elle seule voit le cours
 
-1. **Le plafond de CORPUS manque encore.** Posé le 25/08/2026 : 2 000 notions
-   par atelier (`MAX_NOTIONS_PER_WORKSHOP`, création manuelle comprise), examen
-   de 1 à 200 énoncés par lancement, 300 questions par import, 25 Mo par
-   fichier. Le compte de documents a été écarté à raison — on contourne en
-   fusionnant tout dans un seul PDF. Reste le seul plafond qui borne vraiment la
-   lecture : **le volume total du corpus**, déjà mesuré à la préparation
-   (`corpusTokens`) mais qui ne refuse rien. À décider : à partir de combien on
-   refuse de lire.
-2. **Deux chapitres qui se recouvrent sans se ressembler ne sont pas
-   détectés.** Le rapprochement de noms (seuil 0,7) attrape « L'Europe, foyer de
-   peuplement » et sa variante, jamais « la guerre Israël/Palestine » devenue
-   « la guerre du Moyen-Orient » : les mots n'ont rien de commun. Les notions se
-   répartissent alors entre les deux, aucun ne se vide, aucun n'est écarté — le
-   programme porte deux fois la même partie. La parade la plus simple n'est pas
-   d'écarter mais de **RENOMMER** : la passe chapitres voit tous les chapitres et
-   toutes les notions, elle pourrait reprendre un chapitre existant sous un
-   nouveau nom au lieu d'en créer un voisin. Elle ne sait aujourd'hui que
-   réutiliser à l'identique.
-3. **Un chapitre ne peut toujours être écarté qu'automatiquement**, par le
-   constat qu'il s'est vidé. Ni l'IA ni l'interface n'ont de geste « écarter »
-   explicite — seulement « restaurer ».
-4. Les points 1 et 3 de §17.7 restent ouverts.
+Renversement du 25/08/2026, après débat. L'argument qui tranche n'est pas
+lequel des deux mécanismes est le plus élégant, c'est **où vit l'information** :
+
+- la passe CHAPITRES reçoit les documents, tous les chapitres et toutes les
+  notions. Elle sait laquelle est la bonne version du cours ;
+- la passe RANGEMENT ne reçoit **aucun document** (§16.3). Elle ne voit que des
+  noms de chapitres, donc elle trouve légitimes deux chapitres qui se
+  recouvrent — « la guerre Israël/Palestine » et « la guerre du Moyen-Orient »
+  n'ont rien qui les départage sans le cours sous les yeux.
+
+Faire décider le rangement, c'était poser la question à l'étape qui en sait le
+moins. La déclaration remonte donc à la passe chapitres.
+
+**Elle est POSITIVE, et c'est tout le dispositif.** On aurait pu demander
+l'architecture complète et écarter ce qui n'y figure pas : l'oubli d'une ligne
+aurait alors amputé le programme, et l'omission sur une longue liste est la
+panne la plus banale d'un modèle. Ici, ne rien dire ne fait rien. Deux
+invariants tiennent le reste, tous deux testés (`planSchema.test.ts`) : une
+référence inconnue est ignorée, une référence créée dans la même réponse aussi.
+
+Le cas de la partie qui se resserre se règle du même coup. « Moyen-Orient »
+devient « Israël/Palestine » : le modèle crée le nouveau chapitre ET écarte
+l'ancien. Les notions encore d'actualité rejoignent le nouveau ; celles sur
+l'Iran n'y trouvent pas leur place, **restent dans l'ancien** (§18.2) et sortent
+du programme avec lui. C'est exactement le comportement voulu — et c'est ce que
+le RENOMMAGE, envisagé d'abord, faisait mal : il aurait gardé les notions sur
+l'Iran dans un chapitre devenu « Israël/Palestine ».
+
+Les deux mécanismes d'écartement coexistent et ne disent pas la même chose :
+`hideChapters` porte une décision, `hideEmptiedChapters` ramasse ce qui s'est
+vidé en chemin. Aucun n'efface, un clic annule les deux.
+
+### 18.11 Ce qui reste ouvert
+
+1. ~~Les limites physiques.~~ Posées le 25/08/2026, et elles forment une chaîne
+   complète : 25 Mo par fichier **et 25 Mo par atelier** (le plafond par fichier
+   ne bornait rien tant qu'on pouvait en déposer trente), 2 000 notions par
+   atelier création manuelle comprise, 1 à 200 énoncés d'examen par lancement,
+   300 questions par import, et le mur de lecture — `MAX_CORPUS_TOKENS`, la plus
+   grande fenêtre dont on dispose moins la réserve de sortie, soit 968 000
+   tokens. Au-delà, on refuse **avant** de créer le lot et on rend les documents.
+   Le compte de documents a été écarté à raison : on le contourne en fusionnant
+   tout dans un seul PDF.
+2. ~~Deux chapitres qui se recouvrent sans se ressembler.~~ Réglé par §18.10.
+3. ~~Un chapitre ne peut être écarté qu'automatiquement.~~ L'IA le peut
+   désormais, nommément. **L'interface, elle, n'offre toujours pas de bouton
+   « cacher »** — décision de sobriété du 23/08/2026, inchangée. Seul
+   « restaurer » existe.
+4. **La forme négative est interdite au parcours, tolérée à l'examen.** Asymétrie
+   assumée : en entraînement la correction est automatique et sert à mesurer une
+   maîtrise, on ne saurait pas distinguer « a mal lu » de « ne sait pas ». Un
+   examen cherche à départager. Elle n'est pas encouragée pour autant — rien
+   dans la consigne ne la met en avant.
+5. **Le seuil de recopie entre les deux listes est à 0,95, pas à 0,70.** Mesures
+   du 25/08/2026 sur le recouvrement de mots signifiants : deux calculs ne
+   différant que par un nombre tombent à 0,67 sur un énoncé court mais à **0,80**
+   sur un énoncé long, et une simple reformulation (« causes principales » →
+   « causes majeures ») aussi. Au seuil des titres, on jetait donc des questions
+   payées et légitimes. On ne vise plus que le mot à mot.
+6. Les points 1 et 3 de §17.7 restent ouverts.

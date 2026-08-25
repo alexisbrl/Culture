@@ -26,6 +26,32 @@ export type WorkshopFile = {
 // questions déjà là). Voir docs/ai-ingestion-plan.md §6.
 export const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
+/** Le poids TOTAL des documents d'un atelier (25/08/2026).
+ *
+ *  Même valeur que le plafond d'un fichier, et c'est volontaire : le plafond par
+ *  fichier ne bornait rien du tout tant qu'on pouvait en déposer trente. Le
+ *  contournement était même le geste naturel — découper son cours en dix PDF.
+ *
+ *  ⚠️ **Des octets ne sont pas du texte, et c'est la limite de cette limite.**
+ *  25 Mo de PDF scanné pèsent presque rien à lire (des images), 25 Mo de PDF
+ *  texte représentent des milliers de pages. Le garde-fou qui compte vraiment
+ *  est celui du VOLUME DE TEXTE, mesuré au lancement de la génération
+ *  (`MAX_CORPUS_TOKENS`) : celui-ci n'est que sa doublure côté stockage. */
+export const MAX_WORKSHOP_FILES_SIZE = 25 * 1024 * 1024;
+
+/** Le poids déjà occupé par les documents de cet atelier. Lecture avant
+ *  écriture : un compte inconnu laisse passer (voir `countNotions`, même
+ *  raison — un incident de lecture ne doit pas devenir une panne d'écriture). */
+export async function totalFilesSize(workshopId: string): Promise<number> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('workshop_files')
+    .select('size')
+    .eq('workshop_id', workshopId);
+  if (error) return 0;
+  return (data ?? []).reduce((sum, f) => sum + ((f.size as number | null) ?? 0), 0);
+}
+
 function categoryFor(mimeType: string): FileCategory {
   if (mimeType.startsWith('audio/')) return 'audio';
   if (
@@ -69,6 +95,12 @@ export async function createUploadTicketFor(
 ): Promise<{ success: boolean; ticket?: UploadTicket; path?: string; error?: string }> {
   if (fileSize > MAX_FILE_SIZE) {
     return { success: false, error: 'Fichier trop lourd (25 Mo maximum)' };
+  }
+
+  // Le ticket est le bon endroit : refuser AVANT le transfert évite de faire
+  // monter 25 Mo pour les rejeter à l'enregistrement.
+  if ((await totalFilesSize(workshopId)) + fileSize > MAX_WORKSHOP_FILES_SIZE) {
+    return { success: false, error: 'Cet atelier a atteint sa limite de 25 Mo de documents' };
   }
 
   const path = buildWorkshopFileKey(workshopId, fileName);

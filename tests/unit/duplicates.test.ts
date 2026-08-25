@@ -294,10 +294,33 @@ describe('dropRepeatedQuestions', () => {
     expect(dropRepeatedQuestions(groups, []).kept).toEqual(groups);
   });
 
-  it('ne confond pas deux questions qui travaillent le même fait autrement', () => {
-    // Le seuil vise la RECOPIE. Deux angles sur la même addition doivent passer.
-    const groups = [{ questions: [q('Un train part à 14 h et roule trois heures : à quelle heure arrive-t-il ?')] }];
-    const { kept } = dropRepeatedQuestions(groups, ['Combien font quatorze plus trois ?']);
-    expect(kept).toHaveLength(1);
+  // ─── Les trois faux positifs que le seuil des titres produisait ───────────
+  //
+  // Mesures réelles au 25/08/2026, sur le recouvrement de mots signifiants :
+  // 0,67 · 0,80 · 0,80. À 0,70 (le seuil des titres), les deux derniers étaient
+  // écartés — deux questions payées, légitimes, jetées en silence. C'est ce qui
+  // a fait passer la recopie à 0,95.
+  it('garde deux calculs qui ne diffèrent que par un nombre', () => {
+    const groups = [{ questions: [q('Combien fait la somme 7 + 13 ?')] }];
+    expect(dropRepeatedQuestions(groups, ['Combien fait la somme 7 + 23 ?']).kept).toHaveLength(1);
+  });
+
+  it('garde un énoncé long qui ne diffère que par une valeur', () => {
+    const groups = [{ questions: [q('Un train part de Lyon à 14 h et roule 3 heures : à quelle heure arrive-t-il ?')] }];
+    const seen = ['Un train part de Lyon à 14 h et roule 5 heures : à quelle heure arrive-t-il ?'];
+    expect(dropRepeatedQuestions(groups, seen).kept).toHaveLength(1);
+  });
+
+  it('garde une reformulation de la même question', () => {
+    // Reposer autrement une question du parcours est légitime en examen : on
+    // vérifie que la notion est comprise, pas qu'elle est mémorisée.
+    const groups = [{ questions: [q('Cite les trois causes principales de la Première Guerre mondiale selon le cours.')] }];
+    const seen = ['Cite les trois causes majeures de la Première Guerre mondiale selon le cours.'];
+    expect(dropRepeatedQuestions(groups, seen).kept).toHaveLength(1);
+  });
+
+  it('écarte le mot à mot, y compris sous une ponctuation différente', () => {
+    const groups = [{ questions: [q('Quelle est la capitale du Pérou ?')] }];
+    expect(dropRepeatedQuestions(groups, ['Quelle est la capitale du Pérou.']).kept).toHaveLength(0);
   });
 });

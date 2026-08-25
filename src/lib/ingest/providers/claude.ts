@@ -96,6 +96,19 @@ const CONTEXT_WINDOW: Record<ModelId, number> = {
   [MODELS.opus]: 1_000_000,
 };
 
+/** Le plus gros corpus qu'on sache LIRE, tous modèles confondus (25/08/2026).
+ *
+ *  Ce n'est pas un réglage de coût, c'est un mur : la plus grande fenêtre dont
+ *  on dispose est d'un million de tokens, elle porte l'entrée ET la sortie, et
+ *  `MAX_TOKENS` y est réservé pour la réponse. Au-delà, aucun modèle ne peut
+ *  lire le corpus en un appel et aucun réglage ne le contourne.
+ *
+ *  ⚠️ Il ne borne QUE la passe chapitres — la seule qui reçoive tout le corpus
+ *  d'un coup. La passe notions travaille document par document, la fenêtre s'y
+ *  applique par document ; les passes suivantes ne reçoivent aucun document. Le
+ *  jour où le découpage séquentiel du cours existera, ce plafond tombera. */
+export const MAX_CORPUS_TOKENS = 1_000_000 - MAX_TOKENS;
+
 /** Le modèle voulu pour chaque passe. Haiku 4.5 partout : c'est l'hypothèse à
  *  tester, pas une conclusion (§16.20). */
 export const PASS_MODELS: Record<IngestScope['pass'], ModelId> = {

@@ -68,6 +68,10 @@ export type ParsedPlan = {
   notions: PlanNotion[];
   /** Notions existantes à ranger — ne crée rien, ne détruit rien. */
   assignments: PlanAssignment[];
+  /** Chapitres EXISTANTS que le nouveau cours ne couvre plus. Sortent du
+   *  programme avec ce qu'ils contiennent ; rien n'est effacé, et un clic les
+   *  restaure. */
+  discardChapters: PlanDiscard[];
   groups: PlanGroup[];
   /** Éléments écartés : inexploitables. */
   discarded: PlanIssue[];
@@ -169,6 +173,12 @@ const groupSchema = z.object({
   questions: z.array(questionSchema).min(1, { message: 'groupe sans question' }),
 });
 
+const discardSchema = z.object({
+  ref: refSchema,
+  reason: z.string().trim().default(''),
+});
+
+export type PlanDiscard = z.infer<typeof discardSchema>;
 export type PlanChapter = z.infer<typeof chapterSchema>;
 export type PlanAssignment = z.infer<typeof assignmentSchema>;
 export type PlanNotion = z.infer<typeof notionSchema>;
@@ -180,6 +190,7 @@ export type PlanGroup = z.infer<typeof groupSchema>;
  *  validation à la réception. Deux usages, une seule définition. */
 export const planSchema = z.object({
   chapters: z.array(chapterSchema).default([]),
+  discardChapters: z.array(discardSchema).default([]),
   notions: z.array(notionSchema).default([]),
   assignments: z.array(assignmentSchema).default([]),
   groups: z.array(groupSchema).default([]),
@@ -244,6 +255,31 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
     }
     chapterRefs.add(result.data.ref);
     chapters.push(result.data);
+  }
+
+  // 1 bis. Les chapitres à ÉCARTER — et la seule règle qui compte : la
+  //        référence doit désigner un chapitre QUI EXISTE. Un modèle qui nomme
+  //        une référence de sa propre réponse, ou une référence inventée,
+  //        retirerait du programme quelque chose que personne ne peut situer.
+  //        Dans le doute on ne fait rien : écarter est une perte, pas écarter
+  //        n'en est pas une.
+  const discardChapters: PlanDiscard[] = [];
+  const known = new Set<string>(existing.chapterIds ?? []);
+  const alreadyDiscarded = new Set<string>();
+  for (const item of asArray(root.discardChapters)) {
+    const result = discardSchema.safeParse(item);
+    if (!result.success) {
+      discarded.push({ kind: 'chapter', ref: refOf(item), reason: firstMessage(result.error) });
+      continue;
+    }
+    const { ref } = result.data;
+    if (!known.has(ref)) {
+      discarded.push({ kind: 'chapter', ref, reason: 'chapitre à écarter inconnu — ignoré' });
+      continue;
+    }
+    if (alreadyDiscarded.has(ref)) continue;
+    alreadyDiscarded.add(ref);
+    discardChapters.push(result.data);
   }
 
   // 2. Notions — idem : une question peut viser une notion déjà en base.
@@ -354,5 +390,5 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
     groups.push(group);
   }
 
-  return { chapters, notions, assignments, groups, discarded, adjusted };
+  return { chapters, notions, assignments, groups, discardChapters, discarded, adjusted };
 }

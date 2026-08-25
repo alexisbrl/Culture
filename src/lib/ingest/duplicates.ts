@@ -242,6 +242,22 @@ export function dropNearDuplicates<T>(
 
 export type RepeatedQuestion = { content: string; other: string; proximity: number };
 
+/** Le seuil de la recopie ENTRE LES DEUX LISTES — et il n'a rien à voir avec
+ *  celui des titres (25/08/2026).
+ *
+ *  ⚠️ **Deux questions très ressemblantes sont deux questions.** « Combien fait
+ *  7 + 13 » et « combien fait 7 + 23 » partagent presque tous leurs mots et
+ *  n'ont rien de commun pédagogiquement ; une question de parcours reformulée
+ *  autrement dans un examen est légitime — on veut justement voir si la notion
+ *  est comprise et pas seulement mémorisée. Le seul cas à écarter est le MOT À
+ *  MOT.
+ *
+ *  0,95 sur un recouvrement de mots signifiants revient à exiger le même
+ *  vocabulaire à un mot près. Le seuil des titres (0,70) attrapait, sur un
+ *  énoncé un peu long, deux questions ne différant que par un nombre : c'était
+ *  un faux positif qui coûtait une question payée. */
+export const VERBATIM_REPEAT = 0.95;
+
 /** Retire d'un lot de groupes les questions qui redisent un énoncé déjà écrit
  *  ailleurs.
  *
@@ -258,7 +274,7 @@ export type RepeatedQuestion = { content: string; other: string; proximity: numb
 export function dropRepeatedQuestions<G extends { questions: readonly { content: string }[] }>(
   groups: readonly G[],
   seen: readonly string[],
-  threshold = NEAR_DUPLICATE_TITLE,
+  threshold = VERBATIM_REPEAT,
 ): { kept: G[]; removed: RepeatedQuestion[] } {
   if (seen.length === 0) return { kept: [...groups], removed: [] };
 

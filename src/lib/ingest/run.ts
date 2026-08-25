@@ -60,6 +60,7 @@ import {
   applyAssignments,
   createImport,
   hideEmptiedChapters,
+  hideChapters,
   insertChapters,
   insertGroups,
   insertNotions,
@@ -80,7 +81,7 @@ import {
   type ExistingContent,
   type WorkshopIdentity,
 } from './prompt';
-import { createClaudeProvider, type ModelId } from './providers/claude';
+import { MAX_CORPUS_TOKENS, createClaudeProvider, type ModelId } from './providers/claude';
 import { createDeepSeekProvider } from './providers/deepseek';
 import type { PlanProvider, PreparedDocument } from './providers/types';
 
@@ -545,6 +546,24 @@ export async function prepareIngestion(
   const prepared = await provider.prepare(documents);
   const corpusTokens = await provider.countCorpus(prepared);
 
+  // ─── Le mur de la fenêtre ─────────────────────────────────────────────────
+  //
+  // On refuse ICI, avant d'avoir créé le lot : au-delà de la plus grande fenêtre
+  // dont on dispose, la passe chapitres — la seule à recevoir tout le corpus —
+  // ne peut PAS être appelée, et le lancement échouerait de toute façon, mais
+  // après avoir téléversé et facturé. Un refus mesuré vaut mieux qu'un refus
+  // subi.
+  //
+  // Taille inconnue → on laisse passer : le fournisseur reprend sur le repli
+  // quand l'appel est refusé (`isContextWindowOverflow`), ce qui reste le bon
+  // filet. On ne bloque jamais sur une mesure qu'on n'a pas.
+  if (corpusTokens !== null && corpusTokens > MAX_CORPUS_TOKENS) {
+    await releaseDocuments(provider, prepared);
+    throw new Error(
+      `Ce cours est trop volumineux pour être lu en une fois (${Math.round(corpusTokens / 1000)} k contre ${Math.round(MAX_CORPUS_TOKENS / 1000)} k au maximum). Retire un document ou découpe le cours en deux ateliers.`,
+    );
+  }
+
   // Les poignées sont enregistrées AVANT le premier appel au modèle : si celui-ci
   // échoue, on ne perd pas le téléversement. La taille du corpus voyage dans
   // `scope` — c'est du jsonb libre, aucune migration nécessaire — parce que la
@@ -643,6 +662,32 @@ export async function ingestChapters(
     });
     return false;
   });
+
+  // ─── Ce que le cours ne couvre plus ───────────────────────────────────────
+  //
+  // Décidé ICI et nulle part ailleurs (25/08/2026) : cette passe est la SEULE à
+  // recevoir les documents. L'étape de rangement, elle, ne voit que des noms de
+  // chapitres — elle n'a aucun moyen de savoir laquelle est la bonne version du
+  // cours, et trouverait légitimes deux chapitres qui se recouvrent.
+  //
+  // C'est une déclaration POSITIVE : ce que le modèle ne nomme pas reste au
+  // programme. L'omission — sa panne la plus banale sur une longue liste — est
+  // donc sans effet, là où « voici l'architecture complète, le reste dégage »
+  // aurait fait d'un oubli une amputation.
+  //
+  // Appliqué AVANT le rangement, donc les notions ne seront jamais proposées à
+  // un chapitre qu'on vient d'écarter ; celles qui n'ont plus leur place
+  // ailleurs y resteront, hors programme, ce qui rend le changement lisible.
+  const byId = new Map(chaptersOnly.chapters.map((c) => [c.id, c.name]));
+  const discardedChapters = await hideChapters(workshopId, plan.discardChapters.map((d) => d.ref));
+  for (const id of discardedChapters) {
+    const reason = plan.discardChapters.find((d) => d.ref === id)?.reason?.trim();
+    plan.adjusted.push({
+      kind: 'chapter',
+      ref: id,
+      reason: `« ${byId.get(id) ?? id} » écarté du programme${reason ? ` : ${reason}` : ' — plus couvert par les documents'}`,
+    });
+  }
 
   const created = new Map([...(await insertChapters(workshopId, actorId, importId, fresh)), ...reused]);
 

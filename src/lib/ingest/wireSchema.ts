@@ -144,7 +144,26 @@ export const wireAssignmentSchema = z.object({
 //
 // Bénéfice au passage : nommer les chapitres demande le cours, les ranger non —
 // la passe rangement se passe donc entièrement des documents.
-export const wireChaptersOutput = z.object({ chapters: z.array(wireChapterSchema) });
+/** Un chapitre EXISTANT que le nouveau cours ne couvre plus (25/08/2026).
+ *
+ *  ⚠️ **C'est une déclaration POSITIVE, jamais une absence.** On aurait pu
+ *  demander l'architecture complète et écarter tout ce qui n'y figure pas :
+ *  l'oubli d'une ligne aurait alors retiré une partie du programme. Ici, oublier
+ *  ne fait rien — le chapitre reste. C'est la seule forme où la panne la plus
+ *  banale d'un modèle (omettre un élément d'une longue liste) est inoffensive. */
+export const wireDiscardSchema = z.object({
+  ref: z
+    .string()
+    .describe("Identifiant d'un chapitre DÉJÀ EXISTANT, recopié tel quel depuis la liste de l'atelier. Jamais un chapitre de cette réponse."),
+  reason: z
+    .string()
+    .describe("En quelques mots, pourquoi le cours ne le couvre plus. S'affiche à l'utilisateur."),
+});
+
+export const wireChaptersOutput = z.object({
+  chapters: z.array(wireChapterSchema),
+  discardChapters: z.array(wireDiscardSchema),
+});
 export const wireAssignmentsOutput = z.object({ assignments: z.array(wireAssignmentSchema) });
 export const wireNotionsOutput = z.object({ notions: z.array(wireNotionSchema) });
 export const wireGroupsOutput = z.object({ groups: z.array(wireGroupSchema) });

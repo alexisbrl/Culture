@@ -397,7 +397,15 @@ Donne à chacun une référence courte et unique (ch1, ch2…), et un nom de 120
 
 **Situe chaque chapitre dans le cours** : le document où il commence, sa première et sa dernière page approximatives. Une autre étape s'en servira pour ranger les notions sans avoir à relire le cours. Approximatif suffit largement ; mets 0 quand tu ne peux vraiment pas dire.
 
-**Tu ne ranges rien ici** : les notions ci-dessous sont là pour que tu saches ce que le cours contient réellement, pas pour que tu les distribues. Une autre étape s'en charge.
+**LES CHAPITRES QUE LE COURS NE COUVRE PLUS.** Une mise à jour retire parfois une partie : le nouveau cours ne la traite plus, ou la remplace par un autre découpage. Nomme ces chapitres-là dans \`discardChapters\`, en recopiant leur identifiant tel quel depuis la liste de l'atelier. Ils sortiront du programme avec ce qu'ils contiennent — rien n'est effacé, et l'utilisateur les restaure d'un clic.
+
+Deux garde-fous :
+- **N'y mets que ceux dont tu es sûr.** Un chapitre que tu ne nommes pas reste au programme : ne rien dire est toujours la réponse la moins coûteuse, et c'est la bonne quand tu hésites.
+- **Jamais un chapitre de ta propre réponse**, et jamais un chapitre encore couvert par le cours.
+
+Quand le cours traite toujours la même matière sous un autre découpage — une partie qui s'élargit ou se resserre —, la bonne réponse est de **créer le nouveau chapitre ET d'écarter l'ancien**. Les notions encore d'actualité seront rangées dans le nouveau, et celles qui n'y ont plus leur place resteront dans l'ancien, hors programme. C'est ce qui évite de porter deux fois la même partie sous deux noms.
+
+**Tu ne ranges rien ici** : les notions ci-dessous sont là pour que tu saches ce que le cours contient réellement, pas pour que tu les distribues. Une autre étape s'en charge. C'est aussi pourquoi la décision d'écarter se prend ICI et nulle part ailleurs : l'étape de rangement, elle, n'aura plus les documents sous les yeux, donc aucun moyen de savoir quelle est la bonne version du cours.
 
 ${notionsToArrange(notions)}`;
 }
@@ -655,6 +663,13 @@ Une bonne question se répond avec la notion et rien d'autre : ni piège de form
 
 /** Passe EXAMEN — un nombre fixe de questions pour tout le programme.
  *
+ *  ⚠️ **La forme négative est interdite au parcours, tolérée ici** (25/08/2026).
+ *  « Laquelle n'est PAS vraie ? » teste la lecture plus que la connaissance :
+ *  en entraînement, où la correction est automatique et où l'on mesure une
+ *  maîtrise, on ne saurait pas distinguer « a mal lu » de « ne sait pas ». Un
+ *  examen, lui, cherche à départager — on ne l'encourage donc pas, on cesse
+ *  simplement de l'interdire, et rien dans la consigne ne la met en avant.
+ *
  *  ─── Ce qui la sépare de la passe parcours ─────────────────────────────────
  *
  *  Tout, sauf le format de sortie. Elle ne raisonne pas par notion mais par
@@ -717,7 +732,7 @@ ${groups}
 - **Une question d'examen se donne plus de temps qu'une question d'entraînement du même niveau** : compte 1 à 2 minutes au niveau 2, 3 à 5 minutes aux niveaux 3 et 4. C'est ce temps qui autorise un énoncé plus fourni et une réponse construite.
 - Pour un QCM : des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien.
 - **Une proposition fausse est fausse PAR RAPPORT AUX NOTIONS ci-dessus.** Elle n'affirme aucun fait extérieur — ni vrai ni faux — que rien ici ne permet de vérifier.
-- Pas de « toutes les réponses ci-dessus », pas de « aucune de ces réponses », pas d'énoncé à la forme négative.
+- Pas de « toutes les réponses ci-dessus », pas de « aucune de ces réponses ».
 - Pour une réponse libre : renseigne les critères de correction — ce qui est attendu, ce qui est accepté. C'est ce que le correcteur aura sous les yeux.
 - ${VARIATION_RULE}
 

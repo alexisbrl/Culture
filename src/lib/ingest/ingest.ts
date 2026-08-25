@@ -360,6 +360,32 @@ export async function hideEmptiedChapters(
   return emptied;
 }
 
+/** Écarte des chapitres NOMMÉS, par opposition à `hideEmptiedChapters` qui les
+ *  déduit d'un constat (25/08/2026).
+ *
+ *  Les deux coexistent et ne disent pas la même chose : celle-ci porte une
+ *  décision prise par la passe chapitres, **la seule qui ait les documents sous
+ *  les yeux**, donc la seule qui sache quelle est la bonne version du cours ;
+ *  l'autre ramasse ce qui s'est vidé en cours de route. Aucune n'efface quoi que
+ *  ce soit, et un clic annule les deux.
+ *
+ *  Le filtre sur `workshop_id` est une ceinture de plus : les identifiants ont
+ *  déjà été validés contre les chapitres de l'atelier (`parsePlan`). */
+export async function hideChapters(workshopId: string, chapterIds: readonly string[]): Promise<string[]> {
+  if (chapterIds.length === 0) return [];
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('workshop_chapters')
+    .update({ hidden: true, updated_at: new Date().toISOString() })
+    .eq('workshop_id', workshopId)
+    .in('id', [...chapterIds])
+    .select('id');
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row) => row.id as string);
+}
+
 export async function insertChapters(
   workshopId: string,
   actorId: string,
