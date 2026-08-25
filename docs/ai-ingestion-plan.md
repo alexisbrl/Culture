@@ -1598,3 +1598,20 @@ réponse générale.
 3. **Un chapitre écarté ne l'est que dans les Paramètres** : le parcours,
    l'examen et la maîtrise continuent de l'afficher aux élèves. À brancher avant
    toute mise en ligne (`docs/backlog.md`).
+
+### 17.8 Les documents ne se choisissent plus (25/08/2026)
+
+Les cases devant les documents sources sont retirées à leur tour : **tout ce qui
+est lisible part, à chaque fois**. La raison est la même qu'en §17.1 — c'était une
+décision sans bonne réponse, posée à quelqu'un qui n'a aucune raison de la
+prendre. Un atelier se construit sur l'ensemble de ce qu'on lui a donné ; en
+laisser un de côté produisait un programme incomplet **sans que rien ne le dise**,
+et le seul indice ensuite était une notion manquante qu'on ne cherche pas.
+
+La liste reste affichée, en **lecture seule** : savoir ce que l'IA va lire est
+utile, pouvoir l'amputer ne l'était pas. Les formats non pris en charge y
+figurent toujours, en plus pâle et avec leur infobulle — les taire ferait croire
+à un oubli.
+
+Un seul blocage subsiste, et il n'a pas changé de nature : aucun document
+lisible quand il en faut un, et le bouton reste éteint.

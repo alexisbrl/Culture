@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl';
 import { Sparkles, FileText, AlertTriangle, Check } from 'lucide-react';
 
 import Modal from '@/components/Modal';
-import { Checkbox } from '@/components/ui/checkbox';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Tooltip } from '@/components/ui/tooltip';
 import { ink, palette, radius } from '@/lib/theme';
@@ -121,8 +120,15 @@ type Props = {
 export default function AiGenerationDialog({ workshopId, files, forcedContext = null, onClose, onDone }: Props) {
   const t = useTranslations('ai');
 
+  // ─── Les documents ne se choisissent plus ────────────────────────────────
+  //
+  // La sélection a disparu le 25/08/2026, pour la même raison que les cases
+  // d'étapes la veille : un atelier se construit sur TOUT ce qu'on lui a donné.
+  // En laisser un de côté produisait un programme incomplet sans que rien ne le
+  // dise — et personne n'ouvre ce dialogue pour ne lire qu'une partie de son
+  // cours. La liste reste affichée, en lecture seule : savoir ce que l'IA va
+  // lire est utile, pouvoir l'amputer ne l'était pas.
   const usable = files.filter((f) => isSupported(f.mimeType));
-  const [selected, setSelected] = useState<string[]>(usable.map((f) => f.id));
   // Le programme déjà en place, lu à l'ouverture. `null` = on ne sait pas
   // encore : le dialogue ne peut pas décider de ce qu'il va faire avant de
   // l'avoir, donc il attend plutôt que de supposer.
@@ -178,14 +184,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     return () => { cancelled = true; };
   }, [workshopId]);
 
-  function toggleFile(id: string) {
-    setSelected((prev) => (prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]));
-  }
-
   /** Téléverse les documents, puis enchaîne directement sur la génération. */
   async function prepare() {
     setPhase({ step: 'preparing' });
-    const prepared = await prepareWorkshopIngestion(workshopId, needsFiles ? selected : [], {
+    const prepared = await prepareWorkshopIngestion(workshopId, needsFiles ? usable.map((f) => f.id) : [], {
       // Le périmètre n'est plus un choix : il se déduit du point d'entrée. On le
       // range quand même dans le lot, c'est lui qu'on relira pour comprendre ce
       // qu'un import a voulu faire.
@@ -519,32 +521,35 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
 
             {/* Les documents ne servent qu'à écrire des notions. Une génération
                 de questions seule n'en a aucun besoin — elle travaille sur les
-                notions déjà extraites — et les proposer laisserait croire
-                qu'elle relit le cours, donc qu'elle le facture. */}
+                notions déjà extraites — et les montrer laisserait croire qu'elle
+                relit le cours, donc qu'elle le facture.
+
+                Liste en LECTURE SEULE depuis le 25/08/2026 : elle dit ce qui va
+                être lu, elle ne se négocie plus. */}
             {needsFiles && (
             <>
             <SectionLabel>{t('files')}</SectionLabel>
-            {files.length === 0 && <Hint>{t('noFiles')}</Hint>}
+            {usable.length === 0 && <Hint>{t('noFiles')}</Hint>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
               {files.map((file) => {
                 const supported = isSupported(file.mimeType);
                 const row = (
-                  <div key={file.id} style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: supported ? 1 : 0.45 }}>
-                    <Checkbox
-                      checked={selected.includes(file.id)}
-                      disabled={!supported}
-                      onChange={() => toggleFile(file.id)}
-                      label={
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, color: palette.inkMuted }}>
-                          <FileText size={14} color={palette.inkFaint} />
-                          {file.name}
-                        </span>
-                      }
-                    />
+                  <div
+                    key={file.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6, minWidth: 0,
+                      fontSize: 13.5, color: palette.inkMuted, opacity: supported ? 1 : 0.45,
+                    }}
+                  >
+                    <FileText size={14} color={palette.inkFaint} style={{ flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {file.name}
+                    </span>
                   </div>
                 );
-                // Un format non pris en charge se dit à la sélection, pas au
-                // milieu d'une génération.
+                // Un format non pris en charge reste listé, en plus pâle : le
+                // document existe, il ne sera simplement pas lu, et l'infobulle
+                // dit pourquoi. Le taire ferait croire à un oubli.
                 return supported ? row : (
                   <Tooltip key={file.id} content={t('unsupported')}>
                     <span>{row}</span>
@@ -552,7 +557,6 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 );
               })}
             </div>
-
             </>
             )}
 
@@ -654,7 +658,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                   faut un, il n'y a rien à lire ; tant que le programme n'est pas
                   lu, on ne sait pas encore quoi lancer — mieux vaut attendre une
                   fraction de seconde que partir sur la mauvaise voie. */}
-              <Primary onClick={prepare} disabled={visibleNotions === null || (needsFiles && selected.length === 0)}>
+              <Primary onClick={prepare} disabled={visibleNotions === null || (needsFiles && usable.length === 0)}>
                 {t('generate')}
               </Primary>
             </Actions>

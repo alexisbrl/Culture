@@ -14,7 +14,8 @@ import AiGenerationDialog, { useWorkshopFiles } from './AiGenerationDialog';
 // Chapitre & Notion — et c'est voulu : on arrive à la génération soit par les
 // documents, soit par le programme qu'ils alimentent. Le dialogue derrière est
 // le même (§8 du plan d'ingestion), et il fait **tout** dans les deux cas : il
-// n'y a plus rien à cocher depuis le 24/08/2026 (§17.1). Ce qui varie d'un
+// n'y a plus rien à cocher depuis le 24/08/2026, ni aucun document à choisir
+// depuis le 25/08/2026 (§17.1) : tout ce qui est lisible part. Ce qui varie d'un
 // bouton à l'autre, c'est `forcedContext` — absent ici, imposé quand on entre
 // par une liste de questions.
 
