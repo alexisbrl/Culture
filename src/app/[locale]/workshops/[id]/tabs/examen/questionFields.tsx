@@ -30,7 +30,7 @@ import {
 import { palette, ink, withAlpha } from '@/lib/theme';
 import {
   BLOOM_LEVELS, DEFAULT_BLOOM_LEVEL, DEFAULT_FILE_TYPES, FILE_TYPE_KEYS,
-  MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MAX, MATCH_SPLIT_MIN,
+  MATCH_SEPARATOR, MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MAX, MATCH_SPLIT_MIN, toMatchChoice,
   type BloomLevel, type QuestionPart, type QuestionTypeOptions, type QuestionWeight, type ResponseType,
 } from '@/lib/workshops/examTypes';
 // Les icônes de types de réponse sont partagées avec la banque de questions.
@@ -210,7 +210,7 @@ export function QuestionFields({
     if (rt === 'tableau') return { items: opts.tableRows ?? [], matches: opts.tableCols ?? [] };
     // `choices` peut porter l'encodage « élément :: correspondance » des paires —
     // y compris après un détour par un type sans saisie, qui le conserve tel quel.
-    const parts = values.choices.map(c => c.split(' :: '));
+    const parts = values.choices.map(c => c.split(MATCH_SEPARATOR));
     const paired = parts.some(p => p.length > 1);
     return { items: parts.map(p => p[0] ?? ''), matches: paired ? parts.map(p => p[1] ?? '') : [] };
   }
@@ -229,7 +229,7 @@ export function QuestionFields({
     if (next === rt) return;
     const { items, matches } = carriedOver();
     const nextChoices =
-      next === 'matching' ? padRows(items, 3).map((it, i) => `${it} :: ${matches[i] ?? ''}`)
+      next === 'matching' ? padRows(items, 3).map((it, i) => toMatchChoice(it, matches[i] ?? ''))
       : CHOICE_BASED.includes(next) || next === 'liste' ? padRows(items, 2)
       // Types sans saisie : on conserve `choices` tel quel pour un retour
       // ultérieur — sauf en venant du tableau, dont les lignes vivent dans
@@ -561,10 +561,10 @@ export function QuestionFields({
       // convention déjà utilisée par l'aperçu A4 (`renderAnswerSpace`).
       case 'matching': {
         const pairs = (values.choices.length ? values.choices : ['', '', '']).map(c => {
-          const [l, r] = c.split(' :: ');
+          const [l, r] = c.split(MATCH_SEPARATOR);
           return { l: l ?? '', r: r ?? '' };
         });
-        const commit = (next: { l: string; r: string }[]) => patch({ choices: next.map(p => `${p.l} :: ${p.r}`) });
+        const commit = (next: { l: string; r: string }[]) => patch({ choices: next.map(p => toMatchChoice(p.l, p.r)) });
         const split = Math.min(Math.max(opts.matchSplit ?? MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MIN), MATCH_SPLIT_MAX);
         // Curseur de partage : une seule valeur pour toute la question, donc
         // toutes les colonnes de gauche gardent la même largeur, et celles de
@@ -1015,9 +1015,9 @@ export function ChoiceListEditor({
             )}
             {showPairs ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
-                <TextField value={c.split(' :: ')[0] ?? ''} onChange={(v) => updateChoice(i, `${v} :: ${c.split(' :: ')[1] ?? ''}`)} placeholder={t('choices.pairLeft', { n: i + 1 })} />
+                <TextField value={c.split(MATCH_SEPARATOR)[0] ?? ''} onChange={(v) => updateChoice(i, toMatchChoice(v, c.split(MATCH_SEPARATOR)[1] ?? ''))} placeholder={t('choices.pairLeft', { n: i + 1 })} />
                 <span style={{ fontSize: 12, color: palette.inkFaint }}>→</span>
-                <TextField value={c.split(' :: ')[1] ?? ''} onChange={(v) => updateChoice(i, `${c.split(' :: ')[0] ?? ''} :: ${v}`)} placeholder={t('choices.pairRight')} />
+                <TextField value={c.split(MATCH_SEPARATOR)[1] ?? ''} onChange={(v) => updateChoice(i, toMatchChoice(c.split(MATCH_SEPARATOR)[0] ?? '', v))} placeholder={t('choices.pairRight')} />
               </div>
             ) : (
               <div style={{ flex: 1 }}>

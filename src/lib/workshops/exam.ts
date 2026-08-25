@@ -20,12 +20,22 @@ import type {
   GeneratedExam,
   ExamDraft,
   ExercisePrompt,
+  ExerciseAnswer,
   ExerciseChoice,
   ExerciseResult,
   ExerciseTypeOptions,
   ResponseType,
 } from '@/lib/workshops/examTypes';
-import { normalizeTypeOptions, toBloomLevel, toResponseType, type QuestionTypeOptions } from '@/lib/workshops/examTypes';
+import {
+  emptyExerciseAnswer,
+  matchPairs,
+  normalizeTypeOptions,
+  toBloomLevel,
+  toExerciseAnswer,
+  toResponseType,
+  type QuestionTypeOptions,
+} from '@/lib/workshops/examTypes';
+import { gradeStatement } from '@/lib/workshops/grading';
 import { assertQuestionIntegrity, assertStatements, notionIdsOf } from '@/lib/workshops/questionIntegrity';
 // ─── Stockage : un groupe, ses questions ─────────────────────────────────────
 //
@@ -498,21 +508,27 @@ const MEDIA_URL_TTL_SECONDS = 3600;
 // transmettre telles quelles livrerait la correction avec l'énoncé : le
 // candidat n'a plus qu'à lire. On ne garde donc que la colonne de gauche dans
 // `choices`, la droite partant mélangée et détachée dans `matchRight`.
-const MATCH_SEPARATOR = ' :: ';
-
 function matchSides(choices: string[]): { left: string[]; right: string[] } {
-  const pairs = choices.map((entry) => entry.split(MATCH_SEPARATOR));
-  return {
-    left: pairs.map((pair) => (pair[0] ?? '').trim()),
-    right: pairs.map((pair) => (pair[1] ?? '').trim()),
-  };
+  const pairs = matchPairs(choices);
+  return { left: pairs.map((p) => p.left), right: pairs.map((p) => p.right) };
 }
 
 type ChoiceSource = { choices?: string[]; shuffleChoices?: boolean; responseType: ResponseType };
 
+/** Ce que le candidat voit à cocher ou à relier.
+ *
+ *  ⚠️ **`choices` ne sort que pour les types qui en font des propositions.** La
+ *  LISTE y range ses réponses ATTENDUES (voir `resolveQuestion`, côté
+ *  ingestion) : les envoyer revenait à livrer la correction avec l'énoncé, à
+ *  deux lignes de la précaution prise pour les paires. Rien ne l'affichait, mais
+ *  la charge partait bel et bien au navigateur — corrigé le 25/08/2026, en même
+ *  temps que la correction automatique de la liste. */
 function toChoices(source: ChoiceSource): ExerciseChoice[] {
+  const type = source.responseType;
+  if (type !== 'qcs' && type !== 'qcm' && type !== 'matching') return [];
+
   const raw = source.choices ?? [];
-  const labels = source.responseType === 'matching' ? matchSides(raw).left : raw;
+  const labels = type === 'matching' ? matchSides(raw).left : raw;
   const choices: ExerciseChoice[] = labels.map((text, index) => ({ index, text }));
   return source.shuffleChoices ? shuffled(choices) : choices;
 }
@@ -672,33 +688,14 @@ export async function drawParcoursQuestion(
   return await toPrompt(embeddedToQuestion(row as unknown as EmbeddedGroupRow));
 }
 
-function sameChoiceSet(a: number[], b: number[]): boolean {
-  if (a.length !== b.length) return false;
-  const setB = new Set(b);
-  return a.every((x) => setB.has(x));
-}
-
 /** Notions à créditer après une bonne réponse, telles que le SERVEUR les
  *  connaît (jamais ce que le client prétend) — voir `rewardCorrectAnswer`. */
 export type RewardTarget = { notionIds: string[]; bloomLevel: number };
 
-function gradeOne(
-  source: { responseType: ResponseType; answer?: string; correctChoices?: number[] },
-  selectedChoices: number[]
-): ExerciseResult {
-  const autoGradable = source.responseType === 'qcs' || source.responseType === 'qcm';
-  return {
-    // Réponse libre, dessin, fichier… : pas de correction automatique possible,
-    // on affiche seulement la réponse attendue (`correct: null`).
-    correct: autoGradable ? sameChoiceSet(selectedChoices, source.correctChoices ?? []) : null,
-    answer: source.answer ?? '',
-    correctChoices: source.correctChoices ?? [],
-  };
-}
 
-// `selections[0]` porte les choix de la question principale, `selections[i+1]`
-// ceux de la question liée `i` — même ordre que `ExercisePrompt.parts`. Un index
-// absent vaut « aucun choix coché ».
+// `answers[0]` porte la réponse de la question principale, `answers[i+1]` celle
+// de la question liée `i` — même ordre que `ExercisePrompt.parts`. Un index
+// absent vaut « rien de répondu ».
 //
 // `rewards` n'est PAS destiné au client : il ne sort pas de l'action serveur,
 // qui s'en sert pour créditer la maîtrise des notions de chaque énoncé
@@ -707,7 +704,7 @@ function gradeOne(
 export async function gradeParcoursAnswer(
   workshopId: string,
   questionId: string,
-  selections: number[][]
+  answers: ExerciseAnswer[]
 ): Promise<{ result: ExerciseResult; rewards: RewardTarget[] } | null> {
   const supabase = getSupabaseServerClient();
 
@@ -725,8 +722,11 @@ export async function gradeParcoursAnswer(
   const q = embeddedToQuestion(row as unknown as EmbeddedGroupRow);
   const parts = q.parts ?? [];
 
-  const main = gradeOne(q, selections[0] ?? []);
-  const partResults = parts.map((part, i) => gradeOne(part, selections[i + 1] ?? []));
+  // Ce qui arrive du navigateur n'est jamais tenu pour bien formé : une server
+  // action est une URL POST publique (voir `toExerciseAnswer`).
+  const given = (Array.isArray(answers) ? answers : []).map(toExerciseAnswer);
+  const main = gradeStatement(q, given[0] ?? emptyExerciseAnswer());
+  const partResults = parts.map((part, i) => gradeStatement(part, given[i + 1] ?? emptyExerciseAnswer()));
 
   // Chaque énoncé crédite SES notions avec SON niveau de Bloom : une question
   // liée juste fait progresser les siennes même si la principale est ratée.

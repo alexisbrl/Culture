@@ -25,6 +25,7 @@
 //    son `import_id` : on annule le lot et on remonte l'erreur. C'est
 //    exactement ce pour quoi l'étiquette a été conçue.
 
+import { type QuestionTypeOptions } from '@/lib/workshops/examTypes';
 import { cancelImport } from '@/lib/workshops/imports';
 import { getSupabaseServerClient } from '@/lib/supabase';
 
@@ -487,6 +488,12 @@ type PlanGroupInput = {
     expectations: string;
     bloomLevel: number;
     notionRefs: string[];
+    /** Réglages propres au type de réponse — grille d'un tableau, formats
+     *  acceptés d'un dépôt de fichier, nombre de réponses d'une liste. Écrits
+     *  vides jusqu'au 25/08/2026, ce qui bornait la génération aux trois types
+     *  qui n'en ont pas ; ils arrivent désormais résolus (`resolveQuestion`),
+     *  c'est-à-dire déjà sur la forme stockée. */
+    typeOptions: QuestionTypeOptions;
   }[];
 };
 
@@ -536,7 +543,7 @@ export async function insertGroups(
         correct_choices: question.correctChoices,
         shuffle_choices: question.shuffleChoices,
         text_lines: question.textLines,
-        type_options: {},
+        type_options: question.typeOptions,
         expectations: question.expectations,
         bloom_level: question.bloomLevel,
       });

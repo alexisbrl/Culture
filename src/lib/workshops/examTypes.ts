@@ -195,6 +195,53 @@ export function shufflesAnswerItems(source: {
   }
 }
 
+// ─── Encodage des réponses structurées ──────────────────────────────────────
+//
+// Deux types portent leur réponse dans une forme encodée plutôt que dans
+// `answer`. L'encodage était recopié à trois endroits (l'éditeur, la feuille,
+// l'exercice) ; il vit ici depuis qu'une quatrième source — la génération par
+// IA — doit l'écrire elle aussi (25/08/2026). Une divergence d'un seul de ces
+// consommateurs produirait des questions muettes, jamais une erreur.
+
+/** Séparateur des deux côtés d'une paire, stockées « gauche :: droite » dans UNE
+ *  entrée de `choices`. Un seul tableau plutôt que deux : les deux côtés d'une
+ *  paire ne se réordonnent jamais l'un sans l'autre. */
+export const MATCH_SEPARATOR = ' :: ';
+
+/** Les paires d'un « matching », décodées. Un côté manquant devient une chaîne
+ *  vide — jamais `undefined` : un demi-appariement reste affichable et
+ *  corrigeable, contrairement à une entrée absente. */
+export function matchPairs(choices: string[]): { left: string; right: string }[] {
+  return (choices ?? []).map((entry) => {
+    const [left = '', right = ''] = entry.split(MATCH_SEPARATOR);
+    return { left: left.trim(), right: right.trim() };
+  });
+}
+
+/** Encode une paire pour le stockage. Réciproque de `matchPairs`. */
+export function toMatchChoice(left: string, right: string): string {
+  return `${left}${MATCH_SEPARATOR}${right}`;
+}
+
+/** tableau — clé d'une case de la grille, « ligne-colonne », index à partir de
+ *  0. C'est la forme stockée dans `tableChecked` et celle que le candidat
+ *  renvoie. */
+export function tableCellKey(row: number, col: number): string {
+  return `${row}-${col}`;
+}
+
+/** Lit une clé de case. Rend `null` sur tout ce qui n'en est pas une — une clé
+ *  illisible ne doit jamais être comptée comme la case (0, 0). */
+export function parseTableCellKey(key: unknown): { row: number; col: number } | null {
+  if (typeof key !== 'string') return null;
+  const dash = key.indexOf('-');
+  if (dash <= 0) return null;
+  const row = Number(key.slice(0, dash));
+  const col = Number(key.slice(dash + 1));
+  if (!Number.isInteger(row) || !Number.isInteger(col) || row < 0 || col < 0) return null;
+  return { row, col };
+}
+
 export const MATCH_SPLIT_MIN = 0.05;
 export const MATCH_SPLIT_MAX = 0.95;
 export const MATCH_SPLIT_DEFAULT = 0.5;
@@ -383,12 +430,81 @@ export type ExercisePrompt = {
   parts: ExercisePart[];
 };
 
+// Ce qu'un candidat renvoie pour UN énoncé. Avant le 25/08/2026, il ne
+// renvoyait que des index de choix (`number[]`) : tout ce qui n'était pas un QCM
+// ressortait donc en « pas de correction automatique », y compris la liste, la
+// grille et les paires, dont la réponse juste est pourtant connue au caractère
+// près. Élargir le contrat était le préalable à leur correction.
+export type ExerciseAnswer = {
+  /** qcs, qcm — index des propositions cochées, dans le repère de la question
+   *  (`ExerciseChoice.index`), donc insensible au mélange d'affichage. */
+  choices: number[];
+  /** liste — une entrée par ligne saisie, dans l'ordre de saisie. L'ordre ne
+   *  compte pas à la correction : on compare deux ensembles. */
+  list: string[];
+  /** tableau — cases cochées, en clés « ligne-colonne » (`tableCellKey`). */
+  table: string[];
+  /** matching — index de l'élément de GAUCHE → **texte** de la correspondance
+   *  qu'il a reliée.
+   *
+   *  ⚠️ Le texte, et non un index, et ce n'est pas un raccourci : la colonne de
+   *  droite part MÉLANGÉE et détachée de la gauche (voir `matchRight`), et rien
+   *  côté serveur ne mémorise la permutation d'un tirage à l'autre. Renvoyer un
+   *  index de la colonne mélangée ne voudrait donc rien dire ; envoyer l'index
+   *  d'origine avec l'énoncé livrerait l'appariement attendu avec la question.
+   *  Le texte est déjà sous les yeux du candidat : il ne révèle rien. */
+  match: Record<number, string>;
+};
+
+/** Une réponse vide — le point de départ de chaque énoncé. */
+export function emptyExerciseAnswer(): ExerciseAnswer {
+  return { choices: [], list: [], table: [], match: {} };
+}
+
+/** Ramène ce qu'un client envoie sur la forme attendue, sans jamais lever.
+ *
+ *  Une réponse d'exercice arrive par une server action, c'est-à-dire par une URL
+ *  POST publique : rien ne garantit sa forme, et une correction qui plante sur
+ *  un champ absent afficherait « erreur » là où la bonne réponse est « tu n'as
+ *  rien répondu ». Ce qui n'est pas lisible devient donc vide, jamais une
+ *  exception. */
+export function toExerciseAnswer(value: unknown): ExerciseAnswer {
+  const raw = (value && typeof value === 'object' ? value : {}) as Partial<Record<keyof ExerciseAnswer, unknown>>;
+  const strings = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+
+  const match: Record<number, string> = {};
+  if (raw.match && typeof raw.match === 'object') {
+    for (const [key, text] of Object.entries(raw.match as Record<string, unknown>)) {
+      const index = Number(key);
+      if (Number.isInteger(index) && index >= 0 && typeof text === 'string') match[index] = text;
+    }
+  }
+
+  return {
+    choices: Array.isArray(raw.choices)
+      ? raw.choices.filter((x): x is number => Number.isInteger(x) && (x as number) >= 0)
+      : [],
+    list: strings(raw.list),
+    table: strings(raw.table),
+    match,
+  };
+}
+
 export type ExerciseResult = {
   // `null` quand la correction automatique ne s'applique pas (réponse libre,
   // dessin, fichier…) : on se contente alors d'afficher la réponse attendue.
   correct: boolean | null;
   answer: string;
   correctChoices: number[];
+  /** tableau — cases justes, en clés « ligne-colonne ». N'est renvoyé
+   *  QU'APRÈS validation : c'est la correction, elle ne voyage jamais avec
+   *  l'énoncé (voir `ExerciseTypeOptions`). */
+  correctTable?: string[];
+  /** liste — les réponses attendues, dans l'ordre où l'auteur les a écrites. */
+  correctList?: string[];
+  /** matching — les paires attendues, remises côte à côte. */
+  correctPairs?: { left: string; right: string }[];
   /** Correction de chaque question liée, dans le même ordre que
    *  `ExercisePrompt.parts`. Absent (ou vide) quand la question n'en a pas. */
   parts?: ExerciseResult[];

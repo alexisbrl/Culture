@@ -38,7 +38,19 @@
 
 import { z } from 'zod';
 
-import { parseResponseType, type ResponseType } from '@/lib/workshops/examTypes';
+import {
+  DEFAULT_FILE_TYPES,
+  FILE_TYPE_KEYS,
+  MATCH_SPLIT_MAX,
+  MATCH_SPLIT_MIN,
+  matchPairs,
+  parseResponseType,
+  parseTableCellKey,
+  tableCellKey,
+  toMatchChoice,
+  type QuestionTypeOptions,
+  type ResponseType,
+} from '@/lib/workshops/examTypes';
 
 // ─── Journaux ────────────────────────────────────────────────────────────────
 
@@ -149,6 +161,36 @@ const bloomSchema = z.coerce
   .max(6, { message: 'niveau de Bloom hors bornes' })
   .transform((n) => Math.min(n, 4) as 1 | 2 | 3 | 4);
 
+/** Réglages de type, tels qu'une source extérieure peut les envoyer.
+ *
+ *  Deux formes sont acceptées pour les cases justes d'une grille, et ce n'est
+ *  pas de la complaisance :
+ *
+ *    • `tableCorrect` — par ligne, les index des colonnes justes. C'est la forme
+ *      DEMANDÉE au modèle (voir `wireSchema.ts`) : elle se lit à voix haute et
+ *      ne se rate pas.
+ *    • `tableChecked` — les clés « ligne-colonne » réellement stockées. C'est la
+ *      forme qu'enverra un import qui recopie un atelier existant.
+ *
+ *  Les deux disent exactement la même chose : mapping fondé, donc réparation
+ *  (règle en tête de fichier). Quand les deux sont là, `tableChecked` fait foi —
+ *  c'est la forme native. */
+const typeOptionsSchema = z
+  .object({
+    tableRows: z.array(z.string()).optional(),
+    tableCols: z.array(z.string()).optional(),
+    tableChecked: z.array(z.string()).optional(),
+    tableCorrect: z.array(z.array(z.coerce.number().int().min(0))).optional(),
+    tableUnique: z.boolean().optional(),
+    tableShuffleRows: z.boolean().optional(),
+    listNumbered: z.boolean().optional(),
+    listExpected: z.coerce.number().int().min(1).optional(),
+    matchSplit: z.coerce.number().min(MATCH_SPLIT_MIN).max(MATCH_SPLIT_MAX).optional(),
+    fileTypes: z.array(z.string()).optional(),
+    fileUrl: z.string().optional(),
+  })
+  .optional();
+
 const questionSchema = z.object({
   // Un énoncé d'au moins un caractère — même règle qu'à la saisie manuelle
   // (décision du 19/08/2026, voir src/lib/workshops/questionIntegrity.ts).
@@ -162,6 +204,13 @@ const questionSchema = z.object({
   expectations: z.string().default(''),
   bloomLevel: bloomSchema,
   notionRefs: z.array(refSchema).default([]),
+  // Réglages propres au type — voir `resolveQuestion` pour ce qui en est fait.
+  typeOptions: typeOptionsSchema,
+  /** matching — les paires déjà appariées, forme demandée au modèle. Converties
+   *  en `choices` (« gauche :: droite ») par `resolveQuestion` : c'est
+   *  l'encodage stocké, et le fabriquer soi-même est un piège qu'on n'a aucune
+   *  raison de tendre à une source extérieure. */
+  pairs: z.array(z.object({ left: z.string(), right: z.string() })).optional(),
 });
 
 const groupSchema = z.object({
@@ -178,12 +227,204 @@ const chapterRankSchema = z.object({
   reason: z.string().trim().default(''),
 });
 
+// ─── Ce qu'un type de réponse exige pour fonctionner ─────────────────────────
+//
+// Chaque type porte sa réponse dans un champ différent, et plusieurs ne veulent
+// rien dire sans leurs réglages. Une grille sans lignes ni colonnes n'est pas
+// une grille « incomplète » : c'est un espace blanc que personne ne peut
+// afficher, corriger, ni même réparer à la main sans tout ressaisir. La règle du
+// fichier s'applique donc telle quelle — on répare ce qui a un mapping fondé
+// (des index de colonnes en clés de cases, des paires en `choices`), on écarte
+// ce qui ne peut pas exister.
+//
+// ⚠️ **Ici, l'unité écartée est la QUESTION, pas le groupe.** C'est le seul
+// endroit du fichier où la distinction se pose : une grille vide au milieu d'un
+// groupe de trois questions ne doit pas emporter les deux autres. Un groupe dont
+// toutes les questions tombent est écarté à son tour — un groupe vide n'atteint
+// jamais la base (invariant de `fromGroup`).
+
+/** Une question du plan, RÉSOLUE : ses réglages sont ceux qui seront stockés, et
+ *  la forme d'échange (`pairs`, `tableCorrect`) a disparu. C'est cette forme-là
+ *  que voit l'écriture, jamais celle du fil. */
+export type PlanQuestion = {
+  content: string;
+  responseType: ResponseType;
+  answer: string;
+  choices: string[];
+  correctChoices: number[];
+  shuffleChoices: boolean;
+  textLines: number;
+  expectations: string;
+  bloomLevel: 1 | 2 | 3 | 4;
+  notionRefs: string[];
+  typeOptions: QuestionTypeOptions;
+};
+
+type QuestionInput = z.infer<typeof questionSchema>;
+
+type ResolvedQuestion = {
+  question?: PlanQuestion;
+  /** Conservée, mais corrigée — jamais en silence. */
+  adjusted: string[];
+  /** Écartée : avec ce qui a été fourni, ce type ne peut pas fonctionner. */
+  discard?: string;
+};
+
+/** Les entrées non vides, débarrassées de leurs espaces. À réserver aux listes
+ *  dont l'INDEX NE SIGNIFIE RIEN : filtrer les propositions d'un QCM décalerait
+ *  `correctChoices` et changerait la bonne réponse. */
+function nonEmpty(values: string[] | undefined): string[] {
+  return (values ?? []).map((v) => v.trim()).filter((v) => v.length > 0);
+}
+
+/** Met une question sur sa forme stockable, selon son type de réponse. */
+export function resolveQuestion(raw: QuestionInput): ResolvedQuestion {
+  const adjusted: string[] = [];
+  const opts = raw.typeOptions ?? {};
+  const type = raw.responseType;
+
+  let choices: string[] = raw.choices;
+  let correctChoices: number[] = raw.correctChoices;
+  const typeOptions: QuestionTypeOptions = {};
+
+  switch (type) {
+    case 'qcs':
+    case 'qcm': {
+      // Les propositions ne sont NI filtrées NI retriées : `correctChoices`
+      // désigne des positions, et toute retouche de la liste déplacerait la
+      // bonne réponse sans que rien ne le dise. Une proposition vide fait donc
+      // tomber la question au lieu d'être discrètement retirée.
+      if (raw.choices.length < 2) return { adjusted, discard: 'QCM à moins de deux propositions' };
+      if (raw.choices.some((c) => !c.trim())) return { adjusted, discard: 'QCM à proposition vide' };
+
+      const unique = [...new Set(raw.correctChoices)];
+      const inside = unique.filter((i) => i < raw.choices.length);
+      if (inside.length < unique.length) adjusted.push('bonne réponse hors de la liste des propositions — retirée');
+      if (inside.length === 0) return { adjusted, discard: 'QCM sans bonne réponse' };
+
+      if (type === 'qcs' && inside.length > 1) {
+        adjusted.push('« réponse unique » avec plusieurs bonnes réponses — la première est retenue');
+      }
+      correctChoices = type === 'qcs' ? [Math.min(...inside)] : inside.sort((a, b) => a - b);
+      break;
+    }
+
+    case 'liste': {
+      // Pour une liste, `choices` porte les RÉPONSES ATTENDUES et non des
+      // propositions à cocher : leur ordre est indifférent, filtrer les vides ne
+      // casse donc rien.
+      choices = nonEmpty(raw.choices);
+      if (choices.length === 0) return { adjusted, discard: 'liste sans réponse attendue' };
+      correctChoices = [];
+      typeOptions.listExpected = Math.max(1, Math.min(opts.listExpected ?? choices.length, choices.length));
+      if (opts.listNumbered !== undefined) typeOptions.listNumbered = opts.listNumbered;
+      break;
+    }
+
+    case 'matching': {
+      // `pairs` d'abord (forme demandée au modèle), à défaut l'encodage stocké.
+      const source = raw.pairs && raw.pairs.length > 0 ? raw.pairs : matchPairs(raw.choices);
+      const pairs = source
+        .map((p) => ({ left: (p.left ?? '').trim(), right: (p.right ?? '').trim() }))
+        .filter((p) => p.left.length > 0 && p.right.length > 0);
+      if (pairs.length < source.length) adjusted.push('paire à un seul côté — retirée');
+      // Une seule paire n'est pas un exercice d'appariement : il n'y a rien à
+      // choisir, la réponse est donnée par l'affichage.
+      if (pairs.length < 2) return { adjusted, discard: 'mise en paires : moins de deux paires complètes' };
+
+      choices = pairs.map((p) => toMatchChoice(p.left, p.right));
+      correctChoices = [];
+      if (opts.matchSplit !== undefined) typeOptions.matchSplit = opts.matchSplit;
+      break;
+    }
+
+    case 'tableau': {
+      const rows = nonEmpty(opts.tableRows);
+      const cols = nonEmpty(opts.tableCols);
+      if (rows.length === 0 || cols.length === 0) {
+        return { adjusted, discard: 'tableau sans lignes ou sans colonnes' };
+      }
+      typeOptions.tableRows = rows;
+      typeOptions.tableCols = cols;
+
+      // `tableChecked` fait foi quand il est là : c'est la forme native.
+      const declared = opts.tableChecked
+        ? opts.tableChecked.map(parseTableCellKey).filter((c) => c !== null)
+        : (opts.tableCorrect ?? []).flatMap((columns, row) => columns.map((col) => ({ row, col })));
+      const inside = declared.filter((c) => c.row < rows.length && c.col < cols.length);
+      if (inside.length < declared.length) adjusted.push('case juste hors de la grille — retirée');
+
+      if (opts.tableUnique) {
+        typeOptions.tableUnique = true;
+        // Une seule case par ligne : les suivantes de la même ligne tombent.
+        const kept = new Map<number, string>();
+        for (const cell of inside) {
+          if (!kept.has(cell.row)) kept.set(cell.row, tableCellKey(cell.row, cell.col));
+        }
+        if (kept.size < inside.length) adjusted.push('« une seule case par ligne » : cases en trop retirées');
+        typeOptions.tableChecked = [...kept.values()];
+      } else {
+        typeOptions.tableChecked = [...new Set(inside.map((c) => tableCellKey(c.row, c.col)))];
+      }
+
+      if (opts.tableShuffleRows !== undefined) typeOptions.tableShuffleRows = opts.tableShuffleRows;
+      choices = [];
+      correctChoices = [];
+      break;
+    }
+
+    case 'fichier': {
+      const asked = nonEmpty(opts.fileTypes).map((f) => f.toLowerCase());
+      const families = [...new Set(asked)].filter((f) => (FILE_TYPE_KEYS as readonly string[]).includes(f));
+      if (families.length < new Set(asked).size) adjusted.push('format de fichier inconnu — retiré');
+      // Aucun format demandé : on les accepte tous. C'est à l'auteur de
+      // restreindre, pas à l'absence de consigne de tout fermer.
+      typeOptions.fileTypes = families.length > 0 ? families : DEFAULT_FILE_TYPES;
+      if (opts.fileUrl) typeOptions.fileUrl = opts.fileUrl;
+      choices = [];
+      correctChoices = [];
+      break;
+    }
+
+    case 'textuelle':
+    case 'dessin':
+    case 'sans_reponse':
+      // Ces trois-là n'ont ni proposition ni réglage : ce qui traînerait dans
+      // `choices` viendrait d'un aller-retour entre types et n'aurait plus de
+      // sens ici.
+      choices = [];
+      correctChoices = [];
+      break;
+  }
+
+  return {
+    adjusted,
+    question: {
+      content: raw.content,
+      responseType: type,
+      answer: raw.answer,
+      choices,
+      correctChoices,
+      shuffleChoices: raw.shuffleChoices,
+      textLines: raw.textLines,
+      expectations: raw.expectations,
+      bloomLevel: raw.bloomLevel,
+      notionRefs: raw.notionRefs,
+      typeOptions,
+    },
+  };
+}
+
 export type PlanChapterRank = z.infer<typeof chapterRankSchema>;
 export type PlanChapter = z.infer<typeof chapterSchema>;
 export type PlanAssignment = z.infer<typeof assignmentSchema>;
 export type PlanNotion = z.infer<typeof notionSchema>;
-export type PlanQuestion = z.infer<typeof questionSchema>;
-export type PlanGroup = z.infer<typeof groupSchema>;
+/** Un groupe, ses questions déjà résolues (voir `resolveQuestion`). */
+export type PlanGroup = {
+  ref: string;
+  context: 'parcours' | 'exam';
+  questions: PlanQuestion[];
+};
 
 /** Le schéma du plan complet — utilisé tel quel comme **sortie contrainte** du
  *  modèle (le fournisseur ne peut alors produire que du conforme), et rejoué en
@@ -370,7 +611,12 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
     assignments.push(assignment);
   }
 
-  // 4. Groupes de questions
+  // 4. Groupes de questions — et, dans chaque groupe, question par question.
+  //
+  //    Deux niveaux d’écart, et ils ne disent pas la même chose : la FORME du
+  //    groupe est jugée d’un bloc (une clé en double, un groupe sans question),
+  //    tandis qu’un type de réponse impossible à remplir n’écarte que SA
+  //    question — voir `resolveQuestion`.
   const groups: PlanGroup[] = [];
   const groupRefs = new Set<string>();
   for (const item of asArray(root.groups)) {
@@ -385,20 +631,34 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
       continue;
     }
 
-    for (const question of group.questions) {
-      const unknown = question.notionRefs.filter((ref) => !notionRefs.has(ref));
+    const questions: PlanQuestion[] = [];
+    for (const raw of group.questions) {
+      const resolved = resolveQuestion(raw);
+      for (const reason of resolved.adjusted) adjusted.push({ kind: 'question', ref: group.ref, reason });
+      if (!resolved.question) {
+        discarded.push({ kind: 'question', ref: group.ref, reason: resolved.discard ?? 'question inexploitable' });
+        continue;
+      }
+
+      const unknown = resolved.question.notionRefs.filter((ref) => !notionRefs.has(ref));
       if (unknown.length > 0) {
         adjusted.push({
           kind: 'question',
           ref: group.ref,
           reason: `notion inconnue retirée (${unknown.join(', ')})`,
         });
-        question.notionRefs = question.notionRefs.filter((ref) => notionRefs.has(ref));
+        resolved.question.notionRefs = resolved.question.notionRefs.filter((ref) => notionRefs.has(ref));
       }
+      questions.push(resolved.question);
     }
 
+    // Toutes les questions du groupe sont tombées : le groupe tombe avec elles.
+    // Un groupe vide ne doit jamais atteindre la base (invariant de `fromGroup`),
+    // et l’écart est déjà consigné question par question — inutile de le répéter.
+    if (questions.length === 0) continue;
+
     groupRefs.add(group.ref);
-    groups.push(group);
+    groups.push({ ref: group.ref, context: group.context, questions });
   }
 
   return { chapters, notions, assignments, groups, chapterOrder, discarded, adjusted };

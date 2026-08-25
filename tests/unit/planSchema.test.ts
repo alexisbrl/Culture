@@ -360,3 +360,113 @@ describe('parsePlan — architecture du programme', () => {
     expect(plan.chapterOrder).toEqual([{ ref: 'c1', rank: 1, reason: '' }]);
   });
 });
+
+// ─── Les types à réglages, ouverts au modèle le 25/08/2026 ───────────────────
+//
+// Avant cette date, l'ingestion ne savait produire que les trois types qui ne
+// demandent aucun réglage : `type_options` partait vide en base, si bien qu'un
+// tableau généré serait arrivé en grille blanche. Ces tests tiennent les deux
+// bouts du contrat : une grille impossible tombe SEULE (sans emporter son
+// groupe), et une grille valable arrive sur la forme réellement stockée.
+
+describe('types à réglages — la question tombe, jamais le lot', () => {
+  const grid = (typeOptions: Record<string, unknown>) =>
+    question({ responseType: 'tableau', choices: [], correctChoices: [], typeOptions });
+
+  it('reconstruit la grille et les cases justes à partir des index de colonnes', () => {
+    const plan = parsePlan({
+      groups: [group({ questions: [grid({ tableRows: ['Chat', 'Truite'], tableCols: ['Mammifère', 'Poisson'], tableCorrect: [[0], [1]] })] })],
+    });
+    expect(plan.groups[0].questions[0].typeOptions).toEqual({
+      tableRows: ['Chat', 'Truite'],
+      tableCols: ['Mammifère', 'Poisson'],
+      tableChecked: ['0-0', '1-1'],
+    });
+  });
+
+  it('écarte une grille sans lignes ni colonnes, et son groupe avec elle', () => {
+    // Une grille vide n'est pas « incomplète » : c'est un espace blanc que
+    // personne ne peut afficher ni corriger.
+    const plan = parsePlan({ groups: [group({ questions: [grid({})] })] });
+    expect(plan.groups).toEqual([]);
+    expect(plan.discarded[0].reason).toContain('tableau sans lignes');
+  });
+
+  it('n’écarte QUE la question fautive quand le groupe en porte d’autres', () => {
+    const plan = parsePlan({ groups: [group({ questions: [question(), grid({})] })] });
+    expect(plan.groups).toHaveLength(1);
+    expect(plan.groups[0].questions).toHaveLength(1);
+    expect(plan.discarded).toHaveLength(1);
+  });
+
+  it('retire une case juste hors de la grille, sans perdre la question', () => {
+    const plan = parsePlan({
+      groups: [group({ questions: [grid({ tableRows: ['A'], tableCols: ['X'], tableCorrect: [[0, 4]] })] })],
+    });
+    expect(plan.groups[0].questions[0].typeOptions.tableChecked).toEqual(['0-0']);
+    expect(plan.adjusted[0].reason).toContain('hors de la grille');
+  });
+
+  it('« une seule case par ligne » ne garde que la première de chaque ligne', () => {
+    const plan = parsePlan({
+      groups: [group({ questions: [grid({ tableRows: ['A'], tableCols: ['X', 'Y'], tableCorrect: [[0, 1]], tableUnique: true })] })],
+    });
+    expect(plan.groups[0].questions[0].typeOptions.tableChecked).toEqual(['0-0']);
+  });
+
+  it('encode les paires sur la forme stockée « gauche :: droite »', () => {
+    const plan = parsePlan({
+      groups: [group({ questions: [question({
+        responseType: 'matching', choices: [], correctChoices: [],
+        pairs: [{ left: 'Paris', right: 'France' }, { left: 'Rome', right: 'Italie' }],
+      })] })],
+    });
+    expect(plan.groups[0].questions[0].choices).toEqual(['Paris :: France', 'Rome :: Italie']);
+  });
+
+  it('écarte une mise en paires qui n’en compte qu’une', () => {
+    // Une seule paire ne se choisit pas : l'affichage donne la réponse.
+    const plan = parsePlan({
+      groups: [group({ questions: [question({
+        responseType: 'matching', choices: [], correctChoices: [], pairs: [{ left: 'Paris', right: 'France' }],
+      })] })],
+    });
+    expect(plan.groups).toEqual([]);
+    expect(plan.discarded[0].reason).toContain('moins de deux paires');
+  });
+
+  it('la liste garde ses réponses attendues et compte ce qu’elle attend', () => {
+    const plan = parsePlan({
+      groups: [group({ questions: [question({ responseType: 'liste', choices: ['Foie', '  ', 'Reins'], correctChoices: [] })] })],
+    });
+    const q = plan.groups[0].questions[0];
+    expect(q.choices).toEqual(['Foie', 'Reins']);
+    expect(q.typeOptions.listExpected).toBe(2);
+  });
+
+  it('le dépôt de fichier accepte tous les formats quand rien n’est demandé', () => {
+    const plan = parsePlan({
+      groups: [group({ questions: [question({ responseType: 'fichier', choices: [], correctChoices: [], typeOptions: { fileTypes: ['pdf', 'parchemin'] } })] })],
+    });
+    expect(plan.groups[0].questions[0].typeOptions.fileTypes).toEqual(['pdf']);
+    expect(plan.adjusted[0].reason).toContain('format de fichier inconnu');
+  });
+
+  it('un QCM sans bonne réponse, ou à une seule proposition, est écarté', () => {
+    // Personne ne peut vouloir ça : c'est une question qu'on ne peut pas
+    // répondre, pas un choix pédagogique discutable.
+    expect(parsePlan({ groups: [group({ questions: [question({ correctChoices: [] })] })] }).groups).toEqual([]);
+    expect(parsePlan({ groups: [group({ questions: [question({ choices: ['Paris'] })] })] }).groups).toEqual([]);
+  });
+
+  it('une bonne réponse qui pointe hors de la liste est retirée, pas la question', () => {
+    const plan = parsePlan({ groups: [group({ questions: [question({ correctChoices: [0, 9] })] })] });
+    expect(plan.groups[0].questions[0].correctChoices).toEqual([0]);
+    expect(plan.adjusted[0].reason).toContain('hors de la liste');
+  });
+
+  it('« réponse unique » ne retient qu’une bonne réponse', () => {
+    const plan = parsePlan({ groups: [group({ questions: [question({ responseType: 'qcs', correctChoices: [1, 0] })] })] });
+    expect(plan.groups[0].questions[0].correctChoices).toEqual([0]);
+  });
+});

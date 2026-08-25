@@ -28,7 +28,7 @@ import type {
   ExamPool, GeneratedExam,
 } from '@/lib/workshops/examTypes';
 // bornes du curseur de partage gauche/droite des paires — la copie applique le même réglage que l'éditeur
-import { MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MAX, MATCH_SPLIT_MIN } from '@/lib/workshops/examTypes';
+import { MATCH_SEPARATOR, MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MAX, MATCH_SPLIT_MIN } from '@/lib/workshops/examTypes';
 export type { IdentitySide, CandidateIdentity, CustomField, ExamPresentation, ExamSection, QuestionWeight, ExamConfig };
 export type Pool = ExamPool;
 export type Exam = GeneratedExam;
@@ -1173,7 +1173,7 @@ export function renderAnswerSpace(q: Question) {
     // le curseur réglé dans l'éditeur (5 % → 95 %).
     case 'matching': {
       if (q.choices.length === 0) return blankLines(3);
-      const pairs = q.choices.map(c => c.split(' :: '));
+      const pairs = q.choices.map(c => c.split(MATCH_SEPARATOR));
       const split = Math.min(Math.max(q.typeOptions?.matchSplit ?? MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MIN), MATCH_SPLIT_MAX);
       const PAIR_LINE = 18;
       // Vide de part et d'autre de la ligne de partage : c'est là que l'élève

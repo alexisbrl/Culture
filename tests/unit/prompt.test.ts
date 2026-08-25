@@ -15,7 +15,13 @@ import {
   type BloomDistribution,
   type ExistingContent,
 } from '@/lib/ingest/prompt';
-import { GENERATED_RESPONSE_TYPES, wireGroupsOutput, wireNotionsOutput } from '@/lib/ingest/wireSchema';
+import {
+  EXAM_RESPONSE_TYPES,
+  PARCOURS_RESPONSE_TYPES,
+  wireExamGroupsOutput,
+  wireGroupsOutput,
+  wireNotionsOutput,
+} from '@/lib/ingest/wireSchema';
 
 const empty: ExistingContent = { chapters: [], notions: [], questions: [] };
 
@@ -259,19 +265,40 @@ describe('chaptersInstruction — N documents, UN SEUL cours (§16.15)', () => {
 });
 
 describe('wireSchema — ce qu’on autorise le modèle à produire', () => {
-  it('n’ouvre que les types de réponse complets sans réglages', () => {
-    // `tableau` porte ses lignes, colonnes et cases correctes dans type_options :
-    // en générer un sans ces réglages donnerait une grille vide (décision du
-    // 20/08/2026).
-    expect([...GENERATED_RESPONSE_TYPES]).toEqual(['qcs', 'qcm', 'textuelle', 'liste']);
-    expect(GENERATED_RESPONSE_TYPES).not.toContain('tableau');
+  it('ouvre tous les types du menu, le dépôt de fichier et l’énoncé muet à l’examen seulement', () => {
+    // Les deux exclus de l'entraînement supposent un correcteur humain : la
+    // copie n'y est relue par personne (décision du 25/08/2026).
+    expect([...PARCOURS_RESPONSE_TYPES]).toEqual([
+      'qcs', 'qcm', 'textuelle', 'liste', 'tableau', 'matching', 'dessin',
+    ]);
+    expect(PARCOURS_RESPONSE_TYPES).not.toContain('fichier');
+    expect(PARCOURS_RESPONSE_TYPES).not.toContain('sans_reponse');
+    expect([...EXAM_RESPONSE_TYPES]).toContain('fichier');
+    expect([...EXAM_RESPONSE_TYPES]).toContain('sans_reponse');
   });
 
-  it('refuse un type de réponse hors de cette liste', () => {
+  it('refuse un type de réponse inventé', () => {
     const result = wireGroupsOutput.safeParse({
-      groups: [{ ref: 'g1', questions: [{ content: 'Q', responseType: 'tableau', choices: [], correctChoices: [], answer: '', expectations: '', bloomLevel: 1, notionRefs: ['n1'] }] }],
+      groups: [{ ref: 'g1', questions: [{ content: 'Q', responseType: 'vrai_faux', choices: [], correctChoices: [], answer: '', expectations: '', bloomLevel: 1, notionRefs: ['n1'] }] }],
     });
     expect(result.success).toBe(false);
+  });
+
+  it('refuse à l’entraînement un type réservé à l’examen', () => {
+    const question = { content: 'Q', responseType: 'fichier', choices: [], correctChoices: [], answer: '', expectations: '', bloomLevel: 1, notionRefs: ['n1'] };
+    expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [question] }] }).success).toBe(false);
+    expect(wireExamGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [question] }] }).success).toBe(true);
+  });
+
+  it('les réglages de type sont facultatifs, et un tableau peut les porter', () => {
+    // Facultatifs pour ne pas faire payer à chaque QCM les champs vides des
+    // autres types, sur chaque appel de chaque import.
+    const grid = {
+      content: 'Classe chaque animal', responseType: 'tableau', choices: [], correctChoices: [],
+      answer: '', expectations: '', bloomLevel: 2, notionRefs: ['n1'],
+      typeOptions: { tableRows: ['Chat', 'Truite'], tableCols: ['Mammifère', 'Poisson'], tableCorrect: [[0], [1]], tableUnique: true },
+    };
+    expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [grid] }] }).success).toBe(true);
   });
 
   it('refuse un niveau de Bloom hors 1–4 dès la contrainte de sortie', () => {
