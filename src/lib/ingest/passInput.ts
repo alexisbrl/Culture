@@ -8,7 +8,7 @@
 
 import type { PreparedDocument } from './providers/types';
 
-export type IngestPass = 'chapters' | 'notions' | 'assign' | 'questions';
+export type IngestPass = 'chapters' | 'notions' | 'assign' | 'questions' | 'exam';
 
 /** Les documents qu'une passe reçoit.
  *
@@ -30,8 +30,10 @@ export function documentsForPass(
   documentIndex?: number,
 ): PreparedDocument[] {
   // Ni le rangement ni les questions ne reçoivent de document : le premier
-  // travaille sur des pages et des titres, le second sur des notions (§16.3).
-  if (pass === 'questions' || pass === 'assign') return [];
+  // travaille sur des pages et des titres, les seconds sur des notions (§16.3).
+  // La passe examen suit exactement la même règle — elle lit le programme, pas
+  // le cours.
+  if (pass === 'questions' || pass === 'exam' || pass === 'assign') return [];
 
   // La passe notions ne reçoit QUE son document. C'est l'unité de travail qui
   // remplace le chapitre : elle ne demande aucun jugement au modèle, elle est
@@ -60,6 +62,59 @@ export function documentsForPass(
  *  notions), ni tout le chapitre (`MAX_TOKENS` est à 32 000 et une notion à la
  *  volumétrie cible pèse ~2 400 tokens de sortie : un chapitre de 25 notions
  *  tronquerait la réponse, donc la perdrait, §16.2). Dix est le compromis. */
+// ─── Ce que « aucun chapitre » veut dire, et pour qui ────────────────────────
+//
+// Le modèle n'a qu'une façon de dire « nulle part » : un chapitre vide. Cette
+// réponse recouvre deux situations qui n'ont rien à voir, et c'est NOUS qui les
+// distinguons — jamais lui. Règle arrêtée le 25/08/2026, ici parce qu'elle
+// décide d'écritures en base et qu'une règle qui décide d'écritures se teste.
+
+export type UnplacedSplit = {
+  /** Les redites — le modèle a tranché une ressemblance en faveur de l'autre.
+   *  Elles sortent du programme, sans chapitre : c'est le seul état d'où le
+   *  bouton « restaurer » ne peut pas les ramener par surprise. */
+  setAside: string[];
+  /** Les notions restées faute de mieux : le modèle n'a rien trouvé, elles
+   *  GARDENT leur chapitre. Il sera écarté avec elles dedans s'il ne reste que
+   *  ça — ce qui rend l'import lisible au lieu de disperser son contenu. */
+  stranded: string[];
+  /** Les rangements à réellement écrire : ceux qui nomment un chapitre, plus
+   *  ceux qui vident une notion qui n'avait déjà rien. Les « restées » en sont
+   *  absentes — on ne réécrit pas ce qu'on veut laisser tel quel. */
+  effective: { notionRef: string; chapterRef?: string }[];
+};
+
+/** Répartit les notions que le modèle n'a rangées nulle part.
+ *
+ *  ⚠️ `redites` ne contient QUE des notions dont la ressemblance lui a été
+ *  soumise. Une notion qu'il n'a jamais eu à juger ne peut pas être écartée par
+ *  accident : dans le doute, elle reste où elle est. C'est ce qui distingue une
+ *  décision d'un oubli, et c'est ce qui borne la seule suppression du système
+ *  (`planImportCleanup`). */
+export function splitUnplaced(
+  assignments: readonly { notionRef: string; chapterRef?: string }[],
+  redites: ReadonlySet<string>,
+  /** Où chaque notion se trouve aujourd'hui. Absente ou `null` = nulle part,
+   *  donc rien à préserver. */
+  currentChapters: ReadonlyMap<string, string | null>,
+): UnplacedSplit {
+  const setAside: string[] = [];
+  const stranded: string[] = [];
+
+  for (const a of assignments) {
+    if (a.chapterRef) continue;
+    if (redites.has(a.notionRef)) setAside.push(a.notionRef);
+    else if (currentChapters.get(a.notionRef)) stranded.push(a.notionRef);
+  }
+
+  const left = new Set(stranded);
+  return {
+    setAside,
+    stranded,
+    effective: assignments.filter((a) => a.chapterRef || !left.has(a.notionRef)),
+  };
+}
+
 export const NOTIONS_PER_QUESTION_BATCH = 10;
 
 /** Découpe les notions d'un chapitre en lots de travail.
@@ -72,6 +127,76 @@ export function batchNotions<T>(notions: T[], size = NOTIONS_PER_QUESTION_BATCH)
   const batches: T[][] = [];
   for (let i = 0; i < notions.length; i += size) batches.push(notions.slice(i, i + size));
   return batches;
+}
+
+// ─── Le découpage de la passe EXAMEN ─────────────────────────────────────────
+//
+// L'examen ne travaille pas notion par notion : il reçoit un budget de questions
+// pour TOUT le programme (§ examen, 24/08/2026). Ce qu'on découpe n'est donc pas
+// la matière mais le budget — et la matière suit, pour que deux appels ne
+// puissent pas écrire deux fois la même question sur la même partie du cours.
+//
+// Le découpage est CONTIGU, dans l'ordre du cours : chaque appel reçoit une
+// tranche de programme d'un seul tenant. C'est ce qui permet à une question de
+// croiser plusieurs notions voisines — un découpage qui panacherait les
+// chapitres rendrait ce croisement absurde.
+
+/** Le budget d'un appel, tranche par tranche.
+ *
+ *  Le reste va aux PREMIÈRES tranches : elles couvrent le début du cours, qui
+ *  est la partie qu'un examen a le plus de chances d'évaluer. */
+export function splitBudget(total: number, slices: number): number[] {
+  const safeTotal = Math.max(0, Math.floor(total));
+  const safeSlices = Math.max(1, Math.floor(slices));
+  const base = Math.floor(safeTotal / safeSlices);
+  const remainder = safeTotal % safeSlices;
+  return Array.from({ length: safeSlices }, (_, i) => base + (i < remainder ? 1 : 0));
+}
+
+/** En combien d'appels un budget se découpe. */
+export function examSliceCount(budget: number, perCall: number): number {
+  if (perCall < 1) throw new Error(`Taille d'appel invalide : ${perCall}`);
+  return Math.max(1, Math.ceil(Math.max(0, budget) / perCall));
+}
+
+export type ProgramChapter<T> = { id: string; name: string; notions: T[] };
+
+/** Découpe le programme en tranches contiguës d'un poids de notions comparable.
+ *
+ *  ⚠️ **Un chapitre peut être coupé en deux**, et c'est voulu : sinon un
+ *  chapitre de 300 notions et un de 5 recevraient le même budget de questions,
+ *  et l'examen serait bâti sur la structure du cours plutôt que sur sa matière.
+ *  Le nombre de notions est la seule mesure de poids dont on dispose sans
+ *  relire le cours.
+ *
+ *  Un chapitre coupé apparaît dans les deux tranches, avec ses notions
+ *  respectives : le modèle voit toujours à quel chapitre appartient ce qu'il
+ *  lit. */
+export function sliceProgram<T>(chapters: ProgramChapter<T>[], slices: number): ProgramChapter<T>[][] {
+  const safeSlices = Math.max(1, Math.floor(slices));
+  const flat = chapters.flatMap((c) => c.notions.map((notion) => ({ chapter: c, notion })));
+  if (flat.length === 0) return [];
+
+  // Jamais plus de tranches que de notions : une tranche vide coûterait un appel
+  // au modèle pour rien.
+  const count = Math.min(safeSlices, flat.length);
+  const sizes = splitBudget(flat.length, count);
+
+  const result: ProgramChapter<T>[][] = [];
+  let cursor = 0;
+  for (const size of sizes) {
+    const window = flat.slice(cursor, cursor + size);
+    cursor += size;
+
+    const grouped: ProgramChapter<T>[] = [];
+    for (const { chapter, notion } of window) {
+      const last = grouped[grouped.length - 1];
+      if (last && last.id === chapter.id) last.notions.push(notion);
+      else grouped.push({ id: chapter.id, name: chapter.name, notions: [notion] });
+    }
+    result.push(grouped);
+  }
+  return result;
 }
 
 // ─── Le marqueur de cache ────────────────────────────────────────────────────

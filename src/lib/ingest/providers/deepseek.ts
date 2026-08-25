@@ -1,6 +1,7 @@
-// Implémentation DeepSeek de `PlanProvider` — **passe QUESTIONS uniquement**.
+// Implémentation DeepSeek de `PlanProvider` — **les passes de QUESTIONS
+// uniquement** : l'entraînement et l'examen, qui ne lisent que des notions.
 //
-// ─── Pourquoi seulement cette passe ──────────────────────────────────────────
+// ─── Pourquoi seulement celles-là ────────────────────────────────────────────
 //
 // Claude lit un PDF nativement : chaque page lui part en image en plus du texte,
 // ce qui préserve tableaux, schémas et encadrés. DeepSeek n'a pas d'équivalent —
@@ -9,7 +10,7 @@
 // de SVT ou d'histoire, ce sont précisément les schémas et les cartes qui
 // portent la matière.
 //
-// La passe questions, elle, **ne reçoit aucun document** (`documentsForPass`) :
+// Les passes de questions, elles, **ne reçoivent aucun document** (`documentsForPass`) :
 // elle travaille sur des notions déjà extraites, c'est-à-dire du texte court.
 // Rien ne s'y perd. Et c'est la passe la plus répétée du pipeline — un appel par
 // lot de dix notions — donc celle où le prix unitaire compte le plus. On gagne
@@ -24,6 +25,7 @@ import { z } from 'zod';
 
 import {
   existingContentBlock,
+  examInstruction,
   questionsInstruction,
   systemPrompt,
   userHintBlock,
@@ -101,15 +103,26 @@ export function createDeepSeekProvider(options: DeepSeekOptions = {}): PlanProvi
       existing: ExistingContent,
       scope: IngestScope,
     ): Promise<ProviderResult> {
-      if (scope.pass !== 'questions') return unsupported(`la passe ${scope.pass}`);
+      // Les deux passes de questions — entraînement et examen — travaillent sur
+      // des notions déjà extraites, jamais sur le cours. Toutes les autres
+      // supposent de lire les documents.
+      if (scope.pass !== 'questions' && scope.pass !== 'exam') return unsupported(`la passe ${scope.pass}`);
       if (documents.length > 0) return unsupported('un appel portant des documents');
 
-      const instruction = questionsInstruction({
-        chapter: scope.chapter,
-        notions: scope.notions,
-        neighbours: scope.neighbours,
-        budget: scope.budget,
-      });
+      const instruction =
+        scope.pass === 'exam'
+          ? examInstruction({
+              workshop: scope.workshop,
+              chapters: scope.chapters,
+              budget: scope.budget,
+            })
+          : questionsInstruction({
+              chapter: scope.chapter,
+              workshop: scope.workshop,
+              notions: scope.notions.map((n) => ({ ...n, missing: scope.missing?.[n.id] })),
+              neighbours: scope.neighbours,
+              budget: scope.budget,
+            });
 
       const response = await fetch(API_URL, {
         method: 'POST',
@@ -126,7 +139,12 @@ export function createDeepSeekProvider(options: DeepSeekOptions = {}): PlanProvi
               role: 'user',
               content: [
                 userHintBlock(options.userHint),
-                existingContentBlock(existing, { pass: 'questions', notionIds: scope.notions.map((n) => n.id) }),
+                existingContentBlock(
+                  existing,
+                  scope.pass === 'exam'
+                    ? { pass: 'exam' }
+                    : { pass: 'questions', notionIds: scope.notions.map((n) => n.id) },
+                ),
                 instruction,
                 shapeBlock(),
               ].join('\n\n'),

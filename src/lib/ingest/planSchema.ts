@@ -68,6 +68,9 @@ export type ParsedPlan = {
   notions: PlanNotion[];
   /** Notions existantes à ranger — ne crée rien, ne détruit rien. */
   assignments: PlanAssignment[];
+  /** L'architecture du programme : chaque chapitre avec son rang, 0 pour ceux
+   *  que le cours ne couvre plus. Un chapitre absent d'ici garde sa place. */
+  chapterOrder: PlanChapterRank[];
   groups: PlanGroup[];
   /** Éléments écartés : inexploitables. */
   discarded: PlanIssue[];
@@ -169,6 +172,13 @@ const groupSchema = z.object({
   questions: z.array(questionSchema).min(1, { message: 'groupe sans question' }),
 });
 
+const chapterRankSchema = z.object({
+  ref: refSchema,
+  rank: z.coerce.number().int().min(0),
+  reason: z.string().trim().default(''),
+});
+
+export type PlanChapterRank = z.infer<typeof chapterRankSchema>;
 export type PlanChapter = z.infer<typeof chapterSchema>;
 export type PlanAssignment = z.infer<typeof assignmentSchema>;
 export type PlanNotion = z.infer<typeof notionSchema>;
@@ -180,6 +190,7 @@ export type PlanGroup = z.infer<typeof groupSchema>;
  *  validation à la réception. Deux usages, une seule définition. */
 export const planSchema = z.object({
   chapters: z.array(chapterSchema).default([]),
+  chapterOrder: z.array(chapterRankSchema).default([]),
   notions: z.array(notionSchema).default([]),
   assignments: z.array(assignmentSchema).default([]),
   groups: z.array(groupSchema).default([]),
@@ -244,6 +255,42 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
     }
     chapterRefs.add(result.data.ref);
     chapters.push(result.data);
+  }
+
+  // 1 bis. L'ARCHITECTURE : le rang de chaque chapitre, 0 pour ceux que le
+  //        cours ne couvre plus. Deux règles, et elles bornent tout ce que
+  //        cette réponse peut détruire :
+  //
+  //        • la référence doit désigner un chapitre QUI EXISTE, ou un chapitre
+  //          de cette même réponse. Une référence inventée ne situe rien ;
+  //        • **le rang 0 n'est recevable que pour un chapitre existant.** Créer
+  //          un chapitre puis l'écarter dans le même souffle n'a aucun sens, et
+  //          ouvrirait un chemin où une référence neuve retire du programme.
+  //
+  //        Dans le doute on ne fait rien : écarter est une perte, ne pas
+  //        écarter n'en est pas une.
+  const chapterOrder: PlanChapterRank[] = [];
+  const known = new Set<string>(existing.chapterIds ?? []);
+  const fromThisPlan = new Set(chapters.map((c) => c.ref));
+  const ranked = new Set<string>();
+  for (const item of asArray(root.chapterOrder)) {
+    const result = chapterRankSchema.safeParse(item);
+    if (!result.success) {
+      discarded.push({ kind: 'chapter', ref: refOf(item), reason: firstMessage(result.error) });
+      continue;
+    }
+    const { ref, rank } = result.data;
+    if (!known.has(ref) && !fromThisPlan.has(ref)) {
+      discarded.push({ kind: 'chapter', ref, reason: 'chapitre inconnu dans l’ordre du programme — ignoré' });
+      continue;
+    }
+    if (rank === 0 && !known.has(ref)) {
+      discarded.push({ kind: 'chapter', ref, reason: 'un chapitre de cette réponse ne peut pas être écarté — ignoré' });
+      continue;
+    }
+    if (ranked.has(ref)) continue;
+    ranked.add(ref);
+    chapterOrder.push(result.data);
   }
 
   // 2. Notions — idem : une question peut viser une notion déjà en base.
@@ -354,5 +401,5 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
     groups.push(group);
   }
 
-  return { chapters, notions, assignments, groups, discarded, adjusted };
+  return { chapters, notions, assignments, groups, chapterOrder, discarded, adjusted };
 }

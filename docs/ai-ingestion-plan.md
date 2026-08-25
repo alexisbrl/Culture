@@ -3,7 +3,12 @@
 > Conception arrêtée le 20/07/2026, révisée le 19/08/2026 (décisions produit
 > tranchées, prérequis réévalués contre le code réel, méthode d'appel au modèle
 > ajoutée), **puis le 22/08/2026 — voir §16**, qui enregistre ce que la montée en
-> volume impose de changer. À lire en entier avant d'écrire la première ligne.
+> volume impose de changer, **puis le 24/08/2026 — voir §17**, qui sépare les
+> questions d'entraînement des questions d'examen et retire le choix du
+> périmètre. À lire en entier avant d'écrire la première ligne.
+>
+> ⚠️ **En cas de contradiction entre le §17 et ce qui précède, le §17 fait
+> foi** : lui seul est écrit après implémentation.
 >
 > **Les §1 à §14 décrivent un pipeline aujourd'hui écrit et branché dans l'app**
 > (PR #41, 21/08/2026) — la mention « aucun code écrit à ce jour » qui figurait
@@ -1433,3 +1438,429 @@ Consigné parce que la question est revenue plusieurs fois en séance.
    sémantique deviendront des besoins réels. Piste retenue : modèle à poids
    ouverts exécuté sur notre serveur.
 10. **Le chat** — domaine distinct, sa propre cloison de fournisseur.
+
+---
+
+## 17. Révision du 24/08/2026 — deux régimes de questions, et plus rien à cocher
+
+> Écrit **après** implémentation, contrairement au §16 : ce qui suit décrit du
+> code en place, pas une intention.
+
+### 17.1 Le périmètre n'est plus un choix de l'utilisateur
+
+Les trois cases à cocher (« les chapitres », « les notions », « les questions »)
+sont retirées. Elles demandaient à l'utilisateur une décision qu'il n'a aucune
+raison de prendre — et dont une combinaison particulière avait produit la faille
+du ménage de fin d'import (voir la feuille de route « notions d'abord »).
+**C'est le point d'entrée qui décide :**
+
+| Entrée | Ce qui est lancé | Documents |
+|---|---|---|
+| Paramètres → Ressources | tout : notions, chapitres, rangement, questions du parcours | requis |
+| Paramètres → Chapitre & Notion | idem — deux portes, une seule fonction | requis |
+| Liste de questions (parcours) | **questions seulement**, dans cette liste | aucun |
+| Liste de questions (examen) | **questions seulement**, dans cette liste | aucun |
+
+Deux conséquences qui ne sautent pas aux yeux :
+
+- **Un import de questions ne téléverse rien.** La passe ne reçoit aucun document
+  depuis §16.3 ; exiger un fichier revenait à faire payer un corpus dont
+  personne ne se sert. `prepareIngestion` accepte donc une liste de fichiers
+  vide — mais continue de refuser « des fichiers demandés, aucun trouvé », qui
+  est une vraie panne.
+- **Un seul rattrapage.** Demander des questions à un atelier sans aucune notion
+  **au programme** ne produirait rien : il n'y a rien à faire travailler. Dans ce
+  cas — et seulement celui-là — le programme est construit d'abord. Les notions
+  sans chapitre et celles des chapitres écartés ne comptent pas : elles sont hors
+  programme, c'est la définition même de leur état.
+
+### 17.2 Le parcours et l'examen ne comptent pas la même chose
+
+C'est la décision structurante de la journée. Les deux listes produisaient
+jusqu'ici les mêmes questions avec la même volumétrie, ce qui les rendait
+redondantes. Elles suivent maintenant deux régimes :
+
+| | Parcours | Examen |
+|---|---|---|
+| Unité de compte | **la notion** — 12 questions chacune | **le programme** — 40 questions en tout |
+| Portée d'une question | une seule notion | **plusieurs** notions croisées |
+| Bloom | 8 × mémoriser, 4 × comprendre | 25 % comprendre, 50 % appliquer, 25 % analyser |
+| Groupes | jamais (une question tirée seule) | **un tiers**, en groupes de 2 à 3 |
+| Types de réponse | **QCM uniquement** | QCM, réponse libre, liste |
+| Découpage des appels | par lot de 10 notions | par tranche de budget (10 questions) |
+
+**Le total de l'examen est réglable au lancement** (5 à 200, défaut 40), dans le
+dialogue et non dans un écran de réglages : c'est au moment de lancer qu'on sait
+si l'on veut un contrôle de dix questions ou un examen blanc de soixante.
+Relancer **ajoute** ce total, en voyant la liste existante pour ne pas se
+répéter.
+
+**Pourquoi « QCM uniquement » côté parcours n'est pas un appauvrissement.**
+`gradeParcoursAnswer` ne corrige automatiquement que `qcs` et `qcm` : une
+réponse textuelle y renvoie `correct: null`, donc ne crédite **jamais** la
+maîtrise. Le prompt en demandait pourtant depuis le début — une part des
+questions d'entraînement était donc du travail perdu. L'examen, corrigé à la
+main, est exactement l'endroit où la réponse libre a sa place.
+
+### 17.3 Le découpage de la passe examen
+
+Ce qu'on découpe n'est pas la matière mais le **budget** : dix questions par
+appel, pour ne pas tronquer la réponse (§16.2). La matière suit — chaque appel
+reçoit une **tranche contiguë du cours**, ce qui donne les deux garanties dont
+dépend le parallélisme :
+
+- **rien n'est écrit deux fois** : deux appels ne voient jamais la même partie du
+  programme, alors qu'ils tournent ensemble et qu'aucun ne voit ce que l'autre
+  écrit ;
+- **rien n'est perdu** : la somme des budgets fait exactement le total demandé.
+
+Un chapitre peut être coupé en deux, et c'est voulu : sinon un chapitre de 300
+notions et un de 5 recevraient le même budget, et l'examen serait bâti sur la
+structure du cours plutôt que sur sa matière. Les fonctions concernées
+(`splitBudget`, `examSliceCount`, `sliceProgram`, `examBloomCounts`) sont pures et
+testées — c'est le critère « contrat d'une entrée non fiable » de `CLAUDE.md` §7.
+
+### 17.4 Les groupes : pas d'énoncé commun, et une exception assumée
+
+Un groupe ne partage aujourd'hui qu'une image ou un son ; **il n'a pas de texte
+commun**, et on a choisi de ne pas en ajouter. Le décor — la situation, les
+données, l'extrait — est donc posé par la **première question du groupe**, et les
+suivantes s'appuient dessus.
+
+⚠️ **Cette exception doit être écrite dans la consigne.** Le bloc système exige
+qu'une question se comprenne seule ; sans contre-indication explicite, le modèle
+tranche en faveur de la règle générale et rend des « groupes » dont les questions
+sont indépendantes — c'est-à-dire pas des groupes. La règle exacte : c'est le
+GROUPE qui se comprend seul, pas chacune de ses questions.
+
+Corollaire pour le plafond : on coupe **à la question près, jamais au groupe**.
+Un groupe amputé de sa dernière question reste cohérent, puisque c'est la
+première qui porte le contexte.
+
+### 17.5 Ce que la passe questions reçoit désormais, et ce qu'elle ne reçoit plus
+
+**Ajouté :**
+
+- **le nom et la description de l'atelier** — la seule chose qui distingue un BTS
+  matériaux d'un cours de quatrième. Le modèle ne l'avait jamais sous les yeux au
+  moment de rédiger : il déduisait le domaine du vocabulaire des notions, mais
+  jamais le NIVEAU attendu. Quelques dizaines de tokens pour le levier le moins
+  cher du pipeline ;
+- **le nombre de questions qui MANQUENT à chaque notion**, et non le seul stock
+  existant — c'est ce que le modèle doit produire, et le lui faire calculer
+  serait une soustraction de plus à rater ;
+- **une règle de variation explicite**, qui est l'inverse de celle des notions
+  (§17.6).
+
+**Retiré :** les questions de l'autre liste. Les énoncés existants transmis au
+modèle mélangeaient parcours et examen. C'était faux sur le fond — deux listes
+qui n'ont ni la même volumétrie ni le même régime, et dont la ressemblance n'est
+pas un défaut — et dangereux sur le coût : à la volumétrie cible, verser le
+parcours dans l'examen ramenait exactement le poste de dépense de §16.3.
+
+**Ciblage des notions, et sa dépendance à la consigne libre :**
+
+- **consigne vide** → seules les notions dont le stock n'est pas au complet
+  partent au modèle. Précis, économique, et c'est la forme exacte qu'aura la
+  recharge automatique (§16.6) — la même passe, déclenchée par un stock épuisé au
+  lieu d'un bouton ;
+- **consigne écrite** → on envoie large et le modèle choisit. « Fais des
+  questions sur la Révolution » ne dit rien du stock de chaque notion, et un
+  ciblage sur les seules notions incomplètes écarterait silencieusement ce que
+  l'utilisateur demande.
+
+### 17.6 La similarité entre questions n'est vérifiée nulle part
+
+Et ce n'est pas un oubli. **La règle est l'inverse de celle des notions** : deux
+notions qui disent la même chose sont un doublon à éliminer ; deux questions qui
+font travailler le même fait sont exactement ce qu'on veut — on n'apprend pas une
+addition en la posant une seule fois. « Combien font 5 + 2 » et « combien font
+5 + 1 » sont deux questions, pas une redite.
+
+Le calcul de ressemblance (`duplicates.ts`) reste donc réservé aux notions. Côté
+questions, la seule exigence est de varier autant que possible — angle, exemple,
+valeurs, forme de la réponse — et de reformuler au minimum. Une vérification
+automatique ici coûterait cher pour arbitrer une question qui n'a pas de bonne
+réponse générale.
+
+### 17.7 Ce qui reste ouvert après cette révision
+
+1. **La recharge automatique** (§16.6) : le ciblage sur les notions incomplètes
+   est en place, il ne manque que le déclencheur — un stock épuisé plutôt qu'un
+   bouton. C'est toujours « une boucle qui dépense de l'argent toute seule »,
+   donc toujours hors travail autonome (§16.23).
+2. ~~**Les notions rangées dans un chapitre écarté sont encore soumises au
+   rangement.**~~ Tranché le 25/08/2026, et dans l'autre sens : elles y restent
+   soumises, **et c'est voulu** — si un nouveau document couvre à nouveau la
+   matière, la notion revient au programme au lieu d'être recréée en double. Ce
+   qui a changé, c'est ce qui arrive quand elle ne trouve rien : elle ne bouge
+   plus (§18.2).
+3. **Un chapitre écarté ne l'est que dans les Paramètres** : le parcours,
+   l'examen et la maîtrise continuent de l'afficher aux élèves. À brancher avant
+   toute mise en ligne (`docs/backlog.md`).
+
+### 17.8 Les documents ne se choisissent plus (25/08/2026)
+
+Les cases devant les documents sources sont retirées à leur tour : **tout ce qui
+est lisible part, à chaque fois**. La raison est la même qu'en §17.1 — c'était une
+décision sans bonne réponse, posée à quelqu'un qui n'a aucune raison de la
+prendre. Un atelier se construit sur l'ensemble de ce qu'on lui a donné ; en
+laisser un de côté produisait un programme incomplet **sans que rien ne le dise**,
+et le seul indice ensuite était une notion manquante qu'on ne cherche pas.
+
+La liste reste affichée, en **lecture seule** : savoir ce que l'IA va lire est
+utile, pouvoir l'amputer ne l'était pas. Les formats non pris en charge y
+figurent toujours, en plus pâle et avec leur infobulle — les taire ferait croire
+à un oubli.
+
+Un seul blocage subsiste, et il n'a pas changé de nature : aucun document
+lisible quand il en faut un, et le bouton reste éteint.
+
+---
+
+## 18. Révision du 25/08/2026 — le programme reste lisible d'un import à l'autre
+
+### 18.1 Les documents disparaissent du dialogue
+
+Suite directe de §17.8 : après les cases, c'est la LISTE elle-même qui part.
+Puisque tout ce qui est lisible est lu, l'énumérer n'apprend rien et allonge un
+dialogue qu'on veut court.
+
+Deux conséquences, dont une qui corrige un défaut :
+
+- **Sans document lisible, on ne construit plus rien — on rédige.** Un atelier
+  qui a déjà ses chapitres et ses notions n'a pas besoin qu'on relise un cours
+  pour lui écrire des questions de plus : les trois premiers étages sont sautés,
+  la passe questions travaille seule. Avant, le bouton restait éteint **sans un
+  mot** : un atelier dont on avait retiré les PDF devenait ingénérable.
+- **Un seul blocage subsiste** : ni document lisible, ni notion au programme. Il
+  n'y a alors rien à lire et rien à faire travailler, et le dialogue le dit.
+
+### 18.2 Une notion que l'IA ne range pas ne bouge plus
+
+Le modèle n'a qu'une façon de dire « nulle part » : un chapitre vide. Cette
+réponse recouvrait deux situations qu'on confondait, et qu'on distingue
+désormais **côté serveur, jamais côté modèle** :
+
+| Ce que le modèle dit | Ce que ça veut dire | Ce qu'on en fait |
+|---|---|---|
+| pas de chapitre, notion dont la RESSEMBLANCE lui a été soumise | c'est une redite, il a tranché en faveur de l'autre | sans chapitre — hors programme, et effaçable par le ménage de fin |
+| pas de chapitre, tout le reste | il n'a rien trouvé de mieux | **elle reste où elle était** |
+
+Le chapitre suit ses notions : un chapitre dont il ne reste que des notions que
+personne n'a su placer est **écarté avec elles dedans**. « Vidé » veut donc dire
+désormais : plus rien, hormis ce que personne n'a su placer ailleurs.
+
+Ce que ça achète : un import se lit d'un coup d'œil. La partie que le cours ne
+couvre plus est là, barrée, avec son contenu — au lieu d'être dispersée dans un
+« sans chapitre » qui mélangeait les redites volontaires et les orphelines.
+Et le bouton « restaurer » redevient honnête : il rend une partie avec ses
+notions, jamais une boîte vide, et **jamais une redite**, qui est le seul état
+d'où il ne peut rien ramener par surprise.
+
+Ce qu'on a refusé au passage : offrir les chapitres écartés au modèle comme
+troisième choix de rangement. Ce serait la réponse confortable pour tout ce
+qu'il ne veut pas trancher, et le hors-programme grossirait tout seul sous une
+étiquette qui a l'air propre. Il ne voit toujours QUE les chapitres visibles —
+et depuis cette révision, on ne lui dit même plus « actuellement dans X » quand
+X est écarté : citer une référence absente de sa liste est au mieux du bruit.
+
+La règle de partage est pure et testée (`splitUnplaced`, `passInput.ts`) : elle
+décide d'écritures par lot, et `setAside` borne la seule suppression du système.
+
+### 18.3 Les groupes ne sont plus réservés à l'examen
+
+Un groupe, c'est un ensemble de questions **indissociables**. Rien là-dedans
+n'appartient à l'examen : le parcours tire déjà des GROUPES, pas des questions —
+l'écrasante majorité comptent une seule question, et l'écran sait depuis
+toujours enchaîner les suivantes. Seul le prompt l'interdisait.
+
+La consigne dit donc maintenant l'inverse : une question est seule dans son
+groupe, **sauf** si deux ou trois ne se comprennent que dans l'ordre. Avec un
+garde-fou explicite — un groupe dont les questions tiendraient seules n'est pas
+un groupe.
+
+### 18.4 Le parcours retrouve la réponse libre
+
+La correction est assistée par IA dans les deux listes : le QCM n'est plus le
+seul format qu'on sache corriger, et le réserver à l'entraînement n'avait plus
+de raison d'être. La consigne demande donc de **varier** — le QCM reste le
+format le plus fréquent parce qu'il se traite d'un geste, mais une réponse libre
+de quelques lignes est légitime, avec ses critères de correction.
+
+### 18.5 Le temps de réponse, réglage le plus concret qu'on sache donner
+
+« Niveau 2 » ne dit rien de la longueur attendue ; « 30 secondes à une minute »
+la dicte — taille de l'énoncé, nombre de propositions, ampleur de la réponse.
+
+| Niveau | Parcours | Examen |
+|---|---|---|
+| 1 (mémoriser) | 15 à 30 s | — (le parcours s'en charge) |
+| 2 (comprendre) | 30 s à 1 min | 1 à 2 min |
+| 3 (appliquer) | 1 à 2 min | 3 à 5 min |
+| 4 (analyser, créer) | 2 à 4 min | 3 à 5 min |
+
+### 18.6 Le nom de l'atelier est une indication, pas une preuve
+
+Il reste transmis — c'est la seule chose qui distingue un BTS d'une classe de
+quatrième (§17.5) — mais avec sa réserve écrite : un intitulé peut être vague,
+approximatif, ou resté d'une version précédente du cours. **S'il contredit les
+notions, ce sont les notions qui font foi.**
+
+### 18.7 L'ordre d'autorité, écrit une fois pour toutes
+
+Le bloc système le porte désormais, donc toutes les passes l'ont sous les yeux :
+
+1. **Les documents du cours** — ils font foi sur les FAITS, et sur eux seuls
+   repose ce qui est écrit.
+2. **La consigne de l'utilisateur** — elle fait foi sur la FORME du travail :
+   découpage attendu, niveau de détail, vocabulaire.
+3. **Le titre et la description de l'atelier** — une indication sur le PUBLIC et
+   le niveau. Jamais une information sur ce que le cours contient.
+4. **Ce qui existe déjà dans l'atelier** — de la matière à compléter, jamais une
+   preuve : un contenu en place a pu être écrit d'après une version précédente
+   du cours, et c'est le document qui le corrige, pas l'inverse.
+
+Le rang 4 corrige une formulation du 25/08/2026 au matin qui faisait des notions
+l'arbitre en cas de contradiction. C'était juste **là où on l'avait écrit** — la
+passe questions, qui ne reçoit aucun document et pour qui les notions sont la
+seule matière disponible —, et faux partout ailleurs : un import sert justement
+à mettre l'atelier à jour, donc à démentir ce qui s'y trouve.
+
+### 18.8 Contre l'invention, la fidélité l'emporte sur l'exhaustivité
+
+Les deux premières exigences du bloc système se contredisent par construction :
+couvrir TOUT le document pousse à combler, n'inventer RIEN pousse à s'abstenir.
+L'arbitrage était implicite, il est maintenant écrit — **la fidélité gagne** :
+une lacune se voit et se comble, une invention se lit comme du cours et ne se
+corrige jamais, parce que rien ne la signale. Un point que le document n'aborde
+pas ne produit rien, et c'est une réponse valide.
+
+Deux règles de plus, là où l'invention entre réellement — **les propositions
+fausses d'un QCM**, que personne ne relit :
+
+- une proposition fausse est fausse PAR RAPPORT À LA NOTION ; elle n'affirme
+  aucun fait extérieur, ni vrai ni faux, que rien ne permet de vérifier ;
+- pas de « toutes les réponses ci-dessus », pas de « aucune de ces réponses »,
+  pas d'énoncé à la forme négative — ce sont des tests de lecture, pas de
+  connaissance.
+
+### 18.9 Un examen ne recopie pas l'entraînement
+
+Les deux listes continuent de ne pas se voir : les verser l'une dans l'autre,
+c'est le poste de coût de §16.3 qui revient. La vérification est donc **locale
+et gratuite**, faite après coup sur les énoncés produits (`dropRepeatedQuestions`,
+`duplicates.ts`), au seuil sévère des titres — ce qu'on cherche est la RECOPIE,
+pas la parenté : deux questions qui travaillent le même fait sous deux angles
+doivent passer.
+
+Un groupe amputé de sa PREMIÈRE question part en entier : c'est elle qui pose le
+décor dont les suivantes dépendent, et il n'y a pas d'énoncé commun (§17.4).
+
+**Le manque est rattrapé, une fois.** Sans ça, un examen de 40 en rendrait 34
+sans le dire. Le rattrapage redemande exactement ce qui manque, en un appel, et
+ne se répète pas : un atelier dont le programme ne porte pas quarante questions
+ne les portera pas davantage au troisième essai.
+
+### 18.10 C'est la passe CHAPITRES qui écarte, parce qu'elle seule voit le cours
+
+Renversement du 25/08/2026, après débat. L'argument qui tranche n'est pas
+lequel des deux mécanismes est le plus élégant, c'est **où vit l'information** :
+
+- la passe CHAPITRES reçoit les documents, tous les chapitres et toutes les
+  notions. Elle sait laquelle est la bonne version du cours ;
+- la passe RANGEMENT ne reçoit **aucun document** (§16.3). Elle ne voit que des
+  noms de chapitres, donc elle trouve légitimes deux chapitres qui se
+  recouvrent — « la guerre Israël/Palestine » et « la guerre du Moyen-Orient »
+  n'ont rien qui les départage sans le cours sous les yeux.
+
+Faire décider le rangement, c'était poser la question à l'étape qui en sait le
+moins. La déclaration remonte donc à la passe chapitres.
+
+**La forme retenue : le rang de chaque chapitre, 0 pour ceux qui sortent.** Le
+modèle rend l'architecture entière — chapitres neufs et anciens mêlés — avec un
+rang par chapitre. Demander le rang de CHACUN plutôt qu'une liste d'écartés
+n'est pas cosmétique : ça oblige à statuer sur chaque chapitre existant, là où
+une liste d'écartés se remplit au gré de ce que le modèle remarque. Au passage,
+l'ordre du programme suit enfin celui du cours mis à jour, ce qu'un import ne
+savait pas faire.
+
+**Et pourtant l'omission reste inoffensive**, ce qui est tout le dispositif : un
+chapitre absent de la liste **garde sa place et reste au programme**. C'est le
+rang 0 qui écarte, jamais l'absence. Trois invariants tiennent le reste, tous
+testés (`planSchema.test.ts`) : une référence inconnue est ignorée, un chapitre
+créé dans la même réponse ne peut pas être écarté (rangé, oui), et ne rien dire
+ne déplace ni ne retire rien.
+
+**Un garde-fou de plus, côté serveur : jamais tous.** Écarter chaque chapitre
+existant en un import n'est presque jamais une décision — c'est une consigne mal
+lue, ou un document sans rapport déposé par erreur. Dans ce cas on n'applique
+rien et on le dit. Le cas légitime (remplacer intégralement le cours d'un
+atelier) existe, mais il se fait en deux fois, et mieux vaut le demander deux
+fois que vider un programme sur un malentendu.
+
+L'ordre, lui, ne lit que la **suite** des rangs, jamais leur valeur : 10, 20, 30
+dit la même chose que 1, 2, 3. Et il s'applique **TOUT OU RIEN** : on ne
+réordonne que si chaque chapitre encore au programme a reçu un rang. Un
+classement partiel est une consigne ambiguë — les oubliés iraient où ? Les
+pousser en queue détruirait l'ordre que l'utilisateur avait choisi pour eux, et
+« les laisser à leur place » n'a pas de sens puisque les positions sont
+réécrites en bloc. Comme l'ordre est cosmétique, ne rien changer est toujours
+moins grave que remuer un programme sur une réponse incomplète — et c'est dit
+dans le compte-rendu, sans quoi l'ordre paraîtrait n'avoir mystérieusement pas
+bougé. Il n'existe donc jamais deux chapitres à la même place : ou la liste
+complète est réécrite, ou rien ne l'est. Les chapitres écartés ne sont pas
+exigés — ils ne sont plus au programme — et suivent en queue.
+
+Le cas de la partie qui se resserre se règle du même coup. « Moyen-Orient »
+devient « Israël/Palestine » : le modèle crée le nouveau chapitre ET écarte
+l'ancien. Les notions encore d'actualité rejoignent le nouveau ; celles sur
+l'Iran n'y trouvent pas leur place, **restent dans l'ancien** (§18.2) et sortent
+du programme avec lui. C'est exactement le comportement voulu — et c'est ce que
+le RENOMMAGE, envisagé d'abord, faisait mal : il aurait gardé les notions sur
+l'Iran dans un chapitre devenu « Israël/Palestine ».
+
+Les deux mécanismes d'écartement coexistent et ne disent pas la même chose :
+`hideChapters` porte une décision, `hideEmptiedChapters` ramasse ce qui s'est
+vidé en chemin. Aucun n'efface, un clic annule les deux.
+
+### 18.11 Ce qui reste ouvert
+
+1. ~~Les limites physiques.~~ Posées le 25/08/2026, et elles forment une chaîne
+   complète : 25 Mo par fichier **et 25 Mo par atelier** (le plafond par fichier
+   ne bornait rien tant qu'on pouvait en déposer trente), 2 000 notions par
+   atelier création manuelle comprise, 1 à 200 énoncés d'examen par lancement,
+   300 questions par import, et le mur de lecture — `MAX_CORPUS_TOKENS` = 868 000
+   tokens : la plus grande fenêtre (1 M) moins la réserve de sortie (32 k,
+   **raisonnement compris** — les tokens de réflexion se prélèvent sur
+   `max_tokens`, ils ne s'ajoutent pas à côté) moins 100 k pour ce que la mesure
+   ne voit pas. Car `countCorpus` ne compte que le socle et les documents,
+   quand l'appel réel porte aussi tout le contexte de l'atelier : au plafond de
+   2 000 notions, ~80 000 tokens invisibles à la mesure. Au-delà du mur, on
+   refuse **avant** de créer le lot et on rend les documents.
+   Le compte de documents a été écarté à raison : on le contourne en fusionnant
+   tout dans un seul PDF.
+2. ~~Deux chapitres qui se recouvrent sans se ressembler.~~ Réglé par §18.10.
+3. ~~Un chapitre ne peut être écarté qu'automatiquement.~~ L'IA le peut
+   désormais, nommément. **L'interface, elle, n'offre toujours pas de bouton
+   « cacher »** — décision de sobriété du 23/08/2026, inchangée. Seul
+   « restaurer » existe.
+4. **La forme négative est interdite au parcours, tolérée à l'examen.** Asymétrie
+   assumée : en entraînement la correction est automatique et sert à mesurer une
+   maîtrise, on ne saurait pas distinguer « a mal lu » de « ne sait pas ». Un
+   examen cherche à départager. Elle n'est pas encouragée pour autant — rien
+   dans la consigne ne la met en avant.
+5. **Le seuil de recopie entre les deux listes est à 1, pas à 0,70.** Mesures du
+   25/08/2026 sur le recouvrement de mots signifiants : deux calculs ne
+   différant que par un nombre tombent à 0,67 sur un énoncé court mais à **0,80**
+   sur un énoncé long, et une simple reformulation (« causes principales » →
+   « causes majeures ») aussi. Au seuil des titres, on jetait donc des questions
+   payées et légitimes. Le palier 0,95 a été essayé le même jour puis abandonné :
+   il ne se distingue de 1 que sur les énoncés de plus de vingt mots signifiants.
+   **1 ne veut pas dire « caractère pour caractère »** — la mesure ignore déjà la
+   ponctuation, les accents, la casse, les mots-outils et l'ordre des mots.
+6. **Les groupes s'écrivent en premier, et comptent 2 à 4 questions** (au lieu de
+   2 à 3, et en ordre de grandeur plutôt qu'en contrat). Écrire les groupes
+   d'abord met la coupe du budget à la fin, là où elle ne peut plus amputer un
+   enchaînement de sa dernière question.
+7. Les points 1 et 3 de §17.7 restent ouverts.

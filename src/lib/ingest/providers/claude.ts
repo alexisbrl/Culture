@@ -31,6 +31,7 @@ import {
   existingContentBlock,
   assignInstruction,
   notionsInstruction,
+  examInstruction,
   questionsInstruction,
   systemPrompt,
   type ExistingContent,
@@ -95,6 +96,36 @@ const CONTEXT_WINDOW: Record<ModelId, number> = {
   [MODELS.opus]: 1_000_000,
 };
 
+/** Ce que la mesure du corpus NE COMPTE PAS, et qu'il faut donc lui réserver.
+ *
+ *  `countCorpus` mesure le socle système et les documents. L'appel réel de la
+ *  passe chapitres porte en plus **tout le contexte de l'atelier** : ses
+ *  chapitres, la consigne libre, et surtout **la liste de toutes ses notions**,
+ *  qui est l'entrée principale de cette passe. Un titre pèse ~40 tokens ; au
+ *  plafond de 2 000 notions par atelier, ça fait ~80 000 tokens que la mesure
+ *  ignore. Sans cette réserve, un corpus déclaré « tout juste bon » ferait
+ *  refuser l'appel — après téléversement, donc trop tard.
+ *
+ *  100 000 : les 80 000 du pire cas, plus de quoi loger chapitres et consigne. */
+const WORKSHOP_CONTEXT_RESERVE = 100_000;
+
+/** Le plus gros corpus qu'on sache LIRE, tous modèles confondus (25/08/2026).
+ *
+ *  Ce n'est pas un réglage de coût, c'est un mur : la plus grande fenêtre dont
+ *  on dispose est d'un million de tokens, elle porte l'entrée ET la sortie.
+ *  Deux réserves s'y taillent avant qu'on parle de corpus :
+ *
+ *    • `MAX_TOKENS` pour la réponse — **le raisonnement compris** : les tokens
+ *      de réflexion sont prélevés sur ce budget, pas ajoutés à côté (voir
+ *      `tuningFor`, dont le budget de réflexion reste inférieur à `max_tokens`) ;
+ *    • `WORKSHOP_CONTEXT_RESERVE` pour ce que la mesure ne voit pas.
+ *
+ *  ⚠️ Il ne borne QUE la passe chapitres — la seule qui reçoive tout le corpus
+ *  d'un coup. La passe notions travaille document par document, la fenêtre s'y
+ *  applique par document ; les passes suivantes ne reçoivent aucun document. Le
+ *  jour où le découpage séquentiel du cours existera, ce plafond tombera. */
+export const MAX_CORPUS_TOKENS = 1_000_000 - MAX_TOKENS - WORKSHOP_CONTEXT_RESERVE;
+
 /** Le modèle voulu pour chaque passe. Haiku 4.5 partout : c'est l'hypothèse à
  *  tester, pas une conclusion (§16.20). */
 export const PASS_MODELS: Record<IngestScope['pass'], ModelId> = {
@@ -105,6 +136,7 @@ export const PASS_MODELS: Record<IngestScope['pass'], ModelId> = {
   // du modèle économique (§16.4).
   assign: MODELS.haiku,
   questions: MODELS.haiku,
+  exam: MODELS.haiku,
 };
 
 /** Le repli quand la fenêtre du modèle voulu ne suffit pas. Sonnet 5 et non
@@ -212,8 +244,15 @@ function instructionFor(scope: IngestScope, fileNames: string[]): string {
     case 'questions':
       return questionsInstruction({
         chapter: scope.chapter,
-        notions: scope.notions,
+        workshop: scope.workshop,
+        notions: scope.notions.map((n) => ({ ...n, missing: scope.missing?.[n.id] })),
         neighbours: scope.neighbours,
+        budget: scope.budget,
+      });
+    case 'exam':
+      return examInstruction({
+        workshop: scope.workshop,
+        chapters: scope.chapters,
         budget: scope.budget,
       });
   }
@@ -232,6 +271,13 @@ function existingScopeFor(scope: IngestScope): ExistingScope {
       return { pass: 'assign' };
     case 'questions':
       return { pass: 'questions', notionIds: scope.notions.map((n) => n.id) };
+    case 'exam':
+      // La liste d'examen ENTIÈRE, et non les questions des notions de la
+      // tranche : une question d'examen croise plusieurs notions, et la tranche
+      // suivante piochera dans les mêmes chapitres. Le chargeur
+      // (`loadExamQuestions`) rend déjà exactement ce qu'il faut — la portée ne
+      // doit donc rien retirer de plus.
+      return { pass: 'exam' };
   }
 }
 
@@ -252,6 +298,7 @@ function documentUsesOf(scope: IngestScope): number {
       return 1;
     case 'assign':
     case 'questions':
+    case 'exam':
       // Aucun document : rien à mettre en cache.
       return 0;
   }
@@ -266,6 +313,7 @@ function outputSchemaFor(scope: IngestScope) {
     case 'assign':
       return wireAssignmentsOutput;
     case 'questions':
+    case 'exam':
       return wireGroupsOutput;
   }
 }

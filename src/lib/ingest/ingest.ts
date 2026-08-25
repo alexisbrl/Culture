@@ -319,22 +319,34 @@ export async function removeOrphans(
  *      → **caché**, et c'est automatique parce que c'est réversible d'un clic ;
  *    • il a été créé par cet import et n'a rien reçu → effacé par le ménage,
  *      personne ne l'a jamais vu (`planImportCleanup`) ;
- *    • l'utilisateur l'avait vidé lui-même → on n'y touche pas. */
+ *    • l'utilisateur l'avait vidé lui-même → on n'y touche pas.
+ *
+ *  ⚠️ **`stranded` : les notions restées faute de mieux** (25/08/2026). Une
+ *  notion que le modèle n'a rangée nulle part ne quitte plus son chapitre — elle
+ *  y reste, et le chapitre part avec elle. Sans ce paramètre, une seule notion
+ *  laissée en plan suffirait à faire passer le chapitre pour encore vivant : on
+ *  garderait au programme une partie que le cours ne couvre plus, et on
+ *  perdrait le geste qui rend l'import lisible. « Vidé » veut donc dire : plus
+ *  rien dedans, hormis ce que personne n'a su placer ailleurs. */
 export async function hideEmptiedChapters(
   workshopId: string,
   populatedBefore: readonly string[],
+  stranded: readonly string[] = [],
 ): Promise<string[]> {
   if (populatedBefore.length === 0) return [];
 
   const supabase = getSupabaseServerClient();
   const { data: remaining, error } = await supabase
     .from('workshop_bricks')
-    .select('chapter_id')
+    .select('id, chapter_id')
     .eq('workshop_id', workshopId)
     .in('chapter_id', [...populatedBefore]);
   if (error) throw new Error(error.message);
 
-  const stillPopulated = new Set((remaining ?? []).map((r) => r.chapter_id as string));
+  const left = new Set(stranded);
+  const stillPopulated = new Set(
+    (remaining ?? []).filter((r) => !left.has(r.id as string)).map((r) => r.chapter_id as string),
+  );
   const emptied = populatedBefore.filter((id) => !stillPopulated.has(id));
   if (emptied.length === 0) return [];
 
@@ -346,6 +358,32 @@ export async function hideEmptiedChapters(
   if (hideError) throw new Error(hideError.message);
 
   return emptied;
+}
+
+/** Écarte des chapitres NOMMÉS, par opposition à `hideEmptiedChapters` qui les
+ *  déduit d'un constat (25/08/2026).
+ *
+ *  Les deux coexistent et ne disent pas la même chose : celle-ci porte une
+ *  décision prise par la passe chapitres, **la seule qui ait les documents sous
+ *  les yeux**, donc la seule qui sache quelle est la bonne version du cours ;
+ *  l'autre ramasse ce qui s'est vidé en cours de route. Aucune n'efface quoi que
+ *  ce soit, et un clic annule les deux.
+ *
+ *  Le filtre sur `workshop_id` est une ceinture de plus : les identifiants ont
+ *  déjà été validés contre les chapitres de l'atelier (`parsePlan`). */
+export async function hideChapters(workshopId: string, chapterIds: readonly string[]): Promise<string[]> {
+  if (chapterIds.length === 0) return [];
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('workshop_chapters')
+    .update({ hidden: true, updated_at: new Date().toISOString() })
+    .eq('workshop_id', workshopId)
+    .in('id', [...chapterIds])
+    .select('id');
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row) => row.id as string);
 }
 
 export async function insertChapters(

@@ -131,6 +131,27 @@ export type IngestScope =
        *  4. Quelques milliers de tokens, contre 680 000 pour le corpus. */
       neighbours: { id: string; title: string }[];
       budget: number;
+      /** Combien de questions manquent à chaque notion pour atteindre son stock
+       *  visé. Absent quand la notion part de zéro. */
+      missing?: Record<string, number>;
+      /** Nom et description de l'atelier : le seul indice de niveau (§ examen,
+       *  24/08/2026). */
+      workshop?: { name: string; description?: string | null } | null;
+    }
+  | {
+      /** L'EXAMEN. Passe distincte de `questions` depuis le 24/08/2026, parce
+       *  que rien n'y est pareil sauf le format de sortie : elle ne compte pas
+       *  par notion mais rend un nombre TOTAL de questions pour le programme,
+       *  chacune croisant plusieurs notions, dont un tiers en groupes qui
+       *  s'enchaînent.
+       *
+       *  Comme la passe questions, elle ne reçoit **aucun document**. */
+      pass: 'exam';
+      /** La tranche de programme couverte par cet appel, dans l'ordre du cours. */
+      chapters: { id: string; name: string; notions: { id: string; title: string }[] }[];
+      /** Nombre de questions à écrire dans CET appel. */
+      budget: number;
+      workshop?: { name: string; description?: string | null } | null;
     };
 
 /** Ce que rend un fournisseur : la sortie brute — **non validée**, c'est le rôle
