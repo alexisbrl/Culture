@@ -639,12 +639,22 @@ function responseTypeCatalog(context: 'parcours' | 'exam'): string {
     "- `dessin` — tracer un schéma à main levée. `answer` décrit ce qui est attendu. À réserver aux notions qui se dessinent réellement (un schéma, un axe, une carte) — jamais comme façon détournée de faire écrire.",
   ];
 
+  // Le niveau de Bloom oriente le type, sans le commander — d'où « repère » et
+  // non « règle ». Le formuler comme une contrainte produirait mécaniquement des
+  // QCM au niveau 1 et des rédactions au niveau 4, alors que la bonne question
+  // est parfois l'inverse (une chronologie à remettre en ordre au niveau 4, une
+  // définition à écrire au niveau 1).
+  const bloomHint =
+    "**Un repère pour choisir, pas une règle.** Plus le niveau visé est BAS, plus la réponse gagne à se CHOISIR : au niveau 1 (mémoriser), le QCM, la grille et les paires font exactement le travail — reconnaître, et rien de plus. Plus il est HAUT, plus elle gagne à s'ÉCRIRE : aux niveaux 3 et 4 (appliquer, analyser), demander de rédiger est souvent le seul moyen de voir le raisonnement, qu'aucune case à cocher ne montre. Le niveau 2 va des deux côtés. Ce n'est qu'un repère : une notion qui appelle une grille au niveau 4 prend une grille, et une définition à retenir peut très bien se demander à l'écrit.";
+
   if (context === 'exam') {
     return [
       intro,
       ...common,
       "- `fichier` — le candidat dépose un document. `typeOptions.fileTypes` restreint les formats acceptés (`pdf`, `image`, `word`, `excel`, `ppt`, `txt`, `audio`, `video`, `zip`) ; sans réglage, tous le sont. Pour un livrable, jamais pour une question de cours.",
       "- `sans_reponse` — aucune réponse attendue : une consigne, un préambule, le décor d'un groupe. N'en abuse pas, un examen n'est pas une notice.",
+      '',
+      bloomHint,
     ].join('\n');
   }
 
@@ -652,7 +662,9 @@ function responseTypeCatalog(context: 'parcours' | 'exam'): string {
     intro,
     ...common,
     '',
-    "⚠️ **Ce qui fait progresser la notion, c'est une réponse que la machine sait déclarer juste.** Le QCM, la liste, le tableau et les paires le sont toujours. Une réponse rédigée ne l'est que si le candidat peut écrire EXACTEMENT ce que tu as mis dans `answer` — un terme, une date, un nom, quelques mots ; la casse, les accents et l'article de tête sont tolérés, rien d'autre. Dès qu'elle appelle une phrase construite, plus rien ne peut la juger : le candidat se corrige lui-même et ne progresse pas. Le dessin n'est jamais jugé. Écris donc des réponses rédigées COURTES, et n'en fais pas la majorité.",
+    bloomHint,
+    '',
+    "⚠️ **Ce qui fait progresser la notion, c'est une réponse que la machine sait déclarer juste.** Le QCM, la liste, le tableau et les paires le sont toujours. Une réponse rédigée ne l'est que si le candidat peut écrire EXACTEMENT ce que tu as mis dans `answer` — un terme, une date, un nom, quelques mots ; la casse, les accents et l'article de tête sont tolérés, rien d'autre. Dès qu'elle appelle une phrase construite, plus rien ne peut la juger : le candidat se corrige lui-même et ne progresse pas. Le dessin n'est jamais jugé. Écris donc des réponses rédigées COURTES — ce qui rejoint le repère ci-dessus, l'entraînement visant surtout les niveaux 1 et 2.",
   ].join('\n');
 }
 
