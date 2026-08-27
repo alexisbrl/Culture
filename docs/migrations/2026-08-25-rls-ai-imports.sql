@@ -1,0 +1,14 @@
+-- Appliquée le 25/08/2026 (rien à faire de plus, aucun code à déployer).
+--
+-- `ai_imports` était la seule table de `public` sans RLS — alerte Supabase du
+-- 23/08/2026 (`rls_disabled_in_public`), transmise par l'utilisateur. Oubli à sa
+-- création, pendant le chantier d'ingestion IA.
+--
+-- Toutes les autres tables du projet ont la RLS activée SANS aucune policy :
+-- c'est le modèle voulu, l'accès étant exclusivement serveur via la service role
+-- key, qui contourne la RLS (.claude/rules/server-architecture.md). Activer la
+-- RLS ici ne change donc rien au fonctionnement de l'application — vérifié :
+-- `ai_imports` n'est lue et écrite que par `src/lib/ingest/`, toujours par
+-- `getSupabaseServerClient()`. Ce qui change, c'est que la clé anon publique ne
+-- peut plus ni la lire ni l'écrire.
+alter table public.ai_imports enable row level security;

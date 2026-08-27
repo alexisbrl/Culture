@@ -26,7 +26,9 @@ import { Button } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/tooltip';
 import LinkButton from '@/components/LinkButton';
 import { drawExercise, gradeExercise } from '@/app/actions/parcoursExercise';
-import type { ExercisePart, ExercisePrompt, ExerciseResult } from '@/lib/workshops/examTypes';
+import type { ExerciseAnswer, ExercisePart, ExercisePrompt, ExerciseResult } from '@/lib/workshops/examTypes';
+import { tableCellKey } from '@/lib/workshops/examTypes';
+import { matchListEntries } from '@/lib/workshops/answerMatch';
 
 type Props = {
   locale: string;
@@ -42,11 +44,13 @@ type Props = {
 // progression (docs/backlog.md). Voir docs/chantiers/2026-08-05-refonte-ui-design-system.md, T23.
 const EXERCISE_SESSION_LENGTH = 10;
 
-// Réponses des types que la correction serveur ne sait pas encore consommer
-// (`gradeExercise` ne prend que des index de choix) : elles vivent côté client
-// le temps de la question, pour que la zone de réponse soit celle du type et
-// non un champ texte de repli. Regroupées en UN objet par énoncé plutôt qu'en
-// cinq tableaux parallèles, qu'il faudrait tous réindexer à chaque tirage.
+// Réponses des types qui ne se donnent pas en cochant une proposition.
+// Regroupées en UN objet par énoncé plutôt qu'en cinq tableaux parallèles, qu'il
+// faudrait tous réindexer à chaque tirage.
+//
+// La liste, la grille et les paires PARTENT À LA CORRECTION depuis le
+// 25/08/2026 (voir `toAnswers`) ; le dessin et le fichier restent purement
+// locaux, faute de correcteur qui saurait les juger.
 type ExtraAnswer = {
   /** liste — une entrée par ligne attendue. */
   list: string[];
@@ -131,11 +135,29 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     draw();
   }, [draw]);
 
+  /** Ce qui part au serveur, énoncé par énoncé.
+   *
+   *  ⚠️ Les paires sont converties en TEXTE : la colonne de droite est arrivée
+   *  mélangée et sans index d'origine, un rang dans cette colonne ne voudrait
+   *  donc rien dire pour le serveur (voir `ExerciseAnswer.match`). */
+  function toAnswers(): ExerciseAnswer[] {
+    return statements.map((statement, i) => {
+      const ex = extra[i] ?? emptyExtra();
+      const right = statement.typeOptions.matchRight ?? [];
+      const match: Record<number, string> = {};
+      for (const [leftIndex, rightIndex] of Object.entries(ex.match)) {
+        const text = right[rightIndex];
+        if (text !== undefined) match[Number(leftIndex)] = text;
+      }
+      return { choices: selected[i] ?? [], text: freeText[i] ?? '', list: ex.list, table: ex.table, match };
+    });
+  }
+
   async function handleValidate() {
     if (!prompt) return;
     setChecking(true);
     setError('');
-    const res = await gradeExercise(workshopId, prompt.id, selected);
+    const res = await gradeExercise(workshopId, prompt.id, toAnswers());
     setChecking(false);
     if (res.error || !res.result) {
       setError(res.error ?? t('gradeError'));
@@ -408,6 +430,17 @@ function AnswerZone({ statement, selected, freeText, extra, result, onChoices, o
   const verdictTone =
     result?.correct === true ? palette.green : result?.correct === false ? palette.danger : palette.inkMuted;
 
+  // La « réponse attendue » affichée sous le verdict. Une liste et une mise en
+  // paires n'ont rien dans `answer` — leur attendu est structuré : on le remet à
+  // plat plutôt que d'inventer une clé de traduction par type. La grille, elle,
+  // n'a pas besoin de texte : ses cases justes sont marquées dans la grille
+  // elle-même.
+  const expectedText =
+    result?.answer.trim() ||
+    result?.correctList?.join(' · ') ||
+    result?.correctPairs?.map((pair) => `${pair.left} → ${pair.right}`).join('\n') ||
+    '';
+
   return (
     <>
       {isChoice && statement.choices.map((choice) => (
@@ -430,13 +463,13 @@ function AnswerZone({ statement, selected, freeText, extra, result, onChoices, o
       )}
 
       {statement.responseType === 'liste' && (
-        <ListAnswer statement={statement} extra={extra} readOnly={!!result} onExtra={onExtra} />
+        <ListAnswer statement={statement} extra={extra} result={result} onExtra={onExtra} />
       )}
       {statement.responseType === 'tableau' && (
-        <TableAnswer statement={statement} extra={extra} readOnly={!!result} onExtra={onExtra} />
+        <TableAnswer statement={statement} extra={extra} result={result} onExtra={onExtra} />
       )}
       {statement.responseType === 'matching' && (
-        <MatchAnswer statement={statement} extra={extra} readOnly={!!result} onExtra={onExtra} />
+        <MatchAnswer statement={statement} extra={extra} result={result} onExtra={onExtra} />
       )}
       {statement.responseType === 'dessin' && (
         <DrawAnswer extra={extra} readOnly={!!result} onExtra={onExtra} />
@@ -450,15 +483,20 @@ function AnswerZone({ statement, selected, freeText, extra, result, onChoices, o
           {/* Verdict masqué quand il n'y a pas de correction automatique ET
               qu'une réponse attendue est affichée : les deux lignes diraient la
               même chose. */}
-          {(result.correct !== null || !result.answer.trim()) && (
+          {(result.correct !== null || !expectedText) && (
             <div style={{ fontSize: 13.5, fontWeight: 500, color: verdictTone }}>
               {result.correct === true ? t('verdictCorrect') : result.correct === false ? t('verdictWrong') : t('verdictNeutral')}
             </div>
           )}
-          {result.answer.trim() && (
+          {expectedText && (
             <div style={{ fontSize: 13.5, color: palette.ink, whiteSpace: 'pre-wrap', marginTop: result.correct !== null ? 8 : 0 }}>
-              <span style={{ color: palette.inkFaint }}>{t('expectedAnswer')} </span>
-              {result.answer}
+              {/* Une attente qui tient sur plusieurs lignes (les paires) prend
+                  son propre bloc : à la suite du libellé, sa première ligne
+                  serait décalée de toutes les autres. */}
+              <span style={{ color: palette.inkFaint, display: expectedText.includes('\n') ? 'block' : 'inline' }}>
+                {t('expectedAnswer')}{expectedText.includes('\n') ? '' : ' '}
+              </span>
+              {expectedText}
             </div>
           )}
         </div>
@@ -473,21 +511,41 @@ function AnswerZone({ statement, selected, freeText, extra, result, onChoices, o
 // `AnswerZone` : recréés à chaque rendu du parent, ils remonteraient leur
 // sous-arbre et feraient perdre le focus à la saisie en cours.
 //
-// ⚠️ Ces réponses ne sont PAS encore corrigées : `gradeExercise` ne prend que
-// des index de choix (`selections: number[][]`), donc ces types ressortent en
-// `correct: null` — exactement comme avant, quand ils tombaient tous dans un
-// champ texte de repli. Ce qui change ici est la zone de saisie, pas la
-// correction ; l'étendre demande d'élargir le contrat de `gradeParcoursAnswer`.
+// Trois d'entre elles sont CORRIGÉES depuis le 25/08/2026 — la liste, la grille
+// et les paires. Elles reçoivent donc le résultat au lieu d'un simple booléen de
+// verrouillage : c'est lui qui colore chaque champ, chaque case et chaque trait.
+// Le dessin et le dépôt de fichier gardent leur `readOnly` : rien ne les juge.
+//
+// La règle de comparaison des textes est celle du serveur, importée telle quelle
+// (`answerMatch`) : deux lectures différentes afficheraient un champ vert sous un
+// verdict « faux ».
 
 /** liste — autant de champs que la question attend de réponses. */
-function ListAnswer({ statement, extra, readOnly, onExtra }: {
+function ListAnswer({ statement, extra, result, onExtra }: {
   statement: ExercisePart;
   extra: ExtraAnswer;
-  readOnly: boolean;
+  result: ExerciseResult | null;
   onExtra: (patch: Partial<ExtraAnswer>) => void;
 }) {
   const t = useTranslations('exercise');
+  const readOnly = !!result;
   const rows = listRowCount(statement);
+  // Quelles saisies ont trouvé preneur, dans l'ordre des champs. Appariement UN
+  // POUR UN : la même réponse écrite deux fois ne vaut qu'une fois.
+  const hits = result?.correctList ? matchListEntries(
+    Array.from({ length: rows }, (_, i) => extra.list[i] ?? ''),
+    result.correctList,
+  ) : [];
+
+  /** Couleur d'un champ après validation : vert s'il a trouvé sa réponse,
+   *  rouge s'il porte du texte qui ne correspond à rien. Un champ laissé VIDE
+   *  reste neutre — il n'y a rien à sanctionner dans une case qu'on n'a pas
+   *  remplie, le verdict global le dit déjà. */
+  function entryTone(row: number): string | null {
+    if (!result?.correctList) return null;
+    if (hits[row] !== null && hits[row] !== undefined) return palette.green;
+    return (extra.list[row] ?? '').trim() ? palette.danger : null;
+  }
   // Numérotation activée par défaut : sans réglage explicite, une liste se lit
   // numérotée (c'est le cas de la maquette).
   const numbered = statement.typeOptions.listNumbered ?? true;
@@ -513,7 +571,12 @@ function ListAnswer({ statement, extra, readOnly, onExtra }: {
             }}
             readOnly={readOnly}
             placeholder={t('answerPlaceholder')}
-            style={{ flex: 1, minWidth: 0, padding: '13px 15px', borderRadius: 12, border: `1.5px solid ${palette.lineStrong}`, background: palette.surfaceInput, color: palette.ink, fontSize: 15, fontFamily: 'inherit', boxShadow: shadow.sm, boxSizing: 'border-box' }}
+            style={{
+              flex: 1, minWidth: 0, padding: '13px 15px', borderRadius: 12,
+              border: `1.5px solid ${entryTone(row) ?? palette.lineStrong}`,
+              background: entryTone(row) ? withAlpha(entryTone(row) as string, 0.1) : palette.surfaceInput,
+              color: palette.ink, fontSize: 15, fontFamily: 'inherit', boxShadow: shadow.sm, boxSizing: 'border-box',
+            }}
           />
         </div>
       ))}
@@ -522,12 +585,16 @@ function ListAnswer({ statement, extra, readOnly, onExtra }: {
 }
 
 /** tableau — grille à cocher, une case par croisement ligne/colonne. */
-function TableAnswer({ statement, extra, readOnly, onExtra }: {
+function TableAnswer({ statement, extra, result, onExtra }: {
   statement: ExercisePart;
   extra: ExtraAnswer;
-  readOnly: boolean;
+  result: ExerciseResult | null;
   onExtra: (patch: Partial<ExtraAnswer>) => void;
 }) {
+  const readOnly = !!result;
+  // Les cases justes n'arrivent qu'APRÈS validation : elles ne voyagent jamais
+  // avec l'énoncé (`tableChecked` est exclu de ce qu'on envoie au candidat).
+  const solution = result?.correctTable ?? null;
   const rows = statement.typeOptions.tableRows ?? [];
   const cols = statement.typeOptions.tableCols ?? [];
   // `tableUnique` : une seule case par LIGNE (comportement « radio »).
@@ -558,8 +625,16 @@ function TableAnswer({ statement, extra, readOnly, onExtra }: {
         <div key={rowIndex} style={{ display: 'grid', gridTemplateColumns: template, gap: 8, alignItems: 'center' }}>
           <span style={{ fontSize: 14.5, fontWeight: 600, color: palette.ink }}>{row}</span>
           {cols.map((_, colIndex) => {
-            const key = `${rowIndex}-${colIndex}`;
+            const key = tableCellKey(rowIndex, colIndex);
             const checked = extra.table.includes(key);
+            // Après validation, c'est la SOLUTION qui commande la couleur : une
+            // case juste passe au vert qu'elle ait été cochée ou non (le
+            // candidat doit voir ce qu'il a manqué), et une case cochée à tort
+            // passe au rouge.
+            const expected = solution?.includes(key) ?? false;
+            const tone = solution
+              ? expected ? palette.green : checked ? palette.danger : null
+              : checked ? palette.green : null;
             return (
               <button
                 key={colIndex}
@@ -567,18 +642,21 @@ function TableAnswer({ statement, extra, readOnly, onExtra }: {
                 disabled={readOnly}
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 0',
-                  borderRadius: 12, border: `1.5px solid ${checked ? palette.green : palette.lineStrong}`,
-                  background: checked ? withAlpha(palette.green, 0.1) : palette.surfaceInput,
+                  borderRadius: 12, border: `1.5px solid ${tone ?? palette.lineStrong}`,
+                  background: tone ? withAlpha(tone, 0.1) : palette.surfaceInput,
                   cursor: readOnly ? 'default' : 'pointer', boxShadow: shadow.sm,
                   transition: 'border-color 120ms ease, background 120ms ease',
                 }}
               >
                 <span style={{
                   width: 20, height: 20, borderRadius: unique ? 999 : 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  border: `1.5px solid ${checked ? palette.green : palette.lineStrong}`,
-                  background: checked ? palette.green : 'transparent',
+                  border: `1.5px solid ${tone ?? palette.lineStrong}`,
+                  background: checked ? (tone ?? palette.green) : 'transparent',
                 }}>
                   {checked && <Check size={13} color={palette.onGreen} strokeWidth={3} />}
+                  {/* Case juste que le candidat n'a pas cochée : le contour vert
+                      seul se confondrait avec une case simplement cochable. */}
+                  {!checked && expected && <Check size={13} color={palette.green} strokeWidth={3} />}
                 </span>
               </button>
             );
@@ -601,13 +679,14 @@ function TableAnswer({ statement, extra, readOnly, onExtra }: {
  *  L'association est matérialisée par un rang chiffré des deux côtés, là où la
  *  maquette trace un trait en SVG — même information, sans mesurer la position
  *  de chaque ligne à chaque rendu. */
-function MatchAnswer({ statement, extra, readOnly, onExtra }: {
+function MatchAnswer({ statement, extra, result, onExtra }: {
   statement: ExercisePart;
   extra: ExtraAnswer;
-  readOnly: boolean;
+  result: ExerciseResult | null;
   onExtra: (patch: Partial<ExtraAnswer>) => void;
 }) {
   const t = useTranslations('exercise');
+  const readOnly = !!result;
   // L'élément en attente porte SON CÔTÉ : une paire se commence indifféremment
   // à gauche ou à droite (« touche 2 éléments pour les relier »). Un simple
   // index ne suffisait pas — il obligeait à toujours partir de la gauche.
@@ -666,12 +745,12 @@ function MatchAnswer({ statement, extra, readOnly, onExtra }: {
   // Les tirets ne sont PAS un état permanent d'une colonne : ils désignent les
   // cibles atteignables pendant une sélection. Tant que rien n'est en attente,
   // tout reste en trait plein — rien n'est « à prendre ».
-  function sideStyle(active: boolean, paired: boolean, dashed: boolean): React.CSSProperties {
+  function sideStyle(active: boolean, paired: boolean, dashed: boolean, tone?: string | null): React.CSSProperties {
     return {
       display: 'flex', alignItems: 'center', gap: 10, width: '100%',
       textAlign: 'left', padding: '13px 15px', borderRadius: 12,
-      border: `1.5px ${dashed ? 'dashed' : 'solid'} ${active ? palette.green : paired ? withAlpha(palette.green, 0.5) : dashed ? withAlpha(palette.green, 0.45) : palette.lineStrong}`,
-      background: active ? withAlpha(palette.green, 0.12) : paired ? withAlpha(palette.green, 0.06) : palette.surfaceInput,
+      border: `1.5px ${dashed ? 'dashed' : 'solid'} ${tone ?? (active ? palette.green : paired ? withAlpha(palette.green, 0.5) : dashed ? withAlpha(palette.green, 0.45) : palette.lineStrong)}`,
+      background: tone ? withAlpha(tone, 0.1) : active ? withAlpha(palette.green, 0.12) : paired ? withAlpha(palette.green, 0.06) : palette.surfaceInput,
       color: palette.ink, fontSize: 14.5, fontWeight: 600, fontFamily: 'inherit',
       cursor: readOnly ? 'default' : 'pointer', boxShadow: shadow.sm,
       transition: 'border-color 120ms ease, background 120ms ease',
@@ -701,11 +780,30 @@ function MatchAnswer({ statement, extra, readOnly, onExtra }: {
   const targetSide: 'left' | 'right' | null =
     pending === null ? null : pending.side === 'left' ? 'right' : 'left';
 
+  /** Couleur d'un appariement après validation : vert s'il est juste, rouge
+   *  sinon. `null` tant que rien n'est validé — la correction ne descend jamais
+   *  avant.
+   *
+   *  Comparaison de textes **exacte**, identique à celle du serveur (`gradeStatement`) :
+   *  le candidat n'écrit rien ici, le libellé est simplement l'identifiant de
+   *  l'encadré qu'il a relié — la colonne de droite est arrivée mélangée et son
+   *  rang ne dit rien de l'appariement attendu. Toute tolérance de forme
+   *  colorerait en vert un encadré différent au libellé voisin. */
+  function pairTone(leftIndex: number, rightIndex: number): string | null {
+    const pairs = result?.correctPairs;
+    if (!pairs) return null;
+    return (right[rightIndex] ?? '').trim() === (pairs[leftIndex]?.right ?? '') ? palette.green : palette.danger;
+  }
+
   const links = Object.entries(extra.match).map(([l, r]) => {
     const leftRow = left.findIndex((c) => c.index === Number(l));
     const y1 = ((leftRow + 0.5) / Math.max(left.length, 1)) * 100;
     const y2 = ((r + 0.5) / Math.max(right.length, 1)) * 100;
-    return { key: `${l}-${r}`, d: `M 0 ${y1} C 50 ${y1}, 50 ${y2}, 100 ${y2}` };
+    return {
+      key: `${l}-${r}`,
+      d: `M 0 ${y1} C 50 ${y1}, 50 ${y2}, 100 ${y2}`,
+      stroke: pairTone(Number(l), r) ?? palette.green,
+    };
   });
 
   return (
@@ -714,9 +812,11 @@ function MatchAnswer({ statement, extra, readOnly, onExtra }: {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {left.map((choice) => {
             const active = pending?.side === 'left' && pending.index === choice.index;
-            const paired = extra.match[choice.index] !== undefined;
+            const linked = extra.match[choice.index];
+            const paired = linked !== undefined;
+            const tone = paired ? pairTone(choice.index, linked) : null;
             return (
-              <button key={choice.index} onClick={() => pickLeft(choice.index)} disabled={readOnly} style={sideStyle(active, paired, targetSide === 'left' && !paired)}>
+              <button key={choice.index} onClick={() => pickLeft(choice.index)} disabled={readOnly} style={sideStyle(active, paired, targetSide === 'left' && !paired, tone)}>
                 <span style={{ flex: 1, minWidth: 0 }}>{choice.text}</span>
                 {dot(active || paired)}
               </button>
@@ -731,7 +831,7 @@ function MatchAnswer({ statement, extra, readOnly, onExtra }: {
             {links.map((link) => (
               // `vector-effect` : sans lui, l'étirement non uniforme du viewBox
               // écraserait l'épaisseur du trait à l'horizontale.
-              <path key={link.key} d={link.d} fill="none" stroke={palette.green} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
+              <path key={link.key} d={link.d} fill="none" stroke={link.stroke} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
             ))}
           </svg>
         </div>
@@ -739,9 +839,11 @@ function MatchAnswer({ statement, extra, readOnly, onExtra }: {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {right.map((label, index) => {
             const active = pending?.side === 'right' && pending.index === index;
-            const paired = leftPairedTo(index) !== null;
+            const pairedLeft = leftPairedTo(index);
+            const paired = pairedLeft !== null;
+            const tone = pairedLeft !== null ? pairTone(pairedLeft, index) : null;
             return (
-              <button key={index} onClick={() => pickRight(index)} disabled={readOnly} style={sideStyle(active, paired, targetSide === 'right' && !paired)}>
+              <button key={index} onClick={() => pickRight(index)} disabled={readOnly} style={sideStyle(active, paired, targetSide === 'right' && !paired, tone)}>
                 {dot(active || paired)}
                 <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
               </button>

@@ -892,8 +892,12 @@ bloquant (l'annulation par `import_id` couvre le besoin), mais à garder en têt
    promis : **avec un plan écrit à la main, sans une ligne d'IA** — type inventé
    écarté sans emporter le reste du lot, chapitre pendant réparé en « sans
    chapitre », Bloom 6 ramené à 4, `created_at = updated_at` (donc annulable),
-   puis annulation complète. **Reste à faire** : le wrapper `'use server'` avec
-   authz, et le `type_options` par type de réponse, aujourd'hui écrit vide.
+   puis annulation complète. **Fait depuis** : le wrapper `'use server'` avec authz
+   (`aiIngest.ts`), et le `type_options` par type de réponse — les huit types du
+   menu sont ouverts au modèle depuis le 25/08/2026, avec leurs réglages
+   (`wireSchema.ts` → `resolveQuestion` → `insertGroups`), et la correction
+   automatique du parcours a été étendue à la liste, au tableau et aux paires
+   dans le même mouvement (voir docs/changelog.md).
 6. **Interface `PlanProvider` + implémentation Claude** (§4, §5).
 7. ~~**Les points d'entrée**~~ ✅ **fait le 20/08/2026** (§8) — entrées 1 à 4.
    `AiGenerationDialog` (un seul dialogue pour tous les boutons, avec

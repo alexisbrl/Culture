@@ -607,6 +607,67 @@ export function paceInstruction(distribution: BloomDistribution = DEFAULT_BLOOM_
 const VARIATION_RULE =
   "Deux questions peuvent porter sur le même fait — c'est même souhaitable, on n'apprend pas en répondant une seule fois. Mais elles doivent DIFFÉRER : change l'angle, l'exemple, les valeurs, la forme de la réponse. Reformuler à l'identique ne compte pas comme une question de plus.";
 
+/** Le catalogue des types de réponse, tel qu'on le pose au modèle.
+ *
+ *  ─── Pourquoi il est écrit ici et pas déduit du schéma ─────────────────────
+ *
+ *  Le schéma dit ce qui est ACCEPTÉ ; cette liste dit à quoi chaque type SERT.
+ *  Un modèle à qui l'on n'ouvre qu'une énumération se rabat sur le QCM et la
+ *  réponse rédigée, parce que ce sont les seuls dont il devine l'usage sans
+ *  qu'on le lui dise. Ouvrir les types sans les expliquer n'aurait donc rien
+ *  changé au résultat.
+ *
+ *  ─── Ce que la mention « corrigé automatiquement » fait là ─────────────────
+ *
+ *  En entraînement, seuls le QCM, la liste, le tableau et les paires sont jugés
+ *  par la machine, et **un énoncé n'accorde de progression sur sa notion que
+ *  s'il a été jugé juste**. Un chapitre entièrement rédigé en réponses libres
+ *  ne ferait donc progresser personne. C'est une contrainte de fonctionnement,
+ *  pas une préférence de style : elle est dite au modèle comme telle.
+ *
+ *  À l'examen, la copie est relue par un humain — la distinction n'a pas cours,
+ *  et deux types de plus s'ouvrent : le dépôt de fichier et l'énoncé sans
+ *  réponse attendue. */
+function responseTypeCatalog(context: 'parcours' | 'exam'): string {
+  const intro = "**Choisis le type de réponse d'après ce que la question demande**, et varie-les :";
+  const common = [
+    "- `qcs` / `qcm` — propositions à cocher (`choices`, et `correctChoices` pour les index des justes) : `qcs` quand une seule est juste, `qcm` quand plusieurs le sont. **C'est un seul et même type aux yeux du candidat** : passer de l'un à l'autre ne fait pas varier la question. Deux propositions au minimum, aucune vide.",
+    '- `textuelle` — réponse rédigée. `answer` porte la réponse attendue.',
+    "- `liste` — plusieurs réponses courtes : `choices` porte les réponses attendues, une par entrée. La comparaison ignore la casse, les accents, la ponctuation et l'article de tête, mais **rien d'autre** : n'y mets que des réponses courtes, sans variante possible et sans phrase.",
+    "- `tableau` — grille de cases à cocher. `typeOptions.tableRows` (les lignes), `tableCols` (les colonnes), `tableCorrect` (par ligne, dans l'ordre des lignes, les index des colonnes justes), et `tableUnique` à vrai quand chaque ligne n'admet qu'UNE case — le cas du classement d'éléments en catégories. Sans lignes ni colonnes, la question est jetée.",
+    '- `matching` — relier deux colonnes. `pairs` porte les paires DÉJÀ APPARIÉES ; elles seront mélangées à l’affichage, ne les brouille pas toi-même. Deux paires au minimum.',
+    "- `dessin` — tracer un schéma à main levée. `answer` décrit ce qui est attendu. À réserver aux notions qui se dessinent réellement (un schéma, un axe, une carte) — jamais comme façon détournée de faire écrire.",
+  ];
+
+  // Le niveau de Bloom oriente le type, sans le commander — d'où « repère » et
+  // non « règle ». Le formuler comme une contrainte produirait mécaniquement des
+  // QCM au niveau 1 et des rédactions au niveau 4, alors que la bonne question
+  // est parfois l'inverse (une chronologie à remettre en ordre au niveau 4, une
+  // définition à écrire au niveau 1).
+  const bloomHint =
+    "**Un repère pour choisir, pas une règle.** Plus le niveau visé est BAS, plus la réponse gagne à se CHOISIR : au niveau 1 (mémoriser), le QCM, la grille et les paires font exactement le travail — reconnaître, et rien de plus. Plus il est HAUT, plus elle gagne à s'ÉCRIRE : aux niveaux 3 et 4 (appliquer, analyser), demander de rédiger est souvent le seul moyen de voir le raisonnement, qu'aucune case à cocher ne montre. Le niveau 2 va des deux côtés. Ce n'est qu'un repère : une notion qui appelle une grille au niveau 4 prend une grille, et une définition à retenir peut très bien se demander à l'écrit.";
+
+  if (context === 'exam') {
+    return [
+      intro,
+      ...common,
+      "- `fichier` — le candidat dépose un document. `typeOptions.fileTypes` restreint les formats acceptés (`pdf`, `image`, `word`, `excel`, `ppt`, `txt`, `audio`, `video`, `zip`) ; sans réglage, tous le sont. Pour un livrable, jamais pour une question de cours.",
+      "- `sans_reponse` — aucune réponse attendue : une consigne, un préambule, le décor d'un groupe. N'en abuse pas, un examen n'est pas une notice.",
+      '',
+      bloomHint,
+    ].join('\n');
+  }
+
+  return [
+    intro,
+    ...common,
+    '',
+    bloomHint,
+    '',
+    "⚠️ **Ce qui fait progresser la notion, c'est une réponse que la machine sait déclarer juste.** Le QCM, la liste, le tableau et les paires le sont toujours. Une réponse rédigée ne l'est que si le candidat peut écrire EXACTEMENT ce que tu as mis dans `answer` — un terme, une date, un nom, quelques mots ; la casse, les accents et l'article de tête sont tolérés, rien d'autre. Dès qu'elle appelle une phrase construite, plus rien ne peut la juger : le candidat se corrige lui-même et ne progresse pas. Le dessin n'est jamais jugé. Écris donc des réponses rédigées COURTES — ce qui rejoint le repère ci-dessus, l'entraînement visant surtout les niveaux 1 et 2.",
+  ].join('\n');
+}
+
 /** Passe 3 — les questions d'un lot de notions, ancrées sur elles. */
 export function questionsInstruction(input: {
   chapter: { id: string; name: string };
@@ -652,7 +713,7 @@ Règles de production :
 - Chaque question porte dans \`notionRefs\` la ou les notions qu'elle fait travailler, avec les références ci-dessus. Une question sans notion ne sera jamais posée à personne.
 - **Une question, une notion.** Ici, une question est tirée pour réviser SA notion : elle doit se répondre avec elle et rien d'autre.
 - ${paceInstruction(input.distribution)}
-- **Varie les types de réponse.** Le QCM (\`qcs\` ou \`qcm\` selon qu'une seule ou plusieurs propositions sont correctes) reste le format le plus courant en entraînement parce qu'il se traite d'un geste — mais la réponse libre a toute sa place, elle est corrigée elle aussi. Garde-la brève : quelques lignes au plus, jamais une dissertation.
+${responseTypeCatalog('parcours')}
 - Pour une réponse libre : renseigne les critères de correction — ce qui est attendu, ce qui est accepté. C'est là-dessus que la réponse sera jugée.
 - Pour un QCM : des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien, elle se raye d'office.
 - **Une proposition fausse est fausse PAR RAPPORT À LA NOTION.** Elle n'affirme aucun fait extérieur — ni vrai ni faux — que rien ici ne permet de vérifier : c'est par les propositions fausses qu'une invention entre le plus facilement, et personne ne la relira.
@@ -732,7 +793,7 @@ Règles de production :
 - Répartition visée : ${mix}. Aucune question de simple restitution : le parcours s'en charge.
 - Chaque question porte dans \`notionRefs\` TOUTES les notions qu'elle fait travailler, avec les références ci-dessus. Une question sans notion ne sera jamais retenue.
 ${groups}
-- Varie les types de réponse : QCM, réponse textuelle, liste. La réponse libre est pleinement à sa place ici — c'est elle qui permet d'évaluer un raisonnement, et elle est corrigée comme le reste.
+${responseTypeCatalog('exam')}
 - **Une question d'examen se donne plus de temps qu'une question d'entraînement du même niveau** : compte 1 à 2 minutes au niveau 2, 3 à 5 minutes aux niveaux 3 et 4. C'est ce temps qui autorise un énoncé plus fourni et une réponse construite.
 - Pour un QCM : des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien.
 - **Une proposition fausse est fausse PAR RAPPORT AUX NOTIONS ci-dessus.** Elle n'affirme aucun fait extérieur — ni vrai ni faux — que rien ici ne permet de vérifier.

@@ -41,6 +41,7 @@ import { documentsForPass, shouldCacheDocuments } from '@/lib/ingest/passInput';
 import {
   wireAssignmentsOutput,
   wireChaptersOutput,
+  wireExamGroupsOutput,
   wireGroupsOutput,
   wireNotionsOutput,
 } from '@/lib/ingest/wireSchema';
@@ -313,8 +314,12 @@ function outputSchemaFor(scope: IngestScope) {
     case 'assign':
       return wireAssignmentsOutput;
     case 'questions':
-    case 'exam':
       return wireGroupsOutput;
+    // Deux types de plus à l'examen — le dépôt de fichier et l'énoncé sans
+    // réponse attendue, qui supposent tous deux un correcteur humain
+    // (EXAM_RESPONSE_TYPES).
+    case 'exam':
+      return wireExamGroupsOutput;
   }
 }
 
