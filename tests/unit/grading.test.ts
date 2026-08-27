@@ -120,8 +120,30 @@ describe('gradeStatement — les quatre types jugés', () => {
   });
 });
 
+describe('gradeStatement — la réponse rédigée se confirme, ne se réfute pas', () => {
+  const q = { responseType: 'textuelle', answer: 'La photosynthèse' } as const;
+
+  it('une réponse identique à la référence est déclarée juste, à la forme près', () => {
+    // C'est ce qui permet enfin aux réponses courtes et factuelles de créditer
+    // la notion : jusqu'au 25/08/2026 elles ressortaient toutes sans verdict.
+    expect(gradeStatement(q, answer({ text: 'photosynthese' })).correct).toBe(true);
+  });
+
+  it('une réponse différente ne rend PAS « faux », elle rend « on ne sait pas »', () => {
+    // Une bonne réponse formulée autrement ne ressemble pas à la référence : la
+    // machine ne peut pas les départager. Ce sont ces réponses-là qui iront un
+    // jour à la relecture par IA.
+    expect(gradeStatement(q, answer({ text: 'le processus qui nourrit la plante' })).correct).toBeNull();
+    expect(gradeStatement(q, answer({ text: '' })).correct).toBeNull();
+  });
+
+  it('sans réponse attendue, aucun verdict', () => {
+    expect(gradeStatement({ responseType: 'textuelle', answer: '' }, answer({ text: 'quelque chose' })).correct).toBeNull();
+  });
+});
+
 describe('gradeStatement — les types que rien ne sait juger', () => {
-  it.each(['textuelle', 'dessin', 'fichier', 'sans_reponse'] as const)('%s reste sans verdict', (responseType) => {
+  it.each(['dessin', 'fichier', 'sans_reponse'] as const)('%s reste sans verdict', (responseType) => {
     // `correct: null` — et c'est ce qui les empêche de créditer la maîtrise,
     // d'où la consigne donnée au modèle de ne pas en faire une majorité.
     expect(gradeStatement({ responseType, answer: 'attendu' }, answer()).correct).toBeNull();
@@ -132,8 +154,8 @@ describe('réponse reçue du navigateur — ce qui n’est pas lisible devient v
   it('ne lève jamais, quoi qu’on lui donne', () => {
     expect(toExerciseAnswer(null)).toEqual(emptyExerciseAnswer());
     expect(toExerciseAnswer('bonjour')).toEqual(emptyExerciseAnswer());
-    expect(toExerciseAnswer({ choices: 'nope', list: [1, 'a'], table: null })).toEqual({
-      choices: [], list: ['a'], table: [], match: {},
+    expect(toExerciseAnswer({ choices: 'nope', text: 42, list: [1, 'a'], table: null })).toEqual({
+      choices: [], text: '', list: ['a'], table: [], match: {},
     });
   });
 

@@ -2,13 +2,13 @@
 //
 // ─── Pourquoi une règle écrite plutôt qu'une comparaison de chaînes ──────────
 //
-// Une liste se corrige automatiquement — on connaît la réponse au caractère
-// près. Mais un candidat qui tape « photosynthese » là où l'auteur a écrit « La
-// photosynthèse » a raison, et le lui refuser ferait passer la correction
-// automatique pour un piège. La normalisation ci-dessous est donc le contrat de
-// tolérance, écrit à un seul endroit pour que le serveur (qui juge) et l'écran
-// d'exercice (qui colore les champs) ne puissent pas en avoir deux lectures
-// différentes.
+// Une liste et une réponse rédigée se corrigent en comparant ce que le candidat
+// a TAPÉ à ce que l'auteur a écrit. Mais un candidat qui tape « photosynthese »
+// là où l'auteur a écrit « La photosynthèse » a raison, et le lui refuser ferait
+// passer la correction automatique pour un piège. La normalisation ci-dessous
+// est donc le contrat de tolérance, écrit à un seul endroit pour que le serveur
+// (qui juge) et l'écran d'exercice (qui colore les champs) ne puissent pas en
+// avoir deux lectures différentes.
 //
 // ─── À réserver à ce que le candidat A VRAIMENT ÉCRIT ───────────────────────
 //

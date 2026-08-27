@@ -652,7 +652,7 @@ function responseTypeCatalog(context: 'parcours' | 'exam'): string {
     intro,
     ...common,
     '',
-    "⚠️ **Le QCM, la liste, le tableau et les paires sont corrigés automatiquement, et eux seuls font progresser la notion.** La réponse rédigée et le dessin affichent la réponse attendue et laissent le candidat se juger : ils ont leur place, mais une notion qui n'aurait que ça ne progresserait jamais. Qu'ils restent minoritaires.",
+    "⚠️ **Ce qui fait progresser la notion, c'est une réponse que la machine sait déclarer juste.** Le QCM, la liste, le tableau et les paires le sont toujours. Une réponse rédigée ne l'est que si le candidat peut écrire EXACTEMENT ce que tu as mis dans `answer` — un terme, une date, un nom, quelques mots ; la casse, les accents et l'article de tête sont tolérés, rien d'autre. Dès qu'elle appelle une phrase construite, plus rien ne peut la juger : le candidat se corrige lui-même et ne progresse pas. Le dessin n'est jamais jugé. Écris donc des réponses rédigées COURTES, et n'en fais pas la majorité.",
   ].join('\n');
 }
 

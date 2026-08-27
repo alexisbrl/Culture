@@ -7,7 +7,7 @@
 // projet demande de couvrir. Extrait de `exam.ts` le 25/08/2026, en même temps
 // que l'ouverture de la correction à la liste, au tableau et aux paires.
 
-import { isListCorrect } from '@/lib/workshops/answerMatch';
+import { isListCorrect, sameAnswerText } from '@/lib/workshops/answerMatch';
 import { matchPairs } from '@/lib/workshops/examTypes';
 import type {
   ExerciseAnswer,
@@ -37,18 +37,27 @@ export function sameChoiceSet(a: number[], b: number[]): boolean {
 
 /** Correction d'UN énoncé.
  *
- *  ─── Quatre types jugés, et pourquoi pas les autres ────────────────────────
+ *  ─── Trancher, ou seulement confirmer ──────────────────────────────────────
  *
- *  Le QCM, la LISTE, le TABLEAU et les PAIRES portent une réponse juste connue
- *  au caractère près : la machine peut trancher. Jusqu'au 25/08/2026 elle ne le
- *  faisait que pour le QCM — les trois autres s'affichaient, se remplissaient,
- *  et ressortaient « pas de correction automatique », donc sans jamais créditer
- *  la moindre progression (le crédit de maîtrise ne suit qu'un `correct === true`).
- *  C'est ce qui bornait en pratique la génération par IA au QCM.
+ *  Deux familles, et la différence n'est pas une question de zèle :
  *
- *  La réponse rédigée, le dessin et le dépôt de fichier restent à `null` : leur
- *  jugement demande un correcteur, humain ou assisté. `sans_reponse` aussi — il
- *  n'y a rien à juger, l'énoncé ne fait qu'afficher.
+ *  • **Ce qui se CHOISIT** — QCM, tableau, paires — porte une réponse juste
+ *    connue sans ambiguïté : la machine tranche dans les deux sens, juste ou
+ *    faux. La LISTE s'y rattache : sa référence est close (l'auteur a écrit
+ *    toutes les réponses qu'il attend, et le candidat en donne autant).
+ *  • **Ce qui s'ÉCRIT librement** — la réponse rédigée — ne peut être que
+ *    CONFIRMÉE. Correspondre à la référence prouve qu'on a raison ; ne pas y
+ *    correspondre ne prouve rien, une bonne réponse formulée autrement ne lui
+ *    ressemble pas. Verdict `null`, jamais « faux ».
+ *
+ *  Jusqu'au 25/08/2026, seul le QCM était jugé : tout le reste s'affichait, se
+ *  remplissait, et ressortait « pas de correction automatique » — donc sans
+ *  jamais créditer la moindre progression (le crédit de maîtrise ne suit qu'un
+ *  `correct === true`). C'est ce qui bornait en pratique la génération par IA au
+ *  QCM.
+ *
+ *  Le dessin et le dépôt de fichier restent à `null` : il n'y a rien à comparer.
+ *  `sans_reponse` aussi — l'énoncé ne fait qu'afficher.
  *
  *  ─── Tout ou rien ──────────────────────────────────────────────────────────
  *
@@ -117,9 +126,29 @@ export function gradeStatement(source: GradableStatement, answer: ExerciseAnswer
       return { ...base, correct, correctPairs: pairs };
     }
 
+    case 'textuelle': {
+      // ⚠️ **Une réponse rédigée ne peut être que CONFIRMÉE, jamais réfutée.**
+      //
+      // Si le candidat écrit la réponse attendue — à la casse, aux accents, à la
+      // ponctuation et à l'article près —, il a raison, on peut le dire et
+      // créditer la notion. C'est le cas des réponses courtes et factuelles, et
+      // ça n'était pas fait jusqu'au 25/08/2026 : elles ressortaient toutes sans
+      // verdict, donc sans progression.
+      //
+      // S'il écrit autre chose, on ne sait RIEN : une bonne réponse formulée
+      // autrement ne ressemble pas à la référence, et la machine ne peut pas les
+      // départager. Le verdict reste donc `null` — la réponse attendue s'affiche
+      // et le candidat se juge, exactement comme avant. Ce sont ces réponses-là
+      // qui iront à la relecture par IA le jour où elle existera (docs/backlog.md) :
+      // l'appel n'a de sens que sur ce dont on est incapable de trancher.
+      const expected = (source.answer ?? '').trim();
+      if (!expected) return { ...base, correct: null };
+      return { ...base, correct: sameAnswerText(answer.text, expected) ? true : null };
+    }
+
     default:
-      // Réponse rédigée, dessin, dépôt de fichier, énoncé sans réponse : pas de
-      // correction automatique possible, on affiche la réponse attendue.
+      // Dessin, dépôt de fichier, énoncé sans réponse : rien à comparer, on
+      // affiche la réponse attendue.
       return { ...base, correct: null };
   }
 }

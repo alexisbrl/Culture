@@ -139,8 +139,7 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
    *
    *  ⚠️ Les paires sont converties en TEXTE : la colonne de droite est arrivée
    *  mélangée et sans index d'origine, un rang dans cette colonne ne voudrait
-   *  donc rien dire pour le serveur (voir `ExerciseAnswer.match`). La réponse
-   *  rédigée, elle, ne part pas — rien ne sait encore la juger. */
+   *  donc rien dire pour le serveur (voir `ExerciseAnswer.match`). */
   function toAnswers(): ExerciseAnswer[] {
     return statements.map((statement, i) => {
       const ex = extra[i] ?? emptyExtra();
@@ -150,7 +149,7 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
         const text = right[rightIndex];
         if (text !== undefined) match[Number(leftIndex)] = text;
       }
-      return { choices: selected[i] ?? [], list: ex.list, table: ex.table, match };
+      return { choices: selected[i] ?? [], text: freeText[i] ?? '', list: ex.list, table: ex.table, match };
     });
   }
 

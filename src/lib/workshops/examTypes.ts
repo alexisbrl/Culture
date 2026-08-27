@@ -439,6 +439,12 @@ export type ExerciseAnswer = {
   /** qcs, qcm — index des propositions cochées, dans le repère de la question
    *  (`ExerciseChoice.index`), donc insensible au mélange d'affichage. */
   choices: number[];
+  /** textuelle — la réponse rédigée, telle quelle.
+   *
+   *  Elle ne partait pas au serveur avant le 25/08/2026 : rien ne la jugeait.
+   *  Elle sert désormais à CONFIRMER une bonne réponse (jamais à en refuser
+   *  une — voir `gradeStatement`). */
+  text: string;
   /** liste — une entrée par ligne saisie, dans l'ordre de saisie. L'ordre ne
    *  compte pas à la correction : on compare deux ensembles. */
   list: string[];
@@ -458,7 +464,7 @@ export type ExerciseAnswer = {
 
 /** Une réponse vide — le point de départ de chaque énoncé. */
 export function emptyExerciseAnswer(): ExerciseAnswer {
-  return { choices: [], list: [], table: [], match: {} };
+  return { choices: [], text: '', list: [], table: [], match: {} };
 }
 
 /** Ramène ce qu'un client envoie sur la forme attendue, sans jamais lever.
@@ -485,6 +491,7 @@ export function toExerciseAnswer(value: unknown): ExerciseAnswer {
     choices: Array.isArray(raw.choices)
       ? raw.choices.filter((x): x is number => Number.isInteger(x) && (x as number) >= 0)
       : [],
+    text: typeof raw.text === 'string' ? raw.text : '',
     list: strings(raw.list),
     table: strings(raw.table),
     match,
