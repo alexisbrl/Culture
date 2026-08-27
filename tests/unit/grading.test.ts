@@ -102,6 +102,18 @@ describe('gradeStatement — les quatre types jugés', () => {
     expect(gradeStatement(q, answer({ match: { 0: 'France' } })).correct).toBe(false);
   });
 
+  it('paires : comparaison EXACTE — le candidat n’écrit rien, il désigne un encadré', () => {
+    // La tolérance de forme (`sameAnswerText`) n'a rien à rattraper ici : le
+    // libellé revient tel qu'on l'a envoyé. L'appliquer ferait accepter un
+    // encadré DIFFÉRENT au libellé voisin, c'est-à-dire valider une erreur.
+    const q: GradableStatement = {
+      responseType: 'matching',
+      choices: [toMatchChoice('Fleuve', 'le Rhône'), toMatchChoice('Ville', 'Rhône')],
+    };
+    expect(gradeStatement(q, answer({ match: { 0: 'le Rhône', 1: 'Rhône' } })).correct).toBe(true);
+    expect(gradeStatement(q, answer({ match: { 0: 'Rhône', 1: 'le Rhône' } })).correct).toBe(false);
+  });
+
   it('les paires attendues repartent avec la correction, remises côte à côte', () => {
     const q: GradableStatement = { responseType: 'matching', choices: [toMatchChoice('Paris', 'France')] };
     expect(gradeStatement(q, answer()).correctPairs).toEqual([{ left: 'Paris', right: 'France' }]);

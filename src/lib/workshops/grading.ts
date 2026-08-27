@@ -7,7 +7,7 @@
 // projet demande de couvrir. Extrait de `exam.ts` le 25/08/2026, en même temps
 // que l'ouverture de la correction à la liste, au tableau et aux paires.
 
-import { isListCorrect, sameAnswerText } from '@/lib/workshops/answerMatch';
+import { isListCorrect } from '@/lib/workshops/answerMatch';
 import { matchPairs } from '@/lib/workshops/examTypes';
 import type {
   ExerciseAnswer,
@@ -97,10 +97,23 @@ export function gradeStatement(source: GradableStatement, answer: ExerciseAnswer
       // décalerait toutes les suivantes — donc changerait la bonne réponse.
       const pairs = matchPairs(source.choices ?? []);
       if (!pairs.some((pair) => pair.right.length > 0)) return { ...base, correct: null };
-      // Le candidat renvoie le TEXTE de la correspondance qu'il a reliée : la
-      // colonne de droite lui est parvenue mélangée et sans index d'origine
-      // (voir `ExerciseAnswer.match`).
-      const correct = pairs.every((pair, index) => sameAnswerText(answer.match[index] ?? '', pair.right));
+
+      // ⚠️ **Comparaison EXACTE, et surtout pas `sameAnswerText`.** Ici le
+      // candidat n'écrit rien : il relie deux encadrés. Le texte qu'il renvoie
+      // n'est pas une réponse rédigée, c'est l'IDENTIFIANT de l'encadré qu'il a
+      // touché — la colonne de droite lui est parvenue mélangée et sans index
+      // d'origine (voir `ExerciseAnswer.match`), et il nous revient tel que nous
+      // le lui avons envoyé, au caractère près. La tolérance de forme n'aurait
+      // donc rien à rattraper : elle ne pourrait que faire accepter un encadré
+      // DIFFÉRENT dont le libellé se normalise pareil (« Rhône » et « le
+      // Rhône »), c'est-à-dire valider une erreur.
+      const correct = pairs.every((pair, index) => {
+        // Paire laissée à moitié écrite : il n'y a rien à relier, on ne la
+        // compte pas contre le candidat (même règle que « pas de référence,
+        // pas de verdict »).
+        if (pair.right.length === 0) return true;
+        return (answer.match[index] ?? '').trim() === pair.right;
+      });
       return { ...base, correct, correctPairs: pairs };
     }
 

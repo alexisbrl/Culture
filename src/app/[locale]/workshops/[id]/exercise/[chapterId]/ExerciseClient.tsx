@@ -28,7 +28,7 @@ import LinkButton from '@/components/LinkButton';
 import { drawExercise, gradeExercise } from '@/app/actions/parcoursExercise';
 import type { ExerciseAnswer, ExercisePart, ExercisePrompt, ExerciseResult } from '@/lib/workshops/examTypes';
 import { tableCellKey } from '@/lib/workshops/examTypes';
-import { matchListEntries, sameAnswerText } from '@/lib/workshops/answerMatch';
+import { matchListEntries } from '@/lib/workshops/answerMatch';
 
 type Props = {
   locale: string;
@@ -783,12 +783,17 @@ function MatchAnswer({ statement, extra, result, onExtra }: {
 
   /** Couleur d'un appariement après validation : vert s'il est juste, rouge
    *  sinon. `null` tant que rien n'est validé — la correction ne descend jamais
-   *  avant. La comparaison se fait sur le TEXTE, comme côté serveur : la colonne
-   *  de droite est arrivée mélangée et son rang ne dit rien de l'appariement. */
+   *  avant.
+   *
+   *  Comparaison de textes **exacte**, identique à celle du serveur (`gradeStatement`) :
+   *  le candidat n'écrit rien ici, le libellé est simplement l'identifiant de
+   *  l'encadré qu'il a relié — la colonne de droite est arrivée mélangée et son
+   *  rang ne dit rien de l'appariement attendu. Toute tolérance de forme
+   *  colorerait en vert un encadré différent au libellé voisin. */
   function pairTone(leftIndex: number, rightIndex: number): string | null {
     const pairs = result?.correctPairs;
     if (!pairs) return null;
-    return sameAnswerText(right[rightIndex] ?? '', pairs[leftIndex]?.right ?? '') ? palette.green : palette.danger;
+    return (right[rightIndex] ?? '').trim() === (pairs[leftIndex]?.right ?? '') ? palette.green : palette.danger;
   }
 
   const links = Object.entries(extra.match).map(([l, r]) => {

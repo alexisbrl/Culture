@@ -2,13 +2,23 @@
 //
 // ─── Pourquoi une règle écrite plutôt qu'une comparaison de chaînes ──────────
 //
-// Une liste et une mise en paires se corrigent automatiquement — on connaît la
-// réponse au caractère près. Mais un candidat qui tape « photosynthese » là où
-// l'auteur a écrit « La photosynthèse » a raison, et le lui refuser ferait
-// passer la correction automatique pour un piège. La normalisation ci-dessous
-// est donc le contrat de tolérance, écrit à un seul endroit pour que le serveur
-// (qui juge) et l'écran d'exercice (qui colore les champs) ne puissent pas en
-// avoir deux lectures différentes.
+// Une liste se corrige automatiquement — on connaît la réponse au caractère
+// près. Mais un candidat qui tape « photosynthese » là où l'auteur a écrit « La
+// photosynthèse » a raison, et le lui refuser ferait passer la correction
+// automatique pour un piège. La normalisation ci-dessous est donc le contrat de
+// tolérance, écrit à un seul endroit pour que le serveur (qui juge) et l'écran
+// d'exercice (qui colore les champs) ne puissent pas en avoir deux lectures
+// différentes.
+//
+// ─── À réserver à ce que le candidat A VRAIMENT ÉCRIT ───────────────────────
+//
+// ⚠️ **La mise en paires ne passe PAS par ici, et ne doit pas y passer.** Le
+// candidat n'y écrit rien : il relie deux encadrés, et le texte qui revient au
+// serveur n'est que l'identifiant de l'encadré touché — il nous revient tel que
+// nous le lui avons envoyé. Tolérer la forme n'y rattraperait donc aucune faute
+// de frappe (il n'y en a pas) et ne pourrait que faire accepter un encadré
+// DIFFÉRENT au libellé voisin (« Rhône » et « le Rhône »). `gradeStatement`
+// compare ces textes-là à l'identique.
 //
 // ─── Ce qu'elle ne fait pas ─────────────────────────────────────────────────
 //
