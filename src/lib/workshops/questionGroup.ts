@@ -60,8 +60,12 @@ export type QuestionItem = {
   textLines: number;
   typeOptions: QuestionTypeOptions;
   expectations: string;
+  /** Niveau par défaut de l'énoncé : celui d'une notion qui n'a pas le sien. */
   bloomLevel: BloomLevel;
   notionIds: string[];
+  /** Niveau de Bloom **par notion** (28/08/2026) : une question peut faire
+   *  restituer l'une et analyser l'autre. Clé absente = suit `bloomLevel`. */
+  notionBloom: Record<string, BloomLevel>;
 };
 
 // Les éléments COMMUNS du groupe + ses questions. Rien ici n'est propre à un
@@ -103,6 +107,7 @@ export function toGroup(q: Question): QuestionGroup {
     expectations: q.expectations ?? '',
     bloomLevel: q.bloomLevel ?? DEFAULT_BLOOM_LEVEL,
     notionIds: q.notionIds ?? [],
+    notionBloom: q.notionBloom ?? {},
   };
   const linked: QuestionItem[] = (q.parts ?? []).map((part, i) => ({
     id: itemIdOf(q.id, i + 1, part.id),
@@ -117,6 +122,7 @@ export function toGroup(q: Question): QuestionGroup {
     expectations: part.expectations ?? '',
     bloomLevel: part.bloomLevel ?? DEFAULT_BLOOM_LEVEL,
     notionIds: part.notionIds ?? [],
+    notionBloom: part.notionBloom ?? {},
   }));
 
   return {
@@ -156,6 +162,10 @@ export function fromGroup(group: QuestionGroup): Question {
     expectations: head.expectations,
     bloomLevel: head.bloomLevel,
     notionIds: head.notionIds,
+    // Carte vide = rien à dire : on ne la pose pas. Une question dont aucune
+    // notion n'a de niveau propre reste **identique** à ce qu'elle était avant
+    // que ce champ n'existe, ce qui garde l'aller-retour neutre.
+    ...(Object.keys(head.notionBloom).length > 0 ? { notionBloom: head.notionBloom } : {}),
 
     parts: linked.map((item) => ({
       id: item.id,
@@ -170,6 +180,7 @@ export function fromGroup(group: QuestionGroup): Question {
       expectations: item.expectations,
       bloomLevel: item.bloomLevel,
       notionIds: item.notionIds,
+      ...(Object.keys(item.notionBloom).length > 0 ? { notionBloom: item.notionBloom } : {}),
     })) satisfies QuestionPart[],
 
     // Champs hérités que la vue « groupe » n'expose pas : ils ne sont plus
@@ -220,7 +231,23 @@ function normalizeItem(raw: unknown, groupId: string, index: number): QuestionIt
     expectations: asString(r.expectations),
     bloomLevel: toBloomLevel(r.bloomLevel),
     notionIds: asStringArray(r.notionIds),
+    // Une source extérieure peut envoyer n'importe quoi : on ne retient que les
+    // niveaux qui portent sur une notion RÉELLEMENT reliée à cet énoncé, et
+    // `toBloomLevel` ramène le reste dans les bornes.
+    notionBloom: notionBloomOf(r.notionBloom, asStringArray(r.notionIds)),
   };
+}
+
+/** La carte des niveaux par notion, bornée aux notions de l'énoncé. */
+function notionBloomOf(raw: unknown, notionIds: string[]): Record<string, BloomLevel> {
+  const source = asRecord(raw);
+  const known = new Set(notionIds);
+  const out: Record<string, BloomLevel> = {};
+  for (const [id, value] of Object.entries(source)) {
+    if (!known.has(id) || value === null || value === undefined) continue;
+    out[id] = toBloomLevel(value);
+  }
+  return out;
 }
 
 /** `id` est imposé par l'appelant (jamais par la source) ; un groupe sans

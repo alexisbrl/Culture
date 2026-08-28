@@ -1260,10 +1260,9 @@
     "stop": {
       "aria": "arrêter la génération",
       "title": "Arrêter la génération ?",
-      "body": "Ce qui a déjà été écrit sera retiré : l’atelier revient à son état d’avant. Rien n’est conservé à moitié.",
+      "body": "Ce qui a déjà été écrit sera retiré : l’atelier revient à son état d’avant. La fenêtre se ferme tout de suite, le retrait se termine seul.",
       "keep": "continuer",
-      "confirm": "arrêter et défaire",
-      "working": "Arrêt en cours, puis retrait de ce qui a été écrit…"
+      "confirm": "arrêter et défaire"
     }
   }
 }

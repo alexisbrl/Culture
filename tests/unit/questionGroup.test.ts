@@ -133,6 +133,21 @@ describe('normalizeGroupInput — entrée non fiable (IA, import, API)', () => {
     expect(normalizeGroupInput('n’importe quoi', 'g1').questions).toHaveLength(1);
   });
 
+  // Le niveau par notion (28/08/2026) : c'est une carte libre venue de
+  // l'extérieur, donc le seul endroit où borner ses clés comme ses valeurs.
+  it('ne garde un niveau par notion que pour les notions réellement reliées', () => {
+    const group = normalizeGroupInput({
+      questions: [{ notionIds: ['n1', 'n2'], bloomLevel: 2, notionBloom: { n1: 4, n2: 9, 'n-jamais-reliée': 3 } }],
+    }, 'g1');
+
+    expect(group.questions[0].notionBloom).toEqual({ n1: 4, n2: 4 });
+  });
+
+  it('accepte une question sans niveau par notion', () => {
+    const group = normalizeGroupInput({ questions: [{ notionIds: ['n1'] }] }, 'g1');
+    expect(group.questions[0].notionBloom).toEqual({});
+  });
+
   it('normalise un type de réponse inventé et un niveau de Bloom hors bornes', () => {
     const group = normalizeGroupInput({
       questions: [{ responseType: 'vrai_faux', bloomLevel: 6 }],

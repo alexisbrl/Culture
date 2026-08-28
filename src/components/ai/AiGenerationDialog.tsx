@@ -150,7 +150,6 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   const importIdRef = useRef<string | null>(null);
   const runRef = useRef<Promise<void> | null>(null);
   const [stopAsk, setStopAsk] = useState(false);
-  const [stopping, setStopping] = useState(false);
   const [counts, setCounts] = useState({ chapters: 0, notions: 0, questions: 0 });
   const [issues, setIssues] = useState<{ discarded: PlanIssue[]; adjusted: PlanIssue[] }>({ discarded: [], adjusted: [] });
 
@@ -561,31 +560,33 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     setStopAsk(true);
   }
 
-  /** Arrête l'enchaînement, puis défait ce que ce lot a écrit.
+  /** Arrête l'enchaînement, **rend la main tout de suite**, et défait le reste
+   *  en arrière-plan.
    *
-   *  ⚠️ **On attend la fin de l'enchaînement avant d'annuler.** L'arrêt
-   *  empêche les appels suivants de partir, jamais ceux déjà en vol : annuler
-   *  tout de suite laisserait derrière lui ce qu'un appel retardataire écrit
-   *  après coup — exactement le reliquat qu'on veut éviter. */
-  async function confirmStop() {
+   *  ⚠️ **Le ménage attend la fin de l'enchaînement, l'utilisateur non.**
+   *  L'arrêt empêche les appels suivants de partir, jamais ceux déjà en vol :
+   *  annuler avant qu'ils ne retombent laisserait derrière lui ce qu'un
+   *  retardataire écrit après coup. Cette attente-là dure le temps d'un appel au
+   *  modèle — jusqu'à une minute — et rien ne justifie d'y retenir quelqu'un
+   *  devant une fenêtre fermée (28/08/2026).
+   *
+   *  Les questions sont écrites **au fur et à mesure**, un lot par appel : quitter
+   *  la page n'annule donc rien. Si le ménage n'a pas pu se faire — onglet
+   *  fermé entre-temps, annulation refusée — le lot reste, et le bandeau
+   *  d'annulation le propose comme n'importe quel autre. */
+  function confirmStop() {
     stopped.current = true;
-    setStopping(true);
-    await runRef.current?.catch(() => {});
-
     const importId = importIdRef.current;
-    if (importId) {
-      const result = await cancelWorkshopImport(workshopId, importId);
-      // Une annulation refusée (élément déjà modifié, délai passé) se dit : la
-      // génération est arrêtée, mais ce qu'elle a écrit est resté.
-      if (!result.ok) {
-        setStopping(false);
-        setStopAsk(false);
-        onDone?.();
-        return setPhase({ step: 'error', message: result.error });
-      }
-    }
-    onDone?.();
     onClose();
+
+    void (async () => {
+      await runRef.current?.catch(() => {});
+      if (!importId) return;
+      await cancelWorkshopImport(workshopId, importId).catch(() => {});
+      // L'écran se rafraîchit une fois le ménage fait : ce qui a clignoté pendant
+      // la génération disparaît, sans que personne ait attendu devant.
+      onDone?.();
+    })();
   }
 
   return (
@@ -623,14 +624,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 <p style={{ fontSize: 13, color: palette.inkMuted, margin: '6px 0 0' }}>{t('stop.body')}</p>
               </div>
             </div>
-            {stopping ? (
-              <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 16 }}>{t('stop.working')}</p>
-            ) : (
-              <Actions>
-                <Ghost onClick={() => setStopAsk(false)}>{t('stop.keep')}</Ghost>
-                <Primary onClick={confirmStop}>{t('stop.confirm')}</Primary>
-              </Actions>
-            )}
+            <Actions>
+              <Ghost onClick={() => setStopAsk(false)}>{t('stop.keep')}</Ghost>
+              <Primary onClick={confirmStop}>{t('stop.confirm')}</Primary>
+            </Actions>
           </div>
         )}
 

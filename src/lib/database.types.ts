@@ -257,16 +257,19 @@ export type Database = {
       }
       exam_question_item_bricks: {
         Row: {
+          bloom_level: number | null
           brick_id: string
           created_at: string
           item_id: string
         }
         Insert: {
+          bloom_level?: number | null
           brick_id: string
           created_at?: string
           item_id: string
         }
         Update: {
+          bloom_level?: number | null
           brick_id?: string
           created_at?: string
           item_id?: string

@@ -62,6 +62,7 @@ export function emptyQuestion(): Question {
     // niveau 1, et l'UI ne permet pas de le dé-sélectionner.
     bloomLevel: DEFAULT_BLOOM_LEVEL,
     notionIds: [],
+    notionBloom: {},
   };
 }
 

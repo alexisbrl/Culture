@@ -318,11 +318,14 @@ export type QuestionPart = {
   typeOptions: QuestionTypeOptions;
   /** Attendus de correction, propres à cette question liée. */
   expectations: string;
-  /** Niveau de Bloom visé par cette question liée, indépendant du principal. */
+  /** Niveau de Bloom visé par cette question liée, indépendant du principal.
+   *  Sert de défaut aux notions qui n'ont pas le leur (voir `notionBloom`). */
   bloomLevel: BloomLevel;
   /** Notions couvertes par cette question liée, comme pour la principale :
    *  reliées à la QUESTION (`exam_question_item_bricks`), pas au groupe. */
   notionIds: string[];
+  /** Niveau de Bloom **par notion**, même règle que sur la principale. */
+  notionBloom?: Record<string, BloomLevel>;
 };
 
 // Pas de titre : une question n'a que son énoncé (19/08/2026). Le champ
@@ -369,6 +372,19 @@ export type Question = {
   // et non au groupe depuis le 11/08/2026 ; l'ancienne `exam_question_bricks` a
   // été supprimée le 19/08/2026.
   notionIds: string[];
+  /** ─── Le niveau de Bloom, notion par notion (28/08/2026) ─────────────────
+   *
+   *  Une même question peut faire RESTITUER une notion (niveau 1) et en faire
+   *  ANALYSER une autre (niveau 4) : le niveau qualifie le couple question ↔
+   *  notion, pas la question. Jusqu'ici il n'existait qu'au niveau de la
+   *  question, et la pastille affichée sur chaque notion les changeait donc
+   *  toutes ensemble.
+   *
+   *  Clé absente = cette notion suit `bloomLevel`. On évite ainsi d'avoir à
+   *  remplir la carte pour chaque question existante, et une notion ajoutée par
+   *  un chemin qui ignore ce champ reste correcte. Stocké dans la colonne
+   *  `bloom_level` de la table de jonction. */
+  notionBloom?: Record<string, BloomLevel>;
 };
 
 // ─── Exercice du parcours ────────────────────────────────────────────────────

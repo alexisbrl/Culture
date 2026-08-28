@@ -25,6 +25,7 @@ import type {
   ExerciseResult,
   ExerciseTypeOptions,
   ResponseType,
+  BloomLevel,
 } from '@/lib/workshops/examTypes';
 import {
   emptyExerciseAnswer,
@@ -104,11 +105,24 @@ const GROUP_COLUMNS = 'id, workshop_id, image_key, audio_key, pools, exam_ids, c
 // ⚠️ Cette chaîne n'est vérifiée ni par TypeScript ni par le build : elle
 // désigne des tables et des colonnes par leur nom. Toute modification doit être
 // rejouée contre la base (voir les contrôles de bout en bout du chantier).
-const GROUP_WITH_ITEMS = `${GROUP_COLUMNS}, exam_question_items(*, exam_question_item_bricks(brick_id))`;
+const GROUP_WITH_ITEMS = `${GROUP_COLUMNS}, exam_question_items(*, exam_question_item_bricks(brick_id, bloom_level))`;
 
-type NotionLinkMap = Record<string, string[]>;
+/** Un lien question ↔ notion, avec le niveau de Bloom **propre à ce couple**
+ *  (28/08/2026). `bloomLevel: null` = cette notion suit le niveau de sa
+ *  question ; c'est le cas de tout ce qui a été écrit avant. */
+type NotionLink = { notionId: string; bloomLevel: BloomLevel | null };
+type NotionLinkMap = Record<string, NotionLink[]>;
 
-type EmbeddedItemRow = ItemRow & { exam_question_item_bricks: { brick_id: string }[] | null };
+/** Les niveaux déclarés, bornés aux notions qui en ont un. */
+function notionBloomOf(links: NotionLink[]): Record<string, BloomLevel> {
+  const out: Record<string, BloomLevel> = {};
+  for (const link of links) if (link.bloomLevel !== null) out[link.notionId] = link.bloomLevel;
+  return out;
+}
+
+type EmbeddedItemRow = ItemRow & {
+  exam_question_item_bricks: { brick_id: string; bloom_level: number | null }[] | null;
+};
 type EmbeddedGroupRow = GroupRow & { exam_question_items: EmbeddedItemRow[] | null };
 
 /** Questions d'un groupe **triées par position**, et leurs notions. Le tri se
@@ -119,7 +133,10 @@ function unpackGroup(row: EmbeddedGroupRow): { items: ItemRow[]; notionsByItem: 
   const embedded = row.exam_question_items ?? [];
   const notionsByItem: NotionLinkMap = {};
   for (const item of embedded) {
-    notionsByItem[item.id] = (item.exam_question_item_bricks ?? []).map((link) => link.brick_id);
+    notionsByItem[item.id] = (item.exam_question_item_bricks ?? []).map((link) => ({
+      notionId: link.brick_id,
+      bloomLevel: link.bloom_level === null || link.bloom_level === undefined ? null : toBloomLevel(link.bloom_level),
+    }));
   }
   const items = [...embedded].sort((a, b) => a.sort_order - b.sort_order);
   return { items, notionsByItem };
@@ -131,7 +148,7 @@ function embeddedToQuestion(row: EmbeddedGroupRow): Question {
   return rowToQuestion(row, items, notionsByItem);
 }
 
-function itemToPart(row: ItemRow, notionIds: string[]): QuestionPart {
+function itemToPart(row: ItemRow, links: NotionLink[]): QuestionPart {
   return {
     id: row.id,
     content: row.content ?? '',
@@ -147,7 +164,8 @@ function itemToPart(row: ItemRow, notionIds: string[]): QuestionPart {
     typeOptions: normalizeTypeOptions(row.type_options),
     expectations: row.expectations ?? '',
     bloomLevel: toBloomLevel(row.bloom_level),
-    notionIds,
+    notionIds: links.map((link) => link.notionId),
+    notionBloom: notionBloomOf(links),
   };
 }
 
@@ -180,6 +198,7 @@ function rowToQuestion(row: GroupRow, items: ItemRow[], notionsByItem: NotionLin
     expectations: headPart.expectations,
     bloomLevel: headPart.bloomLevel,
     notionIds: headPart.notionIds,
+    notionBloom: headPart.notionBloom,
 
     parts: linked.map((item) => itemToPart(item, notionsByItem[item.id] ?? [])),
 
@@ -232,6 +251,7 @@ function itemRowsOf(q: Question) {
       expectations: q.expectations ?? '',
       bloomLevel: q.bloomLevel,
       notionIds: q.notionIds ?? [],
+      notionBloom: q.notionBloom ?? {},
     },
     ...parts.map((part) => ({ ...part, id: part.id || crypto.randomUUID() })),
   ];
@@ -254,6 +274,7 @@ function itemRowsOf(q: Question) {
       updated_at: new Date().toISOString(),
     },
     notionIds: item.notionIds ?? [],
+    notionBloom: item.notionBloom ?? {},
   }));
 }
 
@@ -271,12 +292,17 @@ async function loadNotionLinks(itemIds: string[]): Promise<NotionLinkMap> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from('exam_question_item_bricks')
-    .select('item_id, brick_id')
+    .select('item_id, brick_id, bloom_level')
     .in('item_id', itemIds);
   if (error) throw new Error(error.message);
 
   const map: NotionLinkMap = {};
-  for (const row of data ?? []) (map[row.item_id] ??= []).push(row.brick_id);
+  for (const row of data ?? []) {
+    (map[row.item_id] ??= []).push({
+      notionId: row.brick_id,
+      bloomLevel: row.bloom_level === null ? null : toBloomLevel(row.bloom_level),
+    });
+  }
   return map;
 }
 
@@ -352,25 +378,46 @@ async function syncQuestionItems(q: Question): Promise<void> {
     .upsert(wanted.map((w) => w.row));
   if (upsertError) throw new Error(upsertError.message);
 
-  await syncItemNotions(wanted.map((w) => ({ itemId: w.row.id, notionIds: w.notionIds })));
+  await syncItemNotions(
+    wanted.map((w) => ({ itemId: w.row.id, notionIds: w.notionIds, notionBloom: w.notionBloom })),
+  );
 }
 
 /** Remplace les liens notion↔question de tout un groupe. Une seule insertion
  *  pour l'ensemble ; les retraits sont rares et se font par question (un groupe
  *  en compte une poignée — ce n'est pas un chemin de lecture). */
-async function syncItemNotions(items: { itemId: string; notionIds: string[] }[]): Promise<void> {
+async function syncItemNotions(
+  items: { itemId: string; notionIds: string[]; notionBloom: Record<string, BloomLevel> }[],
+): Promise<void> {
   if (items.length === 0) return;
   const supabase = getSupabaseServerClient();
 
   const existing = await loadNotionLinks(items.map((i) => i.itemId));
 
-  const toAdd: { item_id: string; brick_id: string }[] = [];
+  const toAdd: { item_id: string; brick_id: string; bloom_level: number | null }[] = [];
   for (const item of items) {
-    const before = new Set(existing[item.itemId] ?? []);
+    const before = new Map((existing[item.itemId] ?? []).map((link) => [link.notionId, link.bloomLevel]));
     const after = new Set(item.notionIds);
-    for (const notionId of after) if (!before.has(notionId)) toAdd.push({ item_id: item.itemId, brick_id: notionId });
+    const wanted = (notionId: string) => item.notionBloom[notionId] ?? null;
 
-    const toRemove = [...before].filter((id) => !after.has(id));
+    for (const notionId of after) {
+      if (!before.has(notionId)) {
+        toAdd.push({ item_id: item.itemId, brick_id: notionId, bloom_level: wanted(notionId) });
+        continue;
+      }
+      // Le lien existe : seul son niveau peut avoir changé. Réécrire ceux qui
+      // n'ont pas bougé ferait passer la question pour modifiée (`updated_at`),
+      // et un import annulable cesserait de l'être à la première sauvegarde.
+      if (before.get(notionId) === wanted(notionId)) continue;
+      const { error } = await supabase
+        .from('exam_question_item_bricks')
+        .update({ bloom_level: wanted(notionId) })
+        .eq('item_id', item.itemId)
+        .eq('brick_id', notionId);
+      if (error) throw new Error(error.message);
+    }
+
+    const toRemove = [...before.keys()].filter((id) => !after.has(id));
     if (toRemove.length > 0) {
       const { error } = await supabase
         .from('exam_question_item_bricks')
@@ -732,15 +779,27 @@ export async function gradeParcoursAnswer(
   // liée juste fait progresser les siennes même si la principale est ratée.
   // Notions et niveau sont relus de la base ici, jamais reçus du client.
   const rewards: RewardTarget[] = [
-    { correct: main.correct, notionIds: q.notionIds ?? [], bloomLevel: q.bloomLevel },
+    { correct: main.correct, notionIds: q.notionIds ?? [], bloomLevel: q.bloomLevel, notionBloom: q.notionBloom },
     ...parts.map((part, i) => ({
       correct: partResults[i]?.correct ?? null,
       notionIds: part.notionIds ?? [],
       bloomLevel: part.bloomLevel,
+      notionBloom: part.notionBloom,
     })),
   ]
     .filter((target) => target.correct === true && target.notionIds.length > 0)
-    .map(({ notionIds, bloomLevel }) => ({ notionIds, bloomLevel }));
+    // Une notion est créditée à SON niveau, pas à celui de l'énoncé : depuis le
+    // 28/08/2026 une même question peut en faire restituer une et en faire
+    // analyser une autre. On regroupe donc par niveau — la maîtrise se calcule
+    // par palier, un appel par palier suffit.
+    .flatMap(({ notionIds, bloomLevel, notionBloom }) => {
+      const byLevel = new Map<BloomLevel, string[]>();
+      for (const notionId of notionIds) {
+        const level = notionBloom?.[notionId] ?? bloomLevel;
+        byLevel.set(level, [...(byLevel.get(level) ?? []), notionId]);
+      }
+      return [...byLevel].map(([level, ids]) => ({ notionIds: ids, bloomLevel: level }));
+    });
 
   return { result: { ...main, parts: partResults }, rewards };
 }
