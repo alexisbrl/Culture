@@ -1255,6 +1255,14 @@
     "examCount": {
       "label": "NOMBRE DE QUESTIONS",
       "help": "Des énoncés, pour tout le programme et non par chapitre — un ordre de grandeur, pas un compte exact. Un tiers d’entre eux s’enchaîneront par groupes de deux ou trois. Relancer en ajoute autant, sans reposer ce qui existe."
+    },
+    "stop": {
+      "aria": "arrêter la génération",
+      "title": "Arrêter la génération ?",
+      "body": "Ce qui a déjà été écrit sera retiré : l’atelier revient à son état d’avant. Rien n’est conservé à moitié.",
+      "keep": "continuer",
+      "confirm": "arrêter et défaire",
+      "working": "Arrêt en cours, puis retrait de ce qui a été écrit…"
     }
   }
 }

@@ -1255,6 +1255,14 @@
     "examCount": {
       "label": "NUMBER OF QUESTIONS",
       "help": "Individual questions, for the whole programme rather than per chapter — a ballpark, not an exact count. A third of them will come in groups of two or three. Running it again adds as many, without repeating existing ones."
+    },
+    "stop": {
+      "aria": "stop generating",
+      "title": "Stop generating?",
+      "body": "Whatever was written will be removed: the workshop goes back to how it was. Nothing is kept half-done.",
+      "keep": "keep going",
+      "confirm": "stop and undo",
+      "working": "Stopping, then removing what was written…"
     }
   }
 }

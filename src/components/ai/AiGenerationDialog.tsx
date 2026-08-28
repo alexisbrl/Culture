@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Sparkles, AlertTriangle, Check } from 'lucide-react';
+import { Sparkles, AlertTriangle, Check, X } from 'lucide-react';
 
 import Modal from '@/components/Modal';
 import { ProgressBar } from '@/components/ui/progress-bar';
@@ -16,6 +16,7 @@ import {
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import {
+  cancelWorkshopImport,
   finishWorkshopIngestion,
   ingestDocumentNotions,
   ingestParcoursQuestions,
@@ -140,6 +141,16 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   const [questionsProvider, setQuestionsProvider] = useState<'claude' | 'deepseek'>('claude');
   const [hint, setHint] = useState('');
   const [phase, setPhase] = useState<Phase>({ step: 'select' });
+  // ─── L'arrêt, et pourquoi il tient dans des refs ────────────────────────
+  //
+  // L'enchaînement des passes vit dans une fonction async : elle ne relèverait
+  // jamais un changement d'état, qu'elle a capturé à son premier tour. Le drapeau
+  // d'arrêt et le numéro de lot passent donc par des refs, lues à chaque étage.
+  const stopped = useRef(false);
+  const importIdRef = useRef<string | null>(null);
+  const runRef = useRef<Promise<void> | null>(null);
+  const [stopAsk, setStopAsk] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [counts, setCounts] = useState({ chapters: 0, notions: 0, questions: 0 });
   const [issues, setIssues] = useState<{ discarded: PlanIssue[]; adjusted: PlanIssue[] }>({ discarded: [], adjusted: [] });
 
@@ -210,6 +221,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       questionsProvider,
     });
     if (!prepared.ok) return setPhase({ step: 'error', message: prepared.error });
+    // Retenu tout de suite : c'est ce numéro que l'arrêt devra défaire, même si
+    // l'utilisateur ferme au tout premier étage.
+    importIdRef.current = prepared.importId;
+    if (stopped.current) return;
     await generate(prepared.importId, prepared.documents);
   }
 
@@ -259,6 +274,9 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // appels ne partagent aucun préfixe — le corpus part une seule fois au
     // total, ce qui est moins cher que l'écriture de cache qu'on remplace. Tout
     // peut donc partir ensemble.
+    // Chaque étage se demande d'abord s'il a encore lieu d'être : l'arrêt ne
+    // coupe pas un appel en vol, il empêche le suivant de partir.
+    if (stopped.current) return;
     if (withNotions && documents > 0) {
       let error: string | null = null;
       const showNotions = (done: number) => setPhase({
@@ -273,6 +291,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         Array.from({ length: documents }, (_, i) => i),
         INGEST_CONCURRENCY,
         async (index) => {
+          if (stopped.current) return;
           const result = await ingestDocumentNotions(workshopId, importId, index);
           if (!result.ok) { error ??= result.error; return; }
           discarded.push(...result.discarded);
@@ -295,6 +314,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // Décoché, on garde le programme tel quel : les notions qui viennent d'être
     // créées restent sans chapitre, consultables, et un import ultérieur pourra
     // les ranger.
+    if (stopped.current) return;
     if (withChapters) {
       setPhase({ step: 'running', label: t('progress.chapters'), done: stepAt('chapters'), total: totalSteps });
       const structure = await ingestWorkshopChapters(workshopId, importId);
@@ -312,6 +332,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // vient chaque notion et les pages que couvre chaque chapitre. C'est aussi
     // ici que les ressemblances repérées mécaniquement sont soumises au
     // jugement du modèle — le calcul signale, le modèle tranche.
+    if (stopped.current) return;
     if (withAssign) {
       let error: string | null = null;
       const showAssign = (done: number, total: number) => setPhase({
@@ -334,6 +355,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         const rest = Array.from({ length: first.batches - 1 }, (_, i) => i + 1);
         let done = 1;
         await mapWithConcurrency(rest, INGEST_CONCURRENCY, async (index) => {
+          if (stopped.current) return;
           const result = await ingestWorkshopAssignments(workshopId, importId, index);
           if (!result.ok) { error ??= result.error; return; }
           discarded.push(...result.discarded);
@@ -382,6 +404,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       });
 
       const runSlice = async (sliceIndex: number, target?: number) => {
+        if (stopped.current) return null;
         // Même raison que pour le parcours : le serveur ne voit qu'un appel à la
         // fois, seul le client sait combien il en a en vol.
         const remaining = MAX_QUESTIONS - tally.questions;
@@ -482,6 +505,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       });
 
       const runBatch = async (job: { chapter: (typeof chapters)[number]; batchIndex: number }) => {
+        if (stopped.current) return null;
         // ⚠️ **La part du plafond est calculée ici, pas côté serveur.** Le serveur
         // ne voit qu'un appel à la fois : quatre appels concurrents liraient tous
         // le même compteur de questions écrites et se croiraient chacun seuls,
@@ -519,21 +543,98 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       if (error) return setPhase({ step: 'error', message: error });
     }
 
+    // Un arrêt n'est pas une fin : le compte-rendu décrirait un travail que
+    // l'utilisateur vient justement de faire défaire.
+    if (stopped.current) return;
     setIssues({ discarded, adjusted });
     setPhase({ step: 'done' });
     onDone?.();
   }
 
+  // ─── La sortie, et ce qu'elle coûte selon le moment ──────────────────────
+  //
+  // Hors génération, la croix ferme, point. Pendant, elle DEMANDE d'abord : une
+  // génération interrompue laisse un atelier à moitié rempli, ce que personne
+  // ne veut déclencher d'un appui distrait (28/08/2026).
+  function requestClose() {
+    if (!running) return onClose();
+    setStopAsk(true);
+  }
+
+  /** Arrête l'enchaînement, puis défait ce que ce lot a écrit.
+   *
+   *  ⚠️ **On attend la fin de l'enchaînement avant d'annuler.** L'arrêt
+   *  empêche les appels suivants de partir, jamais ceux déjà en vol : annuler
+   *  tout de suite laisserait derrière lui ce qu'un appel retardataire écrit
+   *  après coup — exactement le reliquat qu'on veut éviter. */
+  async function confirmStop() {
+    stopped.current = true;
+    setStopping(true);
+    await runRef.current?.catch(() => {});
+
+    const importId = importIdRef.current;
+    if (importId) {
+      const result = await cancelWorkshopImport(workshopId, importId);
+      // Une annulation refusée (élément déjà modifié, délai passé) se dit : la
+      // génération est arrêtée, mais ce qu'elle a écrit est resté.
+      if (!result.ok) {
+        setStopping(false);
+        setStopAsk(false);
+        onDone?.();
+        return setPhase({ step: 'error', message: result.error });
+      }
+    }
+    onDone?.();
+    onClose();
+  }
+
   return (
-    <Modal onClose={running ? undefined : onClose} width={520} portal>
+    <Modal onClose={requestClose} width={520} portal>
       <div style={{ textAlign: 'left' }}>
+        {/* La croix : une sortie visible, au même endroit à chaque étape. Sans
+            elle, la seule façon de quitter une génération était de fermer
+            l'onglet. */}
+        <button
+          type="button"
+          onClick={requestClose}
+          aria-label={t(running ? 'stop.aria' : 'close')}
+          style={{
+            position: 'absolute', top: 12, right: 12, display: 'flex',
+            padding: 6, borderRadius: radius.md, border: 'none',
+            background: 'transparent', color: palette.inkFaint, cursor: 'pointer',
+          }}
+        >
+          <X size={17} />
+        </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <Sparkles size={18} color={palette.green} />
           <h2 style={{ fontSize: 17, fontWeight: 600, color: palette.ink, margin: 0 }}>{t('title')}</h2>
         </div>
         <p style={{ fontSize: 13, color: palette.inkSoft, margin: '0 0 18px' }}>{t('subtitle')}</p>
 
-        {phase.step === 'select' && (
+        {/* La demande d'arrêt prend toute la place : on ne fait pas cohabiter une
+            question grave avec une barre de progression qui continue d'avancer. */}
+        {stopAsk && (
+          <div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <AlertTriangle size={17} color={palette.amber} style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <strong style={{ fontSize: 14, color: palette.ink }}>{t('stop.title')}</strong>
+                <p style={{ fontSize: 13, color: palette.inkMuted, margin: '6px 0 0' }}>{t('stop.body')}</p>
+              </div>
+            </div>
+            {stopping ? (
+              <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 16 }}>{t('stop.working')}</p>
+            ) : (
+              <Actions>
+                <Ghost onClick={() => setStopAsk(false)}>{t('stop.keep')}</Ghost>
+                <Primary onClick={confirmStop}>{t('stop.confirm')}</Primary>
+              </Actions>
+            )}
+          </div>
+        )}
+
+        {!stopAsk && phase.step === 'select' && (
           <>
             {/* Ce que ce lancement va faire, dit d'une phrase. Il n'y a plus rien
                 à cocher, donc il faut le dire — sans quoi le même bouton ferait
@@ -650,7 +751,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                   pas encore quoi lancer — mieux vaut attendre une fraction de
                   seconde que partir sur la mauvaise voie ; et un atelier sans
                   document ET sans notion n'offre rien à quoi se raccrocher. */}
-              <Primary onClick={prepare} disabled={visibleNotions === null || nothingToDo}>
+              <Primary
+                onClick={() => { runRef.current = prepare(); }}
+                disabled={visibleNotions === null || nothingToDo}
+              >
                 {t('generate')}
               </Primary>
             </Actions>
@@ -660,14 +764,14 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         {/* Téléversement des documents chez le fournisseur. L'étape enchaîne
             désormais seule sur la génération : l'écran de confirmation du coût
             qui s'intercalait ici a été retiré le 22/08/2026. */}
-        {phase.step === 'preparing' && (
+        {!stopAsk && phase.step === 'preparing' && (
           <div style={{ padding: '4px 0 8px' }}>
             <ProgressBar animated value={0} max={1} label={t('estimate.preparing')} />
             <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 14 }}>{t('estimate.preparingHint')}</p>
           </div>
         )}
 
-        {phase.step === 'running' && (
+        {!stopAsk && phase.step === 'running' && (
           <div style={{ padding: '4px 0 8px' }}>
             <ProgressBar animated value={phase.done} max={phase.total} label={phase.label} />
             <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 14 }}>{t('keepOpen')}</p>
@@ -677,7 +781,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
           </div>
         )}
 
-        {phase.step === 'done' && (
+        {!stopAsk && phase.step === 'done' && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
               <Check size={17} color={palette.green} />
@@ -694,7 +798,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
           </div>
         )}
 
-        {phase.step === 'error' && (
+        {!stopAsk && phase.step === 'error' && (
           <div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
               <AlertTriangle size={17} color={palette.amber} style={{ flexShrink: 0, marginTop: 1 }} />
