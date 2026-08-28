@@ -505,7 +505,6 @@ export async function prepareIngestion(
   fileIds: string[],
   options: { provider?: PlanProvider; scope?: Record<string, unknown> } = {},
 ): Promise<PrepareResult> {
-  const provider = options.provider ?? createClaudeProvider();
   const supabase = getSupabaseServerClient();
 
   // ─── Un lot SANS document est légitime ──────────────────────────────────
@@ -544,8 +543,15 @@ export async function prepareIngestion(
     }),
   );
 
-  const prepared = await provider.prepare(documents);
-  const corpusTokens = await provider.countCorpus(prepared);
+  // ⚠️ **Le fournisseur n'est créé que s'il y a quelque chose à lui donner.**
+  //
+  // Un lancement « questions seules » n'a aucun document. Le créer quand même
+  // réclamait la clé Claude, et faisait donc échouer dès l'ouverture du lot un
+  // import qui devait tourner **entièrement sur DeepSeek** (28/08/2026). Sans
+  // document, il n'y a ni téléversement ni corpus à mesurer : zéro token.
+  const provider = documents.length === 0 ? null : (options.provider ?? createClaudeProvider());
+  const prepared = provider ? await provider.prepare(documents) : [];
+  const corpusTokens = provider ? await provider.countCorpus(prepared) : 0;
 
   // ─── Le mur de la fenêtre ─────────────────────────────────────────────────
   //
@@ -558,7 +564,7 @@ export async function prepareIngestion(
   // Taille inconnue → on laisse passer : le fournisseur reprend sur le repli
   // quand l'appel est refusé (`isContextWindowOverflow`), ce qui reste le bon
   // filet. On ne bloque jamais sur une mesure qu'on n'a pas.
-  if (corpusTokens !== null && corpusTokens > MAX_CORPUS_TOKENS) {
+  if (provider && corpusTokens !== null && corpusTokens > MAX_CORPUS_TOKENS) {
     await releaseDocuments(provider, prepared);
     throw new Error(
       `Ce cours est trop volumineux pour être lu en une fois (${Math.round(corpusTokens / 1000)} k contre ${Math.round(MAX_CORPUS_TOKENS / 1000)} k au maximum). Retire un document ou découpe le cours en deux ateliers.`,
