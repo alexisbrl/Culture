@@ -1235,7 +1235,8 @@
       "cancel": "undo import",
       "cancelling": "undoing…",
       "cancelled": "Import undone.",
-      "error": "Cannot undo: {reason}"
+      "error": "Cannot undo: {reason}",
+      "previous": "{count, plural, one {# earlier import} other {# earlier imports}}"
     },
     "button": "generate with AI",
     "chooseAi": "with AI",

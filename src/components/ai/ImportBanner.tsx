@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Sparkles, Undo2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Sparkles, Undo2 } from 'lucide-react';
 
 import { Tooltip } from '@/components/ui/tooltip';
 import { ink, palette, radius } from '@/lib/theme';
-import { cancelWorkshopImport, getImportBanner, type ImportBanner as Banner } from '@/app/actions/aiIngest';
+import { cancelWorkshopImport, getImportBanners, type ImportBanner as Banner } from '@/app/actions/aiIngest';
 
 // Le bandeau d'annulation d'un import IA.
 //
@@ -34,63 +34,103 @@ type Props = {
 
 export default function ImportBanner({ workshopId, onCancelled }: Props) {
   const t = useTranslations('ai');
-  const [banner, setBanner] = useState<Banner | null>(null);
-  const [busy, setBusy] = useState(false);
+  // ⚠️ **Une LISTE, pas un lot** (28/08/2026). Trois essais dans la même heure
+  // laissaient deux lots annulables mais invisibles, donc perdus à l'expiration.
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Les précédents restent repliés : le dernier import est celui qu'on vient de
+  // faire, c'est presque toujours celui qu'on veut défaire.
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    getImportBanner(workshopId)
-      .then((b) => { if (!cancelled) setBanner(b); })
+    getImportBanners(workshopId)
+      .then((list) => { if (!cancelled) setBanners(list); })
       // Le bandeau est un confort : son échec ne doit rien empêcher.
       .catch(() => {});
     return () => { cancelled = true; };
   }, [workshopId]);
 
-  if (!banner) return null;
+  if (banners.length === 0) return null;
 
-  async function cancel() {
-    if (!banner) return;
-    setBusy(true);
+  const [latest, ...previous] = banners;
+
+  async function cancel(importId: string) {
+    setBusy(importId);
     setError(null);
-    const result = await cancelWorkshopImport(workshopId, banner.importId);
-    setBusy(false);
+    const result = await cancelWorkshopImport(workshopId, importId);
+    setBusy(null);
     if (!result.ok) return setError(result.error);
-    setBanner(null);
+    // Seul le lot annulé disparaît : les autres restent annulables, et leur
+    // délai continue de courir.
+    setBanners((list) => list.filter((b) => b.importId !== importId));
     onCancelled?.();
   }
 
-  return (
-    <div
-      style={{
-        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-        padding: '10px 14px', marginBottom: 14,
-        borderRadius: radius.md, background: 'rgba(60,107,57,.07)', border: `1px solid ${ink(0.08)}`,
-      }}
-    >
-      <Sparkles size={15} color={palette.green} style={{ flexShrink: 0 }} />
-      <span style={{ fontSize: 13, color: palette.inkMuted, flex: 1, minWidth: 0 }}>
+  const row = (banner: Banner, main: boolean) => (
+    <div key={banner.importId} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      {main
+        ? <Sparkles size={15} color={palette.green} style={{ flexShrink: 0 }} />
+        : <span style={{ width: 15, flexShrink: 0 }} />}
+      <span style={{ fontSize: main ? 13 : 12.5, color: main ? palette.inkMuted : palette.inkSoft, flex: 1, minWidth: 0 }}>
         {t('banner.text', { chapters: banner.chapters, notions: banner.notions, questions: banner.questions })}
       </span>
-
-      {error && <span style={{ fontSize: 12.5, color: palette.amber }}>{error}</span>}
 
       <Tooltip content={t('cancellable')}>
         <button
           type="button"
-          onClick={cancel}
-          disabled={busy}
+          onClick={() => cancel(banner.importId)}
+          disabled={busy !== null}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '5px 10px', borderRadius: radius.sm,
             border: `1px solid ${ink(0.12)}`, background: palette.creamAlt,
-            fontSize: 12.5, color: palette.inkMuted, cursor: busy ? 'wait' : 'pointer',
+            fontSize: 12.5, color: palette.inkMuted, cursor: busy !== null ? 'wait' : 'pointer',
           }}
         >
           <Undo2 size={13} />
-          {busy ? t('banner.cancelling') : t('banner.cancel')}
+          {busy === banner.importId ? t('banner.cancelling') : t('banner.cancel')}
         </button>
       </Tooltip>
+    </div>
+  );
+
+  return (
+    <div
+      style={{
+        display: 'flex', flexDirection: 'column', gap: 8,
+        padding: '10px 14px', marginBottom: 14,
+        borderRadius: radius.md, background: 'rgba(60,107,57,.07)', border: `1px solid ${ink(0.08)}`,
+      }}
+    >
+      {row(latest, true)}
+
+      {error && <span style={{ fontSize: 12.5, color: palette.amber }}>{error}</span>}
+
+      {/* Les imports plus anciens, encore dans les 24 h. Repliés par défaut :
+          annoncés d'une ligne, dépliés à la demande. */}
+      {previous.length > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
+              padding: 0, border: 'none', background: 'transparent',
+              fontSize: 12.5, color: palette.inkSoft, cursor: 'pointer',
+            }}
+          >
+            {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            {t('banner.previous', { count: previous.length })}
+          </button>
+          {open && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 2 }}>
+              {previous.map((banner) => row(banner, false))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

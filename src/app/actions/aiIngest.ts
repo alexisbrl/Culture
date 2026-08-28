@@ -257,30 +257,33 @@ export async function releaseWorkshopImportFiles(
   return { released: await run.releaseImportDocuments(importId) };
 }
 
-/** Ce qu'il faut pour afficher — ou non — le bandeau d'annulation. Renvoie
- *  `null` quand il n'y a rien à proposer : aucun import, ou lot déjà annulé,
- *  expiré, ou modifié depuis. */
-export async function getImportBanner(workshopId: string): Promise<ImportBanner | null> {
-  if (!(await requireManager(workshopId))) return null;
+/** Les imports encore annulables, du plus récent au plus ancien. Liste vide
+ *  quand il n'y a rien à proposer : aucun import récent, ou lots déjà annulés,
+ *  expirés, ou modifiés depuis.
+ *
+ *  Plusieurs et non plus un seul depuis le 28/08/2026 : voir `recentImportIds`. */
+export async function getImportBanners(workshopId: string): Promise<ImportBanner[]> {
+  if (!(await requireManager(workshopId))) return [];
 
   try {
-    const importId = await imports.latestImportId(workshopId);
-    if (!importId) return null;
+    const ids = await imports.recentImportIds(workshopId);
+    const summaries = await Promise.all(
+      ids.map(async (importId) => ({ importId, summary: await imports.getImportSummary(workshopId, importId) })),
+    );
 
-    const summary = await imports.getImportSummary(workshopId, importId);
-    if (summary.state !== 'cancellable') return null;
-
-    return {
-      importId,
-      state: summary.state,
-      chapters: summary.chapters,
-      notions: summary.notions,
-      questions: summary.questions,
-    };
+    return summaries
+      .filter(({ summary }) => summary.state === 'cancellable')
+      .map(({ importId, summary }) => ({
+        importId,
+        state: summary.state,
+        chapters: summary.chapters,
+        notions: summary.notions,
+        questions: summary.questions,
+      }));
   } catch {
     // Le bandeau est un confort : s'il échoue, il ne doit pas empêcher la page
     // de s'afficher.
-    return null;
+    return [];
   }
 }
 

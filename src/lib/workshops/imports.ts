@@ -182,19 +182,30 @@ export async function getImportSummary(workshopId: string, importId: string): Pr
   return { state: importCancelState(rows), ...counts, questions };
 }
 
-/** Le dernier import de l'atelier, s'il en existe un. Sert au bandeau : on ne
- *  propose l'annulation que du lot le plus récent — remonter plus loin n'aurait
- *  pas de sens, les 24 h ayant de toute façon expiré. */
-export async function latestImportId(workshopId: string): Promise<string | null> {
+/** Les imports de l'atelier encore DANS LE DÉLAI, du plus récent au plus ancien.
+ *
+ *  ⚠️ **Plusieurs, et pas seulement le dernier** (28/08/2026). Le bandeau ne
+ *  montrait que le lot le plus récent : trois essais de suite dans la même
+ *  heure, et les deux premiers devenaient inannulables faute d'être affichés,
+ *  alors que le délai courait encore pour eux. Or c'est précisément quand on
+ *  enchaîne les essais qu'on veut pouvoir revenir en arrière.
+ *
+ *  Le filtre de date se fait ICI, en base : remonter des lots périmés pour les
+ *  écarter ensuite coûterait une lecture complète par lot (`getImportSummary`).
+ *  Le plafond, lui, borne le coût d'un atelier très actif ; au-delà, ce sont
+ *  les plus anciens qu'on laisse tomber, jamais les récents. */
+export async function recentImportIds(workshopId: string, limit = 8): Promise<string[]> {
   const supabase = getSupabaseServerClient();
+  const since = new Date(Date.now() - IMPORT_CANCEL_WINDOW_HOURS * 3600_000).toISOString();
   const { data, error } = await supabase
     .from('ai_imports')
     .select('id')
     .eq('workshop_id', workshopId)
+    .gte('created_at', since)
     .order('created_at', { ascending: false })
-    .limit(1);
+    .limit(limit);
   if (error) throw new Error(error.message);
-  return (data?.[0]?.id as string | undefined) ?? null;
+  return (data ?? []).map((row) => row.id as string);
 }
 
 export type CancelImportResult =

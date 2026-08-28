@@ -1235,7 +1235,8 @@
       "cancel": "annuler l’import",
       "cancelling": "annulation…",
       "cancelled": "Import annulé.",
-      "error": "Annulation impossible : {reason}"
+      "error": "Annulation impossible : {reason}",
+      "previous": "{count, plural, one {# import précédent} other {# imports précédents}}"
     },
     "button": "générer par IA",
     "chooseAi": "par IA",
