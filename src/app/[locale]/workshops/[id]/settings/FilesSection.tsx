@@ -167,7 +167,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
               Même dialogue derrière — §8 du plan d'ingestion. Le bandeau
               d'annulation suit, pour qu'on puisse revenir en arrière sans changer
               d'écran. */}
-          <ImportBanner workshopId={workshopId} onCancelled={() => window.location.reload()} />
+          <ImportBanner workshopId={workshopId} scope="programme" onCancelled={() => window.location.reload()} />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
             <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{t('files.title')}</div>
             <AiGenerationButton workshopId={workshopId} onDone={() => window.location.reload()} />

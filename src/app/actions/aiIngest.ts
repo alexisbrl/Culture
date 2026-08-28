@@ -70,7 +70,11 @@ export type ImportBanner = {
   state: 'cancellable' | 'empty' | 'expired' | 'modified';
   chapters: number;
   notions: number;
-  questions: number;
+  /** Les questions du lot, séparées selon l'écran qui les montre : le bandeau
+   *  du programme n'annonce pas les questions parties à l'examen, et
+   *  réciproquement (28/08/2026). */
+  parcoursQuestions: number;
+  examQuestions: number;
 };
 
 function message(error: unknown): string {
@@ -278,7 +282,8 @@ export async function getImportBanners(workshopId: string): Promise<ImportBanner
         state: summary.state,
         chapters: summary.chapters,
         notions: summary.notions,
-        questions: summary.questions,
+        parcoursQuestions: summary.parcoursQuestions,
+        examQuestions: summary.examQuestions,
       }));
   } catch {
     // Le bandeau est un confort : s'il échoue, il ne doit pas empêcher la page

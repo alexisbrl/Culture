@@ -16,6 +16,19 @@ import { cancelWorkshopImport, getImportBanners, type ImportBanner as Banner } f
 // l'ancrer sur un seul le rendrait introuvable depuis les autres. Le bandeau
 // naît donc là où on constate le résultat, sur chacun d'eux.
 //
+// ─── …mais il n'annonce que ce qu'on a sous les yeux (28/08/2026) ────────────
+//
+// Un lot ne remplit jamais les deux destinations : le contexte des questions
+// vient du bouton par lequel on est entré. Un bandeau qui annonçait un total
+// unique affichait donc « 87 questions ajoutées » en tête de la liste du
+// parcours alors que les 87 étaient parties à la banque d'examen — et
+// inversement. D'où la portée : le programme (chapitres, notions, questions du
+// parcours) d'un côté, la banque d'examen de l'autre. Un lot qui n'a rien
+// apporté à l'écran courant n'y apparaît pas du tout.
+//
+// L'annulation, elle, reste **entière** : elle défait le lot complet, y compris
+// ce que cet écran ne montre pas. C'est dit dans le bandeau plutôt que deviné.
+//
 // Il disparaît de lui-même : le serveur ne le renvoie que si le lot est encore
 // annulable — moins de 24 h, et rien de modifié depuis. Aucune commande
 // destructrice ne traîne donc dans l'interface une fois le délai passé, et il
@@ -26,13 +39,19 @@ import { cancelWorkshopImport, getImportBanners, type ImportBanner as Banner } f
 // est un bon canal de découverte, un mauvais canal d'action : la commande doit
 // rester là où on voit le dégât.)
 
+/** Ce que l'écran hôte montre, donc ce que le bandeau a le droit d'annoncer.
+ *  `programme` : chapitres, notions et questions du parcours (documents,
+ *  notions, liste du parcours). `exam` : la banque de questions d'examen. */
+export type ImportBannerScope = 'programme' | 'exam';
+
 type Props = {
   workshopId: string;
+  scope: ImportBannerScope;
   /** Remonté après une annulation réussie, pour que l'écran se rafraîchisse. */
   onCancelled?: () => void;
 };
 
-export default function ImportBanner({ workshopId, onCancelled }: Props) {
+export default function ImportBanner({ workshopId, scope, onCancelled }: Props) {
   const t = useTranslations('ai');
   // ⚠️ **Une LISTE, pas un lot** (28/08/2026). Trois essais dans la même heure
   // laissaient deux lots annulables mais invisibles, donc perdus à l'expiration.
@@ -52,9 +71,31 @@ export default function ImportBanner({ workshopId, onCancelled }: Props) {
     return () => { cancelled = true; };
   }, [workshopId]);
 
-  if (banners.length === 0) return null;
+  /** Les volumes du lot, rangés en « ce que cet écran montre » et « le reste,
+   *  que l'annulation emportera quand même ». Les zéros sont écartés : un lot
+   *  parti à l'examen n'a pas à annoncer « 0 question de parcours ». */
+  function split(b: Banner) {
+    const parcours = [
+      { text: t('banner.chapters', { count: b.chapters }), count: b.chapters },
+      { text: t('banner.notions', { count: b.notions }), count: b.notions },
+      { text: t('banner.parcoursQuestions', { count: b.parcoursQuestions }), count: b.parcoursQuestions },
+    ];
+    const exam = [{ text: t('banner.examQuestions', { count: b.examQuestions }), count: b.examQuestions }];
+    const [mine, other] = scope === 'exam' ? [exam, parcours] : [parcours, exam];
+    const kept = (parts: typeof parcours) => parts.filter((p) => p.count > 0).map((p) => p.text);
+    return { shown: kept(mine), hidden: kept(other) };
+  }
 
-  const [latest, ...previous] = banners;
+  /** « a, b et c » — la conjonction est traduite, l'énumération non. */
+  function join(parts: string[]): string {
+    if (parts.length <= 1) return parts[0] ?? '';
+    return `${parts.slice(0, -1).join(', ')} ${t('banner.and')} ${parts[parts.length - 1]}`;
+  }
+
+  const visible = banners.filter((b) => split(b).shown.length > 0);
+  if (visible.length === 0) return null;
+
+  const [latest, ...previous] = visible;
 
   async function cancel(importId: string) {
     setBusy(importId);
@@ -68,13 +109,16 @@ export default function ImportBanner({ workshopId, onCancelled }: Props) {
     onCancelled?.();
   }
 
-  const row = (banner: Banner, main: boolean) => (
+  const row = (banner: Banner, main: boolean) => {
+    const { shown, hidden } = split(banner);
+    return (
     <div key={banner.importId} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
       {main
         ? <Sparkles size={15} color={palette.green} style={{ flexShrink: 0 }} />
         : <span style={{ width: 15, flexShrink: 0 }} />}
       <span style={{ fontSize: main ? 13 : 12.5, color: main ? palette.inkMuted : palette.inkSoft, flex: 1, minWidth: 0 }}>
-        {t('banner.text', { chapters: banner.chapters, notions: banner.notions, questions: banner.questions })}
+        {t('banner.text', { items: join(shown) })}
+        {hidden.length > 0 && ` ${t('banner.alsoRemoves', { items: join(hidden) })}`}
       </span>
 
       <Tooltip content={t('cancellable')}>
@@ -94,7 +138,8 @@ export default function ImportBanner({ workshopId, onCancelled }: Props) {
         </button>
       </Tooltip>
     </div>
-  );
+    );
+  };
 
   return (
     <div

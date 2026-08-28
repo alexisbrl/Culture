@@ -100,6 +100,13 @@ export type ImportSummary = {
    *  que compte l'ingestion : les deux doivent dire la même chose, sans quoi le
    *  bandeau d'annulation contredirait le message de fin d'import. */
   questions: number;
+  /** Le même total, **coupé selon l'écran où on le voit** (28/08/2026). Un import
+   *  ne produit jamais les deux : le contexte des questions vient du bouton par
+   *  lequel on est entré (voir `groupSchema`, `src/lib/ingest/planSchema.ts`).
+   *  Un total unique faisait donc afficher « 87 questions ajoutées » au-dessus
+   *  d'une liste de parcours qui n'en avait pas reçu une seule. */
+  parcoursQuestions: number;
+  examQuestions: number;
 };
 
 // Les trois tables étiquetables, dans l'ordre INVERSE de leur création. C'est
@@ -142,44 +149,68 @@ export async function getImportSummary(workshopId: string, importId: string): Pr
   assertImportId(importId);
   const supabase = getSupabaseServerClient();
 
-  const results = await Promise.all(
-    TAGGED_TABLES.map(({ table }) =>
-      supabase
-        .from(table)
-        .select('id, created_at, updated_at')
-        .eq('workshop_id', workshopId)
-        .eq('import_id', importId),
+  // `context` est demandé à part plutôt qu'ajouté aux colonnes de la boucle : il
+  // n'existe que sur les groupes, et une liste de colonnes qui varie d'une table
+  // à l'autre n'est plus analysable par le typage de PostgREST.
+  const [results, groupRows] = await Promise.all([
+    Promise.all(
+      TAGGED_TABLES.map(({ table }) =>
+        supabase
+          .from(table)
+          .select('id, created_at, updated_at')
+          .eq('workshop_id', workshopId)
+          .eq('import_id', importId),
+      ),
     ),
-  );
+    supabase
+      .from('exam_questions')
+      .select('id, context')
+      .eq('workshop_id', workshopId)
+      .eq('import_id', importId),
+  ]);
+
+  if (groupRows.error) throw new Error(groupRows.error.message);
+  // Les groupes rangés par destination — un lot ne remplit jamais les deux.
+  const groupIds: Record<'parcours' | 'exam', string[]> = { parcours: [], exam: [] };
+  for (const row of groupRows.data ?? []) {
+    groupIds[row.context === 'exam' ? 'exam' : 'parcours'].push(row.id as string);
+  }
 
   const counts = { chapters: 0, notions: 0, questionGroups: 0 };
   const rows: ImportRowDates[] = [];
-  const groupIds: string[] = [];
 
   results.forEach(({ data, error }, i) => {
     if (error) throw new Error(error.message);
-    const table = TAGGED_TABLES[i];
-    counts[table.key] = (data ?? []).length;
-    for (const row of data ?? []) {
-      rows.push({ createdAt: row.created_at, updatedAt: row.updated_at });
-      if (table.table === 'exam_questions') groupIds.push(row.id as string);
-    }
+    counts[TAGGED_TABLES[i].key] = (data ?? []).length;
+    for (const row of data ?? []) rows.push({ createdAt: row.created_at, updatedAt: row.updated_at });
   });
 
   // Les questions liées ne portent pas d'étiquette (elles suivent leur groupe) :
   // il faut donc les compter à part pour annoncer un nombre qui corresponde à ce
-  // que l'utilisateur voit.
-  let questions = 0;
-  if (groupIds.length > 0) {
+  // que l'utilisateur voit. On compte en base plutôt que de rapatrier les lignes :
+  // un gros import dépasserait la pagination par défaut, et le total mentirait.
+  const countItems = async (ids: string[]): Promise<number> => {
+    if (ids.length === 0) return 0;
     const { count, error } = await supabase
       .from('exam_question_items')
       .select('id', { count: 'exact', head: true })
-      .in('group_id', groupIds);
+      .in('group_id', ids);
     if (error) throw new Error(error.message);
-    questions = count ?? 0;
-  }
+    return count ?? 0;
+  };
 
-  return { state: importCancelState(rows), ...counts, questions };
+  const [parcoursQuestions, examQuestions] = await Promise.all([
+    countItems(groupIds.parcours),
+    countItems(groupIds.exam),
+  ]);
+
+  return {
+    state: importCancelState(rows),
+    ...counts,
+    questions: parcoursQuestions + examQuestions,
+    parcoursQuestions,
+    examQuestions,
+  };
 }
 
 /** Les imports de l'atelier encore DANS LE DÉLAI, du plus récent au plus ancien.
