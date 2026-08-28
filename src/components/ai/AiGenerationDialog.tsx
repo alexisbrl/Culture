@@ -10,6 +10,7 @@ import { ink, palette, radius } from '@/lib/theme';
 import { INGEST_CONCURRENCY, QUESTIONS_CONCURRENCY, mapWithConcurrency } from '@/lib/ingest/concurrency';
 import {
   DEFAULT_EXAM_QUESTIONS,
+  EXAM_QUESTIONS_PER_CALL,
   EXAM_QUESTIONS_RANGE,
   MAX_QUESTIONS_PER_IMPORT as MAX_QUESTIONS,
 } from '@/lib/ingest/prompt';
@@ -402,13 +403,13 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         total: totalSteps,
       });
 
-      const runSlice = async (sliceIndex: number, target?: number) => {
+      const runSlice = async (sliceIndex: number, target?: number, budget?: number) => {
         if (stopped.current) return null;
         // Même raison que pour le parcours : le serveur ne voit qu'un appel à la
         // fois, seul le client sait combien il en a en vol.
         const remaining = MAX_QUESTIONS - tally.questions;
         if (remaining <= 0) return null;
-        const share = target ?? Math.max(1, Math.floor(remaining / QUESTIONS_CONCURRENCY));
+        const share = budget ?? target ?? Math.max(1, Math.floor(remaining / QUESTIONS_CONCURRENCY));
         const result = await ingestWorkshopExamQuestions(workshopId, importId, sliceIndex, share, target);
         doneCalls += 1;
         if (!result.ok) { error ??= result.error; showExam(); return null; }
@@ -441,19 +442,32 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       // ─── Le rattrapage ────────────────────────────────────────────────────
       //
       // Une question écartée — parce qu'elle redisait une question
-      // d'entraînement, ou parce que le modèle en a rendu moins que demandé —
-      // laisserait l'examen court sans que personne ne l'ait voulu. On redemande
-      // le MANQUE, une seule fois : le second passage ne voit pas le premier
-      // mais relit la banque, donc il ne réécrit pas ce qui vient d'être écrit.
+      // d'entraînement, parce que le modèle en a rendu moins que demandé, ou
+      // parce que sa réponse a été coupée — laisserait l'examen court sans que
+      // personne ne l'ait voulu. On redemande le MANQUE : chaque passage relit
+      // la banque, donc il ne réécrit pas ce qui vient d'être écrit.
       //
-      // Une seule tentative, et c'est délibéré : chaque passage coûte un appel,
-      // et un atelier dont le programme ne porte pas quarante questions ne les
-      // portera pas davantage au troisième essai.
-      const short = Math.min(examCount, MAX_QUESTIONS) - tally.questions;
-      if (short > 0) {
-        totalCalls += 1;
+      // ⚠️ **Autant d'appels que le manque en exige**, et non un seul
+      // (28/08/2026). Un appel n'écrit qu'une part du total — dix questions, la
+      // taille d'un appel — si bien qu'un rattrapage unique plafonnait à un
+      // dixième : sur quarante demandées dont vingt manquantes, il n'en rendait
+      // jamais plus de dix.
+      //
+      // Deux tours au maximum : un atelier dont le programme ne porte pas
+      // quarante questions ne les portera pas davantage au troisième, et chaque
+      // tour coûte des appels.
+      for (let round = 0; round < 2; round += 1) {
+        const short = Math.min(examCount, MAX_QUESTIONS) - tally.questions;
+        if (short <= 0) break;
+
+        const calls = Math.max(1, Math.ceil(short / EXAM_QUESTIONS_PER_CALL));
+        totalCalls += calls;
         showExam();
-        await runSlice(0, short);
+        await mapWithConcurrency(
+          Array.from({ length: calls }, (_, i) => i),
+          QUESTIONS_CONCURRENCY,
+          (sliceIndex) => runSlice(sliceIndex, short, Math.ceil(short / calls)),
+        );
         if (error) return setPhase({ step: 'error', message: error });
       }
 

@@ -459,8 +459,24 @@ async function recordOversizeModel(importId: string, model: ModelId): Promise<vo
  *
  *  On journalise les cinq premiers : assez pour reconnaître un motif répété,
  *  pas assez pour noyer la sortie sur un plan entièrement invalide. */
-function parsePlanLogged(pass: string, raw: unknown, refs: Parameters<typeof parsePlan>[1]) {
+/** `truncated` : la réponse du modèle a été coupée au plafond de sortie. Elle
+ *  devient un écart à part entière — sans ça, l'appel disparaît sans un mot et
+ *  le compte-rendu annonce simplement moins de questions que demandé (perte
+ *  constatée le 28/08/2026). */
+function parsePlanLogged(
+  pass: string,
+  raw: unknown,
+  refs: Parameters<typeof parsePlan>[1],
+  truncated = false,
+) {
   const plan = parsePlan(raw, refs);
+  if (truncated) {
+    plan.discarded.push({
+      kind: 'question',
+      reason:
+        'réponse du modèle coupée avant la fin : ce qu’elle contenait est illisible et n’a pas pu être écrit. Relancer récupère ce qui manque.',
+    });
+  }
   if (plan.discarded.length > 0) {
     const apercu = plan.discarded.slice(0, 5).map((i) => `${i.kind}${i.ref ? ` (${i.ref})` : ''} : ${i.reason}`);
     console.warn(`[ingest] passe ${pass} : ${plan.discarded.length} élément(s) écarté(s) — ${apercu.join(' | ')}`);
@@ -640,7 +656,7 @@ export async function ingestChapters(
       });
       // Les deux essais sont facturés : les deux sont comptés.
       await addImportUsage(importId, attempt.usage);
-      return parsePlanLogged('chapitres', attempt.plan, refs);
+      return parsePlanLogged('chapitres', attempt.plan, refs, attempt.truncated);
     },
     (parsed) => parsed.chapters.length,
     (parsed) => parsed.chapters.map((c) => c.name),
@@ -1081,7 +1097,7 @@ export async function ingestAssignments(
   const plan = parsePlanLogged('rangement', result.plan, {
     chapterIds: chapters.map((c) => c.id),
     notionIds: all.map((n) => n.id),
-  });
+  }, result.truncated);
 
   // Les chapitres sont déjà en base : leurs références SONT leurs identifiants,
   // il n'y a rien à traduire. En revanche on passe l'état AVANT : une notion
@@ -1256,7 +1272,7 @@ export async function ingestDocumentNotions(
   await addImportUsage(importId, result.usage);
 
   const refs = await loadExistingRefs(workshopId);
-  const plan = parsePlanLogged('notions', result.plan, refs);
+  const plan = parsePlanLogged('notions', result.plan, refs, result.truncated);
 
   // ⚠️ **On écrit TOUT ce que le modèle rend, y compris les redites** — décision
   // du 24/08/2026. La version précédente écartait ici les notions trop proches
@@ -1408,7 +1424,7 @@ export async function ingestParcoursQuestions(
   await addImportUsage(importId, result.usage);
 
   const refs = await loadExistingRefs(workshopId);
-  const plan = parsePlanLogged('questions', result.plan, refs);
+  const plan = parsePlanLogged('questions', result.plan, refs, result.truncated);
 
   // Le contexte n'est pas demandé au modèle : il est imposé par le bouton par
   // lequel l'utilisateur est entré (liste du parcours ou banque d'examen, §8).
@@ -1518,7 +1534,7 @@ export async function ingestExamQuestions(
   await addImportUsage(importId, result.usage);
 
   const refs = await loadExistingRefs(workshopId);
-  const plan = parsePlanLogged('examen', result.plan, refs);
+  const plan = parsePlanLogged('examen', result.plan, refs, result.truncated);
 
   // Le contexte vient du bouton, jamais du modèle (§8) — ici, la banque
   // d'examen.
