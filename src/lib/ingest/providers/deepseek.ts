@@ -31,7 +31,7 @@ import {
   userHintBlock,
   type ExistingContent,
 } from '@/lib/ingest/prompt';
-import { wireGroupsOutput } from '@/lib/ingest/wireSchema';
+import { wireExamGroupsOutput, wireGroupsOutput } from '@/lib/ingest/wireSchema';
 
 import type { IngestScope, PlanProvider, PreparedDocument, ProviderResult } from './types';
 
@@ -54,8 +54,10 @@ const MAX_TOKENS = 8_192;
  *  décrite dans le prompt — et la dériver de `wireGroupsOutput` est ce qui
  *  empêche les deux de diverger le jour où le schéma bouge. `parsePlan` reste
  *  de toute façon le contrôle à la réception, exactement comme chez Claude. */
-function shapeBlock(): string {
-  const schema = z.toJSONSchema(wireGroupsOutput, { io: 'output' });
+function shapeBlock(pass: 'questions' | 'exam'): string {
+  // L'examen ouvre deux types de réponse de plus (EXAM_RESPONSE_TYPES). Servir
+  // la même forme aux deux passes les lui cachait, là où Claude les reçoit.
+  const schema = z.toJSONSchema(pass === 'exam' ? wireExamGroupsOutput : wireGroupsOutput, { io: 'output' });
   return `Réponds en JSON, et uniquement en JSON. Il doit valider ce schéma :
 
 ${JSON.stringify(schema, null, 2)}
@@ -146,7 +148,7 @@ export function createDeepSeekProvider(options: DeepSeekOptions = {}): PlanProvi
                     : { pass: 'questions', notionIds: scope.notions.map((n) => n.id) },
                 ),
                 instruction,
-                shapeBlock(),
+                shapeBlock(scope.pass),
               ].join('\n\n'),
             },
           ],

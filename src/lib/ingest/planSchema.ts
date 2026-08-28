@@ -215,7 +215,17 @@ const questionSchema = z.object({
 
 const groupSchema = z.object({
   ref: refSchema,
-  context: z.enum(['parcours', 'exam']),
+  /** ⚠️ **Le modèle ne le fournit PAS, et ne doit pas le fournir** (§8) : le
+   *  contexte vient du bouton par lequel l'utilisateur est entré, et
+   *  `wireSchema.ts` ne le demande donc dans aucune des deux formes de sortie.
+   *  Il a pourtant été exigé ici jusqu'au 28/08/2026 — tous les groupes étaient
+   *  écartés à la validation, quel que soit le fournisseur, et une génération
+   *  n'écrivait plus une seule question. Les tests ne l'ont pas vu : leurs
+   *  fixtures le posaient toutes.
+   *
+   *  Il reste accepté s'il arrive, et le repli vaut ce que vaut l'entrée la plus
+   *  courante ; les deux passes de questions l'écrasent aussitôt après. */
+  context: z.enum(['parcours', 'exam']).default('parcours'),
   // Au moins une question : un groupe vide n'a pas de sens et ne doit jamais
   // atteindre la base (même invariant que `fromGroup`, questionGroup.ts).
   questions: z.array(questionSchema).min(1, { message: 'groupe sans question' }),

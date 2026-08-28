@@ -38,6 +38,20 @@ describe('planSchema — sortie contrainte du modèle', () => {
   it('refuse un contexte inventé', () => {
     expect(planSchema.safeParse({ groups: [group({ context: 'devoir' })] }).success).toBe(false);
   });
+
+  // ⚠️ Le modèle n'a JAMAIS à donner le contexte : aucune des deux formes de
+  // sortie ne le lui demande, et les deux passes de questions l'imposent après
+  // coup (§8). L'exiger ici écartait la totalité des groupes rendus, chez Claude
+  // comme chez DeepSeek — une génération sans une seule question, et sans autre
+  // trace qu'une ligne de journal (28/08/2026). Invisible tant que les fixtures
+  // de ce fichier le posaient toutes : celle-ci ne le pose pas, exprès.
+  it('garde un groupe sans contexte — le modèle ne le donne pas', () => {
+    const sansContexte: Record<string, unknown> = group();
+    delete sansContexte.context;
+    const plan = parsePlan({ groups: [sansContexte] });
+    expect(plan.groups).toHaveLength(1);
+    expect(plan.discarded).toEqual([]);
+  });
 });
 
 describe('parsePlan — réparer', () => {
