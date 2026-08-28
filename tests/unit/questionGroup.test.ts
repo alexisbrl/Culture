@@ -30,8 +30,8 @@ function question(overrides: Partial<Question> = {}): Question {
     parts: [],
     examIds: [],
     textLines: 4,
-    bloomLevel: 1,
     notionIds: ['n1'],
+    notionBloom: { n1: 1 },
     ...overrides,
   };
 }
@@ -72,8 +72,8 @@ describe('toGroup / fromGroup', () => {
         textLines: 2,
         typeOptions: {},
         expectations: '',
-        bloomLevel: 2,
         notionIds: ['n2'],
+        notionBloom: { n2: 2 },
       }],
     }));
 
@@ -97,8 +97,8 @@ describe('toGroup / fromGroup', () => {
         textLines: 3,
         typeOptions: { listNumbered: true },
         expectations: 'Attendus',
-        bloomLevel: 3,
         notionIds: ['n2', 'n3'],
+        notionBloom: { n2: 3, n3: 1 },
       }],
     });
 
@@ -137,24 +137,25 @@ describe('normalizeGroupInput — entrée non fiable (IA, import, API)', () => {
   // l'extérieur, donc le seul endroit où borner ses clés comme ses valeurs.
   it('ne garde un niveau par notion que pour les notions réellement reliées', () => {
     const group = normalizeGroupInput({
-      questions: [{ notionIds: ['n1', 'n2'], bloomLevel: 2, notionBloom: { n1: 4, n2: 9, 'n-jamais-reliée': 3 } }],
+      questions: [{ notionIds: ['n1', 'n2'], notionBloom: { n1: 4, n2: 9, 'n-jamais-reliée': 3 } }],
     }, 'g1');
 
     expect(group.questions[0].notionBloom).toEqual({ n1: 4, n2: 4 });
   });
 
-  it('accepte une question sans niveau par notion', () => {
+  // Une notion sans niveau n'a plus rien à suivre : la question n'en a pas.
+  it('donne le niveau par défaut à une notion dont le niveau manque', () => {
     const group = normalizeGroupInput({ questions: [{ notionIds: ['n1'] }] }, 'g1');
-    expect(group.questions[0].notionBloom).toEqual({});
+    expect(group.questions[0].notionBloom).toEqual({ n1: 1 });
   });
 
   it('normalise un type de réponse inventé et un niveau de Bloom hors bornes', () => {
     const group = normalizeGroupInput({
-      questions: [{ responseType: 'vrai_faux', bloomLevel: 6 }],
+      questions: [{ responseType: 'vrai_faux', notionIds: ['n1'], notionBloom: { n1: 6 } }],
     }, 'g1');
 
     expect(group.questions[0].responseType).toBe('textuelle');
-    expect(group.questions[0].bloomLevel).toBe(4);
+    expect(group.questions[0].notionBloom).toEqual({ n1: 4 });
   });
 
   it('écarte les valeurs du mauvais type au lieu de les recopier', () => {

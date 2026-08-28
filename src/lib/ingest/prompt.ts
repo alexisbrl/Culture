@@ -558,7 +558,7 @@ export function bloomInstruction(distribution: BloomDistribution = DEFAULT_BLOOM
 
   const total = questionsPerNotion(distribution);
   const enumeration = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} et ${parts[parts.length - 1]}`;
-  return `Pour CHAQUE notion à couvrir : ${enumeration}, soit ${total} questions par notion. N'en produis pas d'autres niveaux.`;
+  return `Pour CHAQUE notion à couvrir : ${enumeration}, soit ${total} questions par notion. Ce niveau est celui que tu inscris à côté de la notion dans \`notions\`. N'en produis pas d'autres niveaux.`;
 }
 
 /** Le TEMPS DE RÉPONSE visé, par niveau de Bloom (arbitrage du 25/08/2026).
@@ -710,7 +710,7 @@ ${list}
 ${context}
 Règles de production :
 - ${bloomInstruction(input.distribution)}
-- Chaque question porte dans \`notionRefs\` la ou les notions qu'elle fait travailler, avec les références ci-dessus. Une question sans notion ne sera jamais posée à personne.
+- Chaque question porte dans \`notions\` la ou les notions qu'elle fait travailler, avec les références ci-dessus, **et pour chacune le niveau auquel cette question-là la fait travailler**. Une question sans notion ne sera jamais posée à personne.
 - **Une question, une notion.** Ici, une question est tirée pour réviser SA notion : elle doit se répondre avec elle et rien d'autre.
 - ${paceInstruction(input.distribution)}
 ${responseTypeCatalog('parcours')}
@@ -764,10 +764,13 @@ export function examInstruction(input: {
     .map((c) => `## ${c.name}\n${c.notions.map((n) => `- ${n.id} — ${n.title}`).join('\n')}`)
     .join('\n\n');
 
-  const bloom = examBloomCounts(input.budget);
+  // En PROPORTIONS et non en nombres depuis le 28/08/2026 : le niveau porte sur
+  // le couple question ↔ notion, et une question d'examen en croise plusieurs.
+  // Annoncer « 10 de niveau 2 » sur un budget de 40 questions laisserait croire
+  // qu'on compte des questions.
   const mix = ([2, 3, 4] as const)
-    .filter((level) => bloom[level] > 0)
-    .map((level) => `${bloom[level]} de niveau ${level} (${BLOOM_VERBS[level]})`)
+    .filter((level) => EXAM_BLOOM_MIX[level] > 0)
+    .map((level) => `${Math.round(EXAM_BLOOM_MIX[level] * 100)} % de niveau ${level} (${BLOOM_VERBS[level]})`)
     .join(', ');
 
   const grouped = examGroupedCount(input.budget);
@@ -790,8 +793,9 @@ ${program}
 Règles de production :
 - Écris **exactement ${input.budget} questions**, pas une de plus.
 - **Chaque question croise PLUSIEURS notions** dès que c'est possible : c'est ce qui distingue un examen d'une série de questions de cours. Une question qui ne porte que sur une seule notion doit être l'exception, pas la règle.
-- Répartition visée : ${mix}. Aucune question de simple restitution : le parcours s'en charge.
-- Chaque question porte dans \`notionRefs\` TOUTES les notions qu'elle fait travailler, avec les références ci-dessus. Une question sans notion ne sera jamais retenue.
+- Chaque question porte dans \`notions\` TOUTES les notions qu'elle fait travailler, avec les références ci-dessus. Une question sans notion ne sera jamais retenue.
+- **Le niveau se déclare notion par notion, pas pour la question.** Écris l'énoncé, regarde ce qu'il mobilise, puis dis pour chaque notion ce que la question en demande : une même question peut faire simplement RESTITUER une notion de contexte et faire ANALYSER celle qui est réellement en jeu. Ne mets pas tout le monde au même niveau par facilité.
+- Répartition visée sur l'ensemble de ces couples question ↔ notion : ${mix}. Aucun couple de simple restitution : le parcours s'en charge.
 ${groups}
 ${responseTypeCatalog('exam')}
 - **Une question d'examen se donne plus de temps qu'une question d'entraînement du même niveau** : compte 1 à 2 minutes au niveau 2, 3 à 5 minutes aux niveaux 3 et 4. C'est ce temps qui autorise un énoncé plus fourni et une réponse construite.

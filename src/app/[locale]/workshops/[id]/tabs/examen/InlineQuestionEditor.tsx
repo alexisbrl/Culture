@@ -35,9 +35,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { AudioLines, ImageIcon, Link2, SlidersHorizontal } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
-import {
-  DEFAULT_BLOOM_LEVEL, type Question, type QuestionPart, type QuestionWeight,
-} from '@/lib/workshops/examTypes';
+import type { Question, QuestionPart, QuestionWeight } from '@/lib/workshops/examTypes';
 import { QuestionFields, emptyPart } from './questionFields';
 import { MediaAttachment, useQuestionMediaDrop } from './questionMedia';
 import { type Pool, LabelPill, LabelEditor, LabelPicker } from './examShared';
@@ -101,7 +99,6 @@ export default function InlineQuestionEditor({
   const t = useTranslations('examen');
   const [draft, setDraft] = useState<Question>({
     ...question,
-    bloomLevel: question.bloomLevel ?? DEFAULT_BLOOM_LEVEL,
     notionIds: question.notionIds ?? [],
     expectations: question.expectations ?? '',
     typeOptions: question.typeOptions ?? {},

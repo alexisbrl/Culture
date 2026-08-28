@@ -28,6 +28,7 @@ import type {
   BloomLevel,
 } from '@/lib/workshops/examTypes';
 import {
+  DEFAULT_BLOOM_LEVEL,
   emptyExerciseAnswer,
   matchPairs,
   normalizeTypeOptions,
@@ -83,7 +84,6 @@ type ItemRow = {
   text_lines: number;
   type_options: QuestionTypeOptions | null;
   expectations: string | null;
-  bloom_level: number;
 };
 
 /** Colonnes du groupe, sans les colonnes historiques désormais mortes. */
@@ -108,15 +108,19 @@ const GROUP_COLUMNS = 'id, workshop_id, image_key, audio_key, pools, exam_ids, c
 const GROUP_WITH_ITEMS = `${GROUP_COLUMNS}, exam_question_items(*, exam_question_item_bricks(brick_id, bloom_level))`;
 
 /** Un lien question ↔ notion, avec le niveau de Bloom **propre à ce couple**
- *  (28/08/2026). `bloomLevel: null` = cette notion suit le niveau de sa
- *  question ; c'est le cas de tout ce qui a été écrit avant. */
+ *  (28/08/2026) — la seule forme du niveau depuis que la question n'en porte
+ *  plus. `bloomLevel: null` = colonne pas encore renseignée (tout ce qui a été
+ *  écrit avant cette date) ; c'est une lacune de stockage, pas un sens. */
 type NotionLink = { notionId: string; bloomLevel: BloomLevel | null };
 type NotionLinkMap = Record<string, NotionLink[]>;
 
-/** Les niveaux déclarés, bornés aux notions qui en ont un. */
-function notionBloomOf(links: NotionLink[]): Record<string, BloomLevel> {
+/** Le niveau de CHAQUE notion de la question — une clé par lien, sans trou.
+ *  C'est ici, et nulle part ailleurs, que le défaut s'applique : les lecteurs
+ *  (barème, crédit de maîtrise, éditeur) n'ont ainsi jamais à se demander quoi
+ *  faire d'une notion sans niveau. */
+function withNotionBloom(links: NotionLink[]): Record<string, BloomLevel> {
   const out: Record<string, BloomLevel> = {};
-  for (const link of links) if (link.bloomLevel !== null) out[link.notionId] = link.bloomLevel;
+  for (const link of links) out[link.notionId] = link.bloomLevel ?? DEFAULT_BLOOM_LEVEL;
   return out;
 }
 
@@ -163,9 +167,8 @@ function itemToPart(row: ItemRow, links: NotionLink[]): QuestionPart {
     textLines: row.text_lines ?? 4,
     typeOptions: normalizeTypeOptions(row.type_options),
     expectations: row.expectations ?? '',
-    bloomLevel: toBloomLevel(row.bloom_level),
     notionIds: links.map((link) => link.notionId),
-    notionBloom: notionBloomOf(links),
+    notionBloom: withNotionBloom(links),
   };
 }
 
@@ -177,7 +180,7 @@ function rowToQuestion(row: GroupRow, items: ItemRow[], notionsByItem: NotionLin
   const [head, ...linked] = items;
   const headPart = head
     ? itemToPart(head, notionsByItem[head.id] ?? [])
-    : itemToPart({ id: row.id, group_id: row.id, sort_order: 0, content: '', response_type: 'textuelle', answer: '', choices: [], correct_choices: [], shuffle_choices: false, text_lines: 4, type_options: {}, expectations: '', bloom_level: 1 }, []);
+    : itemToPart({ id: row.id, group_id: row.id, sort_order: 0, content: '', response_type: 'textuelle', answer: '', choices: [], correct_choices: [], shuffle_choices: false, text_lines: 4, type_options: {}, expectations: '' }, []);
 
   return {
     id: row.id,
@@ -195,9 +198,7 @@ function rowToQuestion(row: GroupRow, items: ItemRow[], notionsByItem: NotionLin
     shuffleChoices: headPart.shuffleChoices,
     textLines: headPart.textLines,
     typeOptions: headPart.typeOptions,
-    expectations: headPart.expectations,
-    bloomLevel: headPart.bloomLevel,
-    notionIds: headPart.notionIds,
+    expectations: headPart.expectations,    notionIds: headPart.notionIds,
     notionBloom: headPart.notionBloom,
 
     parts: linked.map((item) => itemToPart(item, notionsByItem[item.id] ?? [])),
@@ -249,7 +250,6 @@ function itemRowsOf(q: Question) {
       textLines: q.textLines ?? 4,
       typeOptions: q.typeOptions ?? {},
       expectations: q.expectations ?? '',
-      bloomLevel: q.bloomLevel,
       notionIds: q.notionIds ?? [],
       notionBloom: q.notionBloom ?? {},
     },
@@ -270,7 +270,6 @@ function itemRowsOf(q: Question) {
       text_lines: item.textLines ?? 4,
       type_options: item.typeOptions ?? {},
       expectations: item.expectations ?? '',
-      bloom_level: toBloomLevel(item.bloomLevel),
       updated_at: new Date().toISOString(),
     },
     notionIds: item.notionIds ?? [],
@@ -394,11 +393,13 @@ async function syncItemNotions(
 
   const existing = await loadNotionLinks(items.map((i) => i.itemId));
 
-  const toAdd: { item_id: string; brick_id: string; bloom_level: number | null }[] = [];
+  const toAdd: { item_id: string; brick_id: string; bloom_level: number }[] = [];
   for (const item of items) {
     const before = new Map((existing[item.itemId] ?? []).map((link) => [link.notionId, link.bloomLevel]));
     const after = new Set(item.notionIds);
-    const wanted = (notionId: string) => item.notionBloom[notionId] ?? null;
+    // Toujours une valeur : depuis que la question n'a plus de niveau à elle, un
+    // lien sans niveau n'aurait plus rien à suivre.
+    const wanted = (notionId: string) => item.notionBloom[notionId] ?? DEFAULT_BLOOM_LEVEL;
 
     for (const notionId of after) {
       if (!before.has(notionId)) {
@@ -407,8 +408,10 @@ async function syncItemNotions(
       }
       // Le lien existe : seul son niveau peut avoir changé. Réécrire ceux qui
       // n'ont pas bougé ferait passer la question pour modifiée (`updated_at`),
-      // et un import annulable cesserait de l'être à la première sauvegarde.
-      if (before.get(notionId) === wanted(notionId)) continue;
+      // et un import annulable cesserait de l'être à la première sauvegarde. Un
+      // niveau encore vide en base vaut le défaut, comme à la lecture : une
+      // ré-écriture de masse n'a pas à les remplir un par un.
+      if ((before.get(notionId) ?? DEFAULT_BLOOM_LEVEL) === wanted(notionId)) continue;
       const { error } = await supabase
         .from('exam_question_item_bricks')
         .update({ bloom_level: wanted(notionId) })
@@ -775,27 +778,26 @@ export async function gradeParcoursAnswer(
   const main = gradeStatement(q, given[0] ?? emptyExerciseAnswer());
   const partResults = parts.map((part, i) => gradeStatement(part, given[i + 1] ?? emptyExerciseAnswer()));
 
-  // Chaque énoncé crédite SES notions avec SON niveau de Bloom : une question
-  // liée juste fait progresser les siennes même si la principale est ratée.
-  // Notions et niveau sont relus de la base ici, jamais reçus du client.
+  // Chaque énoncé crédite SES notions, chacune à SON niveau : une question liée
+  // juste fait progresser les siennes même si la principale est ratée. Notions
+  // et niveaux sont relus de la base ici, jamais reçus du client.
   const rewards: RewardTarget[] = [
-    { correct: main.correct, notionIds: q.notionIds ?? [], bloomLevel: q.bloomLevel, notionBloom: q.notionBloom },
+    { correct: main.correct, notionIds: q.notionIds ?? [], notionBloom: q.notionBloom },
     ...parts.map((part, i) => ({
       correct: partResults[i]?.correct ?? null,
       notionIds: part.notionIds ?? [],
-      bloomLevel: part.bloomLevel,
       notionBloom: part.notionBloom,
     })),
   ]
     .filter((target) => target.correct === true && target.notionIds.length > 0)
-    // Une notion est créditée à SON niveau, pas à celui de l'énoncé : depuis le
-    // 28/08/2026 une même question peut en faire restituer une et en faire
-    // analyser une autre. On regroupe donc par niveau — la maîtrise se calcule
-    // par palier, un appel par palier suffit.
-    .flatMap(({ notionIds, bloomLevel, notionBloom }) => {
+    // Une notion est créditée à SON niveau, pas à celui de l'énoncé : une même
+    // question peut en faire restituer une et en faire analyser une autre. On
+    // regroupe donc par niveau — la maîtrise se calcule par palier, un appel par
+    // palier suffit.
+    .flatMap(({ notionIds, notionBloom }) => {
       const byLevel = new Map<BloomLevel, string[]>();
       for (const notionId of notionIds) {
-        const level = notionBloom?.[notionId] ?? bloomLevel;
+        const level = notionBloom[notionId] ?? DEFAULT_BLOOM_LEVEL;
         byLevel.set(level, [...(byLevel.get(level) ?? []), notionId]);
       }
       return [...byLevel].map(([level, ids]) => ({ notionIds: ids, bloomLevel: level }));

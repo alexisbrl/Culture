@@ -1135,7 +1135,6 @@ export function partAsQuestion(q: Question, part: QuestionPart): Question {
     textLines: part.textLines,
     typeOptions: part.typeOptions,
     expectations: part.expectations,
-    bloomLevel: part.bloomLevel,
     notionIds: part.notionIds,
     notionBloom: part.notionBloom,
     parts: [],

@@ -246,11 +246,18 @@ export const MATCH_SPLIT_MIN = 0.05;
 export const MATCH_SPLIT_MAX = 0.95;
 export const MATCH_SPLIT_DEFAULT = 0.5;
 
-// Taxonomie de Bloom — niveau cognitif VISÉ par la question (1 mémoriser,
-// 2 comprendre, 3 appliquer, 4 analyser, 5 évaluer, 6 créer). À ne pas confondre
-// avec `brick_mastery.bloom_level`, qui mesure le niveau ATTEINT par un candidat
-// sur une notion. Obligatoire : jamais nul, jamais absent, 1 par défaut — la
-// contrainte `exam_questions_bloom_level_check` le garantit jusqu'en base.
+// Taxonomie de Bloom — niveau cognitif VISÉ **par le couple question ↔ notion**
+// (1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser, 5 évaluer, 6 créer). À ne
+// pas confondre avec `brick_mastery.bloom_level`, qui mesure le niveau ATTEINT
+// par un candidat sur une notion.
+//
+// ⚠️ Une question n'a PLUS de niveau à elle (28/08/2026). Elle en portait un,
+// dont les niveaux par notion n'étaient qu'un raffinement facultatif : deux
+// sources pour la même information, dont une seule était affichée. Le niveau vit
+// désormais uniquement sur le lien vers la notion — c'est-à-dire à l'endroit
+// exact où il a un sens, puisqu'il dit ce que la question fait faire de CETTE
+// notion-là. Colonne `exam_question_items.bloom_level` en attente de suppression
+// (EN-ATTENTE-DEPLOIEMENT.md).
 // Quatre niveaux dans toute l'application (09/08/2026) : mémoriser, comprendre,
 // appliquer, analyser. « Évaluer » et « Créer » ont été retirés — ils n'étaient
 // pas exploitables en correction et `mastery.ts` plafonnait déjà à 4 niveaux
@@ -318,14 +325,11 @@ export type QuestionPart = {
   typeOptions: QuestionTypeOptions;
   /** Attendus de correction, propres à cette question liée. */
   expectations: string;
-  /** Niveau de Bloom visé par cette question liée, indépendant du principal.
-   *  Sert de défaut aux notions qui n'ont pas le leur (voir `notionBloom`). */
-  bloomLevel: BloomLevel;
   /** Notions couvertes par cette question liée, comme pour la principale :
    *  reliées à la QUESTION (`exam_question_item_bricks`), pas au groupe. */
   notionIds: string[];
   /** Niveau de Bloom **par notion**, même règle que sur la principale. */
-  notionBloom?: Record<string, BloomLevel>;
+  notionBloom: Record<string, BloomLevel>;
 };
 
 // Pas de titre : une question n'a que son énoncé (19/08/2026). Le champ
@@ -356,10 +360,6 @@ export type Question = {
   // Pas de chapitre sur une question : elle hérite de ceux de ses notions, des
   // deux côtés (filtre de la banque, tirage du parcours). Voir
   // `parcoursQuestionIdsOfChapter` dans `lib/workshops/exam.ts`.
-  // Niveau de Bloom visé. Non optionnel : toute construction d'une Question doit
-  // le fournir (emptyQuestion() met 1), pour qu'il soit impossible d'aboutir en
-  // base sans valeur.
-  bloomLevel: BloomLevel;
   // Réglages propres au type de réponse (liste, tableau, fichier, dessin).
   typeOptions?: QuestionTypeOptions;
   // « Attendus » : instructions de correction en texte libre (détails attendus,
@@ -376,15 +376,17 @@ export type Question = {
    *
    *  Une même question peut faire RESTITUER une notion (niveau 1) et en faire
    *  ANALYSER une autre (niveau 4) : le niveau qualifie le couple question ↔
-   *  notion, pas la question. Jusqu'ici il n'existait qu'au niveau de la
-   *  question, et la pastille affichée sur chaque notion les changeait donc
-   *  toutes ensemble.
+   *  notion, pas la question. C'est la SEULE forme du niveau depuis cette date ;
+   *  la question n'en porte plus.
    *
-   *  Clé absente = cette notion suit `bloomLevel`. On évite ainsi d'avoir à
-   *  remplir la carte pour chaque question existante, et une notion ajoutée par
-   *  un chemin qui ignore ce champ reste correcte. Stocké dans la colonne
-   *  `bloom_level` de la table de jonction. */
-  notionBloom?: Record<string, BloomLevel>;
+   *  Une clé par entrée de `notionIds`, sans exception — c'est ce que garantit
+   *  `withNotionBloom` (exam.ts), par où passe toute lecture. Une notion dont le
+   *  niveau manque (question d'avant ce changement, entrée extérieure muette)
+   *  reçoit `DEFAULT_BLOOM_LEVEL` : jamais de trou, donc jamais de « suit le
+   *  niveau de sa question » à réinventer côté lecteur. Stocké dans la colonne
+   *  `bloom_level` de la table de jonction, qui reste nullable en base — un NULL
+   *  y signifie « pas encore renseigné », et se lit comme le niveau par défaut. */
+  notionBloom: Record<string, BloomLevel>;
 };
 
 // ─── Exercice du parcours ────────────────────────────────────────────────────

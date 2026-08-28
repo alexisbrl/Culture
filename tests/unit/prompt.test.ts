@@ -279,13 +279,13 @@ describe('wireSchema — ce qu’on autorise le modèle à produire', () => {
 
   it('refuse un type de réponse inventé', () => {
     const result = wireGroupsOutput.safeParse({
-      groups: [{ ref: 'g1', questions: [{ content: 'Q', responseType: 'vrai_faux', choices: [], correctChoices: [], answer: '', expectations: '', bloomLevel: 1, notionRefs: ['n1'] }] }],
+      groups: [{ ref: 'g1', questions: [{ content: 'Q', responseType: 'vrai_faux', choices: [], correctChoices: [], answer: '', expectations: '', notions: [{ ref: 'n1', bloomLevel: 1 }] }] }],
     });
     expect(result.success).toBe(false);
   });
 
   it('refuse à l’entraînement un type réservé à l’examen', () => {
-    const question = { content: 'Q', responseType: 'fichier', choices: [], correctChoices: [], answer: '', expectations: '', bloomLevel: 1, notionRefs: ['n1'] };
+    const question = { content: 'Q', responseType: 'fichier', choices: [], correctChoices: [], answer: '', expectations: '', notions: [{ ref: 'n1', bloomLevel: 1 }] };
     expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [question] }] }).success).toBe(false);
     expect(wireExamGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [question] }] }).success).toBe(true);
   });
@@ -295,16 +295,28 @@ describe('wireSchema — ce qu’on autorise le modèle à produire', () => {
     // autres types, sur chaque appel de chaque import.
     const grid = {
       content: 'Classe chaque animal', responseType: 'tableau', choices: [], correctChoices: [],
-      answer: '', expectations: '', bloomLevel: 2, notionRefs: ['n1'],
+      answer: '', expectations: '', notions: [{ ref: 'n1', bloomLevel: 2 }],
       typeOptions: { tableRows: ['Chat', 'Truite'], tableCols: ['Mammifère', 'Poisson'], tableCorrect: [[0], [1]], tableUnique: true },
     };
     expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [grid] }] }).success).toBe(true);
   });
 
+  // Le niveau est porté par la NOTION, pas par la question (28/08/2026) : c'est
+  // là qu'il doit être borné.
   it('refuse un niveau de Bloom hors 1–4 dès la contrainte de sortie', () => {
-    const question = { content: 'Q', responseType: 'qcm', choices: [], correctChoices: [], answer: '', expectations: '', notionRefs: ['n1'] };
-    expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [{ ...question, bloomLevel: 6 }] }] }).success).toBe(false);
-    expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [{ ...question, bloomLevel: 3 }] }] }).success).toBe(true);
+    const question = { content: 'Q', responseType: 'qcm', choices: [], correctChoices: [], answer: '', expectations: '' };
+    const withLevel = (bloomLevel: number) => ({ ...question, notions: [{ ref: 'n1', bloomLevel }] });
+    expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [withLevel(6)] }] }).success).toBe(false);
+    expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [withLevel(3)] }] }).success).toBe(true);
+  });
+
+  // Deux notions, deux niveaux : c'est tout l'intérêt du déplacement.
+  it('accepte deux niveaux différents dans la même question', () => {
+    const question = {
+      content: 'Q', responseType: 'qcm', choices: [], correctChoices: [], answer: '', expectations: '',
+      notions: [{ ref: 'n1', bloomLevel: 1 }, { ref: 'n2', bloomLevel: 4 }],
+    };
+    expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [question] }] }).success).toBe(true);
   });
 
   it('une notion naît SANS chapitre, et porte sa page', () => {

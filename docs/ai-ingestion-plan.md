@@ -406,9 +406,12 @@ peut pas connaître des identifiants qui n'existent pas encore) :
       content: "…",
       responseType: "qcm",       // l'un des 9 types réels (examTypes.ts)
       choices: [...], correctChoices: [...], answer: "…", expectations: "…",
-      bloomLevel: 1 | 2 | 3 | 4, // 4 niveaux, pas 6
-      notionRefs: ["n1", "n7"],  // remplace l'ancien chapterRef : le chapitre
-                                 // d'une question se déduit de ses notions
+      // Les notions travaillées, CHACUNE AVEC SON NIVEAU (28/08/2026) : le
+      // niveau qualifie le couple question ↔ notion, pas la question — une même
+      // question peut faire restituer l'une et analyser l'autre. La question,
+      // elle, n'a plus de niveau du tout. Les notions remplacent aussi l'ancien
+      // chapterRef : le chapitre d'une question se déduit d'elles.
+      notions: [{ ref: "n1", bloomLevel: 1 }, { ref: "n7", bloomLevel: 4 }],
     }],
   }],
 }
@@ -693,7 +696,7 @@ traitements opposés — ne jamais les confondre :
 | Famille | Exemples | Traitement |
 |---|---|---|
 | **Qualité pédagogique** | nombre de propositions d'un QCM, réponse attendue remplie, répartition Bloom, variété des types de réponse | **Prompt uniquement.** Aucun refus serveur. |
-| **Intégrité structurelle** | notion référencée inexistante, ou appartenant à **un autre atelier** ; `bloomLevel` hors 1–4 ; type de réponse inventé ; groupe à zéro question ; **énoncé vide** | **Refus serveur, systématique.** |
+| **Intégrité structurelle** | notion référencée inexistante, ou appartenant à **un autre atelier** ; `bloomLevel` d'une notion hors 1–4 ; type de réponse inventé ; groupe à zéro question ; **énoncé vide** | **Refus serveur, systématique.** |
 
 **L'énoncé fait partie de l'intégrité, pas de la qualité** (décision du
 19/08/2026). Ce n'est pas une exception à la règle mais son application : une

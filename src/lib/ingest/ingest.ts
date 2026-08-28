@@ -486,8 +486,7 @@ type PlanGroupInput = {
     shuffleChoices: boolean;
     textLines: number;
     expectations: string;
-    bloomLevel: number;
-    notionRefs: string[];
+    notions: { ref: string; bloomLevel: number }[];
     /** Réglages propres au type de réponse — grille d'un tableau, formats
      *  acceptés d'un dépôt de fichier, nombre de réponses d'une liste. Écrits
      *  vides jusqu'au 25/08/2026, ce qui bornait la génération aux trois types
@@ -527,7 +526,9 @@ export async function insertGroups(
   if (groupError) throw new Error(groupError.message);
 
   const itemRows: Record<string, unknown>[] = [];
-  const linkRows: { item_id: string; brick_id: string }[] = [];
+  // Le niveau de Bloom vit ICI, sur le lien vers la notion, et nulle part
+  // ailleurs (28/08/2026) : c'est ce que la question demande de CETTE notion.
+  const linkRows: { item_id: string; brick_id: string; bloom_level: number }[] = [];
 
   groups.forEach((group, gi) => {
     group.questions.forEach((question, qi) => {
@@ -545,12 +546,11 @@ export async function insertGroups(
         text_lines: question.textLines,
         type_options: question.typeOptions,
         expectations: question.expectations,
-        bloom_level: question.bloomLevel,
       });
 
-      for (const ref of question.notionRefs) {
-        const brickId = resolve(ref, notionIds);
-        if (brickId) linkRows.push({ item_id: itemId, brick_id: brickId });
+      for (const notion of question.notions) {
+        const brickId = resolve(notion.ref, notionIds);
+        if (brickId) linkRows.push({ item_id: itemId, brick_id: brickId, bloom_level: notion.bloomLevel });
       }
     });
   });

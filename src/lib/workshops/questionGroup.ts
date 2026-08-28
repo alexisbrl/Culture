@@ -60,11 +60,11 @@ export type QuestionItem = {
   textLines: number;
   typeOptions: QuestionTypeOptions;
   expectations: string;
-  /** Niveau par défaut de l'énoncé : celui d'une notion qui n'a pas le sien. */
-  bloomLevel: BloomLevel;
   notionIds: string[];
-  /** Niveau de Bloom **par notion** (28/08/2026) : une question peut faire
-   *  restituer l'une et analyser l'autre. Clé absente = suit `bloomLevel`. */
+  /** Niveau de Bloom **par notion**, et seule forme du niveau (28/08/2026) :
+   *  une question peut faire restituer l'une et analyser l'autre, elle n'a donc
+   *  pas de niveau à elle. Une clé par entrée de `notionIds` ; une notion sans
+   *  niveau déclaré prend `DEFAULT_BLOOM_LEVEL` à la normalisation. */
   notionBloom: Record<string, BloomLevel>;
 };
 
@@ -105,7 +105,6 @@ export function toGroup(q: Question): QuestionGroup {
     textLines: q.textLines ?? 4,
     typeOptions: q.typeOptions ?? {},
     expectations: q.expectations ?? '',
-    bloomLevel: q.bloomLevel ?? DEFAULT_BLOOM_LEVEL,
     notionIds: q.notionIds ?? [],
     notionBloom: q.notionBloom ?? {},
   };
@@ -120,7 +119,6 @@ export function toGroup(q: Question): QuestionGroup {
     textLines: part.textLines ?? 4,
     typeOptions: part.typeOptions ?? {},
     expectations: part.expectations ?? '',
-    bloomLevel: part.bloomLevel ?? DEFAULT_BLOOM_LEVEL,
     notionIds: part.notionIds ?? [],
     notionBloom: part.notionBloom ?? {},
   }));
@@ -160,12 +158,10 @@ export function fromGroup(group: QuestionGroup): Question {
     textLines: head.textLines,
     typeOptions: head.typeOptions,
     expectations: head.expectations,
-    bloomLevel: head.bloomLevel,
     notionIds: head.notionIds,
-    // Carte vide = rien à dire : on ne la pose pas. Une question dont aucune
-    // notion n'a de niveau propre reste **identique** à ce qu'elle était avant
-    // que ce champ n'existe, ce qui garde l'aller-retour neutre.
-    ...(Object.keys(head.notionBloom).length > 0 ? { notionBloom: head.notionBloom } : {}),
+    // Toujours posée, même vide : c'est le seul porteur du niveau depuis que la
+    // question n'en a plus. L'omettre reviendrait à perdre l'information.
+    notionBloom: head.notionBloom,
 
     parts: linked.map((item) => ({
       id: item.id,
@@ -178,9 +174,8 @@ export function fromGroup(group: QuestionGroup): Question {
       textLines: item.textLines,
       typeOptions: item.typeOptions,
       expectations: item.expectations,
-      bloomLevel: item.bloomLevel,
       notionIds: item.notionIds,
-      ...(Object.keys(item.notionBloom).length > 0 ? { notionBloom: item.notionBloom } : {}),
+      notionBloom: item.notionBloom,
     })) satisfies QuestionPart[],
 
     // Champs hérités que la vue « groupe » n'expose pas : ils ne sont plus
@@ -229,7 +224,6 @@ function normalizeItem(raw: unknown, groupId: string, index: number): QuestionIt
     textLines: typeof r.textLines === 'number' && r.textLines >= 1 ? Math.round(r.textLines) : 4,
     typeOptions: normalizeTypeOptions(r.typeOptions),
     expectations: asString(r.expectations),
-    bloomLevel: toBloomLevel(r.bloomLevel),
     notionIds: asStringArray(r.notionIds),
     // Une source extérieure peut envoyer n'importe quoi : on ne retient que les
     // niveaux qui portent sur une notion RÉELLEMENT reliée à cet énoncé, et
@@ -238,14 +232,16 @@ function normalizeItem(raw: unknown, groupId: string, index: number): QuestionIt
   };
 }
 
-/** La carte des niveaux par notion, bornée aux notions de l'énoncé. */
+/** La carte des niveaux, **une entrée par notion de l'énoncé** — ni plus (un
+ *  niveau portant sur une notion non reliée ne veut rien dire), ni moins (une
+ *  notion sans niveau n'a plus rien à suivre depuis que la question n'en a
+ *  pas). Ce qui manque ou n'est pas exploitable prend le niveau par défaut. */
 function notionBloomOf(raw: unknown, notionIds: string[]): Record<string, BloomLevel> {
   const source = asRecord(raw);
-  const known = new Set(notionIds);
   const out: Record<string, BloomLevel> = {};
-  for (const [id, value] of Object.entries(source)) {
-    if (!known.has(id) || value === null || value === undefined) continue;
-    out[id] = toBloomLevel(value);
+  for (const id of notionIds) {
+    const value = source[id];
+    out[id] = value === null || value === undefined ? DEFAULT_BLOOM_LEVEL : toBloomLevel(value);
   }
   return out;
 }

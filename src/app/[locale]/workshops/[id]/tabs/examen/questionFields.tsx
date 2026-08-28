@@ -59,7 +59,7 @@ export function emptyPart(): QuestionPart {
     id: crypto.randomUUID(),
     content: '', responseType: 'qcm', answer: '', choices: ['', ''], correctChoices: [],
     shuffleChoices: false, textLines: 4, typeOptions: {}, expectations: '',
-    bloomLevel: DEFAULT_BLOOM_LEVEL, notionIds: [], notionBloom: {},
+    notionIds: [], notionBloom: {},
   };
 }
 
@@ -80,11 +80,10 @@ export type QuestionFieldValues = {
   textLines?: number;
   typeOptions?: QuestionTypeOptions;
   expectations?: string;
-  /** Niveau par défaut de l'énoncé : celui d'une notion qui n'a pas le sien. */
-  bloomLevel: BloomLevel;
   notionIds: string[];
-  /** Niveau de Bloom par notion — c'est LUI que pilotent les pastilles. */
-  notionBloom?: Record<string, BloomLevel>;
+  /** Niveau de Bloom par notion — c'est LUI que pilotent les pastilles, et
+   *  c'est le seul niveau qui existe : un énoncé n'en a pas à lui. */
+  notionBloom: Record<string, BloomLevel>;
 };
 
 type Props = {
@@ -195,26 +194,29 @@ export function QuestionFields({
   function toggleNotion(id: string) {
     const removing = values.notionIds.includes(id);
     // Le niveau d'une notion retirée s'en va avec elle : le garder ressusciterait
-    // un réglage invisible si on la remettait plus tard.
-    const notionBloom = { ...(values.notionBloom ?? {}) };
+    // un réglage invisible si on la remettait plus tard. Une notion ajoutée
+    // arrive au niveau par défaut — jamais sans niveau.
+    const notionBloom = { ...values.notionBloom };
     if (removing) delete notionBloom[id];
+    else notionBloom[id] = DEFAULT_BLOOM_LEVEL;
     patch({
       notionIds: removing ? values.notionIds.filter(n => n !== id) : [...values.notionIds, id],
       notionBloom,
     });
   }
-  const bloomOf = (notionId: string): BloomLevel => values.notionBloom?.[notionId] ?? values.bloomLevel;
+  const bloomOf = (notionId: string): BloomLevel => values.notionBloom[notionId] ?? DEFAULT_BLOOM_LEVEL;
   /** ⚠️ **Le niveau appartient au couple énoncé ↔ notion**, pas à l'énoncé
    *  (28/08/2026). Jusque-là les pastilles lisaient et écrivaient toutes le
    *  même niveau : en changer une les changeait toutes, alors qu'une question
    *  peut faire restituer une notion et en faire analyser une autre.
    *
-   *  Le niveau de l'énoncé reste comme défaut — c'est ce que l'IA produit, et ce
-   *  que reçoit une notion ajoutée ensuite. */
+   *  L'énoncé n'a plus de niveau du tout depuis cette date : il n'en restait
+   *  qu'un défaut invisible, qui faisait deux sources pour une seule
+   *  information. */
   function cycleBloom(notionId: string) {
     const i = BLOOM_LEVELS.indexOf(bloomOf(notionId));
     const next = BLOOM_LEVELS[(i + 1) % BLOOM_LEVELS.length] as BloomLevel;
-    patch({ notionBloom: { ...(values.notionBloom ?? {}), [notionId]: next } });
+    patch({ notionBloom: { ...values.notionBloom, [notionId]: next } });
   }
 
   /** Ce qui est déjà saisi suit le changement de type. Un même contenu porte le

@@ -33,7 +33,16 @@ et l'incident du 22/06/2026 dans `docs/changelog.md`.
 
 ## À appliquer
 
-AUCUN
+- **`2026-08-28-bloom-uniquement-par-notion.sql` — étape 2 seulement**
+  (`alter table public.exam_question_items drop column bloom_level;`, ligne
+  commentée en fin de fichier).
+  - **Prérequis** : la branche `feat/cout-ingestion-ia` mergée dans `main` et
+    **déployée** sur Vercel. Le code en ligne lit encore cette colonne ; la
+    retirer avant casserait la lecture des questions, souvent en silence.
+  - L'étape 1 du même fichier (reprise des niveaux sur les liens question ↔
+    notion) est **déjà appliquée** — 28/08/2026, 51 liens renseignés.
+  - Après application : régénérer `src/lib/database.types.ts`, retirer cette
+    entrée, laisser une ligne dans `docs/changelog.md`.
 
 ---
 
