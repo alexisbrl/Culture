@@ -1083,6 +1083,18 @@ travaille, dans une session qui n'est pas celle d'un gestionnaire.
 
 Donc :
 
+> **Quitter la page pendant un import (29/08/2026).** La croix et la touche Échap
+> demandent confirmation depuis le 28/08 ; rafraîchir, fermer l'onglet ou revenir
+> en arrière déclenchent désormais la demande du navigateur. ⚠️ **Son texte n'est
+> pas le nôtre** : les navigateurs ignorent le message fourni par le site et
+> montrent leur propre formulation avec leurs propres boutons — protection contre
+> les pages qui retenaient leurs visiteurs de force. On ne peut que provoquer la
+> question, pas la rédiger. Limite connue : un retour arrière traité par le
+> routeur sans recharger la page n'est pas couvert. Ce n'est pas grave — les
+> questions sont écrites au fur et à mesure, donc un import interrompu ne casse
+> rien : ce qui est écrit reste, et le bandeau d'annulation le propose comme
+> n'importe quel autre lot.
+
 - **L'import interactif reste dans le navigateur** — avec le parallélisme de
   §16.5, il redescend à ~15 min, ce qui est tenable et garde la progression
   réelle.

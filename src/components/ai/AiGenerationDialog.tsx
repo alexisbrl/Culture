@@ -564,6 +564,36 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     onDone?.();
   }
 
+  // ─── Quitter la PAGE pendant une génération ──────────────────────────────
+  //
+  // La croix et la touche Échap passent par 'requestClose', qui demande
+  // confirmation. Restaient les sorties que la fenêtre ne voit pas : rafraîchir,
+  // fermer l'onglet, revenir en arrière. Un appui distrait sur F5 interrompait
+  // l'enchaînement sans un mot.
+  //
+  // ⚠️ **Le navigateur n'affiche pas notre texte.** Les navigateurs ignorent
+  // depuis longtemps le message fourni par le site — ils montrent leur propre
+  // formulation (« Quitter le site ? ») avec leurs propres boutons, et on ne
+  // peut ni la choisir ni y ajouter le nôtre. C'est une protection contre les
+  // pages qui retenaient leurs visiteurs de force. Tout ce qu'on peut faire,
+  // c'est déclencher cette demande — ce que fait 'preventDefault', et ce que
+  // fait n'importe quel site à notre place.
+  //
+  // Limite connue : un retour arrière traité par le routeur sans recharger la
+  // page ne déclenche pas cet événement. Rien de dramatique — les questions sont
+  // écrites au fur et à mesure et le lot reste annulable par le bandeau.
+  useEffect(() => {
+    if (!running) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Exigé par les navigateurs anciens, ignoré par les autres : la chaîne
+      // elle-même n'est jamais affichée.
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [running]);
+
   // ─── La sortie, et ce qu'elle coûte selon le moment ──────────────────────
   //
   // Hors génération, la croix ferme, point. Pendant, elle DEMANDE d'abord : une
