@@ -206,16 +206,26 @@ export type ParcoursProgress = {
 export async function getParcoursProgress(workshopId: string, userId: string): Promise<ParcoursProgress> {
   const supabase = getSupabaseServerClient();
 
+  // Deux lectures indépendantes → en parallèle (règle N+1).
   // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
-  const { data: notions, error } = await supabase
-    .from('workshop_bricks')
-    .select('id, chapter_id')
-    .eq('workshop_id', workshopId);
+  const [{ data: notions, error }, { data: chapterRows }] = await Promise.all([
+    supabase.from('workshop_bricks').select('id, chapter_id').eq('workshop_id', workshopId),
+    supabase.from('workshop_chapters').select('id, hidden').eq('workshop_id', workshopId),
+  ]);
 
   if (error) {
     console.error('getParcoursProgress error:', error);
     return { workshopPercent: 0, chapterPercent: {} };
   }
+
+  // Les chapitres cachés sont hors du parcours (29/08/2026) : aucun exercice ne
+  // s'y lance, donc leurs notions ne peuvent plus progresser. Les compter dans
+  // l'avancement de l'atelier plafonnerait la barre sous 100 % sans que le
+  // membre puisse voir ce qui manque — exactement le travers corrigé le
+  // 19/08/2026 pour les notions sans chapitre.
+  const hiddenChapters = new Set(
+    (chapterRows ?? []).filter((c) => c.hidden === true).map((c) => c.id as string),
+  );
 
   const all = notions ?? [];
   if (all.length === 0) return { workshopPercent: 0, chapterPercent: {} };
@@ -246,7 +256,7 @@ export async function getParcoursProgress(workshopId: string, userId: string): P
   const rangees: number[] = [];
   for (const notion of all) {
     const chapterId = notion.chapter_id as string | null;
-    if (!chapterId) continue;
+    if (!chapterId || hiddenChapters.has(chapterId)) continue;
     const score = scores.get(notion.id as string) ?? 0;
     rangees.push(score);
     const list = byChapter.get(chapterId) ?? [];

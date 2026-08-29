@@ -775,6 +775,23 @@ export async function drawParcoursQuestion(
 ): Promise<ParcoursDraw> {
   const supabase = getSupabaseServerClient();
 
+  // ─── Un chapitre caché ne tire rien (29/08/2026) ─────────────────────────
+  //
+  // Il est sorti du parcours : plus de pot dans l'onglet Programme, plus de page
+  // d'exercice. La vérification est refaite ICI parce qu'une server action est
+  // une URL POST publique — l'écran qui n'affiche plus le chapitre n'empêche
+  // personne de demander une question dessus. Réponse `empty`, la même qu'un
+  // chapitre sans question : de l'extérieur, il n'y a rien à y prendre.
+  const { data: chapter, error: chapterError } = await supabase
+    .from('workshop_chapters')
+    .select('hidden')
+    .eq('workshop_id', workshopId)
+    .eq('id', chapterId)
+    .maybeSingle();
+
+  if (chapterError) throw new Error(chapterError.message);
+  if (!chapter || chapter.hidden === true) return { prompt: null, cost: 0, failure: 'empty' };
+
   const { data, error } = await supabase.rpc('parcours_pick', {
     p_workshop: workshopId,
     p_chapter: chapterId,

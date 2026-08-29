@@ -248,6 +248,7 @@ Le niveau de maîtrise d'une notion par un utilisateur se mesure sur les niveaux
 - Gérés depuis Paramètres → Notions (création, renommage, réorganisation, suppression), réservés au propriétaire et aux gestionnaires
 - Supprimer un chapitre **ne supprime pas ses notions** : elles retombent dans « sans chapitre »
 - Un chapitre = un pot dans l'onglet Programme éducatif. Le nombre de pots suit donc directement le nombre de chapitres, et un atelier sans chapitre affiche un programme vide.
+- **Chapitre caché** (29/08/2026) : un import IA qui vide un chapitre l'écarte au lieu de le supprimer — c'est le seul geste qui pose cet état, l'interface n'offre pas de bouton « cacher ». Un chapitre caché **sort entièrement du parcours** : pas de pot, pas d'exercice (y compris par lien direct), aucun tirage, aucune recharge automatique, et ses notions ne comptent plus dans la barre d'avancement de l'atelier — comme les notions sans chapitre. **Côté gestion il reste entier** : visible sous les chapitres visibles dans Paramètres → Notions avec son bouton « restaurer » (unique geste humain sur cet état), et toujours proposé dans la liste des questions du parcours, pour qu'on puisse retrouver ses questions sans avoir à le restaurer d'abord.
 
 ### Programme éducatif
 
@@ -359,6 +360,7 @@ C'est un **rattrapage exponentiel plafonné**. Le terme proportionnel fait qu'un
 - Le **plafond par cible** est structurant : une question « mémoriser » ne peut pas prouver qu'on sait analyser. Un chapitre qui n'a que des questions de Bloom 1 plafonne ses notions à 10 points, donc à 33 % d'avancement.
 - Une question n'alimente que les notions qui lui sont **explicitement reliées** (`exam_question_bricks`). Une question sans notion reliée ne fait progresser aucune barre.
 - Une notion **sans chapitre ne compte dans aucune barre**, pas même celle de l'atelier (19/08/2026). Aucun exercice ne peut la faire progresser — le tirage se fait par chapitre et elle n'a pas de pot — donc la compter revenait à plafonner la barre de l'atelier sous 100 % sans que le membre puisse voir ce qui manque. « Sans chapitre » est un sas de gestion (notion créée à la volée, chapitre supprimé, ingestion IA), pas encore du programme.
+- Même règle, même raison, pour les notions d'un **chapitre caché** (29/08/2026) : le chapitre étant sorti du parcours, aucun exercice ne peut plus les faire progresser.
 - **Avancement affiché** — calculé sur le score exact, pas sur le niveau, et saturé à 30 (les 3 premiers niveaux valent 100 %, le 4e est du bonus) : notion = `min(score, 30) / 30`, chapitre = `Σ min(score, 30) / (30 × nombre de notions)`, atelier = même formule, mais **seulement sur les notions rangées dans un chapitre**.
 - Chaque **nouvelle question** (hors réitération) consomme **1 goutte d'eau** *(V2 — l'énergie n'existe pas encore, le compteur de la barre du haut affiche une valeur fixe)*
 - Les gouttes d'eau se regagnent : avec le temps / en quantité aléatoire après un nombre aléatoire de questions *(V2)*

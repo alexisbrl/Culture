@@ -100,12 +100,17 @@ export async function refillChapter(
     const supabase = getSupabaseServerClient();
     const { data: chapterRow, error } = await supabase
       .from('workshop_chapters')
-      .select('id, name')
+      .select('id, name, hidden')
       .eq('workshop_id', workshopId)
       .eq('id', chapterId)
       .maybeSingle();
     if (error) throw new Error(error.message);
-    if (!chapterRow) return { triggered: false, written: 0 };
+    // Un chapitre caché est sorti du parcours (29/08/2026) : plus aucun exercice
+    // ne s'y lance, donc recharger son stock serait de l'argent dépensé pour des
+    // questions que personne ne verra. Le tirage refuse déjà en amont — ce filet
+    // couvre le cas où un chapitre est écarté pendant qu'une recharge est en
+    // vol, la recharge étant lancée en tâche de fond après la réponse.
+    if (!chapterRow || chapterRow.hidden === true) return { triggered: false, written: 0 };
 
     const chapter = { id: chapterRow.id as string, name: chapterRow.name as string };
 

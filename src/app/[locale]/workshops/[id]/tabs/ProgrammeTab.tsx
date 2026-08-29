@@ -80,7 +80,17 @@ export default function ProgrammeTab({ chapters, workshopId, workshopName, canMa
     return <ParcoursQuestions workshopId={workshopId} chapters={chapters} onBack={() => setShowQuestions(false)} />;
   }
 
-  const sorted = [...chapters].sort((a, b) => a.position - b.position);
+  // ─── Les chapitres cachés ne font plus partie du parcours (29/08/2026) ────
+  //
+  // Ni la liste, ni le chapitre mis en avant, ni un exercice à lancer. Ils
+  // restent entiers côté GESTION — la liste des questions ci-dessus reçoit
+  // toujours `chapters` en entier, et les paramètres offrent « restaurer ».
+  //
+  // Ce filtre n'est que la moitié visible de la règle : le serveur refuse de son
+  // côté (page d'exercice + `drawExercise`), et l'avancement de l'atelier ignore
+  // ces notions (`getParcoursProgress`). Sans ça, un lien direct ou un signet
+  // rouvrirait un chapitre écarté.
+  const sorted = chapters.filter((c) => !c.hidden).sort((a, b) => a.position - b.position);
   const hero = sorted[0];
 
   return (

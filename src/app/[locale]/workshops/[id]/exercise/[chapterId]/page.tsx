@@ -29,7 +29,10 @@ export default async function ExercisePage({ params }: Props) {
 
   const chapters = await getWorkshopChapters(id);
   const chapter = chapters.find((c) => c.id === chapterId);
-  if (!chapter) notFound();
+  // Un chapitre caché est sorti du parcours : il n'a plus de pot dans l'onglet
+  // Programme, et son exercice n'existe donc plus non plus. Même traitement
+  // qu'un chapitre inconnu — un lien gardé en signet ne doit pas le rouvrir.
+  if (!chapter || chapter.hidden) notFound();
 
   return (
     <ExerciseClient
