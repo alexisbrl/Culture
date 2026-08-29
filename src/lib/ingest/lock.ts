@@ -45,6 +45,48 @@ export const LIVE_TIMEOUT_MS = 2 * 60 * 1000;
  *  `ai.busy`) : `lib/` ne connaît pas la langue de qui regarde. */
 export const BUSY_ERROR = 'INGEST_BUSY';
 
+/** Le refus d'écrire dans un lot refermé, sous une forme RECONNAISSABLE — ce
+ *  n'est pas une panne, c'est le fonctionnement normal d'une annulation. */
+export const CLOSED_ERROR = 'INGEST_CLOSED';
+
+/** Refuse d'écrire dans un lot déjà refermé.
+ *
+ *  ─── Ce que ça rend possible : annuler sans attendre ────────────────────────
+ *
+ *  L'annulation attendait que les appels au modèle déjà partis retombent, faute
+ *  de quoi un retardataire écrivait **après** le retrait et laissait derrière lui
+ *  ce qu'on venait d'effacer. Cette attente dure le temps d'un appel — jusqu'à
+ *  une minute — et elle vivait dans la page : quitter l'onglet pendant ce
+ *  temps-là et le retrait ne partait jamais.
+ *
+ *  Fermer le lot d'abord règle le problème à la source : les retardataires n'ont
+ *  plus le droit d'écrire, donc le retrait peut partir tout de suite et se
+ *  terminer côté serveur, quoi que fasse l'utilisateur ensuite (29/08/2026).
+ *
+ *  ⚠️ Reste une fenêtre de quelques millisecondes : un appel qui lit « ouvert »
+ *  juste avant la fermeture peut écrire juste après le retrait. Sans transaction
+ *  multi-requêtes, on ne la ferme pas — et ce n'est pas grave : ce qui reste est
+ *  étiqueté au même lot, donc le bandeau le propose à l'annulation comme
+ *  n'importe quel autre import.
+ *
+ *  ⚠️ **Sur erreur de lecture, on LAISSE écrire.** Refuser sur un état qu'on n'a
+ *  pas su lire ferait échouer un import parfaitement normal ; à l'inverse, une
+ *  écriture en trop reste annulable. */
+export async function assertImportOpen(importId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('ai_imports')
+    .select('closed_at')
+    .eq('id', importId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('assertImportOpen error:', error);
+    return;
+  }
+  if (data?.closed_at) throw new Error(CLOSED_ERROR);
+}
+
 /** Le lot vivant de cet atelier, s'il y en a un — sinon `null`.
  *
  *  ⚠️ Sur erreur de lecture, on répond `null` : on ne sait pas, et refuser un

@@ -2,7 +2,7 @@
 
 import { requireManager } from '@/lib/authz';
 import * as lock from '@/lib/ingest/lock';
-import { BUSY_ERROR } from '@/lib/ingest/lock';
+import { BUSY_ERROR, CLOSED_ERROR } from '@/lib/ingest/lock';
 import * as run from '@/lib/ingest/run';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import * as imports from '@/lib/workshops/imports';
@@ -94,6 +94,12 @@ export type ImportBanner = {
  *  questions a échoué » sans dire laquelle, sur quoi, ne se diagnostique pas. */
 function failed(pass: string, error: unknown, context: Record<string, unknown>): string {
   const detail = message(error);
+  // Un lot refermé n'est pas une panne : c'est une annulation qui a fait son
+  // travail, et l'appel qui retombe se refuse tout seul. Le dire, sans le crier.
+  if (detail === CLOSED_ERROR) {
+    console.info(`[ingest] passe ${pass} : écriture refusée, le lot a été annulé`, context);
+    return detail;
+  }
   console.error(`[ingest] passe ${pass} échouée :`, detail, context);
   return detail;
 }

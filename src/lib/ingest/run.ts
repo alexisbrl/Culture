@@ -59,7 +59,7 @@ import {
   addImportUsage,
   applyAssignments,
   createImport,
-  hideEmptiedChapters,
+  hideEmptyChapters,
   hideChapters,
   insertChapters,
   insertGroups,
@@ -74,7 +74,7 @@ import { dropRepeatedQuestions, flagSimilar, findExistingMatch } from './duplica
 import { batchNotions, examSliceCount, sliceProgram, splitBudget, splitUnplaced, withChapterRetry } from './passInput';
 import type { BloomLevel } from '@/lib/workshops/examTypes';
 import { demandByNotion, demandForChapterStart, type QuestionDemand } from './demand';
-import { BUSY_ERROR, closeImport, liveImportOf } from './lock';
+import { BUSY_ERROR, assertImportOpen, closeImport, liveImportOf } from './lock';
 import { parsePlan, type PlanIssue } from './planSchema';
 import { releaseDocuments } from './release';
 import {
@@ -968,31 +968,6 @@ async function loadNotionsToArrange(workshopId: string) {
   });
 }
 
-/** Relève, AVANT le rangement, quels chapitres portaient des notions.
- *
- *  C'est la seule façon de distinguer plus tard « vidé par cet import » de
- *  « déjà vide avant » — un chapitre que le cours ne couvrait pas ne doit pas
- *  être caché sous prétexte qu'il l'est resté. Rangé dans `ai_imports.scope`,
- *  du jsonb libre : aucune migration. */
-async function snapshotPopulatedChapters(workshopId: string, importId: string): Promise<void> {
-  const supabase = getSupabaseServerClient();
-  const [{ data: scopeRow }, notions] = await Promise.all([
-    supabase.from('ai_imports').select('scope').eq('id', importId).single(),
-    loadNotionsToArrange(workshopId),
-  ]);
-
-  const scope = (scopeRow?.scope as Record<string, unknown> | null) ?? {};
-  // Le premier lot fait foi : les suivants ne doivent pas écraser le relevé par
-  // un état déjà modifié par eux-mêmes.
-  if (Array.isArray(scope.populatedBefore)) return;
-
-  const populated = [...new Set(notions.map((n) => n.chapterId).filter((id): id is string => !!id))];
-  await supabase
-    .from('ai_imports')
-    .update({ scope: { ...scope, populatedBefore: populated } })
-    .eq('id', importId);
-}
-
 /** Mémorise ce que ce lot de rangement a décidé.
  *
  *  Deux listes, cumulées d'un lot à l'autre dans `ai_imports.scope` (jsonb
@@ -1060,13 +1035,6 @@ async function strandedOf(importId: string): Promise<string[]> {
   return Array.isArray(scope.strandedNotions) ? (scope.strandedNotions as string[]) : [];
 }
 
-async function populatedBeforeOf(importId: string): Promise<string[]> {
-  const supabase = getSupabaseServerClient();
-  const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
-  const scope = (data?.scope as Record<string, unknown> | null) ?? {};
-  return Array.isArray(scope.populatedBefore) ? (scope.populatedBefore as string[]) : [];
-}
-
 /** Passe 3 — le RANGEMENT d'UN LOT de notions.
  *
  *  Séparée de la passe chapitres le 24/08/2026, pour une raison de volume :
@@ -1087,10 +1055,6 @@ export async function ingestAssignments(
 ): Promise<AssignPassResult> {
   const userHint = await userHintOf(importId);
   const provider = options.provider ?? createClaudeProvider({ userHint });
-
-  // Au premier lot seulement : on fige l'état d'avant, pour savoir à la fin
-  // quels chapitres CET import a vidés.
-  if (batchIndex === 0) await snapshotPopulatedChapters(workshopId, importId);
 
   const [all, chapters] = await Promise.all([
     loadNotionsToArrange(workshopId),
@@ -1178,6 +1142,12 @@ export async function ingestAssignments(
   // système, une erreur ici efface du travail saisi à la main).
   const { setAside, stranded, effective } = splitUnplaced(plan.assignments, redites, before);
 
+  // Le garde est POSÉ ICI et non dans `applyAssignments`, qui ne reçoit pas de
+  // lot : elle déplace des notions existantes, elle n'en étiquette aucune. Un
+  // rangement arrivé après une annulation serait pourtant le pire des
+  // retardataires — il modifie des lignes que l'annulation ne peut plus retirer,
+  // et le seul fait de les toucher rend l'import non annulable.
+  await assertImportOpen(importId);
   const movedIds = await applyAssignments(workshopId, effective, new Map(), before);
   await recordProgress(importId, {
     movedNotions: movedIds,
@@ -1237,11 +1207,10 @@ export async function finishIngestion(
   importId: string,
 ): Promise<{ hidden: string[]; removedChapters: number; removedNotions: number }> {
   try {
-    const populatedBefore = await populatedBeforeOf(importId);
     // Les notions restées faute de mieux ne font plus vivre leur chapitre : il
     // est écarté avec elles dedans, ce qui rend le changement lisible d'un
     // coup d'œil au lieu de les disperser dans « sans chapitre ».
-    const hidden = await hideEmptiedChapters(workshopId, populatedBefore, await strandedOf(importId));
+    const hidden = await hideEmptyChapters(workshopId, await strandedOf(importId));
 
     const supabase = getSupabaseServerClient();
     const [notions, chapterRows] = await Promise.all([
@@ -1516,6 +1485,25 @@ export async function ingestParcoursQuestions(
   }
 
   const written = await insertGroups(workshopId, importId, capped, new Map());
+
+  // ⚠️ **Demandé vs rendu vs écrit — la seule façon de savoir qui sous-produit.**
+  // Un import qui rend moitié moins de questions que demandé peut l'être pour
+  // trois raisons qui ne se distinguent pas de l'extérieur : le modèle en a
+  // écrit moins qu'on ne lui demandait, la lecture de sa réponse en a écarté, ou
+  // le plafond de débit a coupé. Sans cette ligne, on ne peut que supposer
+  // (constaté le 29/08/2026 sur un import qui a rendu 43 questions pour ~71
+  // demandées, sans qu'aucune trace ne permette de trancher).
+  console.info('[ingest] questions parcours', {
+    chapitre: chapter.name,
+    lot: batchIndex,
+    notionsDuLot: notions.length,
+    demandees: Number.isFinite(asked) ? asked : null,
+    plafondDeCetAppel: budget,
+    renduesParLeModele: plan.groups.reduce((sum, g) => sum + g.questions.length, 0),
+    ecarteesALaLecture: plan.discarded.length,
+    ecrites: written,
+  });
+
   return { written, discarded: plan.discarded, adjusted: plan.adjusted, batches: batches.length };
 }
 

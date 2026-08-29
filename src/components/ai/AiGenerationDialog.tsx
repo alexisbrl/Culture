@@ -162,7 +162,6 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // d'arrêt et le numéro de lot passent donc par des refs, lues à chaque étage.
   const stopped = useRef(false);
   const importIdRef = useRef<string | null>(null);
-  const runRef = useRef<Promise<void> | null>(null);
   const [stopAsk, setStopAsk] = useState(false);
   const [counts, setCounts] = useState({ chapters: 0, notions: 0, questions: 0 });
   const [issues, setIssues] = useState<{ discarded: PlanIssue[]; adjusted: PlanIssue[] }>({ discarded: [], adjusted: [] });
@@ -652,27 +651,28 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   }
 
   /** Arrête l'enchaînement, **rend la main tout de suite**, et défait le reste
-   *  en arrière-plan.
+   *  côté serveur.
    *
-   *  ⚠️ **Le ménage attend la fin de l'enchaînement, l'utilisateur non.**
-   *  L'arrêt empêche les appels suivants de partir, jamais ceux déjà en vol :
-   *  annuler avant qu'ils ne retombent laisserait derrière lui ce qu'un
-   *  retardataire écrit après coup. Cette attente-là dure le temps d'un appel au
-   *  modèle — jusqu'à une minute — et rien ne justifie d'y retenir quelqu'un
-   *  devant une fenêtre fermée (28/08/2026).
+   *  ⚠️ **Plus aucune attente ici, et c'est ce qui rend l'annulation fiable**
+   *  (29/08/2026). Elle attendait jusqu'ici que les appels déjà en vol retombent,
+   *  faute de quoi un retardataire réécrivait ce qu'on venait d'effacer : une
+   *  minute d'attente, portée par la page — donc perdue si l'utilisateur
+   *  naviguait ailleurs, et l'import restait alors en place.
    *
-   *  Les questions sont écrites **au fur et à mesure**, un lot par appel : quitter
-   *  la page n'annule donc rien. Si le ménage n'a pas pu se faire — onglet
-   *  fermé entre-temps, annulation refusée — le lot reste, et le bandeau
-   *  d'annulation le propose comme n'importe quel autre. */
+   *  Le retrait ferme désormais le lot AVANT d'effacer, et un lot fermé
+   *  n'accepte plus rien (voir `assertImportOpen`, @/lib/ingest/lock) : les
+   *  retardataires se refusent d'eux-mêmes. Une fois l'appel parti, il se termine
+   *  côté serveur quoi que fasse l'utilisateur — y compris fermer l'onglet.
+   *
+   *  L'enchaînement, lui, s'arrête par le drapeau : ce qui est déjà parti finit
+   *  sa course, mais n'écrit plus rien. */
   function confirmStop() {
     stopped.current = true;
     const importId = importIdRef.current;
     onClose();
 
+    if (!importId) return;
     void (async () => {
-      await runRef.current?.catch(() => {});
-      if (!importId) return;
       await cancelWorkshopImport(workshopId, importId).catch(() => {});
       // L'écran se rafraîchit une fois le ménage fait : ce qui a clignoté pendant
       // la génération disparaît, sans que personne ait attendu devant.
@@ -846,7 +846,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                   seconde que partir sur la mauvaise voie ; et un atelier sans
                   document ET sans notion n'offre rien à quoi se raccrocher. */}
               <Primary
-                onClick={() => { runRef.current = prepare(); }}
+                onClick={() => { void prepare(); }}
                 disabled={visibleNotions === null || nothingToDo}
               >
                 {t('generate')}
