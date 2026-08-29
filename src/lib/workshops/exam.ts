@@ -28,6 +28,7 @@ import type {
   BloomLevel,
 } from '@/lib/workshops/examTypes';
 import {
+  BLOOM_REACH,
   DEFAULT_BLOOM_LEVEL,
   emptyExerciseAnswer,
   matchPairs,
@@ -38,8 +39,6 @@ import {
   type QuestionTypeOptions,
 } from '@/lib/workshops/examTypes';
 import { gradeStatement } from '@/lib/workshops/grading';
-import { getNotionScores } from '@/lib/workshops/mastery';
-import { selectCandidate, type DrawCandidate, type DrawFailure, type DrawStatement } from '@/lib/workshops/parcoursDraw';
 import { assertQuestionIntegrity, assertStatements, notionIdsOf } from '@/lib/workshops/questionIntegrity';
 // ─── Stockage : un groupe, ses questions ─────────────────────────────────────
 //
@@ -655,100 +654,6 @@ export async function resolveMediaUrls(keys: string[]): Promise<Record<string, s
   return Object.fromEntries(entries.filter((entry): entry is [string, string] => entry[1] !== null));
 }
 
-/** Grappes de parcours qui couvrent un chapitre, réduites à ce que le tirage a
- *  besoin de savoir : ce que chaque énoncé demande de chacune de ses notions.
- *
- *  Une question n'est pas rattachée à un chapitre : elle **hérite de celui de
- *  ses notions** (19/08/2026, en remplacement de `exam_questions.chapter_id` et
- *  de son sélecteur dans la liste). C'est déjà la règle du filtre « chapitre »
- *  de la banque d'examen (`chaptersOfQuestion`), et c'est ce qui fait qu'une
- *  question posée sur des notions de deux chapitres est tirable dans les deux.
- *  Corollaire assumé : une question sans notion — ou dont aucune notion n'est
- *  rangée — n'est jamais tirée.
- *
- *  Cinq sauts, faute de jointure côté PostgREST : notions du chapitre → énoncés
- *  qui les mobilisent → leurs groupes → les groupes de CET atelier en contexte
- *  parcours → TOUS les énoncés de ces groupes, et leurs notions. Les deux
- *  derniers sauts ne font pas double emploi avec les premiers : une grappe se
- *  pose entière, donc ses questions liées comptent dans son coût et dans sa
- *  portée même quand elles ne touchent aucune notion du chapitre. */
-async function parcoursCandidatesOfChapter(workshopId: string, chapterId: string): Promise<DrawCandidate[]> {
-  const supabase = getSupabaseServerClient();
-
-  // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
-  const { data: notions, error: notionsError } = await supabase
-    .from('workshop_bricks')
-    .select('id')
-    .eq('workshop_id', workshopId)
-    .eq('chapter_id', chapterId);
-  if (notionsError) throw new Error(notionsError.message);
-
-  const notionIds = (notions ?? []).map((n) => n.id as string);
-  if (notionIds.length === 0) return [];
-
-  const { data: links, error: linksError } = await supabase
-    .from('exam_question_item_bricks')
-    .select('item_id')
-    .in('brick_id', notionIds);
-  if (linksError) throw new Error(linksError.message);
-
-  const seedItemIds = [...new Set((links ?? []).map((l) => l.item_id as string))];
-  if (seedItemIds.length === 0) return [];
-
-  const { data: seedItems, error: seedError } = await supabase
-    .from('exam_question_items')
-    .select('group_id')
-    .in('id', seedItemIds);
-  if (seedError) throw new Error(seedError.message);
-
-  const seedGroupIds = [...new Set((seedItems ?? []).map((i) => i.group_id as string))];
-  if (seedGroupIds.length === 0) return [];
-
-  const { data: groups, error: groupsError } = await supabase
-    .from('exam_questions')
-    .select('id')
-    .eq('workshop_id', workshopId)
-    .eq('context', 'parcours')
-    .in('id', seedGroupIds);
-  if (groupsError) throw new Error(groupsError.message);
-
-  const groupIds = (groups ?? []).map((g) => g.id as string);
-  if (groupIds.length === 0) return [];
-
-  const { data: items, error: itemsError } = await supabase
-    .from('exam_question_items')
-    .select('id, group_id')
-    .in('group_id', groupIds);
-  if (itemsError) throw new Error(itemsError.message);
-
-  const rows = items ?? [];
-  const notionsByItem = await loadNotionLinks(rows.map((i) => i.id as string));
-
-  const byGroup = new Map<string, DrawStatement[]>();
-  for (const item of rows) {
-    const groupId = item.group_id as string;
-    const statements = byGroup.get(groupId) ?? [];
-    statements.push({ notionBloom: withNotionBloom(notionsByItem[item.id as string] ?? []) });
-    byGroup.set(groupId, statements);
-  }
-
-  return [...byGroup].map(([groupId, statements]) => ({ groupId, statements }));
-}
-
-/** Grappes auxquelles ce membre a déjà RÉPONDU dans cet atelier — celles que le
- *  tirage ne repropose pas. Voir `markParcoursAsked` pour le moment de
- *  l'écriture, qui est le cœur de la règle. */
-async function answeredParcoursGroups(workshopId: string, userId: string): Promise<Set<string>> {
-  const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('parcours_asked')
-    .select('group_id')
-    .eq('workshop_id', workshopId)
-    .eq('user_id', userId);
-  if (error) throw new Error(error.message);
-  return new Set((data ?? []).map((r) => r.group_id as string));
-}
-
 /** Retient qu'une grappe a été posée à ce membre — appelé à la CORRECTION et non
  *  au tirage (règle révisée le 29/08/2026 : une question vue puis abandonnée ne
  *  compte pas comme posée, elle reste disponible). L'écriture ne fait rien si la
@@ -789,17 +694,36 @@ export type ParcoursDraw = {
   /** `null` quand une question a été tirée. Sinon la raison de l'arrêt :
    *  `budget` (fin normale de l'exercice), `exhausted` (plus rien d'inédit à
    *  portée — anomalie) ou `empty` (le chapitre n'a aucune question). */
-  failure: DrawFailure | 'empty' | null;
+  failure: 'budget' | 'exhausted' | 'empty' | null;
 };
 
-/** La prochaine question d'un exercice : celle qui fait travailler la notion la
- *  moins maîtrisée, à portée du membre, jamais répondue par lui, et qui tient
- *  dans ce qui reste des 12 niveaux. Les règles sont dans `parcoursDraw.ts` ;
- *  ici, on ne fait que réunir ce qu'elles demandent.
+/** Ce que rend la fonction de tirage, en base. */
+type PickRow = {
+  group_id: string | null;
+  cost: number | null;
+  /** Grappes inédites ET à portée, budget mis à part. */
+  eligible_total: number;
+  /** Grappes du chapitre, avant toute règle. */
+  chapter_total: number;
+};
+
+/**
+ * La prochaine question d'un exercice : celle qui fait travailler la notion la
+ * moins maîtrisée, à portée du membre, jamais répondue par lui, et qui tient
+ * dans ce qui reste des 12 niveaux.
  *
- *  `excludeIds` porte les grappes déjà posées dans CET exercice : la trace en
- *  base n'étant écrite qu'à la correction, elle ne suffit pas à éviter de
- *  reposer une question dont la correction n'a pas abouti. */
+ * ⚠️ **Le choix se fait en base** (`parcours_pick`, voir
+ * docs/migrations/2026-08-29-tirage-en-base.sql, qui porte l'énoncé des règles).
+ * L'application chargeait auparavant tout le chapitre pour n'en garder qu'une
+ * question : intenable à la cible du produit (2 000 notions et 100 000 questions
+ * par atelier). Ici, il ne remonte qu'un identifiant, son coût et de quoi
+ * distinguer les impasses — l'énoncé complet n'est lu qu'ensuite, pour la seule
+ * question retenue.
+ *
+ * `excludeIds` porte les grappes déjà posées dans CET exercice : la trace en
+ * base n'étant écrite qu'à la correction, elle ne suffit pas à éviter de
+ * reposer une question dont la correction n'a pas abouti.
+ */
 export async function drawParcoursQuestion(
   workshopId: string,
   chapterId: string,
@@ -808,41 +732,46 @@ export async function drawParcoursQuestion(
 ): Promise<ParcoursDraw> {
   const supabase = getSupabaseServerClient();
 
-  const candidates = await parcoursCandidatesOfChapter(workshopId, chapterId);
-  if (candidates.length === 0) return { prompt: null, cost: 0, failure: 'empty' };
+  const { data, error } = await supabase.rpc('parcours_pick', {
+    p_workshop: workshopId,
+    p_chapter: chapterId,
+    p_user: userId,
+    p_remaining: options.remaining,
+    p_reach: BLOOM_REACH,
+    p_exclude: options.excludeIds ?? [],
+  });
 
-  const notionIds = [
-    ...new Set(candidates.flatMap((c) => c.statements.flatMap((s) => Object.keys(s.notionBloom)))),
-  ];
-  const [scores, answered] = await Promise.all([
-    getNotionScores(userId, notionIds),
-    answeredParcoursGroups(workshopId, userId),
-  ]);
+  if (error) throw new Error(error.message);
 
-  const seen = new Set([...answered, ...(options.excludeIds ?? [])]);
-  const outcome = selectCandidate(candidates, { scores, seen, remaining: options.remaining });
+  // La fonction rend toujours exactement une ligne, quitte à ce que la question
+  // y soit nulle.
+  const pick = (data as PickRow[] | null)?.[0];
+  if (!pick || pick.chapter_total === 0) return { prompt: null, cost: 0, failure: 'empty' };
 
-  if (!outcome.candidate) {
+  if (!pick.group_id) {
     // ⚠️ ANOMALIE À REMONTER le jour où la collecte d'erreurs existe (voir
     // docs/backlog.md) : un chapitre sans plus aucune question inédite à portée
     // est exactement ce que la recharge automatique doit empêcher. Le membre,
     // lui, ne voit qu'un exercice qui s'arrête — il n'a rien à se reprocher.
-    if (outcome.failure === 'exhausted') {
+    if (pick.eligible_total === 0) {
       console.error('[parcours] plus aucune question inédite à portée', {
         workshopId,
         chapterId,
         userId,
-        candidates: candidates.length,
+        chapterTotal: pick.chapter_total,
       });
+      return { prompt: null, cost: 0, failure: 'exhausted' };
     }
-    return { prompt: null, cost: 0, failure: outcome.failure };
+    // Il reste des questions, mais aucune n'entre dans ce qui reste du budget :
+    // fin normale de l'exercice, rien à signaler.
+    return { prompt: null, cost: 0, failure: 'budget' };
   }
 
   const { data: row, error: rowError } = await supabase
     .from('exam_questions')
     .select(GROUP_WITH_ITEMS)
     .eq('workshop_id', workshopId)
-    .eq('id', outcome.candidate.groupId)
+    .eq('id', pick.group_id)
     .maybeSingle();
 
   if (rowError) throw new Error(rowError.message);
@@ -850,7 +779,7 @@ export async function drawParcoursQuestion(
 
   return {
     prompt: await toPrompt(embeddedToQuestion(row as unknown as EmbeddedGroupRow)),
-    cost: outcome.cost,
+    cost: pick.cost ?? 0,
     failure: null,
   };
 }

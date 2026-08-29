@@ -1,6 +1,11 @@
 -- Le radar : combien de questions restent-il à poser, notion par notion et
 -- niveau par niveau, pour les membres d'un atelier ?
 --
+-- ⚠️ REMPLACÉE LE JOUR MÊME par 2026-08-29-tirage-en-base.sql, qui donne à
+--    cette fonction un paramètre de membre : le radar mesure celui qui lance
+--    l'exercice, pas le plus démuni de l'atelier. Ce fichier reste pour la
+--    trace ; la définition qui fait foi est dans l'autre.
+--
 -- ✅ APPLIQUÉE le 29/08/2026 (création de fonction : additive, donc sans danger
 --    — le code déployé ignore ce qui n'existait pas quand il est parti).
 --

@@ -286,6 +286,18 @@ export function toBloomLevel(value: unknown): BloomLevel {
 // d'avancement, et qu'il ne doit rien importer qui touche à la base.
 export const EXERCISE_BLOOM_BUDGET = 12;
 
+// Combien de niveaux au-dessus de ce qu'il a atteint une question peut demander
+// à un membre. Un membre qui a atteint le niveau N sur une notion travaille le
+// N+1 ; on accepte donc jusqu'à N+2 — un cran d'avance, pas deux. La règle
+// s'applique à CHAQUE notion de CHAQUE énoncé de la grappe, qui se pose d'un
+// bloc : une seule notion hors de portée l'écarte entière.
+//
+// Elle est appliquée par la base (docs/migrations/2026-08-29-tirage-en-base.sql,
+// qui reçoit ce nombre en paramètre) : le tirage et le radar croisent trop de
+// lignes pour se faire ici. La valeur reste ici parce que c'est une règle
+// produit, pas un détail de requête.
+export const BLOOM_REACH = 2;
+
 // ─── Question liée ───────────────────────────────────────────────────────────
 //
 // Une « question liée » (nommée `part` dans le modèle et en base) est une
