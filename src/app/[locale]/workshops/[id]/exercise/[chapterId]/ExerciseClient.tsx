@@ -35,7 +35,7 @@ import { palette, radius, withAlpha, shadow } from '@/lib/theme';
 import { Button } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/tooltip';
 import LinkButton from '@/components/LinkButton';
-import { drawExercise, gradeExercise } from '@/app/actions/parcoursExercise';
+import { drawExercise, gradeExercise, refillExerciseChapter } from '@/app/actions/parcoursExercise';
 import type { ExerciseAnswer, ExercisePart, ExercisePrompt, ExerciseResult } from '@/lib/workshops/examTypes';
 import { EXERCISE_BLOOM_BUDGET, tableCellKey } from '@/lib/workshops/examTypes';
 import { matchListEntries } from '@/lib/workshops/answerMatch';
@@ -250,6 +250,22 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
       // de fin, pas un mur.
       if (opening.failure === 'blocked') setDone(true);
       if (first?.prompt) void enqueue();
+
+      // ─── La recharge du chapitre part ICI, et n'est jamais attendue ───────
+      //
+      // APRÈS l'affichage de la première question, dans sa propre requête. Elle
+      // était accrochée au tirage côté serveur : la réponse du tirage attendait
+      // alors la fin d'une génération de deux minutes, et l'écran affichait
+      // « tirage d'une question… » tout ce temps (29/08/2026).
+      //
+      // `void` sans `await` et sans état : ce qu'elle produit servira au prochain
+      // exercice, pas à celui-ci. Une panne ici ne doit rien changer à l'écran —
+      // d'où le `catch` muet, la trace utile étant côté serveur.
+      //
+      // Au premier tirage seulement : les garde-fous (délai de garde de 10
+      // minutes par chapitre, plafond) vivent côté serveur, mais rappeler à
+      // chaque question ferait autant d'allers-retours pour rien.
+      if (first?.prompt) void refillExerciseChapter(workshopId, chapterId).catch(() => {});
     })();
     return () => {
       cancelled = true;
