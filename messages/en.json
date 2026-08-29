@@ -1277,7 +1277,7 @@
       "aria": "stop generating",
       "title": "Stop generating?",
       "body": "Whatever was written will be removed: the workshop goes back to how it was. This closes right away, the cleanup finishes on its own.",
-      "keep": "keep going",
+      "keep": "keep generating",
       "confirm": "stop and undo"
     }
   }

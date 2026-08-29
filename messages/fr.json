@@ -1277,7 +1277,7 @@
       "aria": "arrêter la génération",
       "title": "Arrêter la génération ?",
       "body": "Ce qui a déjà été écrit sera retiré : l’atelier revient à son état d’avant. La fenêtre se ferme tout de suite, le retrait se termine seul.",
-      "keep": "continuer",
+      "keep": "continuer la génération",
       "confirm": "arrêter et défaire"
     }
   }
