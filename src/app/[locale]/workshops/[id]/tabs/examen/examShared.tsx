@@ -452,6 +452,12 @@ export function FilterButton({ title, count = 0, open = false, disabled = false,
       </Tooltip>
       {open && panelPos && (
         <div
+          /* Un panneau de filtres se manipule au clic répété : cocher puis
+             décocher deux fois passe pour un double-clic et surligne le libellé
+             visé. La règle et son exception (les champs de saisie) vivent dans
+             `globals.css` — un style en ligne ne saurait pas viser les
+             descendants. */
+          className="pointer-panel"
           style={{
             position: 'fixed', left: panelPos.left, top: panelPos.top, width: panelWidth, maxHeight: panelPos.maxHeight,
             background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg,
@@ -1499,7 +1505,21 @@ const CARD_ACTIONS_SHAPE_TOP = CARD_LINE + 2;
  *
  *  La mesure est rejouée à chaque rendu et à chaque changement de largeur de la
  *  colonne (`ResizeObserver`), gardée par une comparaison pour ne pas boucler. */
-function ClampedTitle({ text, indent }: { text: string; indent: number }) {
+function ClampedTitle({ text, indent, actionsTop = CARD_ACTIONS_SHAPE_TOP }: {
+  text: string;
+  indent: number;
+  /** À partir de quelle hauteur les boutons occupent la droite de la carte.
+   *
+   *  ⚠️ **Ce n'est pas toujours la deuxième ligne** (29/08/2026). Le bloc de
+   *  boutons est ancré en BAS de la carte et haut de deux lignes : sur une carte
+   *  de trois lignes (la banque, qui a sa ligne de libellés) il couvre les lignes
+   *  2 et 3, et la première ligne du titre court jusqu'au bord. Sur une carte de
+   *  DEUX lignes — la liste du parcours, qui n'a pas de libellés — il couvre les
+   *  deux, et le titre passait alors **derrière les boutons dès la première
+   *  ligne**. La cale doit donc exclure la même hauteur que celle réellement
+   *  occupée, pas une hauteur supposée. */
+  actionsTop?: number;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [display, setDisplay] = useState(text);
   // Largeur courante de la colonne, seule entrée variable de la mesure. Elle
@@ -1527,7 +1547,7 @@ function ClampedTitle({ text, indent }: { text: string; indent: number }) {
       `letter-spacing:${cs.letterSpacing}`, `text-indent:${indent}px`, 'white-space:normal', 'overflow-wrap:anywhere',
     ].join(';');
     const spacer = document.createElement('span');
-    spacer.style.cssText = `float:right;width:${CARD_ACTIONS_W}px;height:${2 * CARD_LINE}px;shape-outside:inset(${CARD_ACTIONS_SHAPE_TOP}px 0 0 0)`;
+    spacer.style.cssText = `float:right;width:${CARD_ACTIONS_W}px;height:${2 * CARD_LINE}px;shape-outside:inset(${actionsTop}px 0 0 0)`;
     const node = document.createTextNode('');
     probe.append(spacer, node);
     document.body.appendChild(probe);
@@ -1574,7 +1594,7 @@ function ClampedTitle({ text, indent }: { text: string; indent: number }) {
           donc la 1re ligne était raccourcie elle aussi. `shape-outside` limite
           l'exclusion à la moitié basse — la 1re ligne court jusqu'au bord de la
           carte, seule la 2e s'arrête avant les boutons. */}
-      <span style={{ float: 'right' as const, width: CARD_ACTIONS_W, height: 2 * CARD_LINE, shapeOutside: `inset(${CARD_ACTIONS_SHAPE_TOP}px 0 0 0)` }} />
+      <span style={{ float: 'right' as const, width: CARD_ACTIONS_W, height: 2 * CARD_LINE, shapeOutside: `inset(${actionsTop}px 0 0 0)` }} />
       {display}
     </div>
     </Tooltip>
@@ -1637,7 +1657,7 @@ export function ListCard({ onClick, onDoubleClick, tint, borderColor, leading, i
              dans le brouillon au lieu de déplier la grappe). */
           <div style={{ position: 'absolute' as const, zIndex: 1, top: 0, left: 0, height: CARD_LINE, display: 'flex', alignItems: 'center', gap: 4 }}>{leading}</div>
         )}
-        <ClampedTitle text={title} indent={indent} />
+        <ClampedTitle text={title} indent={indent} actionsTop={meta === undefined ? 0 : CARD_ACTIONS_SHAPE_TOP} />
         {meta !== undefined && (
           <div style={{ height: CARD_LINE, paddingRight: CARD_ACTIONS_W, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>{meta}</div>
         )}

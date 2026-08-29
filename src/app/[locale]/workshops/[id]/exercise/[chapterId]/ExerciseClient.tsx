@@ -35,7 +35,7 @@ import { palette, radius, withAlpha, shadow } from '@/lib/theme';
 import { Button } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/tooltip';
 import LinkButton from '@/components/LinkButton';
-import { drawExercise, gradeExercise, refillExerciseChapter } from '@/app/actions/parcoursExercise';
+import { drawExercise, gradeExercise } from '@/app/actions/parcoursExercise';
 import type { ExerciseAnswer, ExercisePart, ExercisePrompt, ExerciseResult } from '@/lib/workshops/examTypes';
 import { EXERCISE_BLOOM_BUDGET, tableCellKey } from '@/lib/workshops/examTypes';
 import { matchListEntries } from '@/lib/workshops/answerMatch';
@@ -253,19 +253,28 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
 
       // ─── La recharge du chapitre part ICI, et n'est jamais attendue ───────
       //
-      // APRÈS l'affichage de la première question, dans sa propre requête. Elle
-      // était accrochée au tirage côté serveur : la réponse du tirage attendait
-      // alors la fin d'une génération de deux minutes, et l'écran affichait
-      // « tirage d'une question… » tout ce temps (29/08/2026).
+      // APRÈS l'affichage de la première question, et par un `fetch` ORDINAIRE —
+      // ni `after()` côté serveur, ni server action. Les deux ont été essayés le
+      // 29/08/2026 et retenaient l'écran de la même façon : `after` n'est détaché
+      // que là où l'hébergeur sait le faire, et les appels d'action d'un même
+      // onglet sont mis à la queue leu leu par le routeur. Une recharge de deux
+      // minutes bloquait donc soit le tirage lui-même, soit tout ce qui vient
+      // après. Le pourquoi complet est en tête de la route.
       //
-      // `void` sans `await` et sans état : ce qu'elle produit servira au prochain
-      // exercice, pas à celui-ci. Une panne ici ne doit rien changer à l'écran —
-      // d'où le `catch` muet, la trace utile étant côté serveur.
+      // `keepalive` : la requête survit à la fermeture de l'onglet, ce que ne
+      // fait aucune des deux autres approches.
       //
-      // Au premier tirage seulement : les garde-fous (délai de garde de 10
-      // minutes par chapitre, plafond) vivent côté serveur, mais rappeler à
-      // chaque question ferait autant d'allers-retours pour rien.
-      if (first?.prompt) void refillExerciseChapter(workshopId, chapterId).catch(() => {});
+      // Sans `await` et sans état : ce qu'elle produit servira au prochain
+      // exercice, pas à celui-ci. Une panne ne doit rien changer à l'écran — la
+      // trace utile est côté serveur.
+      if (first?.prompt) {
+        void fetch('/api/parcours/refill', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ workshopId, chapterId }),
+          keepalive: true,
+        }).catch(() => {});
+      }
     })();
     return () => {
       cancelled = true;

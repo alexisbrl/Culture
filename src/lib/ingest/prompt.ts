@@ -395,7 +395,9 @@ Un chapitre est une unité d'enseignement, pas une section de mise en page : deu
 
 Ordre de grandeur : un cours en compte typiquement ${PLAUSIBLE_CHAPTERS.min} à ${PLAUSIBLE_CHAPTERS.max}, davantage pour un programme annuel ou un découpage fin explicitement demandé. C'est une indication et non une limite — dépasse-la si le contenu ou la demande le justifient.
 
-Donne à chacun une référence courte et unique (ch1, ch2…), et un nom de 120 caractères maximum. Un chapitre qui existe déjà se réutilise en reprenant SA référence telle quelle, sans le recréer.
+Donne à chacun une référence courte et unique (ch1, ch2…), et un nom de 120 caractères maximum.
+
+**Ne mets dans \`chapters\` que les chapitres que tu CRÉES.** Ceux qui existent déjà sont listés plus haut avec leur référence : ils n'ont rien à y faire, et les y remettre ne les met pas à jour — leur nom et leur place ne changent pas. Tu les nommes dans \`chapterOrder\`, et là seulement, pour dire leur rang. Un cours qu'on repasse à l'identique se répond donc avec un \`chapters\` VIDE, et c'est la bonne réponse.
 
 **Situe chaque chapitre dans le cours** : le document où il commence, sa première et sa dernière page approximatives. Une autre étape s'en servira pour ranger les notions sans avoir à relire le cours. Approximatif suffit largement ; mets 0 quand tu ne peux vraiment pas dire.
 

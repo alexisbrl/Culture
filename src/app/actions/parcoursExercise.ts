@@ -4,7 +4,6 @@ import { requireMember } from '@/lib/authz';
 import * as examLib from '@/lib/workshops/exam';
 import { rewardAnsweredQuestion } from '@/lib/workshops/mastery';
 import { paceVerdict, sanitizeAnswerMs, PACE_WINDOW } from '@/lib/workshops/answerPace';
-import { refillChapter } from '@/lib/ingest/refill';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import { EXERCISE_BLOOM_BUDGET } from '@/lib/workshops/examTypes';
 import type { ExerciseAnswer, ExercisePrompt, ExerciseResult } from '@/lib/workshops/examTypes';
@@ -83,37 +82,6 @@ export async function drawExercise(
     console.error('drawExercise error:', err);
     return { prompt: null, cost: 0, failure: null, error: 'Erreur lors du tirage' };
   }
-}
-
-/** La recharge automatique du chapitre — **appelée par l'écran, sans être
- *  attendue**, une fois la première question affichée.
- *
- *  ⚠️ **Elle était accrochée au tirage (`after`), et c'était une erreur**
- *  (29/08/2026). L'intention était bonne : lancer la génération une fois la
- *  réponse envoyée, pour que personne n'attende. Mais `after` ne détache la
- *  tâche que là où l'hébergeur sait le faire ; en développement, la réponse du
- *  tirage attendait la fin de la recharge — **deux minutes de « tirage d'une
- *  question… » avant la première question**, mesuré sur un chapitre qui avait un
- *  vrai manque à combler. Et même là où `after` détache, une génération de deux
- *  minutes reste comptée dans la durée de la fonction serveur.
- *
- *  Un appel à part règle les deux : le tirage répond en quelques dizaines de
- *  millisecondes, la recharge vit dans sa propre requête, et l'écran ne
- *  l'attend jamais.
- *
- *  Ne renvoie rien : ce qu'elle produit servira au PROCHAIN exercice, pas à
- *  celui qui commence. Ses garde-fous — plafond de 60 questions, délai de garde
- *  de 10 minutes par chapitre, lot tracé et annulable — sont dans
- *  @/lib/ingest/refill, et c'est là qu'ils doivent rester : l'écran n'est qu'un
- *  déclencheur, pas une autorité.
- *
- *  Contrepartie assumée, la même que pour l'import interactif : si l'onglet se
- *  ferme pendant, la recharge s'arrête là où elle en est. Ce qu'elle a écrit
- *  reste, et le prochain lancement d'exercice reprendra le manque. */
-export async function refillExerciseChapter(workshopId: string, chapterId: string): Promise<void> {
-  const ctx = await requireMember(workshopId);
-  if (!ctx) return;
-  await refillChapter(workshopId, chapterId, ctx.userId);
 }
 
 // `answers[0]` = la réponse donnée à la question principale, `answers[i+1]` =
