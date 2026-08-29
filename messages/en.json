@@ -1232,7 +1232,9 @@
       "questionsCount": "Questions — {done}/{n} batches done",
       "questionsBatch": "Questions — {chapter} ({i}/{n}) · batch {b}/{nb}"
     },
-    "keepOpen": "Keep this tab open: generation stops if you close it. Whatever was written stays, and stays undoable.",
+    "keepOpen": "Keep this tab open: generation stops if you close it. Whatever was written stays, and stays undoable. No need to wait here: open a second tab and carry on elsewhere.",
+    "newTab": "open Culture in a second tab",
+    "busy": "A generation is already running on this workshop, in another tab. Wait for it to finish, or stop it before starting another.",
     "runningCounts": "{chapters} chapters · {notions} notions · {questions} questions",
     "doneCounts": "{chapters} chapters, {notions} notions and {questions} questions added",
     "discarded": "Discarded",

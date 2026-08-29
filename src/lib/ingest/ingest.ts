@@ -39,6 +39,11 @@ export type IngestMeta = {
   inputTokens?: number;
   outputTokens?: number;
   cachedTokens?: number;
+  /** Lot piloté par un onglet ouvert : il pose son premier signe de vie dès sa
+   *  création, et c'est lui qui tient le verrou « une génération à la fois »
+   *  (voir `./lock`). Faux pour une recharge automatique, qui tourne en fond
+   *  sans que personne l'ait demandée et n'a donc rien à bloquer. */
+  live?: boolean;
 };
 
 export type IngestResult = {
@@ -74,6 +79,10 @@ export async function createImport(
       input_tokens: meta.inputTokens ?? 0,
       output_tokens: meta.outputTokens ?? 0,
       cached_tokens: meta.cachedTokens ?? 0,
+      // Le verrou naît avec le lot : entre l'ouverture et le premier battement
+      // de l'onglet il s'écoule plusieurs dizaines de secondes (téléversement
+      // des documents), largement de quoi lancer une seconde génération.
+      beat_at: meta.live ? new Date().toISOString() : null,
     })
     .select('id')
     .single();

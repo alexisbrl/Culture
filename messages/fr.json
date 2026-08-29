@@ -1232,7 +1232,9 @@
       "questionsCount": "Questions — {done}/{n} lots traités",
       "questionsBatch": "Questions — {chapter} ({i}/{n}) · lot {b}/{nb}"
     },
-    "keepOpen": "Garde cet onglet ouvert : la génération s’interrompt s’il est fermé. Ce qui a déjà été écrit reste, et reste annulable.",
+    "keepOpen": "Garde cet onglet ouvert : la génération s’interrompt s’il est fermé. Ce qui a déjà été écrit reste, et reste annulable. Rien ne t’oblige à attendre devant : ouvre un second onglet et continue ailleurs.",
+    "newTab": "ouvrir Culture dans un second onglet",
+    "busy": "Une génération est déjà en cours sur cet atelier, dans un autre onglet. Attends qu’elle se termine, ou arrête-la avant d’en lancer une autre.",
     "runningCounts": "{chapters} chapitres · {notions} notions · {questions} questions",
     "doneCounts": "{chapters} chapitres, {notions} notions et {questions} questions ajoutés",
     "discarded": "Écarté",

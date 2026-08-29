@@ -25,7 +25,9 @@ export type Database = {
     Tables: {
       ai_imports: {
         Row: {
+          beat_at: string | null
           cached_tokens: number
+          closed_at: string | null
           created_at: string
           created_by: string
           file_ids: Json
@@ -36,7 +38,9 @@ export type Database = {
           workshop_id: string
         }
         Insert: {
+          beat_at?: string | null
           cached_tokens?: number
+          closed_at?: string | null
           created_at?: string
           created_by: string
           file_ids?: Json
@@ -47,7 +51,9 @@ export type Database = {
           workshop_id: string
         }
         Update: {
+          beat_at?: string | null
           cached_tokens?: number
+          closed_at?: string | null
           created_at?: string
           created_by?: string
           file_ids?: Json

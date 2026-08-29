@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useTranslations } from 'next-intl';
-import { Sparkles, AlertTriangle, Check, X } from 'lucide-react';
+import { useLocale, useTranslations } from 'next-intl';
+import { Sparkles, AlertTriangle, Check, ExternalLink, X } from 'lucide-react';
 
 import Modal from '@/components/Modal';
 import { ProgressBar } from '@/components/ui/progress-bar';
@@ -17,7 +17,9 @@ import {
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import {
+  beatWorkshopImport,
   cancelWorkshopImport,
+  closeWorkshopImport,
   finishWorkshopIngestion,
   ingestDocumentNotions,
   ingestParcoursQuestions,
@@ -52,6 +54,16 @@ import {
 // **Grouper par étage reste impératif** : le cache de prompt est propre à
 // chaque schéma de sortie, donc alterner les étages le ferait manquer à chaque
 // fois — sur douze chapitres, ~3 $ contre ~11 $ (mesuré, §5.2).
+
+/** Rythme du signe de vie envoyé pendant une génération.
+ *
+ *  ⚠️ **À tenir sous `LIVE_TIMEOUT_MS` (@/lib/ingest/lock), avec de la marge** :
+ *  le serveur oublie un lot qui n'a plus battu depuis deux minutes. Trente
+ *  secondes laissent passer trois battements manqués — le temps qu'un réseau
+ *  hésitant se reprenne — avant que le verrou ne se relâche pour de bon. La
+ *  constante est redéclarée ici plutôt qu'importée : `lock.ts` ouvre un client
+ *  Supabase de service, qui n'a rien à faire dans un composant client. */
+const LIVE_BEAT_MS = 30_000;
 
 /** Ce que l'API accepte aujourd'hui (§6). Les autres formats restent visibles
  *  mais non sélectionnables : mieux vaut le dire à la sélection qu'échouer au
@@ -120,6 +132,7 @@ type Props = {
 
 export default function AiGenerationDialog({ workshopId, files, forcedContext = null, onClose, onDone }: Props) {
   const t = useTranslations('ai');
+  const locale = useLocale();
 
   // ─── Les documents ne se choisissent plus, et ne s'affichent plus ────────
   //
@@ -220,7 +233,12 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       hint: hint.trim(),
       questionsProvider,
     });
-    if (!prepared.ok) return setPhase({ step: 'error', message: prepared.error });
+    // Une génération tourne déjà sur cet atelier, dans un autre onglet : le
+    // serveur a refusé avant le moindre téléversement. Le message affiché est le
+    // nôtre — le refus, lui, ne voyage que sous forme de mot-clé.
+    if (!prepared.ok) {
+      return setPhase({ step: 'error', message: prepared.reason === 'busy' ? t('busy') : prepared.error });
+    }
     // Retenu tout de suite : c'est ce numéro que l'arrêt devra défaire, même si
     // l'utilisateur ferme au tout premier étage.
     importIdRef.current = prepared.importId;
@@ -564,6 +582,35 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     onDone?.();
   }
 
+  // ─── Le signe de vie, et ce qu'il tient ──────────────────────────────────
+  //
+  // Tant que cet onglet enchaîne les passes, il le dit au serveur toutes les
+  // 30 s. C'est ce battement qui interdit une seconde génération sur le MÊME
+  // atelier — deux enchaînements y réécrivent les mêmes chapitres et les mêmes
+  // notions (voir @/lib/ingest/lock). Sur deux ateliers différents, rien n'est
+  // bloqué : il n'y a là aucune écriture partagée.
+  //
+  // Le verrou s'oublie de lui-même s'il cesse de battre : un onglet fermé
+  // brutalement ne condamne pas l'atelier, il le libère au bout de deux minutes.
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => {
+      const importId = importIdRef.current;
+      if (importId) void beatWorkshopImport(workshopId, importId);
+    }, LIVE_BEAT_MS);
+    return () => clearInterval(id);
+  }, [running, workshopId]);
+
+  // Fin de partie — terminé ou en panne : le lot se referme tout de suite, sans
+  // attendre l'expiration du battement. Un seul endroit pour toutes les sorties,
+  // l'enchaînement pouvant s'arrêter en erreur à n'importe lequel de ses étages.
+  // (L'arrêt volontaire, lui, passe par l'annulation, qui referme aussi.)
+  useEffect(() => {
+    if (phase.step !== 'done' && phase.step !== 'error') return;
+    const importId = importIdRef.current;
+    if (importId) void closeWorkshopImport(workshopId, importId);
+  }, [phase.step, workshopId]);
+
   // ─── Quitter la PAGE pendant une génération ──────────────────────────────
   //
   // La croix et la touche Échap passent par 'requestClose', qui demande
@@ -809,6 +856,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
           <div style={{ padding: '4px 0 8px' }}>
             <ProgressBar animated value={0} max={1} label={t('estimate.preparing')} />
             <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 14 }}>{t('estimate.preparingHint')}</p>
+            <SecondTab href={`/${locale}/dashboard`} label={t('newTab')} />
           </div>
         )}
 
@@ -819,6 +867,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             <p style={{ fontSize: 12.5, color: palette.inkFaint, marginTop: 6 }}>
               {t('runningCounts', { chapters: counts.chapters, notions: counts.notions, questions: counts.questions })}
             </p>
+            <SecondTab href={`/${locale}/dashboard`} label={t('newTab')} />
           </div>
         )}
 
@@ -870,6 +919,36 @@ function Hint({ children }: { children: React.ReactNode }) {
 
 function Actions({ children }: { children: React.ReactNode }) {
   return <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>{children}</div>;
+}
+
+/** La sortie de secours pendant une génération : un SECOND onglet.
+ *
+ *  L'enchaînement des passes vit dans cette page (voir l'en-tête du fichier) :
+ *  la quitter interrompt la génération, et c'est pour ça que le dialogue retient
+ *  celui qui la lance. Plutôt que de le laisser attendre devant une barre,
+ *  on lui ouvre l'app ailleurs — l'onglet qui travaille reste intact derrière,
+ *  et il fait ce qu'il veut du nouveau (29/08/2026).
+ *
+ *  Un vrai lien, pas un `window.open` : il survit aux bloqueurs de fenêtres,
+ *  s'ouvre au clic du milieu, et se copie. `noopener` est indispensable — sans
+ *  lui, la page ouverte peut atteindre l'onglet qui l'a ouverte, c'est-à-dire
+ *  précisément celui qu'on protège. */
+function SecondTab({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 14,
+        padding: '7px 12px', borderRadius: radius.md, border: `1px solid ${ink(0.12)}`,
+        fontSize: 12.5, fontWeight: 600, color: palette.inkMuted, textDecoration: 'none',
+      }}
+    >
+      <ExternalLink size={13} />
+      {label}
+    </a>
+  );
 }
 
 function Ghost({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {

@@ -74,6 +74,7 @@ import { dropRepeatedQuestions, flagSimilar, findExistingMatch } from './duplica
 import { batchNotions, examSliceCount, sliceProgram, splitBudget, splitUnplaced, withChapterRetry } from './passInput';
 import type { BloomLevel } from '@/lib/workshops/examTypes';
 import { demandByNotion, demandForChapterStart, type QuestionDemand } from './demand';
+import { BUSY_ERROR, closeImport, liveImportOf } from './lock';
 import { parsePlan, type PlanIssue } from './planSchema';
 import { releaseDocuments } from './release';
 import {
@@ -527,6 +528,42 @@ export async function prepareIngestion(
   fileIds: string[],
   options: { provider?: PlanProvider; scope?: Record<string, unknown> } = {},
 ): Promise<PrepareResult> {
+  // ─── Une génération à la fois sur un atelier (29/08/2026) ────────────────
+  //
+  // AVANT le moindre téléversement : deux enchaînements sur le même atelier
+  // écrivent les mêmes chapitres et les mêmes notions, et le ménage de fin de
+  // l'un peut cacher ce que l'autre vient de remplir. Le refus se reconnaît à
+  // son mot-clé, que le dialogue traduit (voir `./lock`).
+  if (await liveImportOf(workshopId)) throw new Error(BUSY_ERROR);
+
+  // ⚠️ **Le lot naît AVANT le téléversement, et c'est tout l'intérêt.** C'est lui
+  // qui porte le verrou : le créer à la fin, comme avant, laissait grande ouverte
+  // la seule fenêtre où deux lancements peuvent réellement se croiser — celle du
+  // téléversement, qui dure des dizaines de secondes. Les poignées de fichiers et
+  // la taille du corpus le rejoignent ensuite, quand elles sont connues.
+  const importId = await createImport(workshopId, actorId, { scope: options.scope ?? {}, live: true });
+
+  try {
+    return await openCorpus(workshopId, importId, fileIds, options);
+  } catch (error) {
+    // Le lot n'a pas pu s'ouvrir (fichier illisible, corpus trop volumineux,
+    // fournisseur en panne) : le verrou tombe tout de suite. Sans ça, l'atelier
+    // resterait bloqué deux minutes après une erreur que l'utilisateur vient de
+    // lire, et sa première réaction — réessayer — se ferait refuser.
+    await closeImport(importId);
+    throw error;
+  }
+}
+
+/** Le corps du téléversement, une fois le lot ouvert et le verrou tenu. Séparé
+ *  pour que **toute** sortie en erreur relâche le verrou, sans avoir à énumérer
+ *  les six endroits où celle-ci peut se produire. */
+async function openCorpus(
+  workshopId: string,
+  importId: string,
+  fileIds: string[],
+  options: { provider?: PlanProvider; scope?: Record<string, unknown> },
+): Promise<PrepareResult> {
   const supabase = getSupabaseServerClient();
 
   // ─── Un lot SANS document est légitime ──────────────────────────────────
@@ -577,7 +614,7 @@ export async function prepareIngestion(
 
   // ─── Le mur de la fenêtre ─────────────────────────────────────────────────
   //
-  // On refuse ICI, avant d'avoir créé le lot : au-delà de la plus grande fenêtre
+  // On refuse ICI, avant le premier appel payant : au-delà de la plus grande fenêtre
   // dont on dispose, la passe chapitres — la seule à recevoir tout le corpus —
   // ne peut PAS être appelée, et le lancement échouerait de toute façon, mais
   // après avoir téléversé et facturé. Un refus mesuré vaut mieux qu'un refus
@@ -597,10 +634,14 @@ export async function prepareIngestion(
   // échoue, on ne perd pas le téléversement. La taille du corpus voyage dans
   // `scope` — c'est du jsonb libre, aucune migration nécessaire — parce que la
   // passe chapitres en a besoin pour choisir son modèle (§16.20).
-  const importId = await createImport(workshopId, actorId, {
-    scope: { ...(options.scope ?? {}), corpusTokens },
-    fileIds: prepared as unknown as string[],
-  });
+  const { error: attachError } = await supabase
+    .from('ai_imports')
+    .update({
+      scope: { ...(options.scope ?? {}), corpusTokens },
+      file_ids: prepared as unknown as string[],
+    })
+    .eq('id', importId);
+  if (attachError) throw new Error(attachError.message);
 
   return { importId, documents: prepared.length, corpusTokens };
 }

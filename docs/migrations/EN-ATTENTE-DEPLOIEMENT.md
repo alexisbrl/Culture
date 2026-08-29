@@ -48,6 +48,11 @@ et l'incident du 22/06/2026 dans `docs/changelog.md`.
 
 ## Appliqué / sans objet
 
+- **29/08/2026 — `2026-08-29-une-generation-a-la-fois.sql` appliquée le jour
+  même.** Purement additive (`ai_imports.beat_at`, `ai_imports.closed_at`, un
+  index partiel) : le code en ligne les ignore, rien à attendre.
+  `src/lib/database.types.ts` régénéré dans la foulée.
+
 - **19/08/2026 — Tout le retard de migrations soldé après le déploiement de la
   PR #40** (`7532c78`, production Vercel `READY`). Les six entrées ci-dessous
   attendaient toutes le même prérequis — que le code déployé n'utilise plus les

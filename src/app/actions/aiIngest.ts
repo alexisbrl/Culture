@@ -1,6 +1,8 @@
 'use server';
 
 import { requireManager } from '@/lib/authz';
+import * as lock from '@/lib/ingest/lock';
+import { BUSY_ERROR } from '@/lib/ingest/lock';
 import * as run from '@/lib/ingest/run';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import * as imports from '@/lib/workshops/imports';
@@ -55,7 +57,10 @@ export type AssignPassResult =
 
 export type PrepareIngestionResult =
   | { ok: true; importId: string; documents: number }
-  | { ok: false; error: string };
+  /** `reason: 'busy'` = une génération tourne déjà sur cet atelier (voir
+   *  @/lib/ingest/lock). L'écran a sa propre phrase pour ce cas-là : le message
+   *  brut ne serait pas traduit. */
+  | { ok: false; error: string; reason?: 'busy' };
 
 export type NotionPassResult =
   | { ok: true; written: number; discarded: PlanIssue[]; adjusted: PlanIssue[]; documents: number }
@@ -103,8 +108,28 @@ export async function prepareWorkshopIngestion(
     const { importId, documents } = await run.prepareIngestion(workshopId, ctx.userId, fileIds, { scope });
     return { ok: true, importId, documents };
   } catch (error) {
-    return { ok: false, error: message(error) };
+    const detail = message(error);
+    if (detail === BUSY_ERROR) return { ok: false, error: detail, reason: 'busy' };
+    return { ok: false, error: detail };
   }
+}
+
+/** Le signe de vie de l'onglet qui pilote une génération, toutes les 30 s.
+ *
+ *  C'est ce battement — et lui seul — qui empêche un second lancement sur le
+ *  même atelier. S'il s'arrête (onglet fermé, machine éteinte), le verrou expire
+ *  et l'atelier redevient disponible : voir @/lib/ingest/lock pour le pourquoi
+ *  d'un verrou qui s'oublie de lui-même. */
+export async function beatWorkshopImport(workshopId: string, importId: string): Promise<void> {
+  if (!(await requireManager(workshopId))) return;
+  await lock.beatImport(importId);
+}
+
+/** Referme un lot piloté : terminé, arrêté ou en erreur. Relâche le verrou tout
+ *  de suite, au lieu d'attendre son expiration. */
+export async function closeWorkshopImport(workshopId: string, importId: string): Promise<void> {
+  if (!(await requireManager(workshopId))) return;
+  await lock.closeImport(importId);
 }
 
 /** Passe 1 — les notions d'UN document.
@@ -300,6 +325,11 @@ export async function cancelWorkshopImport(
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
+    // Annuler, c'est en avoir fini avec ce lot : le verrou tombe, sans attendre
+    // son expiration. Posé AVANT le reste — une annulation refusée (lot déjà
+    // annulé, délai dépassé) ne laisse pas pour autant une génération en cours.
+    await lock.closeImport(importId);
+
     const result = await imports.cancelImport(workshopId, importId);
     if (!result.cancelled) {
       const reasons: Record<string, string> = {

@@ -1883,3 +1883,48 @@ vidé en chemin. Aucun n'efface, un clic annule les deux.
    d'abord met la coupe du budget à la fin, là où elle ne peut plus amputer un
    enchaînement de sa dernière question.
 7. Les points 1 et 3 de §17.7 restent ouverts.
+
+---
+
+## 19. Révision du 29/08/2026 — une génération à la fois, et un second onglet
+
+Deux questions posées ensemble, une réponse chacune.
+
+### 19.1 Deux générations en parallèle : interdites sur un même atelier, libres ailleurs
+
+L'enchaînement des passes vit dans le navigateur (§5.4) : rien n'empêchait
+d'ouvrir un second onglet sur le **même** atelier et d'y lancer une seconde
+génération. Les deux écrivent alors les mêmes chapitres et les mêmes notions, et
+le ménage de fin de l'une (`finishIngestion`) peut cacher les chapitres que
+l'autre vient de remplir. Ce n'est pas « deux fois plus de contenu » : c'est un
+programme incohérent, et deux fois la facture.
+
+**Sur deux ateliers différents, rien n'est bloqué.** Aucune écriture n'y est
+partagée ; seul le débit vers le fournisseur l'est, et il se régule tout seul
+(§16.6). Interdire aurait été une gêne sans contrepartie.
+
+**Le verrou est un signe de vie, pas un booléen** (`src/lib/ingest/lock.ts`).
+Un drapeau posé par un onglet qui meurt brutalement — plantage, coupure, machine
+éteinte — ne se relâche jamais : l'atelier resterait bloqué sans recours. L'onglet
+qui travaille bat donc toutes les 30 s (`ai_imports.beat_at`), et un lot sans
+battement depuis deux minutes cesse de bloquer. La fin propre — terminée, arrêtée
+ou en erreur — relâche immédiatement (`ai_imports.closed_at`), sans attendre
+l'expiration. Migration additive `2026-08-29-une-generation-a-la-fois.sql`.
+
+Les **recharges automatiques** (§16.11) ne battent jamais : elles tournent en
+tâche de fond, l'utilisateur n'en sait rien, et lui refuser un lancement à cause
+d'elles serait incompréhensible.
+
+### 19.2 La popup reste, mais elle ouvre une porte
+
+La question « peut-on naviguer ailleurs pendant une génération ? » n'a qu'une
+réponse tant que l'enchaînement vit dans la page : **non**, quitter l'onglet
+interrompt la génération à l'étage où elle en est. La popup n'est donc pas une
+précaution qu'on pourrait retirer, c'est la conséquence de §5.4.
+
+Plutôt que de déplacer l'orchestration côté serveur — un chantier à part entière,
+qui reste la cible —, l'écran de génération propose d'**ouvrir Culture dans un
+second onglet**. Celui qui travaille reste intact derrière ; on va faire autre
+chose dans l'autre. Un vrai lien (`target="_blank"`, `rel="noopener"`), pas un
+`window.open` : il survit aux bloqueurs de fenêtres, et `noopener` empêche la
+page ouverte d'atteindre l'onglet qu'on cherche justement à protéger.
