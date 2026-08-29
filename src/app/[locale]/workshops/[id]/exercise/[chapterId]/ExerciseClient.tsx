@@ -242,8 +242,13 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
       await enqueue();
       const first = await takeNext();
       if (cancelled) return;
-      apply(first ?? failedRef.current ?? { prompt: null, cost: 0, failure: 'empty' });
+      const opening = first ?? failedRef.current ?? { prompt: null, cost: 0, failure: 'empty' as const };
+      apply(opening);
       setLoading(false);
+      // Une pause en cours ferme l'exercice au lieu de l'ouvrir : le membre doit
+      // pouvoir faire autre chose, donc il lui faut la porte de sortie de l'écran
+      // de fin, pas un mur.
+      if (opening.failure === 'blocked') setDone(true);
       if (first?.prompt) void enqueue();
     })();
     return () => {
