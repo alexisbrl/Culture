@@ -65,25 +65,42 @@ export function assertImportId(value: unknown): string {
  *  plus), la **modification** vient ensuite car c'est la plus actionnable à
  *  afficher (« tu y as touché depuis »).
  *
- *  « Modifié » se lit `updated_at > created_at`, **sans tolérance** : les deux
- *  colonnes ont `default now()`, et `now()` étant l'heure de début de
+ *  ⚠️ **« Modifié » se mesure APRÈS la fin de l'import, pas après la naissance
+ *  de chaque ligne** (29/08/2026). La règle lisait `updated_at > created_at`,
+ *  ce qui marchait tant qu'un import écrivait chaque ligne une fois pour toutes.
+ *  Depuis l'inversion des étages (23/08/2026), ce n'est plus vrai : une notion
+ *  naît SANS chapitre à la première passe, et c'est le rangement — le même
+ *  import, quelques minutes plus tard — qui la range. Elle porte donc
+ *  `updated_at > created_at` du seul fait de l'import qui l'a créée, et **tout
+ *  import qui range une notion neuve se déclarait lui-même « modifié » : le
+ *  bandeau d'annulation ne s'affichait plus jamais.**
+ *
+ *  La référence est donc la **dernière écriture du lot** (le plus récent des
+ *  `created_at`). Ce qui bouge après elle est une main humaine ; ce qui bouge
+ *  avant est l'import en train de se faire. Pas de marge de tolérance : les
+ *  deux colonnes ont `default now()`, et `now()` étant l'heure de début de
  *  transaction en Postgres, un INSERT qui les omet toutes les deux leur donne
- *  une valeur strictement identique. C'est ce qui permet de se passer d'une
- *  marge de quelques secondes — laquelle finirait immanquablement par mentir
- *  dans un sens ou dans l'autre.
+ *  une valeur strictement identique.
+ *
+ *  Angle mort assumé : une modification faite à la main **pendant** que l'import
+ *  écrit encore passe inaperçue. Personne n'édite une question au milieu d'une
+ *  génération, et l'alternative — refuser l'annulation dès qu'une ligne bouge —
+ *  revient à ne jamais l'offrir.
  *
  *  ⚠️ Corollaire pour l'écriture d'ingestion : elle doit **omettre** `updated_at`
  *  et non l'écrire, contrairement à `questionToRow` aujourd'hui
- *  (`src/lib/workshops/exam.ts`). Sans ça, tout import naîtrait « déjà
- *  modifié » et le bouton d'annulation ne s'afficherait jamais. */
+ *  (`src/lib/workshops/exam.ts`). */
 export function importCancelState(rows: ImportRowDates[], now: Date = new Date()): ImportCancelState {
   if (rows.length === 0) return 'empty';
 
-  const oldest = Math.min(...rows.map((r) => new Date(r.createdAt).getTime()));
+  const created = rows.map((r) => new Date(r.createdAt).getTime());
+  const oldest = Math.min(...created);
   const deadline = oldest + IMPORT_CANCEL_WINDOW_HOURS * 3600_000;
   if (now.getTime() > deadline) return 'expired';
 
-  const touched = rows.some((r) => new Date(r.updatedAt).getTime() > new Date(r.createdAt).getTime());
+  // La fin de l'import : sa dernière ligne écrite.
+  const finished = Math.max(...created);
+  const touched = rows.some((r) => new Date(r.updatedAt).getTime() > finished);
   if (touched) return 'modified';
 
   return 'cancellable';

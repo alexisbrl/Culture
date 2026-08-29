@@ -533,8 +533,17 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
       discarded.push({ kind: 'chapter', ref: refOf(item), reason: firstMessage(result.error) });
       continue;
     }
+    // ⚠️ **Corrigé, pas écarté** (29/08/2026). Le modèle redéclare volontiers
+    // les chapitres qui existent déjà au lieu de se contenter de les citer :
+    // sur un atelier de quatre chapitres, une mise à jour affichait
+    // « Écarté (4) — référence en double » et laissait croire à une perte. Rien
+    // n'est perdu — le chapitre existe, c'est le doublon qu'on ignore.
     if (chapterRefs.has(result.data.ref)) {
-      discarded.push({ kind: 'chapter', ref: result.data.ref, reason: 'référence en double' });
+      adjusted.push({
+        kind: 'chapter',
+        ref: result.data.ref,
+        reason: 'chapitre déjà présent — celui de l’atelier est conservé, le doublon ignoré',
+      });
       continue;
     }
     chapterRefs.add(result.data.ref);
@@ -587,8 +596,14 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
       continue;
     }
     const notion = result.data;
+    // Même raison que pour les chapitres : la notion existe, c'est le doublon
+    // qu'on ignore. Rien n'est perdu, donc rien n'est « écarté ».
     if (notionRefs.has(notion.ref)) {
-      discarded.push({ kind: 'notion', ref: notion.ref, reason: 'référence en double' });
+      adjusted.push({
+        kind: 'notion',
+        ref: notion.ref,
+        reason: 'notion déjà présente — celle de l’atelier est conservée, le doublon ignoré',
+      });
       continue;
     }
     if (notion.chapterRef && !chapterRefs.has(notion.chapterRef)) {

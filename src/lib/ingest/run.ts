@@ -1155,6 +1155,28 @@ export async function ingestAssignments(
     strandedNotions: stranded,
   });
 
+  // ⚠️ **Soumis vs répondu — la seule façon de distinguer un oubli d'un refus.**
+  // La consigne dit « réponds pour CHAQUE notion » ; quand une notion ressort
+  // pourtant sans chapitre, rien ne permet de savoir si le modèle l'a jugée sans
+  // place ou s'il l'a simplement sautée. La différence compte : la première est
+  // une décision, la seconde une panne silencieuse qui se répète à chaque
+  // génération (constaté le 29/08/2026 sur une notion restée « sans chapitre »
+  // deux imports d'affilée).
+  const answered = new Set(plan.assignments.map((a) => a.notionRef));
+  const omitted = batch.filter((n) => !answered.has(n.id));
+  console.info('[ingest] rangement', {
+    lot: batchIndex,
+    soumises: batch.length,
+    repondues: answered.size,
+    omisesParLeModele: omitted.length,
+    // Les oubliées qui n'ont AUCUN chapitre sont les seules qui se voient : les
+    // autres restent simplement là où elles étaient.
+    omisesEtSansChapitre: omitted.filter((n) => !n.chapterId).length,
+    deplacees: movedIds.length,
+    sansPlaceSelonLeModele: setAside.length,
+    laisseesSurPlace: stranded.length,
+  });
+
   // ─── Récupérer les questions en sommeil ───────────────────────────────────
   //
   // Quand le modèle tranche une ressemblance en faveur de la NOUVELLE notion,

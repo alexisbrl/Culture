@@ -125,13 +125,18 @@ describe('parsePlan — rejeter', () => {
     expect(plan.discarded[0].reason).toContain('groupe sans question');
   });
 
-  it('écarte les références en double plutôt que d’en écraser une', () => {
+  it('ignore une référence en double plutôt que d’en écraser une', () => {
     const plan = parsePlan({
       chapters: [{ ref: 'ch1', name: 'Un' }, { ref: 'ch1', name: 'Deux' }],
     });
     expect(plan.chapters).toHaveLength(1);
     expect(plan.chapters[0].name).toBe('Un'); // le premier gagne
-    expect(plan.discarded[0].reason).toContain('double');
+    // CORRIGÉ, et non écarté (29/08/2026) : rien n'est perdu — le chapitre est
+    // là, c'est le doublon qu'on laisse tomber. L'annoncer comme « écarté »
+    // faisait craindre une perte à chaque mise à jour d'atelier, le modèle
+    // redéclarant volontiers les chapitres qui existent déjà.
+    expect(plan.discarded).toEqual([]);
+    expect(plan.adjusted[0].reason).toContain('déjà présent');
   });
 
   it('n’écarte QUE l’élément fautif — le reste du lot survit', () => {
@@ -208,14 +213,16 @@ describe('parsePlan — compléter l’existant', () => {
     expect(plan.adjusted).toEqual([]);
   });
 
-  it('écarte une notion qui tenterait de recréer une notion existante', () => {
-    // Le modèle doit référencer l'existant, pas le dupliquer.
+  it('ignore une notion qui tenterait de recréer une notion existante', () => {
+    // Le modèle doit référencer l'existant, pas le dupliquer. Comme pour les
+    // chapitres, c'est une correction et non une perte : la notion est là.
     const plan = parsePlan(
       { notions: [{ ref: 'n-existante-en-base', title: 'Doublon' }] },
       existing,
     );
     expect(plan.notions).toEqual([]);
-    expect(plan.discarded[0].reason).toContain('double');
+    expect(plan.discarded).toEqual([]);
+    expect(plan.adjusted[0].reason).toContain('déjà présente');
   });
 });
 
