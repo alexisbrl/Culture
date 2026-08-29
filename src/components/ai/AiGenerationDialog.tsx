@@ -715,9 +715,15 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 <p style={{ fontSize: 13, color: palette.inkMuted, margin: '6px 0 0' }}>{t('stop.body')}</p>
               </div>
             </div>
+            {/* ⚠️ **Les couleurs disent laquelle des deux est sans retour.**
+                Le vert allait à « arrêter et défaire » — la seule action de tout
+                le dialogue qui détruise quelque chose — et le gris à « continuer ».
+                Le rouge va donc à l'arrêt, le vert à la poursuite, et l'arrêt
+                passe à gauche : le geste par défaut (dernier bouton, celui qu'on
+                vise sans lire) est celui qui ne coûte rien (29/08/2026). */}
             <Actions>
-              <Ghost onClick={() => setStopAsk(false)}>{t('stop.keep')}</Ghost>
-              <Primary onClick={confirmStop}>{t('stop.confirm')}</Primary>
+              <Danger onClick={confirmStop}>{t('stop.confirm')}</Danger>
+              <Primary onClick={() => setStopAsk(false)}>{t('stop.keep')}</Primary>
             </Actions>
           </div>
         )}
@@ -957,6 +963,24 @@ function Ghost({ children, onClick }: { children: React.ReactNode; onClick: () =
       type="button"
       onClick={onClick}
       style={{ padding: '8px 14px', borderRadius: radius.md, border: `1px solid ${ink(0.12)}`, background: 'transparent', fontSize: 13.5, color: palette.inkMuted, cursor: 'pointer' }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** L'action qui détruit — cerclée de rouge, pas remplie : deux aplats côte à
+ *  côte se disputeraient le regard, alors qu'un seul des deux boutons doit
+ *  attirer le clic distrait, et ce n'est pas celui-ci. */
+function Danger({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '8px 14px', borderRadius: radius.md, border: `1px solid ${palette.danger}`,
+        background: 'transparent', fontSize: 13.5, fontWeight: 600, color: palette.danger, cursor: 'pointer',
+      }}
     >
       {children}
     </button>

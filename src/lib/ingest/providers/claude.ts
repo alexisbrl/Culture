@@ -446,11 +446,24 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
         ...(cacheable && i === sent.length - 1 ? { cache_control: { type: 'ephemeral' as const } } : {}),
       }));
 
-      content.push({ type: 'text', text: existingContentBlock(existing, existingScopeFor(scope)) });
+      // ⚠️ **Un bloc de texte VIDE fait échouer l'appel entier**, avec un 400
+      // « text content blocks must be non-empty » que rien ne rattrape — l'API
+      // les refuse, elle ne les ignore pas. Le cas n'est pas théorique : la passe
+      // RANGEMENT n'a par construction rien à mettre dans le bloc « ce qui
+      // existe déjà » (ses notions et ses chapitres voyagent dans sa consigne,
+      // les répéter doublerait la facture), si bien qu'elle échouait à tous les
+      // coups — donc tout import qui range des notions (29/08/2026).
+      //
+      // Le filtre est posé ici, à l'endroit où les blocs sont assemblés, et non
+      // dans `existingContentBlock` : c'est la liste envoyée qui doit être
+      // valide, quelle que soit la raison pour laquelle un bloc est vide.
+      const existingBlock = existingContentBlock(existing, existingScopeFor(scope));
+      if (existingBlock.trim()) content.push({ type: 'text', text: existingBlock });
       // ⚠️ La consigne de l'utilisateur est collée en tête de l'instruction, donc
       // APRÈS le marqueur de cache : elle varie d'un import à l'autre et n'a
       // rien à faire dans le préfixe stable (voir l'en-tête de `prompt.ts`).
-      content.push({ type: 'text', text: userHintBlock(opts.userHint) + instructionFor(scope, sent.map((doc) => doc.fileName)) });
+      const instructionBlock = userHintBlock(opts.userHint) + instructionFor(scope, sent.map((doc) => doc.fileName));
+      if (instructionBlock.trim()) content.push({ type: 'text', text: instructionBlock });
 
       const wanted = wantedFor(scope.pass);
       // Taille connue : on tranche sans appeler (fonction pure, gratuite).
