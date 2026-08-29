@@ -57,6 +57,34 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
   const [activeSection, setActiveSection] = useState<NavSection>('general');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
+  // ─── La section ouverte survit à un rechargement ─────────────────────────
+  //
+  // Elle vit dans l'URL (`?section=notions`), écrite SANS naviguer : les
+  // sections sont montées en permanence (voir .claude/rules/server-architecture.md),
+  // et passer par le routeur pour changer d'onglet remettrait un temps de
+  // chargement là où il n'y en a pas. `replaceState` n'ajoute pas non plus
+  // d'entrée d'historique — le bouton « retour » continue de ramener d'où l'on
+  // vient, pas d'onglet en onglet.
+  //
+  // Ça règle deux gênes d'un coup (30/08/2026) : F5 ne renvoie plus sur
+  // « Général », et la fin d'une génération par IA — qui recharge la page pour
+  // que les listes soient à jour — retombe sur la section d'où elle a été
+  // lancée.
+  //
+  // Lu dans un effet et non au premier rendu : le serveur ne connaît pas l'URL
+  // du navigateur, et l'initialiser ici ferait diverger les deux rendus.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('section');
+    if (wanted && NAV_ITEMS.some((item) => item.id === wanted)) setActiveSection(wanted as NavSection);
+  }, []);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (activeSection === 'general') url.searchParams.delete('section');
+    else url.searchParams.set('section', activeSection);
+    window.history.replaceState(null, '', url);
+  }, [activeSection]);
+
   // Section 1 — General
   const [workshopNameInput, setWorkshopNameInput] = useState(workshopName);
   const [descriptionInput, setDescriptionInput] = useState(description ?? '');

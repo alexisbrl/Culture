@@ -293,33 +293,64 @@ async function loadParcoursContents(workshopId: string): Promise<string[]> {
 
 /** Le nom et la description de l'atelier — le seul indice de NIVEAU dont le
  *  modèle dispose au moment de rédiger (voir `workshopBlock`). */
-/** Combien de questions de parcours existent DÉJÀ par notion et par niveau.
+/** Par paquets : la liste des notions part dans l'URL, et un gros chapitre la
+ *  ferait dépasser la taille qu'un serveur accepte (voir docs/backlog.md). */
+const NOTIONS_PER_COUNT_QUERY = 100;
+
+/** Combien de questions de parcours existaient DÉJÀ par notion et par niveau,
+ *  **à l'ouverture du lot**.
  *
  *  `parcoursQuestionCounts` compte toutes notions confondues ; la demande d'un
  *  chapitre neuf, elle, se formule niveau par niveau — 25 de niveau 1 et rien
  *  d'autre. Sans ce détail, un chapitre déjà pourvu au niveau 2 passerait pour
- *  pourvu au niveau 1. */
+ *  pourvu au niveau 1.
+ *
+ *  ⚠️ **`before` n'est pas un raffinement, c'est ce qui rend le découpage en lots
+ *  possible** (30/08/2026). Le compte sert à établir la liste des notions à
+ *  pourvoir, dont on tire les lots ; chaque appel la recalcule, et chaque appel
+ *  a lieu APRÈS que les précédents ont écrit. En comptant tout, la liste
+ *  RÉTRÉCIT d'un lot à l'autre : le lot n° 1 se retrouvait à traiter ce qui était
+ *  devenu le n° 2, et le n° 2 n'existait plus. Résultat mesuré sur trois
+ *  chapitres, à l'identique : dix notions pourvues, **dix sautées**, cinq
+ *  pourvues — 15 questions au lieu des 25 demandées, et un trou au milieu de
+ *  chaque chapitre.
+ *
+ *  Compter à la date d'ouverture du lot fige la liste : les écritures du lot
+ *  lui-même ne la déplacent plus, et les lots restent alignés sur le découpage
+ *  annoncé au premier appel. */
 async function parcoursQuestionCountsByLevel(
   notionIds: string[],
+  before: string,
 ): Promise<Map<string, Map<number, number>>> {
   const counts = new Map<string, Map<number, number>>();
   if (notionIds.length === 0) return counts;
 
   const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('exam_question_item_bricks')
-    .select('brick_id, bloom_level')
-    .in('brick_id', notionIds);
-  if (error) throw new Error(error.message);
+  for (let i = 0; i < notionIds.length; i += NOTIONS_PER_COUNT_QUERY) {
+    const { data, error } = await supabase
+      .from('exam_question_item_bricks')
+      .select('brick_id, bloom_level')
+      .in('brick_id', notionIds.slice(i, i + NOTIONS_PER_COUNT_QUERY))
+      .lt('created_at', before);
+    if (error) throw new Error(error.message);
 
-  for (const row of data ?? []) {
-    const notionId = row.brick_id as string;
-    const level = (row.bloom_level as number | null) ?? 1;
-    const byLevel = counts.get(notionId) ?? new Map<number, number>();
-    byLevel.set(level, (byLevel.get(level) ?? 0) + 1);
-    counts.set(notionId, byLevel);
+    for (const row of data ?? []) {
+      const notionId = row.brick_id as string;
+      const level = (row.bloom_level as number | null) ?? 1;
+      const byLevel = counts.get(notionId) ?? new Map<number, number>();
+      byLevel.set(level, (byLevel.get(level) ?? 0) + 1);
+      counts.set(notionId, byLevel);
+    }
   }
   return counts;
+}
+
+/** Quand ce lot a été ouvert — la date qui fige tout ce qui doit l'être. */
+async function importOpenedAt(importId: string): Promise<string> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.from('ai_imports').select('created_at').eq('id', importId).single();
+  if (error || !data) throw new Error(error?.message ?? 'import introuvable');
+  return data.created_at as string;
 }
 
 async function loadWorkshopIdentity(workshopId: string): Promise<WorkshopIdentity | null> {
@@ -1417,7 +1448,10 @@ export async function ingestParcoursQuestions(
 
   let demand = options.demand ?? null;
   if (!demand && !hint) {
-    const perLevel = await parcoursQuestionCountsByLevel(chapterNotions.map((n) => n.id));
+    const perLevel = await parcoursQuestionCountsByLevel(
+      chapterNotions.map((n) => n.id),
+      await importOpenedAt(importId),
+    );
     demand = demandForChapterStart(chapterNotions.map((n) => n.id))
       .map((item) => ({
         ...item,

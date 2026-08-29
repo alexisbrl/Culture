@@ -232,16 +232,26 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
   // suivante instantané même pour qui ne lit pas sa correction — la file se
   // regarnit ensuite à chaque validation, jamais au clic.
   useEffect(() => {
-    // Garde d'exécution unique : en développement, React monte deux fois. Sans
-    // elle, l'exercice partirait avec quatre questions tirées et la moitié du
-    // budget réservée pour rien.
+    // ⚠️ **Garde d'exécution unique, et SURTOUT PAS de drapeau d'annulation.**
+    //
+    // En développement, React monte le composant deux fois : effet, nettoyage,
+    // effet. La garde empêche le second passage de tirer quatre questions et de
+    // réserver la moitié du budget pour rien — mais elle rend du même coup le
+    // motif habituel « `cancelled` dans le nettoyage » **mortel** : le premier
+    // passage se voyait annulé par le nettoyage et renonçait à afficher, le
+    // second ne faisait rien du tout, et l'écran restait sur « tirage d'une
+    // question… » **indéfiniment** (bug introduit avec les deux questions
+    // d'avance le 29/08/2026, diagnostiqué le 30).
+    //
+    // Rien ne remplace ce drapeau, et il n'y a rien à remplacer : le composant
+    // du second montage est le MÊME, refs comprises, donc l'affichage tombe au
+    // bon endroit. Et sur un vrai démontage, poser un état sur un composant
+    // parti ne fait rien du tout depuis React 18 — ni erreur, ni avertissement.
     if (startedRef.current) return;
     startedRef.current = true;
-    let cancelled = false;
     void (async () => {
       await enqueue();
       const first = await takeNext();
-      if (cancelled) return;
       const opening = first ?? failedRef.current ?? { prompt: null, cost: 0, failure: 'empty' as const };
       apply(opening);
       setLoading(false);
@@ -276,9 +286,6 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
         }).catch(() => {});
       }
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [enqueue, takeNext, apply]);
 
   /** Question suivante : celle qui attend dans la file. */
