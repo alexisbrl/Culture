@@ -320,7 +320,16 @@ Une demande est **une liste de couples (notion × niveau) avec un nombre pour ch
 
 **Répondre au hasard** *(29/08/2026)*
 
-Une question répondue est consommée, juste ou fausse : quelques minutes de clics au hasard vident un chapitre et déclenchent une recharge payante pour rien. Remettre les mauvaises réponses au tirage a été **écarté** — ça donnerait le moyen d'aller vite pour se faire montrer toutes les réponses, puis de repasser en les connaissant. À la place, un **avertissement** (jamais un blocage) quand les **cinq dernières réponses** sont toutes en **moins de trois secondes** avec au plus une bonne réponse — le score du hasard sur un QCM à quatre propositions. Quand rien n'était corrigeable automatiquement, la vitesse seule tranche. Le temps est mesuré par l'écran et non par le serveur : depuis les deux questions d'avance, une question est tirée bien avant d'être affichée. C'est donc falsifiable, et c'est assumé — on vise le membre qui se disperse, pas le tricheur.
+Une question répondue est consommée, juste ou fausse : quelques minutes de clics au hasard vident un chapitre et déclenchent une recharge payante pour rien. Remettre les mauvaises réponses au tirage a été **écarté** — ça donnerait le moyen d'aller vite pour se faire montrer toutes les réponses, puis de repasser en les connaissant.
+
+La règle compte **les fautes expédiées**, pas un score comparé au hasard : une réponse rédigée, un dessin, un dépôt de fichier n'ont pas de probabilité de réussite, et « proche du hasard » n'aurait voulu dire quelque chose que pour un QCM.
+
+- **3 mauvaises réponses d'affilée, chacune en moins de 3 secondes** → un message, affiché avec la correction. Rien n'est empêché.
+- **2 de plus dans le même état** (5 d'affilée) → l'exercice se met **en pause 5 minutes** : la question suivante est refusée plutôt que brûlée. Le temps repart de la dernière réponse, donc s'entêter repousse d'autant.
+- Une bonne réponse, une réponse posée, ou une réponse que rien ne permet de corriger automatiquement **remet le compteur à zéro**. Conséquence assumée : on ne repère pas quelqu'un qui expédierait uniquement des questions ouvertes — mieux vaut le laisser passer que mettre en pause quelqu'un dont on ignore s'il avait raison.
+- La pause **ne se stocke pas** : elle se déduit de la date de la dernière réponse. Rien à écrire, rien à nettoyer, rien qui puisse rester coincé.
+
+Le temps est mesuré **par l'écran** et non par le serveur : depuis les deux questions d'avance, une question est tirée bien avant d'être affichée, et le chronomètre du serveur laisserait donc passer un cliqueur. Le message d'avertissement s'affiche sur l'écran de la question **déjà corrigée**, donc le temps de le lire n'entre jamais dans le chronomètre de la suivante. C'est falsifiable, et c'est assumé — on vise le membre qui se disperse, pas le tricheur.
 
 Sécurité : le client ne reçoit **jamais** `answer` ni `correctChoices` au tirage — le serveur renvoie un `ExercisePrompt` épuré et calcule la correction (`gradeExercise`). Les options peuvent donc être mélangées côté serveur sans mémoriser de permutation, chaque option portant son index d'origine. Un membre qui soumet n'importe quoi peut obtenir la réponse : c'est assumé pour un parcours d'entraînement individuel, contrairement à un examen noté.
 

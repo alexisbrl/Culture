@@ -1,4 +1,4 @@
-// Repérer un membre qui répond au hasard.
+// Repérer un membre qui répond au hasard, et l'arrêter s'il continue.
 //
 // ── Ce qu'on cherche, et ce qu'on ne cherche pas ────────────────────────────
 //
@@ -8,28 +8,31 @@
 // clics au hasard vident un chapitre et déclenchent une recharge payante pour
 // rien (arbitrage du 29/08/2026).
 //
-// La conséquence est un **avertissement**, jamais un blocage ni une sanction.
-// C'est pourquoi il n'y a aucun problème à ce que le temps vienne de l'écran et
-// soit donc falsifiable : quelqu'un qui prend la peine de fausser son chronomètre
-// n'est plus quelqu'un qui se disperse, et ce n'est pas lui qu'on vise.
+// ── La règle : une série de fautes rapides ──────────────────────────────────
 //
-// ── La règle ────────────────────────────────────────────────────────────────
+//   • 3 mauvaises réponses d'affilée, chacune en moins de 3 secondes → un
+//     message, affiché avec la correction ;
+//   • 2 de plus dans le même état (5 d'affilée) → l'exercice se met en pause
+//     5 minutes.
 //
-// Les CINQ dernières réponses, toutes en moins de trois secondes, avec un
-// résultat proche du hasard. Les trois nombres comptent ensemble :
+// **On compte les fautes, pas le score.** La version précédente demandait un
+// « résultat proche du hasard », ce qui ne se calcule que pour un QCM : une
+// réponse rédigée, un dessin, un dépôt de fichier n'ont pas de probabilité de
+// réussite (révision du 29/08/2026, même jour). Une faute est une faute, quel
+// que soit le type de réponse — et c'est aussi plus juste : quelqu'un de rapide
+// ET juste n'est jamais inquiété, quel que soit le nombre de propositions.
 //
-//   - moins de 3 s : personne ne lit un énoncé, pèse quatre propositions et
-//     répond en trois secondes. Sur une seule question c'est une chance ; cinq
-//     fois de suite, c'est une habitude ;
-//   - cinq : moins, et une série de questions faciles suffirait à déclencher ;
-//   - proche du hasard : au plus UNE bonne réponse sur les cinq. Un QCM à quatre
-//     propositions rapporte une bonne réponse sur quatre en moyenne — quelqu'un
-//     de rapide ET juste connaît son cours, on ne l'embête pas.
+// **Une réponse non corrigée automatiquement (`correct: null`) casse la série.**
+// Elle n'est ni juste ni fausse : rien ne permet d'accuser qui que ce soit.
+// Conséquence assumée : on ne repère pas un membre qui expédierait uniquement
+// des questions ouvertes. Il faut accepter de laisser passer ce cas plutôt que
+// de mettre en pause quelqu'un dont on ignore s'il a raison.
 //
-// Cas particulier assumé : quand aucune des cinq n'a pu être corrigée
-// automatiquement (réponses rédigées, dessins), la vitesse suffit. Répondre à
-// cinq questions ouvertes en moins de trois secondes chacune ne se fait pas de
-// bonne foi.
+// ── Le blocage se déduit, il ne se stocke pas ───────────────────────────────
+//
+// Aucun « bloqué jusqu'à » en base : la pause est simplement la date de la
+// dernière réponse plus cinq minutes, relue à chaque tirage. Rien à écrire, rien
+// à nettoyer, et rien qui puisse rester coincé si le calcul change.
 
 /** Une réponse récente, telle qu'elle est retenue en base. */
 export type AnswerPaceRow = {
@@ -37,17 +40,30 @@ export type AnswerPaceRow = {
   answerMs: number | null;
   /** Grappe réussie ? `null` = rien n'était corrigeable automatiquement. */
   correct: boolean | null;
+  /** Quand la réponse a été enregistrée (millisecondes epoch). */
+  answeredAt: number;
 };
-
-/** Combien de réponses la règle regarde. */
-export const PACE_WINDOW = 5;
 
 /** En dessous de ce temps, une réponse n'a pas été réfléchie. */
 export const PACE_MIN_MS = 3000;
 
-/** Au-delà de ce nombre de bonnes réponses dans la fenêtre, ce n'est plus du
- *  hasard — c'est quelqu'un qui sait. */
-export const PACE_MAX_CORRECT = 1;
+/** Fautes rapides d'affilée avant l'avertissement. */
+export const PACE_WARN_STREAK = 3;
+
+/** Fautes rapides d'affilée avant la mise en pause. */
+export const PACE_BLOCK_STREAK = 5;
+
+/** Durée de la pause. */
+export const PACE_BLOCK_MS = 5 * 60 * 1000;
+
+/** Combien de réponses il faut relire pour trancher. */
+export const PACE_WINDOW = PACE_BLOCK_STREAK;
+
+export type PaceVerdict =
+  | { state: 'ok' }
+  | { state: 'warn' }
+  /** `until` : date (epoch, ms) à laquelle l'exercice redevient possible. */
+  | { state: 'blocked'; until: number };
 
 /** Le temps rapporté par l'écran, ramené à quelque chose d'exploitable. Une
  *  valeur absurde (négative, ou plus longue qu'une heure) est traitée comme
@@ -59,24 +75,39 @@ export function sanitizeAnswerMs(value: unknown): number | null {
   return ms;
 }
 
+/** Une réponse fausse ET expédiée. Le seul motif qui alimente la série. */
+function isFastMiss(row: AnswerPaceRow): boolean {
+  return row.correct === false && row.answerMs !== null && row.answerMs < PACE_MIN_MS;
+}
+
+/** Combien de fautes rapides d'affilée, en partant de la plus récente. */
+export function fastMissStreak(rows: AnswerPaceRow[]): number {
+  let streak = 0;
+  for (const row of rows) {
+    if (!isFastMiss(row)) break;
+    streak += 1;
+  }
+  return streak;
+}
+
 /**
- * Ce membre répond-il au hasard ? `rows` porte ses dernières réponses, la plus
- * récente en tête.
+ * Que faire de ce membre ? `rows` porte ses dernières réponses, la plus récente
+ * en tête ; `now` est injectable pour que la pause se teste sans horloge.
  *
- * Renvoie `false` tant qu'on n'a pas la fenêtre entière : on n'avertit personne
- * sur trois réponses, et une réponse dont le temps n'a pas été mesuré (avant
- * cette fonctionnalité) interrompt la série au lieu de compter pour rapide.
+ * La pause est calculée depuis la DERNIÈRE réponse : cinq minutes après elle,
+ * l'exercice repart. Continuer à cliquer au hasard la repousse d'autant.
  */
-export function looksRandom(rows: AnswerPaceRow[]): boolean {
-  const window = rows.slice(0, PACE_WINDOW);
-  if (window.length < PACE_WINDOW) return false;
+export function paceVerdict(rows: AnswerPaceRow[], now: number = Date.now()): PaceVerdict {
+  const streak = fastMissStreak(rows);
 
-  const allFast = window.every((row) => row.answerMs !== null && row.answerMs < PACE_MIN_MS);
-  if (!allFast) return false;
+  if (streak >= PACE_BLOCK_STREAK) {
+    const until = rows[0].answeredAt + PACE_BLOCK_MS;
+    if (now < until) return { state: 'blocked', until };
+    // La pause est passée : on laisse repartir, sans effacer la série. Une
+    // nouvelle faute rapide remettra aussitôt en pause, ce qui est l'effet
+    // voulu — on ne rouvre pas la porte en grand.
+    return { state: 'ok' };
+  }
 
-  const graded = window.filter((row) => row.correct !== null);
-  // Aucune réponse corrigeable : la vitesse seule tranche.
-  if (graded.length === 0) return true;
-
-  return graded.filter((row) => row.correct === true).length <= PACE_MAX_CORRECT;
+  return streak >= PACE_WARN_STREAK ? { state: 'warn' } : { state: 'ok' };
 }

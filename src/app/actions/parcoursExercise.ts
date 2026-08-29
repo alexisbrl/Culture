@@ -5,7 +5,7 @@ import { after } from 'next/server';
 import { requireMember } from '@/lib/authz';
 import * as examLib from '@/lib/workshops/exam';
 import { rewardAnsweredQuestion } from '@/lib/workshops/mastery';
-import { looksRandom, sanitizeAnswerMs, PACE_WINDOW } from '@/lib/workshops/answerPace';
+import { paceVerdict, sanitizeAnswerMs, PACE_WINDOW } from '@/lib/workshops/answerPace';
 import { refillChapter } from '@/lib/ingest/refill';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import { EXERCISE_BLOOM_BUDGET } from '@/lib/workshops/examTypes';
@@ -36,9 +36,12 @@ export type DrawnExercise = {
   /** Ce que la question consomme du budget de l'exercice. */
   cost: number;
   /** `null` quand une question a été tirée ; sinon la raison de l'arrêt —
-   *  `budget` (fin normale), `exhausted` (plus rien d'inédit à portée) ou
-   *  `empty` (le chapitre n'a aucune question). */
-  failure: 'budget' | 'exhausted' | 'empty' | null;
+   *  `budget` (fin normale), `exhausted` (plus rien d'inédit à portée),
+   *  `empty` (le chapitre n'a aucune question) ou `blocked` (l'exercice est
+   *  en pause après une série de fautes expédiées). */
+  failure: 'budget' | 'exhausted' | 'empty' | 'blocked' | null;
+  /** Pour `blocked` : date à laquelle l'exercice repart (epoch, ms). */
+  blockedUntil?: number;
   error?: string;
 };
 
@@ -60,6 +63,17 @@ export async function drawExercise(
     // fin — et surtout des questions bien au-dessus de son niveau.
     const budget = Math.max(0, Math.min(Math.floor(Number(remaining) || 0), EXERCISE_BLOOM_BUDGET));
     const excludes = (Array.isArray(excludeIds) ? excludeIds : []).filter((id) => typeof id === 'string');
+
+    // ─── La pause, avant tout le reste ─────────────────────────────────────
+    //
+    // Cinq fautes expédiées d'affilée mettent l'exercice en pause : on refuse
+    // la question suivante plutôt que de la brûler. La pause ne se stocke pas,
+    // elle se déduit de la date de la dernière réponse (voir
+    // @/lib/workshops/answerPace) — rien à écrire, rien à nettoyer.
+    const verdict = paceVerdict(await examLib.recentAnswerPace(workshopId, ctx.userId, PACE_WINDOW));
+    if (verdict.state === 'blocked') {
+      return { prompt: null, cost: 0, failure: 'blocked', blockedUntil: verdict.until };
+    }
 
     const drawn = await examLib.drawParcoursQuestion(workshopId, chapterId, ctx.userId, {
       remaining: budget,
@@ -140,13 +154,12 @@ export async function gradeExercise(
     );
     if (changes.some(Boolean)) revalidateWorkshop();
 
-    // Avertissement, jamais sanction : cinq réponses d'affilée en moins de trois
-    // secondes avec un résultat proche du hasard vident le chapitre pour rien.
-    const tooFast = looksRandom(
-      await examLib.recentAnswerPace(workshopId, ctx.userId, PACE_WINDOW)
-    );
+    // Trois fautes expédiées d'affilée : on le dit, avec la correction. Deux de
+    // plus et c'est le TIRAGE qui refusera (voir `drawExercise`) — la mise en
+    // pause n'a pas à interrompre une correction déjà calculée.
+    const verdict = paceVerdict(await examLib.recentAnswerPace(workshopId, ctx.userId, PACE_WINDOW));
 
-    return { result: graded.result, tooFast };
+    return { result: graded.result, tooFast: verdict.state === 'warn' };
   } catch (err) {
     console.error('gradeExercise error:', err);
     return { result: null, error: 'Erreur lors de la correction' };

@@ -130,9 +130,12 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
    *  alors de terminer, plutôt que d'annoncer une question suivante qui
    *  n'existe pas. */
   const [noMore, setNoMore] = useState(false);
-  /** Cinq réponses d'affilée trop rapides et proches du hasard : on le dit une
-   *  fois, sans rien bloquer (voir @/lib/workshops/answerPace). */
+  /** Trois fautes expédiées d'affilée : on le dit avec la correction, sans
+   *  rien empêcher (voir @/lib/workshops/answerPace). */
   const [tooFast, setTooFast] = useState(false);
+  /** Minutes de pause restantes, quand le serveur a refusé la question
+   *  suivante après cinq fautes expédiées. */
+  const [blockedMinutes, setBlockedMinutes] = useState(0);
   /** Pourquoi le dernier tirage n'a rien rendu — deux impasses très différentes
    *  à l'écran : un chapitre sans aucune question (le gestionnaire a du travail)
    *  et un chapitre dont rien n'est encore à la portée du membre (il n'y est
@@ -168,6 +171,9 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     setPrompt(res.prompt);
     setCost(res.cost);
     setFailure(res.failure);
+    if (res.failure === 'blocked') {
+      setBlockedMinutes(Math.max(1, Math.ceil(((res.blockedUntil ?? 0) - Date.now()) / 60_000)));
+    }
     shownAtRef.current = Date.now();
     const slots = 1 + (res.prompt?.parts.length ?? 0);
     setSelected(Array.from({ length: slots }, () => []));
@@ -254,6 +260,10 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     const res = await takeNext();
     setLoading(false);
     if (!res) {
+      // Une file vide, c'est la fin de l'exercice — sauf si le dernier tirage
+      // s'est heurté à la mise en pause, qui a son propre écran.
+      const failed = failedRef.current;
+      if (failed) apply(failed);
       setDone(true);
       return;
     }
@@ -392,8 +402,14 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
             <div style={{ width: 120, height: 120, borderRadius: radius.pill, background: withAlpha(palette.green, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
               <Leaf size={48} strokeWidth={1.5} color={palette.green} />
             </div>
-            <div style={{ fontWeight: 600, fontSize: 30, color: palette.greenBrand }}>{t('doneTitle')}</div>
-            <div style={{ fontSize: 14.5, color: palette.inkSoft, marginTop: 10 }}>{t('doneScore', { count: correctCount })}</div>
+            <div style={{ fontWeight: 600, fontSize: 30, color: palette.greenBrand }}>
+              {failure === 'blocked' ? t('blockedTitle') : t('doneTitle')}
+            </div>
+            <div style={{ fontSize: 14.5, color: palette.inkSoft, marginTop: 10 }}>
+              {failure === 'blocked'
+                ? t('blockedDesc', { minutes: blockedMinutes })
+                : t('doneScore', { count: correctCount })}
+            </div>
             <div style={{ marginTop: 28 }}>
               <LinkButton href={`/${locale}/workshops/${workshopId}`} variant="primary" size="lg">
                 {t('backToParcours')} <ArrowRight size={16} strokeWidth={1.75} />
@@ -426,10 +442,18 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
             ) : !prompt ? (
               <div style={{ padding: '30px 0', textAlign: 'center' }}>
                 <div style={{ fontSize: 14, color: palette.ink }}>
-                  {failure === 'exhausted' ? t('outOfReachTitle') : t('emptyTitle')}
+                  {failure === 'blocked'
+                    ? t('blockedTitle')
+                    : failure === 'exhausted'
+                      ? t('outOfReachTitle')
+                      : t('emptyTitle')}
                 </div>
                 <div style={{ fontSize: 12.5, color: palette.inkFaint, marginTop: 6 }}>
-                  {failure === 'exhausted' ? t('outOfReachDesc') : t('emptyDesc')}
+                  {failure === 'blocked'
+                    ? t('blockedDesc', { minutes: blockedMinutes })
+                    : failure === 'exhausted'
+                      ? t('outOfReachDesc')
+                      : t('emptyDesc')}
                 </div>
               </div>
             ) : (

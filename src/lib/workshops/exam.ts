@@ -697,7 +697,7 @@ export async function recentAnswerPace(
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from('parcours_asked')
-    .select('answer_ms, correct')
+    .select('answer_ms, correct, asked_at')
     .eq('workshop_id', workshopId)
     .eq('user_id', userId)
     .order('asked_at', { ascending: false })
@@ -711,6 +711,7 @@ export async function recentAnswerPace(
   return (data ?? []).map((row) => ({
     answerMs: (row.answer_ms as number | null) ?? null,
     correct: (row.correct as boolean | null) ?? null,
+    answeredAt: new Date(row.asked_at as string).getTime(),
   }));
 }
 
