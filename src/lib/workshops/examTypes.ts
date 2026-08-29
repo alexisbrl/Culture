@@ -278,6 +278,14 @@ export function toBloomLevel(value: unknown): BloomLevel {
   return BLOOM_LEVELS.includes(n as BloomLevel) ? (n as BloomLevel) : DEFAULT_BLOOM_LEVEL;
 }
 
+// Ce que vaut UN exercice du parcours : 12 niveaux de Bloom, et non 12 questions
+// (règle produit du 29/08/2026). Un énoncé coûte le plus haut niveau qu'il
+// demande, une grappe la somme de ses énoncés : douze énoncés « mémoriser », ou
+// un « analyser » + deux « appliquer » + deux « mémoriser ». Ici plutôt que dans
+// `parcoursDraw.ts` parce que l'écran d'exercice en a besoin pour sa barre
+// d'avancement, et qu'il ne doit rien importer qui touche à la base.
+export const EXERCISE_BLOOM_BUDGET = 12;
+
 // ─── Question liée ───────────────────────────────────────────────────────────
 //
 // Une « question liée » (nommée `part` dans le modèle et en base) est une

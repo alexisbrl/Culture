@@ -15,9 +15,15 @@
 -- ─── Ce qu'on enregistre, et à quel moment ───────────────────────────────────
 --
 -- Le GROUPE (`exam_questions.id`), pas chaque énoncé : un groupe est posé d'un
--- bloc, ses questions liées avec lui. Et à l'instant où il est POSÉ, pas
--- répondu : une question qu'on a vue puis abandonnée est brûlée pour la
--- révision — la reproposer plus tard ne mesurerait plus rien.
+-- bloc, ses questions liées avec lui.
+--
+-- ⚠️ RÈGLE RÉVISÉE LE 29/08/2026 — l'écriture se fait à la CORRECTION, pas au
+-- tirage. On avait tranché l'inverse la veille (une question vue puis
+-- abandonnée serait « brûlée pour la révision »). Décision produit contraire :
+-- ne pas répondre ne mesure rien, donc ne consomme rien — la question reste
+-- disponible. La colonne s'appelle toujours `asked_at`, et c'est bien la date
+-- de la première RÉPONSE ; renommer coûterait une migration restrictive pour
+-- un mot.
 --
 -- ⚠️ `exam_questions.id` est du TEXT et non de l'uuid (héritage). La clé
 -- étrangère doit donc l'être aussi, sans quoi la création échoue.
@@ -32,9 +38,9 @@ create table if not exists public.parcours_asked (
   user_id text not null,
   group_id text not null references public.exam_questions(id) on delete cascade,
   asked_at timestamptz not null default now(),
-  -- Un membre ne voit une question qu'une fois : c'est l'invariant même de
+  -- Un membre ne répond à une question qu'une fois : c'est l'invariant même de
   -- « disponible ». L'écriture est donc un upsert qui ne fait rien s'il y a
-  -- déjà une ligne, et le second tirage ne rajeunit pas la date.
+  -- déjà une ligne, et une seconde réponse ne rajeunit pas la date.
   unique (user_id, group_id)
 );
 

@@ -267,7 +267,7 @@ Un bouton « questions du parcours », en haut de l'onglet (gestionnaires unique
 
 Toute question — parcours **et** banque d'examen — porte :
 
-- un **niveau de Bloom visé, obligatoire** (`exam_questions.bloom_level`, 1 mémoriser → 6 créer). Garanti à trois niveaux : `not null default 1` + contrainte `check between 1 and 6` en base, type non optionnel côté TypeScript, et sélecteur segmenté toujours à une valeur active côté UI — il n'existe aucun état « sans niveau ». À ne pas confondre avec `brick_mastery.bloom_level`, qui mesure le niveau *atteint* par un candidat ; celui-ci est le niveau *visé* par la question.
+- un **niveau de Bloom visé par notion** (1 mémoriser → 4 analyser), porté par le lien question ↔ notion (`exam_question_item_bricks.bloom_level`) et **non par la question** depuis le 28/08/2026 : une même question peut faire *restituer* une notion de contexte et faire *analyser* celle qui est réellement en jeu. Un lien sans niveau se lit comme « mémoriser ». À ne pas confondre avec `brick_mastery.bloom_level`, qui mesure le niveau *atteint* par un candidat ; celui-ci est le niveau *visé*.
 - zéro à N **notions** (table de jonction `exam_question_bricks` — encore nommée `bricks` en base, voir `CLAUDE.md` §1 —, `on delete cascade` des deux côtés : supprimer une notion détache les questions, supprimer une question retire ses liens). Aucune restriction de chapitre — une question peut mobiliser des notions de plusieurs chapitres.
 
 Les deux se saisissent dans l'éditeur de question, section « Options par question ».
@@ -278,11 +278,20 @@ La **liste des questions du parcours** est celle de la banque d'examen (même co
 
 **Exercice (page candidat)**
 
-`/{locale}/workshops/{id}/exercise/{chapterId}`, ouverte par le bouton du pot et accessible à **tout membre**. Elle tire au hasard une question du chapitre, affiche l'énoncé et une zone de réponse, puis la correction après validation :
+`/{locale}/workshops/{id}/exercise/{chapterId}`, ouverte par le bouton du pot et accessible à **tout membre**. Elle enchaîne des questions choisies pour CE membre, affiche l'énoncé et une zone de réponse, puis la correction après validation :
 
 - **QCS / QCM** → choix cliquables, correction automatique (bonne/mauvaise réponse, bonnes options mises en évidence).
 - **Autres types de réponse** (texte, dessin, fichier…) → saisie libre, pas de verdict automatique : la validation affiche seulement la réponse attendue.
-- Après correction, « question suivante » retire du tirage celle qu'on vient de faire (sauf s'il n'en reste qu'une).
+
+**Ce que vaut un exercice : 12 niveaux de Bloom, pas 12 questions** *(règles arrêtées le 29/08/2026, implémentées dans `src/lib/workshops/parcoursDraw.ts`)*
+
+- Un **énoncé coûte le plus haut niveau qu'il demande** (le maximum sur ses notions) ; une **grappe coûte la somme de ses énoncés**, puisqu'elle se pose d'un bloc. Un exercice, c'est donc douze énoncés « mémoriser », ou un « analyser » + deux « appliquer » + deux « mémoriser », ou cinq questions difficiles. La barre du haut avance en pourcentage du budget consommé, jamais en nombre de questions : personne ne sait d'avance combien il y en aura.
+- **Portée : jamais plus de deux niveaux au-dessus de ce qui est atteint.** Un membre qui a atteint le niveau N sur une notion travaille le N+1 ; on accepte donc jusqu'à N+2. La règle vaut pour **chaque notion de chaque énoncé** de la grappe — une seule notion hors de portée l'écarte entière. Exemple : sur une notion jamais travaillée (niveau 0), seules les questions « mémoriser » et « comprendre » sont tirables.
+- **Priorité à la notion la moins maîtrisée** du chapitre, tirage au hasard entre les candidats à égalité.
+- **Une question répondue ne revient jamais** (table `parcours_asked`). Une question **vue puis abandonnée reste disponible** : ne pas y répondre ne mesure rien, la brûler pour autant serait du gâchis (règle révisée le 29/08/2026 — l'enregistrement se fait à la correction, pas au tirage).
+- **La question suivante est tirée pendant la lecture de la correction**, jamais toutes au lancement : le choix tient compte de la progression qui vient d'avoir lieu, et le clic sur « question suivante » n'attend rien.
+- **Plus rien à poser → l'exercice s'arrête.** En cours d'exercice, l'écran de fin s'affiche normalement. Au lancement, deux impasses bien distinctes : un chapitre **sans aucune question** dit qu'un gestionnaire doit en créer ; un chapitre dont **rien n'est encore à portée** (ou dont tout a déjà été répondu) répond « rien à te proposer ici pour l'instant » — le membre n'y est pour rien et personne n'est mis en cause. Le second cas est une anomalie que la recharge automatique doit empêcher : elle est signalée côté serveur (voir `docs/backlog.md`), jamais à l'écran.
+- **XP** *(règle arrêtée le 29/08/2026, pas encore implémentée — aucun XP n'existe côté serveur)* : une question rapporte un XP proportionnel à son niveau de Bloom. Un « appliquer » (3) rapporte trois fois un « mémoriser » (1).
 
 Sécurité : le client ne reçoit **jamais** `answer` ni `correctChoices` au tirage — le serveur renvoie un `ExercisePrompt` épuré et calcule la correction (`gradeExercise`). Les options peuvent donc être mélangées côté serveur sans mémoriser de permutation, chaque option portant son index d'origine. Un membre qui soumet n'importe quoi peut obtenir la réponse : c'est assumé pour un parcours d'entraînement individuel, contrairement à un examen noté.
 

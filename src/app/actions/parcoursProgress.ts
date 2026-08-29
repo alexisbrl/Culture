@@ -3,6 +3,7 @@
 import { requireMember } from '@/lib/authz';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import * as masteryLib from '@/lib/workshops/mastery';
+import * as examLib from '@/lib/workshops/exam';
 
 // Avancement d'un membre sur son parcours — alimente les barres de progression
 // de l'onglet parcours. Logique métier : voir @/lib/workshops/mastery.
@@ -37,6 +38,16 @@ export async function resetMyParcoursProgress(
   if (!ctx) return { success: false, cleared: 0, error: 'Accès refusé' };
 
   const result = await masteryLib.resetUserMastery(workshopId, ctx.userId);
+
+  // Les deux vont ensemble : remettre la maîtrise à zéro sans oublier les
+  // questions déjà répondues laisserait un parcours vierge et sans plus rien à
+  // tirer. Une erreur ici n'annule pas la remise à zéro, qui a bien eu lieu.
+  try {
+    await examLib.clearParcoursAsked(workshopId, ctx.userId);
+  } catch (err) {
+    console.error('resetMyParcoursProgress asked error:', err);
+  }
+
   if (result.success) revalidateWorkshop();
   return result;
 }

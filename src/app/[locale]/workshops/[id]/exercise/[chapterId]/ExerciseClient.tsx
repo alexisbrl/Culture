@@ -12,12 +12,22 @@
 // d'affichage sans mémoriser de permutation.
 //
 // Coquille plein écran (position fixed, au-dessus de la barre du haut/du bas —
-// masquées par ailleurs sur /exercise/ dans DashboardHeader.tsx) : aucune
-// notion de « session » ou de progression n'existe côté serveur (le tirage
-// pioche indéfiniment, sans fin de chapitre), donc pas de barre de progression
-// ici — voir docs/chantiers/2026-08-05-refonte-ui-design-system.md, T21.
+// masquées par ailleurs sur /exercise/ dans DashboardHeader.tsx).
+//
+// ── Un exercice = 12 niveaux de Bloom (29/08/2026) ──────────────────────────
+//
+// Ce n'est pas un nombre de questions : chaque question coûte ce qu'elle
+// demande de plus exigeant, et l'exercice s'arrête quand le budget est
+// consommé. Douze questions faciles, ou cinq difficiles. Le décompte est tenu
+// par le serveur, qui choisit chaque question d'après la maîtrise du membre —
+// l'écran ne fait qu'afficher où il en est.
+//
+// Le tirage suivant part DÈS LA CORRECTION AFFICHÉE, pendant que le membre la
+// lit : une question d'avance, jamais plus. C'est ce qui rend le passage à la
+// suivante instantané tout en gardant un choix calculé sur la progression qui
+// vient d'avoir lieu.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { ArrowRight, Check, Droplet, FileText, Leaf, Loader2, RotateCw, Sprout, Upload, X } from 'lucide-react';
@@ -27,7 +37,7 @@ import { Tooltip } from '@/components/ui/tooltip';
 import LinkButton from '@/components/LinkButton';
 import { drawExercise, gradeExercise } from '@/app/actions/parcoursExercise';
 import type { ExerciseAnswer, ExercisePart, ExercisePrompt, ExerciseResult } from '@/lib/workshops/examTypes';
-import { tableCellKey } from '@/lib/workshops/examTypes';
+import { EXERCISE_BLOOM_BUDGET, tableCellKey } from '@/lib/workshops/examTypes';
 import { matchListEntries } from '@/lib/workshops/answerMatch';
 
 type Props = {
@@ -38,11 +48,16 @@ type Props = {
   chapterName: string;
 };
 
-// Longueur de session choisie côté client : le tirage serveur pioche
-// indéfiniment sans notion de fin de chapitre (voir plus haut) — ce nombre est
-// une règle produit provisoire, à revoir avec la vraie mécanique de
-// progression (docs/backlog.md). Voir docs/chantiers/2026-08-05-refonte-ui-design-system.md, T23.
-const EXERCISE_SESSION_LENGTH = 10;
+/** Ce que rend le tirage — déduit de l'action plutôt que réimporté : un fichier
+ *  `'use server'` n'expose pas ses types au client (piège Turbopack, cf.
+ *  .claude/rules/server-architecture.md). */
+type DrawResult = Awaited<ReturnType<typeof drawExercise>>;
+
+/** Sentinelle d'un tirage qui n'a pas abouti (réseau coupé, action injoignable).
+ *  Un jeton plutôt qu'un message : la traduction se fait à l'affichage, sinon il
+ *  faudrait faire entrer `t` dans les dépendances du tirage — et le premier
+ *  tirage se relancerait à chaque rendu. */
+const DRAW_FAILED = '__draw_failed__';
 
 // Réponses des types qui ne se donnent pas en cochant une proposition.
 // Regroupées en UN objet par énoncé plutôt qu'en cinq tableaux parallèles, qu'il
@@ -105,35 +120,81 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
   const [result, setResult] = useState<ExerciseResult | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
-  const [answeredCount, setAnsweredCount] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [done, setDone] = useState(false);
+  /** Niveaux de Bloom déjà consommés — par les questions RÉPONDUES, pas posées. */
+  const [spent, setSpent] = useState(0);
+  /** Ce que coûte la question affichée, décompté à sa validation. */
+  const [cost, setCost] = useState(0);
+  /** Pourquoi le dernier tirage n'a rien rendu — deux impasses très différentes
+   *  à l'écran : un chapitre sans aucune question (le gestionnaire a du travail)
+   *  et un chapitre dont rien n'est encore à la portée du membre (il n'y est
+   *  pour rien, et personne n'a à être mis en cause). */
+  const [failure, setFailure] = useState<DrawResult['failure']>(null);
 
-  const draw = useCallback(
-    async (excludeId?: string) => {
-      setLoading(true);
-      setError('');
-      setResult(null);
-      setSelected([[]]);
-      setFreeText(['']);
-      setExtra([emptyExtra()]);
-      const res = await drawExercise(workshopId, chapterId, excludeId);
-      if (res.error) setError(res.error);
-      setPrompt(res.prompt);
-      // Une case de réponse par énoncé : la question principale et chacune de
-      // ses questions liées.
-      const slots = 1 + (res.prompt?.parts.length ?? 0);
-      setSelected(Array.from({ length: slots }, () => []));
-      setFreeText(Array.from({ length: slots }, () => ''));
-      setExtra(Array.from({ length: slots }, emptyExtra));
-      setLoading(false);
-    },
+  // Grappes déjà posées dans CET exercice, pour ne pas en reproposer une dont la
+  // correction n'a pas abouti (la trace en base ne s'écrit qu'à la correction).
+  // En ref et non en état : le tirage suivant part d'un gestionnaire
+  // d'événement, qui lirait sinon la valeur figée au rendu.
+  const servedRef = useRef<string[]>([]);
+  // Le tirage lancé d'avance, pendant la lecture de la correction.
+  const nextRef = useRef<Promise<DrawResult> | null>(null);
+
+  /** Installe une question tirée : une case de réponse par énoncé (la question
+   *  principale et chacune de ses questions liées). */
+  const apply = useCallback((res: DrawResult) => {
+    if (res.error) setError(res.error);
+    setPrompt(res.prompt);
+    setCost(res.cost);
+    setFailure(res.failure);
+    if (res.prompt) servedRef.current = [...servedRef.current, res.prompt.id];
+    const slots = 1 + (res.prompt?.parts.length ?? 0);
+    setSelected(Array.from({ length: slots }, () => []));
+    setFreeText(Array.from({ length: slots }, () => ''));
+    setExtra(Array.from({ length: slots }, emptyExtra));
+  }, []);
+
+  const requestDraw = useCallback(
+    (remaining: number): Promise<DrawResult> =>
+      drawExercise(workshopId, chapterId, remaining, servedRef.current).catch((err) => {
+        console.error('drawExercise error:', err);
+        return { prompt: null, cost: 0, failure: null, error: DRAW_FAILED };
+      }),
     [workshopId, chapterId]
   );
 
+  // Première question de l'exercice ; les suivantes passent par `handleNext`,
+  // qui récupère le tirage déjà lancé.
+  // (L'écran démarre déjà en « tirage en cours » : rien à mettre à jour avant
+  // l'appel, ce qui évite un rendu en cascade au montage.)
   useEffect(() => {
-    draw();
-  }, [draw]);
+    let cancelled = false;
+    requestDraw(EXERCISE_BLOOM_BUDGET).then((res) => {
+      if (cancelled) return;
+      apply(res);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [requestDraw, apply]);
+
+  /** Question suivante : celle qui a été tirée pendant la lecture de la
+   *  correction, ou un tirage à la volée si elle manque. */
+  async function handleNext() {
+    const pending = nextRef.current;
+    nextRef.current = null;
+    setError('');
+    setResult(null);
+    setLoading(true);
+    const res = await (pending ?? requestDraw(EXERCISE_BLOOM_BUDGET - spent));
+    apply(res);
+    setLoading(false);
+    // Plus rien à poser : l'exercice s'arrête là. Le membre n'a pas à en savoir
+    // davantage — un chapitre à sec est une anomalie que le serveur signale de
+    // son côté (voir `drawParcoursQuestion`).
+    if (!res.prompt) setDone(true);
+  }
 
   /** Ce qui part au serveur, énoncé par énoncé.
    *
@@ -164,8 +225,6 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
       return;
     }
     setResult(res.result);
-    const answeredSoFar = answeredCount + 1;
-    setAnsweredCount(answeredSoFar);
     // Une grappe compte pour une : elle est réussie si aucun de ses énoncés
     // n'est faux et qu'au moins un a pu être corrigé automatiquement (une
     // question entièrement libre ne prouve rien, voir `ExerciseResult`).
@@ -173,8 +232,23 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     if (outcomes.some((o) => o.correct !== null) && outcomes.every((o) => o.correct !== false)) {
       setCorrectCount((c) => c + 1);
     }
-    if (answeredSoFar >= EXERCISE_SESSION_LENGTH) setDone(true);
+
+    // La question consomme son coût dès qu'elle est répondue — juste ou fausse.
+    const spentNow = spent + cost;
+    setSpent(spentNow);
+
+    if (spentNow >= EXERCISE_BLOOM_BUDGET) {
+      setDone(true);
+      return;
+    }
+    // Le tirage suivant part MAINTENANT, pendant la lecture de la correction :
+    // il tient compte de ce que cette réponse vient de faire progresser, et le
+    // clic sur « question suivante » n'attend plus rien.
+    nextRef.current = requestDraw(EXERCISE_BLOOM_BUDGET - spentNow);
   }
+
+  /** Avancement de l'exercice : la part du budget déjà consommée. */
+  const progressPercent = Math.min(100, Math.round((spent / EXERCISE_BLOOM_BUDGET) * 100));
 
   /** Énoncés de la grappe, dans l'ordre d'affichage et de correction : la
    *  question principale puis ses questions liées. */
@@ -219,18 +293,19 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
             <X size={16} strokeWidth={1.75} />
           </Link>
         </Tooltip>
-        {/* Barre d'avancement de la session (maquette : `exProgressW`). Le
-            tirage serveur pioche indéfiniment ; la longueur de session est une
-            règle client (`EXERCISE_SESSION_LENGTH`), c'est donc elle qui donne
-            le dénominateur. */}
-        <Tooltip content={t('progressTitle', { done: answeredCount, total: EXERCISE_SESSION_LENGTH })}>
+        {/* Barre d'avancement de l'exercice (maquette : `exProgressW`). Elle
+            avance en niveaux de Bloom consommés, pas en questions : une question
+            difficile la fait bondir, c'est le sens même du budget. D'où un
+            pourcentage plutôt qu'un « x sur y » qui promettrait un nombre de
+            questions que personne ne connaît d'avance. */}
+        <Tooltip content={t('progressTitle', { percent: progressPercent })}>
         <div
           style={{ flex: 1, height: 10, borderRadius: radius.pill, background: palette.surfaceSunken, boxShadow: shadow.inset, overflow: 'hidden' }}
         >
           <div
             style={{
               height: '100%', borderRadius: radius.pill, background: palette.green,
-              width: `${Math.min(100, (answeredCount / EXERCISE_SESSION_LENGTH) * 100)}%`,
+              width: `${progressPercent}%`,
               transition: 'width 360ms cubic-bezier(0.22, 1, 0.36, 1)',
             }}
           />
@@ -272,7 +347,11 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
         // est centré quand il est court, aligné en haut et défilable quand il
         // est long. Voir .claude/rules/frontend-patterns.md.
         <div style={{ maxWidth: 680, margin: 'auto', width: '100%' }}>
-          {error && <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 12 }}>{error}</div>}
+          {error && (
+            <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 12 }}>
+              {error === DRAW_FAILED ? t('drawError') : error}
+            </div>
+          )}
 
           {/* Pas de carte autour de l'énoncé actif : la maquette le pose
               directement sur le fond de la coque. Seuls les énoncés DÉJÀ
@@ -285,8 +364,12 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
               </div>
             ) : !prompt ? (
               <div style={{ padding: '30px 0', textAlign: 'center' }}>
-                <div style={{ fontSize: 14, color: palette.ink }}>{t('emptyTitle')}</div>
-                <div style={{ fontSize: 12.5, color: palette.inkFaint, marginTop: 6 }}>{t('emptyDesc')}</div>
+                <div style={{ fontSize: 14, color: palette.ink }}>
+                  {failure === 'exhausted' ? t('outOfReachTitle') : t('emptyTitle')}
+                </div>
+                <div style={{ fontSize: 12.5, color: palette.inkFaint, marginTop: 6 }}>
+                  {failure === 'exhausted' ? t('outOfReachDesc') : t('emptyDesc')}
+                </div>
               </div>
             ) : (
               <>
@@ -363,7 +446,7 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
                 {statements.every((s) => s.responseType === 'sans_reponse') ? t('revealAnswer') : t('validate')}
               </Button>
             ) : (
-              <Button variant="primary" size="lg" onClick={() => draw(prompt.id)}>
+              <Button variant="primary" size="lg" onClick={handleNext}>
                 <RotateCw size={14} strokeWidth={1.75} /> {t('next')}
               </Button>
             )}

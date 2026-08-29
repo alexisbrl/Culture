@@ -165,6 +165,35 @@ async function creditNotions(
   return true;
 }
 
+/** Scores de maîtrise d'un membre sur un lot de notions. Une notion absente du
+ *  résultat n'a jamais été travaillée : elle vaut 0, et c'est à l'appelant de le
+ *  lire ainsi plutôt que d'écrire des zéros en base.
+ *
+ *  Sert au tirage du parcours (`drawParcoursQuestion`), qui décide de ce qu'une
+ *  question a le droit de demander d'après ce qui est déjà atteint. */
+export async function getNotionScores(
+  userId: string,
+  notionIds: string[]
+): Promise<Record<string, number>> {
+  if (notionIds.length === 0) return {};
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('brick_mastery')
+    .select('brick_id, score')
+    .eq('user_id', userId)
+    .in('brick_id', notionIds);
+
+  if (error) {
+    console.error('getNotionScores error:', error);
+    return {};
+  }
+
+  const scores: Record<string, number> = {};
+  for (const row of data ?? []) scores[row.brick_id as string] = row.score as number;
+  return scores;
+}
+
 export type ParcoursProgress = {
   /** Avancement de l'atelier entier, 0-100, sur ses notions **rangées dans un
    *  chapitre** — voir `getParcoursProgress` pour la raison. */
@@ -247,9 +276,10 @@ export async function getParcoursProgress(workshopId: string, userId: string): P
 // CET utilisateur sur les notions de CET atelier. Un `delete` sur `user_id`
 // seul effacerait sa progression sur tous ses autres ateliers.
 //
-// Quand le tirage « jamais deux fois la même question » existera, c'est ici
-// qu'il faudra aussi purger l'historique des questions posées — la fonction est
-// déjà le point d'entrée unique de la remise à zéro.
+// L'historique des questions déjà répondues (`parcours_asked`) se purge en même
+// temps, mais depuis le wrapper `resetMyParcoursProgress` : il vit dans exam.ts,
+// qui lit déjà la maîtrise d'ici — l'appeler ici ferait tourner les deux modules
+// en rond.
 export async function resetUserMastery(
   workshopId: string,
   userId: string
