@@ -126,6 +126,10 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
   const [spent, setSpent] = useState(0);
   /** Ce que coûte la question affichée, décompté à sa validation. */
   const [cost, setCost] = useState(0);
+  /** Plus rien ne viendra après la question affichée : le bouton du bas propose
+   *  alors de terminer, plutôt que d'annoncer une question suivante qui
+   *  n'existe pas. */
+  const [noMore, setNoMore] = useState(false);
   /** Pourquoi le dernier tirage n'a rien rendu — deux impasses très différentes
    *  à l'écran : un chapitre sans aucune question (le gestionnaire a du travail)
    *  et un chapitre dont rien n'est encore à la portée du membre (il n'y est
@@ -134,11 +138,22 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
 
   // Grappes déjà posées dans CET exercice, pour ne pas en reproposer une dont la
   // correction n'a pas abouti (la trace en base ne s'écrit qu'à la correction).
-  // En ref et non en état : le tirage suivant part d'un gestionnaire
-  // d'événement, qui lirait sinon la valeur figée au rendu.
+  // En ref et non en état : les tirages partent de gestionnaires d'événements,
+  // qui liraient sinon la valeur figée au rendu.
   const servedRef = useRef<string[]>([]);
-  // Le tirage lancé d'avance, pendant la lecture de la correction.
-  const nextRef = useRef<Promise<DrawResult> | null>(null);
+  /** Questions tirées et pas encore affichées. */
+  const queueRef = useRef<DrawResult[]>([]);
+  /** Somme des coûts de TOUT ce qui a été tiré — affiché, répondu ou en file.
+   *  C'est lui qui borne l'exercice : un tirage réserve sa part du budget au
+   *  moment où il part, pas quand la question est répondue. Sans quoi les deux
+   *  questions d'avance pourraient faire dépasser les 12 niveaux. */
+  const committedRef = useRef(0);
+  /** Les tirages s'enchaînent au lieu de partir en parallèle : chacun a besoin
+   *  du coût du précédent pour savoir ce qui reste du budget. */
+  const chainRef = useRef<Promise<void>>(Promise.resolve());
+  /** Dernière impasse rencontrée, gardée pour l'écran de fin ou d'accueil. */
+  const failedRef = useRef<DrawResult | null>(null);
+  const startedRef = useRef(false);
 
   /** Installe une question tirée : une case de réponse par énoncé (la question
    *  principale et chacune de ses questions liées). */
@@ -147,7 +162,6 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     setPrompt(res.prompt);
     setCost(res.cost);
     setFailure(res.failure);
-    if (res.prompt) servedRef.current = [...servedRef.current, res.prompt.id];
     const slots = 1 + (res.prompt?.parts.length ?? 0);
     setSelected(Array.from({ length: slots }, () => []));
     setFreeText(Array.from({ length: slots }, () => ''));
@@ -163,39 +177,76 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     [workshopId, chapterId]
   );
 
-  // Première question de l'exercice ; les suivantes passent par `handleNext`,
-  // qui récupère le tirage déjà lancé.
-  // (L'écran démarre déjà en « tirage en cours » : rien à mettre à jour avant
-  // l'appel, ce qui évite un rendu en cascade au montage.)
-  useEffect(() => {
-    let cancelled = false;
-    requestDraw(EXERCISE_BLOOM_BUDGET).then((res) => {
-      if (cancelled) return;
-      apply(res);
-      setLoading(false);
+  /** Lance un tirage de plus, à la queue de la file. Ne rend rien quand le
+   *  budget est déjà entièrement réservé ou qu'une impasse a été rencontrée :
+   *  la file reste vide, et c'est ce vide qui met fin à l'exercice. */
+  const enqueue = useCallback((): Promise<void> => {
+    chainRef.current = chainRef.current.then(async () => {
+      if (failedRef.current) return;
+      const room = EXERCISE_BLOOM_BUDGET - committedRef.current;
+      if (room <= 0) return;
+      const res = await requestDraw(room);
+      if (!res.prompt) {
+        failedRef.current = res;
+        return;
+      }
+      committedRef.current += res.cost;
+      // Retenue dès le TIRAGE et non à l'affichage : avec une question
+      // d'avance dans la file, la suivante se tire avant que celle-ci
+      // n'apparaisse — la marquer trop tard, c'est risquer de la tirer deux
+      // fois de suite.
+      servedRef.current = [...servedRef.current, res.prompt.id];
+      queueRef.current.push(res);
     });
+    return chainRef.current;
+  }, [requestDraw]);
+
+  /** La prochaine question prête, ou `null` s'il n'y en a plus. Attend le
+   *  tirage en cours : c'est le seul moment où l'écran peut avoir à patienter,
+   *  et il ne se produit que si le membre va plus vite que le serveur. */
+  const takeNext = useCallback(async (): Promise<DrawResult | null> => {
+    await chainRef.current;
+    return queueRef.current.shift() ?? null;
+  }, []);
+
+  // Au montage : DEUX tirages d'affilée. Le premier s'affiche, le second attend
+  // dans la file. C'est ce coup d'avance qui rend le passage à la question
+  // suivante instantané même pour qui ne lit pas sa correction — la file se
+  // regarnit ensuite à chaque validation, jamais au clic.
+  useEffect(() => {
+    // Garde d'exécution unique : en développement, React monte deux fois. Sans
+    // elle, l'exercice partirait avec quatre questions tirées et la moitié du
+    // budget réservée pour rien.
+    if (startedRef.current) return;
+    startedRef.current = true;
+    let cancelled = false;
+    void (async () => {
+      await enqueue();
+      const first = await takeNext();
+      if (cancelled) return;
+      apply(first ?? failedRef.current ?? { prompt: null, cost: 0, failure: 'empty' });
+      setLoading(false);
+      if (first?.prompt) void enqueue();
+    })();
     return () => {
       cancelled = true;
     };
-  }, [requestDraw, apply]);
+  }, [enqueue, takeNext, apply]);
 
-  /** Question suivante : celle qui a été tirée pendant la lecture de la
-   *  correction, ou un tirage à la volée si elle manque. */
+  /** Question suivante : celle qui attend dans la file. */
   async function handleNext() {
-    const pending = nextRef.current;
-    nextRef.current = null;
     setError('');
     setResult(null);
+    setNoMore(false);
     setLoading(true);
-    const res = await (pending ?? requestDraw(EXERCISE_BLOOM_BUDGET - spent));
-    apply(res);
+    const res = await takeNext();
     setLoading(false);
-    // Plus rien à poser : l'exercice s'arrête là. Le membre n'a pas à en savoir
-    // davantage — un chapitre à sec est une anomalie que le serveur signale de
-    // son côté (voir `drawParcoursQuestion`).
-    if (!res.prompt) setDone(true);
+    if (!res) {
+      setDone(true);
+      return;
+    }
+    apply(res);
   }
-
   /** Ce qui part au serveur, énoncé par énoncé.
    *
    *  ⚠️ Les paires sont converties en TEXTE : la colonne de droite est arrivée
@@ -234,17 +285,14 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     }
 
     // La question consomme son coût dès qu'elle est répondue — juste ou fausse.
-    const spentNow = spent + cost;
-    setSpent(spentNow);
+    setSpent(spent + cost);
 
-    if (spentNow >= EXERCISE_BLOOM_BUDGET) {
-      setDone(true);
-      return;
-    }
-    // Le tirage suivant part MAINTENANT, pendant la lecture de la correction :
-    // il tient compte de ce que cette réponse vient de faire progresser, et le
-    // clic sur « question suivante » n'attend plus rien.
-    nextRef.current = requestDraw(EXERCISE_BLOOM_BUDGET - spentNow);
+    // Un tirage de plus part MAINTENANT, pendant la lecture de la correction.
+    // La file en garde donc toujours un d'avance : le temps de lire, puis de
+    // répondre à la question suivante, suffit largement à le préparer.
+    void enqueue().then(() => {
+      if (queueRef.current.length === 0) setNoMore(true);
+    });
   }
 
   /** Avancement de l'exercice : la part du budget déjà consommée. */
@@ -446,8 +494,9 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
                 {statements.every((s) => s.responseType === 'sans_reponse') ? t('revealAnswer') : t('validate')}
               </Button>
             ) : (
-              <Button variant="primary" size="lg" onClick={handleNext}>
-                <RotateCw size={14} strokeWidth={1.75} /> {t('next')}
+              <Button variant="primary" size="lg" onClick={noMore ? () => setDone(true) : handleNext}>
+                {noMore ? <Leaf size={14} strokeWidth={1.75} /> : <RotateCw size={14} strokeWidth={1.75} />}
+                {noMore ? t('finish') : t('next')}
               </Button>
             )}
           </div>
