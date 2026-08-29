@@ -206,12 +206,32 @@ export type ParcoursProgress = {
 export async function getParcoursProgress(workshopId: string, userId: string): Promise<ParcoursProgress> {
   const supabase = getSupabaseServerClient();
 
-  // Deux lectures indépendantes → en parallèle (règle N+1).
+  // ⚠️ **La maîtrise se filtre par JOINTURE, jamais par liste d'identifiants.**
+  //
+  // Elle était lue en énumérant les notions de l'atelier (`in('brick_id', […])`).
+  // PostgREST reçoit ses filtres dans l'URL : à 845 notions, la requête pesait
+  // ~38 000 caractères et le serveur la refusait — « Bad Request », et un objet
+  // d'erreur dont le message n'est même pas énumérable, donc journalisé `{}`.
+  // La panne est SILENCIEUSE pour le membre : l'erreur n'interrompt rien, les
+  // scores retombent à zéro et toutes les barres affichent 0 % sur l'atelier le
+  // plus rempli — celui où elles comptent le plus (29/08/2026). Même famille que
+  // le tirage descendu en base la veille : ce qui grandit avec le contenu ne doit
+  // pas voyager dans une URL.
+  //
+  // La jointure interne dit la même chose sans rien énumérer : « la maîtrise de
+  // ce membre, sur les notions de cet atelier ». Elle ne dépend plus de la
+  // lecture des notions, donc les trois lectures partent ensemble (règle N+1).
   // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
-  const [{ data: notions, error }, { data: chapterRows }] = await Promise.all([
-    supabase.from('workshop_bricks').select('id, chapter_id').eq('workshop_id', workshopId),
-    supabase.from('workshop_chapters').select('id, hidden').eq('workshop_id', workshopId),
-  ]);
+  const [{ data: notions, error }, { data: chapterRows }, { data: mastery, error: masteryError }] =
+    await Promise.all([
+      supabase.from('workshop_bricks').select('id, chapter_id').eq('workshop_id', workshopId),
+      supabase.from('workshop_chapters').select('id, hidden').eq('workshop_id', workshopId),
+      supabase
+        .from('brick_mastery')
+        .select('brick_id, score, workshop_bricks!inner(workshop_id)')
+        .eq('user_id', userId)
+        .eq('workshop_bricks.workshop_id', workshopId),
+    ]);
 
   if (error) {
     console.error('getParcoursProgress error:', error);
@@ -230,16 +250,14 @@ export async function getParcoursProgress(workshopId: string, userId: string): P
   const all = notions ?? [];
   if (all.length === 0) return { workshopPercent: 0, chapterPercent: {} };
 
-  const { data: mastery, error: masteryError } = await supabase
-    .from('brick_mastery')
-    .select('brick_id, score')
-    .eq('user_id', userId)
-    .in(
-      'brick_id',
-      all.map((n) => n.id as string)
-    );
-
-  if (masteryError) console.error('getParcoursProgress mastery error:', masteryError);
+  // Maîtrise illisible : on s'arrête là plutôt que de calculer des pourcentages
+  // sur des scores qu'on n'a pas. L'écran affichera 0 % — c'est faux, et c'est
+  // assumé faute d'un état « inconnu » dans le contrat des barres ; au moins le
+  // journal porte la cause au lieu d'un tableau de zéros sans explication.
+  if (masteryError) {
+    console.error('getParcoursProgress mastery error:', masteryError);
+    return { workshopPercent: 0, chapterPercent: {} };
+  }
 
   const scores = new Map<string, number>();
   for (const row of mastery ?? []) scores.set(row.brick_id as string, row.score as number);
@@ -290,6 +308,11 @@ export async function getParcoursProgress(workshopId: string, userId: string): P
 // temps, mais depuis le wrapper `resetMyParcoursProgress` : il vit dans exam.ts,
 // qui lit déjà la maîtrise d'ici — l'appeler ici ferait tourner les deux modules
 // en rond.
+/** Combien d'identifiants de notion par requête de suppression. Une centaine
+ *  pèse ~4 500 caractères d'URL, loin de la limite où le serveur commence à
+ *  refuser (~8 000), et laisse la marge pour les autres paramètres. */
+const MASTERY_DELETE_CHUNK = 100;
+
 export async function resetUserMastery(
   workshopId: string,
   userId: string
@@ -312,17 +335,31 @@ export async function resetUserMastery(
   // — PostgREST le traduirait par un filtre qui ne restreint rien.
   if (ids.length === 0) return { success: true, cleared: 0 };
 
-  const { data: deleted, error: deleteError } = await supabase
-    .from('brick_mastery')
-    .delete()
-    .eq('user_id', userId)
-    .in('brick_id', ids)
-    .select('id');
+  // ⚠️ **Par PAQUETS, et pas d'un bloc.** La liste part dans l'URL : au-delà de
+  // quelques centaines de notions, le serveur refuse la requête entière (« Bad
+  // Request ») — mesuré à 845 notions le 29/08/2026, voir `getParcoursProgress`.
+  // Une lecture y échappe par une jointure ; une SUPPRESSION, non : PostgREST ne
+  // sait pas filtrer un `delete` sur une table jointe. Le découpage est donc le
+  // seul recours, et il ne change rien à la garantie qui compte — chaque paquet
+  // reste doublement filtré (cet utilisateur, ces notions-ci).
+  //
+  // Un paquet qui échoue arrête tout : une remise à zéro à moitié faite laisse
+  // une progression incohérente, et il vaut mieux la redemander en entier.
+  let cleared = 0;
+  for (let i = 0; i < ids.length; i += MASTERY_DELETE_CHUNK) {
+    const { data: deleted, error: deleteError } = await supabase
+      .from('brick_mastery')
+      .delete()
+      .eq('user_id', userId)
+      .in('brick_id', ids.slice(i, i + MASTERY_DELETE_CHUNK))
+      .select('id');
 
-  if (deleteError) {
-    console.error('resetUserMastery delete error:', deleteError);
-    return { success: false, cleared: 0, error: deleteError.message };
+    if (deleteError) {
+      console.error('resetUserMastery delete error:', deleteError);
+      return { success: false, cleared, error: deleteError.message };
+    }
+    cleared += (deleted ?? []).length;
   }
 
-  return { success: true, cleared: (deleted ?? []).length };
+  return { success: true, cleared };
 }

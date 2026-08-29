@@ -82,6 +82,22 @@ export type ImportBanner = {
   examQuestions: number;
 };
 
+/** Une passe qui échoue laisse une trace CÔTÉ SERVEUR, en plus du message rendu
+ *  à l'écran.
+ *
+ *  ⚠️ Sans elle, une panne d'ingestion ne survivait nulle part : le seul endroit
+ *  où elle s'affichait était le dialogue, et un rafraîchissement de page — ou la
+ *  fermeture de l'onglet — l'emportait avec lui. Constaté le 29/08/2026, sur une
+ *  erreur de fin de génération qu'il a été impossible de retrouver après coup.
+ *
+ *  Le contexte (atelier, lot, chapitre, numéro de lot) est joint : « la passe
+ *  questions a échoué » sans dire laquelle, sur quoi, ne se diagnostique pas. */
+function failed(pass: string, error: unknown, context: Record<string, unknown>): string {
+  const detail = message(error);
+  console.error(`[ingest] passe ${pass} échouée :`, detail, context);
+  return detail;
+}
+
 function message(error: unknown): string {
   return error instanceof Error ? error.message : 'Erreur inattendue';
 }
@@ -149,7 +165,7 @@ export async function ingestDocumentNotions(
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
-    return { ok: false, error: message(error) };
+    return { ok: false, error: failed('notions', error, { workshopId, importId, documentIndex }) };
   }
 }
 
@@ -169,7 +185,7 @@ export async function ingestWorkshopChapters(
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
-    return { ok: false, error: message(error) };
+    return { ok: false, error: failed('chapitres', error, { workshopId, importId }) };
   }
 }
 
@@ -190,7 +206,7 @@ export async function ingestWorkshopAssignments(
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
-    return { ok: false, error: message(error) };
+    return { ok: false, error: failed('rangement', error, { workshopId, importId, batchIndex }) };
   }
 }
 
@@ -239,7 +255,7 @@ export async function ingestParcoursQuestions(
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
-    return { ok: false, error: message(error) };
+    return { ok: false, error: failed('questions du parcours', error, { workshopId, importId, chapter: chapter.name, batchIndex }) };
   }
 }
 
@@ -267,7 +283,7 @@ export async function ingestWorkshopExamQuestions(
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
-    return { ok: false, error: message(error) };
+    return { ok: false, error: failed("questions d'examen", error, { workshopId, importId, sliceIndex }) };
   }
 }
 
