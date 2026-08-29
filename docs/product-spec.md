@@ -302,7 +302,25 @@ La **liste des questions du parcours** est celle de la banque d'examen (même co
 - **On ne compte qu'à la frontière** : les niveaux qu'il reste à conquérir sur chaque notion, du niveau atteint + 1 jusqu'à la portée (+ 2), plafonnés à 4. Un niveau déjà acquis n'a pas besoin d'être réapprovisionné.
 - **Déclenchement : un seul couple à 1 ou 0 question disponible suffit. La recharge remet alors TOUS les couples du chapitre à 4** — un déclenchement remet tout au propre, sinon on rechargerait un exercice sur deux.
 - **Le radar tourne au lancement d'un exercice, pour le membre qui le lance** (et sur son chapitre). Mesurer le membre le plus démuni de l'atelier remplirait le stock de quelqu'un d'autre et laisserait celui qui a la page ouverte sans question ; la recharge qu'il déclenche profite ensuite à tous, les questions créées étant neuves pour tout le monde. La base sait aussi balayer un atelier entier — ça servira le jour où l'on préparera le stock à l'avance plutôt qu'à l'ouverture d'un exercice.
-- **Ce que la recharge fait produire** : une question centrée sur le couple en manque. Les autres notions qu'elle mobilise restent déclarées honnêtement (on ne demande pas à l'IA de les cacher), mais **à un niveau déjà à portée** — sans quoi la question créée pour combler un manque serait elle-même indisponible. Voir aussi `docs/ai-ingestion-plan.md`.
+- **Ce que la recharge fait produire** : une question centrée sur le couple en manque. Les autres notions qu'elle mobilise restent déclarées honnêtement (on ne demande pas à l'IA de les cacher), mais **aucune à un niveau supérieur à celui de la notion principale** — sans quoi la question créée pour combler un manque serait elle-même indisponible. Si le modèle dépasse quand même le plafond, la question est **conservée** (c'est du contenu valide) : elle ne compte simplement pas pour le couple visé, et le radar redemandera. Aucune pression à mentir, aucun rejet.
+
+**Demander des questions à l'IA : une seule forme, trois façons de la remplir** *(arrêté le 29/08/2026)*
+
+Une demande est **une liste de couples (notion × niveau) avec un nombre pour chacun**. Ce qui change d'un cas à l'autre, ce n'est pas la demande, c'est qui la remplit :
+
+| Qui remplit | Quand | Ce qui est demandé |
+|---|---|---|
+| Le programme | Chapitre neuf ou mis à jour | **25 questions de niveau 1**, réparties sur les notions du chapitre — de quoi tenir deux exercices. L'existant est retranché : un second passage n'en rajoute pas 25. |
+| Le radar | Lancement d'un exercice | Les couples sous le seuil, remontés à 4. |
+| Un gestionnaire | Bouton « générer des questions » | Rien de calculé : une consigne libre ne dit rien du stock de chaque notion, donc on envoie toutes les notions du chapitre et **c'est le modèle qui choisit**. |
+
+⚠️ **Changement de volumétrie** : jusqu'au 29/08/2026, un import visait **12 questions par notion** (8 de niveau 1, 4 de niveau 2), soit 240 pour un chapitre de 20 notions. C'est désormais **25 par chapitre**. Les niveaux supérieurs et les notions restées vides ne sont plus produits d'avance : la recharge les pourvoit quand un membre les atteint réellement.
+
+**Garde-fous de la recharge** — c'est le seul appel payant que personne ne décide : un **plafond** de 60 questions par recharge (ce qui reste en manque sera repris au lancement suivant), un **délai de garde** de 10 minutes par chapitre (deux exercices coup sur coup ne rechargent qu'une fois), et une **trace** — chaque recharge ouvre un lot d'import comme n'importe quelle génération, donc son coût est compté et son contenu reste annulable. Elle part **après** que la question est partie à l'écran : le membre n'attend jamais après elle, et elle survit à la fermeture de l'onglet.
+
+**Répondre au hasard** *(29/08/2026)*
+
+Une question répondue est consommée, juste ou fausse : quelques minutes de clics au hasard vident un chapitre et déclenchent une recharge payante pour rien. Remettre les mauvaises réponses au tirage a été **écarté** — ça donnerait le moyen d'aller vite pour se faire montrer toutes les réponses, puis de repasser en les connaissant. À la place, un **avertissement** (jamais un blocage) quand les **cinq dernières réponses** sont toutes en **moins de trois secondes** avec au plus une bonne réponse — le score du hasard sur un QCM à quatre propositions. Quand rien n'était corrigeable automatiquement, la vitesse seule tranche. Le temps est mesuré par l'écran et non par le serveur : depuis les deux questions d'avance, une question est tirée bien avant d'être affichée. C'est donc falsifiable, et c'est assumé — on vise le membre qui se disperse, pas le tricheur.
 
 Sécurité : le client ne reçoit **jamais** `answer` ni `correctChoices` au tirage — le serveur renvoie un `ExercisePrompt` épuré et calcule la correction (`gradeExercise`). Les options peuvent donc être mélangées côté serveur sans mémoriser de permutation, chaque option portant son index d'origine. Un membre qui soumet n'importe quoi peut obtenir la réponse : c'est assumé pour un parcours d'entraînement individuel, contrairement à un examen noté.
 

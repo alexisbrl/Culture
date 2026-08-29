@@ -1026,6 +1026,7 @@
     "verdictCorrect": "Bonne réponse !",
     "verdictWrong": "Mauvaise réponse",
     "verdictNeutral": "Pas de correction automatique pour ce type de réponse.",
+    "tooFast": "Tu réponds très vite, et rarement juste. Chaque question ne se pose qu'une fois : au hasard, tu épuises celles qui te restaient.",
     "expectedAnswer": "Réponse attendue :",
     "gradeError": "Erreur lors de la correction",
     "doneTitle": "belle récolte.",

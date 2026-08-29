@@ -39,6 +39,7 @@ import {
   type QuestionTypeOptions,
 } from '@/lib/workshops/examTypes';
 import { gradeStatement } from '@/lib/workshops/grading';
+import type { AnswerPaceRow } from '@/lib/workshops/answerPace';
 import { assertQuestionIntegrity, assertStatements, notionIdsOf } from '@/lib/workshops/questionIntegrity';
 // ─── Stockage : un groupe, ses questions ─────────────────────────────────────
 //
@@ -661,15 +662,56 @@ export async function resolveMediaUrls(keys: string[]): Promise<Record<string, s
  *
  *  Ne lève pas : perdre cette trace repose une question un jour, ce qui ne
  *  justifie pas de refuser au membre la correction qu'il vient de demander. */
-export async function markParcoursAsked(workshopId: string, userId: string, groupId: string): Promise<void> {
+export async function markParcoursAsked(
+  workshopId: string,
+  userId: string,
+  groupId: string,
+  pace: { answerMs: number | null; correct: boolean | null } = { answerMs: null, correct: null }
+): Promise<void> {
   const supabase = getSupabaseServerClient();
   const { error } = await supabase
     .from('parcours_asked')
     .upsert(
-      { workshop_id: workshopId, user_id: userId, group_id: groupId },
+      {
+        workshop_id: workshopId,
+        user_id: userId,
+        group_id: groupId,
+        answer_ms: pace.answerMs,
+        correct: pace.correct,
+      },
       { onConflict: 'user_id,group_id', ignoreDuplicates: true }
     );
   if (error) console.error('markParcoursAsked error:', error);
+}
+
+/** Les dernières réponses d'un membre dans un atelier, la plus récente en tête —
+ *  de quoi juger son rythme (voir `looksRandom`, @/lib/workshops/answerPace).
+ *
+ *  Ne lève pas : un détecteur d'avertissement ne doit jamais faire échouer la
+ *  correction qu'un membre vient de demander. */
+export async function recentAnswerPace(
+  workshopId: string,
+  userId: string,
+  limit: number
+): Promise<AnswerPaceRow[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('parcours_asked')
+    .select('answer_ms, correct')
+    .eq('workshop_id', workshopId)
+    .eq('user_id', userId)
+    .order('asked_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('recentAnswerPace error:', error);
+    return [];
+  }
+
+  return (data ?? []).map((row) => ({
+    answerMs: (row.answer_ms as number | null) ?? null,
+    correct: (row.correct as boolean | null) ?? null,
+  }));
 }
 
 /** Efface ce qu'un membre a déjà répondu dans un atelier. Appelé par la remise à

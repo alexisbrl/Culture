@@ -123,8 +123,11 @@ export type IngestScope =
   | {
       pass: 'questions';
       chapter: { id: string; name: string };
-      /** Les notions à faire travailler par ce lot de questions. */
-      notions: { id: string; title: string }[];
+      /** Les notions à faire travailler par ce lot de questions. `want` porte la
+       *  DEMANDE : ce qu'il faut produire sur cette notion, niveau par niveau
+       *  (voir @/lib/ingest/demand). Absent quand une consigne libre laisse le
+       *  modèle choisir. */
+      notions: { id: string; title: string; want?: { bloomLevel: 1 | 2 | 3 | 4; count: number }[] }[];
       /** Les AUTRES notions du même chapitre, en contexte seulement (§16.21).
        *  C'est ce qui remplace le cours : la notion suffit pour les niveaux 1 et
        *  2 de Bloom, ses voisines apportent ce qu'il faut pour les niveaux 3 et

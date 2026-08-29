@@ -1026,6 +1026,7 @@
     "verdictCorrect": "Correct!",
     "verdictWrong": "Wrong answer",
     "verdictNeutral": "No automatic grading for this response type.",
+    "tooFast": "You are answering very fast, and rarely right. Each question is only asked once: answering at random uses up the ones you had left.",
     "expectedAnswer": "Expected answer:",
     "gradeError": "Error while grading",
     "doneTitle": "great harvest.",

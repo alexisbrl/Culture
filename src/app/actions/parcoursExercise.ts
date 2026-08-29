@@ -1,8 +1,12 @@
 'use server';
 
+import { after } from 'next/server';
+
 import { requireMember } from '@/lib/authz';
 import * as examLib from '@/lib/workshops/exam';
 import { rewardAnsweredQuestion } from '@/lib/workshops/mastery';
+import { looksRandom, sanitizeAnswerMs, PACE_WINDOW } from '@/lib/workshops/answerPace';
+import { refillChapter } from '@/lib/ingest/refill';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import { EXERCISE_BLOOM_BUDGET } from '@/lib/workshops/examTypes';
 import type { ExerciseAnswer, ExercisePrompt, ExerciseResult } from '@/lib/workshops/examTypes';
@@ -57,10 +61,26 @@ export async function drawExercise(
     const budget = Math.max(0, Math.min(Math.floor(Number(remaining) || 0), EXERCISE_BLOOM_BUDGET));
     const excludes = (Array.isArray(excludeIds) ? excludeIds : []).filter((id) => typeof id === 'string');
 
-    return await examLib.drawParcoursQuestion(workshopId, chapterId, ctx.userId, {
+    const drawn = await examLib.drawParcoursQuestion(workshopId, chapterId, ctx.userId, {
       remaining: budget,
       excludeIds: excludes,
     });
+
+    // ─── La recharge automatique part ICI ──────────────────────────────────
+    //
+    // Au LANCEMENT d'un exercice seulement (budget entier), et après que la
+    // question est partie à l'écran :  exécute ce bloc une fois la
+    // réponse envoyée, donc le membre n'attend jamais après une génération et
+    // celle-ci survit à la fermeture de l'onglet.
+    //
+    // Rien n'est attendu ni renvoyé : ce que la recharge produit servira au
+    // prochain exercice, pas à celui qui commence. Ses garde-fous (plafond,
+    // délai de garde, trace) sont dans @/lib/ingest/refill.
+    if (budget >= EXERCISE_BLOOM_BUDGET) {
+      after(() => refillChapter(workshopId, chapterId, ctx.userId));
+    }
+
+    return drawn;
   } catch (err) {
     console.error('drawExercise error:', err);
     return { prompt: null, cost: 0, failure: null, error: 'Erreur lors du tirage' };
@@ -79,8 +99,9 @@ export async function drawExercise(
 export async function gradeExercise(
   workshopId: string,
   questionId: string,
-  answers: ExerciseAnswer[]
-): Promise<{ result: ExerciseResult | null; error?: string }> {
+  answers: ExerciseAnswer[],
+  answerMs?: number
+): Promise<{ result: ExerciseResult | null; tooFast?: boolean; error?: string }> {
   try {
     const ctx = await requireMember(workshopId);
     if (!ctx) return { result: null, error: 'Accès refusé' };
@@ -88,11 +109,25 @@ export async function gradeExercise(
     const graded = await examLib.gradeParcoursAnswer(workshopId, questionId, answers);
     if (!graded) return { result: null };
 
+    // La grappe est réussie si aucun de ses énoncés n'est faux et qu'au moins un
+    // a pu être corrigé automatiquement — même règle que la goutte affichée à
+    // l'écran. `null` quand rien n'était corrigeable : ni réussi ni raté.
+    const outcomes = [graded.result, ...(graded.result.parts ?? [])];
+    const judged = outcomes.some((o) => o.correct !== null);
+    const correct = judged ? outcomes.every((o) => o.correct !== false) : null;
+
     // C'EST ICI que la question sort du tirage, et pas au moment où elle est
     // posée (règle du 29/08/2026) : une question affichée puis abandonnée n'a
     // rien mesuré, elle reste disponible. Répondue, en revanche, elle est
     // consommée — juste ou fausse.
-    await examLib.markParcoursAsked(workshopId, ctx.userId, questionId);
+    //
+    // Le temps de réponse vient de l'écran : le serveur ne peut pas le mesurer
+    // depuis que les questions sont tirées d'avance (voir
+    // docs/migrations/2026-08-29-rythme-de-reponse.sql).
+    await examLib.markParcoursAsked(workshopId, ctx.userId, questionId, {
+      answerMs: sanitizeAnswerMs(answerMs),
+      correct,
+    });
 
     // Seule une bonne réponse vérifiée par le serveur fait progresser. Les
     // types sans correction automatique (réponse rédigée, dessin, dépôt de
@@ -105,7 +140,13 @@ export async function gradeExercise(
     );
     if (changes.some(Boolean)) revalidateWorkshop();
 
-    return { result: graded.result };
+    // Avertissement, jamais sanction : cinq réponses d'affilée en moins de trois
+    // secondes avec un résultat proche du hasard vident le chapitre pour rien.
+    const tooFast = looksRandom(
+      await examLib.recentAnswerPace(workshopId, ctx.userId, PACE_WINDOW)
+    );
+
+    return { result: graded.result, tooFast };
   } catch (err) {
     console.error('gradeExercise error:', err);
     return { result: null, error: 'Erreur lors de la correction' };

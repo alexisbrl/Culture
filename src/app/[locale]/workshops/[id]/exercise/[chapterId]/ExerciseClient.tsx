@@ -130,6 +130,9 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
    *  alors de terminer, plutôt que d'annoncer une question suivante qui
    *  n'existe pas. */
   const [noMore, setNoMore] = useState(false);
+  /** Cinq réponses d'affilée trop rapides et proches du hasard : on le dit une
+   *  fois, sans rien bloquer (voir @/lib/workshops/answerPace). */
+  const [tooFast, setTooFast] = useState(false);
   /** Pourquoi le dernier tirage n'a rien rendu — deux impasses très différentes
    *  à l'écran : un chapitre sans aucune question (le gestionnaire a du travail)
    *  et un chapitre dont rien n'est encore à la portée du membre (il n'y est
@@ -154,6 +157,9 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
   /** Dernière impasse rencontrée, gardée pour l'écran de fin ou d'accueil. */
   const failedRef = useRef<DrawResult | null>(null);
   const startedRef = useRef(false);
+  /** Quand la question affichée l'a été. Le serveur ne peut pas le savoir : il a
+   *  tiré cette question bien avant, pendant que la précédente était traitée. */
+  const shownAtRef = useRef(0);
 
   /** Installe une question tirée : une case de réponse par énoncé (la question
    *  principale et chacune de ses questions liées). */
@@ -162,11 +168,17 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     setPrompt(res.prompt);
     setCost(res.cost);
     setFailure(res.failure);
+    shownAtRef.current = Date.now();
     const slots = 1 + (res.prompt?.parts.length ?? 0);
     setSelected(Array.from({ length: slots }, () => []));
     setFreeText(Array.from({ length: slots }, () => ''));
     setExtra(Array.from({ length: slots }, emptyExtra));
   }, []);
+
+  /** Depuis combien de temps la question est à l'écran. Enveloppé plutôt
+   *  qu'appelé sur place : lire l'horloge dans le corps du composant est
+   *  signalé comme impur par la règle React Compiler du projet. */
+  const elapsedSinceShown = useCallback(() => Date.now() - shownAtRef.current, []);
 
   const requestDraw = useCallback(
     (remaining: number): Promise<DrawResult> =>
@@ -269,13 +281,14 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     if (!prompt) return;
     setChecking(true);
     setError('');
-    const res = await gradeExercise(workshopId, prompt.id, toAnswers());
+    const res = await gradeExercise(workshopId, prompt.id, toAnswers(), elapsedSinceShown());
     setChecking(false);
     if (res.error || !res.result) {
       setError(res.error ?? t('gradeError'));
       return;
     }
     setResult(res.result);
+    setTooFast(res.tooFast === true);
     // Une grappe compte pour une : elle est réussie si aucun de ses énoncés
     // n'est faux et qu'au moins un a pu être corrigé automatiquement (une
     // question entièrement libre ne prouve rien, voir `ExerciseResult`).
@@ -452,6 +465,22 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
                   onText={(next) => setTextAt(0, next)}
                   onExtra={(patch) => setExtraAt(0, patch)}
                 />
+
+                {tooFast && (
+                  <div
+                    style={{
+                      marginTop: 20,
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      background: withAlpha(palette.amber, 0.14),
+                      color: palette.ink,
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {t('tooFast')}
+                  </div>
+                )}
 
                 {prompt.parts.map((part, i) => (
                   <div key={i} style={{ marginTop: 26, paddingTop: 22, borderTop: `1px solid ${palette.line}` }}>

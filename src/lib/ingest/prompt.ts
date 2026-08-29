@@ -584,9 +584,15 @@ const PARCOURS_PACE: Record<BloomLevel, string> = {
  *  annoncer une durée pour un niveau qu'on ne produit pas attirerait l'attention
  *  sur ce qu'on ne veut justement pas voir. */
 export function paceInstruction(distribution: BloomDistribution = DEFAULT_BLOOM_DISTRIBUTION): string {
-  const parts = BLOOM_LEVELS.filter((level) => distribution[level] > 0).map(
-    (level) => `${PARCOURS_PACE[level]} au niveau ${level}`,
-  );
+  return paceForLevels(BLOOM_LEVELS.filter((level) => distribution[level] > 0));
+}
+
+/** La même règle, à partir des niveaux réellement demandés — la forme qu'il
+ *  faut quand la volumétrie vient d'une demande explicite et non d'une
+ *  répartition (voir @/lib/ingest/demand). */
+export function paceForLevels(levels: BloomLevel[]): string {
+  const wanted = BLOOM_LEVELS.filter((level) => levels.includes(level));
+  const parts = wanted.map((level) => `${PARCOURS_PACE[level]} au niveau ${level}`);
   if (parts.length === 0) return '';
   return `**Un entraînement s'enchaîne** : vise ${parts.join(', ')}. C'est le temps de réponse attendu, et c'est lui qui dicte l'ampleur de l'énoncé comme celle de la réponse.`;
 }
@@ -672,7 +678,16 @@ function responseTypeCatalog(context: 'parcours' | 'exam'): string {
 export function questionsInstruction(input: {
   chapter: { id: string; name: string };
   workshop?: WorkshopIdentity | null;
-  notions: { id: string; title: string; missing?: number }[];
+  /** `want` porte la DEMANDE explicite : ce qu'il faut produire sur cette
+   *  notion, niveau par niveau. Présente pour un chapitre neuf comme pour une
+   *  recharge ; absente pour une consigne libre, où le modèle choisit
+   *  (voir @/lib/ingest/demand). */
+  notions: {
+    id: string;
+    title: string;
+    missing?: number;
+    want?: { bloomLevel: BloomLevel; count: number }[];
+  }[];
   /** Les autres notions du chapitre, en contexte seulement (§16.21). La passe ne
    *  reçoit plus les documents : ce sont elles qui remplacent le cours. */
   neighbours?: { id: string; title: string }[];
@@ -688,10 +703,23 @@ export function questionsInstruction(input: {
   // consigne qui dit déjà 12 n'apporte rien et brouille la règle générale.
   const list = input.notions
     .map((n) => {
+      // La demande explicite prime : elle dit le nombre ET le niveau, il n'y a
+      // plus rien à déduire d'une règle générale.
+      if (n.want && n.want.length > 0) {
+        const parts = n.want.map((w) => `${w.count} de niveau ${w.bloomLevel} (${BLOOM_VERBS[w.bloomLevel]})`);
+        return `- ${n.id} — ${n.title} : ${parts.join(', ')}`;
+      }
       const missing = typeof n.missing === 'number' && n.missing > 0 ? ` [il en manque ${n.missing}]` : '';
       return `- ${n.id} — ${n.title}${missing}`;
     })
     .join('\n');
+
+  // Les niveaux réellement demandés, pour la règle de rythme : face à une
+  // demande explicite, la répartition par défaut ne dit plus rien de juste.
+  const wantedLevels = new Set<BloomLevel>(
+    input.notions.flatMap((n) => (n.want ?? []).map((w) => w.bloomLevel)),
+  );
+  const hasDemand = wantedLevels.size > 0;
   const neighbours = input.neighbours ?? [];
 
   // Le contexte vient APRÈS les notions à couvrir et se termine par un rappel :
@@ -709,10 +737,14 @@ Notions à couvrir :
 ${list}
 ${context}
 Règles de production :
-- ${bloomInstruction(input.distribution)}
+- ${hasDemand
+    ? "**Produis exactement ce qui est demandé en face de chaque notion** — le nombre et le niveau y sont écrits. Ce niveau est celui que tu inscris à côté de la notion dans `notions`. N'en ajoute pas, et ne produis aucun autre niveau."
+    : bloomInstruction(input.distribution)}
 - Chaque question porte dans \`notions\` la ou les notions qu'elle fait travailler, avec les références ci-dessus, **et pour chacune le niveau auquel cette question-là la fait travailler**. Une question sans notion ne sera jamais posée à personne.
-- **Une question, une notion.** Ici, une question est tirée pour réviser SA notion : elle doit se répondre avec elle et rien d'autre.
-- ${paceInstruction(input.distribution)}
+- ${hasDemand
+    ? "**Une question est écrite POUR une notion, au niveau demandé.** Si elle en mobilise d'autres, déclare-les toutes — mais **aucune à un niveau supérieur à celui de sa notion principale**. Une question qui exige d'une notion secondaire plus que de sa notion principale ne pourra être posée à personne : elle serait hors de portée de ceux-là mêmes pour qui on l'écrit."
+    : "**Une question, une notion.** Ici, une question est tirée pour réviser SA notion : elle doit se répondre avec elle et rien d'autre."}
+- ${hasDemand ? paceForLevels([...wantedLevels]) : paceInstruction(input.distribution)}
 ${responseTypeCatalog('parcours')}
 - Pour une réponse libre : renseigne les critères de correction — ce qui est attendu, ce qui est accepté. C'est là-dessus que la réponse sera jugée.
 - Pour un QCM : des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien, elle se raye d'office.
