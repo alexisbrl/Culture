@@ -117,7 +117,14 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
   const [selected, setSelected] = useState<number[][]>([[]]);
   const [freeText, setFreeText] = useState<string[]>(['']);
   const [extra, setExtra] = useState<ExtraAnswer[]>([emptyExtra()]);
-  const [result, setResult] = useState<ExerciseResult | null>(null);
+  /** Correction de chaque énoncé, `null` tant qu'il n'a pas été validé. Un
+   *  tableau et non un objet unique : une grappe se corrige énoncé par énoncé,
+   *  et les corrections déjà rendues restent à l'écran. */
+  const [outcomes, setOutcomes] = useState<(ExerciseResult | null)[]>([null]);
+  /** Combien d'énoncés de la grappe sont affichés. On commence au premier seul,
+   *  et « suivant » en découvre un de plus — jamais un écran vierge : le
+   *  précédent reste au-dessus, avec sa correction. */
+  const [shown, setShown] = useState(1);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
   const [correctCount, setCorrectCount] = useState(0);
@@ -179,6 +186,8 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     setSelected(Array.from({ length: slots }, () => []));
     setFreeText(Array.from({ length: slots }, () => ''));
     setExtra(Array.from({ length: slots }, emptyExtra));
+    setOutcomes(Array.from({ length: slots }, () => null));
+    setShown(1);
   }, []);
 
   /** Depuis combien de temps la question est à l'écran. Enveloppé plutôt
@@ -291,7 +300,7 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
   /** Question suivante : celle qui attend dans la file. */
   async function handleNext() {
     setError('');
-    setResult(null);
+    setTooFast(false);
     setNoMore(false);
     setLoading(true);
     const res = await takeNext();
@@ -324,23 +333,36 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     });
   }
 
+  /** Valide l'énoncé actif — et lui seul. Les énoncés déjà corrigés restent
+   *  affichés au-dessus ; ceux qui suivent n'ont pas encore été posés, et leur
+   *  correction n'est donc pas calculée (voir `gradeExercise`). */
   async function handleValidate() {
     if (!prompt) return;
+    const at = activeIndex;
     setChecking(true);
     setError('');
-    const res = await gradeExercise(workshopId, prompt.id, toAnswers(), elapsedSinceShown());
+    // `elapsedSinceShown` mesure la grappe ENTIÈRE : elle est remise à zéro à
+    // l'affichage de la question, pas à chaque énoncé. Le serveur ne s'en sert
+    // qu'au dernier — le rythme se juge sur l'unité qui compte pour une
+    // question, pas sur ses morceaux.
+    const res = await gradeExercise(workshopId, prompt.id, toAnswers(), at, elapsedSinceShown());
     setChecking(false);
     if (res.error || !res.result) {
       setError(res.error ?? t('gradeError'));
       return;
     }
-    setResult(res.result);
+    const outcome = res.result;
+    setOutcomes((prev) => prev.map((v, i) => (i === at ? outcome : v)));
+    if (!res.isLast) return;
+
+    // ─── Fin de grappe : c'est ici, et seulement ici, qu'elle compte ────────
     setTooFast(res.tooFast === true);
-    // Une grappe compte pour une : elle est réussie si aucun de ses énoncés
+
+    // Une grappe vaut UNE question : elle est réussie si aucun de ses énoncés
     // n'est faux et qu'au moins un a pu être corrigé automatiquement (une
     // question entièrement libre ne prouve rien, voir `ExerciseResult`).
-    const outcomes = [res.result, ...(res.result.parts ?? [])];
-    if (outcomes.some((o) => o.correct !== null) && outcomes.every((o) => o.correct !== false)) {
+    const all = [...outcomes.slice(0, at), outcome];
+    if (all.some((o) => o && o.correct !== null) && all.every((o) => !o || o.correct !== false)) {
       setCorrectCount((c) => c + 1);
     }
 
@@ -348,12 +370,30 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     setSpent(spent + cost);
 
     // Un tirage de plus part MAINTENANT, pendant la lecture de la correction.
-    // La file en garde donc toujours un d'avance : le temps de lire, puis de
-    // répondre à la question suivante, suffit largement à le préparer.
+    // À la FIN de la grappe et pas à chacun de ses énoncés : le budget est
+    // réservé par question, et un tirage par question liée en réserverait
+    // autant de fois trop.
     void enqueue().then(() => {
       if (queueRef.current.length === 0) setNoMore(true);
     });
   }
+
+  /** « Suivant » à l'intérieur d'une grappe : découvre l'énoncé d'après, sous
+   *  celui qu'on vient de corriger. Rien à demander au serveur — la question
+   *  liée est déjà là, elle attendait seulement son tour. */
+  function handleNextStatement() {
+    setError('');
+    setShown((n) => n + 1);
+  }
+
+  /** L'énoncé qu'on vient de découvrir arrive SOUS la correction précédente,
+   *  donc souvent hors de l'écran quand la première question était longue. On
+   *  l'amène sous les yeux — sans quoi « suivant » donnerait l'impression de
+   *  n'avoir rien fait. */
+  const revealedRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (shown > 1) revealedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [shown]);
 
   /** Avancement de l'exercice : la part du budget déjà consommée. */
   const progressPercent = Math.min(100, Math.round((spent / EXERCISE_BLOOM_BUDGET) * 100));
@@ -373,6 +413,14 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
       ]
     : [];
 
+  /** L'énoncé en cours : le dernier découvert. Ceux d'avant sont corrigés et
+   *  posés en cartes au-dessus, ceux d'après n'existent pas encore à l'écran. */
+  const activeIndex = Math.min(shown, statements.length) - 1;
+  /** La correction de l'énoncé actif, une fois validée. */
+  const activeOutcome = outcomes[activeIndex] ?? null;
+  /** Reste-t-il une question liée après celle qu'on vient de corriger ? */
+  const hasNextStatement = activeIndex < statements.length - 1;
+
   function setChoicesAt(idx: number, next: number[]) {
     setSelected((prev) => prev.map((v, i) => (i === idx ? next : v)));
   }
@@ -383,11 +431,18 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     setExtra((prev) => prev.map((v, i) => (i === idx ? { ...v, ...patch } : v)));
   }
 
-  // Une réponse est requise sur CHAQUE énoncé qui en attend une, sauf ceux sans
-  // réponse attendue (où le bouton sert juste à afficher la correction).
+  // Seul l'énoncé actif est validable : les précédents sont corrigés, les
+  // suivants ne sont pas posés. `sans_reponse` reste validable d'emblée — le
+  // bouton n'y fait qu'afficher la réponse attendue.
   const canValidate =
-    !!prompt && !result && !checking &&
-    statements.every((s, i) => isAnswered(s, selected[i] ?? [], freeText[i] ?? '', extra[i] ?? emptyExtra()));
+    !!prompt && !activeOutcome && !checking &&
+    !!statements[activeIndex] &&
+    isAnswered(
+      statements[activeIndex],
+      selected[activeIndex] ?? [],
+      freeText[activeIndex] ?? '',
+      extra[activeIndex] ?? emptyExtra(),
+    );
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 40, display: 'flex', flexDirection: 'column', background: palette.cream }}>
@@ -495,37 +550,83 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
               </div>
             ) : (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 22 }}>
-                  <span style={{ width: 44, height: 44, borderRadius: 12, background: withAlpha(palette.green, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.green, flexShrink: 0 }}>
-                    <Sprout size={20} strokeWidth={1.75} />
-                  </span>
-                  <span style={{ fontSize: 21, fontWeight: 700, color: palette.ink, lineHeight: 1.3, whiteSpace: 'pre-wrap' }}>
-                    {prompt.content.trim() || tExam('noStatement')}
-                  </span>
-                </div>
+                {/* ─── La grappe se dévoile un énoncé à la fois ─────────────
+                    Seuls les énoncés déjà découverts sont rendus (`shown`) :
+                    le suivant n'apparaît qu'au clic sur « suivant », SOUS le
+                    précédent, qui reste lisible avec sa correction. Un énoncé
+                    corrigé prend une carte, l'énoncé actif est posé
+                    directement sur le fond — c'est le repère « ce qui est
+                    fait / ce qui reste ». */}
+                {statements.slice(0, shown).map((statement, i) => {
+                  const outcome = outcomes[i] ?? null;
+                  const isMain = i === 0;
+                  const settled = outcome !== null;
+                  return (
+                    <div
+                      key={i}
+                      ref={i === shown - 1 ? revealedRef : null}
+                      style={{
+                        marginTop: isMain ? 0 : 18,
+                        ...(settled
+                          ? {
+                              background: palette.surfaceRaised,
+                              border: `1px solid ${palette.line}`,
+                              borderRadius: 14,
+                              padding: '18px 20px',
+                            }
+                          : {}),
+                      }}
+                    >
+                      {isMain ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 22 }}>
+                          <span style={{ width: 44, height: 44, borderRadius: 12, background: withAlpha(palette.green, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.green, flexShrink: 0 }}>
+                            <Sprout size={20} strokeWidth={1.75} />
+                          </span>
+                          <span style={{ fontSize: 21, fontWeight: 700, color: palette.ink, lineHeight: 1.3, whiteSpace: 'pre-wrap' }}>
+                            {statement.content.trim() || tExam('noStatement')}
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Une grappe se découvrant une question à la fois,
+                              on dit combien il en reste : sans ce repère, le
+                              candidat ne sait pas si « suivant » le mène à une
+                              question liée de plus ou à une autre question. */}
+                          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: palette.inkFaint, marginBottom: 8 }}>
+                            {t('statementCounter', { index: i, total: statements.length - 1 })}
+                          </div>
+                          <div style={{ fontSize: 16.5, fontWeight: 700, color: palette.ink, lineHeight: 1.4, marginBottom: 16, whiteSpace: 'pre-wrap' }}>
+                            {statement.content.trim() || tExam('noStatement')}
+                          </div>
+                        </>
+                      )}
 
-                {prompt.imageUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element -- aperçu d'un fichier privé (URL signée éphémère), pas un asset next/image
-                  <img src={prompt.imageUrl} alt="" style={{ maxWidth: '100%', maxHeight: 320, borderRadius: 12, border: `1px solid ${palette.line}`, marginBottom: 18 }} />
-                )}
-                {prompt.audioUrl && (
-                  <audio controls src={prompt.audioUrl} style={{ width: '100%', marginBottom: 18 }} />
-                )}
+                      {/* Image et audio restent avec la question principale :
+                          ce sont les éléments COMMUNS de la grappe, et les
+                          questions liées s'y réfèrent. Ils ne sont donc jamais
+                          répétés, et restent visibles une fois la principale
+                          corrigée. */}
+                      {isMain && prompt.imageUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element -- aperçu d'un fichier privé (URL signée éphémère), pas un asset next/image
+                        <img src={prompt.imageUrl} alt="" style={{ maxWidth: '100%', maxHeight: 320, borderRadius: 12, border: `1px solid ${palette.line}`, marginBottom: 18 }} />
+                      )}
+                      {isMain && prompt.audioUrl && (
+                        <audio controls src={prompt.audioUrl} style={{ width: '100%', marginBottom: 18 }} />
+                      )}
 
-                {/* Zone de réponse de la question principale, puis chaque
-                    question liée avec son propre énoncé et sa correction.
-                    L'image et l'audio ne sont pas répétés : ce sont les
-                    éléments communs de la grappe. */}
-                <AnswerZone
-                  statement={statements[0]}
-                  selected={selected[0] ?? []}
-                  freeText={freeText[0] ?? ''}
-                  extra={extra[0] ?? emptyExtra()}
-                  result={result}
-                  onChoices={(next) => setChoicesAt(0, next)}
-                  onText={(next) => setTextAt(0, next)}
-                  onExtra={(patch) => setExtraAt(0, patch)}
-                />
+                      <AnswerZone
+                        statement={statement}
+                        selected={selected[i] ?? []}
+                        freeText={freeText[i] ?? ''}
+                        extra={extra[i] ?? emptyExtra()}
+                        result={outcome}
+                        onChoices={(next) => setChoicesAt(i, next)}
+                        onText={(next) => setTextAt(i, next)}
+                        onExtra={(patch) => setExtraAt(i, patch)}
+                      />
+                    </div>
+                  );
+                })}
 
                 {tooFast && (
                   <div
@@ -542,25 +643,6 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
                     {t('tooFast')}
                   </div>
                 )}
-
-                {prompt.parts.map((part, i) => (
-                  <div key={i} style={{ marginTop: 26, paddingTop: 22, borderTop: `1px solid ${palette.line}` }}>
-                    <div style={{ fontSize: 16.5, fontWeight: 700, color: palette.ink, lineHeight: 1.4, marginBottom: 16, whiteSpace: 'pre-wrap' }}>
-                      {part.content.trim() || tExam('noStatement')}
-                    </div>
-                    <AnswerZone
-                      statement={part}
-                      selected={selected[i + 1] ?? []}
-                      freeText={freeText[i + 1] ?? ''}
-                      extra={extra[i + 1] ?? emptyExtra()}
-                      result={result?.parts?.[i] ?? null}
-                      onChoices={(next) => setChoicesAt(i + 1, next)}
-                      onText={(next) => setTextAt(i + 1, next)}
-                      onExtra={(patch) => setExtraAt(i + 1, patch)}
-                    />
-                  </div>
-                ))}
-
               </>
             )}
           </div>
@@ -575,13 +657,23 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
       {!done && prompt && !loading && (
         <div style={{ flex: 'none', borderTop: `1px solid ${palette.line}`, background: palette.surfaceRaised, boxShadow: `0 -8px 24px -12px ${withAlpha(palette.ink, 0.28)}`, padding: '14px 20px' }}>
           <div style={{ maxWidth: 680, margin: '0 auto', width: '100%', display: 'flex', justifyContent: 'flex-end' }}>
-            {!result ? (
+            {/* ─── Un bouton, trois sens, dans cet ordre ────────────────────
+                1. valider l'énoncé actif ;
+                2. découvrir l'énoncé suivant de la grappe ;
+                3. passer à la question suivante — ou terminer, quand il n'y a
+                   plus rien à tirer (`noMore`). Il ne doit jamais annoncer une
+                   suite qui n'existe pas. */}
+            {!activeOutcome ? (
               <Button variant="primary" size="lg" onClick={handleValidate} disabled={!canValidate}>
                 {checking && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-                {/* « Voir la réponse » seulement si AUCUN énoncé de la grappe
-                    n'attend de réponse : dès qu'il y en a un, le bouton valide
-                    bien quelque chose. */}
-                {statements.every((s) => s.responseType === 'sans_reponse') ? t('revealAnswer') : t('validate')}
+                {/* « Afficher la réponse » quand l'énoncé actif n'attend rien :
+                    le bouton ne valide alors rien, il dévoile. */}
+                {statements[activeIndex]?.responseType === 'sans_reponse' ? t('revealAnswer') : t('validate')}
+              </Button>
+            ) : hasNextStatement ? (
+              <Button variant="primary" size="lg" onClick={handleNextStatement}>
+                <ArrowRight size={14} strokeWidth={1.75} />
+                {t('nextStatement')}
               </Button>
             ) : (
               <Button variant="primary" size="lg" onClick={noMore ? () => setDone(true) : handleNext}>

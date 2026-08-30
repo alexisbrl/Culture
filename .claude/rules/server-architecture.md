@@ -119,3 +119,15 @@ Passe du 30/08/2026 sur les paramètres d'atelier, mesurée : « Général » s'
 - **Ce qu'un onglet fermé n'a pas besoin de montrer ne bloque pas la page.** `settings/page.tsx` n'attend que l'atelier ; membres, ressources et notions arrivent en flux dans leur propre `<Suspense>`, alimenté par un petit composant serveur async par section (`MembersSlot`/`FilesSlot`/`NotionsSlot`), passé à la coque **en prop** (`membersSlot`…). L'invariant du montage permanent tient toujours : la bascule `display: 'contents' | 'none'` reste dans le composant client, on ne diffère que l'arrivée du contenu, jamais son montage.
 
 > **Piège RSC : une VALEUR importée d'un module `'use client'` n'arrive pas entière côté serveur.** Un composant serveur qui importe un tableau exporté par un module client en reçoit une référence, pas le tableau — `NAV_ITEMS.some is not a function` au rendu, invisible pour `tsc` comme pour `next build`. Les constantes qu'un serveur ET un client doivent lire vivent donc dans un module neutre (ici `settings/sections.ts`), le module client se contentant d'y accrocher son habillage. Les `import type`, eux, traversent sans problème : ils disparaissent à la compilation.
+
+## Correction d'un exercice : un énoncé par appel
+
+`gradeExercise(workshopId, questionId, answers, index, answerMs?)` corrige **l'énoncé `index`** d'une grappe, et lui seul (0 = la question principale, `i + 1` = la question liée `i`). Règle du 30/08/2026, en même temps que la pose une-par-une côté écran (voir `docs/product-spec.md`).
+
+Ce qui se fait à **chaque** appel : le verdict de l'énoncé, et le crédit de maîtrise de **ses** notions. Ce qui ne se fait qu'au **dernier** (`isLast`) : la trace `parcours_asked` — une grappe vaut une question, l'écrire à chaque énoncé la ferait compter trois fois — et le rythme de réponse, mesuré de l'affichage de la grappe à sa dernière validation.
+
+Trois pièges à ne pas rouvrir :
+
+- **`answers` porte toute la grappe à chaque appel**, pas seulement l'énoncé validé : le dernier appel rejuge l'ensemble pour savoir si la grappe est réussie. Un client bricolé peut donc réécrire ses réponses précédentes avant le dernier envoi — ça ne touche que cette trace, jamais la maîtrise, créditée à la validation de chaque énoncé sur le verdict rendu à ce moment-là.
+- **`ExerciseResult` ne porte plus de champ `parts`.** Renvoyer la correction de toute la grappe ferait descendre au navigateur les réponses de questions **pas encore posées** — exactement ce que le modèle du parcours interdit (`drawExercise` ne renvoie ni `answer` ni `correctChoices`).
+- **Le tirage de la question suivante reste déclenché à la FIN de la grappe** (`enqueue` dans `ExerciseClient`), jamais à chaque énoncé : le budget de Bloom est réservé au tirage, un tirage par question liée en réserverait autant de fois trop.

@@ -19,6 +19,28 @@
 // URL — l'URL signée est résolue à la demande, côté serveur uniquement.
 export type QuestionMedia = { key: string };
 
+// ─── Décision : un média se porte sur l'ÉNONCÉ, jamais sur une réponse ───────
+//
+// Arrêté le 30/08/2026 après examen, à ne pas rediscuter sans élément nouveau :
+// les propositions d'un QCM, les éléments d'une liste, les cases d'un tableau
+// et les paires à relier restent du TEXTE. Pas d'image ni d'audio dans une
+// proposition de réponse.
+//
+// Ce n'est pas un manque de temps, c'est un mauvais rapport : le même exercice
+// s'obtient en mettant le média sur l'énoncé (une planche, un extrait sonore)
+// et en faisant choisir parmi des options écrites — « lequel de ces éléments
+// est en A ? ». Le résultat pédagogique est quasiment identique, alors que le
+// coût, lui, ne l'est pas : il faudrait un dépôt de fichier par proposition,
+// autant d'URL signées à résoudre à chaque tirage, un rendu à inventer sur la
+// feuille A4 comme dans l'exercice du parcours, la reprise de la correction
+// (qui compare des textes), du barème, de la copie de question, du contrat
+// exposé à l'IA et à une future API — pour chacun des types à propositions.
+//
+// Conséquence pratique : `QuestionMedia` n'apparaît que sur la question (image,
+// audio), et `choices` reste un tableau de chaînes partout où il existe. Si
+// l'envie revient, elle doit d'abord expliquer ce que l'énoncé ne sait pas déjà
+// faire.
+
 // Une question vit soit dans la banque d'examen, soit dans le parcours
 // pédagogique (colonne `exam_questions.context`). Même table, même éditeur,
 // deux surfaces de gestion distinctes.
@@ -550,10 +572,14 @@ export type ExerciseResult = {
   correctList?: string[];
   /** matching — les paires attendues, remises côte à côte. */
   correctPairs?: { left: string; right: string }[];
-  /** Correction de chaque question liée, dans le même ordre que
-   *  `ExercisePrompt.parts`. Absent (ou vide) quand la question n'en a pas. */
-  parts?: ExerciseResult[];
 };
+
+// Une correction porte UN énoncé, jamais la grappe entière : depuis le
+// 30/08/2026, les questions liées se posent et se corrigent une par une, donc
+// la correction de la suivante n'existe pas encore quand on rend celle-ci. Le
+// champ `parts` qui les portait toutes d'un coup a disparu avec cette règle —
+// le rendre à ce type reviendrait à faire descendre au navigateur des réponses
+// à des questions qui ne sont pas encore posées.
 
 export type IdentitySide = 'left' | 'right' | 'hidden';
 

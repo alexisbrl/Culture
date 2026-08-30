@@ -84,34 +84,50 @@ export async function drawExercise(
   }
 }
 
-// `answers[0]` = la réponse donnée à la question principale, `answers[i+1]` =
-// celle de la question liée `i` (même ordre que `ExercisePrompt.parts`). Chaque
-// énoncé est corrigé et crédite ses propres notions : une question liée juste
-// fait progresser les siennes même si la principale est ratée.
+// ─── Une grappe se corrige énoncé par énoncé (30/08/2026) ───────────────────
+//
+// `index` est l'énoncé qu'on vient de valider (0 = la question principale,
+// `i + 1` = la question liée `i`), et c'est le SEUL corrigé : les suivants ne
+// sont pas encore posés. `answers` porte quand même toute la grappe, l'écran
+// gardant les réponses déjà données — le dernier appel en a besoin pour juger
+// la grappe entière (voir `gradeParcoursAnswer`).
+//
+// Ce qui n'arrive qu'au DERNIER énoncé, et jamais avant :
+//   • la trace en base (la grappe sort du tirage — une seule fois, sans quoi
+//     une question à trois énoncés compterait pour trois) ;
+//   • le rythme de réponse, mesuré sur la grappe entière : c'est elle l'unité
+//     de temps, pas chacun de ses morceaux.
+// Ce qui arrive à CHAQUE énoncé : le crédit de maîtrise de ses propres notions.
 //
 // Une réponse ne se limite plus aux cases cochées depuis le 25/08/2026 : elle
 // porte aussi les lignes d'une liste, les cases d'une grille et les paires
-// reliées, qui sont désormais corrigées (voir `gradeOne` dans
-// @/lib/workshops/exam).
+// reliées, qui sont désormais corrigées (voir `gradeStatement`).
 export async function gradeExercise(
   workshopId: string,
   questionId: string,
   answers: ExerciseAnswer[],
+  index: number,
   answerMs?: number
-): Promise<{ result: ExerciseResult | null; tooFast?: boolean; error?: string }> {
+): Promise<{ result: ExerciseResult | null; isLast?: boolean; tooFast?: boolean; error?: string }> {
   try {
     const ctx = await requireMember(workshopId);
     if (!ctx) return { result: null, error: 'Accès refusé' };
 
-    const graded = await examLib.gradeParcoursAnswer(workshopId, questionId, answers);
+    const graded = await examLib.gradeParcoursAnswer(workshopId, questionId, answers, index);
     if (!graded) return { result: null };
 
-    // La grappe est réussie si aucun de ses énoncés n'est faux et qu'au moins un
-    // a pu être corrigé automatiquement — même règle que la goutte affichée à
-    // l'écran. `null` quand rien n'était corrigeable : ni réussi ni raté.
-    const outcomes = [graded.result, ...(graded.result.parts ?? [])];
-    const judged = outcomes.some((o) => o.correct !== null);
-    const correct = judged ? outcomes.every((o) => o.correct !== false) : null;
+    // Seule une bonne réponse vérifiée par le serveur fait progresser. Les
+    // types sans correction automatique (réponse rédigée, dessin, dépôt de
+    // fichier) ont `correct: null` : rien ne prouve la maîtrise, le score reste
+    // inchangé.
+    // `rewards` ne porte que les notions de l'énoncé corrigé, avec leur niveau
+    // de Bloom lu en base — jamais ce que le client prétend.
+    const changes = await Promise.all(
+      graded.rewards.map((target) => rewardAnsweredQuestion(workshopId, ctx.userId, target)),
+    );
+    if (changes.some(Boolean)) revalidateWorkshop();
+
+    if (!graded.isLast) return { result: graded.result, isLast: false };
 
     // C'EST ICI que la question sort du tirage, et pas au moment où elle est
     // posée (règle du 29/08/2026) : une question affichée puis abandonnée n'a
@@ -123,26 +139,15 @@ export async function gradeExercise(
     // docs/migrations/2026-08-29-rythme-de-reponse.sql).
     await examLib.markParcoursAsked(workshopId, ctx.userId, questionId, {
       answerMs: sanitizeAnswerMs(answerMs),
-      correct,
+      correct: graded.groupCorrect,
     });
-
-    // Seule une bonne réponse vérifiée par le serveur fait progresser. Les
-    // types sans correction automatique (réponse rédigée, dessin, dépôt de
-    // fichier) ont `correct: null` : rien ne prouve la maîtrise, le score reste
-    // inchangé.
-    // `rewards` ne contient que les énoncés justes, avec leurs notions et leur
-    // niveau de Bloom lus en base — jamais ce que le client prétend.
-    const changes = await Promise.all(
-      graded.rewards.map((target) => rewardAnsweredQuestion(workshopId, ctx.userId, target)),
-    );
-    if (changes.some(Boolean)) revalidateWorkshop();
 
     // Trois fautes expédiées d'affilée : on le dit, avec la correction. Deux de
     // plus et c'est le TIRAGE qui refusera (voir `drawExercise`) — la mise en
     // pause n'a pas à interrompre une correction déjà calculée.
     const verdict = paceVerdict(await examLib.recentAnswerPace(workshopId, ctx.userId, PACE_WINDOW));
 
-    return { result: graded.result, tooFast: verdict.state === 'warn' };
+    return { result: graded.result, isLast: true, tooFast: verdict.state === 'warn' };
   } catch (err) {
     console.error('gradeExercise error:', err);
     return { result: null, error: 'Erreur lors de la correction' };

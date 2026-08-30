@@ -1023,6 +1023,8 @@
     "validate": "validate",
     "revealAnswer": "show the answer",
     "next": "next question",
+    "nextStatement": "next",
+    "statementCounter": "linked question {index} of {total}",
     "finish": "finish the exercise",
     "verdictCorrect": "Correct!",
     "verdictWrong": "Wrong answer",

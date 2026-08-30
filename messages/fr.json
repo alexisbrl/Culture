@@ -1023,6 +1023,8 @@
     "validate": "valider",
     "revealAnswer": "afficher la réponse",
     "next": "question suivante",
+    "nextStatement": "suivant",
+    "statementCounter": "question liée {index} sur {total}",
     "finish": "terminer l’exercice",
     "verdictCorrect": "Bonne réponse !",
     "verdictWrong": "Mauvaise réponse",

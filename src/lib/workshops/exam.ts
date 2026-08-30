@@ -849,19 +849,53 @@ export async function drawParcoursQuestion(
 export type RewardTarget = { notionIds: string[]; bloomLevel: number };
 
 
-// `answers[0]` porte la réponse de la question principale, `answers[i+1]` celle
-// de la question liée `i` — même ordre que `ExercisePrompt.parts`. Un index
-// absent vaut « rien de répondu ».
+/** Notions à créditer pour un énoncé, regroupées par palier de Bloom : une même
+ *  question peut faire restituer une notion et en faire analyser une autre. */
+function rewardsFor(
+  correct: boolean | null,
+  notionIds: string[],
+  notionBloom: Record<string, BloomLevel>,
+): RewardTarget[] {
+  if (correct !== true || notionIds.length === 0) return [];
+  const byLevel = new Map<BloomLevel, string[]>();
+  for (const notionId of notionIds) {
+    const level = notionBloom[notionId] ?? DEFAULT_BLOOM_LEVEL;
+    byLevel.set(level, [...(byLevel.get(level) ?? []), notionId]);
+  }
+  return [...byLevel].map(([level, ids]) => ({ notionIds: ids, bloomLevel: level }));
+}
+
+// ─── Une grappe se corrige énoncé par énoncé (30/08/2026) ───────────────────
+//
+// `index` désigne l'énoncé qu'on vient de valider : 0 = la question principale,
+// `i + 1` = la question liée `i` (même ordre que `ExercisePrompt.parts`). On ne
+// corrige QUE celui-là — les suivants n'ont pas encore été posés, et leur
+// correction ne doit pas descendre au navigateur d'avance.
+//
+// `answers` porte quand même TOUTE la grappe (l'écran conserve les réponses
+// déjà données) : à la validation du DERNIER énoncé, il faut rejuger l'ensemble
+// pour savoir si la grappe est réussie — c'est ce verdict-là, et lui seul, qui
+// s'écrit en base, une fois, à la fin. Un client bricolé pourrait donc
+// réécrire ses réponses précédentes avant le dernier envoi : ça ne changerait
+// que cette trace, jamais la maîtrise — les notions d'un énoncé sont créditées
+// à SA validation, sur le verdict rendu à ce moment-là, et jamais deux fois.
 //
 // `rewards` n'est PAS destiné au client : il ne sort pas de l'action serveur,
-// qui s'en sert pour créditer la maîtrise des notions de chaque énoncé
-// correctement traité (la question principale et chaque question liée ont les
-// leurs, voir `QuestionPart`).
+// qui s'en sert pour créditer la maîtrise des notions de l'énoncé corrigé.
 export async function gradeParcoursAnswer(
   workshopId: string,
   questionId: string,
-  answers: ExerciseAnswer[]
-): Promise<{ result: ExerciseResult; rewards: RewardTarget[] } | null> {
+  answers: ExerciseAnswer[],
+  index: number,
+): Promise<{
+  result: ExerciseResult;
+  rewards: RewardTarget[];
+  /** L'énoncé corrigé est-il le dernier de la grappe ? */
+  isLast: boolean;
+  /** Verdict de la GRAPPE entière, calculé au dernier énoncé seulement
+   *  (`null` ailleurs, comme lorsque rien n'était corrigeable). */
+  groupCorrect: boolean | null;
+} | null> {
   const supabase = getSupabaseServerClient();
 
   const { data: row, error } = await supabase
@@ -876,40 +910,33 @@ export async function gradeParcoursAnswer(
   if (!row) return null;
 
   const q = embeddedToQuestion(row as unknown as EmbeddedGroupRow);
-  const parts = q.parts ?? [];
+  // Les énoncés de la grappe, dans l'ordre où le candidat les traite.
+  const statements = [q, ...(q.parts ?? [])];
 
   // Ce qui arrive du navigateur n'est jamais tenu pour bien formé : une server
-  // action est une URL POST publique (voir `toExerciseAnswer`).
+  // action est une URL POST publique (voir `toExerciseAnswer`). L'index non
+  // plus — il désigne une case d'un tableau relu en base.
   const given = (Array.isArray(answers) ? answers : []).map(toExerciseAnswer);
-  const main = gradeStatement(q, given[0] ?? emptyExerciseAnswer());
-  const partResults = parts.map((part, i) => gradeStatement(part, given[i + 1] ?? emptyExerciseAnswer()));
+  const at = Math.max(0, Math.min(Math.floor(Number(index) || 0), statements.length - 1));
+  const statement = statements[at];
 
-  // Chaque énoncé crédite SES notions, chacune à SON niveau : une question liée
+  const result = gradeStatement(statement, given[at] ?? emptyExerciseAnswer());
+
+  // L'énoncé crédite SES notions, chacune à SON niveau : une question liée
   // juste fait progresser les siennes même si la principale est ratée. Notions
   // et niveaux sont relus de la base ici, jamais reçus du client.
-  const rewards: RewardTarget[] = [
-    { correct: main.correct, notionIds: q.notionIds ?? [], notionBloom: q.notionBloom },
-    ...parts.map((part, i) => ({
-      correct: partResults[i]?.correct ?? null,
-      notionIds: part.notionIds ?? [],
-      notionBloom: part.notionBloom,
-    })),
-  ]
-    .filter((target) => target.correct === true && target.notionIds.length > 0)
-    // Une notion est créditée à SON niveau, pas à celui de l'énoncé : une même
-    // question peut en faire restituer une et en faire analyser une autre. On
-    // regroupe donc par niveau — la maîtrise se calcule par palier, un appel par
-    // palier suffit.
-    .flatMap(({ notionIds, notionBloom }) => {
-      const byLevel = new Map<BloomLevel, string[]>();
-      for (const notionId of notionIds) {
-        const level = notionBloom[notionId] ?? DEFAULT_BLOOM_LEVEL;
-        byLevel.set(level, [...(byLevel.get(level) ?? []), notionId]);
-      }
-      return [...byLevel].map(([level, ids]) => ({ notionIds: ids, bloomLevel: level }));
-    });
+  const rewards = rewardsFor(result.correct, statement.notionIds ?? [], statement.notionBloom);
 
-  return { result: { ...main, parts: partResults }, rewards };
+  const isLast = at === statements.length - 1;
+  let groupCorrect: boolean | null = null;
+  if (isLast) {
+    // La grappe compte pour UNE question : elle est réussie si aucun de ses
+    // énoncés n'est faux et qu'au moins un a pu être corrigé automatiquement.
+    const all = statements.map((s, i) => gradeStatement(s, given[i] ?? emptyExerciseAnswer()));
+    groupCorrect = all.some((o) => o.correct !== null) ? all.every((o) => o.correct !== false) : null;
+  }
+
+  return { result, rewards, isLast, groupCorrect };
 }
 
 export async function saveQuestions(workshopId: string, questions: Question[]): Promise<void> {
