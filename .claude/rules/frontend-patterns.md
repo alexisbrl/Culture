@@ -134,3 +134,13 @@ Trois comportements que le hook tient et qu'il ne faut pas réécrire à la main
 - **Rangée flex dont un panneau n'a que des enfants `position: absolute`** (ex. le panneau « pots » de `ProgrammeTab`) : ce panneau a une hauteur intrinsèque nulle — sa hauteur visible vient soit d'un frère avec du contenu réel, soit d'une hauteur définie. Si l'ancêtre est en `minHeight` (hauteur `auto`), un `height: '100%'` ne résout pas ; supprimer le frère qui donnait la hauteur fait s'effondrer toute la rangée à 0 px → « page blanche » inexpliquée. Toujours poser un `minHeight` explicite sur le conteneur de la rangée dans ce cas.
 
 - **Deux systèmes d'avatar distincts existent** — ne pas les confondre : le composeur PNG actuel (`src/components/avatar/avatarConfig.ts`, rendu par `AvatarComposer`, édité via `/profile/avatar`, source de vérité `publicMetadata.avatarParts` sur le compte Clerk) et un système SVG legacy (`src/components/avatar/types.ts`, rendu par `AvatarSVG`, utilisé uniquement par la `Navbar` visiteur — invisible une fois connecté). Toujours vérifier de quel fichier `avatarConfig`/`types` on importe avant de modifier le rendu d'avatar.
+
+## Préparer une page au survol — `WarmLink`
+
+`src/components/WarmLink.tsx` remplace `next/link` partout où l'on veut que la page parte **à l'intention** et non au clic : survol, premier contact du doigt (`touchstart`, quelques dizaines de millisecondes d'avance), ou focus clavier. Une page n'est préparée qu'une fois par visite.
+
+**Pourquoi pas le `prefetch` de Next.** Il se déclenche à l'entrée dans le champ de vision. Sur une barre de navigation, tous les onglets sont visibles en permanence : chaque ouverture de page ferait alors calculer au serveur toutes les autres, y compris pour les visites qui n'y vont jamais.
+
+**La zone de déclenchement, c'est le lien lui-même.** Un halo plus large (marge intérieure + marge négative) a été essayé puis retiré le 30/08/2026 : il attrape aussi les CLICS, et il n'y a que 12 px de vide entre l'engrenage des paramètres et la cloche de notifications — au-delà, on avale les clics du voisin ou on déborde sous la barre sur le contenu de la page.
+
+Sans effet en développement : Next ne prépare rien hors production.
