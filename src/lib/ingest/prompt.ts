@@ -391,7 +391,13 @@ Ne réduis pas ce qui n'a pas à l'être : un découpage juste que tu rabotes fa
 
 Un chapitre est une unité d'enseignement, pas une section de mise en page : deux sous-parties qui traitent du même sujet forment un seul chapitre. Vise le découpage qu'un enseignant ferait pour organiser sa progression.
 
-**Le mot « chapitre » est le nôtre, pas celui du document.** Un cours nomme ses grandes parties comme il veut — thèmes, séquences, modules, parties, unités —, ou ne les nomme pas du tout. Ce qu'on te demande est un NIVEAU DE DÉCOUPAGE, pas la recherche d'un mot. Si le cours s'organise en thèmes contenant eux-mêmes des chapitres, les deux niveaux sont des découpages possibles : choisis celui qui correspond à la demande de l'utilisateur, et à défaut de demande, celui des grandes parties.
+**Le mot « chapitre » est le nôtre, pas celui du document.** Un cours nomme ses grandes parties comme il veut — thèmes, séquences, modules, parties, unités —, ou ne les nomme pas du tout. Ce qu'on te demande est un NIVEAU DE DÉCOUPAGE, pas la recherche d'un mot.
+
+**UN SEUL NIVEAU, JAMAIS DEUX.** Quand le cours emboîte ses divisions — des thèmes qui contiennent des chapitres, des parties qui contiennent des séquences —, tu choisis UN de ces niveaux et tu t'y tiens d'un bout à l'autre du cours. Une liste qui mélange un thème et les chapitres d'un autre thème est une réponse fausse, même si chaque nom pris isolément existe dans le document : le programme s'y lit alors sur deux échelles à la fois, et une notion ne sait plus où se ranger.
+
+Le niveau à prendre, sauf demande contraire de l'utilisateur : **le plus fin des niveaux emboîtés, celui qui porte réellement le contenu du cours**. Si le cours est fait de thèmes contenant des chapitres, ce sont les CHAPITRES, et les thèmes ne sont alors rien d'autre que des étiquettes de regroupement — ils ne deviennent jamais des chapitres à eux seuls, et n'ont pas à figurer dans ta réponse.
+
+**Une division annoncée mais jamais développée n'existe pas.** Un cours saute parfois une partie de son propre plan : le titre est là, et rien dessous — pas de contenu, pas de sous-partie, pas une ligne à apprendre. Ne la reprends pas, ni comme chapitre ni comme notion. On ne met pas au programme une partie qui n'a rien à enseigner, et signaler son absence n'est pas ton travail ici.
 
 Ordre de grandeur : un cours en compte typiquement ${PLAUSIBLE_CHAPTERS.min} à ${PLAUSIBLE_CHAPTERS.max}, davantage pour un programme annuel ou un découpage fin explicitement demandé. C'est une indication et non une limite — dépasse-la si le contenu ou la demande le justifient.
 
@@ -433,9 +439,16 @@ ${notionsToArrange(notions)}`;
 export function notionsInstruction(document: { fileName: string }): string {
   return `Extrais les NOTIONS du document « ${document.fileName} ». Traite-le en entier ; ne t'occupe d'aucun autre document.
 
-Une notion est l'unité minimale de connaissance : UNE idée, en UNE phrase de 280 caractères maximum, autoportante et vérifiable. « La Loire est le plus long fleuve de France » est une notion ; « Les fleuves » n'en est pas une, c'est un thème.
+Une notion est l'unité minimale de connaissance : UNE idée, en UNE phrase de 500 caractères maximum, autoportante et vérifiable. « La Loire est le plus long fleuve de France » est une notion ; « Les fleuves » n'en est pas une, c'est un thème.
 
 Découpe assez fin pour qu'on puisse interroger chaque notion séparément, mais pas au point de séparer une idée en deux moitiés qui ne veulent plus rien dire seules.
+
+**CHAQUE NOTION SERA LUE SEULE, sans le cours et sans les autres notions.** C'est la règle la plus importante de cette consigne : une notion est posée telle quelle à un élève, des semaines plus tard, sans rien autour. Écris donc chacune comme si c'était la première phrase qu'on lit sur le sujet.
+
+Concrètement, aucune notion ne commence ni ne continue par un renvoi vers l'extérieur : pas de « ce », « cette », « ces », « cet », « il », « elle », « y », « en » qui désignent quelque chose d'absent de la phrase, pas de « comme vu plus haut », pas de « cette période », pas de « ces améliorations ». Nomme ce dont tu parles, à chaque fois, même si ça t'oblige à répéter d'une notion à l'autre — la répétition ne coûte rien, le renvoi rend la notion inutilisable.
+
+À éviter : « Ces améliorations ont permis d'augmenter la quantité de livres produits. » — quelles améliorations ?
+À écrire : « La réduction du format, les lettres romaines et le papier ont permis d'augmenter la quantité de livres produits. »
 
 **Ne range rien dans un chapitre** : à ce stade il n'y en a pas, et ce n'est pas ton travail ici.
 
@@ -468,7 +481,7 @@ ${lines.join('\n')}`;
  *  ⚠️ **Elle ne reçoit aucun document**, et c'est tout son intérêt. Ce qui
  *  remplace le cours, ce sont deux nombres : la page d'où vient la notion, et
  *  les pages que couvre le chapitre. Renvoyer le corpus pour décider où va une
- *  phrase de 280 caractères serait refaire l'erreur de coût du 22/08/2026.
+ *  notion d’une phrase serait refaire l'erreur de coût du 22/08/2026.
  *
  *  ⚠️ **La page indique, le contenu décide.** Un chapitre ne s'arrête pas au bas
  *  d'une page : une notion du haut de la page 40 appartient souvent encore au

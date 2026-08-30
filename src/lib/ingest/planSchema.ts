@@ -52,6 +52,7 @@ import {
   type QuestionTypeOptions,
   type ResponseType,
 } from '@/lib/workshops/examTypes';
+import { NOTION_TITLE_MAX } from '@/lib/workshops/notions';
 
 // ─── Journaux ────────────────────────────────────────────────────────────────
 
@@ -110,8 +111,11 @@ const chapterSchema = z.object({
 
 const notionSchema = z.object({
   ref: refSchema,
-  // Une notion n'a plus qu'UN texte depuis le 19/08/2026 (280 caractères).
-  title: z.string().trim().min(1).max(280), // NOTION_TITLE_MAX
+  // Une notion n'a plus qu'UN texte depuis le 19/08/2026. La borne est
+  // IMPORTÉE et non recopiée : une notion écrite par l'IA et une notion saisie
+  // à la main sont la même chose, et deux nombres jumeaux finissent toujours
+  // par diverger.
+  title: z.string().trim().min(1).max(NOTION_TITLE_MAX),
   chapterRef: refSchema.optional(),
   // D'où elle vient. Le document est ajouté par l'appelant (il sait lequel il
   // traite) ; la page vient du modèle, qui seul l'a sous les yeux.

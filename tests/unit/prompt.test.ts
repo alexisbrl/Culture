@@ -131,7 +131,11 @@ describe('instructions de passe', () => {
   it('la passe notions cible UN document et ne range dans aucun chapitre', () => {
     const instruction = notionsInstruction({ fileName: 'Chapitre 3.pdf' });
     expect(instruction).toContain('Chapitre 3.pdf');
-    expect(instruction).toContain('280');
+    expect(instruction).toContain('500');
+    // Une notion est lue SEULE, des semaines plus tard : la consigne doit le
+    // dire, sinon le modèle écrit « ces améliorations… » et la notion devient
+    // inutilisable (constaté le 30/08/2026).
+    expect(instruction).toMatch(/SERA LUE SEULE/);
     // Le rangement est le travail de la passe suivante, et la consigne le dit.
     expect(instruction).toMatch(/Ne range rien/);
   });

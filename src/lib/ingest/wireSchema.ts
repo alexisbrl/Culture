@@ -214,7 +214,9 @@ export const wireNotionSchema = z.object({
   ref: z.string().describe('Clé locale unique de cette notion dans ce plan.'),
   title: z
     .string()
-    .describe("La notion en UNE phrase de 280 caractères maximum, autoportante et vérifiable."),
+    .describe(
+      "La notion en UNE phrase de 500 caractères maximum, vérifiable, et qui SE LIT SEULE : jamais de « ce », « cette », « ces » renvoyant à une autre notion ou à ce qui précède dans le cours.",
+    ),
   page: z
     .number()
     .int()

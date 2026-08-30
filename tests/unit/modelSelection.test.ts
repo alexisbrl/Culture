@@ -50,15 +50,22 @@ describe('selectModel — (modèle voulu, taille du corpus) → modèle retenu',
   });
 });
 
-describe('PASS_MODELS — Haiku d’abord, partout (§16.20)', () => {
-  it('toutes les passes visent Haiku 4.5', () => {
-    expect(PASS_MODELS).toEqual({
-      chapters: MODELS.haiku,
-      notions: MODELS.haiku,
-      assign: MODELS.haiku,
-      questions: MODELS.haiku,
-      exam: MODELS.haiku,
-    });
+describe('PASS_MODELS — Sonnet sur le programme, Haiku sur les questions', () => {
+  // Répartition arrêtée le 30/08/2026 après comparaison sur le même cours :
+  // Haiku laissait des doublons littéraux, oubliait des notions au rangement et
+  // dérivait vers le détail sans intérêt. Les trois passes qui JUGENT montent
+  // donc en gamme ; les deux qui produisent du volume restent en bas.
+  it('les trois passes du programme visent Sonnet 5', () => {
+    expect(PASS_MODELS.chapters).toBe(MODELS.sonnet);
+    expect(PASS_MODELS.notions).toBe(MODELS.sonnet);
+    expect(PASS_MODELS.assign).toBe(MODELS.sonnet);
+  });
+
+  it('les deux passes de questions restent sur Haiku 4.5', () => {
+    // C'est là que le volume de SORTIE explose, donc là que le prix du modèle
+    // se paie : 5 $/M contre 10 $/M sur des millions de tokens produits.
+    expect(PASS_MODELS.questions).toBe(MODELS.haiku);
+    expect(PASS_MODELS.exam).toBe(MODELS.haiku);
   });
 
   it('le repli est Sonnet 5, pas Opus — même fenêtre, trois fois moins cher', () => {

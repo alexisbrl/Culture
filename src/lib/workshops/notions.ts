@@ -27,8 +27,17 @@ export type Notion = {
 };
 
 /** Assez pour une notion en une ou deux phrases, pas assez pour un paragraphe :
- *  la même valeur sert de libellé partout ailleurs dans l'app. */
-export const NOTION_TITLE_MAX = 280;
+ *  la même valeur sert de libellé partout ailleurs dans l'app.
+ *
+ *  **Passé de 280 à 500 le 30/08/2026**, pour deux raisons qui vont ensemble.
+ *  D'abord une mesure : sur la première génération au découpage large, douze
+ *  notions ont été refusées pour dépassement, et plusieurs de celles qui sont
+ *  passées étaient à un ou deux caractères de la borne — la limite était
+ *  devenue le véritable arbitre de la granularité, à la place du sens.
+ *  Ensuite un effet de bord : privé de place, le modèle compressait en
+ *  renvoyant à ce qui précède (« **ces** améliorations… »), ce qui produit
+ *  exactement ce qu'une notion ne doit pas être — une phrase illisible seule. */
+export const NOTION_TITLE_MAX = 500;
 
 /** Combien de notions un atelier peut porter, au total (25/08/2026).
  *
