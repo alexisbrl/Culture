@@ -1252,7 +1252,9 @@
       "cancelling": "undoing…",
       "cancelled": "Import undone.",
       "error": "Cannot undo: {reason}",
-      "previous": "{count, plural, one {# earlier import} other {# earlier imports}}"
+      "previous": "{count, plural, one {# earlier import} other {# earlier imports}}",
+      "interruptedText": "Generation interrupted: AI had time to add {items}.",
+      "interruptedHint": "This generation stopped before finishing — tab closed, page reloaded or server lost. Whatever it had already written stayed: you can remove it here, then start a new generation."
     },
     "button": "generate with AI",
     "chooseAi": "with AI",

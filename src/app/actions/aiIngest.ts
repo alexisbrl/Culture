@@ -73,6 +73,11 @@ export type QuestionPassResult =
 export type ImportBanner = {
   importId: string;
   state: 'cancellable' | 'empty' | 'expired' | 'modified';
+  /** La génération s'est arrêtée avant la fin (onglet fermé, page rechargée,
+   *  serveur perdu). Ce qu'elle a écrit est là, mais ce n'est pas un résultat
+   *  voulu : le bandeau le dit au lieu de l'annoncer comme un import réussi.
+   *  Voir `interruptedAmong` (@/lib/ingest/lock). */
+  interrupted: boolean;
   chapters: number;
   notions: number;
   /** Les questions du lot, séparées selon l'écran qui les montre : le bandeau
@@ -318,15 +323,22 @@ export async function getImportBanners(workshopId: string): Promise<ImportBanner
 
   try {
     const ids = await imports.recentImportIds(workshopId);
-    const summaries = await Promise.all(
-      ids.map(async (importId) => ({ importId, summary: await imports.getImportSummary(workshopId, importId) })),
-    );
+    // Les deux lectures sont indépendantes → en parallèle (règle N+1). Le
+    // relevé des lots interrompus est une seule requête pour toute la liste,
+    // pas une par lot.
+    const [summaries, interrupted] = await Promise.all([
+      Promise.all(
+        ids.map(async (importId) => ({ importId, summary: await imports.getImportSummary(workshopId, importId) })),
+      ),
+      lock.interruptedAmong(ids),
+    ]);
 
     return summaries
       .filter(({ summary }) => summary.state === 'cancellable')
       .map(({ importId, summary }) => ({
         importId,
         state: summary.state,
+        interrupted: interrupted.has(importId),
         chapters: summary.chapters,
         notions: summary.notions,
         parcoursQuestions: summary.parcoursQuestions,

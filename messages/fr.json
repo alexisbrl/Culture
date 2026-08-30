@@ -1252,7 +1252,9 @@
       "cancelling": "annulation…",
       "cancelled": "Import annulé.",
       "error": "Annulation impossible : {reason}",
-      "previous": "{count, plural, one {# import précédent} other {# imports précédents}}"
+      "previous": "{count, plural, one {# import précédent} other {# imports précédents}}",
+      "interruptedText": "Génération interrompue : l’IA a eu le temps d’ajouter {items}.",
+      "interruptedHint": "Cette génération s’est arrêtée avant la fin — onglet fermé, page rechargée ou serveur perdu. Ce qu’elle avait déjà écrit est resté en place : tu peux le retirer ici, puis relancer une génération."
     },
     "button": "générer par IA",
     "chooseAi": "par IA",

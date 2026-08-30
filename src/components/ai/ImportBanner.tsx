@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { ChevronDown, ChevronUp, Sparkles, Undo2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Sparkles, TriangleAlert, Undo2 } from 'lucide-react';
 
 import { Tooltip } from '@/components/ui/tooltip';
 import { ink, palette, radius } from '@/lib/theme';
@@ -113,11 +113,25 @@ export default function ImportBanner({ workshopId, scope, onCancelled }: Props) 
     const { shown, hidden } = split(banner);
     return (
     <div key={banner.importId} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-      {main
-        ? <Sparkles size={15} color={palette.green} style={{ flexShrink: 0 }} />
-        : <span style={{ width: 15, flexShrink: 0 }} />}
+      {/* Une génération arrêtée en route porte son propre pictogramme, y compris
+          dans les lignes repliées : c'est l'information la plus importante de la
+          ligne, et la reléguer au texte seul la rendrait invisible au survol de
+          la liste. */}
+      {banner.interrupted ? (
+        <Tooltip content={t('banner.interruptedHint')}>
+          <span style={{ display: 'inline-flex', flexShrink: 0 }}>
+            <TriangleAlert size={15} color={palette.amber} />
+          </span>
+        </Tooltip>
+      ) : main ? (
+        <Sparkles size={15} color={palette.green} style={{ flexShrink: 0 }} />
+      ) : (
+        <span style={{ width: 15, flexShrink: 0 }} />
+      )}
       <span style={{ fontSize: main ? 13 : 12.5, color: main ? palette.inkMuted : palette.inkSoft, flex: 1, minWidth: 0 }}>
-        {t('banner.text', { items: join(shown) })}
+        {banner.interrupted
+          ? t('banner.interruptedText', { items: join(shown) })
+          : t('banner.text', { items: join(shown) })}
         {hidden.length > 0 && ` ${t('banner.alsoRemoves', { items: join(hidden) })}`}
       </span>
 

@@ -113,6 +113,58 @@ export async function liveImportOf(workshopId: string): Promise<string | null> {
   return (data ?? [])[0]?.id ?? null;
 }
 
+/** Parmi les lots donnés, ceux qui se sont ARRÊTÉS EN ROUTE — 30/08/2026.
+ *
+ *  Une génération est pilotée par l'onglet (voir l'en-tête de
+ *  `AiGenerationDialog`) : le fermer, recharger, ou perdre le serveur suffit à
+ *  l'interrompre. Ce qu'elle avait écrit reste en base, et jusqu'ici **rien ne
+ *  le disait** : le bandeau annonçait ces lignes comme n'importe quel import
+ *  réussi. Un chapitre créé sans notion et jamais rangé passait donc pour un
+ *  résultat voulu (constaté sur deux ateliers, deux générations coupées à la
+ *  même minute).
+ *
+ *  Trois conditions, et les trois comptent :
+ *    • `closed_at` vide — le lot n'a jamais été refermé, ni par la fin, ni par
+ *      une annulation ;
+ *    • un battement **existant** — c'est ce qui distingue une génération pilotée
+ *      d'un lot de recharge automatique, qui n'en émet aucun (`live: false`) et
+ *      n'est jamais refermé non plus : sans ce test, toute recharge serait
+ *      annoncée comme interrompue ;
+ *    • un battement **périmé** — sinon c'est une génération qui tourne encore,
+ *      en ce moment même, et il n'y a rien à signaler.
+ *
+ *  ⚠️ Sur erreur de lecture, on ne signale rien : un bandeau muet vaut mieux
+ *  qu'un bandeau qui accuse à tort une génération d'avoir échoué.
+ *
+ *  La liste d'identifiants part dans l'URL, ce qui est acceptable ici et
+ *  seulement ici : elle est bornée par `recentImportIds` (huit au plus) et ne
+ *  grandit pas avec le contenu de l'atelier. */
+export async function interruptedAmong(importIds: readonly string[]): Promise<Set<string>> {
+  if (importIds.length === 0) return new Set();
+
+  try {
+    const supabase = getSupabaseServerClient();
+    const since = new Date(Date.now() - LIVE_TIMEOUT_MS).toISOString();
+
+    const { data, error } = await supabase
+      .from('ai_imports')
+      .select('id')
+      .in('id', [...importIds])
+      .is('closed_at', null)
+      .not('beat_at', 'is', null)
+      .lt('beat_at', since);
+
+    if (error) {
+      console.error('interruptedAmong error:', error);
+      return new Set();
+    }
+    return new Set((data ?? []).map((row) => row.id as string));
+  } catch (err) {
+    console.error('interruptedAmong error:', err);
+    return new Set();
+  }
+}
+
 /** Le battement de l'onglet qui pilote un lot. **Ne lève jamais** : un battement
  *  perdu ne doit pas interrompre une génération en cours — au pire le verrou
  *  expire, et le seul effet est qu'un second lancement redevient possible. */
