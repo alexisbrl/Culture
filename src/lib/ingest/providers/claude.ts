@@ -61,6 +61,25 @@ const FILES_BETA = 'files-api-2025-04-14';
  *  plafond ne se paie en délai d'attente HTTP. */
 const MAX_TOKENS = 32_000;
 
+/** ⚠️ **La réflexion se prélève sur ce budget, elle ne s'ajoute pas à côté.**
+ *
+ *  Un modèle à réflexion adaptative peut donc consommer l'essentiel du plafond
+ *  avant d'écrire la première accolade, et ce qui reste ne suffit plus au JSON :
+ *  la réponse s'arrête **au milieu d'une chaîne**. Ce n'est pas théorique, c'est
+ *  arrivé au premier import lancé sur Sonnet (30/08/2026, « Unterminated string
+ *  in JSON at position 14563 ») — 14 500 caractères de sortie utile pour 32 000
+ *  jetons de budget, le reste était parti en réflexion.
+ *
+ *  Le doublement est sans risque : l'appel est déjà en flux, donc un plafond
+ *  élevé ne se paie pas en délai d'attente HTTP, et rien n'est facturé qui ne
+ *  soit produit. Haiku 4.5 garde le sien : sa réflexion est bornée séparément
+ *  (`budget_tokens`, voir `tuningFor`), donc le problème ne s'y pose pas. */
+const MAX_TOKENS_THINKING = 64_000;
+
+function maxTokensFor(model: ModelId): number {
+  return model === MODELS.haiku ? MAX_TOKENS : MAX_TOKENS_THINKING;
+}
+
 // ─── Le modèle, par passe ────────────────────────────────────────────────────
 //
 // Il était en dur (`claude-opus-5`) sur les trois passes. Deux raisons de le
@@ -152,7 +171,7 @@ const WORKSHOP_CONTEXT_RESERVE = 100_000;
  *  d'un coup. La passe notions travaille document par document, la fenêtre s'y
  *  applique par document ; les passes suivantes ne reçoivent aucun document. Le
  *  jour où le découpage séquentiel du cours existera, ce plafond tombera. */
-export const MAX_CORPUS_TOKENS = 1_000_000 - MAX_TOKENS - WORKSHOP_CONTEXT_RESERVE;
+export const MAX_CORPUS_TOKENS = 1_000_000 - MAX_TOKENS_THINKING - WORKSHOP_CONTEXT_RESERVE;
 
 /** Le modèle voulu pour chaque passe : Sonnet 5 sur le programme, Haiku 4.5 sur
  *  les questions (voir le bloc ci-dessus pour le pourquoi et les coûts). */
@@ -517,7 +536,7 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
         const tuning = tuningFor(id);
         return client.beta.messages.stream({
           model: id,
-          max_tokens: MAX_TOKENS,
+          max_tokens: maxTokensFor(id),
           betas: [FILES_BETA],
           system: [{ type: 'text', text: systemPrompt() }],
           thinking: tuning.thinking,
