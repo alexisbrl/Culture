@@ -44,9 +44,24 @@ et l'incident du 22/06/2026 dans `docs/changelog.md`.
   - Après application : régénérer `src/lib/database.types.ts`, retirer cette
     entrée, laisser une ligne dans `docs/changelog.md`.
 
+- **`parcours_asked.answer_ms` et `parcours_asked.correct`** — remplacées par
+  la colonne `answers` (une entrée par question répondue,
+  `2026-08-30-rythme-par-question.sql`). Le détecteur de rythme ne les lit plus
+  que pour les lignes écrites avant cette date.
+  - **Prérequis** : `feat/cout-ingestion-ia` mergée et déployée, ET toutes les
+    lignes antérieures sorties de la fenêtre de lecture du rythme (les cinq
+    dernières réponses d'un membre) — autant dire quelques exercices. Sans
+    urgence : deux colonnes inutilisées ne coûtent rien.
+  - **SQL** : `alter table parcours_asked drop column answer_ms, drop column correct;`
+
 ---
 
 ## Appliqué / sans objet
+
+- **30/08/2026 — `2026-08-30-rythme-par-question.sql` appliquée le jour même.**
+  Purement additive (`parcours_asked.answers`, jsonb, défaut `[]`) : le code en
+  ligne l'ignore, les lignes existantes valent tableau vide et restent lues par
+  les colonnes qu'elle remplace. `src/lib/database.types.ts` régénéré.
 
 - **29/08/2026 — `2026-08-29-une-generation-a-la-fois.sql` appliquée le jour
   même.** Purement additive (`ai_imports.beat_at`, `ai_imports.closed_at`, un

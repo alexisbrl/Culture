@@ -30,8 +30,12 @@ import type { ExerciseAnswer, ExercisePrompt, ExerciseResult } from '@/lib/works
 // un type importé (piège Turbopack, cf. .claude/rules/server-architecture.md).
 export type DrawnExercise = {
   prompt: ExercisePrompt | null;
-  /** Ce que la question consomme du budget de l'exercice. */
+  /** Ce que la GRAPPE consomme du budget de l'exercice — réservé d'un bloc au
+   *  tirage, pour ne pas dépasser en cours de route. */
   cost: number;
+  /** Ce que coûte chaque énoncé, dans l'ordre. La barre avance question par
+   *  question, chacune comptant pour elle-même. */
+  costs: number[];
   /** `null` quand une question a été tirée ; sinon la raison de l'arrêt —
    *  `budget` (fin normale), `exhausted` (plus rien d'inédit à portée),
    *  `empty` (le chapitre n'a aucune question) ou `blocked` (l'exercice est
@@ -53,7 +57,7 @@ export async function drawExercise(
 ): Promise<DrawnExercise> {
   try {
     const ctx = await requireMember(workshopId);
-    if (!ctx) return { prompt: null, cost: 0, failure: null, error: 'Accès refusé' };
+    if (!ctx) return { prompt: null, cost: 0, costs: [], failure: null, error: 'Accès refusé' };
 
     // Ce qui arrive du navigateur n'est jamais tenu pour bien formé : le budget
     // restant est borné ici, sinon un client bricolé s'offrirait un exercice sans
@@ -69,7 +73,7 @@ export async function drawExercise(
     // @/lib/workshops/answerPace) — rien à écrire, rien à nettoyer.
     const verdict = paceVerdict(await examLib.recentAnswerPace(workshopId, ctx.userId, PACE_WINDOW));
     if (verdict.state === 'blocked') {
-      return { prompt: null, cost: 0, failure: 'blocked', blockedUntil: verdict.until };
+      return { prompt: null, cost: 0, costs: [], failure: 'blocked', blockedUntil: verdict.until };
     }
 
     const drawn = await examLib.drawParcoursQuestion(workshopId, chapterId, ctx.userId, {
@@ -80,7 +84,7 @@ export async function drawExercise(
     return drawn;
   } catch (err) {
     console.error('drawExercise error:', err);
-    return { prompt: null, cost: 0, failure: null, error: 'Erreur lors du tirage' };
+    return { prompt: null, cost: 0, costs: [], failure: null, error: 'Erreur lors du tirage' };
   }
 }
 
@@ -88,16 +92,19 @@ export async function drawExercise(
 //
 // `index` est l'énoncé qu'on vient de valider (0 = la question principale,
 // `i + 1` = la question liée `i`), et c'est le SEUL corrigé : les suivants ne
-// sont pas encore posés. `answers` porte quand même toute la grappe, l'écran
-// gardant les réponses déjà données — le dernier appel en a besoin pour juger
-// la grappe entière (voir `gradeParcoursAnswer`).
+// sont pas encore posés.
 //
-// Ce qui n'arrive qu'au DERNIER énoncé, et jamais avant :
-//   • la trace en base (la grappe sort du tirage — une seule fois, sans quoi
-//     une question à trois énoncés compterait pour trois) ;
-//   • le rythme de réponse, mesuré sur la grappe entière : c'est elle l'unité
-//     de temps, pas chacun de ses morceaux.
-// Ce qui arrive à CHAQUE énoncé : le crédit de maîtrise de ses propres notions.
+// **Une question liée est une question entière.** Les questions d'une grappe
+// sont inséparables — elles se tirent et se posent ensemble —, mais chacune
+// compte pour elle-même : sa maîtrise, sa goutte, sa part du budget de Bloom,
+// son XP le jour où il existera, et sa propre mesure de rythme (trois fautes
+// expédiées, ce sont trois QUESTIONS bâclées, pas trois grappes). Tout ce qui
+// suit se fait donc à chaque énoncé.
+//
+// La seule chose qui reste à l'échelle de la grappe est la **trace en base** :
+// elle dit « cette grappe a été posée » et le tirage l'exclut en entier, ses
+// questions étant inséparables. Elle s'écrit dès le PREMIER énoncé validé — sa
+// réponse est dévoilée, la grappe est consommée, même si le membre s'arrête là.
 //
 // Une réponse ne se limite plus aux cases cochées depuis le 25/08/2026 : elle
 // porte aussi les lignes d'une liste, les cases d'une grille et les paires
@@ -127,8 +134,6 @@ export async function gradeExercise(
     );
     if (changes.some(Boolean)) revalidateWorkshop();
 
-    if (!graded.isLast) return { result: graded.result, isLast: false };
-
     // C'EST ICI que la question sort du tirage, et pas au moment où elle est
     // posée (règle du 29/08/2026) : une question affichée puis abandonnée n'a
     // rien mesuré, elle reste disponible. Répondue, en revanche, elle est
@@ -136,10 +141,11 @@ export async function gradeExercise(
     //
     // Le temps de réponse vient de l'écran : le serveur ne peut pas le mesurer
     // depuis que les questions sont tirées d'avance (voir
-    // docs/migrations/2026-08-29-rythme-de-reponse.sql).
+    // docs/migrations/2026-08-29-rythme-de-reponse.sql). Il est mesuré depuis
+    // l'affichage de CETTE question, remis à zéro à chaque énoncé découvert.
     await examLib.markParcoursAsked(workshopId, ctx.userId, questionId, {
       answerMs: sanitizeAnswerMs(answerMs),
-      correct: graded.groupCorrect,
+      correct: graded.result.correct,
     });
 
     // Trois fautes expédiées d'affilée : on le dit, avec la correction. Deux de
@@ -147,7 +153,7 @@ export async function gradeExercise(
     // pause n'a pas à interrompre une correction déjà calculée.
     const verdict = paceVerdict(await examLib.recentAnswerPace(workshopId, ctx.userId, PACE_WINDOW));
 
-    return { result: graded.result, isLast: true, tooFast: verdict.state === 'warn' };
+    return { result: graded.result, isLast: graded.isLast, tooFast: verdict.state === 'warn' };
   } catch (err) {
     console.error('gradeExercise error:', err);
     return { result: null, error: 'Erreur lors de la correction' };

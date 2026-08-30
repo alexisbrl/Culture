@@ -445,6 +445,54 @@ export type Database = {
           },
         ]
       }
+      parcours_asked: {
+        Row: {
+          answer_ms: number | null
+          answers: Json
+          asked_at: string
+          correct: boolean | null
+          group_id: string
+          id: string
+          user_id: string
+          workshop_id: string
+        }
+        Insert: {
+          answer_ms?: number | null
+          answers?: Json
+          asked_at?: string
+          correct?: boolean | null
+          group_id: string
+          id?: string
+          user_id: string
+          workshop_id: string
+        }
+        Update: {
+          answer_ms?: number | null
+          answers?: Json
+          asked_at?: string
+          correct?: boolean | null
+          group_id?: string
+          id?: string
+          user_id?: string
+          workshop_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parcours_asked_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "exam_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parcours_asked_workshop_id_fkey"
+            columns: ["workshop_id"]
+            isOneToOne: false
+            referencedRelation: "workshops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_profiles: {
         Row: {
           display_name: string
@@ -472,9 +520,9 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          import_id: string | null
           source_document: string | null
           source_page: number | null
-          import_id: string | null
           title: string
           updated_at: string
           workshop_id: string
@@ -484,9 +532,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          import_id?: string | null
           source_document?: string | null
           source_page?: number | null
-          import_id?: string | null
           title: string
           updated_at?: string
           workshop_id: string
@@ -496,9 +544,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          import_id?: string | null
           source_document?: string | null
           source_page?: number | null
-          import_id?: string | null
           title?: string
           updated_at?: string
           workshop_id?: string
@@ -534,11 +582,11 @@ export type Database = {
           hidden: boolean
           id: string
           import_id: string | null
+          name: string
           page_end: number | null
           page_start: number | null
-          name: string
-          source_document: string | null
           position: number
+          source_document: string | null
           updated_at: string
           workshop_id: string
         }
@@ -548,11 +596,11 @@ export type Database = {
           hidden?: boolean
           id?: string
           import_id?: string | null
-          page_end: number | null
-          page_start: number | null
           name: string
-          source_document?: string | null
+          page_end?: number | null
+          page_start?: number | null
           position?: number
+          source_document?: string | null
           updated_at?: string
           workshop_id: string
         }
@@ -562,11 +610,11 @@ export type Database = {
           hidden?: boolean
           id?: string
           import_id?: string | null
+          name?: string
           page_end?: number | null
           page_start?: number | null
-          name?: string
-          source_document?: string | null
           position?: number
+          source_document?: string | null
           updated_at?: string
           workshop_id?: string
         }
@@ -792,7 +840,36 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      parcours_pick: {
+        Args: {
+          p_chapter: string
+          p_exclude?: string[]
+          p_reach?: number
+          p_remaining: number
+          p_user: string
+          p_workshop: string
+        }
+        Returns: {
+          chapter_total: number
+          cost: number
+          eligible_total: number
+          group_id: string
+        }[]
+      }
+      parcours_radar: {
+        Args: {
+          p_chapter: string
+          p_reach?: number
+          p_user?: string
+          p_workshop: string
+        }
+        Returns: {
+          available_min: number
+          bloom_level: number
+          brick_id: string
+          members: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

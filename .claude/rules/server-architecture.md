@@ -124,10 +124,16 @@ Passe du 30/08/2026 sur les paramètres d'atelier, mesurée : « Général » s'
 
 `gradeExercise(workshopId, questionId, answers, index, answerMs?)` corrige **l'énoncé `index`** d'une grappe, et lui seul (0 = la question principale, `i + 1` = la question liée `i`). Règle du 30/08/2026, en même temps que la pose une-par-une côté écran (voir `docs/product-spec.md`).
 
-Ce qui se fait à **chaque** appel : le verdict de l'énoncé, et le crédit de maîtrise de **ses** notions. Ce qui ne se fait qu'au **dernier** (`isLast`) : la trace `parcours_asked` — une grappe vaut une question, l'écrire à chaque énoncé la ferait compter trois fois — et le rythme de réponse, mesuré de l'affichage de la grappe à sa dernière validation.
+**Une question liée est une question entière** : à chaque appel se font le verdict, le crédit de maîtrise de ses notions, sa goutte, sa part du budget de Bloom et sa mesure de rythme. Rien n'attend la fin de la grappe — sauf ce qui dépend de son caractère indissociable :
 
-Trois pièges à ne pas rouvrir :
+- la **trace** `parcours_asked` (une ligne par grappe, le tirage l'excluant en entier) est écrite dès la PREMIÈRE question validée : sa réponse est dévoilée, la grappe est consommée même si le membre s'arrête là ;
+- le **tirage de la question suivante** part à la fin de la grappe (`enqueue` dans `ExerciseClient`) : le budget est réservé grappe par grappe (`cost`), tirer à chaque question liée en réserverait autant de fois trop. Le détail par énoncé voyage à part (`costs`), pour faire avancer la barre question par question.
 
-- **`answers` porte toute la grappe à chaque appel**, pas seulement l'énoncé validé : le dernier appel rejuge l'ensemble pour savoir si la grappe est réussie. Un client bricolé peut donc réécrire ses réponses précédentes avant le dernier envoi — ça ne touche que cette trace, jamais la maîtrise, créditée à la validation de chaque énoncé sur le verdict rendu à ce moment-là.
+Deux pièges à ne pas rouvrir :
+
 - **`ExerciseResult` ne porte plus de champ `parts`.** Renvoyer la correction de toute la grappe ferait descendre au navigateur les réponses de questions **pas encore posées** — exactement ce que le modèle du parcours interdit (`drawExercise` ne renvoie ni `answer` ni `correctChoices`).
-- **Le tirage de la question suivante reste déclenché à la FIN de la grappe** (`enqueue` dans `ExerciseClient`), jamais à chaque énoncé : le budget de Bloom est réservé au tirage, un tirage par question liée en réserverait autant de fois trop.
+- **Le rythme se lit dans `parcours_asked.answers`**, une entrée `{ ms, correct, at }` par question répondue (migration `2026-08-30-rythme-par-question.sql`), et non plus dans les colonnes `answer_ms`/`correct` de la ligne, qui ne portaient qu'une valeur par grappe. Les lignes écrites avant cette date sont relues par ces colonnes, en dernier recours.
+
+## Routes d'API et middleware Clerk
+
+Le matcher de `src/proxy.ts` doit **inclure `/api`**, sinon `clerkMiddleware` n'y passe pas et tout `auth()` appelé dans une route lève (`Clerk can't detect usage of clerkMiddleware`). Les routes d'API sont en revanche rendues **avant** next-intl : elles n'ont pas de langue, et le middleware i18n les redirigerait vers `/fr/api/...`. Précédent : la recharge automatique de questions a répondu 500 en silence du 29 au 30/08/2026 pour cette raison exacte — personne n'attend sa réponse, donc rien ne le signalait à l'écran.

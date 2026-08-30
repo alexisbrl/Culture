@@ -53,21 +53,42 @@ export default function WorkshopActionsMenu({ workshopId, size = 34 }: Props) {
     router.prefetch(href);
   }, [router, href]);
 
+  // ─── La zone qui déclenche, plus large que l'engrenage ────────────────────
+  //
+  // Exprimée en FRACTION de la taille du bouton, jamais en pixels écrits à la
+  // main : changer `size` déplace la zone d'autant, il n'y a rien à retoucher
+  // ailleurs. La marge négative rend la place prise au voisinage, donc la mise
+  // en page ne bouge pas d'un pixel.
+  //
+  // Pourquoi 0,35 et pas 1 (une zone trois fois plus grande) : ce halo attrape
+  // AUSSI les clics. Au-delà de l'espace libre autour du bouton — 12 px jusqu'à
+  // la cloche, 13 px jusqu'aux bords de la barre — il recouvrirait la cloche et
+  // avalerait ses clics, ou déborderait sous la barre sur le contenu de la
+  // page. 0,35 × 34 = 12 px : la zone occupe exactement le vide disponible.
+  const halo = Math.round(size * 0.35);
+
   return (
-    <Tooltip content={tNav('workshopSettings')}>
-      <Link
-        href={href}
-        onPointerEnter={warm}
-        onTouchStart={warm}
-        onFocus={warm}
-        aria-label={tNav('workshopSettings')}
-        className={`flex flex-none items-center justify-center rounded-full border border-[var(--line)] outline-none transition-colors focus-visible:shadow-[var(--shadow-focus)] ${
-          active ? 'text-[var(--green)]' : 'text-[var(--ink-body)] hover:text-[var(--ink)]'
-        }`}
-        style={{ width: size, height: size }}
-      >
-        <Settings size={size >= 34 ? 16 : 15} strokeWidth={1.75} />
-      </Link>
-    </Tooltip>
+    // Le halo porte le déclenchement, pas le bouton : c'est lui qui est large.
+    // Il reste HORS de l'infobulle, qui doit continuer de suivre l'engrenage
+    // lui-même et non son voisinage.
+    <span
+      onPointerEnter={warm}
+      onTouchStart={warm}
+      style={{ display: 'inline-flex', flex: 'none', padding: halo, margin: -halo }}
+    >
+      <Tooltip content={tNav('workshopSettings')}>
+        <Link
+          href={href}
+          onFocus={warm}
+          aria-label={tNav('workshopSettings')}
+          className={`flex flex-none items-center justify-center rounded-full border border-[var(--line)] outline-none transition-colors focus-visible:shadow-[var(--shadow-focus)] ${
+            active ? 'text-[var(--green)]' : 'text-[var(--ink-body)] hover:text-[var(--ink)]'
+          }`}
+          style={{ width: size, height: size }}
+        >
+          <Settings size={size >= 34 ? 16 : 15} strokeWidth={1.75} />
+        </Link>
+      </Tooltip>
+    </span>
   );
 }

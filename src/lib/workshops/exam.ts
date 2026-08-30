@@ -669,18 +669,47 @@ export async function markParcoursAsked(
   pace: { answerMs: number | null; correct: boolean | null } = { answerMs: null, correct: null }
 ): Promise<void> {
   const supabase = getSupabaseServerClient();
-  const { error } = await supabase
+
+  // ─── Une ligne par GRAPPE, une entrée par QUESTION (30/08/2026) ───────────
+  //
+  // La ligne dit « cette grappe a été posée à ce membre » : elle est unique,
+  // parce que le tirage travaille par grappe — ses questions sont inséparables
+  // et ne reviennent jamais séparément. Elle est écrite dès la PREMIÈRE
+  // question validée : sa réponse a été dévoilée, la grappe est consommée,
+  // même si le membre s'arrête là.
+  //
+  // La colonne `answers` porte, elle, une entrée par question répondue — c'est
+  // elle que lit le détecteur de rythme, qui compte les fautes expédiées
+  // question par question et non par grappe (une grappe de cinq questions
+  // bâclées doit se voir comme cinq fautes, pas comme une).
+  //
+  // Deux requêtes plutôt qu'une fonction en base : le volume est d'une ligne,
+  // et rien d'autre n'écrit cette colonne au même instant — les questions d'une
+  // grappe se valident l'une après l'autre, jamais en parallèle.
+  const { data: existing } = await supabase
     .from('parcours_asked')
-    .upsert(
-      {
-        workshop_id: workshopId,
-        user_id: userId,
-        group_id: groupId,
-        answer_ms: pace.answerMs,
-        correct: pace.correct,
-      },
-      { onConflict: 'user_id,group_id', ignoreDuplicates: true }
-    );
+    .select('answers')
+    .eq('user_id', userId)
+    .eq('group_id', groupId)
+    .maybeSingle();
+
+  const previous = Array.isArray(existing?.answers) ? (existing.answers as unknown[]) : [];
+  const entry = { ms: pace.answerMs, correct: pace.correct, at: new Date().toISOString() };
+
+  const { error } = await supabase.from('parcours_asked').upsert(
+    {
+      workshop_id: workshopId,
+      user_id: userId,
+      group_id: groupId,
+      answers: [...previous, entry],
+      // Colonnes de rythme d'avant `answers`, tenues à jour par compatibilité :
+      // elles portent la dernière réponse en date. Leur suppression attend le
+      // déploiement de ce code (EN-ATTENTE-DEPLOIEMENT.md).
+      answer_ms: pace.answerMs,
+      correct: pace.correct,
+    },
+    { onConflict: 'user_id,group_id' }
+  );
   if (error) console.error('markParcoursAsked error:', error);
 }
 
@@ -697,7 +726,7 @@ export async function recentAnswerPace(
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from('parcours_asked')
-    .select('answer_ms, correct, asked_at')
+    .select('answers, answer_ms, correct, asked_at')
     .eq('workshop_id', workshopId)
     .eq('user_id', userId)
     .order('asked_at', { ascending: false })
@@ -708,11 +737,31 @@ export async function recentAnswerPace(
     return [];
   }
 
-  return (data ?? []).map((row) => ({
-    answerMs: (row.answer_ms as number | null) ?? null,
-    correct: (row.correct as boolean | null) ?? null,
-    answeredAt: new Date(row.asked_at as string).getTime(),
-  }));
+  // Une grappe porte plusieurs réponses : on lit les `limit` dernières GRAPPES,
+  // on déplie leurs questions, et on garde les `limit` réponses les plus
+  // récentes. Les plus récentes sont forcément dans les grappes les plus
+  // récentes, donc rien ne peut manquer.
+  const rows: AnswerPaceRow[] = (data ?? []).flatMap((row) => {
+    const entries = Array.isArray(row.answers) ? (row.answers as { ms?: unknown; correct?: unknown; at?: unknown }[]) : [];
+    // Lignes écrites avant la colonne `answers` : la grappe n'y compte que pour
+    // une réponse, ce qui reste juste — c'est ainsi qu'elle a été jouée.
+    if (entries.length === 0) {
+      return [
+        {
+          answerMs: (row.answer_ms as number | null) ?? null,
+          correct: (row.correct as boolean | null) ?? null,
+          answeredAt: new Date(row.asked_at as string).getTime(),
+        },
+      ];
+    }
+    return entries.map((entry) => ({
+      answerMs: typeof entry.ms === 'number' ? entry.ms : null,
+      correct: typeof entry.correct === 'boolean' ? entry.correct : null,
+      answeredAt: new Date(String(entry.at ?? row.asked_at)).getTime(),
+    }));
+  });
+
+  return rows.sort((a, b) => b.answeredAt - a.answeredAt).slice(0, limit);
 }
 
 /** Efface ce qu'un membre a déjà répondu dans un atelier. Appelé par la remise à
@@ -730,10 +779,31 @@ export async function clearParcoursAsked(workshopId: string, userId: string): Pr
   return (data ?? []).length;
 }
 
+/** Ce que coûte UN énoncé du budget de l'exercice : le plus haut niveau de
+ *  Bloom qu'il demande, sur l'ensemble de ses notions.
+ *
+ *  Un énoncé sans notion coûte le niveau par défaut plutôt que rien : il occupe
+ *  le membre, il ne peut pas être gratuit. Cette règle est la copie fidèle de
+ *  celle du tirage, qui vit en base (`cout_enonce` dans `parcours_pick`, voir
+ *  docs/migrations/2026-08-29-tirage-en-base.sql) — les deux doivent bouger
+ *  ensemble, sinon la barre d'avancement ne dirait plus la même chose que le
+ *  budget réellement engagé. */
+function statementCost(statement: { notionIds?: string[]; notionBloom: Record<string, BloomLevel> }): number {
+  const ids = statement.notionIds ?? [];
+  if (ids.length === 0) return DEFAULT_BLOOM_LEVEL;
+  return Math.max(...ids.map((id) => statement.notionBloom[id] ?? DEFAULT_BLOOM_LEVEL));
+}
+
 export type ParcoursDraw = {
   prompt: ExercisePrompt | null;
-  /** Ce que la question consomme du budget de l'exercice (12 niveaux de Bloom). */
+  /** Ce que la GRAPPE consomme du budget de l'exercice (12 niveaux de Bloom).
+   *  Réservé d'un bloc au tirage : on doit savoir ce que coûte l'ensemble avant
+   *  de l'engager, sans quoi on dépasserait en cours de route. */
   cost: number;
+  /** Ce que coûte chaque énoncé, dans l'ordre d'affichage — la question
+   *  principale puis ses questions liées. C'est ce détail qui fait avancer la
+   *  barre question par question, et non d'un bond à la fin de la grappe. */
+  costs: number[];
   /** `null` quand une question a été tirée. Sinon la raison de l'arrêt :
    *  `budget` (fin normale de l'exercice), `exhausted` (plus rien d'inédit à
    *  portée — anomalie) ou `empty` (le chapitre n'a aucune question). */
@@ -790,7 +860,7 @@ export async function drawParcoursQuestion(
     .maybeSingle();
 
   if (chapterError) throw new Error(chapterError.message);
-  if (!chapter || chapter.hidden === true) return { prompt: null, cost: 0, failure: 'empty' };
+  if (!chapter || chapter.hidden === true) return { prompt: null, cost: 0, costs: [], failure: 'empty' };
 
   const { data, error } = await supabase.rpc('parcours_pick', {
     p_workshop: workshopId,
@@ -806,7 +876,7 @@ export async function drawParcoursQuestion(
   // La fonction rend toujours exactement une ligne, quitte à ce que la question
   // y soit nulle.
   const pick = (data as PickRow[] | null)?.[0];
-  if (!pick || pick.chapter_total === 0) return { prompt: null, cost: 0, failure: 'empty' };
+  if (!pick || pick.chapter_total === 0) return { prompt: null, cost: 0, costs: [], failure: 'empty' };
 
   if (!pick.group_id) {
     // ⚠️ ANOMALIE À REMONTER le jour où la collecte d'erreurs existe (voir
@@ -820,11 +890,11 @@ export async function drawParcoursQuestion(
         userId,
         chapterTotal: pick.chapter_total,
       });
-      return { prompt: null, cost: 0, failure: 'exhausted' };
+      return { prompt: null, cost: 0, costs: [], failure: 'exhausted' };
     }
     // Il reste des questions, mais aucune n'entre dans ce qui reste du budget :
     // fin normale de l'exercice, rien à signaler.
-    return { prompt: null, cost: 0, failure: 'budget' };
+    return { prompt: null, cost: 0, costs: [], failure: 'budget' };
   }
 
   const { data: row, error: rowError } = await supabase
@@ -835,11 +905,15 @@ export async function drawParcoursQuestion(
     .maybeSingle();
 
   if (rowError) throw new Error(rowError.message);
-  if (!row) return { prompt: null, cost: 0, failure: 'exhausted' };
+  if (!row) return { prompt: null, cost: 0, costs: [], failure: 'exhausted' };
+
+  const question = embeddedToQuestion(row as unknown as EmbeddedGroupRow);
+  const statements = [question, ...(question.parts ?? [])];
 
   return {
-    prompt: await toPrompt(embeddedToQuestion(row as unknown as EmbeddedGroupRow)),
+    prompt: await toPrompt(question),
     cost: pick.cost ?? 0,
+    costs: statements.map(statementCost),
     failure: null,
   };
 }
@@ -872,13 +946,9 @@ function rewardsFor(
 // corrige QUE celui-là — les suivants n'ont pas encore été posés, et leur
 // correction ne doit pas descendre au navigateur d'avance.
 //
-// `answers` porte quand même TOUTE la grappe (l'écran conserve les réponses
-// déjà données) : à la validation du DERNIER énoncé, il faut rejuger l'ensemble
-// pour savoir si la grappe est réussie — c'est ce verdict-là, et lui seul, qui
-// s'écrit en base, une fois, à la fin. Un client bricolé pourrait donc
-// réécrire ses réponses précédentes avant le dernier envoi : ça ne changerait
-// que cette trace, jamais la maîtrise — les notions d'un énoncé sont créditées
-// à SA validation, sur le verdict rendu à ce moment-là, et jamais deux fois.
+// `answers` est indexé par énoncé (l'écran renvoie tout le tableau, la case
+// utile est celle d'`index`) : chaque question est jugée pour elle-même, au
+// moment où elle est validée, et rien n'est rejugé ensuite.
 //
 // `rewards` n'est PAS destiné au client : il ne sort pas de l'action serveur,
 // qui s'en sert pour créditer la maîtrise des notions de l'énoncé corrigé.
@@ -892,9 +962,6 @@ export async function gradeParcoursAnswer(
   rewards: RewardTarget[];
   /** L'énoncé corrigé est-il le dernier de la grappe ? */
   isLast: boolean;
-  /** Verdict de la GRAPPE entière, calculé au dernier énoncé seulement
-   *  (`null` ailleurs, comme lorsque rien n'était corrigeable). */
-  groupCorrect: boolean | null;
 } | null> {
   const supabase = getSupabaseServerClient();
 
@@ -927,16 +994,7 @@ export async function gradeParcoursAnswer(
   // et niveaux sont relus de la base ici, jamais reçus du client.
   const rewards = rewardsFor(result.correct, statement.notionIds ?? [], statement.notionBloom);
 
-  const isLast = at === statements.length - 1;
-  let groupCorrect: boolean | null = null;
-  if (isLast) {
-    // La grappe compte pour UNE question : elle est réussie si aucun de ses
-    // énoncés n'est faux et qu'au moins un a pu être corrigé automatiquement.
-    const all = statements.map((s, i) => gradeStatement(s, given[i] ?? emptyExerciseAnswer()));
-    groupCorrect = all.some((o) => o.correct !== null) ? all.every((o) => o.correct !== false) : null;
-  }
-
-  return { result, rewards, isLast, groupCorrect };
+  return { result, rewards, isLast: at === statements.length - 1 };
 }
 
 export async function saveQuestions(workshopId: string, questions: Question[]): Promise<void> {

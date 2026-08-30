@@ -290,7 +290,15 @@ Une question qui porte des questions liées ne s'affiche plus en entier. Seule l
 
 L'énoncé en cours est posé à même le fond, les énoncés déjà corrigés prennent une carte : c'est le repère « ce qui est fait / ce qui reste ». L'image et l'audio, communs à la grappe, restent affichés avec la question principale et ne sont jamais répétés.
 
-Trois choses ne changent pas pour autant : **une grappe vaut une question** (une goutte au plus, un seul coût prélevé sur le budget, une seule trace « déjà posée », à la fin) ; **le tirage de la question suivante part à la fin de la grappe**, pas à chacun de ses énoncés ; et le **rythme de réponse** se mesure sur la grappe entière, de son affichage à sa dernière validation — c'est elle l'unité qui compte pour une question. En revanche, la **maîtrise se crédite énoncé par énoncé** : une question liée juste fait progresser ses notions même si la principale est ratée.
+**Une question liée est une question entière.** Les questions d'une grappe sont **inséparables** — elles se tirent et se posent ensemble, jamais l'une sans les autres — mais aucune n'est un morceau d'une autre, la première comprise : elle compte dans le « question X sur N » comme les suivantes. Chacune vaut donc pour elle-même :
+
+- **sa goutte** — une bonne réponse, une goutte, quelle que soit sa place dans la grappe ;
+- **sa part du budget de Bloom** — la barre avance à chaque question validée, du coût de cette question-là. Le coût de la grappe ENTIÈRE est en revanche réservé dès le tirage : on doit savoir ce qu'elle vaut avant de l'engager, sinon on dépasserait les douze niveaux en cours de route ;
+- **son XP**, le jour où il existera (règle du 29/08/2026, rien n'est encore implémenté côté serveur) ;
+- **sa maîtrise** — les notions d'une question liée juste progressent même si la principale est ratée ;
+- **son rythme de réponse** — les trois secondes de la détection de réponses expédiées se comptent par question, jamais sur la grappe : cinq questions bâclées à la suite doivent se voir comme cinq fautes.
+
+Deux choses restent à l'échelle de la grappe, et pour la même raison — ses questions sont inséparables : la **trace « déjà posée »** (elle s'écrit dès la première question validée, la grappe est alors consommée, même si le membre s'arrête là) et le **tirage de la question suivante**, déclenché à la fin de la grappe et non à chacune de ses questions.
 
 **Ce que vaut un exercice : 12 niveaux de Bloom, pas 12 questions** *(règles arrêtées le 29/08/2026, implémentées dans `src/lib/workshops/parcoursDraw.ts`)*
 
