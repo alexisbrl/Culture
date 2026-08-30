@@ -9,17 +9,12 @@ import { useTranslations } from 'next-intl';
 import { AlertTriangle, Check, ChevronDown, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, Trash2, X } from 'lucide-react';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, leaveWorkshop, type MemberGroup } from '@/app/actions/workshops';
-import type { WorkshopFile } from '@/app/actions/workshopFiles';
-import type { Notion } from '@/app/actions/workshopNotions';
-import type { Chapter } from '@/app/actions/workshopChapters';
+import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, leaveWorkshop } from '@/app/actions/workshops';
 import { COVER_GRADIENTS, COVER_GRADIENT_KEYS, COVER_EMOJIS, coverGradientFor, emojiFor } from '@/lib/workshopCover';
 import ShareQRModal from '@/components/ShareQRModal';
 import { Tooltip } from '@/components/ui/tooltip';
-import { NAV_ITEMS, Row, Switch, SmallBtn, SectionCard, type WorkshopRole, type Member, type NavSection } from './settingsShared';
-import MembersSection from './MembersSection';
-import FilesSection from './FilesSection';
-import NotionsSection from './NotionsSection';
+import { NAV_ITEMS, Row, Switch, SmallBtn, SectionCard, type WorkshopRole } from './settingsShared';
+import { isNavSection, type NavSection } from './sections';
 import PremiumSection from './PremiumSection';
 
 type Props = {
@@ -36,14 +31,19 @@ type Props = {
   currentUserRole: WorkshopRole;
   isPremium: boolean;
   showProgramme: boolean;
-  members: Member[];
-  groups: MemberGroup[];
-  files: WorkshopFile[];
-  notions: Notion[];
-  chapters: Chapter[];
+  /** Onglet à ouvrir, lu dans l'URL côté serveur (voir page.tsx). */
+  initialSection: NavSection;
+  /** Vient de l'atelier lui-même, donc gratuit : c'est la seule chose dont la
+   *  section Premium a besoin de la liste des membres. */
+  memberCount: number;
+  // Les trois sections lourdes arrivent en flux : la page les rend dans leur
+  // propre frontière de chargement et nous les passe déjà emballées (page.tsx).
+  membersSlot: React.ReactNode;
+  filesSlot: React.ReactNode;
+  notionsSlot: React.ReactNode;
 };
 
-export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, isPremium, showProgramme: showProgrammeProp, members, groups, files: initialFiles, notions, chapters }: Props) {
+export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, isPremium, showProgramme: showProgrammeProp, initialSection, memberCount, membersSlot, filesSlot, notionsSlot }: Props) {
   const router = useRouter();
   const t = useTranslations('settings');
 
@@ -54,7 +54,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
   const isOwner = currentUserRole === 'owner';
   const isMember = currentUserRole === 'member';
 
-  const [activeSection, setActiveSection] = useState<NavSection>('general');
+  const [activeSection, setActiveSection] = useState<NavSection>(initialSection);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // ─── La section ouverte vit dans l'URL, et le retour arrière la suit ─────
@@ -75,16 +75,14 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
   // coup. Sortir reste à un clic : le lien « ← nom de l'atelier » en tête de
   // page est là pour ça, quel que soit l'onglet ouvert.
   //
-  // Lu dans un effet et non au premier rendu : le serveur ne connaît pas l'URL
-  // du navigateur, et l'initialiser ici ferait diverger les deux rendus.
+  // L'onglet d'ARRIVÉE, lui, est lu côté serveur (`initialSection`, page.tsx) :
+  // le lire ici, dans un effet, affichait « Général » le temps d'un battement
+  // avant de basculer sur le bon onglet à chaque rafraîchissement. La lecture
+  // ci-dessous ne sert donc plus qu'au trajet arrière/avant du navigateur.
   const sectionFromUrl = useCallback((): NavSection => {
-    const wanted = new URLSearchParams(window.location.search).get('section');
-    return wanted && NAV_ITEMS.some((item) => item.id === wanted) ? (wanted as NavSection) : 'general';
+    const wanted = new URLSearchParams(window.location.search).get('section') ?? undefined;
+    return isNavSection(wanted) ? wanted : 'general';
   }, []);
-
-  useEffect(() => {
-    setActiveSection(sectionFromUrl());
-  }, [sectionFromUrl]);
 
   // Retour / suivant du navigateur : l'URL a déjà changé quand l'événement
   // arrive, il suffit de la relire. Aucune requête n'accompagne ce trajet —
@@ -734,20 +732,20 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         )}
 
         <div style={{ display: activeSection === 'members' ? 'contents' : 'none' }}>
-          <MembersSection workshopId={workshopId} isPremium={isPremium} currentUserRole={currentUserRole} members={members} groups={groups} />
+          {membersSlot}
         </div>
 
         <div style={{ display: activeSection === 'files' ? 'contents' : 'none' }}>
-          <FilesSection workshopId={workshopId} initialFiles={initialFiles} />
+          {filesSlot}
         </div>
 
         <div style={{ display: activeSection === 'notions' ? 'contents' : 'none' }}>
-          <NotionsSection workshopId={workshopId} notions={notions} chapters={chapters} />
+          {notionsSlot}
         </div>
 
         {isOwner && (
           <div style={{ display: activeSection === 'premium' ? 'contents' : 'none' }}>
-            <PremiumSection workshopId={workshopId} isPremium={isPremium} memberCount={members.length} />
+            <PremiumSection workshopId={workshopId} isPremium={isPremium} memberCount={memberCount} />
           </div>
         )}
       </div>

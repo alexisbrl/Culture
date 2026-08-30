@@ -1,6 +1,7 @@
 'use server';
 
 import { auth, clerkClient } from '@clerk/nextjs/server';
+import { after } from 'next/server';
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { requireMember, requireManager, requireOwner } from '@/lib/authz';
 import * as membersLib from '@/lib/workshops/members';
@@ -149,7 +150,12 @@ export async function getWorkshop(workshopId: string) {
   try {
     const { userId } = await auth();
     if (!userId) return null;
-    return await coreLib.getWorkshop(workshopId, userId);
+    const workshop = await coreLib.getWorkshop(workshopId, userId);
+    // L'horodatage de visite ne sert qu'au tri du tableau de bord : il part
+    // APRÈS la réponse, au lieu de retarder chaque ouverture d'atelier d'un
+    // aller-retour d'écriture.
+    if (workshop) after(() => coreLib.touchWorkshopVisit(workshopId, userId));
+    return workshop;
   } catch (err) {
     console.error('getWorkshop error:', err);
     return null;

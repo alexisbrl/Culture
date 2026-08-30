@@ -1,4 +1,4 @@
-import { currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { redirect, notFound } from 'next/navigation';
 import { getLocale } from 'next-intl/server';
 import { getWorkshop } from '@/app/actions/workshops';
@@ -19,10 +19,12 @@ type Props = {
 
 export default async function ExercisePage({ params }: Props) {
   const { id, chapterId } = await params;
-  const user = await currentUser();
-  const locale = await getLocale();
+  // `auth()` (le jeton de session, déjà présent dans la requête) plutôt que
+  // `currentUser()`, qui irait chercher tout le profil auprès de Clerk sur le
+  // réseau pour une simple vérification de connexion.
+  const [{ userId }, locale] = await Promise.all([auth(), getLocale()]);
 
-  if (!user) redirect(`/${locale}/sign-in`);
+  if (!userId) redirect(`/${locale}/sign-in`);
 
   const workshop = await getWorkshop(id);
   if (!workshop) notFound();

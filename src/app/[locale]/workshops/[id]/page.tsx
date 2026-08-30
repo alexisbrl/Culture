@@ -1,4 +1,4 @@
-import { currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { redirect, notFound } from 'next/navigation';
 import { getLocale } from 'next-intl/server';
 import { getWorkshop } from '@/app/actions/workshops';
@@ -12,10 +12,12 @@ type Props = {
 
 export default async function WorkshopPage({ params }: Props) {
   const { id } = await params;
-  const user = await currentUser();
-  const locale = await getLocale();
+  // `auth()` (le jeton de session, déjà présent dans la requête) plutôt que
+  // `currentUser()`, qui va chercher tout le profil auprès de Clerk sur le
+  // réseau pour un simple identifiant.
+  const [{ userId }, locale] = await Promise.all([auth(), getLocale()]);
 
-  if (!user) redirect(`/${locale}/sign-in`);
+  if (!userId) redirect(`/${locale}/sign-in`);
 
   const workshop = await getWorkshop(id);
   if (!workshop) notFound();
@@ -45,7 +47,7 @@ export default async function WorkshopPage({ params }: Props) {
       workshopId={workshop.id}
       workshopName={workshop.name}
       createdAt={workshop.created_at}
-      currentUserId={user.id}
+      currentUserId={userId}
       currentUserRole={workshop.currentUserRole}
       isPremium={workshop.is_premium}
       members={members}

@@ -9,6 +9,7 @@
 
 import { getSupabaseServerClient } from '@/lib/supabase';
 import type { WorkshopRole } from '@/lib/authz';
+import { getWorkshopRole } from '@/lib/workshops/membership';
 import type { WorkshopCardData } from '@/app/actions/workshops';
 
 export async function getUserWorkshops(userId: string): Promise<{
@@ -159,39 +160,26 @@ export async function getLastVisitedWorkshop(
 export async function getWorkshop(workshopId: string, userId: string) {
   const supabase = getSupabaseServerClient();
 
-  // 1. Vérifier que l'utilisateur est membre
-  const { data: membership } = await supabase
-    .from('workshop_members')
-    .select('role')
-    .eq('workshop_id', workshopId)
-    .eq('user_id', userId)
-    .single();
+  // Droits, atelier et membres ne dépendent pas les uns des autres : les
+  // enchaîner coûtait trois allers-retours à la base avant le moindre pixel.
+  // Le rôle passe par le cache de requête (membership.ts), donc les sections
+  // qui revérifient les droits derrière ne le repayent pas.
+  const [role, { data: workshop }, { data: workshopMembers }] = await Promise.all([
+    getWorkshopRole(workshopId, userId),
+    supabase
+      .from('workshops')
+      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium, show_programme')
+      .eq('id', workshopId)
+      .single(),
+    supabase
+      .from('workshop_members')
+      .select('id, user_id, role, joined_at, groups')
+      .eq('workshop_id', workshopId),
+  ]);
 
-  if (!membership) return null;
+  if (!role || !workshop) return null;
 
-  // Enregistrer la visite pour le tri du Dashboard (dernier atelier visité en premier)
-  await supabase
-    .from('workshop_members')
-    .update({ last_visited_at: new Date().toISOString() })
-    .eq('workshop_id', workshopId)
-    .eq('user_id', userId);
-
-  // 2. Récupérer l'atelier
-  const { data: workshop } = await supabase
-    .from('workshops')
-    .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium, show_programme')
-    .eq('id', workshopId)
-    .single();
-
-  if (!workshop) return null;
-
-  // 3. Récupérer les membres
-  const { data: workshopMembers } = await supabase
-    .from('workshop_members')
-    .select('id, user_id, role, joined_at, groups')
-    .eq('workshop_id', workshopId);
-
-  // 4. Récupérer les profils des membres
+  // Profils des membres
   const memberUserIds = (workshopMembers ?? []).map((m) => m.user_id);
   let userProfiles: Array<{ user_id: string; unique_tag: string; display_name: string }> = [];
 
@@ -213,8 +201,23 @@ export async function getWorkshop(workshopId: string, userId: string) {
   return {
     ...workshop,
     workshop_members: membersWithProfiles,
-    currentUserRole: membership.role as WorkshopRole,
+    currentUserRole: role,
   };
+}
+
+/** Horodate la visite d'un atelier — sert au tri du tableau de bord (« dernier
+ *  visité en premier »), et à rien d'autre.
+ *
+ *  Volontairement séparé de la lecture : c'est une écriture, elle n'a aucune
+ *  raison de retarder l'affichage. Le wrapper `'use server'` la programme
+ *  APRÈS la réponse (`after`), voir @/app/actions/workshops. */
+export async function touchWorkshopVisit(workshopId: string, userId: string) {
+  const supabase = getSupabaseServerClient();
+  await supabase
+    .from('workshop_members')
+    .update({ last_visited_at: new Date().toISOString() })
+    .eq('workshop_id', workshopId)
+    .eq('user_id', userId);
 }
 
 export async function getWorkshopPreview(
