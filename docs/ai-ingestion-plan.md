@@ -158,6 +158,14 @@ besoin qui n'existe pas encore.
 DeepSeek ensuite (coût) → à terme, modèles open-source DeepSeek **auto-hébergés
 en local**.
 
+**Où en est-on (30/08/2026) :** la passe QUESTIONS est passée à DeepSeek — par
+défaut et partout, y compris pour ce qui produit des questions sans que personne
+ne l'ait décidé (recharge automatique, et le chat quand il existera). Claude ne
+s'y utilise plus que si on le demande explicitement, dans le dialogue de
+génération, le temps de la comparaison. Les passes CHAPITRES et NOTIONS restent
+sur Claude sans discussion : elles lisent les PDF, ce que DeepSeek ne sait pas
+faire.
+
 ### Comment Claude préserve tableaux et images
 
 Ce n'est pas du parsing : **chaque page du PDF est envoyée au modèle comme une

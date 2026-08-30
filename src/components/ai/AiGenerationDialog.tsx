@@ -152,7 +152,12 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // exposé le temps de comparer Claude et DeepSeek sur un vrai corpus ; il n'a
   // pas vocation à rester un choix d'utilisateur. Seule cette passe est
   // concernée : elle ne reçoit aucun document (voir `providers/deepseek.ts`).
-  const [questionsProvider, setQuestionsProvider] = useState<'claude' | 'deepseek'>('claude');
+  //
+  // **DeepSeek d'office** depuis le 30/08/2026 : c'est le fournisseur des
+  // questions partout ailleurs (recharge automatique, et le chat quand il
+  // existera, qui ne proposera aucun choix). Ce dialogue est le seul endroit
+  // d'où l'on peut encore demander Claude, et c'est alors un geste délibéré.
+  const [questionsProvider, setQuestionsProvider] = useState<'claude' | 'deepseek'>('deepseek');
   const [hint, setHint] = useState('');
   const [phase, setPhase] = useState<Phase>({ step: 'select' });
   // ─── L'arrêt, et pourquoi il tient dans des refs ────────────────────────

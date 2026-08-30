@@ -63,10 +63,17 @@ export function questionsPerNotion(distribution: BloomDistribution = DEFAULT_BLO
  *  500 à 1000 (§9) — c'est pourquoi rien dans le pipeline ne suppose « tout le
  *  lot dans une seule réponse ».
  *
- *  À 50, il bloquait à 2 % de la volumétrie cible (§16.2). Relevé à 300 **le
- *  temps des tests** : c'est un garde-fou contre une boucle qui part en vrille,
- *  il doit rester bas tant que les coûts réels ne sont pas constatés. */
-export const MAX_QUESTIONS_PER_IMPORT = 300;
+ *  À 50, il bloquait à 2 % de la volumétrie cible (§16.2). Passé à 300, puis à
+ *  500 le 30/08/2026 : c'est un **fusible**, pas un quota. Il ne doit jamais se
+ *  déclencher en usage normal — un lancement réel n'en approche pas le volume —
+ *  et ne sert qu'à arrêter une boucle qui part en vrille. Un plafond réglé sous
+ *  l'usage nominal ne protège plus, il gêne.
+ *
+ *  Il ne borne PAS la dépense d'un compte : chaque lot rouvre le compteur, et
+ *  relancer une génération est un geste humain, délibéré et visible. Le vrai
+ *  plafond de dépense serait un quota par utilisateur adossé à l'abonnement — il
+ *  n'existe pas encore (`docs/backlog.md`). */
+export const MAX_QUESTIONS_PER_IMPORT = 500;
 
 // ─── L'examen : une volumétrie qui ne se compte pas par notion ───────────────
 //

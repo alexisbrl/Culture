@@ -445,21 +445,29 @@ async function userHintOf(importId: string): Promise<string | undefined> {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
-/** Le fournisseur choisi au lancement pour la passe QUESTIONS.
+/** Le fournisseur de la passe QUESTIONS. **DeepSeek par défaut** (30/08/2026) —
+ *  Claude seulement s'il a été demandé explicitement.
  *
  *  Seule cette passe est concernée : elle ne reçoit aucun document, donc rien
  *  n'y dépend de la lecture des PDF, que DeepSeek ne sait pas faire (voir
  *  `providers/deepseek.ts`). Les passes chapitres et notions restent sur Claude
  *  quoi qu'il arrive — le choix ne leur est même pas proposé.
  *
- *  Repli sur Claude à la moindre valeur inattendue : une chaîne inconnue rangée
- *  dans le `scope` ne doit pas faire échouer un import. */
+ *  Le sens du défaut compte : tout ce qui produit des questions SANS que
+ *  personne ne l'ait décidé passe par ici sans rien ranger dans le `scope` — la
+ *  recharge automatique aujourd'hui, le chat plus tard. Ces chemins-là n'ont
+ *  pas à choisir, et ils doivent prendre le fournisseur le moins cher. Seul le
+ *  dialogue de génération propose encore l'autre, le temps de la comparaison
+ *  (option temporaire, voir `AiGenerationDialog`).
+ *
+ *  Repli sur DeepSeek à la moindre valeur inattendue : une chaîne inconnue
+ *  rangée dans le `scope` ne doit pas faire échouer un import. */
 async function questionsProviderOf(importId: string): Promise<'claude' | 'deepseek'> {
   const supabase = getSupabaseServerClient();
   const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
-  return (data?.scope as { questionsProvider?: unknown } | null)?.questionsProvider === 'deepseek'
-    ? 'deepseek'
-    : 'claude';
+  return (data?.scope as { questionsProvider?: unknown } | null)?.questionsProvider === 'claude'
+    ? 'claude'
+    : 'deepseek';
 }
 
 async function oversizeModelsOf(importId: string): Promise<ModelId[]> {

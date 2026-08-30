@@ -1221,7 +1221,7 @@
       "label": "MODÈLE POUR LES QUESTIONS",
       "claude": "Claude (Haiku)",
       "deepseek": "DeepSeek",
-      "help": "Ne concerne que la rédaction des questions, qui ne lit pas les documents. Les chapitres et les notions restent sur Claude, seul à lire les PDF sans en perdre les schémas."
+      "help": "DeepSeek écrit les questions partout ailleurs — le choix n'existe qu'ici. Ne concerne que la rédaction des questions, qui ne lit pas les documents : les chapitres et les notions restent sur Claude, seul à lire les PDF sans en perdre les schémas."
     },
     "generate": "générer",
     "cancel": "annuler",

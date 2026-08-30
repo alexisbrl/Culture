@@ -1221,7 +1221,7 @@
       "label": "MODEL FOR QUESTIONS",
       "claude": "Claude (Haiku)",
       "deepseek": "DeepSeek",
-      "help": "Only affects question writing, which does not read the documents. Chapters and notions stay on Claude, the only one that reads PDFs without losing their diagrams."
+      "help": "DeepSeek writes the questions everywhere else — the choice only exists here. Only affects question writing, which does not read the documents: chapters and notions stay on Claude, the only one that reads PDFs without losing their diagrams."
     },
     "generate": "generate",
     "cancel": "cancel",
