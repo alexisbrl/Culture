@@ -490,7 +490,6 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
 
       setIssues({ discarded, adjusted });
       setPhase({ step: 'done' });
-      onDone?.();
       return;
     }
 
@@ -578,7 +577,6 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     if (stopped.current) return;
     setIssues({ discarded, adjusted });
     setPhase({ step: 'done' });
-    onDone?.();
   }
 
   // ─── Le signe de vie, et ce qu'il tient ──────────────────────────────────
@@ -645,9 +643,33 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // Hors génération, la croix ferme, point. Pendant, elle DEMANDE d'abord : une
   // génération interrompue laisse un atelier à moitié rempli, ce que personne
   // ne veut déclencher d'un appui distrait (28/08/2026).
+  // ─── Le rafraîchissement a lieu à la FERMETURE, pas à la fin ─────────────
+  //
+  // ⚠️ **Deux raisons, et la première était un bug** (30/08/2026).
+  //
+  // `onDone` partait juste après `setPhase({ step: 'done' })`, et les trois
+  // écrans qui l'utilisent rechargent la page. Or un état React ne s'applique
+  // pas dans l'instant : au moment de l'appel, le rendu affichait encore
+  // « en cours », donc l'écouteur `beforeunload` posé plus haut était TOUJOURS
+  // en place. Le rechargement déclenchait alors la demande « Quitter le site ? »
+  // du navigateur — et il suffisait de ne pas la confirmer pour que l'écran ne
+  // se rafraîchisse jamais. C'est ce qui a fait croire qu'une génération
+  // n'avait rien changé alors qu'elle avait rangé un chapitre et déplacé des
+  // notions.
+  //
+  // La seconde raison tient toute seule : recharger à l'instant où le
+  // compte-rendu s'affiche emporte le compte-rendu avec lui. On le laisse donc
+  // se lire, et c'est la fermeture — le moment où l'on revient à l'écran — qui
+  // le rafraîchit. À ce moment-là, `running` est faux depuis longtemps et
+  // l'écouteur a été retiré.
+  //
+  // La condition porte sur le lot, pas sur l'étape : une génération arrêtée ou
+  // en erreur a pu écrire, elle aussi. Fermer sans avoir rien lancé ne
+  // recharge rien.
   function requestClose() {
-    if (!running) return onClose();
-    setStopAsk(true);
+    if (running) return setStopAsk(true);
+    if (importIdRef.current) onDone?.();
+    onClose();
   }
 
   /** Arrête l'enchaînement, **rend la main tout de suite**, et défait le reste
@@ -840,7 +862,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             </div>
 
             <Actions>
-              <Ghost onClick={onClose}>{t('cancel')}</Ghost>
+              <Ghost onClick={requestClose}>{t('cancel')}</Ghost>
               {/* Deux blocages : tant que le programme n'est pas lu, on ne sait
                   pas encore quoi lancer — mieux vaut attendre une fraction de
                   seconde que partir sur la mauvaise voie ; et un atelier sans
@@ -889,7 +911,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             <IssueList heading={t('adjusted')} issues={issues.adjusted} tone="soft" />
             <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 12 }}>{t('cancellable')}</p>
             <Actions>
-              <Primary onClick={onClose}>{t('close')}</Primary>
+              <Primary onClick={requestClose}>{t('close')}</Primary>
             </Actions>
           </div>
         )}
@@ -902,7 +924,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             </div>
             <Actions>
               <Ghost onClick={() => setPhase({ step: 'select' })}>{t('retry')}</Ghost>
-              <Primary onClick={onClose}>{t('close')}</Primary>
+              <Primary onClick={requestClose}>{t('close')}</Primary>
             </Actions>
           </div>
         )}
