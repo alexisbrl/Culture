@@ -78,6 +78,33 @@ const MAX_TOKENS = 32_000;
 //
 // Méthode arrêtée avec Alexis : Haiku 4.5 partout, on ne monte en gamme que là
 // où il se révèle insuffisant.
+//
+// ─── Il s'est révélé insuffisant sur le programme (30/08/2026) ───────────────
+//
+// Le même cours passé deux fois a donné 125 notions d'un côté et 209 de l'autre.
+// L'écart lui-même n'est pas le problème — c'est un découpage deux fois plus
+// fin, pas du contenu inventé. Ce qui l'est : les doublons littéraux restés
+// dans un atelier alors que la consigne demande explicitement de comparer les
+// FAITS et non les phrases, les notions que le rangement laisse de côté sans
+// rien en dire, et une granularité qui dérive jusqu'au détail sans intérêt.
+// Trois défaillances de JUGEMENT, pas d'exécution.
+//
+// Les trois passes du programme montent donc sur Sonnet 5. Y compris les
+// chapitres, malgré leur air de simple mise en boîtes : c'est la décision la
+// plus structurante de la chaîne et elle ne coûte **qu'un appel** — le meilleur
+// rapport qualité/prix du pipeline (point 1 ci-dessus, appliqué pour de bon).
+//
+// Les deux passes de questions restent sur Haiku : c'est là que le volume de
+// sortie explose (point 2), et le résultat est jugé satisfaisant en l'état.
+//
+// Ordre de grandeur mesuré sur une génération complète : ~0,55 € en tout-Haiku,
+// ~0,80 € dans la répartition ci-dessous, ~1,10 € en tout-Sonnet, ~2,80 € en
+// tout-Opus. À ce niveau, le modèle se choisit sur la qualité ; la question du
+// coût se rouvrira quand il y aura des utilisateurs.
+//
+// ⚠️ **Un seul changement à la fois.** La consigne d'extraction n'est pas
+// retouchée en même temps, exprès : sans ça, on ne saurait pas à quoi
+// attribuer la différence au prochain test.
 
 export const MODELS = {
   haiku: 'claude-haiku-4-5',
@@ -127,15 +154,16 @@ const WORKSHOP_CONTEXT_RESERVE = 100_000;
  *  jour où le découpage séquentiel du cours existera, ce plafond tombera. */
 export const MAX_CORPUS_TOKENS = 1_000_000 - MAX_TOKENS - WORKSHOP_CONTEXT_RESERVE;
 
-/** Le modèle voulu pour chaque passe. Haiku 4.5 partout : c'est l'hypothèse à
- *  tester, pas une conclusion (§16.20). */
+/** Le modèle voulu pour chaque passe : Sonnet 5 sur le programme, Haiku 4.5 sur
+ *  les questions (voir le bloc ci-dessus pour le pourquoi et les coûts). */
 export const PASS_MODELS: Record<IngestScope['pass'], ModelId> = {
-  chapters: MODELS.haiku,
-  notions: MODELS.haiku,
-  // Le rangement est la tâche la plus mécanique du pipeline — croiser une page
-  // et une liste de chapitres — et la plus répétée. C'est exactement le profil
-  // du modèle économique (§16.4).
-  assign: MODELS.haiku,
+  chapters: MODELS.sonnet,
+  notions: MODELS.sonnet,
+  // Le rangement passait pour la tâche la plus mécanique du pipeline — croiser
+  // une page et une liste de chapitres. À l'usage, c'en est une de jugement :
+  // une notion que le modèle ne sait pas placer reste sans chapitre pour
+  // toujours, personne ne la réexamine, et rien ne le signale. D'où Sonnet.
+  assign: MODELS.sonnet,
   questions: MODELS.haiku,
   exam: MODELS.haiku,
 };
