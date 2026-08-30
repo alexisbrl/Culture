@@ -27,7 +27,7 @@
 // suivante instantané tout en gardant un choix calculé sur la progression qui
 // vient d'avoir lieu.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { ArrowRight, Check, Droplet, FileText, Leaf, Loader2, RotateCw, Sprout, Upload, X } from 'lucide-react';
@@ -898,9 +898,8 @@ function TableAnswer({ statement, extra, result, onExtra }: {
  *  La colonne de droite arrive mélangée et détachée de la gauche (voir
  *  `matchRight` dans examTypes) : rien ici ne trahit l'appariement attendu.
  *
- *  L'association est matérialisée par un rang chiffré des deux côtés, là où la
- *  maquette trace un trait en SVG — même information, sans mesurer la position
- *  de chaque ligne à chaque rendu. */
+ *  L'association est matérialisée par un trait tracé en SVG dans la gouttière
+ *  centrale, d'une pastille à l'autre. */
 function MatchAnswer({ statement, extra, result, onExtra }: {
   statement: ExercisePart;
   extra: ExtraAnswer;
@@ -979,6 +978,60 @@ function MatchAnswer({ statement, extra, result, onExtra }: {
     };
   }
 
+  // ── Où partent les traits : mesuré, et non plus déduit du rang ───────────
+  //
+  // Un encadré dont le libellé revient à la ligne est plus haut que ses
+  // voisins : le rang ne dit alors plus où tombe son milieu, et le trait
+  // partait au-dessus ou en dessous de la pastille (constaté le 30/08/2026).
+  // On mesure donc le centre RÉEL de chaque encadré, dans le repère de la
+  // gouttière, et le SVG travaille en pixels — pas de `viewBox` étiré, donc
+  // pas d'hypothèse sur des lignes de hauteur égale.
+  //
+  // La mesure re-tourne à chaque rendu et sur tout changement de taille (le
+  // `ResizeObserver` reste branché : une fenêtre redimensionnée fait
+  // re-répartir les retours à la ligne). Elle est gardée par une comparaison,
+  // sans quoi chaque mesure redéclencherait un rendu, donc une mesure.
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const gutterRef = useRef<HTMLDivElement | null>(null);
+  const leftRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const rightRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [geom, setGeom] = useState<{ width: number; leftY: number[]; rightY: number[] }>({ width: 0, leftY: [], rightY: [] });
+
+  const measure = useCallback(() => {
+    const gutter = gutterRef.current;
+    if (!gutter) return;
+    const base = gutter.getBoundingClientRect();
+    // Tout en coordonnées de la fenêtre : on ne mélange jamais un
+    // `getBoundingClientRect` et un `offsetHeight` dans un même calcul
+    // (cf. .claude/rules/frontend-patterns.md).
+    const centers = (els: (HTMLButtonElement | null)[]) =>
+      els.map((el) => {
+        if (!el) return 0;
+        const r = el.getBoundingClientRect();
+        return r.top + r.height / 2 - base.top;
+      });
+    const next = { width: base.width, leftY: centers(leftRefs.current), rightY: centers(rightRefs.current) };
+    setGeom((prev) => {
+      const same =
+        prev.width === next.width &&
+        prev.leftY.length === next.leftY.length &&
+        prev.rightY.length === next.rightY.length &&
+        prev.leftY.every((v, i) => v === next.leftY[i]) &&
+        prev.rightY.every((v, i) => v === next.rightY[i]);
+      return same ? prev : next;
+    });
+  }, []);
+
+  useLayoutEffect(measure);
+
+  useLayoutEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(measure);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [measure]);
+
   /** Pastille d'accroche, sur le bord intérieur de l'encadré : pleine dès que
    *  l'élément est relié ou sélectionné, creuse sinon. C'est elle que le trait
    *  vient rejoindre. */
@@ -988,13 +1041,6 @@ function MatchAnswer({ statement, extra, result, onExtra }: {
     );
   }
 
-  // Traits reliant les paires, tracés dans la gouttière centrale. Les positions
-  // se DÉDUISENT du rang de chaque ligne au lieu d'être mesurées : les lignes
-  // d'une colonne ont toutes la même hauteur, donc le centre de la ligne `i`
-  // tombe à `(i + 0.5) / n` de la hauteur totale. Un `viewBox` de 0 à 100 avec
-  // `preserveAspectRatio="none"` laisse le SVG s'étirer exactement sur la
-  // hauteur des colonnes — pas de `ResizeObserver`, pas de mesure à chaque
-  // rendu, donc rien qui puisse se désynchroniser pendant une animation.
   // Côté où se trouvent les cibles de la sélection en cours : c'est l'AUTRE
   // colonne que celle de l'élément en attente. Ses encadrés encore libres se
   // mettent en pointillé pour montrer où le trait peut aboutir ; un encadré
@@ -1019,26 +1065,31 @@ function MatchAnswer({ statement, extra, result, onExtra }: {
 
   const links = Object.entries(extra.match).map(([l, r]) => {
     const leftRow = left.findIndex((c) => c.index === Number(l));
-    const y1 = ((leftRow + 0.5) / Math.max(left.length, 1)) * 100;
-    const y2 = ((r + 0.5) / Math.max(right.length, 1)) * 100;
+    const y1 = geom.leftY[leftRow] ?? 0;
+    const y2 = geom.rightY[r] ?? 0;
+    const w = geom.width;
     return {
       key: `${l}-${r}`,
-      d: `M 0 ${y1} C 50 ${y1}, 50 ${y2}, 100 ${y2}`,
+      d: `M 0 ${y1} C ${w / 2} ${y1}, ${w / 2} ${y2}, ${w} ${y2}`,
       stroke: pairTone(Number(l), r) ?? palette.green,
     };
   });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: `${split}fr 54px ${1 - split}fr`, alignItems: 'stretch' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {left.map((choice) => {
+      {/* Les deux colonnes sont CENTRÉES l'une sur l'autre (`justifyContent`) :
+          celle qui a des encadrés sur deux lignes est plus haute, elle
+          commence donc plus haut et finit plus bas que l'autre, au lieu de
+          s'aligner par le sommet et de faire pencher toute la grille. */}
+      <div ref={gridRef} style={{ display: 'grid', gridTemplateColumns: `${split}fr 54px ${1 - split}fr`, alignItems: 'stretch' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
+          {left.map((choice, row) => {
             const active = pending?.side === 'left' && pending.index === choice.index;
             const linked = extra.match[choice.index];
             const paired = linked !== undefined;
             const tone = paired ? pairTone(choice.index, linked) : null;
             return (
-              <button key={choice.index} onClick={() => pickLeft(choice.index)} disabled={readOnly} style={sideStyle(active, paired, targetSide === 'left' && !paired, tone)}>
+              <button key={choice.index} ref={(el) => { leftRefs.current[row] = el; }} onClick={() => pickLeft(choice.index)} disabled={readOnly} style={sideStyle(active, paired, targetSide === 'left' && !paired, tone)}>
                 <span style={{ flex: 1, minWidth: 0 }}>{choice.text}</span>
                 {dot(active || paired)}
               </button>
@@ -1048,24 +1099,24 @@ function MatchAnswer({ statement, extra, result, onExtra }: {
 
         {/* Gouttière des traits. `overflow: visible` : une courbe entre deux
             lignes très écartées déborde du cadre, et serait rognée sinon. */}
-        <div style={{ position: 'relative' }}>
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none' }}>
+        <div ref={gutterRef} style={{ position: 'relative' }}>
+          {/* Pas de `viewBox` : le repère du SVG est celui des pixels de la
+              gouttière, donc les centres mesurés s'y posent tels quels. */}
+          <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none' }}>
             {links.map((link) => (
-              // `vector-effect` : sans lui, l'étirement non uniforme du viewBox
-              // écraserait l'épaisseur du trait à l'horizontale.
-              <path key={link.key} d={link.d} fill="none" stroke={link.stroke} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
+              <path key={link.key} d={link.d} fill="none" stroke={link.stroke} strokeWidth={2} strokeLinecap="round" />
             ))}
           </svg>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
           {right.map((label, index) => {
             const active = pending?.side === 'right' && pending.index === index;
             const pairedLeft = leftPairedTo(index);
             const paired = pairedLeft !== null;
             const tone = pairedLeft !== null ? pairTone(pairedLeft, index) : null;
             return (
-              <button key={index} onClick={() => pickRight(index)} disabled={readOnly} style={sideStyle(active, paired, targetSide === 'right' && !paired, tone)}>
+              <button key={index} ref={(el) => { rightRefs.current[index] = el; }} onClick={() => pickRight(index)} disabled={readOnly} style={sideStyle(active, paired, targetSide === 'right' && !paired, tone)}>
                 {dot(active || paired)}
                 <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
               </button>

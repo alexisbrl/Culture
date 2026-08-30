@@ -2,7 +2,7 @@
 
 import { palette, ink, withAlpha, shadow } from '@/lib/theme';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -57,33 +57,57 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
   const [activeSection, setActiveSection] = useState<NavSection>('general');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  // ─── La section ouverte survit à un rechargement ─────────────────────────
+  // ─── La section ouverte vit dans l'URL, et le retour arrière la suit ─────
   //
-  // Elle vit dans l'URL (`?section=notions`), écrite SANS naviguer : les
+  // Elle est écrite dans `?section=notions` SANS passer par le routeur : les
   // sections sont montées en permanence (voir .claude/rules/server-architecture.md),
-  // et passer par le routeur pour changer d'onglet remettrait un temps de
-  // chargement là où il n'y en a pas. `replaceState` n'ajoute pas non plus
-  // d'entrée d'historique — le bouton « retour » continue de ramener d'où l'on
-  // vient, pas d'onglet en onglet.
+  // et une vraie navigation remettrait un temps de chargement là où il n'y en
+  // a pas. L'API d'historique du navigateur ne déclenche, elle, aucune requête.
   //
-  // Ça règle deux gênes d'un coup (30/08/2026) : F5 ne renvoie plus sur
-  // « Général », et la fin d'une génération par IA — qui recharge la page pour
-  // que les listes soient à jour — retombe sur la section d'où elle a été
-  // lancée.
+  // Ça règle trois gênes (30/08/2026) : F5 ne renvoie plus sur « Général », la
+  // fin d'une génération par IA — qui recharge la page pour rafraîchir les
+  // listes — retombe sur la section d'où elle a été lancée, et le bouton
+  // « retour » du navigateur repasse d'onglet en onglet avant de sortir.
+  //
+  // Chaque changement d'onglet AJOUTE donc une entrée d'historique
+  // (`pushState`), là où la première version se contentait de réécrire la
+  // dernière (`replaceState`) pour que « retour » sorte des paramètres d'un
+  // coup. Sortir reste à un clic : le lien « ← nom de l'atelier » en tête de
+  // page est là pour ça, quel que soit l'onglet ouvert.
   //
   // Lu dans un effet et non au premier rendu : le serveur ne connaît pas l'URL
   // du navigateur, et l'initialiser ici ferait diverger les deux rendus.
-  useEffect(() => {
+  const sectionFromUrl = useCallback((): NavSection => {
     const wanted = new URLSearchParams(window.location.search).get('section');
-    if (wanted && NAV_ITEMS.some((item) => item.id === wanted)) setActiveSection(wanted as NavSection);
+    return wanted && NAV_ITEMS.some((item) => item.id === wanted) ? (wanted as NavSection) : 'general';
   }, []);
 
   useEffect(() => {
+    setActiveSection(sectionFromUrl());
+  }, [sectionFromUrl]);
+
+  // Retour / suivant du navigateur : l'URL a déjà changé quand l'événement
+  // arrive, il suffit de la relire. Aucune requête n'accompagne ce trajet —
+  // les cinq sections sont toujours à l'écran, on ne fait que changer celle
+  // qui est visible.
+  useEffect(() => {
+    const onPop = () => setActiveSection(sectionFromUrl());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [sectionFromUrl]);
+
+  /** Ouvre une section : l'état ET l'entrée d'historique, jamais l'un sans
+   *  l'autre. Écrit ici plutôt que dans un effet sur `activeSection` — sans
+   *  quoi un retour arrière, qui pose lui aussi l'état, empilerait une entrée
+   *  de plus et rendrait le bouton « retour » inopérant. */
+  function openSection(id: NavSection) {
+    if (id === activeSection) return;
+    setActiveSection(id);
     const url = new URL(window.location.href);
-    if (activeSection === 'general') url.searchParams.delete('section');
-    else url.searchParams.set('section', activeSection);
-    window.history.replaceState(null, '', url);
-  }, [activeSection]);
+    if (id === 'general') url.searchParams.delete('section');
+    else url.searchParams.set('section', id);
+    window.history.pushState(null, '', url);
+  }
 
   // Section 1 — General
   const [workshopNameInput, setWorkshopNameInput] = useState(workshopName);
@@ -366,7 +390,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveSection(item.id)}
+                onClick={() => openSection(item.id)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -431,7 +455,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   <button
                     key={item.id}
                     onClick={() => {
-                      setActiveSection(item.id);
+                      openSection(item.id);
                       setMobileNavOpen(false);
                     }}
                     style={{ width: '100%', border: 'none', background: active ? withAlpha(palette.green, 0.08) : 'transparent', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: `1px solid ${palette.line}`, textAlign: 'left', fontSize: 13.5, fontWeight: 600, color: active ? palette.green : palette.ink }}
