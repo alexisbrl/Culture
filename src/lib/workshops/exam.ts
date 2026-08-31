@@ -702,11 +702,6 @@ export async function markParcoursAsked(
       user_id: userId,
       group_id: groupId,
       answers: [...previous, entry],
-      // Colonnes de rythme d'avant `answers`, tenues à jour par compatibilité :
-      // elles portent la dernière réponse en date. Leur suppression attend le
-      // déploiement de ce code (EN-ATTENTE-DEPLOIEMENT.md).
-      answer_ms: pace.answerMs,
-      correct: pace.correct,
     },
     { onConflict: 'user_id,group_id' }
   );
@@ -726,7 +721,7 @@ export async function recentAnswerPace(
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from('parcours_asked')
-    .select('answers, answer_ms, correct, asked_at')
+    .select('answers, asked_at')
     .eq('workshop_id', workshopId)
     .eq('user_id', userId)
     .order('asked_at', { ascending: false })
@@ -743,17 +738,13 @@ export async function recentAnswerPace(
   // récentes, donc rien ne peut manquer.
   const rows: AnswerPaceRow[] = (data ?? []).flatMap((row) => {
     const entries = Array.isArray(row.answers) ? (row.answers as { ms?: unknown; correct?: unknown; at?: unknown }[]) : [];
-    // Lignes écrites avant la colonne `answers` : la grappe n'y compte que pour
-    // une réponse, ce qui reste juste — c'est ainsi qu'elle a été jouée.
-    if (entries.length === 0) {
-      return [
-        {
-          answerMs: (row.answer_ms as number | null) ?? null,
-          correct: (row.correct as boolean | null) ?? null,
-          answeredAt: new Date(row.asked_at as string).getTime(),
-        },
-      ];
-    }
+    // ⚠️ Une grappe SANS entrée ne compte pour rien (31/08/2026). Ce sont les
+    // lignes écrites avant la colonne `answers` : leur rythme vivait dans deux
+    // colonnes désormais retirées. Les relire n'a plus de sens, et inventer une
+    // valeur en aurait encore moins — un détecteur de réponses expédiées qui
+    // devine est pire que le même détecteur avec un échantillon de moins. Le cas
+    // s'éteint de lui-même à mesure que les membres répondent.
+    if (entries.length === 0) return [];
     return entries.map((entry) => ({
       answerMs: typeof entry.ms === 'number' ? entry.ms : null,
       correct: typeof entry.correct === 'boolean' ? entry.correct : null,

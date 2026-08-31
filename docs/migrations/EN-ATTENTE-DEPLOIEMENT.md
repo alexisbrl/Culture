@@ -35,23 +35,23 @@ et l'incident du 22/06/2026 dans `docs/changelog.md`.
 
 - **`parcours_asked.answer_ms` et `parcours_asked.correct`** — remplacées par
   la colonne `answers` (une entrée par question répondue,
-  `2026-08-30-rythme-par-question.sql`). Le détecteur de rythme ne les lit plus
-  que pour les lignes écrites avant cette date.
-  - **Prérequis** : la PR #48 est mergée et **déployée** (31/08/2026), première
-    moitié du prérequis levée. Il reste la seconde : toutes les lignes
-    antérieures doivent être sorties de la fenêtre de lecture du rythme (les
-    cinq dernières réponses d'un membre). **Vérifié le 31/08/2026 : pas encore.**
-    22 lignes au total, 18 sans la colonne `answers`, dont **1 encore dans la
-    fenêtre** — elle en sortira après quelques questions répondues par ce
-    membre. Sans urgence : deux colonnes inutilisées ne coûtent rien.
-  - Requête de contrôle avant d'appliquer (doit rendre 0) :
-    ```sql
-    select count(*) from (
-      select row_number() over (partition by user_id order by asked_at desc) as rang, answers
-      from parcours_asked
-    ) t where t.rang <= 5 and (t.answers is null or t.answers = '[]'::jsonb);
-    ```
+  `2026-08-30-rythme-par-question.sql`).
+  - **Prérequis** : la PR #49 mergée **et déployée** sur Vercel. Rien d'autre.
+  - ⚠️ **Le prérequis noté ici jusqu'au 31/08/2026 était faux**, et l'erreur
+    mérite d'être gardée : on attendait que les lignes d'avant `answers` sortent
+    de la fenêtre de lecture du rythme, comme si le blocage était une question de
+    DONNÉES. Il était de CODE — `recentAnswerPace` nommait les deux colonnes dans
+    son `select`, et l'écriture les tenait à jour. Les supprimer aurait cassé la
+    lecture quelle que soit l'ancienneté des lignes, et **en silence** : ce
+    `select` ignore son erreur pour ne jamais faire échouer une correction.
+    Vérifier ce que le code NOMME, jamais seulement ce que les lignes contiennent.
+  - Depuis la PR #49 : plus rien n'écrit ni ne lit ces deux colonnes, et une
+    grappe d'avant `answers` ne compte simplement pour aucune réponse dans le
+    détecteur de rythme. Les 18 lignes concernées n'ont donc plus besoin de
+    « sortir » de quoi que ce soit.
   - **SQL** : `alter table parcours_asked drop column answer_ms, drop column correct;`
+  - Après application : mettre à jour `src/lib/database.types.ts` et déplacer
+    cette entrée plus bas.
 
 ---
 
