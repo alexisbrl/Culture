@@ -985,6 +985,7 @@
   },
   "programme": {
     "startExercise": "lancer un exercice",
+    "paused": "exercices en pause après des réponses expédiées — reviens dans {minutes, plural, one {# minute} other {# minutes}}",
     "notionCount": "{count, plural, =0 {aucune notion} one {# notion} other {# notions}}",
     "chapterIndicator": "chapitre {from}–{to} / {total}",
     "progressPercent": "{pct} %",
@@ -1010,22 +1011,31 @@
   },
   "exercise": {
     "back": "retour à {workshop}",
-    "progressTitle": "{done} question(s) sur {total}",
+    "progressTitle": "avancement de l'exercice : {percent} %",
     "dropletsTitle": "gouttes gagnées dans cette session",
     "drawing": "tirage d'une question…",
+    "drawError": "le tirage de la question a échoué",
     "emptyTitle": "Aucune question dans ce chapitre",
     "emptyDesc": "Un gestionnaire doit d'abord créer des questions de parcours et leur relier des notions rangées dans ce chapitre.",
+    "outOfReachTitle": "Rien à te proposer ici pour l’instant",
+    "outOfReachDesc": "Les questions de ce chapitre ne correspondent pas encore à ton niveau, ou tu y as déjà répondu. Reviens un peu plus tard.",
     "answerPlaceholder": "ta réponse…",
     "validate": "valider",
     "revealAnswer": "afficher la réponse",
     "next": "question suivante",
+    "nextStatement": "suivant",
+    "statementCounter": "question {index} sur {total}",
+    "finish": "terminer l’exercice",
     "verdictCorrect": "Bonne réponse !",
     "verdictWrong": "Mauvaise réponse",
     "verdictNeutral": "Pas de correction automatique pour ce type de réponse.",
+    "tooFast": "Trois mauvaises réponses en quelques secondes. Chaque question ne se pose qu'une fois : en répondant sans lire, tu épuises celles qui te restaient. Si ça continue, l'exercice se met en pause.",
     "expectedAnswer": "Réponse attendue :",
     "gradeError": "Erreur lors de la correction",
     "doneTitle": "belle récolte.",
     "doneScore": "{count, plural, =0 {aucune bonne réponse} one {# bonne réponse} other {# bonnes réponses}}",
+    "blockedTitle": "pause.",
+    "blockedDesc": "Cinq mauvaises réponses expédiées d'affilée. Reviens dans {minutes, plural, one {# minute} other {# minutes}} — les questions ne sont pas illimitées, autant les garder pour quand tu les liras.",
     "backToParcours": "retour au parcours",
     "matchHint": "touche 2 éléments pour les relier · reclique sur l'un d'eux pour annuler",
     "drawHint": "dessine au doigt ou à la souris",
@@ -1211,7 +1221,7 @@
       "label": "MODÈLE POUR LES QUESTIONS",
       "claude": "Claude (Haiku)",
       "deepseek": "DeepSeek",
-      "help": "Ne concerne que la rédaction des questions, qui ne lit pas les documents. Les chapitres et les notions restent sur Claude, seul à lire les PDF sans en perdre les schémas."
+      "help": "DeepSeek écrit les questions partout ailleurs — le choix n'existe qu'ici. Ne concerne que la rédaction des questions, qui ne lit pas les documents : les chapitres et les notions restent sur Claude, seul à lire les PDF sans en perdre les schémas."
     },
     "generate": "générer",
     "cancel": "annuler",
@@ -1224,18 +1234,29 @@
       "questionsCount": "Questions — {done}/{n} lots traités",
       "questionsBatch": "Questions — {chapter} ({i}/{n}) · lot {b}/{nb}"
     },
-    "keepOpen": "Garde cet onglet ouvert : la génération s’interrompt s’il est fermé. Ce qui a déjà été écrit reste, et reste annulable.",
+    "keepOpen": "Garde cet onglet ouvert : la génération s’interrompt s’il est fermé. Ce qui a déjà été écrit reste, et reste annulable. Rien ne t’oblige à attendre devant : ouvre un second onglet et continue ailleurs.",
+    "newTab": "ouvrir Culture dans un second onglet",
+    "busy": "Une génération est déjà en cours sur cet atelier, dans un autre onglet. Attends qu’elle se termine, ou arrête-la avant d’en lancer une autre.",
     "runningCounts": "{chapters} chapitres · {notions} notions · {questions} questions",
     "doneCounts": "{chapters} chapitres, {notions} notions et {questions} questions ajoutés",
     "discarded": "Écarté",
     "adjusted": "Corrigé",
     "cancellable": "Tu peux annuler cet import pendant 24 h, tant que rien n’a été modifié.",
     "banner": {
-      "text": "{chapters} chapitres, {notions} notions et {questions} questions ajoutés par l’IA",
+      "text": "L’IA a ajouté {items}.",
+      "alsoRemoves": "L’annulation retire aussi {items} du même import.",
+      "and": "et",
+      "chapters": "{count, plural, one {# chapitre} other {# chapitres}}",
+      "notions": "{count, plural, one {# notion} other {# notions}}",
+      "parcoursQuestions": "{count, plural, one {# question de parcours} other {# questions de parcours}}",
+      "examQuestions": "{count, plural, one {# question d’examen} other {# questions d’examen}}",
       "cancel": "annuler l’import",
       "cancelling": "annulation…",
       "cancelled": "Import annulé.",
-      "error": "Annulation impossible : {reason}"
+      "error": "Annulation impossible : {reason}",
+      "previous": "{count, plural, one {# import précédent} other {# imports précédents}}",
+      "interruptedText": "Génération interrompue : l’IA a eu le temps d’ajouter {items}.",
+      "interruptedHint": "Cette génération s’est arrêtée avant la fin — onglet fermé, page rechargée ou serveur perdu. Ce qu’elle avait déjà écrit est resté en place : tu peux le retirer ici, puis relancer une génération."
     },
     "button": "générer par IA",
     "chooseAi": "par IA",
@@ -1255,6 +1276,13 @@
     "examCount": {
       "label": "NOMBRE DE QUESTIONS",
       "help": "Des énoncés, pour tout le programme et non par chapitre — un ordre de grandeur, pas un compte exact. Un tiers d’entre eux s’enchaîneront par groupes de deux ou trois. Relancer en ajoute autant, sans reposer ce qui existe."
+    },
+    "stop": {
+      "aria": "arrêter la génération",
+      "title": "Arrêter la génération ?",
+      "body": "Ce qui a déjà été écrit sera retiré : l’atelier revient à son état d’avant. La fenêtre se ferme tout de suite, le retrait se termine seul.",
+      "keep": "continuer la génération",
+      "confirm": "arrêter et défaire"
     }
   }
 }

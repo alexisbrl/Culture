@@ -123,8 +123,11 @@ export type IngestScope =
   | {
       pass: 'questions';
       chapter: { id: string; name: string };
-      /** Les notions à faire travailler par ce lot de questions. */
-      notions: { id: string; title: string }[];
+      /** Les notions à faire travailler par ce lot de questions. `want` porte la
+       *  DEMANDE : ce qu'il faut produire sur cette notion, niveau par niveau
+       *  (voir @/lib/ingest/demand). Absent quand une consigne libre laisse le
+       *  modèle choisir. */
+      notions: { id: string; title: string; want?: { bloomLevel: 1 | 2 | 3 | 4; count: number }[] }[];
       /** Les AUTRES notions du même chapitre, en contexte seulement (§16.21).
        *  C'est ce qui remplace le cours : la notion suffit pour les niveaux 1 et
        *  2 de Bloom, ses voisines apportent ce qu'il faut pour les niveaux 3 et
@@ -158,6 +161,13 @@ export type IngestScope =
  *  de `parsePlan` — et ce que l'appel a coûté. */
 export type ProviderResult = {
   plan: unknown;
+  /** La réponse a-t-elle été **coupée au plafond de sortie** ?
+   *
+   *  Un JSON tronqué ne se relit pas : l'appel entier est perdu, et sans ce
+   *  drapeau il l'est **en silence** — zéro question écrite, aucun écart à
+   *  signaler, un compte-rendu qui ne dit rien. L'appelant en fait une ligne du
+   *  compte-rendu (28/08/2026). */
+  truncated?: boolean;
   usage: {
     /** Tokens facturés plein tarif — ni mis en cache, ni lus depuis le cache. */
     inputTokens: number;

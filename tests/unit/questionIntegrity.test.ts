@@ -30,8 +30,9 @@ function part(overrides: Partial<QuestionPart> = {}): QuestionPart {
     textLines: 4,
     typeOptions: {},
     expectations: '',
-    bloomLevel: 1,
     notionIds: [],
+    notionBloom: {},
+
     ...overrides,
   };
 }
@@ -52,8 +53,9 @@ function question(overrides: Partial<Question> = {}): Question {
     parts: [],
     examIds: [],
     textLines: 4,
-    bloomLevel: 1,
     notionIds: [],
+    notionBloom: {},
+
     ...overrides,
   };
 }

@@ -1,6 +1,8 @@
 'use server';
 
 import { requireManager } from '@/lib/authz';
+import * as lock from '@/lib/ingest/lock';
+import { BUSY_ERROR, CLOSED_ERROR } from '@/lib/ingest/lock';
 import * as run from '@/lib/ingest/run';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import * as imports from '@/lib/workshops/imports';
@@ -55,7 +57,10 @@ export type AssignPassResult =
 
 export type PrepareIngestionResult =
   | { ok: true; importId: string; documents: number }
-  | { ok: false; error: string };
+  /** `reason: 'busy'` = une génération tourne déjà sur cet atelier (voir
+   *  @/lib/ingest/lock). L'écran a sa propre phrase pour ce cas-là : le message
+   *  brut ne serait pas traduit. */
+  | { ok: false; error: string; reason?: 'busy' };
 
 export type NotionPassResult =
   | { ok: true; written: number; discarded: PlanIssue[]; adjusted: PlanIssue[]; documents: number }
@@ -68,10 +73,41 @@ export type QuestionPassResult =
 export type ImportBanner = {
   importId: string;
   state: 'cancellable' | 'empty' | 'expired' | 'modified';
+  /** La génération s'est arrêtée avant la fin (onglet fermé, page rechargée,
+   *  serveur perdu). Ce qu'elle a écrit est là, mais ce n'est pas un résultat
+   *  voulu : le bandeau le dit au lieu de l'annoncer comme un import réussi.
+   *  Voir `interruptedAmong` (@/lib/ingest/lock). */
+  interrupted: boolean;
   chapters: number;
   notions: number;
-  questions: number;
+  /** Les questions du lot, séparées selon l'écran qui les montre : le bandeau
+   *  du programme n'annonce pas les questions parties à l'examen, et
+   *  réciproquement (28/08/2026). */
+  parcoursQuestions: number;
+  examQuestions: number;
 };
+
+/** Une passe qui échoue laisse une trace CÔTÉ SERVEUR, en plus du message rendu
+ *  à l'écran.
+ *
+ *  ⚠️ Sans elle, une panne d'ingestion ne survivait nulle part : le seul endroit
+ *  où elle s'affichait était le dialogue, et un rafraîchissement de page — ou la
+ *  fermeture de l'onglet — l'emportait avec lui. Constaté le 29/08/2026, sur une
+ *  erreur de fin de génération qu'il a été impossible de retrouver après coup.
+ *
+ *  Le contexte (atelier, lot, chapitre, numéro de lot) est joint : « la passe
+ *  questions a échoué » sans dire laquelle, sur quoi, ne se diagnostique pas. */
+function failed(pass: string, error: unknown, context: Record<string, unknown>): string {
+  const detail = message(error);
+  // Un lot refermé n'est pas une panne : c'est une annulation qui a fait son
+  // travail, et l'appel qui retombe se refuse tout seul. Le dire, sans le crier.
+  if (detail === CLOSED_ERROR) {
+    console.info(`[ingest] passe ${pass} : écriture refusée, le lot a été annulé`, context);
+    return detail;
+  }
+  console.error(`[ingest] passe ${pass} échouée :`, detail, context);
+  return detail;
+}
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : 'Erreur inattendue';
@@ -99,8 +135,28 @@ export async function prepareWorkshopIngestion(
     const { importId, documents } = await run.prepareIngestion(workshopId, ctx.userId, fileIds, { scope });
     return { ok: true, importId, documents };
   } catch (error) {
-    return { ok: false, error: message(error) };
+    const detail = message(error);
+    if (detail === BUSY_ERROR) return { ok: false, error: detail, reason: 'busy' };
+    return { ok: false, error: detail };
   }
+}
+
+/** Le signe de vie de l'onglet qui pilote une génération, toutes les 30 s.
+ *
+ *  C'est ce battement — et lui seul — qui empêche un second lancement sur le
+ *  même atelier. S'il s'arrête (onglet fermé, machine éteinte), le verrou expire
+ *  et l'atelier redevient disponible : voir @/lib/ingest/lock pour le pourquoi
+ *  d'un verrou qui s'oublie de lui-même. */
+export async function beatWorkshopImport(workshopId: string, importId: string): Promise<void> {
+  if (!(await requireManager(workshopId))) return;
+  await lock.beatImport(importId);
+}
+
+/** Referme un lot piloté : terminé, arrêté ou en erreur. Relâche le verrou tout
+ *  de suite, au lieu d'attendre son expiration. */
+export async function closeWorkshopImport(workshopId: string, importId: string): Promise<void> {
+  if (!(await requireManager(workshopId))) return;
+  await lock.closeImport(importId);
 }
 
 /** Passe 1 — les notions d'UN document.
@@ -120,7 +176,7 @@ export async function ingestDocumentNotions(
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
-    return { ok: false, error: message(error) };
+    return { ok: false, error: failed('notions', error, { workshopId, importId, documentIndex }) };
   }
 }
 
@@ -140,7 +196,7 @@ export async function ingestWorkshopChapters(
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
-    return { ok: false, error: message(error) };
+    return { ok: false, error: failed('chapitres', error, { workshopId, importId }) };
   }
 }
 
@@ -161,7 +217,7 @@ export async function ingestWorkshopAssignments(
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
-    return { ok: false, error: message(error) };
+    return { ok: false, error: failed('rangement', error, { workshopId, importId, batchIndex }) };
   }
 }
 
@@ -210,7 +266,7 @@ export async function ingestParcoursQuestions(
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
-    return { ok: false, error: message(error) };
+    return { ok: false, error: failed('questions du parcours', error, { workshopId, importId, chapter: chapter.name, batchIndex }) };
   }
 }
 
@@ -238,7 +294,7 @@ export async function ingestWorkshopExamQuestions(
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
-    return { ok: false, error: message(error) };
+    return { ok: false, error: failed("questions d'examen", error, { workshopId, importId, sliceIndex }) };
   }
 }
 
@@ -257,30 +313,41 @@ export async function releaseWorkshopImportFiles(
   return { released: await run.releaseImportDocuments(importId) };
 }
 
-/** Ce qu'il faut pour afficher — ou non — le bandeau d'annulation. Renvoie
- *  `null` quand il n'y a rien à proposer : aucun import, ou lot déjà annulé,
- *  expiré, ou modifié depuis. */
-export async function getImportBanner(workshopId: string): Promise<ImportBanner | null> {
-  if (!(await requireManager(workshopId))) return null;
+/** Les imports encore annulables, du plus récent au plus ancien. Liste vide
+ *  quand il n'y a rien à proposer : aucun import récent, ou lots déjà annulés,
+ *  expirés, ou modifiés depuis.
+ *
+ *  Plusieurs et non plus un seul depuis le 28/08/2026 : voir `recentImportIds`. */
+export async function getImportBanners(workshopId: string): Promise<ImportBanner[]> {
+  if (!(await requireManager(workshopId))) return [];
 
   try {
-    const importId = await imports.latestImportId(workshopId);
-    if (!importId) return null;
+    const ids = await imports.recentImportIds(workshopId);
+    // Les deux lectures sont indépendantes → en parallèle (règle N+1). Le
+    // relevé des lots interrompus est une seule requête pour toute la liste,
+    // pas une par lot.
+    const [summaries, interrupted] = await Promise.all([
+      Promise.all(
+        ids.map(async (importId) => ({ importId, summary: await imports.getImportSummary(workshopId, importId) })),
+      ),
+      lock.interruptedAmong(ids),
+    ]);
 
-    const summary = await imports.getImportSummary(workshopId, importId);
-    if (summary.state !== 'cancellable') return null;
-
-    return {
-      importId,
-      state: summary.state,
-      chapters: summary.chapters,
-      notions: summary.notions,
-      questions: summary.questions,
-    };
+    return summaries
+      .filter(({ summary }) => summary.state === 'cancellable')
+      .map(({ importId, summary }) => ({
+        importId,
+        state: summary.state,
+        interrupted: interrupted.has(importId),
+        chapters: summary.chapters,
+        notions: summary.notions,
+        parcoursQuestions: summary.parcoursQuestions,
+        examQuestions: summary.examQuestions,
+      }));
   } catch {
     // Le bandeau est un confort : s'il échoue, il ne doit pas empêcher la page
     // de s'afficher.
-    return null;
+    return [];
   }
 }
 
@@ -292,6 +359,11 @@ export async function cancelWorkshopImport(
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
+    // Annuler, c'est en avoir fini avec ce lot : le verrou tombe, sans attendre
+    // son expiration. Posé AVANT le reste — une annulation refusée (lot déjà
+    // annulé, délai dépassé) ne laisse pas pour autant une génération en cours.
+    await lock.closeImport(importId);
+
     const result = await imports.cancelImport(workshopId, importId);
     if (!result.cancelled) {
       const reasons: Record<string, string> = {

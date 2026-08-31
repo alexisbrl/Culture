@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations, useLocale } from 'next-intl';
@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Tooltip } from '@/components/ui/tooltip';
 import LinkButton from '@/components/LinkButton';
+import { Button } from '@/components/ui/button';
 
 type Props = {
   chapters: Chapter[];
@@ -21,6 +22,8 @@ type Props = {
   workshopName: string;
   canManage: boolean;
   progress: ParcoursProgress;
+  /** Millisecondes restantes de mise en pause, 0 si rien ne bloque. */
+  pausedFor: number;
 };
 
 /**
@@ -37,11 +40,30 @@ type Props = {
  * chapitre sans notion reliée à ses questions reste à 0 % : c'est la donnée
  * réelle, pas un état de chargement.
  */
-export default function ProgrammeTab({ chapters, workshopId, workshopName, canManage, progress }: Props) {
+export default function ProgrammeTab({ chapters, workshopId, workshopName, canManage, progress, pausedFor }: Props) {
   const t = useTranslations('programme');
   const locale = useLocale();
   const router = useRouter();
   const [showQuestions, setShowQuestions] = useState(false);
+
+  // ─── Exercices en pause ────────────────────────────────────────────────
+  //
+  // Après une série de réponses expédiées, l'exercice se ferme et on ne peut
+  // pas en relancer avant la fin du compte (voir @/lib/workshops/answerPace).
+  // Le serveur refuse de toute façon — ce qui suit ne fait que ne pas inviter
+  // à un aller-retour inutile.
+  //
+  // Une DURÉE, jamais une date : le compte se réarme tout seul à échéance,
+  // sans jamais lire l'horloge pendant un rendu.
+  const [pauseLeft, setPauseLeft] = useState(pausedFor);
+  useEffect(() => {
+    if (pauseLeft <= 0) return;
+    const id = setTimeout(() => setPauseLeft(0), pauseLeft);
+    return () => clearTimeout(id);
+  }, [pauseLeft]);
+
+  const paused = pauseLeft > 0;
+  const pauseHint = t('paused', { minutes: Math.max(1, Math.ceil(pauseLeft / 60_000)) });
 
   // ⚠️ TEMPORAIRE — voir le commentaire du bouton plus bas.
   const [resetting, setResetting] = useState(false);
@@ -58,7 +80,17 @@ export default function ProgrammeTab({ chapters, workshopId, workshopName, canMa
     return <ParcoursQuestions workshopId={workshopId} chapters={chapters} onBack={() => setShowQuestions(false)} />;
   }
 
-  const sorted = [...chapters].sort((a, b) => a.position - b.position);
+  // ─── Les chapitres cachés ne font plus partie du parcours (29/08/2026) ────
+  //
+  // Ni la liste, ni le chapitre mis en avant, ni un exercice à lancer. Ils
+  // restent entiers côté GESTION — la liste des questions ci-dessus reçoit
+  // toujours `chapters` en entier, et les paramètres offrent « restaurer ».
+  //
+  // Ce filtre n'est que la moitié visible de la règle : le serveur refuse de son
+  // côté (page d'exercice + `drawExercise`), et l'avancement de l'atelier ignore
+  // ces notions (`getParcoursProgress`). Sans ça, un lien direct ou un signet
+  // rouvrirait un chapitre écarté.
+  const sorted = chapters.filter((c) => !c.hidden).sort((a, b) => a.position - b.position);
   const hero = sorted[0];
 
   return (
@@ -128,10 +160,21 @@ export default function ProgrammeTab({ chapters, workshopId, workshopName, canMa
                 {t('currentChapterEyebrow')}
               </div>
               <div className="mt-2 text-[21px] font-bold text-[var(--ink)]">{hero.name}</div>
-              <LinkButton href={`/${locale}/workshops/${workshopId}/exercise/${hero.id}`} size="lg" className="mt-[22px]">
-                {t('startExercise')}
-                <ArrowRight size={18} strokeWidth={1.75} />
-              </LinkButton>
+              {paused ? (
+                <Tooltip content={pauseHint}>
+                  <span className="mt-[22px] inline-flex cursor-not-allowed opacity-50">
+                    <Button size="lg" disabled>
+                      {t('startExercise')}
+                      <ArrowRight size={18} strokeWidth={1.75} />
+                    </Button>
+                  </span>
+                </Tooltip>
+              ) : (
+                <LinkButton href={`/${locale}/workshops/${workshopId}/exercise/${hero.id}`} size="lg" className="mt-[22px]">
+                  {t('startExercise')}
+                  <ArrowRight size={18} strokeWidth={1.75} />
+                </LinkButton>
+              )}
             </div>
 
             <div className="my-6 flex items-center gap-3.5">
@@ -142,21 +185,43 @@ export default function ProgrammeTab({ chapters, workshopId, workshopName, canMa
               <span className="h-px flex-1 bg-[var(--line)]" />
             </div>
             <div className="flex flex-col gap-2.5">
-              {sorted.map((chapter) => (
-                <Link
-                  key={chapter.id}
-                  href={`/${locale}/workshops/${workshopId}/exercise/${chapter.id}`}
-                  className="flex items-center gap-3.5 rounded-2xl border border-[var(--line)] bg-[var(--surface-raised)] px-[18px] py-3.5 shadow-[var(--shadow-sm)] transition-transform hover:-translate-y-0.5"
-                >
-                  <div className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold text-[var(--ink)]">{chapter.name}</span>
-                    <ProgressBar value={progress.chapterPercent[chapter.id] ?? 0} size="sm" className="mt-2.5" />
-                  </div>
-                  <span className="flex size-[34px] flex-none items-center justify-center rounded-full bg-[var(--green-tint)] text-[var(--green-strong)]">
-                    <Play size={14} strokeWidth={1.75} fill="currentColor" />
-                  </span>
-                </Link>
-              ))}
+              {sorted.map((chapter) => {
+                const row = (
+                  <>
+                    <div className="min-w-0 flex-1">
+                      <span className="block text-sm font-bold text-[var(--ink)]">{chapter.name}</span>
+                      <ProgressBar value={progress.chapterPercent[chapter.id] ?? 0} size="sm" className="mt-2.5" />
+                    </div>
+                    <span className="flex size-[34px] flex-none items-center justify-center rounded-full bg-[var(--green-tint)] text-[var(--green-strong)]">
+                      <Play size={14} strokeWidth={1.75} fill="currentColor" />
+                    </span>
+                  </>
+                );
+                const shell = "flex items-center gap-3.5 rounded-2xl border border-[var(--line)] bg-[var(--surface-raised)] px-[18px] py-3.5 shadow-[var(--shadow-sm)]";
+
+                // Pendant la pause, la ligne reste lisible (l'avancement de chaque
+                // chapitre est une information, pas une invitation) mais ne mène
+                // plus nulle part.
+                if (paused) {
+                  return (
+                    <Tooltip key={chapter.id} content={pauseHint}>
+                      <div className={`${shell} cursor-not-allowed opacity-60`} aria-disabled="true">
+                        {row}
+                      </div>
+                    </Tooltip>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={chapter.id}
+                    href={`/${locale}/workshops/${workshopId}/exercise/${chapter.id}`}
+                    className={`${shell} transition-transform hover:-translate-y-0.5`}
+                  >
+                    {row}
+                  </Link>
+                );
+              })}
             </div>
           </>
         )}

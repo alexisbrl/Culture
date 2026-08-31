@@ -147,15 +147,25 @@ function questionSchemaFor<T extends readonly [string, ...string[]]>(types: T) {
     expectations: z
       .string()
       .describe("Critères de correction : ce qui est attendu, ce qui est accepté. Peut être vide."),
-    bloomLevel: z
-      .number()
-      .int()
-      .min(1)
-      .max(4)
-      .describe('Niveau visé : 1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser ou créer.'),
-    notionRefs: z
-      .array(z.string())
-      .describe('Références des notions que cette question fait travailler. Au moins une.'),
+    // ⚠️ Le niveau est porté par CHAQUE notion, et non par la question
+    // (28/08/2026) : une même question peut faire restituer une notion et en
+    // faire analyser une autre. Écris donc l'énoncé, regarde ce qu'il mobilise,
+    // et dis pour chaque notion ce qu'il en demande.
+    notions: z
+      .array(
+        z.object({
+          ref: z.string().describe("Référence d'une notion que cette question fait travailler."),
+          bloomLevel: z
+            .number()
+            .int()
+            .min(1)
+            .max(4)
+            .describe(
+              'Ce que la question demande de CETTE notion-là : 1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser ou créer.',
+            ),
+        }),
+      )
+      .describe('Les notions que cette question fait travailler, chacune avec son niveau. Au moins une.'),
   });
 }
 
@@ -204,7 +214,9 @@ export const wireNotionSchema = z.object({
   ref: z.string().describe('Clé locale unique de cette notion dans ce plan.'),
   title: z
     .string()
-    .describe("La notion en UNE phrase de 280 caractères maximum, autoportante et vérifiable."),
+    .describe(
+      "La notion en UNE phrase de 500 caractères maximum, vérifiable, et qui SE LIT SEULE : jamais de « ce », « cette », « ces » renvoyant à une autre notion ou à ce qui précède dans le cours.",
+    ),
   page: z
     .number()
     .int()

@@ -567,7 +567,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
           posé ici parce que c'est ici qu'on constate le résultat sur les
           chapitres et les notions ; il ne s'affiche que tant que le lot est
           réellement annulable, et disparaît de lui-même. */}
-      <ImportBanner workshopId={workshopId} onCancelled={() => window.location.reload()} />
+      <ImportBanner workshopId={workshopId} scope="programme" onCancelled={() => window.location.reload()} />
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
         <AiGenerationButton workshopId={workshopId} onDone={() => window.location.reload()} />
       </div>

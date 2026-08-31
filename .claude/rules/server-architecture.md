@@ -108,3 +108,32 @@ Trigger Postgres `trg_prevent_workshop_premium_downgrade` empêche `is_premium` 
 Les deux plus gros composants ont été éclatés en sous-modules sans changement de comportement : `tabs/examen/{examShared,HistoryContent,BankContent,GeneratorContent}.tsx` et `settings/{settingsShared,MembersSection,FilesSection,PremiumSection,BricksSection}.tsx`. **Les sections de Paramètres sont montées en permanence** (toggle `display:'contents'`/`'none'`, pas de montage conditionnel `{active && <Section/>}`) — c'est volontaire, ça préserve l'état entre onglets (upload en cours, mises à jour optimistes des membres). Ne pas repasser en montage conditionnel sans réfléchir aux régressions que ça réintroduirait.
 
 Pattern de découpage à réutiliser pour tout futur fichier surdimensionné : tranches verbatim (pas de réécriture), un module `xShared` pour types/constantes/helpers/petits composants, un fichier par responsabilité, validé par `tsc --noEmit` + `next build`.
+
+## Ce qui bloque l'affichage d'une page (et ce qui ne doit pas)
+
+Passe du 30/08/2026 sur les paramètres d'atelier, mesurée : « Général » s'affichait en ~700 ms en local (1,3 à 2,6 s en production), il s'affiche en ~270 ms. Quatre règles en sont sorties, valables pour toute page, pas seulement celle-là.
+
+- **Une seule question de droits par requête.** `requireMember`/`requireManager`/`requireOwner` passent tous par `getWorkshopRole` (`src/lib/workshops/membership.ts`), mémorisé par le `cache` de React pour la durée d'UNE requête. Une page qui enchaîne cinq lectures ne paye donc qu'un aller-retour, et `core.getWorkshop` s'appuie sur le même. Le cache ne survit pas à la requête : un changement de rôle est visible au rendu suivant. **Ne jamais réintroduire une lecture directe de `workshop_members.role`** pour vérifier un droit — elle échapperait à cette mémoire.
+- **`auth()` plutôt que `currentUser()` pour savoir si quelqu'un est connecté.** `currentUser()` appelle l'API de Clerk **sur le réseau** pour rapporter tout le profil ; `auth()` lit le jeton déjà présent dans la requête. Ne prendre `currentUser()` que si l'on affiche vraiment le profil (prénom, e-mail) — c'est le cas du tableau de bord, pas des pages d'atelier.
+- **Une écriture n'a pas à retarder une lecture.** L'horodatage « dernier atelier visité » part dans `after()` (`next/server`), après la réponse. Même principe pour tout effet de bord qui ne change rien à ce qui s'affiche.
+- **Ce qu'un onglet fermé n'a pas besoin de montrer ne bloque pas la page.** `settings/page.tsx` n'attend que l'atelier ; membres, ressources et notions arrivent en flux dans leur propre `<Suspense>`, alimenté par un petit composant serveur async par section (`MembersSlot`/`FilesSlot`/`NotionsSlot`), passé à la coque **en prop** (`membersSlot`…). L'invariant du montage permanent tient toujours : la bascule `display: 'contents' | 'none'` reste dans le composant client, on ne diffère que l'arrivée du contenu, jamais son montage.
+
+> **Piège RSC : une VALEUR importée d'un module `'use client'` n'arrive pas entière côté serveur.** Un composant serveur qui importe un tableau exporté par un module client en reçoit une référence, pas le tableau — `NAV_ITEMS.some is not a function` au rendu, invisible pour `tsc` comme pour `next build`. Les constantes qu'un serveur ET un client doivent lire vivent donc dans un module neutre (ici `settings/sections.ts`), le module client se contentant d'y accrocher son habillage. Les `import type`, eux, traversent sans problème : ils disparaissent à la compilation.
+
+## Correction d'un exercice : un énoncé par appel
+
+`gradeExercise(workshopId, questionId, answers, index, answerMs?)` corrige **l'énoncé `index`** d'une grappe, et lui seul (0 = la question principale, `i + 1` = la question liée `i`). Règle du 30/08/2026, en même temps que la pose une-par-une côté écran (voir `docs/product-spec.md`).
+
+**Une question liée est une question entière** : à chaque appel se font le verdict, le crédit de maîtrise de ses notions, sa goutte, sa part du budget de Bloom et sa mesure de rythme. Rien n'attend la fin de la grappe — sauf ce qui dépend de son caractère indissociable :
+
+- la **trace** `parcours_asked` (une ligne par grappe, le tirage l'excluant en entier) est écrite dès la PREMIÈRE question validée : sa réponse est dévoilée, la grappe est consommée même si le membre s'arrête là ;
+- le **tirage de la question suivante** part à la fin de la grappe (`enqueue` dans `ExerciseClient`) : le budget est réservé grappe par grappe (`cost`), tirer à chaque question liée en réserverait autant de fois trop. Le détail par énoncé voyage à part (`costs`), pour faire avancer la barre question par question.
+
+Deux pièges à ne pas rouvrir :
+
+- **`ExerciseResult` ne porte plus de champ `parts`.** Renvoyer la correction de toute la grappe ferait descendre au navigateur les réponses de questions **pas encore posées** — exactement ce que le modèle du parcours interdit (`drawExercise` ne renvoie ni `answer` ni `correctChoices`).
+- **Le rythme se lit dans `parcours_asked.answers`**, une entrée `{ ms, correct, at }` par question répondue (migration `2026-08-30-rythme-par-question.sql`), et non plus dans les colonnes `answer_ms`/`correct` de la ligne, qui ne portaient qu'une valeur par grappe. Les lignes écrites avant cette date sont relues par ces colonnes, en dernier recours.
+
+## Routes d'API et middleware Clerk
+
+Le matcher de `src/proxy.ts` doit **inclure `/api`**, sinon `clerkMiddleware` n'y passe pas et tout `auth()` appelé dans une route lève (`Clerk can't detect usage of clerkMiddleware`). Les routes d'API sont en revanche rendues **avant** next-intl : elles n'ont pas de langue, et le middleware i18n les redirigerait vers `/fr/api/...`. Précédent : la recharge automatique de questions a répondu 500 en silence du 29 au 30/08/2026 pour cette raison exacte — personne n'attend sa réponse, donc rien ne le signalait à l'écran.

@@ -1,5 +1,5 @@
 import { auth } from '@clerk/nextjs/server';
-import { getSupabaseServerClient } from '@/lib/supabase';
+import { getWorkshopRole } from '@/lib/workshops/membership';
 
 // ─── Contrôle d'accès aux ateliers ───────────────────────────────────────────
 //
@@ -38,17 +38,12 @@ export async function requireWorkshopRole(
   const { userId } = await auth();
   if (!userId) return null;
 
-  const supabase = getSupabaseServerClient();
-  const { data: membership } = await supabase
-    .from('workshop_members')
-    .select('role')
-    .eq('workshop_id', workshopId)
-    .eq('user_id', userId)
-    .single();
+  // La lecture du rôle est mémorisée pour la durée de la requête
+  // (@/lib/workshops/membership) : appeler ce garde en tête de dix actions ne
+  // coûte qu'un seul aller-retour à la base.
+  const role = await getWorkshopRole(workshopId, userId);
+  if (!role) return null;
 
-  if (!membership) return null;
-
-  const role = membership.role as WorkshopRole;
   if ((ROLE_RANK[role] ?? 0) < ROLE_RANK[minRole]) return null;
 
   return { userId, role };

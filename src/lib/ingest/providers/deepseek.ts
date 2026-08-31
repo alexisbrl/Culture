@@ -31,21 +31,37 @@ import {
   userHintBlock,
   type ExistingContent,
 } from '@/lib/ingest/prompt';
-import { wireGroupsOutput } from '@/lib/ingest/wireSchema';
+import { wireExamGroupsOutput, wireGroupsOutput } from '@/lib/ingest/wireSchema';
 
 import type { IngestScope, PlanProvider, PreparedDocument, ProviderResult } from './types';
 
 const API_URL = 'https://api.deepseek.com/chat/completions';
 
-/** `deepseek-chat` et non `deepseek-reasoner` : rédiger des questions sur une
- *  notion déjà extraite est une tâche de production, pas de raisonnement long.
- *  Le modèle de raisonnement coûterait sa réflexion sur chacun des ~10 lots d'un
- *  import, pour un gain qui n'est pas établi. */
-export const DEEPSEEK_MODEL = 'deepseek-chat';
+/** ⚠️ **`deepseek-chat` était un alias d'une génération précédente**, et il
+ *  plafonnait sa réponse à 8 192 tokens. Sur un lot de dix questions d'examen,
+ *  ce plafond était atteint une fois sur quatre — et une réponse coupée en plein
+ *  JSON est **entièrement perdue** : elle ne se relit pas. C'est la cause
+ *  principale des générations qui rendaient la moitié des questions demandées
+ *  (mesuré le 28/08/2026, quatre appels : 3 questions, 9, 8, et un appel perdu).
+ *
+ *  `deepseek-v4-flash` est le modèle courant du catalogue : même usage, même
+ *  prix d'entrée de gamme, et une sortie qui se compte en centaines de milliers
+ *  de tokens. On reste sur la version rapide plutôt que `pro` (trois fois le
+ *  prix) : écrire des questions sur des notions déjà extraites est une tâche de
+ *  production, pas de raisonnement long. */
+export const DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
-/** Même plafond que côté Claude : un lot de dix notions à la volumétrie cible
- *  produit un JSON long, et une réponse tronquée est une réponse perdue. */
-const MAX_TOKENS = 8_192;
+/** Le plafond de sortie qu'on s'impose, très en deçà de celui du modèle.
+ *
+ *  Il ne sert plus à tenir dans la limite technique (384 000 tokens chez v4)
+ *  mais à borner une réponse qui partirait en vrille.
+ *
+ *  ⚠️ **Mesuré, pas deviné** : un appel de dix questions d'examen a consommé
+ *  16 182 tokens de sortie le 28/08/2026 — ce modèle réfléchit avant de répondre
+ *  et sa réflexion compte dans la sortie. Un plafond à 16 000 serait donc frôlé
+ *  à chaque appel, et frôlé veut dire dépassé un jour sur deux — or une réponse
+ *  coupée est **entièrement perdue**. Le double laisse la marge qui manquait. */
+const MAX_TOKENS = 32_768;
 
 /** La forme attendue, **dérivée du schéma Zod** et non recopiée à la main.
  *
@@ -54,8 +70,10 @@ const MAX_TOKENS = 8_192;
  *  décrite dans le prompt — et la dériver de `wireGroupsOutput` est ce qui
  *  empêche les deux de diverger le jour où le schéma bouge. `parsePlan` reste
  *  de toute façon le contrôle à la réception, exactement comme chez Claude. */
-function shapeBlock(): string {
-  const schema = z.toJSONSchema(wireGroupsOutput, { io: 'output' });
+function shapeBlock(pass: 'questions' | 'exam'): string {
+  // L'examen ouvre deux types de réponse de plus (EXAM_RESPONSE_TYPES). Servir
+  // la même forme aux deux passes les lui cachait, là où Claude les reçoit.
+  const schema = z.toJSONSchema(pass === 'exam' ? wireExamGroupsOutput : wireGroupsOutput, { io: 'output' });
   return `Réponds en JSON, et uniquement en JSON. Il doit valider ce schéma :
 
 ${JSON.stringify(schema, null, 2)}
@@ -146,7 +164,7 @@ export function createDeepSeekProvider(options: DeepSeekOptions = {}): PlanProvi
                     : { pass: 'questions', notionIds: scope.notions.map((n) => n.id) },
                 ),
                 instruction,
-                shapeBlock(),
+                shapeBlock(scope.pass),
               ].join('\n\n'),
             },
           ],
@@ -161,7 +179,7 @@ export function createDeepSeekProvider(options: DeepSeekOptions = {}): PlanProvi
       }
 
       const payload = (await response.json()) as {
-        choices?: { message?: { content?: string } }[];
+        choices?: { message?: { content?: string }; finish_reason?: string }[];
         usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_cache_hit_tokens?: number };
       };
       const text = payload.choices?.[0]?.message?.content ?? '';
@@ -170,6 +188,11 @@ export function createDeepSeekProvider(options: DeepSeekOptions = {}): PlanProvi
         // Volontairement NON validé ici : `parsePlan` est le contrôle à la
         // réception, et il doit voir la sortie telle qu'elle est arrivée.
         plan: safeJson(text),
+        // Une réponse coupée au plafond est un JSON incomplet, donc illisible :
+        // sans ce drapeau, l'appel disparaît en silence (aucun écart à signaler,
+        // aucune question écrite) et personne ne sait pourquoi le compte n'y est
+        // pas.
+        truncated: payload.choices?.[0]?.finish_reason === 'length',
         usage: {
           inputTokens: payload.usage?.prompt_tokens ?? 0,
           outputTokens: payload.usage?.completion_tokens ?? 0,

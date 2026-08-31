@@ -39,6 +39,7 @@
 import { z } from 'zod';
 
 import {
+  DEFAULT_BLOOM_LEVEL,
   DEFAULT_FILE_TYPES,
   FILE_TYPE_KEYS,
   MATCH_SPLIT_MAX,
@@ -51,6 +52,7 @@ import {
   type QuestionTypeOptions,
   type ResponseType,
 } from '@/lib/workshops/examTypes';
+import { NOTION_TITLE_MAX } from '@/lib/workshops/notions';
 
 // ─── Journaux ────────────────────────────────────────────────────────────────
 
@@ -109,8 +111,11 @@ const chapterSchema = z.object({
 
 const notionSchema = z.object({
   ref: refSchema,
-  // Une notion n'a plus qu'UN texte depuis le 19/08/2026 (280 caractères).
-  title: z.string().trim().min(1).max(280), // NOTION_TITLE_MAX
+  // Une notion n'a plus qu'UN texte depuis le 19/08/2026. La borne est
+  // IMPORTÉE et non recopiée : une notion écrite par l'IA et une notion saisie
+  // à la main sont la même chose, et deux nombres jumeaux finissent toujours
+  // par diverger.
+  title: z.string().trim().min(1).max(NOTION_TITLE_MAX),
   chapterRef: refSchema.optional(),
   // D'où elle vient. Le document est ajouté par l'appelant (il sait lequel il
   // traite) ; la page vient du modèle, qui seul l'a sous les yeux.
@@ -202,8 +207,17 @@ const questionSchema = z.object({
   shuffleChoices: z.boolean().default(false),
   textLines: z.number().int().min(1).max(40).default(4),
   expectations: z.string().default(''),
-  bloomLevel: bloomSchema,
-  notionRefs: z.array(refSchema).default([]),
+  /** Le niveau vit sur le lien vers la notion (28/08/2026) : une question peut
+   *  faire restituer l'une et analyser l'autre. C'est la forme demandée au
+   *  modèle (`wireSchema.ts`). */
+  notions: z.array(z.object({ ref: refSchema, bloomLevel: bloomSchema })).default([]),
+  /** L'ancienne forme — un niveau pour la question, une liste de références —
+   *  reste acceptée. Le mapping est fondé (toutes les notions au niveau de la
+   *  question), donc réparation et non rejet : un modèle qui répond dans la
+   *  forme d'avant ne doit pas faire perdre tout un lot. Voir la règle en tête
+   *  de fichier. */
+  bloomLevel: bloomSchema.optional(),
+  notionRefs: z.array(refSchema).optional(),
   // Réglages propres au type — voir `resolveQuestion` pour ce qui en est fait.
   typeOptions: typeOptionsSchema,
   /** matching — les paires déjà appariées, forme demandée au modèle. Converties
@@ -215,7 +229,17 @@ const questionSchema = z.object({
 
 const groupSchema = z.object({
   ref: refSchema,
-  context: z.enum(['parcours', 'exam']),
+  /** ⚠️ **Le modèle ne le fournit PAS, et ne doit pas le fournir** (§8) : le
+   *  contexte vient du bouton par lequel l'utilisateur est entré, et
+   *  `wireSchema.ts` ne le demande donc dans aucune des deux formes de sortie.
+   *  Il a pourtant été exigé ici jusqu'au 28/08/2026 — tous les groupes étaient
+   *  écartés à la validation, quel que soit le fournisseur, et une génération
+   *  n'écrivait plus une seule question. Les tests ne l'ont pas vu : leurs
+   *  fixtures le posaient toutes.
+   *
+   *  Il reste accepté s'il arrive, et le repli vaut ce que vaut l'entrée la plus
+   *  courante ; les deux passes de questions l'écrasent aussitôt après. */
+  context: z.enum(['parcours', 'exam']).default('parcours'),
   // Au moins une question : un groupe vide n'a pas de sens et ne doit jamais
   // atteindre la base (même invariant que `fromGroup`, questionGroup.ts).
   questions: z.array(questionSchema).min(1, { message: 'groupe sans question' }),
@@ -255,8 +279,9 @@ export type PlanQuestion = {
   shuffleChoices: boolean;
   textLines: number;
   expectations: string;
-  bloomLevel: 1 | 2 | 3 | 4;
-  notionRefs: string[];
+  /** Les notions travaillées, chacune avec le niveau que CETTE question demande
+   *  d'elle. Seule forme du niveau : une question n'en a pas à elle. */
+  notions: { ref: string; bloomLevel: 1 | 2 | 3 | 4 }[];
   typeOptions: QuestionTypeOptions;
 };
 
@@ -281,6 +306,7 @@ function nonEmpty(values: string[] | undefined): string[] {
 export function resolveQuestion(raw: QuestionInput): ResolvedQuestion {
   const adjusted: string[] = [];
   const opts = raw.typeOptions ?? {};
+  const notions = notionsOf(raw, adjusted);
   const type = raw.responseType;
 
   let choices: string[] = raw.choices;
@@ -408,11 +434,32 @@ export function resolveQuestion(raw: QuestionInput): ResolvedQuestion {
       shuffleChoices: raw.shuffleChoices,
       textLines: raw.textLines,
       expectations: raw.expectations,
-      bloomLevel: raw.bloomLevel,
-      notionRefs: raw.notionRefs,
+      notions,
       typeOptions,
     },
   };
+}
+
+/** Les notions de la question, chacune avec son niveau — quelle que soit la
+ *  forme reçue. La forme demandée fait foi ; l'ancienne (un niveau pour la
+ *  question) est repliée dessus, ce qui est exactement ce qu'elle voulait dire.
+ *  Un doublon de référence ne garde que son premier niveau : deux niveaux pour
+ *  une même notion sur une même question n'ont pas de sens, et le lien est
+ *  unique en base. */
+function notionsOf(raw: QuestionInput, adjusted: string[]): { ref: string; bloomLevel: 1 | 2 | 3 | 4 }[] {
+  const seen = new Map<string, 1 | 2 | 3 | 4>();
+  for (const notion of raw.notions) if (!seen.has(notion.ref)) seen.set(notion.ref, notion.bloomLevel);
+
+  const legacy = (raw.notionRefs ?? []).filter((ref) => !seen.has(ref));
+  if (legacy.length > 0) {
+    const level = raw.bloomLevel ?? DEFAULT_BLOOM_LEVEL;
+    adjusted.push(
+      `niveau de Bloom donné pour la question et non par notion : les ${legacy.length} notion(s) concernées prennent le niveau ${level}`,
+    );
+    for (const ref of legacy) seen.set(ref, level);
+  }
+
+  return [...seen].map(([ref, bloomLevel]) => ({ ref, bloomLevel }));
 }
 
 export type PlanChapterRank = z.infer<typeof chapterRankSchema>;
@@ -490,8 +537,17 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
       discarded.push({ kind: 'chapter', ref: refOf(item), reason: firstMessage(result.error) });
       continue;
     }
+    // ⚠️ **Corrigé, pas écarté** (29/08/2026). Le modèle redéclare volontiers
+    // les chapitres qui existent déjà au lieu de se contenter de les citer :
+    // sur un atelier de quatre chapitres, une mise à jour affichait
+    // « Écarté (4) — référence en double » et laissait croire à une perte. Rien
+    // n'est perdu — le chapitre existe, c'est le doublon qu'on ignore.
     if (chapterRefs.has(result.data.ref)) {
-      discarded.push({ kind: 'chapter', ref: result.data.ref, reason: 'référence en double' });
+      adjusted.push({
+        kind: 'chapter',
+        ref: result.data.ref,
+        reason: 'chapitre déjà présent — celui de l’atelier est conservé, le doublon ignoré',
+      });
       continue;
     }
     chapterRefs.add(result.data.ref);
@@ -544,8 +600,14 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
       continue;
     }
     const notion = result.data;
+    // Même raison que pour les chapitres : la notion existe, c'est le doublon
+    // qu'on ignore. Rien n'est perdu, donc rien n'est « écarté ».
     if (notionRefs.has(notion.ref)) {
-      discarded.push({ kind: 'notion', ref: notion.ref, reason: 'référence en double' });
+      adjusted.push({
+        kind: 'notion',
+        ref: notion.ref,
+        reason: 'notion déjà présente — celle de l’atelier est conservée, le doublon ignoré',
+      });
       continue;
     }
     if (notion.chapterRef && !chapterRefs.has(notion.chapterRef)) {
@@ -640,14 +702,14 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
         continue;
       }
 
-      const unknown = resolved.question.notionRefs.filter((ref) => !notionRefs.has(ref));
+      const unknown = resolved.question.notions.filter((n) => !notionRefs.has(n.ref));
       if (unknown.length > 0) {
         adjusted.push({
           kind: 'question',
           ref: group.ref,
-          reason: `notion inconnue retirée (${unknown.join(', ')})`,
+          reason: `notion inconnue retirée (${unknown.map((n) => n.ref).join(', ')})`,
         });
-        resolved.question.notionRefs = resolved.question.notionRefs.filter((ref) => notionRefs.has(ref));
+        resolved.question.notions = resolved.question.notions.filter((n) => notionRefs.has(n.ref));
       }
       questions.push(resolved.question);
     }

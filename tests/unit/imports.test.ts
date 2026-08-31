@@ -95,6 +95,27 @@ describe('importCancelState', () => {
     expect(importCancelState([row(T0, justAfter)], plusHours(T0, 1))).toBe('modified');
   });
 
+  it('ne prend pas l’import lui-même pour une modification humaine', () => {
+    // Le bug du 29/08/2026 : depuis que les notions naissent SANS chapitre et que
+    // le rangement les place quelques minutes plus tard, une notion porte
+    // `updated_at > created_at` du seul fait de l'import qui l'a créée. Avec
+    // l'ancienne règle, tout import qui range une notion neuve se déclarait
+    // « modifié » et le bandeau d'annulation ne s'affichait plus jamais.
+    const minutes = (m: number) => new Date(T0.getTime() + m * 60_000);
+    const rows = [
+      // la notion, créée au début puis rangée à la troisième minute
+      row(T0, minutes(3)),
+      // les questions, écrites jusqu'à la cinquième — dernière écriture du lot
+      row(minutes(5)),
+    ];
+    expect(importCancelState(rows, plusHours(T0, 1))).toBe('cancellable');
+
+    // Ce qui bouge APRÈS la dernière écriture, en revanche, est bien une main
+    // humaine.
+    const touchedAfter = [row(T0, minutes(3)), row(minutes(5), minutes(6))];
+    expect(importCancelState(touchedAfter, plusHours(T0, 1))).toBe('modified');
+  });
+
   it('le délai prime sur la modification', () => {
     // Passé 24 h, la question de savoir si on y a touché ne se pose plus.
     const rows = [row(T0, plusHours(T0, 1))];

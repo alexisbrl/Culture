@@ -985,6 +985,7 @@
   },
   "programme": {
     "startExercise": "start an exercise",
+    "paused": "exercises paused after rushed answers — come back in {minutes, plural, one {# minute} other {# minutes}}",
     "notionCount": "{count, plural, =0 {no notions} one {# notion} other {# notions}}",
     "chapterIndicator": "chapter {from}–{to} / {total}",
     "progressPercent": "{pct}%",
@@ -1010,22 +1011,31 @@
   },
   "exercise": {
     "back": "back to {workshop}",
-    "progressTitle": "{done} of {total} questions",
+    "progressTitle": "exercise progress: {percent}%",
     "dropletsTitle": "droplets earned this session",
     "drawing": "drawing a question…",
+    "drawError": "could not draw a question",
     "emptyTitle": "No question in this chapter",
     "emptyDesc": "A manager must first create parcours questions and link them to notions filed in this chapter.",
+    "outOfReachTitle": "Nothing to offer you here for now",
+    "outOfReachDesc": "This chapter’s questions are not at your level yet, or you have already answered them. Come back a little later.",
     "answerPlaceholder": "your answer…",
     "validate": "validate",
     "revealAnswer": "show the answer",
     "next": "next question",
+    "nextStatement": "next",
+    "statementCounter": "question {index} of {total}",
+    "finish": "finish the exercise",
     "verdictCorrect": "Correct!",
     "verdictWrong": "Wrong answer",
     "verdictNeutral": "No automatic grading for this response type.",
+    "tooFast": "Three wrong answers in a few seconds. Each question is only asked once: answering without reading uses up the ones you had left. If this continues, the exercise pauses.",
     "expectedAnswer": "Expected answer:",
     "gradeError": "Error while grading",
     "doneTitle": "great harvest.",
     "doneScore": "{count, plural, =0 {no correct answers} one {# correct answer} other {# correct answers}}",
+    "blockedTitle": "paused.",
+    "blockedDesc": "Five rushed wrong answers in a row. Come back in {minutes, plural, one {# minute} other {# minutes}} — questions are not unlimited, better keep them for when you read them.",
     "backToParcours": "back to path",
     "matchHint": "tap 2 items to link them · tap one again to undo",
     "drawHint": "draw with your finger or mouse",
@@ -1211,7 +1221,7 @@
       "label": "MODEL FOR QUESTIONS",
       "claude": "Claude (Haiku)",
       "deepseek": "DeepSeek",
-      "help": "Only affects question writing, which does not read the documents. Chapters and notions stay on Claude, the only one that reads PDFs without losing their diagrams."
+      "help": "DeepSeek writes the questions everywhere else — the choice only exists here. Only affects question writing, which does not read the documents: chapters and notions stay on Claude, the only one that reads PDFs without losing their diagrams."
     },
     "generate": "generate",
     "cancel": "cancel",
@@ -1224,18 +1234,29 @@
       "questionsCount": "Questions — {done}/{n} batches done",
       "questionsBatch": "Questions — {chapter} ({i}/{n}) · batch {b}/{nb}"
     },
-    "keepOpen": "Keep this tab open: generation stops if you close it. Whatever was written stays, and stays undoable.",
+    "keepOpen": "Keep this tab open: generation stops if you close it. Whatever was written stays, and stays undoable. No need to wait here: open a second tab and carry on elsewhere.",
+    "newTab": "open Culture in a second tab",
+    "busy": "A generation is already running on this workshop, in another tab. Wait for it to finish, or stop it before starting another.",
     "runningCounts": "{chapters} chapters · {notions} notions · {questions} questions",
     "doneCounts": "{chapters} chapters, {notions} notions and {questions} questions added",
     "discarded": "Discarded",
     "adjusted": "Adjusted",
     "cancellable": "You can undo this import for 24 hours, as long as nothing has been edited.",
     "banner": {
-      "text": "{chapters} chapters, {notions} notions and {questions} questions added by AI",
+      "text": "AI added {items}.",
+      "alsoRemoves": "Undoing also removes {items} from the same import.",
+      "and": "and",
+      "chapters": "{count, plural, one {# chapter} other {# chapters}}",
+      "notions": "{count, plural, one {# notion} other {# notions}}",
+      "parcoursQuestions": "{count, plural, one {# learning-path question} other {# learning-path questions}}",
+      "examQuestions": "{count, plural, one {# exam question} other {# exam questions}}",
       "cancel": "undo import",
       "cancelling": "undoing…",
       "cancelled": "Import undone.",
-      "error": "Cannot undo: {reason}"
+      "error": "Cannot undo: {reason}",
+      "previous": "{count, plural, one {# earlier import} other {# earlier imports}}",
+      "interruptedText": "Generation interrupted: AI had time to add {items}.",
+      "interruptedHint": "This generation stopped before finishing — tab closed, page reloaded or server lost. Whatever it had already written stayed: you can remove it here, then start a new generation."
     },
     "button": "generate with AI",
     "chooseAi": "with AI",
@@ -1255,6 +1276,13 @@
     "examCount": {
       "label": "NUMBER OF QUESTIONS",
       "help": "Individual questions, for the whole programme rather than per chapter — a ballpark, not an exact count. A third of them will come in groups of two or three. Running it again adds as many, without repeating existing ones."
+    },
+    "stop": {
+      "aria": "stop generating",
+      "title": "Stop generating?",
+      "body": "Whatever was written will be removed: the workshop goes back to how it was. This closes right away, the cleanup finishes on its own.",
+      "keep": "keep generating",
+      "confirm": "stop and undo"
     }
   }
 }

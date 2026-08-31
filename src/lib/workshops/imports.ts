@@ -65,25 +65,42 @@ export function assertImportId(value: unknown): string {
  *  plus), la **modification** vient ensuite car c'est la plus actionnable à
  *  afficher (« tu y as touché depuis »).
  *
- *  « Modifié » se lit `updated_at > created_at`, **sans tolérance** : les deux
- *  colonnes ont `default now()`, et `now()` étant l'heure de début de
+ *  ⚠️ **« Modifié » se mesure APRÈS la fin de l'import, pas après la naissance
+ *  de chaque ligne** (29/08/2026). La règle lisait `updated_at > created_at`,
+ *  ce qui marchait tant qu'un import écrivait chaque ligne une fois pour toutes.
+ *  Depuis l'inversion des étages (23/08/2026), ce n'est plus vrai : une notion
+ *  naît SANS chapitre à la première passe, et c'est le rangement — le même
+ *  import, quelques minutes plus tard — qui la range. Elle porte donc
+ *  `updated_at > created_at` du seul fait de l'import qui l'a créée, et **tout
+ *  import qui range une notion neuve se déclarait lui-même « modifié » : le
+ *  bandeau d'annulation ne s'affichait plus jamais.**
+ *
+ *  La référence est donc la **dernière écriture du lot** (le plus récent des
+ *  `created_at`). Ce qui bouge après elle est une main humaine ; ce qui bouge
+ *  avant est l'import en train de se faire. Pas de marge de tolérance : les
+ *  deux colonnes ont `default now()`, et `now()` étant l'heure de début de
  *  transaction en Postgres, un INSERT qui les omet toutes les deux leur donne
- *  une valeur strictement identique. C'est ce qui permet de se passer d'une
- *  marge de quelques secondes — laquelle finirait immanquablement par mentir
- *  dans un sens ou dans l'autre.
+ *  une valeur strictement identique.
+ *
+ *  Angle mort assumé : une modification faite à la main **pendant** que l'import
+ *  écrit encore passe inaperçue. Personne n'édite une question au milieu d'une
+ *  génération, et l'alternative — refuser l'annulation dès qu'une ligne bouge —
+ *  revient à ne jamais l'offrir.
  *
  *  ⚠️ Corollaire pour l'écriture d'ingestion : elle doit **omettre** `updated_at`
  *  et non l'écrire, contrairement à `questionToRow` aujourd'hui
- *  (`src/lib/workshops/exam.ts`). Sans ça, tout import naîtrait « déjà
- *  modifié » et le bouton d'annulation ne s'afficherait jamais. */
+ *  (`src/lib/workshops/exam.ts`). */
 export function importCancelState(rows: ImportRowDates[], now: Date = new Date()): ImportCancelState {
   if (rows.length === 0) return 'empty';
 
-  const oldest = Math.min(...rows.map((r) => new Date(r.createdAt).getTime()));
+  const created = rows.map((r) => new Date(r.createdAt).getTime());
+  const oldest = Math.min(...created);
   const deadline = oldest + IMPORT_CANCEL_WINDOW_HOURS * 3600_000;
   if (now.getTime() > deadline) return 'expired';
 
-  const touched = rows.some((r) => new Date(r.updatedAt).getTime() > new Date(r.createdAt).getTime());
+  // La fin de l'import : sa dernière ligne écrite.
+  const finished = Math.max(...created);
+  const touched = rows.some((r) => new Date(r.updatedAt).getTime() > finished);
   if (touched) return 'modified';
 
   return 'cancellable';
@@ -100,6 +117,13 @@ export type ImportSummary = {
    *  que compte l'ingestion : les deux doivent dire la même chose, sans quoi le
    *  bandeau d'annulation contredirait le message de fin d'import. */
   questions: number;
+  /** Le même total, **coupé selon l'écran où on le voit** (28/08/2026). Un import
+   *  ne produit jamais les deux : le contexte des questions vient du bouton par
+   *  lequel on est entré (voir `groupSchema`, `src/lib/ingest/planSchema.ts`).
+   *  Un total unique faisait donc afficher « 87 questions ajoutées » au-dessus
+   *  d'une liste de parcours qui n'en avait pas reçu une seule. */
+  parcoursQuestions: number;
+  examQuestions: number;
 };
 
 // Les trois tables étiquetables, dans l'ordre INVERSE de leur création. C'est
@@ -142,59 +166,94 @@ export async function getImportSummary(workshopId: string, importId: string): Pr
   assertImportId(importId);
   const supabase = getSupabaseServerClient();
 
-  const results = await Promise.all(
-    TAGGED_TABLES.map(({ table }) =>
-      supabase
-        .from(table)
-        .select('id, created_at, updated_at')
-        .eq('workshop_id', workshopId)
-        .eq('import_id', importId),
+  // `context` est demandé à part plutôt qu'ajouté aux colonnes de la boucle : il
+  // n'existe que sur les groupes, et une liste de colonnes qui varie d'une table
+  // à l'autre n'est plus analysable par le typage de PostgREST.
+  const [results, groupRows] = await Promise.all([
+    Promise.all(
+      TAGGED_TABLES.map(({ table }) =>
+        supabase
+          .from(table)
+          .select('id, created_at, updated_at')
+          .eq('workshop_id', workshopId)
+          .eq('import_id', importId),
+      ),
     ),
-  );
+    supabase
+      .from('exam_questions')
+      .select('id, context')
+      .eq('workshop_id', workshopId)
+      .eq('import_id', importId),
+  ]);
+
+  if (groupRows.error) throw new Error(groupRows.error.message);
+  // Les groupes rangés par destination — un lot ne remplit jamais les deux.
+  const groupIds: Record<'parcours' | 'exam', string[]> = { parcours: [], exam: [] };
+  for (const row of groupRows.data ?? []) {
+    groupIds[row.context === 'exam' ? 'exam' : 'parcours'].push(row.id as string);
+  }
 
   const counts = { chapters: 0, notions: 0, questionGroups: 0 };
   const rows: ImportRowDates[] = [];
-  const groupIds: string[] = [];
 
   results.forEach(({ data, error }, i) => {
     if (error) throw new Error(error.message);
-    const table = TAGGED_TABLES[i];
-    counts[table.key] = (data ?? []).length;
-    for (const row of data ?? []) {
-      rows.push({ createdAt: row.created_at, updatedAt: row.updated_at });
-      if (table.table === 'exam_questions') groupIds.push(row.id as string);
-    }
+    counts[TAGGED_TABLES[i].key] = (data ?? []).length;
+    for (const row of data ?? []) rows.push({ createdAt: row.created_at, updatedAt: row.updated_at });
   });
 
   // Les questions liées ne portent pas d'étiquette (elles suivent leur groupe) :
   // il faut donc les compter à part pour annoncer un nombre qui corresponde à ce
-  // que l'utilisateur voit.
-  let questions = 0;
-  if (groupIds.length > 0) {
+  // que l'utilisateur voit. On compte en base plutôt que de rapatrier les lignes :
+  // un gros import dépasserait la pagination par défaut, et le total mentirait.
+  const countItems = async (ids: string[]): Promise<number> => {
+    if (ids.length === 0) return 0;
     const { count, error } = await supabase
       .from('exam_question_items')
       .select('id', { count: 'exact', head: true })
-      .in('group_id', groupIds);
+      .in('group_id', ids);
     if (error) throw new Error(error.message);
-    questions = count ?? 0;
-  }
+    return count ?? 0;
+  };
 
-  return { state: importCancelState(rows), ...counts, questions };
+  const [parcoursQuestions, examQuestions] = await Promise.all([
+    countItems(groupIds.parcours),
+    countItems(groupIds.exam),
+  ]);
+
+  return {
+    state: importCancelState(rows),
+    ...counts,
+    questions: parcoursQuestions + examQuestions,
+    parcoursQuestions,
+    examQuestions,
+  };
 }
 
-/** Le dernier import de l'atelier, s'il en existe un. Sert au bandeau : on ne
- *  propose l'annulation que du lot le plus récent — remonter plus loin n'aurait
- *  pas de sens, les 24 h ayant de toute façon expiré. */
-export async function latestImportId(workshopId: string): Promise<string | null> {
+/** Les imports de l'atelier encore DANS LE DÉLAI, du plus récent au plus ancien.
+ *
+ *  ⚠️ **Plusieurs, et pas seulement le dernier** (28/08/2026). Le bandeau ne
+ *  montrait que le lot le plus récent : trois essais de suite dans la même
+ *  heure, et les deux premiers devenaient inannulables faute d'être affichés,
+ *  alors que le délai courait encore pour eux. Or c'est précisément quand on
+ *  enchaîne les essais qu'on veut pouvoir revenir en arrière.
+ *
+ *  Le filtre de date se fait ICI, en base : remonter des lots périmés pour les
+ *  écarter ensuite coûterait une lecture complète par lot (`getImportSummary`).
+ *  Le plafond, lui, borne le coût d'un atelier très actif ; au-delà, ce sont
+ *  les plus anciens qu'on laisse tomber, jamais les récents. */
+export async function recentImportIds(workshopId: string, limit = 8): Promise<string[]> {
   const supabase = getSupabaseServerClient();
+  const since = new Date(Date.now() - IMPORT_CANCEL_WINDOW_HOURS * 3600_000).toISOString();
   const { data, error } = await supabase
     .from('ai_imports')
     .select('id')
     .eq('workshop_id', workshopId)
+    .gte('created_at', since)
     .order('created_at', { ascending: false })
-    .limit(1);
+    .limit(limit);
   if (error) throw new Error(error.message);
-  return (data?.[0]?.id as string | undefined) ?? null;
+  return (data ?? []).map((row) => row.id as string);
 }
 
 export type CancelImportResult =

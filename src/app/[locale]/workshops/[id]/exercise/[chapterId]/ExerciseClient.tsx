@@ -12,12 +12,22 @@
 // d'affichage sans mémoriser de permutation.
 //
 // Coquille plein écran (position fixed, au-dessus de la barre du haut/du bas —
-// masquées par ailleurs sur /exercise/ dans DashboardHeader.tsx) : aucune
-// notion de « session » ou de progression n'existe côté serveur (le tirage
-// pioche indéfiniment, sans fin de chapitre), donc pas de barre de progression
-// ici — voir docs/chantiers/2026-08-05-refonte-ui-design-system.md, T21.
+// masquées par ailleurs sur /exercise/ dans DashboardHeader.tsx).
+//
+// ── Un exercice = 12 niveaux de Bloom (29/08/2026) ──────────────────────────
+//
+// Ce n'est pas un nombre de questions : chaque question coûte ce qu'elle
+// demande de plus exigeant, et l'exercice s'arrête quand le budget est
+// consommé. Douze questions faciles, ou cinq difficiles. Le décompte est tenu
+// par le serveur, qui choisit chaque question d'après la maîtrise du membre —
+// l'écran ne fait qu'afficher où il en est.
+//
+// Le tirage suivant part DÈS LA CORRECTION AFFICHÉE, pendant que le membre la
+// lit : une question d'avance, jamais plus. C'est ce qui rend le passage à la
+// suivante instantané tout en gardant un choix calculé sur la progression qui
+// vient d'avoir lieu.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { ArrowRight, Check, Droplet, FileText, Leaf, Loader2, RotateCw, Sprout, Upload, X } from 'lucide-react';
@@ -27,7 +37,7 @@ import { Tooltip } from '@/components/ui/tooltip';
 import LinkButton from '@/components/LinkButton';
 import { drawExercise, gradeExercise } from '@/app/actions/parcoursExercise';
 import type { ExerciseAnswer, ExercisePart, ExercisePrompt, ExerciseResult } from '@/lib/workshops/examTypes';
-import { tableCellKey } from '@/lib/workshops/examTypes';
+import { EXERCISE_BLOOM_BUDGET, tableCellKey } from '@/lib/workshops/examTypes';
 import { matchListEntries } from '@/lib/workshops/answerMatch';
 
 type Props = {
@@ -38,11 +48,16 @@ type Props = {
   chapterName: string;
 };
 
-// Longueur de session choisie côté client : le tirage serveur pioche
-// indéfiniment sans notion de fin de chapitre (voir plus haut) — ce nombre est
-// une règle produit provisoire, à revoir avec la vraie mécanique de
-// progression (docs/backlog.md). Voir docs/chantiers/2026-08-05-refonte-ui-design-system.md, T23.
-const EXERCISE_SESSION_LENGTH = 10;
+/** Ce que rend le tirage — déduit de l'action plutôt que réimporté : un fichier
+ *  `'use server'` n'expose pas ses types au client (piège Turbopack, cf.
+ *  .claude/rules/server-architecture.md). */
+type DrawResult = Awaited<ReturnType<typeof drawExercise>>;
+
+/** Sentinelle d'un tirage qui n'a pas abouti (réseau coupé, action injoignable).
+ *  Un jeton plutôt qu'un message : la traduction se fait à l'affichage, sinon il
+ *  faudrait faire entrer `t` dans les dépendances du tirage — et le premier
+ *  tirage se relancerait à chaque rendu. */
+const DRAW_FAILED = '__draw_failed__';
 
 // Réponses des types qui ne se donnent pas en cochant une proposition.
 // Regroupées en UN objet par énoncé plutôt qu'en cinq tableaux parallèles, qu'il
@@ -102,39 +117,211 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
   const [selected, setSelected] = useState<number[][]>([[]]);
   const [freeText, setFreeText] = useState<string[]>(['']);
   const [extra, setExtra] = useState<ExtraAnswer[]>([emptyExtra()]);
-  const [result, setResult] = useState<ExerciseResult | null>(null);
+  /** Correction de chaque énoncé, `null` tant qu'il n'a pas été validé. Un
+   *  tableau et non un objet unique : une grappe se corrige énoncé par énoncé,
+   *  et les corrections déjà rendues restent à l'écran. */
+  const [outcomes, setOutcomes] = useState<(ExerciseResult | null)[]>([null]);
+  /** Combien d'énoncés de la grappe sont affichés. On commence au premier seul,
+   *  et « suivant » en découvre un de plus — jamais un écran vierge : le
+   *  précédent reste au-dessus, avec sa correction. */
+  const [shown, setShown] = useState(1);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
-  const [answeredCount, setAnsweredCount] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [done, setDone] = useState(false);
+  /** Niveaux de Bloom déjà consommés — par les questions RÉPONDUES, pas posées. */
+  const [spent, setSpent] = useState(0);
+  /** Ce que coûte la question affichée, décompté à sa validation. */
+  /** Ce que coûte chaque énoncé de la grappe affichée, dans l'ordre. La barre
+   *  avance à chaque question validée — une question liée est une question
+   *  entière, elle consomme sa part comme les autres. Le budget, lui, a été
+   *  réservé pour la grappe ENTIÈRE au tirage (`committedRef`) : c'est ce qui
+   *  garantit qu'on ne dépasse pas en cours de grappe. */
+  const [costs, setCosts] = useState<number[]>([]);
+  /** Plus rien ne viendra après la question affichée : le bouton du bas propose
+   *  alors de terminer, plutôt que d'annoncer une question suivante qui
+   *  n'existe pas. */
+  const [noMore, setNoMore] = useState(false);
+  /** Trois fautes expédiées d'affilée : on le dit avec la correction, sans
+   *  rien empêcher (voir @/lib/workshops/answerPace). */
+  const [tooFast, setTooFast] = useState(false);
+  /** Minutes de pause restantes, quand le serveur a refusé la question
+   *  suivante après cinq fautes expédiées. */
+  const [blockedMinutes, setBlockedMinutes] = useState(0);
+  /** Pourquoi le dernier tirage n'a rien rendu — deux impasses très différentes
+   *  à l'écran : un chapitre sans aucune question (le gestionnaire a du travail)
+   *  et un chapitre dont rien n'est encore à la portée du membre (il n'y est
+   *  pour rien, et personne n'a à être mis en cause). */
+  const [failure, setFailure] = useState<DrawResult['failure']>(null);
 
-  const draw = useCallback(
-    async (excludeId?: string) => {
-      setLoading(true);
-      setError('');
-      setResult(null);
-      setSelected([[]]);
-      setFreeText(['']);
-      setExtra([emptyExtra()]);
-      const res = await drawExercise(workshopId, chapterId, excludeId);
-      if (res.error) setError(res.error);
-      setPrompt(res.prompt);
-      // Une case de réponse par énoncé : la question principale et chacune de
-      // ses questions liées.
-      const slots = 1 + (res.prompt?.parts.length ?? 0);
-      setSelected(Array.from({ length: slots }, () => []));
-      setFreeText(Array.from({ length: slots }, () => ''));
-      setExtra(Array.from({ length: slots }, emptyExtra));
-      setLoading(false);
-    },
+  // Grappes déjà posées dans CET exercice, pour ne pas en reproposer une dont la
+  // correction n'a pas abouti (la trace en base ne s'écrit qu'à la correction).
+  // En ref et non en état : les tirages partent de gestionnaires d'événements,
+  // qui liraient sinon la valeur figée au rendu.
+  const servedRef = useRef<string[]>([]);
+  /** Questions tirées et pas encore affichées. */
+  const queueRef = useRef<DrawResult[]>([]);
+  /** Somme des coûts de TOUT ce qui a été tiré — affiché, répondu ou en file.
+   *  C'est lui qui borne l'exercice : un tirage réserve sa part du budget au
+   *  moment où il part, pas quand la question est répondue. Sans quoi les deux
+   *  questions d'avance pourraient faire dépasser les 12 niveaux. */
+  const committedRef = useRef(0);
+  /** Les tirages s'enchaînent au lieu de partir en parallèle : chacun a besoin
+   *  du coût du précédent pour savoir ce qui reste du budget. */
+  const chainRef = useRef<Promise<void>>(Promise.resolve());
+  /** Dernière impasse rencontrée, gardée pour l'écran de fin ou d'accueil. */
+  const failedRef = useRef<DrawResult | null>(null);
+  const startedRef = useRef(false);
+  /** Quand la question affichée l'a été. Le serveur ne peut pas le savoir : il a
+   *  tiré cette question bien avant, pendant que la précédente était traitée. */
+  const shownAtRef = useRef(0);
+
+  /** Installe une question tirée : une case de réponse par énoncé (la question
+   *  principale et chacune de ses questions liées). */
+  const apply = useCallback((res: DrawResult) => {
+    if (res.error) setError(res.error);
+    setPrompt(res.prompt);
+    setCosts(res.costs ?? []);
+    setFailure(res.failure);
+    if (res.failure === 'blocked') {
+      setBlockedMinutes(Math.max(1, Math.ceil(((res.blockedUntil ?? 0) - Date.now()) / 60_000)));
+    }
+    shownAtRef.current = Date.now();
+    const slots = 1 + (res.prompt?.parts.length ?? 0);
+    setSelected(Array.from({ length: slots }, () => []));
+    setFreeText(Array.from({ length: slots }, () => ''));
+    setExtra(Array.from({ length: slots }, emptyExtra));
+    setOutcomes(Array.from({ length: slots }, () => null));
+    setShown(1);
+  }, []);
+
+  /** Depuis combien de temps la QUESTION affichée est à l'écran — remis à zéro
+   *  à chaque énoncé découvert, et non à chaque grappe : le rythme se juge
+   *  question par question (voir @/lib/workshops/answerPace). Enveloppé plutôt
+   *  qu'appelé sur place : lire l'horloge dans le corps du composant est
+   *  signalé comme impur par la règle React Compiler du projet. */
+  const elapsedSinceShown = useCallback(() => Date.now() - shownAtRef.current, []);
+
+  const requestDraw = useCallback(
+    (remaining: number): Promise<DrawResult> =>
+      drawExercise(workshopId, chapterId, remaining, servedRef.current).catch((err) => {
+        console.error('drawExercise error:', err);
+        return { prompt: null, cost: 0, costs: [], failure: null, error: DRAW_FAILED };
+      }),
     [workshopId, chapterId]
   );
 
-  useEffect(() => {
-    draw();
-  }, [draw]);
+  /** Lance un tirage de plus, à la queue de la file. Ne rend rien quand le
+   *  budget est déjà entièrement réservé ou qu'une impasse a été rencontrée :
+   *  la file reste vide, et c'est ce vide qui met fin à l'exercice. */
+  const enqueue = useCallback((): Promise<void> => {
+    chainRef.current = chainRef.current.then(async () => {
+      if (failedRef.current) return;
+      const room = EXERCISE_BLOOM_BUDGET - committedRef.current;
+      if (room <= 0) return;
+      const res = await requestDraw(room);
+      if (!res.prompt) {
+        failedRef.current = res;
+        return;
+      }
+      committedRef.current += res.cost;
+      // Retenue dès le TIRAGE et non à l'affichage : avec une question
+      // d'avance dans la file, la suivante se tire avant que celle-ci
+      // n'apparaisse — la marquer trop tard, c'est risquer de la tirer deux
+      // fois de suite.
+      servedRef.current = [...servedRef.current, res.prompt.id];
+      queueRef.current.push(res);
+    });
+    return chainRef.current;
+  }, [requestDraw]);
 
+  /** La prochaine question prête, ou `null` s'il n'y en a plus. Attend le
+   *  tirage en cours : c'est le seul moment où l'écran peut avoir à patienter,
+   *  et il ne se produit que si le membre va plus vite que le serveur. */
+  const takeNext = useCallback(async (): Promise<DrawResult | null> => {
+    await chainRef.current;
+    return queueRef.current.shift() ?? null;
+  }, []);
+
+  // Au montage : DEUX tirages d'affilée. Le premier s'affiche, le second attend
+  // dans la file. C'est ce coup d'avance qui rend le passage à la question
+  // suivante instantané même pour qui ne lit pas sa correction — la file se
+  // regarnit ensuite à chaque validation, jamais au clic.
+  useEffect(() => {
+    // ⚠️ **Garde d'exécution unique, et SURTOUT PAS de drapeau d'annulation.**
+    //
+    // En développement, React monte le composant deux fois : effet, nettoyage,
+    // effet. La garde empêche le second passage de tirer quatre questions et de
+    // réserver la moitié du budget pour rien — mais elle rend du même coup le
+    // motif habituel « `cancelled` dans le nettoyage » **mortel** : le premier
+    // passage se voyait annulé par le nettoyage et renonçait à afficher, le
+    // second ne faisait rien du tout, et l'écran restait sur « tirage d'une
+    // question… » **indéfiniment** (bug introduit avec les deux questions
+    // d'avance le 29/08/2026, diagnostiqué le 30).
+    //
+    // Rien ne remplace ce drapeau, et il n'y a rien à remplacer : le composant
+    // du second montage est le MÊME, refs comprises, donc l'affichage tombe au
+    // bon endroit. Et sur un vrai démontage, poser un état sur un composant
+    // parti ne fait rien du tout depuis React 18 — ni erreur, ni avertissement.
+    if (startedRef.current) return;
+    startedRef.current = true;
+    void (async () => {
+      await enqueue();
+      const first = await takeNext();
+      const opening = first ?? failedRef.current ?? { prompt: null, cost: 0, costs: [], failure: 'empty' as const };
+      apply(opening);
+      setLoading(false);
+      // Une pause en cours ferme l'exercice au lieu de l'ouvrir : le membre doit
+      // pouvoir faire autre chose, donc il lui faut la porte de sortie de l'écran
+      // de fin, pas un mur.
+      if (opening.failure === 'blocked') setDone(true);
+      if (first?.prompt) void enqueue();
+
+      // ─── La recharge du chapitre part ICI, et n'est jamais attendue ───────
+      //
+      // APRÈS l'affichage de la première question, et par un `fetch` ORDINAIRE —
+      // ni `after()` côté serveur, ni server action. Les deux ont été essayés le
+      // 29/08/2026 et retenaient l'écran de la même façon : `after` n'est détaché
+      // que là où l'hébergeur sait le faire, et les appels d'action d'un même
+      // onglet sont mis à la queue leu leu par le routeur. Une recharge de deux
+      // minutes bloquait donc soit le tirage lui-même, soit tout ce qui vient
+      // après. Le pourquoi complet est en tête de la route.
+      //
+      // `keepalive` : la requête survit à la fermeture de l'onglet, ce que ne
+      // fait aucune des deux autres approches.
+      //
+      // Sans `await` et sans état : ce qu'elle produit servira au prochain
+      // exercice, pas à celui-ci. Une panne ne doit rien changer à l'écran — la
+      // trace utile est côté serveur.
+      if (first?.prompt) {
+        void fetch('/api/parcours/refill', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ workshopId, chapterId }),
+          keepalive: true,
+        }).catch(() => {});
+      }
+    })();
+  }, [enqueue, takeNext, apply]);
+
+  /** Question suivante : celle qui attend dans la file. */
+  async function handleNext() {
+    setError('');
+    setTooFast(false);
+    setNoMore(false);
+    setLoading(true);
+    const res = await takeNext();
+    setLoading(false);
+    if (!res) {
+      // Une file vide, c'est la fin de l'exercice — sauf si le dernier tirage
+      // s'est heurté à la mise en pause, qui a son propre écran.
+      const failed = failedRef.current;
+      if (failed) apply(failed);
+      setDone(true);
+      return;
+    }
+    apply(res);
+  }
   /** Ce qui part au serveur, énoncé par énoncé.
    *
    *  ⚠️ Les paires sont converties en TEXTE : la colonne de droite est arrivée
@@ -153,28 +340,145 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     });
   }
 
+  /** Valide l'énoncé actif — et lui seul. Les énoncés déjà corrigés restent
+   *  affichés au-dessus ; ceux qui suivent n'ont pas encore été posés, et leur
+   *  correction n'est donc pas calculée (voir `gradeExercise`). */
   async function handleValidate() {
     if (!prompt) return;
+    const at = activeIndex;
     setChecking(true);
     setError('');
-    const res = await gradeExercise(workshopId, prompt.id, toAnswers());
+    // `elapsedSinceShown` mesure la grappe ENTIÈRE : elle est remise à zéro à
+    // l'affichage de la question, pas à chaque énoncé. Le serveur ne s'en sert
+    // qu'au dernier — le rythme se juge sur l'unité qui compte pour une
+    // question, pas sur ses morceaux.
+    const res = await gradeExercise(workshopId, prompt.id, toAnswers(), at, elapsedSinceShown());
     setChecking(false);
     if (res.error || !res.result) {
       setError(res.error ?? t('gradeError'));
       return;
     }
-    setResult(res.result);
-    const answeredSoFar = answeredCount + 1;
-    setAnsweredCount(answeredSoFar);
-    // Une grappe compte pour une : elle est réussie si aucun de ses énoncés
-    // n'est faux et qu'au moins un a pu être corrigé automatiquement (une
-    // question entièrement libre ne prouve rien, voir `ExerciseResult`).
-    const outcomes = [res.result, ...(res.result.parts ?? [])];
-    if (outcomes.some((o) => o.correct !== null) && outcomes.every((o) => o.correct !== false)) {
-      setCorrectCount((c) => c + 1);
-    }
-    if (answeredSoFar >= EXERCISE_SESSION_LENGTH) setDone(true);
+    const outcome = res.result;
+    setOutcomes((prev) => prev.map((v, i) => (i === at ? outcome : v)));
+
+    // ─── Chaque question compte pour elle-même ─────────────────────────────
+    //
+    // Une question liée n'est pas un morceau de la principale : elle a sa
+    // goutte, sa part du budget, et son propre verdict de rythme. Seul le
+    // TIRAGE travaille par grappe, parce que ces questions sont inséparables.
+    setTooFast(res.tooFast === true);
+    if (outcome.correct === true) setCorrectCount((c) => c + 1);
+    // La question consomme son coût dès qu'elle est répondue — juste ou fausse.
+    setSpent((s) => s + (costs[at] ?? 0));
+
+    if (!res.isLast) return;
+
+    // Un tirage de plus part MAINTENANT, pendant la lecture de la correction —
+    // à la FIN de la grappe, jamais à chacun de ses énoncés : le budget est
+    // réservé grappe par grappe, et tirer à chaque question liée en
+    // réserverait autant de fois trop.
+    void enqueue().then(() => {
+      if (queueRef.current.length === 0) setNoMore(true);
+    });
   }
+
+  /** « Suivant » à l'intérieur d'une grappe : découvre l'énoncé d'après, sous
+   *  celui qu'on vient de corriger. Rien à demander au serveur — la question
+   *  liée est déjà là, elle attendait seulement son tour. */
+  function handleNextStatement() {
+    setError('');
+    setTooFast(false);
+    // Le chronomètre du rythme repart : c'est une nouvelle question, et c'est
+    // maintenant qu'elle s'affiche.
+    shownAtRef.current = Date.now();
+    setShown((n) => n + 1);
+  }
+
+  // ─── La question en cours est toujours au centre de l'écran ──────────────
+  //
+  // C'est le modèle de la maquette (`_measureEx` / `componentDidUpdate` dans
+  // docs/design/App-Culture.dc.html) : la première question d'une grappe est
+  // centrée, et chaque question découverte ensuite vient prendre sa place au
+  // centre, les précédentes remontant hors champ.
+  //
+  // Le centrage se fait par une MARGE INTÉRIEURE calculée, pas par un
+  // `margin: auto` ni un `justify-content: center` : la pile grandit à chaque
+  // question, et seule la marge permet de centrer l'énoncé ACTIF plutôt que
+  // l'ensemble. C'est aussi ce qui garde tout le contenu atteignable — un
+  // centrage flex rend inatteignable ce qui dépasse vers le haut (les
+  // navigateurs refusent un défilement négatif, voir frontend-patterns.md).
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const activeRef = useRef<HTMLDivElement | null>(null);
+  const [pad, setPad] = useState(48);
+
+  /** Où commence l'énoncé actif dans le contenu défilant, et quelle hauteur
+   *  visible il a devant lui. Mesuré sur des rectangles d'écran plutôt que sur
+   *  `offsetTop`, qui dépendrait de l'ancêtre positionné le plus proche. */
+  const measure = useCallback(() => {
+    const box = scrollRef.current;
+    const active = activeRef.current;
+    if (!box || !active) return null;
+    const visible = box.clientHeight;
+    if (!visible) return null;
+    const top = active.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+    return { box, visible, top, height: active.offsetHeight };
+  }, []);
+
+  // Sans tableau de dépendances : la mesure doit repartir à chaque rendu (une
+  // correction qui s'ouvre change les hauteurs). La comparaison explicite avant
+  // `setPad` est ce qui empêche la boucle — pattern documenté dans
+  // .claude/rules/frontend-patterns.md.
+  useLayoutEffect(() => {
+    const m = measure();
+    if (!m) return;
+    const above = Math.max(0, m.top - pad);
+    const natural = above + m.height;
+    const next =
+      natural <= m.visible
+        ? Math.max(16, Math.round((m.visible - natural) / 2))
+        : Math.max(16, Math.round((m.visible - m.height) / 2));
+    if (Math.abs(next - pad) > 1) setPad(next);
+  });
+
+  /** À la découverte d'une question liée, on l'amène au centre. On attend que
+   *  la hauteur du contenu se stabilise avant de viser : la correction qui
+   *  vient de s'afficher au-dessus continue de grandir pendant un ou deux
+   *  rendus, et un défilement calculé trop tôt tomberait à côté. */
+  useEffect(() => {
+    const box = scrollRef.current;
+    if (!box) return;
+    if (shown <= 1) {
+      box.scrollTo({ top: 0 });
+      return;
+    }
+    let frame = 0;
+    let tries = 0;
+    let lastHeight = -1;
+    let stable = 0;
+    const run = () => {
+      const m = measure();
+      if (!m) return;
+      const height = m.box.scrollHeight;
+      if (height === lastHeight) stable += 1;
+      else {
+        stable = 0;
+        lastHeight = height;
+      }
+      tries += 1;
+      if (stable < 2 && tries < 30) {
+        frame = requestAnimationFrame(run);
+        return;
+      }
+      const wanted = m.height <= m.visible ? m.top - Math.max(0, (m.visible - m.height) / 2) : m.top - 12;
+      const top = Math.max(0, Math.min(wanted, m.box.scrollHeight - m.box.clientHeight));
+      m.box.scrollTo({ top, behavior: 'smooth' });
+    };
+    frame = requestAnimationFrame(run);
+    return () => cancelAnimationFrame(frame);
+  }, [shown, prompt?.id, measure]);
+
+  /** Avancement de l'exercice : la part du budget déjà consommée. */
+  const progressPercent = Math.min(100, Math.round((spent / EXERCISE_BLOOM_BUDGET) * 100));
 
   /** Énoncés de la grappe, dans l'ordre d'affichage et de correction : la
    *  question principale puis ses questions liées. */
@@ -191,6 +495,14 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
       ]
     : [];
 
+  /** L'énoncé en cours : le dernier découvert. Ceux d'avant sont corrigés et
+   *  posés en cartes au-dessus, ceux d'après n'existent pas encore à l'écran. */
+  const activeIndex = Math.min(shown, statements.length) - 1;
+  /** La correction de l'énoncé actif, une fois validée. */
+  const activeOutcome = outcomes[activeIndex] ?? null;
+  /** Reste-t-il une question liée après celle qu'on vient de corriger ? */
+  const hasNextStatement = activeIndex < statements.length - 1;
+
   function setChoicesAt(idx: number, next: number[]) {
     setSelected((prev) => prev.map((v, i) => (i === idx ? next : v)));
   }
@@ -201,11 +513,18 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
     setExtra((prev) => prev.map((v, i) => (i === idx ? { ...v, ...patch } : v)));
   }
 
-  // Une réponse est requise sur CHAQUE énoncé qui en attend une, sauf ceux sans
-  // réponse attendue (où le bouton sert juste à afficher la correction).
+  // Seul l'énoncé actif est validable : les précédents sont corrigés, les
+  // suivants ne sont pas posés. `sans_reponse` reste validable d'emblée — le
+  // bouton n'y fait qu'afficher la réponse attendue.
   const canValidate =
-    !!prompt && !result && !checking &&
-    statements.every((s, i) => isAnswered(s, selected[i] ?? [], freeText[i] ?? '', extra[i] ?? emptyExtra()));
+    !!prompt && !activeOutcome && !checking &&
+    !!statements[activeIndex] &&
+    isAnswered(
+      statements[activeIndex],
+      selected[activeIndex] ?? [],
+      freeText[activeIndex] ?? '',
+      extra[activeIndex] ?? emptyExtra(),
+    );
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 40, display: 'flex', flexDirection: 'column', background: palette.cream }}>
@@ -219,18 +538,19 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
             <X size={16} strokeWidth={1.75} />
           </Link>
         </Tooltip>
-        {/* Barre d'avancement de la session (maquette : `exProgressW`). Le
-            tirage serveur pioche indéfiniment ; la longueur de session est une
-            règle client (`EXERCISE_SESSION_LENGTH`), c'est donc elle qui donne
-            le dénominateur. */}
-        <Tooltip content={t('progressTitle', { done: answeredCount, total: EXERCISE_SESSION_LENGTH })}>
+        {/* Barre d'avancement de l'exercice (maquette : `exProgressW`). Elle
+            avance en niveaux de Bloom consommés, pas en questions : une question
+            difficile la fait bondir, c'est le sens même du budget. D'où un
+            pourcentage plutôt qu'un « x sur y » qui promettrait un nombre de
+            questions que personne ne connaît d'avance. */}
+        <Tooltip content={t('progressTitle', { percent: progressPercent })}>
         <div
           style={{ flex: 1, height: 10, borderRadius: radius.pill, background: palette.surfaceSunken, boxShadow: shadow.inset, overflow: 'hidden' }}
         >
           <div
             style={{
               height: '100%', borderRadius: radius.pill, background: palette.green,
-              width: `${Math.min(100, (answeredCount / EXERCISE_SESSION_LENGTH) * 100)}%`,
+              width: `${progressPercent}%`,
               transition: 'width 360ms cubic-bezier(0.22, 1, 0.36, 1)',
             }}
           />
@@ -250,14 +570,24 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
         </Tooltip>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 20px 40px', display: 'flex' }}>
+      {/* Mise en page en BLOC et non en flex : un enfant de conteneur flex est
+          étiré à la hauteur du conteneur, et ce qui dépasse de lui n'entre plus
+          dans la hauteur défilante — le défilement s'arrêtait alors avant que
+          l'énoncé actif ait pu monter au centre. */}
+      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 20px', display: 'block' }}>
         {done ? (
-          <div style={{ margin: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', maxWidth: 420, padding: '24px 0' }}>
+          <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', maxWidth: 420, margin: '0 auto', padding: '24px 0' }}>
             <div style={{ width: 120, height: 120, borderRadius: radius.pill, background: withAlpha(palette.green, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
               <Leaf size={48} strokeWidth={1.5} color={palette.green} />
             </div>
-            <div style={{ fontWeight: 600, fontSize: 30, color: palette.greenBrand }}>{t('doneTitle')}</div>
-            <div style={{ fontSize: 14.5, color: palette.inkSoft, marginTop: 10 }}>{t('doneScore', { count: correctCount })}</div>
+            <div style={{ fontWeight: 600, fontSize: 30, color: palette.greenBrand }}>
+              {failure === 'blocked' ? t('blockedTitle') : t('doneTitle')}
+            </div>
+            <div style={{ fontSize: 14.5, color: palette.inkSoft, marginTop: 10 }}>
+              {failure === 'blocked'
+                ? t('blockedDesc', { minutes: blockedMinutes })
+                : t('doneScore', { count: correctCount })}
+            </div>
             <div style={{ marginTop: 28 }}>
               <LinkButton href={`/${locale}/workshops/${workshopId}`} variant="primary" size="lg">
                 {t('backToParcours')} <ArrowRight size={16} strokeWidth={1.75} />
@@ -265,14 +595,17 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
             </div>
           </div>
         ) : (
-        // `margin: auto` et non `justifyContent: center` : sur un conteneur
-        // défilant, le centrage flex rend inatteignable la partie qui dépasse
-        // (les navigateurs refusent un défilement négatif). La marge auto, elle,
-        // se résout à 0 dès que le contenu est plus haut que la zone — l'énoncé
-        // est centré quand il est court, aligné en haut et défilable quand il
-        // est long. Voir .claude/rules/frontend-patterns.md.
-        <div style={{ maxWidth: 680, margin: 'auto', width: '100%' }}>
-          {error && <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 12 }}>{error}</div>}
+        // Le centrage vertical passe par les marges intérieures calculées
+        // au-dessus (`pad`), qui suivent l'énoncé ACTIF au lieu de centrer toute
+        // la pile — et jamais par `justifyContent: center`, qui rendrait
+        // inatteignable ce qui dépasse vers le haut (les navigateurs refusent un
+        // défilement négatif, voir .claude/rules/frontend-patterns.md).
+        <div style={{ maxWidth: 680, margin: '0 auto', width: '100%', paddingTop: pad, paddingBottom: pad }}>
+          {error && (
+            <div style={{ fontSize: 12.5, color: palette.danger, marginBottom: 12 }}>
+              {error === DRAW_FAILED ? t('drawError') : error}
+            </div>
+          )}
 
           {/* Pas de carte autour de l'énoncé actif : la maquette le pose
               directement sur le fond de la coque. Seuls les énoncés DÉJÀ
@@ -285,61 +618,117 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
               </div>
             ) : !prompt ? (
               <div style={{ padding: '30px 0', textAlign: 'center' }}>
-                <div style={{ fontSize: 14, color: palette.ink }}>{t('emptyTitle')}</div>
-                <div style={{ fontSize: 12.5, color: palette.inkFaint, marginTop: 6 }}>{t('emptyDesc')}</div>
+                <div style={{ fontSize: 14, color: palette.ink }}>
+                  {failure === 'blocked'
+                    ? t('blockedTitle')
+                    : failure === 'exhausted'
+                      ? t('outOfReachTitle')
+                      : t('emptyTitle')}
+                </div>
+                <div style={{ fontSize: 12.5, color: palette.inkFaint, marginTop: 6 }}>
+                  {failure === 'blocked'
+                    ? t('blockedDesc', { minutes: blockedMinutes })
+                    : failure === 'exhausted'
+                      ? t('outOfReachDesc')
+                      : t('emptyDesc')}
+                </div>
               </div>
             ) : (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 22 }}>
-                  <span style={{ width: 44, height: 44, borderRadius: 12, background: withAlpha(palette.green, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.green, flexShrink: 0 }}>
-                    <Sprout size={20} strokeWidth={1.75} />
-                  </span>
-                  <span style={{ fontSize: 21, fontWeight: 700, color: palette.ink, lineHeight: 1.3, whiteSpace: 'pre-wrap' }}>
-                    {prompt.content.trim() || tExam('noStatement')}
-                  </span>
-                </div>
+                {/* ─── La grappe se dévoile un énoncé à la fois ─────────────
+                    Seuls les énoncés déjà découverts sont rendus (`shown`) :
+                    le suivant n'apparaît qu'au clic sur « suivant », SOUS le
+                    précédent, qui reste lisible avec sa correction. Un énoncé
+                    corrigé prend une carte, l'énoncé actif est posé
+                    directement sur le fond — c'est le repère « ce qui est
+                    fait / ce qui reste ». */}
+                {statements.slice(0, shown).map((statement, i) => {
+                  const outcome = outcomes[i] ?? null;
+                  const isMain = i === 0;
+                  const settled = outcome !== null;
+                  return (
+                    <div
+                      key={i}
+                      ref={i === shown - 1 ? activeRef : null}
+                      style={{
+                        marginTop: isMain ? 0 : 18,
+                        ...(settled
+                          ? {
+                              background: palette.surfaceRaised,
+                              border: `1px solid ${palette.line}`,
+                              borderRadius: 14,
+                              padding: '18px 20px',
+                            }
+                          : {}),
+                      }}
+                    >
+                      {/* Le repère « où en est-on » compte TOUTES les questions
+                          du groupe, la première comprise : elle n'a rien de
+                          particulier, c'est une question comme les autres. Sans
+                          lui, on ne sait pas si « suivant » mène à une question
+                          liée de plus ou à une autre question de l'exercice. */}
+                      {statements.length > 1 && (
+                        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: palette.inkFaint, marginBottom: 8 }}>
+                          {t('statementCounter', { index: i + 1, total: statements.length })}
+                        </div>
+                      )}
+                      {isMain ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 22 }}>
+                          <span style={{ width: 44, height: 44, borderRadius: 12, background: withAlpha(palette.green, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.green, flexShrink: 0 }}>
+                            <Sprout size={20} strokeWidth={1.75} />
+                          </span>
+                          <span style={{ fontSize: 21, fontWeight: 700, color: palette.ink, lineHeight: 1.3, whiteSpace: 'pre-wrap' }}>
+                            {statement.content.trim() || tExam('noStatement')}
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 16.5, fontWeight: 700, color: palette.ink, lineHeight: 1.4, marginBottom: 16, whiteSpace: 'pre-wrap' }}>
+                          {statement.content.trim() || tExam('noStatement')}
+                        </div>
+                      )}
 
-                {prompt.imageUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element -- aperçu d'un fichier privé (URL signée éphémère), pas un asset next/image
-                  <img src={prompt.imageUrl} alt="" style={{ maxWidth: '100%', maxHeight: 320, borderRadius: 12, border: `1px solid ${palette.line}`, marginBottom: 18 }} />
-                )}
-                {prompt.audioUrl && (
-                  <audio controls src={prompt.audioUrl} style={{ width: '100%', marginBottom: 18 }} />
-                )}
+                      {/* Image et audio restent avec la question principale :
+                          ce sont les éléments COMMUNS de la grappe, et les
+                          questions liées s'y réfèrent. Ils ne sont donc jamais
+                          répétés, et restent visibles une fois la principale
+                          corrigée. */}
+                      {isMain && prompt.imageUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element -- aperçu d'un fichier privé (URL signée éphémère), pas un asset next/image
+                        <img src={prompt.imageUrl} alt="" style={{ maxWidth: '100%', maxHeight: 320, borderRadius: 12, border: `1px solid ${palette.line}`, marginBottom: 18 }} />
+                      )}
+                      {isMain && prompt.audioUrl && (
+                        <audio controls src={prompt.audioUrl} style={{ width: '100%', marginBottom: 18 }} />
+                      )}
 
-                {/* Zone de réponse de la question principale, puis chaque
-                    question liée avec son propre énoncé et sa correction.
-                    L'image et l'audio ne sont pas répétés : ce sont les
-                    éléments communs de la grappe. */}
-                <AnswerZone
-                  statement={statements[0]}
-                  selected={selected[0] ?? []}
-                  freeText={freeText[0] ?? ''}
-                  extra={extra[0] ?? emptyExtra()}
-                  result={result}
-                  onChoices={(next) => setChoicesAt(0, next)}
-                  onText={(next) => setTextAt(0, next)}
-                  onExtra={(patch) => setExtraAt(0, patch)}
-                />
-
-                {prompt.parts.map((part, i) => (
-                  <div key={i} style={{ marginTop: 26, paddingTop: 22, borderTop: `1px solid ${palette.line}` }}>
-                    <div style={{ fontSize: 16.5, fontWeight: 700, color: palette.ink, lineHeight: 1.4, marginBottom: 16, whiteSpace: 'pre-wrap' }}>
-                      {part.content.trim() || tExam('noStatement')}
+                      <AnswerZone
+                        statement={statement}
+                        selected={selected[i] ?? []}
+                        freeText={freeText[i] ?? ''}
+                        extra={extra[i] ?? emptyExtra()}
+                        result={outcome}
+                        onChoices={(next) => setChoicesAt(i, next)}
+                        onText={(next) => setTextAt(i, next)}
+                        onExtra={(patch) => setExtraAt(i, patch)}
+                      />
                     </div>
-                    <AnswerZone
-                      statement={part}
-                      selected={selected[i + 1] ?? []}
-                      freeText={freeText[i + 1] ?? ''}
-                      extra={extra[i + 1] ?? emptyExtra()}
-                      result={result?.parts?.[i] ?? null}
-                      onChoices={(next) => setChoicesAt(i + 1, next)}
-                      onText={(next) => setTextAt(i + 1, next)}
-                      onExtra={(patch) => setExtraAt(i + 1, patch)}
-                    />
-                  </div>
-                ))}
+                  );
+                })}
 
+                {tooFast && (
+                  <div
+                    style={{
+                      marginTop: 20,
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      background: withAlpha(palette.amber, 0.14),
+                      color: palette.ink,
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {t('tooFast')}
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -354,17 +743,28 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
       {!done && prompt && !loading && (
         <div style={{ flex: 'none', borderTop: `1px solid ${palette.line}`, background: palette.surfaceRaised, boxShadow: `0 -8px 24px -12px ${withAlpha(palette.ink, 0.28)}`, padding: '14px 20px' }}>
           <div style={{ maxWidth: 680, margin: '0 auto', width: '100%', display: 'flex', justifyContent: 'flex-end' }}>
-            {!result ? (
+            {/* ─── Un bouton, trois sens, dans cet ordre ────────────────────
+                1. valider l'énoncé actif ;
+                2. découvrir l'énoncé suivant de la grappe ;
+                3. passer à la question suivante — ou terminer, quand il n'y a
+                   plus rien à tirer (`noMore`). Il ne doit jamais annoncer une
+                   suite qui n'existe pas. */}
+            {!activeOutcome ? (
               <Button variant="primary" size="lg" onClick={handleValidate} disabled={!canValidate}>
                 {checking && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-                {/* « Voir la réponse » seulement si AUCUN énoncé de la grappe
-                    n'attend de réponse : dès qu'il y en a un, le bouton valide
-                    bien quelque chose. */}
-                {statements.every((s) => s.responseType === 'sans_reponse') ? t('revealAnswer') : t('validate')}
+                {/* « Afficher la réponse » quand l'énoncé actif n'attend rien :
+                    le bouton ne valide alors rien, il dévoile. */}
+                {statements[activeIndex]?.responseType === 'sans_reponse' ? t('revealAnswer') : t('validate')}
+              </Button>
+            ) : hasNextStatement ? (
+              <Button variant="primary" size="lg" onClick={handleNextStatement}>
+                <ArrowRight size={14} strokeWidth={1.75} />
+                {t('nextStatement')}
               </Button>
             ) : (
-              <Button variant="primary" size="lg" onClick={() => draw(prompt.id)}>
-                <RotateCw size={14} strokeWidth={1.75} /> {t('next')}
+              <Button variant="primary" size="lg" onClick={noMore ? () => setDone(true) : handleNext}>
+                {noMore ? <Leaf size={14} strokeWidth={1.75} /> : <RotateCw size={14} strokeWidth={1.75} />}
+                {noMore ? t('finish') : t('next')}
               </Button>
             )}
           </div>
@@ -676,9 +1076,8 @@ function TableAnswer({ statement, extra, result, onExtra }: {
  *  La colonne de droite arrive mélangée et détachée de la gauche (voir
  *  `matchRight` dans examTypes) : rien ici ne trahit l'appariement attendu.
  *
- *  L'association est matérialisée par un rang chiffré des deux côtés, là où la
- *  maquette trace un trait en SVG — même information, sans mesurer la position
- *  de chaque ligne à chaque rendu. */
+ *  L'association est matérialisée par un trait tracé en SVG dans la gouttière
+ *  centrale, d'une pastille à l'autre. */
 function MatchAnswer({ statement, extra, result, onExtra }: {
   statement: ExercisePart;
   extra: ExtraAnswer;
@@ -757,6 +1156,60 @@ function MatchAnswer({ statement, extra, result, onExtra }: {
     };
   }
 
+  // ── Où partent les traits : mesuré, et non plus déduit du rang ───────────
+  //
+  // Un encadré dont le libellé revient à la ligne est plus haut que ses
+  // voisins : le rang ne dit alors plus où tombe son milieu, et le trait
+  // partait au-dessus ou en dessous de la pastille (constaté le 30/08/2026).
+  // On mesure donc le centre RÉEL de chaque encadré, dans le repère de la
+  // gouttière, et le SVG travaille en pixels — pas de `viewBox` étiré, donc
+  // pas d'hypothèse sur des lignes de hauteur égale.
+  //
+  // La mesure re-tourne à chaque rendu et sur tout changement de taille (le
+  // `ResizeObserver` reste branché : une fenêtre redimensionnée fait
+  // re-répartir les retours à la ligne). Elle est gardée par une comparaison,
+  // sans quoi chaque mesure redéclencherait un rendu, donc une mesure.
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const gutterRef = useRef<HTMLDivElement | null>(null);
+  const leftRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const rightRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [geom, setGeom] = useState<{ width: number; leftY: number[]; rightY: number[] }>({ width: 0, leftY: [], rightY: [] });
+
+  const measure = useCallback(() => {
+    const gutter = gutterRef.current;
+    if (!gutter) return;
+    const base = gutter.getBoundingClientRect();
+    // Tout en coordonnées de la fenêtre : on ne mélange jamais un
+    // `getBoundingClientRect` et un `offsetHeight` dans un même calcul
+    // (cf. .claude/rules/frontend-patterns.md).
+    const centers = (els: (HTMLButtonElement | null)[]) =>
+      els.map((el) => {
+        if (!el) return 0;
+        const r = el.getBoundingClientRect();
+        return r.top + r.height / 2 - base.top;
+      });
+    const next = { width: base.width, leftY: centers(leftRefs.current), rightY: centers(rightRefs.current) };
+    setGeom((prev) => {
+      const same =
+        prev.width === next.width &&
+        prev.leftY.length === next.leftY.length &&
+        prev.rightY.length === next.rightY.length &&
+        prev.leftY.every((v, i) => v === next.leftY[i]) &&
+        prev.rightY.every((v, i) => v === next.rightY[i]);
+      return same ? prev : next;
+    });
+  }, []);
+
+  useLayoutEffect(measure);
+
+  useLayoutEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(measure);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [measure]);
+
   /** Pastille d'accroche, sur le bord intérieur de l'encadré : pleine dès que
    *  l'élément est relié ou sélectionné, creuse sinon. C'est elle que le trait
    *  vient rejoindre. */
@@ -766,13 +1219,6 @@ function MatchAnswer({ statement, extra, result, onExtra }: {
     );
   }
 
-  // Traits reliant les paires, tracés dans la gouttière centrale. Les positions
-  // se DÉDUISENT du rang de chaque ligne au lieu d'être mesurées : les lignes
-  // d'une colonne ont toutes la même hauteur, donc le centre de la ligne `i`
-  // tombe à `(i + 0.5) / n` de la hauteur totale. Un `viewBox` de 0 à 100 avec
-  // `preserveAspectRatio="none"` laisse le SVG s'étirer exactement sur la
-  // hauteur des colonnes — pas de `ResizeObserver`, pas de mesure à chaque
-  // rendu, donc rien qui puisse se désynchroniser pendant une animation.
   // Côté où se trouvent les cibles de la sélection en cours : c'est l'AUTRE
   // colonne que celle de l'élément en attente. Ses encadrés encore libres se
   // mettent en pointillé pour montrer où le trait peut aboutir ; un encadré
@@ -797,26 +1243,31 @@ function MatchAnswer({ statement, extra, result, onExtra }: {
 
   const links = Object.entries(extra.match).map(([l, r]) => {
     const leftRow = left.findIndex((c) => c.index === Number(l));
-    const y1 = ((leftRow + 0.5) / Math.max(left.length, 1)) * 100;
-    const y2 = ((r + 0.5) / Math.max(right.length, 1)) * 100;
+    const y1 = geom.leftY[leftRow] ?? 0;
+    const y2 = geom.rightY[r] ?? 0;
+    const w = geom.width;
     return {
       key: `${l}-${r}`,
-      d: `M 0 ${y1} C 50 ${y1}, 50 ${y2}, 100 ${y2}`,
+      d: `M 0 ${y1} C ${w / 2} ${y1}, ${w / 2} ${y2}, ${w} ${y2}`,
       stroke: pairTone(Number(l), r) ?? palette.green,
     };
   });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: `${split}fr 54px ${1 - split}fr`, alignItems: 'stretch' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {left.map((choice) => {
+      {/* Les deux colonnes sont CENTRÉES l'une sur l'autre (`justifyContent`) :
+          celle qui a des encadrés sur deux lignes est plus haute, elle
+          commence donc plus haut et finit plus bas que l'autre, au lieu de
+          s'aligner par le sommet et de faire pencher toute la grille. */}
+      <div ref={gridRef} style={{ display: 'grid', gridTemplateColumns: `${split}fr 54px ${1 - split}fr`, alignItems: 'stretch' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
+          {left.map((choice, row) => {
             const active = pending?.side === 'left' && pending.index === choice.index;
             const linked = extra.match[choice.index];
             const paired = linked !== undefined;
             const tone = paired ? pairTone(choice.index, linked) : null;
             return (
-              <button key={choice.index} onClick={() => pickLeft(choice.index)} disabled={readOnly} style={sideStyle(active, paired, targetSide === 'left' && !paired, tone)}>
+              <button key={choice.index} ref={(el) => { leftRefs.current[row] = el; }} onClick={() => pickLeft(choice.index)} disabled={readOnly} style={sideStyle(active, paired, targetSide === 'left' && !paired, tone)}>
                 <span style={{ flex: 1, minWidth: 0 }}>{choice.text}</span>
                 {dot(active || paired)}
               </button>
@@ -826,24 +1277,24 @@ function MatchAnswer({ statement, extra, result, onExtra }: {
 
         {/* Gouttière des traits. `overflow: visible` : une courbe entre deux
             lignes très écartées déborde du cadre, et serait rognée sinon. */}
-        <div style={{ position: 'relative' }}>
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none' }}>
+        <div ref={gutterRef} style={{ position: 'relative' }}>
+          {/* Pas de `viewBox` : le repère du SVG est celui des pixels de la
+              gouttière, donc les centres mesurés s'y posent tels quels. */}
+          <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none' }}>
             {links.map((link) => (
-              // `vector-effect` : sans lui, l'étirement non uniforme du viewBox
-              // écraserait l'épaisseur du trait à l'horizontale.
-              <path key={link.key} d={link.d} fill="none" stroke={link.stroke} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
+              <path key={link.key} d={link.d} fill="none" stroke={link.stroke} strokeWidth={2} strokeLinecap="round" />
             ))}
           </svg>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
           {right.map((label, index) => {
             const active = pending?.side === 'right' && pending.index === index;
             const pairedLeft = leftPairedTo(index);
             const paired = pairedLeft !== null;
             const tone = pairedLeft !== null ? pairTone(pairedLeft, index) : null;
             return (
-              <button key={index} onClick={() => pickRight(index)} disabled={readOnly} style={sideStyle(active, paired, targetSide === 'right' && !paired, tone)}>
+              <button key={index} ref={(el) => { rightRefs.current[index] = el; }} onClick={() => pickRight(index)} disabled={readOnly} style={sideStyle(active, paired, targetSide === 'right' && !paired, tone)}>
                 {dot(active || paired)}
                 <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
               </button>

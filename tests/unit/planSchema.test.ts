@@ -14,7 +14,7 @@ const question = (over: Record<string, unknown> = {}) => ({
   responseType: 'qcm',
   choices: ['Paris', 'Lyon'],
   correctChoices: [0],
-  bloomLevel: 1,
+  notions: [],
   ...over,
 });
 
@@ -31,12 +31,26 @@ describe('planSchema — sortie contrainte du modèle', () => {
     expect(parsed.chapters).toEqual([]);
     expect(parsed.notions).toEqual([]);
     expect(parsed.groups[0].questions[0].answer).toBe('');
-    expect(parsed.groups[0].questions[0].notionRefs).toEqual([]);
+    expect(parsed.groups[0].questions[0].notions).toEqual([]);
     expect(parsed.groups[0].questions[0].textLines).toBe(4);
   });
 
   it('refuse un contexte inventé', () => {
     expect(planSchema.safeParse({ groups: [group({ context: 'devoir' })] }).success).toBe(false);
+  });
+
+  // ⚠️ Le modèle n'a JAMAIS à donner le contexte : aucune des deux formes de
+  // sortie ne le lui demande, et les deux passes de questions l'imposent après
+  // coup (§8). L'exiger ici écartait la totalité des groupes rendus, chez Claude
+  // comme chez DeepSeek — une génération sans une seule question, et sans autre
+  // trace qu'une ligne de journal (28/08/2026). Invisible tant que les fixtures
+  // de ce fichier le posaient toutes : celle-ci ne le pose pas, exprès.
+  it('garde un groupe sans contexte — le modèle ne le donne pas', () => {
+    const sansContexte: Record<string, unknown> = group();
+    delete sansContexte.context;
+    const plan = parsePlan({ groups: [sansContexte] });
+    expect(plan.groups).toHaveLength(1);
+    expect(plan.discarded).toEqual([]);
   });
 });
 
@@ -50,13 +64,34 @@ describe('parsePlan — réparer', () => {
   it('ramène les niveaux de Bloom 5 et 6 sur 4', () => {
     // L'échelle est passée de 6 à 4 niveaux : « créer » reste le plus exigeant,
     // on ne le rétrograde pas au niveau 1.
-    const plan = parsePlan({ groups: [group({ questions: [question({ bloomLevel: 6 })] })] });
-    expect(plan.groups[0].questions[0].bloomLevel).toBe(4);
+    const plan = parsePlan({
+      notions: [{ ref: 'n1', title: 'La Loire' }],
+      groups: [group({ questions: [question({ notions: [{ ref: 'n1', bloomLevel: 6 }] })] })],
+    });
+    expect(plan.groups[0].questions[0].notions).toEqual([{ ref: 'n1', bloomLevel: 4 }]);
   });
 
   it('accepte un entier écrit en texte', () => {
-    const plan = parsePlan({ groups: [group({ questions: [question({ bloomLevel: '3' })] })] });
-    expect(plan.groups[0].questions[0].bloomLevel).toBe(3);
+    const plan = parsePlan({
+      notions: [{ ref: 'n1', title: 'La Loire' }],
+      groups: [group({ questions: [question({ notions: [{ ref: 'n1', bloomLevel: '3' }] })] })],
+    });
+    expect(plan.groups[0].questions[0].notions).toEqual([{ ref: 'n1', bloomLevel: 3 }]);
+  });
+
+  // L'ancienne forme — un niveau pour la question, les notions à côté — reste
+  // acceptée : le mapping est fondé (toutes au niveau de la question), et un
+  // modèle qui répond dans la forme d'avant ne doit pas faire perdre le lot.
+  it('replie un niveau donné pour la question sur chacune de ses notions', () => {
+    const plan = parsePlan({
+      notions: [{ ref: 'n1', title: 'La Loire' }, { ref: 'n2', title: 'La Seine' }],
+      groups: [group({ questions: [question({ bloomLevel: 3, notionRefs: ['n1', 'n2'] })] })],
+    });
+    expect(plan.groups[0].questions[0].notions).toEqual([
+      { ref: 'n1', bloomLevel: 3 },
+      { ref: 'n2', bloomLevel: 3 },
+    ]);
+    expect(plan.adjusted[0].reason).toContain('niveau de Bloom donné pour la question');
   });
 });
 
@@ -90,13 +125,18 @@ describe('parsePlan — rejeter', () => {
     expect(plan.discarded[0].reason).toContain('groupe sans question');
   });
 
-  it('écarte les références en double plutôt que d’en écraser une', () => {
+  it('ignore une référence en double plutôt que d’en écraser une', () => {
     const plan = parsePlan({
       chapters: [{ ref: 'ch1', name: 'Un' }, { ref: 'ch1', name: 'Deux' }],
     });
     expect(plan.chapters).toHaveLength(1);
     expect(plan.chapters[0].name).toBe('Un'); // le premier gagne
-    expect(plan.discarded[0].reason).toContain('double');
+    // CORRIGÉ, et non écarté (29/08/2026) : rien n'est perdu — le chapitre est
+    // là, c'est le doublon qu'on laisse tomber. L'annoncer comme « écarté »
+    // faisait craindre une perte à chaque mise à jour d'atelier, le modèle
+    // redéclarant volontiers les chapitres qui existent déjà.
+    expect(plan.discarded).toEqual([]);
+    expect(plan.adjusted[0].reason).toContain('déjà présent');
   });
 
   it('n’écarte QUE l’élément fautif — le reste du lot survit', () => {
@@ -131,18 +171,18 @@ describe('parsePlan — références pendantes', () => {
   it('retire d’une question la notion inconnue, sans toucher aux autres', () => {
     const plan = parsePlan({
       notions: [{ ref: 'n1', title: 'La Loire' }],
-      groups: [group({ questions: [question({ notionRefs: ['n1', 'n-inexistante'] })] })],
+      groups: [group({ questions: [question({ notions: [{ ref: 'n1', bloomLevel: 2 }, { ref: 'n-inexistante', bloomLevel: 1 }] })] })],
     });
-    expect(plan.groups[0].questions[0].notionRefs).toEqual(['n1']);
-    expect(plan.adjusted[0].reason).toContain('n-inexistante');
+    expect(plan.groups[0].questions[0].notions).toEqual([{ ref: 'n1', bloomLevel: 2 }]);
+    expect(plan.adjusted.some((a) => a.reason.includes('n-inexistante'))).toBe(true);
   });
 
   it('conserve une question dont TOUTES les notions étaient inconnues', () => {
     // Elle ne sera tirée par aucun exercice tant qu'on ne lui en relie pas une —
     // état permis (§11 du plan), et signalé.
-    const plan = parsePlan({ groups: [group({ questions: [question({ notionRefs: ['x'] })] })] });
+    const plan = parsePlan({ groups: [group({ questions: [question({ notions: [{ ref: 'x', bloomLevel: 1 }] })] })] });
     expect(plan.groups).toHaveLength(1);
-    expect(plan.groups[0].questions[0].notionRefs).toEqual([]);
+    expect(plan.groups[0].questions[0].notions).toEqual([]);
     expect(plan.adjusted).toHaveLength(1);
   });
 });
@@ -157,10 +197,10 @@ describe('parsePlan — compléter l’existant', () => {
     // Sans ça, le modèle ne pourrait qu'ajouter des îlots : il ne pourrait
     // jamais accrocher une nouvelle question à une notion existante.
     const plan = parsePlan(
-      { groups: [group({ questions: [question({ notionRefs: ['n-existante-en-base'] })] })] },
+      { groups: [group({ questions: [question({ notions: [{ ref: 'n-existante-en-base', bloomLevel: 2 }] })] })] },
       existing,
     );
-    expect(plan.groups[0].questions[0].notionRefs).toEqual(['n-existante-en-base']);
+    expect(plan.groups[0].questions[0].notions).toEqual([{ ref: 'n-existante-en-base', bloomLevel: 2 }]);
     expect(plan.adjusted).toEqual([]);
   });
 
@@ -173,14 +213,16 @@ describe('parsePlan — compléter l’existant', () => {
     expect(plan.adjusted).toEqual([]);
   });
 
-  it('écarte une notion qui tenterait de recréer une notion existante', () => {
-    // Le modèle doit référencer l'existant, pas le dupliquer.
+  it('ignore une notion qui tenterait de recréer une notion existante', () => {
+    // Le modèle doit référencer l'existant, pas le dupliquer. Comme pour les
+    // chapitres, c'est une correction et non une perte : la notion est là.
     const plan = parsePlan(
       { notions: [{ ref: 'n-existante-en-base', title: 'Doublon' }] },
       existing,
     );
     expect(plan.notions).toEqual([]);
-    expect(plan.discarded[0].reason).toContain('double');
+    expect(plan.discarded).toEqual([]);
+    expect(plan.adjusted[0].reason).toContain('déjà présente');
   });
 });
 

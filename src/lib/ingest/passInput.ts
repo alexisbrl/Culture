@@ -16,7 +16,7 @@ export type IngestPass = 'chapters' | 'notions' | 'assign' | 'questions' | 'exam
  *  autoportante par construction — c'est la définition qu'en donne la passe 2 —
  *  et ce qui manque pour les niveaux supérieurs de Bloom n'est pas le cours mais
  *  les notions voisines du même chapitre. Renvoyer le corpus pour rédiger une
- *  question sur une phrase de 280 caractères, c'est ce qui a coûté ~20 $ pour
+ *  question sur une notion d’une phrase, c'est ce qui a coûté ~20 $ pour
  *  zéro question le 22/08/2026 : à l'échelle du corpus de test, ~287 $ de
  *  lectures de cache contre ~8,50 $ sans les documents.
  *

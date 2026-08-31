@@ -10,12 +10,16 @@
 //
 // Monté à deux endroits — la barre du haut (ordinateur) et le bandeau d'atelier
 // (téléphone) — d'où le composant partagé.
+//
+// Les paramètres se préparent au survol (`WarmLink`), sur le bouton lui-même et
+// pas un pouce plus large : un halo de déclenchement autour attraperait aussi
+// les clics, et il n'y a que 12 px de vide jusqu'à la cloche de notifications.
 
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { Settings } from 'lucide-react';
 import { Tooltip } from '@/components/ui/tooltip';
+import WarmLink from '@/components/WarmLink';
 
 type Props = {
   workshopId: string;
@@ -33,7 +37,7 @@ export default function WorkshopActionsMenu({ workshopId, size = 34 }: Props) {
 
   return (
     <Tooltip content={tNav('workshopSettings')}>
-      <Link
+      <WarmLink
         href={`/${locale}/workshops/${workshopId}/settings`}
         aria-label={tNav('workshopSettings')}
         className={`flex flex-none items-center justify-center rounded-full border border-[var(--line)] outline-none transition-colors focus-visible:shadow-[var(--shadow-focus)] ${
@@ -42,7 +46,7 @@ export default function WorkshopActionsMenu({ workshopId, size = 34 }: Props) {
         style={{ width: size, height: size }}
       >
         <Settings size={size >= 34 ? 16 : 15} strokeWidth={1.75} />
-      </Link>
+      </WarmLink>
     </Tooltip>
   );
 }

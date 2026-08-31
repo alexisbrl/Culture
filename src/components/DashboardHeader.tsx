@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip } from '@/components/ui/tooltip';
 import WorkshopSwitcher from '@/components/WorkshopSwitcher';
 import WorkshopActionsMenu from '@/components/WorkshopActionsMenu';
+import WarmLink from '@/components/WarmLink';
 import NotificationBell from '@/components/NotificationBell';
 import DropletCounter from '@/components/DropletCounter';
 
@@ -153,27 +154,27 @@ export default function DashboardHeader({ userId, initialWorkshop }: Props) {
     <>
       {!isExercise && (
         <nav className="fixed inset-x-0 bottom-0 z-30 flex items-stretch gap-1 border-t border-[var(--line)] bg-[var(--surface-raised)] px-3 pt-2 pb-3.5 md:hidden">
-          <Link href={`/${locale}/garden`} className={mobileItemClass(isJardin)}>
+          <WarmLink href={`/${locale}/garden`} className={mobileItemClass(isJardin)}>
             <Sprout size={22} strokeWidth={1.75} />
             {t('tabJardin')}
-          </Link>
+          </WarmLink>
           {workshopId && (
             <div className="flex flex-[3] items-stretch gap-1 rounded-2xl border border-[var(--line-strong)]">
-              <Link
+              <WarmLink
                 href={`/${locale}/workshops/${workshopId}?tab=programme`}
                 className={mobileItemClass(onWorkshopPage && activeTab === 'programme')}
               >
                 <Route size={22} strokeWidth={1.75} />
                 {t('tabParcours')}
-              </Link>
+              </WarmLink>
               {canManage && (
-                <Link
+                <WarmLink
                   href={`/${locale}/workshops/${workshopId}?tab=examen`}
                   className={mobileItemClass(onWorkshopPage && activeTab === 'examen')}
                 >
                   <FileText size={22} strokeWidth={1.75} />
                   {t('tabExamens')}
-                </Link>
+                </WarmLink>
               )}
               <div aria-disabled="true" className={mobileItemClass(false)} style={{ pointerEvents: 'none' }}>
                 <BookOpen size={22} strokeWidth={1.75} />
@@ -181,10 +182,10 @@ export default function DashboardHeader({ userId, initialWorkshop }: Props) {
               </div>
             </div>
           )}
-          <Link href={`/${locale}/profile`} className={mobileItemClass(isProfil)}>
+          <WarmLink href={`/${locale}/profile`} className={mobileItemClass(isProfil)}>
             <User size={22} strokeWidth={1.75} />
             {t('tabProfil')}
-          </Link>
+          </WarmLink>
         </nav>
       )}
       {/* `sticky` plutôt que `fixed` : la barre reste dans le flux, donc aucune
@@ -197,10 +198,10 @@ export default function DashboardHeader({ userId, initialWorkshop }: Props) {
         style={{ height: 60, borderBottom: '1px solid var(--line)', background: 'var(--surface-raised)' }}
       >
       <div className="flex min-w-0 flex-1 items-center gap-6">
-        <Link href={`/${locale}/dashboard`} className="flex shrink-0 items-center gap-2">
+        <WarmLink href={`/${locale}/dashboard`} className="flex shrink-0 items-center gap-2">
           <Sprout size={20} strokeWidth={1.75} className="text-[var(--green)]" />
           <span style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: 19, color: 'var(--ink)' }}>Culture</span>
-        </Link>
+        </WarmLink>
         {workshopId && activeWorkshop && (
           <div className="relative flex min-w-0 items-center gap-2 text-[13px] text-[var(--ink-muted)]">
             <span className="truncate font-semibold text-[var(--ink)]">{activeWorkshop.name}</span>
@@ -220,17 +221,17 @@ export default function DashboardHeader({ userId, initialWorkshop }: Props) {
       </div>
 
       <nav className="flex flex-none items-center justify-center gap-1.5">
-        <Link href={`/${locale}/garden`} className={tabClass(isJardin)}>
+        <WarmLink href={`/${locale}/garden`} className={tabClass(isJardin)}>
           {t('tabJardin')}
-        </Link>
+        </WarmLink>
         {workshopId && (
           <div className="flex items-center gap-0.5 rounded-full border border-[var(--line-strong)] px-1.5 py-[5px]">
-            <Link
+            <WarmLink
               href={`/${locale}/workshops/${workshopId}?tab=programme`}
               className={tabClass(onWorkshopPage && activeTab === 'programme')}
             >
               {t('tabParcours')}
-            </Link>
+            </WarmLink>
             {/* `canManage` vient d'un appel client (`getWorkshop`) : tant qu'il
                 n'a pas répondu, on réserve la largeur de l'onglet au lieu de le
                 faire surgir après coup en décalant tout le groupe (T50). Le
@@ -239,12 +240,12 @@ export default function DashboardHeader({ userId, initialWorkshop }: Props) {
             {activeWorkshop === null ? (
               <span aria-hidden className={`${tabClass(false)} invisible`}>{t('tabExamens')}</span>
             ) : canManage ? (
-              <Link
+              <WarmLink
                 href={`/${locale}/workshops/${workshopId}?tab=examen`}
                 className={tabClass(onWorkshopPage && activeTab === 'examen')}
               >
                 {t('tabExamens')}
-              </Link>
+              </WarmLink>
             ) : null}
             {/* Pas d'infobulle : elle répétait mot pour mot le texte de l'onglet,
                 juste sous le curseur. */}
@@ -258,9 +259,9 @@ export default function DashboardHeader({ userId, initialWorkshop }: Props) {
             </span>
           </div>
         )}
-        <Link href={`/${locale}/profile`} className={tabClass(isProfil)}>
+        <WarmLink href={`/${locale}/profile`} className={tabClass(isProfil)}>
           {t('tabProfil')}
-        </Link>
+        </WarmLink>
       </nav>
 
       <div className="flex flex-1 items-center justify-end gap-3">

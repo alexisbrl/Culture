@@ -158,6 +158,14 @@ besoin qui n'existe pas encore.
 DeepSeek ensuite (coût) → à terme, modèles open-source DeepSeek **auto-hébergés
 en local**.
 
+**Où en est-on (30/08/2026) :** la passe QUESTIONS est passée à DeepSeek — par
+défaut et partout, y compris pour ce qui produit des questions sans que personne
+ne l'ait décidé (recharge automatique, et le chat quand il existera). Claude ne
+s'y utilise plus que si on le demande explicitement, dans le dialogue de
+génération, le temps de la comparaison. Les passes CHAPITRES et NOTIONS restent
+sur Claude sans discussion : elles lisent les PDF, ce que DeepSeek ne sait pas
+faire.
+
 ### Comment Claude préserve tableaux et images
 
 Ce n'est pas du parsing : **chaque page du PDF est envoyée au modèle comme une
@@ -406,9 +414,12 @@ peut pas connaître des identifiants qui n'existent pas encore) :
       content: "…",
       responseType: "qcm",       // l'un des 9 types réels (examTypes.ts)
       choices: [...], correctChoices: [...], answer: "…", expectations: "…",
-      bloomLevel: 1 | 2 | 3 | 4, // 4 niveaux, pas 6
-      notionRefs: ["n1", "n7"],  // remplace l'ancien chapterRef : le chapitre
-                                 // d'une question se déduit de ses notions
+      // Les notions travaillées, CHACUNE AVEC SON NIVEAU (28/08/2026) : le
+      // niveau qualifie le couple question ↔ notion, pas la question — une même
+      // question peut faire restituer l'une et analyser l'autre. La question,
+      // elle, n'a plus de niveau du tout. Les notions remplacent aussi l'ancien
+      // chapterRef : le chapitre d'une question se déduit d'elles.
+      notions: [{ ref: "n1", bloomLevel: 1 }, { ref: "n7", bloomLevel: 4 }],
     }],
   }],
 }
@@ -693,7 +704,7 @@ traitements opposés — ne jamais les confondre :
 | Famille | Exemples | Traitement |
 |---|---|---|
 | **Qualité pédagogique** | nombre de propositions d'un QCM, réponse attendue remplie, répartition Bloom, variété des types de réponse | **Prompt uniquement.** Aucun refus serveur. |
-| **Intégrité structurelle** | notion référencée inexistante, ou appartenant à **un autre atelier** ; `bloomLevel` hors 1–4 ; type de réponse inventé ; groupe à zéro question ; **énoncé vide** | **Refus serveur, systématique.** |
+| **Intégrité structurelle** | notion référencée inexistante, ou appartenant à **un autre atelier** ; `bloomLevel` d'une notion hors 1–4 ; type de réponse inventé ; groupe à zéro question ; **énoncé vide** | **Refus serveur, systématique.** |
 
 **L'énoncé fait partie de l'intégrité, pas de la qualité** (décision du
 19/08/2026). Ce n'est pas une exception à la règle mais son application : une
@@ -1079,6 +1090,18 @@ gestionnaire, qui regarde sa barre de progression. Une recharge automatique n'a
 travaille, dans une session qui n'est pas celle d'un gestionnaire.
 
 Donc :
+
+> **Quitter la page pendant un import (29/08/2026).** La croix et la touche Échap
+> demandent confirmation depuis le 28/08 ; rafraîchir, fermer l'onglet ou revenir
+> en arrière déclenchent désormais la demande du navigateur. ⚠️ **Son texte n'est
+> pas le nôtre** : les navigateurs ignorent le message fourni par le site et
+> montrent leur propre formulation avec leurs propres boutons — protection contre
+> les pages qui retenaient leurs visiteurs de force. On ne peut que provoquer la
+> question, pas la rédiger. Limite connue : un retour arrière traité par le
+> routeur sans recharger la page n'est pas couvert. Ce n'est pas grave — les
+> questions sont écrites au fur et à mesure, donc un import interrompu ne casse
+> rien : ce qui est écrit reste, et le bandeau d'annulation le propose comme
+> n'importe quel autre lot.
 
 - **L'import interactif reste dans le navigateur** — avec le parallélisme de
   §16.5, il redescend à ~15 min, ce qui est tenable et garde la progression
@@ -1834,7 +1857,9 @@ vidé en chemin. Aucun n'efface, un clic annule les deux.
    complète : 25 Mo par fichier **et 25 Mo par atelier** (le plafond par fichier
    ne bornait rien tant qu'on pouvait en déposer trente), 2 000 notions par
    atelier création manuelle comprise, 1 à 200 énoncés d'examen par lancement,
-   300 questions par import, et le mur de lecture — `MAX_CORPUS_TOKENS` = 868 000
+   500 questions par import (300 jusqu'au 30/08/2026 : c'est un fusible contre
+   une boucle emballée, pas un quota, et il doit rester au-dessus de l'usage
+   nominal), et le mur de lecture — `MAX_CORPUS_TOKENS` = 868 000
    tokens : la plus grande fenêtre (1 M) moins la réserve de sortie (32 k,
    **raisonnement compris** — les tokens de réflexion se prélèvent sur
    `max_tokens`, ils ne s'ajoutent pas à côté) moins 100 k pour ce que la mesure
@@ -1868,3 +1893,48 @@ vidé en chemin. Aucun n'efface, un clic annule les deux.
    d'abord met la coupe du budget à la fin, là où elle ne peut plus amputer un
    enchaînement de sa dernière question.
 7. Les points 1 et 3 de §17.7 restent ouverts.
+
+---
+
+## 19. Révision du 29/08/2026 — une génération à la fois, et un second onglet
+
+Deux questions posées ensemble, une réponse chacune.
+
+### 19.1 Deux générations en parallèle : interdites sur un même atelier, libres ailleurs
+
+L'enchaînement des passes vit dans le navigateur (§5.4) : rien n'empêchait
+d'ouvrir un second onglet sur le **même** atelier et d'y lancer une seconde
+génération. Les deux écrivent alors les mêmes chapitres et les mêmes notions, et
+le ménage de fin de l'une (`finishIngestion`) peut cacher les chapitres que
+l'autre vient de remplir. Ce n'est pas « deux fois plus de contenu » : c'est un
+programme incohérent, et deux fois la facture.
+
+**Sur deux ateliers différents, rien n'est bloqué.** Aucune écriture n'y est
+partagée ; seul le débit vers le fournisseur l'est, et il se régule tout seul
+(§16.6). Interdire aurait été une gêne sans contrepartie.
+
+**Le verrou est un signe de vie, pas un booléen** (`src/lib/ingest/lock.ts`).
+Un drapeau posé par un onglet qui meurt brutalement — plantage, coupure, machine
+éteinte — ne se relâche jamais : l'atelier resterait bloqué sans recours. L'onglet
+qui travaille bat donc toutes les 30 s (`ai_imports.beat_at`), et un lot sans
+battement depuis deux minutes cesse de bloquer. La fin propre — terminée, arrêtée
+ou en erreur — relâche immédiatement (`ai_imports.closed_at`), sans attendre
+l'expiration. Migration additive `2026-08-29-une-generation-a-la-fois.sql`.
+
+Les **recharges automatiques** (§16.11) ne battent jamais : elles tournent en
+tâche de fond, l'utilisateur n'en sait rien, et lui refuser un lancement à cause
+d'elles serait incompréhensible.
+
+### 19.2 La popup reste, mais elle ouvre une porte
+
+La question « peut-on naviguer ailleurs pendant une génération ? » n'a qu'une
+réponse tant que l'enchaînement vit dans la page : **non**, quitter l'onglet
+interrompt la génération à l'étage où elle en est. La popup n'est donc pas une
+précaution qu'on pourrait retirer, c'est la conséquence de §5.4.
+
+Plutôt que de déplacer l'orchestration côté serveur — un chantier à part entière,
+qui reste la cible —, l'écran de génération propose d'**ouvrir Culture dans un
+second onglet**. Celui qui travaille reste intact derrière ; on va faire autre
+chose dans l'autre. Un vrai lien (`target="_blank"`, `rel="noopener"`), pas un
+`window.open` : il survit aux bloqueurs de fenêtres, et `noopener` empêche la
+page ouverte d'atteindre l'onglet qu'on cherche justement à protéger.

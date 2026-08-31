@@ -2,24 +2,19 @@
 
 import { palette, ink, withAlpha, shadow } from '@/lib/theme';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { AlertTriangle, Check, ChevronDown, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, Trash2, X } from 'lucide-react';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, leaveWorkshop, type MemberGroup } from '@/app/actions/workshops';
-import type { WorkshopFile } from '@/app/actions/workshopFiles';
-import type { Notion } from '@/app/actions/workshopNotions';
-import type { Chapter } from '@/app/actions/workshopChapters';
+import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, leaveWorkshop } from '@/app/actions/workshops';
 import { COVER_GRADIENTS, COVER_GRADIENT_KEYS, COVER_EMOJIS, coverGradientFor, emojiFor } from '@/lib/workshopCover';
 import ShareQRModal from '@/components/ShareQRModal';
 import { Tooltip } from '@/components/ui/tooltip';
-import { NAV_ITEMS, Row, Switch, SmallBtn, SectionCard, type WorkshopRole, type Member, type NavSection } from './settingsShared';
-import MembersSection from './MembersSection';
-import FilesSection from './FilesSection';
-import NotionsSection from './NotionsSection';
+import { NAV_ITEMS, Row, Switch, SmallBtn, SectionCard, type WorkshopRole } from './settingsShared';
+import { isNavSection, type NavSection } from './sections';
 import PremiumSection from './PremiumSection';
 
 type Props = {
@@ -36,14 +31,19 @@ type Props = {
   currentUserRole: WorkshopRole;
   isPremium: boolean;
   showProgramme: boolean;
-  members: Member[];
-  groups: MemberGroup[];
-  files: WorkshopFile[];
-  notions: Notion[];
-  chapters: Chapter[];
+  /** Onglet à ouvrir, lu dans l'URL côté serveur (voir page.tsx). */
+  initialSection: NavSection;
+  /** Vient de l'atelier lui-même, donc gratuit : c'est la seule chose dont la
+   *  section Premium a besoin de la liste des membres. */
+  memberCount: number;
+  // Les trois sections lourdes arrivent en flux : la page les rend dans leur
+  // propre frontière de chargement et nous les passe déjà emballées (page.tsx).
+  membersSlot: React.ReactNode;
+  filesSlot: React.ReactNode;
+  notionsSlot: React.ReactNode;
 };
 
-export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, isPremium, showProgramme: showProgrammeProp, members, groups, files: initialFiles, notions, chapters }: Props) {
+export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, isPremium, showProgramme: showProgrammeProp, initialSection, memberCount, membersSlot, filesSlot, notionsSlot }: Props) {
   const router = useRouter();
   const t = useTranslations('settings');
 
@@ -54,8 +54,58 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
   const isOwner = currentUserRole === 'owner';
   const isMember = currentUserRole === 'member';
 
-  const [activeSection, setActiveSection] = useState<NavSection>('general');
+  const [activeSection, setActiveSection] = useState<NavSection>(initialSection);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // ─── La section ouverte vit dans l'URL, et le retour arrière la suit ─────
+  //
+  // Elle est écrite dans `?section=notions` SANS passer par le routeur : les
+  // sections sont montées en permanence (voir .claude/rules/server-architecture.md),
+  // et une vraie navigation remettrait un temps de chargement là où il n'y en
+  // a pas. L'API d'historique du navigateur ne déclenche, elle, aucune requête.
+  //
+  // Ça règle trois gênes (30/08/2026) : F5 ne renvoie plus sur « Général », la
+  // fin d'une génération par IA — qui recharge la page pour rafraîchir les
+  // listes — retombe sur la section d'où elle a été lancée, et le bouton
+  // « retour » du navigateur repasse d'onglet en onglet avant de sortir.
+  //
+  // Chaque changement d'onglet AJOUTE donc une entrée d'historique
+  // (`pushState`), là où la première version se contentait de réécrire la
+  // dernière (`replaceState`) pour que « retour » sorte des paramètres d'un
+  // coup. Sortir reste à un clic : le lien « ← nom de l'atelier » en tête de
+  // page est là pour ça, quel que soit l'onglet ouvert.
+  //
+  // L'onglet d'ARRIVÉE, lui, est lu côté serveur (`initialSection`, page.tsx) :
+  // le lire ici, dans un effet, affichait « Général » le temps d'un battement
+  // avant de basculer sur le bon onglet à chaque rafraîchissement. La lecture
+  // ci-dessous ne sert donc plus qu'au trajet arrière/avant du navigateur.
+  const sectionFromUrl = useCallback((): NavSection => {
+    const wanted = new URLSearchParams(window.location.search).get('section') ?? undefined;
+    return isNavSection(wanted) ? wanted : 'general';
+  }, []);
+
+  // Retour / suivant du navigateur : l'URL a déjà changé quand l'événement
+  // arrive, il suffit de la relire. Aucune requête n'accompagne ce trajet —
+  // les cinq sections sont toujours à l'écran, on ne fait que changer celle
+  // qui est visible.
+  useEffect(() => {
+    const onPop = () => setActiveSection(sectionFromUrl());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [sectionFromUrl]);
+
+  /** Ouvre une section : l'état ET l'entrée d'historique, jamais l'un sans
+   *  l'autre. Écrit ici plutôt que dans un effet sur `activeSection` — sans
+   *  quoi un retour arrière, qui pose lui aussi l'état, empilerait une entrée
+   *  de plus et rendrait le bouton « retour » inopérant. */
+  function openSection(id: NavSection) {
+    if (id === activeSection) return;
+    setActiveSection(id);
+    const url = new URL(window.location.href);
+    if (id === 'general') url.searchParams.delete('section');
+    else url.searchParams.set('section', id);
+    window.history.pushState(null, '', url);
+  }
 
   // Section 1 — General
   const [workshopNameInput, setWorkshopNameInput] = useState(workshopName);
@@ -338,7 +388,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveSection(item.id)}
+                onClick={() => openSection(item.id)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -403,7 +453,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                   <button
                     key={item.id}
                     onClick={() => {
-                      setActiveSection(item.id);
+                      openSection(item.id);
                       setMobileNavOpen(false);
                     }}
                     style={{ width: '100%', border: 'none', background: active ? withAlpha(palette.green, 0.08) : 'transparent', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: `1px solid ${palette.line}`, textAlign: 'left', fontSize: 13.5, fontWeight: 600, color: active ? palette.green : palette.ink }}
@@ -682,20 +732,20 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         )}
 
         <div style={{ display: activeSection === 'members' ? 'contents' : 'none' }}>
-          <MembersSection workshopId={workshopId} isPremium={isPremium} currentUserRole={currentUserRole} members={members} groups={groups} />
+          {membersSlot}
         </div>
 
         <div style={{ display: activeSection === 'files' ? 'contents' : 'none' }}>
-          <FilesSection workshopId={workshopId} initialFiles={initialFiles} />
+          {filesSlot}
         </div>
 
         <div style={{ display: activeSection === 'notions' ? 'contents' : 'none' }}>
-          <NotionsSection workshopId={workshopId} notions={notions} chapters={chapters} />
+          {notionsSlot}
         </div>
 
         {isOwner && (
           <div style={{ display: activeSection === 'premium' ? 'contents' : 'none' }}>
-            <PremiumSection workshopId={workshopId} isPremium={isPremium} memberCount={members.length} />
+            <PremiumSection workshopId={workshopId} isPremium={isPremium} memberCount={memberCount} />
           </div>
         )}
       </div>

@@ -23,11 +23,14 @@ type Props = {
   members: { id: string; userId: string; role: 'owner' | 'manager' | 'member'; joinedAt: string; displayName: string; uniqueTag: string }[];
   chapters: Chapter[];
   progress: ParcoursProgress;
+  /** Millisecondes restantes avant de pouvoir relancer un exercice, 0 si rien
+   *  ne bloque (voir `getParcoursPause`). */
+  pausedFor: number;
 };
 
 type TabId = 'programme' | 'examen' | 'cours';
 
-export default function WorkshopClient({ workshopId, workshopName, currentUserRole, chapters, progress }: Props) {
+export default function WorkshopClient({ workshopId, workshopName, currentUserRole, chapters, progress, pausedFor }: Props) {
   const searchParams = useSearchParams();
   // Propriétaire ou gestionnaire : accès aux onglets de gestion + paramètres.
   const canManage = currentUserRole === 'owner' || currentUserRole === 'manager';
@@ -74,6 +77,7 @@ export default function WorkshopClient({ workshopId, workshopName, currentUserRo
             workshopName={workshopName}
             canManage={canManage}
             progress={progress}
+            pausedFor={pausedFor}
           />
         )}
         {canManage && activeTab === 'examen' && <ExamenTab workshopId={workshopId} />}

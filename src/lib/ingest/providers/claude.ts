@@ -61,6 +61,25 @@ const FILES_BETA = 'files-api-2025-04-14';
  *  plafond ne se paie en délai d'attente HTTP. */
 const MAX_TOKENS = 32_000;
 
+/** ⚠️ **La réflexion se prélève sur ce budget, elle ne s'ajoute pas à côté.**
+ *
+ *  Un modèle à réflexion adaptative peut donc consommer l'essentiel du plafond
+ *  avant d'écrire la première accolade, et ce qui reste ne suffit plus au JSON :
+ *  la réponse s'arrête **au milieu d'une chaîne**. Ce n'est pas théorique, c'est
+ *  arrivé au premier import lancé sur Sonnet (30/08/2026, « Unterminated string
+ *  in JSON at position 14563 ») — 14 500 caractères de sortie utile pour 32 000
+ *  jetons de budget, le reste était parti en réflexion.
+ *
+ *  Le doublement est sans risque : l'appel est déjà en flux, donc un plafond
+ *  élevé ne se paie pas en délai d'attente HTTP, et rien n'est facturé qui ne
+ *  soit produit. Haiku 4.5 garde le sien : sa réflexion est bornée séparément
+ *  (`budget_tokens`, voir `tuningFor`), donc le problème ne s'y pose pas. */
+const MAX_TOKENS_THINKING = 64_000;
+
+function maxTokensFor(model: ModelId): number {
+  return model === MODELS.haiku ? MAX_TOKENS : MAX_TOKENS_THINKING;
+}
+
 // ─── Le modèle, par passe ────────────────────────────────────────────────────
 //
 // Il était en dur (`claude-opus-5`) sur les trois passes. Deux raisons de le
@@ -78,6 +97,33 @@ const MAX_TOKENS = 32_000;
 //
 // Méthode arrêtée avec Alexis : Haiku 4.5 partout, on ne monte en gamme que là
 // où il se révèle insuffisant.
+//
+// ─── Il s'est révélé insuffisant sur le programme (30/08/2026) ───────────────
+//
+// Le même cours passé deux fois a donné 125 notions d'un côté et 209 de l'autre.
+// L'écart lui-même n'est pas le problème — c'est un découpage deux fois plus
+// fin, pas du contenu inventé. Ce qui l'est : les doublons littéraux restés
+// dans un atelier alors que la consigne demande explicitement de comparer les
+// FAITS et non les phrases, les notions que le rangement laisse de côté sans
+// rien en dire, et une granularité qui dérive jusqu'au détail sans intérêt.
+// Trois défaillances de JUGEMENT, pas d'exécution.
+//
+// Les trois passes du programme montent donc sur Sonnet 5. Y compris les
+// chapitres, malgré leur air de simple mise en boîtes : c'est la décision la
+// plus structurante de la chaîne et elle ne coûte **qu'un appel** — le meilleur
+// rapport qualité/prix du pipeline (point 1 ci-dessus, appliqué pour de bon).
+//
+// Les deux passes de questions restent sur Haiku : c'est là que le volume de
+// sortie explose (point 2), et le résultat est jugé satisfaisant en l'état.
+//
+// Ordre de grandeur mesuré sur une génération complète : ~0,55 € en tout-Haiku,
+// ~0,80 € dans la répartition ci-dessous, ~1,10 € en tout-Sonnet, ~2,80 € en
+// tout-Opus. À ce niveau, le modèle se choisit sur la qualité ; la question du
+// coût se rouvrira quand il y aura des utilisateurs.
+//
+// ⚠️ **Un seul changement à la fois.** La consigne d'extraction n'est pas
+// retouchée en même temps, exprès : sans ça, on ne saurait pas à quoi
+// attribuer la différence au prochain test.
 
 export const MODELS = {
   haiku: 'claude-haiku-4-5',
@@ -125,17 +171,18 @@ const WORKSHOP_CONTEXT_RESERVE = 100_000;
  *  d'un coup. La passe notions travaille document par document, la fenêtre s'y
  *  applique par document ; les passes suivantes ne reçoivent aucun document. Le
  *  jour où le découpage séquentiel du cours existera, ce plafond tombera. */
-export const MAX_CORPUS_TOKENS = 1_000_000 - MAX_TOKENS - WORKSHOP_CONTEXT_RESERVE;
+export const MAX_CORPUS_TOKENS = 1_000_000 - MAX_TOKENS_THINKING - WORKSHOP_CONTEXT_RESERVE;
 
-/** Le modèle voulu pour chaque passe. Haiku 4.5 partout : c'est l'hypothèse à
- *  tester, pas une conclusion (§16.20). */
+/** Le modèle voulu pour chaque passe : Sonnet 5 sur le programme, Haiku 4.5 sur
+ *  les questions (voir le bloc ci-dessus pour le pourquoi et les coûts). */
 export const PASS_MODELS: Record<IngestScope['pass'], ModelId> = {
-  chapters: MODELS.haiku,
-  notions: MODELS.haiku,
-  // Le rangement est la tâche la plus mécanique du pipeline — croiser une page
-  // et une liste de chapitres — et la plus répétée. C'est exactement le profil
-  // du modèle économique (§16.4).
-  assign: MODELS.haiku,
+  chapters: MODELS.sonnet,
+  notions: MODELS.sonnet,
+  // Le rangement passait pour la tâche la plus mécanique du pipeline — croiser
+  // une page et une liste de chapitres. À l'usage, c'en est une de jugement :
+  // une notion que le modèle ne sait pas placer reste sans chapitre pour
+  // toujours, personne ne la réexamine, et rien ne le signale. D'où Sonnet.
+  assign: MODELS.sonnet,
   questions: MODELS.haiku,
   exam: MODELS.haiku,
 };
@@ -446,11 +493,24 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
         ...(cacheable && i === sent.length - 1 ? { cache_control: { type: 'ephemeral' as const } } : {}),
       }));
 
-      content.push({ type: 'text', text: existingContentBlock(existing, existingScopeFor(scope)) });
+      // ⚠️ **Un bloc de texte VIDE fait échouer l'appel entier**, avec un 400
+      // « text content blocks must be non-empty » que rien ne rattrape — l'API
+      // les refuse, elle ne les ignore pas. Le cas n'est pas théorique : la passe
+      // RANGEMENT n'a par construction rien à mettre dans le bloc « ce qui
+      // existe déjà » (ses notions et ses chapitres voyagent dans sa consigne,
+      // les répéter doublerait la facture), si bien qu'elle échouait à tous les
+      // coups — donc tout import qui range des notions (29/08/2026).
+      //
+      // Le filtre est posé ici, à l'endroit où les blocs sont assemblés, et non
+      // dans `existingContentBlock` : c'est la liste envoyée qui doit être
+      // valide, quelle que soit la raison pour laquelle un bloc est vide.
+      const existingBlock = existingContentBlock(existing, existingScopeFor(scope));
+      if (existingBlock.trim()) content.push({ type: 'text', text: existingBlock });
       // ⚠️ La consigne de l'utilisateur est collée en tête de l'instruction, donc
       // APRÈS le marqueur de cache : elle varie d'un import à l'autre et n'a
       // rien à faire dans le préfixe stable (voir l'en-tête de `prompt.ts`).
-      content.push({ type: 'text', text: userHintBlock(opts.userHint) + instructionFor(scope, sent.map((doc) => doc.fileName)) });
+      const instructionBlock = userHintBlock(opts.userHint) + instructionFor(scope, sent.map((doc) => doc.fileName));
+      if (instructionBlock.trim()) content.push({ type: 'text', text: instructionBlock });
 
       const wanted = wantedFor(scope.pass);
       // Taille connue : on tranche sans appeler (fonction pure, gratuite).
@@ -476,7 +536,7 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
         const tuning = tuningFor(id);
         return client.beta.messages.stream({
           model: id,
-          max_tokens: MAX_TOKENS,
+          max_tokens: maxTokensFor(id),
           betas: [FILES_BETA],
           system: [{ type: 'text', text: systemPrompt() }],
           thinking: tuning.thinking,
@@ -523,6 +583,9 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
         // Volontairement NON validé ici : `parsePlan` est le contrôle à la
         // réception, et il doit voir la sortie telle qu'elle est arrivée.
         plan: safeJson(text),
+        // Même mesure que chez DeepSeek : une réponse arrêtée par le plafond de
+        // sortie rend un JSON incomplet, donc perdu. On le dit.
+        truncated: message.stop_reason === 'max_tokens',
         usage: {
           inputTokens: message.usage.input_tokens ?? 0,
           outputTokens: message.usage.output_tokens ?? 0,

@@ -446,7 +446,15 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
           quoi créer. Les filtres actifs ne sont pas repris ici non plus : ils se
           lisent et se règlent dans leur panneau, d'où le compteur porté par le
           bouton « filtres ». */}
-      {workshopId && <ImportBanner workshopId={workshopId} onCancelled={() => window.location.reload()} />}
+      {/* Le bandeau n'annonce que ce que CETTE liste a reçu : la banque d'examen
+          ne parle pas des questions du parcours, et réciproquement. */}
+      {workshopId && (
+        <ImportBanner
+          workshopId={workshopId}
+          scope={aiContext === 'exam' ? 'exam' : 'programme'}
+          onCancelled={() => window.location.reload()}
+        />
+      )}
 
       {/* Le choix « par IA / manuellement ». Une modale plutôt qu'un menu ancré :
           le bouton est rendu par `ListToolbar`, qui n'expose pas son nœud — et

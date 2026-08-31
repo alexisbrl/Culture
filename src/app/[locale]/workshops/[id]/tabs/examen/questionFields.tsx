@@ -59,7 +59,7 @@ export function emptyPart(): QuestionPart {
     id: crypto.randomUUID(),
     content: '', responseType: 'qcm', answer: '', choices: ['', ''], correctChoices: [],
     shuffleChoices: false, textLines: 4, typeOptions: {}, expectations: '',
-    bloomLevel: DEFAULT_BLOOM_LEVEL, notionIds: [],
+    notionIds: [], notionBloom: {},
   };
 }
 
@@ -80,8 +80,10 @@ export type QuestionFieldValues = {
   textLines?: number;
   typeOptions?: QuestionTypeOptions;
   expectations?: string;
-  bloomLevel: BloomLevel;
   notionIds: string[];
+  /** Niveau de Bloom par notion — c'est LUI que pilotent les pastilles, et
+   *  c'est le seul niveau qui existe : un énoncé n'en a pas à lui. */
+  notionBloom: Record<string, BloomLevel>;
 };
 
 type Props = {
@@ -190,15 +192,31 @@ export function QuestionFields({
     />
   ) : null;
   function toggleNotion(id: string) {
-    patch({ notionIds: values.notionIds.includes(id) ? values.notionIds.filter(n => n !== id) : [...values.notionIds, id] });
+    const removing = values.notionIds.includes(id);
+    // Le niveau d'une notion retirée s'en va avec elle : le garder ressusciterait
+    // un réglage invisible si on la remettait plus tard. Une notion ajoutée
+    // arrive au niveau par défaut — jamais sans niveau.
+    const notionBloom = { ...values.notionBloom };
+    if (removing) delete notionBloom[id];
+    else notionBloom[id] = DEFAULT_BLOOM_LEVEL;
+    patch({
+      notionIds: removing ? values.notionIds.filter(n => n !== id) : [...values.notionIds, id],
+      notionBloom,
+    });
   }
-  /** Un seul niveau de Bloom par énoncé dans le modèle : la pastille portée par
-   *  chaque notion pilote donc le niveau de CET énoncé — question principale ou
-   *  question liée, chacune a le sien (la maquette en prévoit un par notion —
-   *  divergence assumée, voir docs/backlog.md). */
-  function cycleBloom() {
-    const i = BLOOM_LEVELS.indexOf(values.bloomLevel);
-    patch({ bloomLevel: BLOOM_LEVELS[(i + 1) % BLOOM_LEVELS.length] as BloomLevel });
+  const bloomOf = (notionId: string): BloomLevel => values.notionBloom[notionId] ?? DEFAULT_BLOOM_LEVEL;
+  /** ⚠️ **Le niveau appartient au couple énoncé ↔ notion**, pas à l'énoncé
+   *  (28/08/2026). Jusque-là les pastilles lisaient et écrivaient toutes le
+   *  même niveau : en changer une les changeait toutes, alors qu'une question
+   *  peut faire restituer une notion et en faire analyser une autre.
+   *
+   *  L'énoncé n'a plus de niveau du tout depuis cette date : il n'en restait
+   *  qu'un défaut invisible, qui faisait deux sources pour une seule
+   *  information. */
+  function cycleBloom(notionId: string) {
+    const i = BLOOM_LEVELS.indexOf(bloomOf(notionId));
+    const next = BLOOM_LEVELS[(i + 1) % BLOOM_LEVELS.length] as BloomLevel;
+    patch({ notionBloom: { ...values.notionBloom, [notionId]: next } });
   }
 
   /** Ce qui est déjà saisi suit le changement de type. Un même contenu porte le
@@ -892,10 +910,10 @@ export function QuestionFields({
                   <Tooltip content={t('editor.bloomLabel')}>
                     <button
                       type="button"
-                      onClick={cycleBloom}
+                      onClick={() => cycleBloom(nid)}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: palette.green, background: withAlpha(palette.green, 0.14), border: 'none', borderRadius: 999, padding: '3px 10px', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit' }}
                     >
-                      {t(`bloom.${values.bloomLevel}`)}
+                      {t(`bloom.${bloomOf(nid)}`)}
                       <ChevronDown size={10} strokeWidth={2.2} style={{ opacity: 0.65 }} />
                     </button>
                   </Tooltip>

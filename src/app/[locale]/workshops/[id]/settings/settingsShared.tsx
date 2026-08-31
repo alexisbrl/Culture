@@ -6,6 +6,7 @@
 import { palette, withAlpha, shadow } from '@/lib/theme';
 import { FileText, LayoutGrid, Music, SlidersHorizontal, Star, Users, type LucideIcon, File as FileIcon } from 'lucide-react';
 import type { FileCategory } from '@/app/actions/workshopFiles';
+import type { NavSection } from './sections';
 
 export type WorkshopRole = 'owner' | 'manager' | 'member';
 
@@ -19,7 +20,9 @@ export type Member = {
   groupIds: string[];
 };
 
-export type NavSection = 'general' | 'members' | 'notions' | 'files' | 'premium';
+// La liste des onglets vit dans `./sections` (module non-client, lisible par la
+// page serveur) ; ici on ne fait que lui accrocher son icône.
+export type { NavSection } from './sections';
 
 export const NAV_ITEMS: { id: NavSection; icon: LucideIcon }[] = [
   { id: 'general', icon: SlidersHorizontal },

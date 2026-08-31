@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useTranslations } from 'next-intl';
-import { Sparkles, AlertTriangle, Check } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
+import { Sparkles, AlertTriangle, Check, ExternalLink, X } from 'lucide-react';
 
 import Modal from '@/components/Modal';
 import { ProgressBar } from '@/components/ui/progress-bar';
@@ -10,12 +10,16 @@ import { ink, palette, radius } from '@/lib/theme';
 import { INGEST_CONCURRENCY, QUESTIONS_CONCURRENCY, mapWithConcurrency } from '@/lib/ingest/concurrency';
 import {
   DEFAULT_EXAM_QUESTIONS,
+  EXAM_QUESTIONS_PER_CALL,
   EXAM_QUESTIONS_RANGE,
   MAX_QUESTIONS_PER_IMPORT as MAX_QUESTIONS,
 } from '@/lib/ingest/prompt';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import {
+  beatWorkshopImport,
+  cancelWorkshopImport,
+  closeWorkshopImport,
   finishWorkshopIngestion,
   ingestDocumentNotions,
   ingestParcoursQuestions,
@@ -50,6 +54,16 @@ import {
 // **Grouper par étage reste impératif** : le cache de prompt est propre à
 // chaque schéma de sortie, donc alterner les étages le ferait manquer à chaque
 // fois — sur douze chapitres, ~3 $ contre ~11 $ (mesuré, §5.2).
+
+/** Rythme du signe de vie envoyé pendant une génération.
+ *
+ *  ⚠️ **À tenir sous `LIVE_TIMEOUT_MS` (@/lib/ingest/lock), avec de la marge** :
+ *  le serveur oublie un lot qui n'a plus battu depuis deux minutes. Trente
+ *  secondes laissent passer trois battements manqués — le temps qu'un réseau
+ *  hésitant se reprenne — avant que le verrou ne se relâche pour de bon. La
+ *  constante est redéclarée ici plutôt qu'importée : `lock.ts` ouvre un client
+ *  Supabase de service, qui n'a rien à faire dans un composant client. */
+const LIVE_BEAT_MS = 30_000;
 
 /** Ce que l'API accepte aujourd'hui (§6). Les autres formats restent visibles
  *  mais non sélectionnables : mieux vaut le dire à la sélection qu'échouer au
@@ -118,6 +132,7 @@ type Props = {
 
 export default function AiGenerationDialog({ workshopId, files, forcedContext = null, onClose, onDone }: Props) {
   const t = useTranslations('ai');
+  const locale = useLocale();
 
   // ─── Les documents ne se choisissent plus, et ne s'affichent plus ────────
   //
@@ -137,9 +152,22 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // exposé le temps de comparer Claude et DeepSeek sur un vrai corpus ; il n'a
   // pas vocation à rester un choix d'utilisateur. Seule cette passe est
   // concernée : elle ne reçoit aucun document (voir `providers/deepseek.ts`).
-  const [questionsProvider, setQuestionsProvider] = useState<'claude' | 'deepseek'>('claude');
+  //
+  // **DeepSeek d'office** depuis le 30/08/2026 : c'est le fournisseur des
+  // questions partout ailleurs (recharge automatique, et le chat quand il
+  // existera, qui ne proposera aucun choix). Ce dialogue est le seul endroit
+  // d'où l'on peut encore demander Claude, et c'est alors un geste délibéré.
+  const [questionsProvider, setQuestionsProvider] = useState<'claude' | 'deepseek'>('deepseek');
   const [hint, setHint] = useState('');
   const [phase, setPhase] = useState<Phase>({ step: 'select' });
+  // ─── L'arrêt, et pourquoi il tient dans des refs ────────────────────────
+  //
+  // L'enchaînement des passes vit dans une fonction async : elle ne relèverait
+  // jamais un changement d'état, qu'elle a capturé à son premier tour. Le drapeau
+  // d'arrêt et le numéro de lot passent donc par des refs, lues à chaque étage.
+  const stopped = useRef(false);
+  const importIdRef = useRef<string | null>(null);
+  const [stopAsk, setStopAsk] = useState(false);
   const [counts, setCounts] = useState({ chapters: 0, notions: 0, questions: 0 });
   const [issues, setIssues] = useState<{ discarded: PlanIssue[]; adjusted: PlanIssue[] }>({ discarded: [], adjusted: [] });
 
@@ -209,7 +237,16 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       hint: hint.trim(),
       questionsProvider,
     });
-    if (!prepared.ok) return setPhase({ step: 'error', message: prepared.error });
+    // Une génération tourne déjà sur cet atelier, dans un autre onglet : le
+    // serveur a refusé avant le moindre téléversement. Le message affiché est le
+    // nôtre — le refus, lui, ne voyage que sous forme de mot-clé.
+    if (!prepared.ok) {
+      return setPhase({ step: 'error', message: prepared.reason === 'busy' ? t('busy') : prepared.error });
+    }
+    // Retenu tout de suite : c'est ce numéro que l'arrêt devra défaire, même si
+    // l'utilisateur ferme au tout premier étage.
+    importIdRef.current = prepared.importId;
+    if (stopped.current) return;
     await generate(prepared.importId, prepared.documents);
   }
 
@@ -259,6 +296,9 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // appels ne partagent aucun préfixe — le corpus part une seule fois au
     // total, ce qui est moins cher que l'écriture de cache qu'on remplace. Tout
     // peut donc partir ensemble.
+    // Chaque étage se demande d'abord s'il a encore lieu d'être : l'arrêt ne
+    // coupe pas un appel en vol, il empêche le suivant de partir.
+    if (stopped.current) return;
     if (withNotions && documents > 0) {
       let error: string | null = null;
       const showNotions = (done: number) => setPhase({
@@ -273,6 +313,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         Array.from({ length: documents }, (_, i) => i),
         INGEST_CONCURRENCY,
         async (index) => {
+          if (stopped.current) return;
           const result = await ingestDocumentNotions(workshopId, importId, index);
           if (!result.ok) { error ??= result.error; return; }
           discarded.push(...result.discarded);
@@ -295,6 +336,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // Décoché, on garde le programme tel quel : les notions qui viennent d'être
     // créées restent sans chapitre, consultables, et un import ultérieur pourra
     // les ranger.
+    if (stopped.current) return;
     if (withChapters) {
       setPhase({ step: 'running', label: t('progress.chapters'), done: stepAt('chapters'), total: totalSteps });
       const structure = await ingestWorkshopChapters(workshopId, importId);
@@ -312,6 +354,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // vient chaque notion et les pages que couvre chaque chapitre. C'est aussi
     // ici que les ressemblances repérées mécaniquement sont soumises au
     // jugement du modèle — le calcul signale, le modèle tranche.
+    if (stopped.current) return;
     if (withAssign) {
       let error: string | null = null;
       const showAssign = (done: number, total: number) => setPhase({
@@ -334,6 +377,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         const rest = Array.from({ length: first.batches - 1 }, (_, i) => i + 1);
         let done = 1;
         await mapWithConcurrency(rest, INGEST_CONCURRENCY, async (index) => {
+          if (stopped.current) return;
           const result = await ingestWorkshopAssignments(workshopId, importId, index);
           if (!result.ok) { error ??= result.error; return; }
           discarded.push(...result.discarded);
@@ -381,12 +425,13 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         total: totalSteps,
       });
 
-      const runSlice = async (sliceIndex: number, target?: number) => {
+      const runSlice = async (sliceIndex: number, target?: number, budget?: number) => {
+        if (stopped.current) return null;
         // Même raison que pour le parcours : le serveur ne voit qu'un appel à la
         // fois, seul le client sait combien il en a en vol.
         const remaining = MAX_QUESTIONS - tally.questions;
         if (remaining <= 0) return null;
-        const share = target ?? Math.max(1, Math.floor(remaining / QUESTIONS_CONCURRENCY));
+        const share = budget ?? target ?? Math.max(1, Math.floor(remaining / QUESTIONS_CONCURRENCY));
         const result = await ingestWorkshopExamQuestions(workshopId, importId, sliceIndex, share, target);
         doneCalls += 1;
         if (!result.ok) { error ??= result.error; showExam(); return null; }
@@ -419,25 +464,37 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       // ─── Le rattrapage ────────────────────────────────────────────────────
       //
       // Une question écartée — parce qu'elle redisait une question
-      // d'entraînement, ou parce que le modèle en a rendu moins que demandé —
-      // laisserait l'examen court sans que personne ne l'ait voulu. On redemande
-      // le MANQUE, une seule fois : le second passage ne voit pas le premier
-      // mais relit la banque, donc il ne réécrit pas ce qui vient d'être écrit.
+      // d'entraînement, parce que le modèle en a rendu moins que demandé, ou
+      // parce que sa réponse a été coupée — laisserait l'examen court sans que
+      // personne ne l'ait voulu. On redemande le MANQUE : chaque passage relit
+      // la banque, donc il ne réécrit pas ce qui vient d'être écrit.
       //
-      // Une seule tentative, et c'est délibéré : chaque passage coûte un appel,
-      // et un atelier dont le programme ne porte pas quarante questions ne les
-      // portera pas davantage au troisième essai.
-      const short = Math.min(examCount, MAX_QUESTIONS) - tally.questions;
-      if (short > 0) {
-        totalCalls += 1;
+      // ⚠️ **Autant d'appels que le manque en exige**, et non un seul
+      // (28/08/2026). Un appel n'écrit qu'une part du total — dix questions, la
+      // taille d'un appel — si bien qu'un rattrapage unique plafonnait à un
+      // dixième : sur quarante demandées dont vingt manquantes, il n'en rendait
+      // jamais plus de dix.
+      //
+      // Deux tours au maximum : un atelier dont le programme ne porte pas
+      // quarante questions ne les portera pas davantage au troisième, et chaque
+      // tour coûte des appels.
+      for (let round = 0; round < 2; round += 1) {
+        const short = Math.min(examCount, MAX_QUESTIONS) - tally.questions;
+        if (short <= 0) break;
+
+        const calls = Math.max(1, Math.ceil(short / EXAM_QUESTIONS_PER_CALL));
+        totalCalls += calls;
         showExam();
-        await runSlice(0, short);
+        await mapWithConcurrency(
+          Array.from({ length: calls }, (_, i) => i),
+          QUESTIONS_CONCURRENCY,
+          (sliceIndex) => runSlice(sliceIndex, short, Math.ceil(short / calls)),
+        );
         if (error) return setPhase({ step: 'error', message: error });
       }
 
       setIssues({ discarded, adjusted });
       setPhase({ step: 'done' });
-      onDone?.();
       return;
     }
 
@@ -482,6 +539,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       });
 
       const runBatch = async (job: { chapter: (typeof chapters)[number]; batchIndex: number }) => {
+        if (stopped.current) return null;
         // ⚠️ **La part du plafond est calculée ici, pas côté serveur.** Le serveur
         // ne voit qu'un appel à la fois : quatre appels concurrents liraient tous
         // le même compteur de questions écrites et se croiraient chacun seuls,
@@ -519,21 +577,185 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       if (error) return setPhase({ step: 'error', message: error });
     }
 
+    // Un arrêt n'est pas une fin : le compte-rendu décrirait un travail que
+    // l'utilisateur vient justement de faire défaire.
+    if (stopped.current) return;
     setIssues({ discarded, adjusted });
     setPhase({ step: 'done' });
-    onDone?.();
+  }
+
+  // ─── Le signe de vie, et ce qu'il tient ──────────────────────────────────
+  //
+  // Tant que cet onglet enchaîne les passes, il le dit au serveur toutes les
+  // 30 s. C'est ce battement qui interdit une seconde génération sur le MÊME
+  // atelier — deux enchaînements y réécrivent les mêmes chapitres et les mêmes
+  // notions (voir @/lib/ingest/lock). Sur deux ateliers différents, rien n'est
+  // bloqué : il n'y a là aucune écriture partagée.
+  //
+  // Le verrou s'oublie de lui-même s'il cesse de battre : un onglet fermé
+  // brutalement ne condamne pas l'atelier, il le libère au bout de deux minutes.
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => {
+      const importId = importIdRef.current;
+      if (importId) void beatWorkshopImport(workshopId, importId);
+    }, LIVE_BEAT_MS);
+    return () => clearInterval(id);
+  }, [running, workshopId]);
+
+  // Fin de partie — terminé ou en panne : le lot se referme tout de suite, sans
+  // attendre l'expiration du battement. Un seul endroit pour toutes les sorties,
+  // l'enchaînement pouvant s'arrêter en erreur à n'importe lequel de ses étages.
+  // (L'arrêt volontaire, lui, passe par l'annulation, qui referme aussi.)
+  useEffect(() => {
+    if (phase.step !== 'done' && phase.step !== 'error') return;
+    const importId = importIdRef.current;
+    if (importId) void closeWorkshopImport(workshopId, importId);
+  }, [phase.step, workshopId]);
+
+  // ─── Quitter la PAGE pendant une génération ──────────────────────────────
+  //
+  // La croix et la touche Échap passent par 'requestClose', qui demande
+  // confirmation. Restaient les sorties que la fenêtre ne voit pas : rafraîchir,
+  // fermer l'onglet, revenir en arrière. Un appui distrait sur F5 interrompait
+  // l'enchaînement sans un mot.
+  //
+  // ⚠️ **Le navigateur n'affiche pas notre texte.** Les navigateurs ignorent
+  // depuis longtemps le message fourni par le site — ils montrent leur propre
+  // formulation (« Quitter le site ? ») avec leurs propres boutons, et on ne
+  // peut ni la choisir ni y ajouter le nôtre. C'est une protection contre les
+  // pages qui retenaient leurs visiteurs de force. Tout ce qu'on peut faire,
+  // c'est déclencher cette demande — ce que fait 'preventDefault', et ce que
+  // fait n'importe quel site à notre place.
+  //
+  // Limite connue : un retour arrière traité par le routeur sans recharger la
+  // page ne déclenche pas cet événement. Rien de dramatique — les questions sont
+  // écrites au fur et à mesure et le lot reste annulable par le bandeau.
+  useEffect(() => {
+    if (!running) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Exigé par les navigateurs anciens, ignoré par les autres : la chaîne
+      // elle-même n'est jamais affichée.
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [running]);
+
+  // ─── La sortie, et ce qu'elle coûte selon le moment ──────────────────────
+  //
+  // Hors génération, la croix ferme, point. Pendant, elle DEMANDE d'abord : une
+  // génération interrompue laisse un atelier à moitié rempli, ce que personne
+  // ne veut déclencher d'un appui distrait (28/08/2026).
+  // ─── Le rafraîchissement a lieu à la FERMETURE, pas à la fin ─────────────
+  //
+  // ⚠️ **Deux raisons, et la première était un bug** (30/08/2026).
+  //
+  // `onDone` partait juste après `setPhase({ step: 'done' })`, et les trois
+  // écrans qui l'utilisent rechargent la page. Or un état React ne s'applique
+  // pas dans l'instant : au moment de l'appel, le rendu affichait encore
+  // « en cours », donc l'écouteur `beforeunload` posé plus haut était TOUJOURS
+  // en place. Le rechargement déclenchait alors la demande « Quitter le site ? »
+  // du navigateur — et il suffisait de ne pas la confirmer pour que l'écran ne
+  // se rafraîchisse jamais. C'est ce qui a fait croire qu'une génération
+  // n'avait rien changé alors qu'elle avait rangé un chapitre et déplacé des
+  // notions.
+  //
+  // La seconde raison tient toute seule : recharger à l'instant où le
+  // compte-rendu s'affiche emporte le compte-rendu avec lui. On le laisse donc
+  // se lire, et c'est la fermeture — le moment où l'on revient à l'écran — qui
+  // le rafraîchit. À ce moment-là, `running` est faux depuis longtemps et
+  // l'écouteur a été retiré.
+  //
+  // La condition porte sur le lot, pas sur l'étape : une génération arrêtée ou
+  // en erreur a pu écrire, elle aussi. Fermer sans avoir rien lancé ne
+  // recharge rien.
+  function requestClose() {
+    if (running) return setStopAsk(true);
+    if (importIdRef.current) onDone?.();
+    onClose();
+  }
+
+  /** Arrête l'enchaînement, **rend la main tout de suite**, et défait le reste
+   *  côté serveur.
+   *
+   *  ⚠️ **Plus aucune attente ici, et c'est ce qui rend l'annulation fiable**
+   *  (29/08/2026). Elle attendait jusqu'ici que les appels déjà en vol retombent,
+   *  faute de quoi un retardataire réécrivait ce qu'on venait d'effacer : une
+   *  minute d'attente, portée par la page — donc perdue si l'utilisateur
+   *  naviguait ailleurs, et l'import restait alors en place.
+   *
+   *  Le retrait ferme désormais le lot AVANT d'effacer, et un lot fermé
+   *  n'accepte plus rien (voir `assertImportOpen`, @/lib/ingest/lock) : les
+   *  retardataires se refusent d'eux-mêmes. Une fois l'appel parti, il se termine
+   *  côté serveur quoi que fasse l'utilisateur — y compris fermer l'onglet.
+   *
+   *  L'enchaînement, lui, s'arrête par le drapeau : ce qui est déjà parti finit
+   *  sa course, mais n'écrit plus rien. */
+  function confirmStop() {
+    stopped.current = true;
+    const importId = importIdRef.current;
+    onClose();
+
+    if (!importId) return;
+    void (async () => {
+      await cancelWorkshopImport(workshopId, importId).catch(() => {});
+      // L'écran se rafraîchit une fois le ménage fait : ce qui a clignoté pendant
+      // la génération disparaît, sans que personne ait attendu devant.
+      onDone?.();
+    })();
   }
 
   return (
-    <Modal onClose={running ? undefined : onClose} width={520} portal>
+    <Modal onClose={requestClose} width={520} portal>
       <div style={{ textAlign: 'left' }}>
+        {/* La croix : une sortie visible, au même endroit à chaque étape. Sans
+            elle, la seule façon de quitter une génération était de fermer
+            l'onglet. */}
+        <button
+          type="button"
+          onClick={requestClose}
+          aria-label={t(running ? 'stop.aria' : 'close')}
+          style={{
+            position: 'absolute', top: 12, right: 12, display: 'flex',
+            padding: 6, borderRadius: radius.md, border: 'none',
+            background: 'transparent', color: palette.inkFaint, cursor: 'pointer',
+          }}
+        >
+          <X size={17} />
+        </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <Sparkles size={18} color={palette.green} />
           <h2 style={{ fontSize: 17, fontWeight: 600, color: palette.ink, margin: 0 }}>{t('title')}</h2>
         </div>
         <p style={{ fontSize: 13, color: palette.inkSoft, margin: '0 0 18px' }}>{t('subtitle')}</p>
 
-        {phase.step === 'select' && (
+        {/* La demande d'arrêt prend toute la place : on ne fait pas cohabiter une
+            question grave avec une barre de progression qui continue d'avancer. */}
+        {stopAsk && (
+          <div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <AlertTriangle size={17} color={palette.amber} style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <strong style={{ fontSize: 14, color: palette.ink }}>{t('stop.title')}</strong>
+                <p style={{ fontSize: 13, color: palette.inkMuted, margin: '6px 0 0' }}>{t('stop.body')}</p>
+              </div>
+            </div>
+            {/* ⚠️ **Les couleurs disent laquelle des deux est sans retour.**
+                Le vert allait à « arrêter et défaire » — la seule action de tout
+                le dialogue qui détruise quelque chose — et le gris à « continuer ».
+                Le rouge va donc à l'arrêt, le vert à la poursuite, et l'arrêt
+                passe à gauche : le geste par défaut (dernier bouton, celui qu'on
+                vise sans lire) est celui qui ne coûte rien (29/08/2026). */}
+            <Actions>
+              <Danger onClick={confirmStop}>{t('stop.confirm')}</Danger>
+              <Primary onClick={() => setStopAsk(false)}>{t('stop.keep')}</Primary>
+            </Actions>
+          </div>
+        )}
+
+        {!stopAsk && phase.step === 'select' && (
           <>
             {/* Ce que ce lancement va faire, dit d'une phrase. Il n'y a plus rien
                 à cocher, donc il faut le dire — sans quoi le même bouton ferait
@@ -645,12 +867,15 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             </div>
 
             <Actions>
-              <Ghost onClick={onClose}>{t('cancel')}</Ghost>
+              <Ghost onClick={requestClose}>{t('cancel')}</Ghost>
               {/* Deux blocages : tant que le programme n'est pas lu, on ne sait
                   pas encore quoi lancer — mieux vaut attendre une fraction de
                   seconde que partir sur la mauvaise voie ; et un atelier sans
                   document ET sans notion n'offre rien à quoi se raccrocher. */}
-              <Primary onClick={prepare} disabled={visibleNotions === null || nothingToDo}>
+              <Primary
+                onClick={() => { void prepare(); }}
+                disabled={visibleNotions === null || nothingToDo}
+              >
                 {t('generate')}
               </Primary>
             </Actions>
@@ -660,24 +885,26 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         {/* Téléversement des documents chez le fournisseur. L'étape enchaîne
             désormais seule sur la génération : l'écran de confirmation du coût
             qui s'intercalait ici a été retiré le 22/08/2026. */}
-        {phase.step === 'preparing' && (
+        {!stopAsk && phase.step === 'preparing' && (
           <div style={{ padding: '4px 0 8px' }}>
             <ProgressBar animated value={0} max={1} label={t('estimate.preparing')} />
             <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 14 }}>{t('estimate.preparingHint')}</p>
+            <SecondTab href={`/${locale}/dashboard`} label={t('newTab')} />
           </div>
         )}
 
-        {phase.step === 'running' && (
+        {!stopAsk && phase.step === 'running' && (
           <div style={{ padding: '4px 0 8px' }}>
             <ProgressBar animated value={phase.done} max={phase.total} label={phase.label} />
             <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 14 }}>{t('keepOpen')}</p>
             <p style={{ fontSize: 12.5, color: palette.inkFaint, marginTop: 6 }}>
               {t('runningCounts', { chapters: counts.chapters, notions: counts.notions, questions: counts.questions })}
             </p>
+            <SecondTab href={`/${locale}/dashboard`} label={t('newTab')} />
           </div>
         )}
 
-        {phase.step === 'done' && (
+        {!stopAsk && phase.step === 'done' && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
               <Check size={17} color={palette.green} />
@@ -689,12 +916,12 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             <IssueList heading={t('adjusted')} issues={issues.adjusted} tone="soft" />
             <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 12 }}>{t('cancellable')}</p>
             <Actions>
-              <Primary onClick={onClose}>{t('close')}</Primary>
+              <Primary onClick={requestClose}>{t('close')}</Primary>
             </Actions>
           </div>
         )}
 
-        {phase.step === 'error' && (
+        {!stopAsk && phase.step === 'error' && (
           <div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
               <AlertTriangle size={17} color={palette.amber} style={{ flexShrink: 0, marginTop: 1 }} />
@@ -702,7 +929,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             </div>
             <Actions>
               <Ghost onClick={() => setPhase({ step: 'select' })}>{t('retry')}</Ghost>
-              <Primary onClick={onClose}>{t('close')}</Primary>
+              <Primary onClick={requestClose}>{t('close')}</Primary>
             </Actions>
           </div>
         )}
@@ -727,12 +954,60 @@ function Actions({ children }: { children: React.ReactNode }) {
   return <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>{children}</div>;
 }
 
+/** La sortie de secours pendant une génération : un SECOND onglet.
+ *
+ *  L'enchaînement des passes vit dans cette page (voir l'en-tête du fichier) :
+ *  la quitter interrompt la génération, et c'est pour ça que le dialogue retient
+ *  celui qui la lance. Plutôt que de le laisser attendre devant une barre,
+ *  on lui ouvre l'app ailleurs — l'onglet qui travaille reste intact derrière,
+ *  et il fait ce qu'il veut du nouveau (29/08/2026).
+ *
+ *  Un vrai lien, pas un `window.open` : il survit aux bloqueurs de fenêtres,
+ *  s'ouvre au clic du milieu, et se copie. `noopener` est indispensable — sans
+ *  lui, la page ouverte peut atteindre l'onglet qui l'a ouverte, c'est-à-dire
+ *  précisément celui qu'on protège. */
+function SecondTab({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 14,
+        padding: '7px 12px', borderRadius: radius.md, border: `1px solid ${ink(0.12)}`,
+        fontSize: 12.5, fontWeight: 600, color: palette.inkMuted, textDecoration: 'none',
+      }}
+    >
+      <ExternalLink size={13} />
+      {label}
+    </a>
+  );
+}
+
 function Ghost({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
       style={{ padding: '8px 14px', borderRadius: radius.md, border: `1px solid ${ink(0.12)}`, background: 'transparent', fontSize: 13.5, color: palette.inkMuted, cursor: 'pointer' }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** L'action qui détruit — cerclée de rouge, pas remplie : deux aplats côte à
+ *  côte se disputeraient le regard, alors qu'un seul des deux boutons doit
+ *  attirer le clic distrait, et ce n'est pas celui-ci. */
+function Danger({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '8px 14px', borderRadius: radius.md, border: `1px solid ${palette.danger}`,
+        background: 'transparent', fontSize: 13.5, fontWeight: 600, color: palette.danger, cursor: 'pointer',
+      }}
     >
       {children}
     </button>

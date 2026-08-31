@@ -598,3 +598,25 @@
   .tree-sway { animation: none; }
 }
 
+
+/* ─── Panneaux qui se cliquent, pas qui se lisent ─────────────────────────────
+   Un panneau de filtres se manipule au clic répété : on coche, on décoche, on
+   recoche. Au troisième aller-retour, le navigateur y voit un double-clic et
+   surligne le libellé sous le curseur — un bleu de sélection en travers d'une
+   liste de critères, qu'il faut ensuite cliquer ailleurs pour faire partir
+   (signalé le 29/08/2026).
+
+   La règle ne s'applique qu'aux panneaux, jamais aux listes : ce qui est là pour
+   être LU (un énoncé de question, un nom de chapitre) doit rester copiable.
+   Les champs de saisie sont rétablis explicitement — `user-select: none` hérité
+   les rend inéditables au clavier sur certains navigateurs. */
+.pointer-panel {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.pointer-panel input,
+.pointer-panel textarea,
+.pointer-panel [contenteditable='true'] {
+  user-select: text;
+  -webkit-user-select: text;
+}

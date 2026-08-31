@@ -16,7 +16,6 @@ import { LabelPill, LabelPicker, SelectMenu } from './examen/examShared';
 // pas des types d'UI. Ré-exportés ici pour ne pas casser les nombreux imports
 // existants (`from './QuestionEditor'`) dans le reste de l'onglet examen.
 import type { ResponseType, QuestionPart, Question, BloomLevel } from '@/lib/workshops/examTypes';
-import { BLOOM_LEVELS, DEFAULT_BLOOM_LEVEL } from '@/lib/workshops/examTypes';
 export type { ResponseType, QuestionPart, Question, BloomLevel };
 
 // Constantes de types de réponse, briques de formulaire et corps d'édition
@@ -58,10 +57,8 @@ export function emptyQuestion(): Question {
     parts: [],
     examIds: [],
     textLines: 4,
-    // Le niveau de Bloom est obligatoire : toute nouvelle question naît au
-    // niveau 1, et l'UI ne permet pas de le dé-sélectionner.
-    bloomLevel: DEFAULT_BLOOM_LEVEL,
     notionIds: [],
+    notionBloom: {},
   };
 }
 
@@ -198,11 +195,8 @@ export default function QuestionEditor({
   onCancel: () => void;
 }) {
   const t = useTranslations('examen');
-  // Filet pour les questions créées avant l'ajout du champ : une question sans
-  // niveau ne doit jamais exister côté éditeur non plus.
   const [draft, setDraft] = useState<Question>({
     ...question,
-    bloomLevel: question.bloomLevel ?? DEFAULT_BLOOM_LEVEL,
     notionIds: question.notionIds ?? [],
   });
   // Le popup n'a pas l'interrupteur global de l'éditeur en ligne : les réglages
@@ -426,16 +420,9 @@ export default function QuestionEditor({
           {/* options avancées */}
           <SectionDivider title={t('editor.optionsDivider')} />
 
-          {/* niveau de Bloom — obligatoire : Segmented a toujours exactement une
-              option active, il n'existe donc pas d'état « aucun niveau » */}
-          <div style={{ marginBottom: 18 }}>
-            <FieldLabel hint={t('editor.bloomHint')}>{t('editor.bloomLabel')}</FieldLabel>
-            <Segmented<string>
-              value={String(draft.bloomLevel)}
-              onChange={(v) => patch({ bloomLevel: Number(v) as BloomLevel })}
-              options={BLOOM_LEVELS.map((level) => ({ value: String(level), label: `${level} · ${t(`bloom.${level}`)}` }))}
-            />
-          </div>
+          {/* Plus de sélecteur de niveau ici (28/08/2026) : le niveau appartient
+              au couple question ↔ notion, et se règle sur la pastille de chaque
+              notion, juste en dessous. */}
 
           {/* notions couvertes (toutes celles de l'atelier) */}
           <div style={{ marginBottom: 18 }}>

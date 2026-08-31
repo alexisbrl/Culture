@@ -248,6 +248,7 @@ Le niveau de maîtrise d'une notion par un utilisateur se mesure sur les niveaux
 - Gérés depuis Paramètres → Notions (création, renommage, réorganisation, suppression), réservés au propriétaire et aux gestionnaires
 - Supprimer un chapitre **ne supprime pas ses notions** : elles retombent dans « sans chapitre »
 - Un chapitre = un pot dans l'onglet Programme éducatif. Le nombre de pots suit donc directement le nombre de chapitres, et un atelier sans chapitre affiche un programme vide.
+- **Chapitre caché** (29/08/2026) : un import IA qui vide un chapitre l'écarte au lieu de le supprimer — c'est le seul geste qui pose cet état, l'interface n'offre pas de bouton « cacher ». Un chapitre caché **sort entièrement du parcours** : pas de pot, pas d'exercice (y compris par lien direct), aucun tirage, aucune recharge automatique, et ses notions ne comptent plus dans la barre d'avancement de l'atelier — comme les notions sans chapitre. **Côté gestion il reste entier** : visible sous les chapitres visibles dans Paramètres → Notions avec son bouton « restaurer » (unique geste humain sur cet état), et toujours proposé dans la liste des questions du parcours, pour qu'on puisse retrouver ses questions sans avoir à le restaurer d'abord.
 
 ### Programme éducatif
 
@@ -267,7 +268,7 @@ Un bouton « questions du parcours », en haut de l'onglet (gestionnaires unique
 
 Toute question — parcours **et** banque d'examen — porte :
 
-- un **niveau de Bloom visé, obligatoire** (`exam_questions.bloom_level`, 1 mémoriser → 6 créer). Garanti à trois niveaux : `not null default 1` + contrainte `check between 1 and 6` en base, type non optionnel côté TypeScript, et sélecteur segmenté toujours à une valeur active côté UI — il n'existe aucun état « sans niveau ». À ne pas confondre avec `brick_mastery.bloom_level`, qui mesure le niveau *atteint* par un candidat ; celui-ci est le niveau *visé* par la question.
+- un **niveau de Bloom visé par notion** (1 mémoriser → 4 analyser), porté par le lien question ↔ notion (`exam_question_item_bricks.bloom_level`) et **non par la question** depuis le 28/08/2026 : une même question peut faire *restituer* une notion de contexte et faire *analyser* celle qui est réellement en jeu. Un lien sans niveau se lit comme « mémoriser ». À ne pas confondre avec `brick_mastery.bloom_level`, qui mesure le niveau *atteint* par un candidat ; celui-ci est le niveau *visé*.
 - zéro à N **notions** (table de jonction `exam_question_bricks` — encore nommée `bricks` en base, voir `CLAUDE.md` §1 —, `on delete cascade` des deux côtés : supprimer une notion détache les questions, supprimer une question retire ses liens). Aucune restriction de chapitre — une question peut mobiliser des notions de plusieurs chapitres.
 
 Les deux se saisissent dans l'éditeur de question, section « Options par question ».
@@ -278,11 +279,76 @@ La **liste des questions du parcours** est celle de la banque d'examen (même co
 
 **Exercice (page candidat)**
 
-`/{locale}/workshops/{id}/exercise/{chapterId}`, ouverte par le bouton du pot et accessible à **tout membre**. Elle tire au hasard une question du chapitre, affiche l'énoncé et une zone de réponse, puis la correction après validation :
+`/{locale}/workshops/{id}/exercise/{chapterId}`, ouverte par le bouton du pot et accessible à **tout membre**. Elle enchaîne des questions choisies pour CE membre, affiche l'énoncé et une zone de réponse, puis la correction après validation :
 
 - **QCS / QCM** → choix cliquables, correction automatique (bonne/mauvaise réponse, bonnes options mises en évidence).
 - **Autres types de réponse** (texte, dessin, fichier…) → saisie libre, pas de verdict automatique : la validation affiche seulement la réponse attendue.
-- Après correction, « question suivante » retire du tirage celle qu'on vient de faire (sauf s'il n'en reste qu'une).
+
+**Une grappe se pose une question à la fois** *(règle arrêtée le 30/08/2026)*
+
+Une question qui porte des questions liées ne s'affiche plus en entier. Seule la **première** est posée ; on répond, on valide, **elle seule est corrigée**, et sa correction s'affiche. « Suivant » fait alors apparaître la deuxième **sous** la première, qui reste visible avec sa correction — jamais un écran vierge, jamais une correction qui disparaît. Ainsi de suite jusqu'au bout de la grappe, puis on passe à la question suivante de l'exercice.
+
+L'énoncé en cours est posé à même le fond, les énoncés déjà corrigés prennent une carte : c'est le repère « ce qui est fait / ce qui reste ». L'image et l'audio, communs à la grappe, restent affichés avec la question principale et ne sont jamais répétés.
+
+**Une question liée est une question entière.** Les questions d'une grappe sont **inséparables** — elles se tirent et se posent ensemble, jamais l'une sans les autres — mais aucune n'est un morceau d'une autre, la première comprise : elle compte dans le « question X sur N » comme les suivantes. Chacune vaut donc pour elle-même :
+
+- **sa goutte** — une bonne réponse, une goutte, quelle que soit sa place dans la grappe ;
+- **sa part du budget de Bloom** — la barre avance à chaque question validée, du coût de cette question-là. Le coût de la grappe ENTIÈRE est en revanche réservé dès le tirage : on doit savoir ce qu'elle vaut avant de l'engager, sinon on dépasserait les douze niveaux en cours de route ;
+- **son XP**, le jour où il existera (règle du 29/08/2026, rien n'est encore implémenté côté serveur) ;
+- **sa maîtrise** — les notions d'une question liée juste progressent même si la principale est ratée ;
+- **son rythme de réponse** — les trois secondes de la détection de réponses expédiées se comptent par question, jamais sur la grappe : cinq questions bâclées à la suite doivent se voir comme cinq fautes.
+
+Deux choses restent à l'échelle de la grappe, et pour la même raison — ses questions sont inséparables : la **trace « déjà posée »** (elle s'écrit dès la première question validée, la grappe est alors consommée, même si le membre s'arrête là) et le **tirage de la question suivante**, déclenché à la fin de la grappe et non à chacune de ses questions.
+
+**Ce que vaut un exercice : 12 niveaux de Bloom, pas 12 questions** *(règles arrêtées le 29/08/2026, implémentées dans `src/lib/workshops/parcoursDraw.ts`)*
+
+- Un **énoncé coûte le plus haut niveau qu'il demande** (le maximum sur ses notions) ; une **grappe coûte la somme de ses énoncés**, puisque tous sont posés (un à la fois depuis le 30/08/2026, mais toujours d'une seule traite). Un exercice, c'est donc douze énoncés « mémoriser », ou un « analyser » + deux « appliquer » + deux « mémoriser », ou cinq questions difficiles. La barre du haut avance en pourcentage du budget consommé, jamais en nombre de questions : personne ne sait d'avance combien il y en aura.
+- **Portée : jamais plus de deux niveaux au-dessus de ce qui est atteint.** Un membre qui a atteint le niveau N sur une notion travaille le N+1 ; on accepte donc jusqu'à N+2. La règle vaut pour **chaque notion de chaque énoncé** de la grappe — une seule notion hors de portée l'écarte entière. Exemple : sur une notion jamais travaillée (niveau 0), seules les questions « mémoriser » et « comprendre » sont tirables.
+- **Priorité à la notion la moins maîtrisée** du chapitre, tirage au hasard entre les candidats à égalité.
+- **Une question répondue ne revient jamais** (table `parcours_asked`). Une question **vue puis abandonnée reste disponible** : ne pas y répondre ne mesure rien, la brûler pour autant serait du gâchis (règle révisée le 29/08/2026 — l'enregistrement se fait à la correction, pas au tirage).
+- **La question suivante est tirée pendant la lecture de la correction**, jamais toutes au lancement : le choix tient compte de la progression qui vient d'avoir lieu, et le clic sur « question suivante » n'attend rien.
+- **Plus rien à poser → l'exercice s'arrête.** En cours d'exercice, l'écran de fin s'affiche normalement. Au lancement, deux impasses bien distinctes : un chapitre **sans aucune question** dit qu'un gestionnaire doit en créer ; un chapitre dont **rien n'est encore à portée** (ou dont tout a déjà été répondu) répond « rien à te proposer ici pour l'instant » — le membre n'y est pour rien et personne n'est mis en cause. Le second cas est une anomalie que la recharge automatique doit empêcher : elle est signalée côté serveur (voir `docs/backlog.md`), jamais à l'écran.
+- **XP** *(règle arrêtée le 29/08/2026, pas encore implémentée — aucun XP n'existe côté serveur)* : une question rapporte un XP proportionnel à son niveau de Bloom. Un « appliquer » (3) rapporte trois fois un « mémoriser » (1).
+- **Deux questions d'avance.** Au lancement, deux questions sont tirées : la première s'affiche, la seconde attend. À chaque validation, une de plus est tirée — le temps de lire la correction *puis* de traiter la question suivante suffit largement à la préparer. Un membre qui ne lit aucune correction n'attend donc jamais. Le budget est réservé au tirage et non à la réponse : deux questions d'avance ne peuvent pas faire dépasser les 12 niveaux.
+
+**Le radar et la recharge automatique** *(règles arrêtées le 29/08/2026 ; la mesure est implémentée — `parcours_radar` en base et `src/lib/workshops/parcoursRadar.ts` —, la génération reste à faire)*
+
+- **Un « couple » = une notion et un niveau de Bloom** (« la photosynthèse au niveau appliquer »). C'est l'unité de stock, parce que c'est l'unité de ce qu'on sait demander à l'IA.
+- **Le stock se compte membre par membre**, jamais pour l'atelier : « disponible » veut dire *jamais posée à CE membre* et *entièrement à sa portée*. Deux membres du même atelier n'ont donc pas le même stock devant eux.
+- **Une question ne compte pour un couple que si la grappe entière est à portée.** Une question qui vise « notion 1, niveau 2 » ne compte pas pour ce couple si elle mobilise par ailleurs une notion hors d'atteinte du membre : elle se tire en entier, donc elle est indisponible en entier. C'est ce point qui interdit de compter question par question.
+- **On ne compte qu'à la frontière** : les niveaux qu'il reste à conquérir sur chaque notion, du niveau atteint + 1 jusqu'à la portée (+ 2), plafonnés à 4. Un niveau déjà acquis n'a pas besoin d'être réapprovisionné.
+- **Déclenchement : un seul couple à 1 ou 0 question disponible suffit. La recharge remet alors TOUS les couples du chapitre à 4** — un déclenchement remet tout au propre, sinon on rechargerait un exercice sur deux.
+- **Le radar tourne au lancement d'un exercice, pour le membre qui le lance** (et sur son chapitre). Mesurer le membre le plus démuni de l'atelier remplirait le stock de quelqu'un d'autre et laisserait celui qui a la page ouverte sans question ; la recharge qu'il déclenche profite ensuite à tous, les questions créées étant neuves pour tout le monde. La base sait aussi balayer un atelier entier — ça servira le jour où l'on préparera le stock à l'avance plutôt qu'à l'ouverture d'un exercice.
+- **Ce que la recharge fait produire** : une question centrée sur le couple en manque. Les autres notions qu'elle mobilise restent déclarées honnêtement (on ne demande pas à l'IA de les cacher), mais **aucune à un niveau supérieur à celui de la notion principale** — sans quoi la question créée pour combler un manque serait elle-même indisponible. Si le modèle dépasse quand même le plafond, la question est **conservée** (c'est du contenu valide) : elle ne compte simplement pas pour le couple visé, et le radar redemandera. Aucune pression à mentir, aucun rejet.
+
+**Demander des questions à l'IA : une seule forme, trois façons de la remplir** *(arrêté le 29/08/2026)*
+
+Une demande est **une liste de couples (notion × niveau) avec un nombre pour chacun**. Ce qui change d'un cas à l'autre, ce n'est pas la demande, c'est qui la remplit :
+
+| Qui remplit | Quand | Ce qui est demandé |
+|---|---|---|
+| Le programme | Chapitre neuf ou mis à jour | **25 questions de niveau 1**, réparties sur les notions du chapitre — de quoi tenir deux exercices. L'existant est retranché : un second passage n'en rajoute pas 25. |
+| Le radar | Lancement d'un exercice | Les couples sous le seuil, remontés à 4. |
+| Un gestionnaire | Bouton « générer des questions » | Rien de calculé : une consigne libre ne dit rien du stock de chaque notion, donc on envoie toutes les notions du chapitre et **c'est le modèle qui choisit**. |
+
+⚠️ **Changement de volumétrie** : jusqu'au 29/08/2026, un import visait **12 questions par notion** (8 de niveau 1, 4 de niveau 2), soit 240 pour un chapitre de 20 notions. C'est désormais **25 par chapitre**. Les niveaux supérieurs et les notions restées vides ne sont plus produits d'avance : la recharge les pourvoit quand un membre les atteint réellement.
+
+**Garde-fous de la recharge** — c'est le seul appel payant que personne ne décide : un **plafond** de 60 questions par recharge (ce qui reste en manque sera repris au lancement suivant), un **délai de garde** de 10 minutes par chapitre (deux exercices coup sur coup ne rechargent qu'une fois), et une **trace** — chaque recharge ouvre un lot d'import comme n'importe quelle génération, donc son coût est compté et son contenu reste annulable. Elle part **après** que la question est partie à l'écran : le membre n'attend jamais après elle, et elle survit à la fermeture de l'onglet.
+
+**Répondre au hasard** *(29/08/2026)*
+
+Une question répondue est consommée, juste ou fausse : quelques minutes de clics au hasard vident un chapitre et déclenchent une recharge payante pour rien. Remettre les mauvaises réponses au tirage a été **écarté** — ça donnerait le moyen d'aller vite pour se faire montrer toutes les réponses, puis de repasser en les connaissant.
+
+La règle compte **les fautes expédiées**, pas un score comparé au hasard : une réponse rédigée, un dessin, un dépôt de fichier n'ont pas de probabilité de réussite, et « proche du hasard » n'aurait voulu dire quelque chose que pour un QCM.
+
+- **3 mauvaises réponses d'affilée, chacune en moins de 3 secondes** → un message, affiché avec la correction. Rien n'est empêché.
+- **2 de plus dans le même état** (5 d'affilée) → **l'exercice se ferme**, en pause 5 minutes. Il ne s'interrompt pas sur un mur : ce qui a été fait est enregistré, l'écran de fin s'affiche avec le retour au parcours, et le membre va faire autre chose. Tant que le compte tourne, l'onglet Programme n'invite plus à en relancer un — le bouton du chapitre en cours et les lignes de chapitres sont éteints, avec la raison en infobulle — et le tirage refuserait de toute façon. Le temps repart de la dernière réponse, donc s'entêter repousse d'autant.
+- **Recharger la page n'y change rien** : la pause se déduit des réponses enregistrées, pas d'un compte à rebours du navigateur. Fermer l'onglet, changer d'appareil ou se reconnecter donnent le même résultat.
+- **Portage mobile** : le refus vient du **serveur** (le tirage de la question suivante), donc il s'appliquera tel quel à l'app. Ce que l'app devra fournir, et qu'elle seule peut fournir : le **temps d'affichage de la question** (le serveur ne peut pas le mesurer, voir plus bas) et l'écran de pause. Sans le premier, la règle ne se déclenche jamais — elle ne se voit pas casser, elle se tait.
+- Une bonne réponse, une réponse posée, ou une réponse que rien ne permet de corriger automatiquement **remet le compteur à zéro**. Conséquence assumée : on ne repère pas quelqu'un qui expédierait uniquement des questions ouvertes — mieux vaut le laisser passer que mettre en pause quelqu'un dont on ignore s'il avait raison.
+- La pause **ne se stocke pas** : elle se déduit de la date de la dernière réponse. Rien à écrire, rien à nettoyer, rien qui puisse rester coincé.
+
+Le temps est mesuré **par l'écran** et non par le serveur : depuis les deux questions d'avance, une question est tirée bien avant d'être affichée, et le chronomètre du serveur laisserait donc passer un cliqueur. Le message d'avertissement s'affiche sur l'écran de la question **déjà corrigée**, donc le temps de le lire n'entre jamais dans le chronomètre de la suivante. C'est falsifiable, et c'est assumé — on vise le membre qui se disperse, pas le tricheur.
 
 Sécurité : le client ne reçoit **jamais** `answer` ni `correctChoices` au tirage — le serveur renvoie un `ExercisePrompt` épuré et calcule la correction (`gradeExercise`). Les options peuvent donc être mélangées côté serveur sans mémoriser de permutation, chaque option portant son index d'origine. Un membre qui soumet n'importe quoi peut obtenir la réponse : c'est assumé pour un parcours d'entraînement individuel, contrairement à un examen noté.
 
@@ -310,6 +376,7 @@ C'est un **rattrapage exponentiel plafonné**. Le terme proportionnel fait qu'un
 - Le **plafond par cible** est structurant : une question « mémoriser » ne peut pas prouver qu'on sait analyser. Un chapitre qui n'a que des questions de Bloom 1 plafonne ses notions à 10 points, donc à 33 % d'avancement.
 - Une question n'alimente que les notions qui lui sont **explicitement reliées** (`exam_question_bricks`). Une question sans notion reliée ne fait progresser aucune barre.
 - Une notion **sans chapitre ne compte dans aucune barre**, pas même celle de l'atelier (19/08/2026). Aucun exercice ne peut la faire progresser — le tirage se fait par chapitre et elle n'a pas de pot — donc la compter revenait à plafonner la barre de l'atelier sous 100 % sans que le membre puisse voir ce qui manque. « Sans chapitre » est un sas de gestion (notion créée à la volée, chapitre supprimé, ingestion IA), pas encore du programme.
+- Même règle, même raison, pour les notions d'un **chapitre caché** (29/08/2026) : le chapitre étant sorti du parcours, aucun exercice ne peut plus les faire progresser.
 - **Avancement affiché** — calculé sur le score exact, pas sur le niveau, et saturé à 30 (les 3 premiers niveaux valent 100 %, le 4e est du bonus) : notion = `min(score, 30) / 30`, chapitre = `Σ min(score, 30) / (30 × nombre de notions)`, atelier = même formule, mais **seulement sur les notions rangées dans un chapitre**.
 - Chaque **nouvelle question** (hors réitération) consomme **1 goutte d'eau** *(V2 — l'énergie n'existe pas encore, le compteur de la barre du haut affiche une valeur fixe)*
 - Les gouttes d'eau se regagnent : avec le temps / en quantité aléatoire après un nombre aléatoire de questions *(V2)*

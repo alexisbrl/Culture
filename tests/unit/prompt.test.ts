@@ -131,7 +131,11 @@ describe('instructions de passe', () => {
   it('la passe notions cible UN document et ne range dans aucun chapitre', () => {
     const instruction = notionsInstruction({ fileName: 'Chapitre 3.pdf' });
     expect(instruction).toContain('Chapitre 3.pdf');
-    expect(instruction).toContain('280');
+    expect(instruction).toContain('500');
+    // Une notion est lue SEULE, des semaines plus tard : la consigne doit le
+    // dire, sinon le modèle écrit « ces améliorations… » et la notion devient
+    // inutilisable (constaté le 30/08/2026).
+    expect(instruction).toMatch(/SERA LUE SEULE/);
     // Le rangement est le travail de la passe suivante, et la consigne le dit.
     expect(instruction).toMatch(/Ne range rien/);
   });
@@ -157,6 +161,39 @@ describe('instructions de passe', () => {
     expect(instruction).toContain('12');
   });
 
+  it('une demande explicite dicte le nombre ET le niveau, notion par notion', () => {
+    // La forme commune aux trois façons de demander des questions (29/08/2026) :
+    // une liste de couples avec un compte. Sans elle, le modèle suit une
+    // répartition générale — ce qui est juste pour une consigne libre, et faux
+    // pour une recharge qui vise un manque précis.
+    const instruction = questionsInstruction({
+      chapter: { id: 'ch1', name: 'Les fleuves' },
+      notions: [
+        { id: 'n1', title: 'La Loire…', want: [{ bloomLevel: 1, count: 3 }, { bloomLevel: 2, count: 2 }] },
+      ],
+      budget: 12,
+    });
+    expect(instruction).toContain('3 de niveau 1');
+    expect(instruction).toContain('2 de niveau 2');
+    expect(instruction).toMatch(/exactement ce qui est demandé/);
+    // La répartition par défaut ne doit PAS venir contredire la demande.
+    expect(instruction).not.toMatch(/soit d+ questions par notion/);
+  });
+
+  it('une demande explicite plafonne les notions secondaires, sans les interdire', () => {
+    // Une question écrite pour combler « notion X, niveau N » doit rester
+    // POSABLE : une notion secondaire plus exigeante la mettrait hors de portée
+    // de ceux-là mêmes pour qui on l'écrit. On plafonne, on ne bride pas — le
+    // modèle doit continuer de déclarer toutes les notions qu'il mobilise.
+    const instruction = questionsInstruction({
+      chapter: { id: 'ch1', name: 'Les fleuves' },
+      notions: [{ id: 'n1', title: 'La Loire…', want: [{ bloomLevel: 2, count: 1 }] }],
+      budget: 4,
+    });
+    expect(instruction).toMatch(/aucune à un niveau supérieur/);
+    expect(instruction).toMatch(/déclare-les toutes/);
+    expect(instruction).not.toMatch(/Une question, une notion/);
+  });
   it('la passe questions donne les notions voisines en contexte, sans les interroger', () => {
     // Elle ne reçoit plus les documents (§16.3) : les voisines du chapitre sont
     // ce qui remplace le cours pour les niveaux 3 et 4 de Bloom (§16.21).
@@ -279,13 +316,13 @@ describe('wireSchema — ce qu’on autorise le modèle à produire', () => {
 
   it('refuse un type de réponse inventé', () => {
     const result = wireGroupsOutput.safeParse({
-      groups: [{ ref: 'g1', questions: [{ content: 'Q', responseType: 'vrai_faux', choices: [], correctChoices: [], answer: '', expectations: '', bloomLevel: 1, notionRefs: ['n1'] }] }],
+      groups: [{ ref: 'g1', questions: [{ content: 'Q', responseType: 'vrai_faux', choices: [], correctChoices: [], answer: '', expectations: '', notions: [{ ref: 'n1', bloomLevel: 1 }] }] }],
     });
     expect(result.success).toBe(false);
   });
 
   it('refuse à l’entraînement un type réservé à l’examen', () => {
-    const question = { content: 'Q', responseType: 'fichier', choices: [], correctChoices: [], answer: '', expectations: '', bloomLevel: 1, notionRefs: ['n1'] };
+    const question = { content: 'Q', responseType: 'fichier', choices: [], correctChoices: [], answer: '', expectations: '', notions: [{ ref: 'n1', bloomLevel: 1 }] };
     expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [question] }] }).success).toBe(false);
     expect(wireExamGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [question] }] }).success).toBe(true);
   });
@@ -295,16 +332,28 @@ describe('wireSchema — ce qu’on autorise le modèle à produire', () => {
     // autres types, sur chaque appel de chaque import.
     const grid = {
       content: 'Classe chaque animal', responseType: 'tableau', choices: [], correctChoices: [],
-      answer: '', expectations: '', bloomLevel: 2, notionRefs: ['n1'],
+      answer: '', expectations: '', notions: [{ ref: 'n1', bloomLevel: 2 }],
       typeOptions: { tableRows: ['Chat', 'Truite'], tableCols: ['Mammifère', 'Poisson'], tableCorrect: [[0], [1]], tableUnique: true },
     };
     expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [grid] }] }).success).toBe(true);
   });
 
+  // Le niveau est porté par la NOTION, pas par la question (28/08/2026) : c'est
+  // là qu'il doit être borné.
   it('refuse un niveau de Bloom hors 1–4 dès la contrainte de sortie', () => {
-    const question = { content: 'Q', responseType: 'qcm', choices: [], correctChoices: [], answer: '', expectations: '', notionRefs: ['n1'] };
-    expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [{ ...question, bloomLevel: 6 }] }] }).success).toBe(false);
-    expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [{ ...question, bloomLevel: 3 }] }] }).success).toBe(true);
+    const question = { content: 'Q', responseType: 'qcm', choices: [], correctChoices: [], answer: '', expectations: '' };
+    const withLevel = (bloomLevel: number) => ({ ...question, notions: [{ ref: 'n1', bloomLevel }] });
+    expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [withLevel(6)] }] }).success).toBe(false);
+    expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [withLevel(3)] }] }).success).toBe(true);
+  });
+
+  // Deux notions, deux niveaux : c'est tout l'intérêt du déplacement.
+  it('accepte deux niveaux différents dans la même question', () => {
+    const question = {
+      content: 'Q', responseType: 'qcm', choices: [], correctChoices: [], answer: '', expectations: '',
+      notions: [{ ref: 'n1', bloomLevel: 1 }, { ref: 'n2', bloomLevel: 4 }],
+    };
+    expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [question] }] }).success).toBe(true);
   });
 
   it('une notion naît SANS chapitre, et porte sa page', () => {

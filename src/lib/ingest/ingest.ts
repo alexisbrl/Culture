@@ -29,6 +29,7 @@ import { type QuestionTypeOptions } from '@/lib/workshops/examTypes';
 import { cancelImport } from '@/lib/workshops/imports';
 import { getSupabaseServerClient } from '@/lib/supabase';
 
+import { assertImportOpen } from './lock';
 import { parsePlan, type ExistingRefs, type PlanIssue } from './planSchema';
 
 export type IngestMeta = {
@@ -39,6 +40,11 @@ export type IngestMeta = {
   inputTokens?: number;
   outputTokens?: number;
   cachedTokens?: number;
+  /** Lot piloté par un onglet ouvert : il pose son premier signe de vie dès sa
+   *  création, et c'est lui qui tient le verrou « une génération à la fois »
+   *  (voir `./lock`). Faux pour une recharge automatique, qui tourne en fond
+   *  sans que personne l'ait demandée et n'a donc rien à bloquer. */
+  live?: boolean;
 };
 
 export type IngestResult = {
@@ -74,6 +80,10 @@ export async function createImport(
       input_tokens: meta.inputTokens ?? 0,
       output_tokens: meta.outputTokens ?? 0,
       cached_tokens: meta.cachedTokens ?? 0,
+      // Le verrou naît avec le lot : entre l'ouverture et le premier battement
+      // de l'onglet il s'écoule plusieurs dizaines de secondes (téléversement
+      // des documents), largement de quoi lancer une seconde génération.
+      beat_at: meta.live ? new Date().toISOString() : null,
     })
     .select('id')
     .single();
@@ -307,48 +317,62 @@ export async function removeOrphans(
   }
 }
 
-/** Cache les chapitres que CET import vient de vider.
+/** Cache les chapitres qui, à l'arrivée d'un import, ne portent plus aucune notion.
  *
- *  ⚠️ « Vider » se mesure, il ne se devine pas. Un chapitre vide à l'arrivée
- *  n'est pas forcément un chapitre vidé : il pouvait l'être déjà avant (le
- *  document ne le couvrait pas), et le cacher serait alors une décision qu'on
- *  n'a pas prise. D'où `populatedBefore` — la liste des chapitres qui portaient
- *  des notions AVANT le rangement, relevée au début de celui-ci.
+ *  ⚠️ **Tout chapitre vide, et pas seulement celui que CET import a vidé**
+ *  (29/08/2026). La règle ne regardait que les chapitres qui portaient des
+ *  notions avant le rangement : un chapitre déjà vide auparavant — parce qu'un
+ *  import précédent l'avait vidé et qu'on l'avait restauré à la main, parce que
+ *  le document ne l'a jamais couvert — traversait toutes les générations sans
+ *  être touché. Il restait donc au programme sous la forme d'un pot à 0 % dont
+ *  l'exercice ne trouve jamais rien, ce que personne ne veut voir et que
+ *  personne n'a décidé non plus.
  *
- *  Trois cas, et un seul mène ici (feuille de route §5) :
- *    • il existait, il portait des notions, l'import les a toutes déplacées
- *      → **caché**, et c'est automatique parce que c'est réversible d'un clic ;
+ *  Le geste est **réversible d'un clic** (bouton « restaurer » des paramètres),
+ *  et c'est ce qui autorise à l'automatiser. Un chapitre créé à la main juste
+ *  avant une génération sera donc caché s'il est encore vide à la fin : c'est le
+ *  prix, assumé, d'une règle qui se dit en une phrase.
+ *
+ *  Trois cas, et un seul mène ici :
+ *    • il existait et se retrouve sans notion → **caché** ;
  *    • il a été créé par cet import et n'a rien reçu → effacé par le ménage,
  *      personne ne l'a jamais vu (`planImportCleanup`) ;
- *    • l'utilisateur l'avait vidé lui-même → on n'y touche pas.
+ *    • il porte encore au moins une notion → on n'y touche pas.
  *
  *  ⚠️ **`stranded` : les notions restées faute de mieux** (25/08/2026). Une
  *  notion que le modèle n'a rangée nulle part ne quitte plus son chapitre — elle
  *  y reste, et le chapitre part avec elle. Sans ce paramètre, une seule notion
  *  laissée en plan suffirait à faire passer le chapitre pour encore vivant : on
- *  garderait au programme une partie que le cours ne couvre plus, et on
- *  perdrait le geste qui rend l'import lisible. « Vidé » veut donc dire : plus
- *  rien dedans, hormis ce que personne n'a su placer ailleurs. */
-export async function hideEmptiedChapters(
+ *  garderait au programme une partie que le cours ne couvre plus. « Vide » veut
+ *  donc dire : plus rien dedans, hormis ce que personne n'a su placer ailleurs. */
+export async function hideEmptyChapters(
   workshopId: string,
-  populatedBefore: readonly string[],
   stranded: readonly string[] = [],
 ): Promise<string[]> {
-  if (populatedBefore.length === 0) return [];
-
   const supabase = getSupabaseServerClient();
-  const { data: remaining, error } = await supabase
-    .from('workshop_bricks')
-    .select('id, chapter_id')
-    .eq('workshop_id', workshopId)
-    .in('chapter_id', [...populatedBefore]);
+
+  // Deux lectures indépendantes → en parallèle (règle N+1). Aucune liste
+  // d'identifiants ne part dans l'URL : elles grandissent avec le contenu, et
+  // c'est exactement ce qui a fini par casser ailleurs (voir docs/backlog.md).
+  const [{ data: chapters, error }, { data: notions, error: notionError }] = await Promise.all([
+    supabase.from('workshop_chapters').select('id, hidden').eq('workshop_id', workshopId),
+    supabase.from('workshop_bricks').select('id, chapter_id').eq('workshop_id', workshopId),
+  ]);
   if (error) throw new Error(error.message);
+  if (notionError) throw new Error(notionError.message);
 
   const left = new Set(stranded);
   const stillPopulated = new Set(
-    (remaining ?? []).filter((r) => !left.has(r.id as string)).map((r) => r.chapter_id as string),
+    (notions ?? [])
+      .filter((n) => n.chapter_id && !left.has(n.id as string))
+      .map((n) => n.chapter_id as string),
   );
-  const emptied = populatedBefore.filter((id) => !stillPopulated.has(id));
+
+  // Déjà caché, on ne le recache pas : la liste rendue sert à annoncer ce que
+  // l'import vient de changer.
+  const emptied = (chapters ?? [])
+    .filter((c) => c.hidden !== true && !stillPopulated.has(c.id as string))
+    .map((c) => c.id as string);
   if (emptied.length === 0) return [];
 
   const { error: hideError } = await supabase
@@ -403,6 +427,11 @@ export async function insertChapters(
   const created = new Map<string, string>();
   if (chapters.length === 0) return created;
 
+  // Le lot a-t-il encore le droit de recevoir ? Une annulation le referme, et
+  // les appels au modèle encore en vol ne doivent plus rien y déposer (voir
+  // ./lock).
+  await assertImportOpen(importId);
+
   const supabase = getSupabaseServerClient();
 
   // Les nouveaux chapitres se rangent APRÈS les existants : l'ordre du programme
@@ -452,6 +481,11 @@ export async function insertNotions(
   const created = new Map<string, string>();
   if (notions.length === 0) return created;
 
+  // Le lot a-t-il encore le droit de recevoir ? Une annulation le referme, et
+  // les appels au modèle encore en vol ne doivent plus rien y déposer (voir
+  // ./lock).
+  await assertImportOpen(importId);
+
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from('workshop_bricks')
@@ -486,8 +520,7 @@ type PlanGroupInput = {
     shuffleChoices: boolean;
     textLines: number;
     expectations: string;
-    bloomLevel: number;
-    notionRefs: string[];
+    notions: { ref: string; bloomLevel: number }[];
     /** Réglages propres au type de réponse — grille d'un tableau, formats
      *  acceptés d'un dépôt de fichier, nombre de réponses d'une liste. Écrits
      *  vides jusqu'au 25/08/2026, ce qui bornait la génération aux trois types
@@ -508,6 +541,11 @@ export async function insertGroups(
 ): Promise<number> {
   if (groups.length === 0) return 0;
 
+  // Le lot a-t-il encore le droit de recevoir ? Une annulation le referme, et
+  // les appels au modèle encore en vol ne doivent plus rien y déposer (voir
+  // ./lock).
+  await assertImportOpen(importId);
+
   const supabase = getSupabaseServerClient();
 
   // La question principale reprend l'identifiant de son groupe (`sort_order` 0) —
@@ -527,7 +565,9 @@ export async function insertGroups(
   if (groupError) throw new Error(groupError.message);
 
   const itemRows: Record<string, unknown>[] = [];
-  const linkRows: { item_id: string; brick_id: string }[] = [];
+  // Le niveau de Bloom vit ICI, sur le lien vers la notion, et nulle part
+  // ailleurs (28/08/2026) : c'est ce que la question demande de CETTE notion.
+  const linkRows: { item_id: string; brick_id: string; bloom_level: number }[] = [];
 
   groups.forEach((group, gi) => {
     group.questions.forEach((question, qi) => {
@@ -545,12 +585,11 @@ export async function insertGroups(
         text_lines: question.textLines,
         type_options: question.typeOptions,
         expectations: question.expectations,
-        bloom_level: question.bloomLevel,
       });
 
-      for (const ref of question.notionRefs) {
-        const brickId = resolve(ref, notionIds);
-        if (brickId) linkRows.push({ item_id: itemId, brick_id: brickId });
+      for (const notion of question.notions) {
+        const brickId = resolve(notion.ref, notionIds);
+        if (brickId) linkRows.push({ item_id: itemId, brick_id: brickId, bloom_level: notion.bloomLevel });
       }
     });
   });

@@ -25,8 +25,11 @@ import type {
   ExerciseResult,
   ExerciseTypeOptions,
   ResponseType,
+  BloomLevel,
 } from '@/lib/workshops/examTypes';
 import {
+  BLOOM_REACH,
+  DEFAULT_BLOOM_LEVEL,
   emptyExerciseAnswer,
   matchPairs,
   normalizeTypeOptions,
@@ -36,6 +39,7 @@ import {
   type QuestionTypeOptions,
 } from '@/lib/workshops/examTypes';
 import { gradeStatement } from '@/lib/workshops/grading';
+import type { AnswerPaceRow } from '@/lib/workshops/answerPace';
 import { assertQuestionIntegrity, assertStatements, notionIdsOf } from '@/lib/workshops/questionIntegrity';
 // ─── Stockage : un groupe, ses questions ─────────────────────────────────────
 //
@@ -82,7 +86,6 @@ type ItemRow = {
   text_lines: number;
   type_options: QuestionTypeOptions | null;
   expectations: string | null;
-  bloom_level: number;
 };
 
 /** Colonnes du groupe, sans les colonnes historiques désormais mortes. */
@@ -104,11 +107,28 @@ const GROUP_COLUMNS = 'id, workshop_id, image_key, audio_key, pools, exam_ids, c
 // ⚠️ Cette chaîne n'est vérifiée ni par TypeScript ni par le build : elle
 // désigne des tables et des colonnes par leur nom. Toute modification doit être
 // rejouée contre la base (voir les contrôles de bout en bout du chantier).
-const GROUP_WITH_ITEMS = `${GROUP_COLUMNS}, exam_question_items(*, exam_question_item_bricks(brick_id))`;
+const GROUP_WITH_ITEMS = `${GROUP_COLUMNS}, exam_question_items(*, exam_question_item_bricks(brick_id, bloom_level))`;
 
-type NotionLinkMap = Record<string, string[]>;
+/** Un lien question ↔ notion, avec le niveau de Bloom **propre à ce couple**
+ *  (28/08/2026) — la seule forme du niveau depuis que la question n'en porte
+ *  plus. `bloomLevel: null` = colonne pas encore renseignée (tout ce qui a été
+ *  écrit avant cette date) ; c'est une lacune de stockage, pas un sens. */
+type NotionLink = { notionId: string; bloomLevel: BloomLevel | null };
+type NotionLinkMap = Record<string, NotionLink[]>;
 
-type EmbeddedItemRow = ItemRow & { exam_question_item_bricks: { brick_id: string }[] | null };
+/** Le niveau de CHAQUE notion de la question — une clé par lien, sans trou.
+ *  C'est ici, et nulle part ailleurs, que le défaut s'applique : les lecteurs
+ *  (barème, crédit de maîtrise, éditeur) n'ont ainsi jamais à se demander quoi
+ *  faire d'une notion sans niveau. */
+function withNotionBloom(links: NotionLink[]): Record<string, BloomLevel> {
+  const out: Record<string, BloomLevel> = {};
+  for (const link of links) out[link.notionId] = link.bloomLevel ?? DEFAULT_BLOOM_LEVEL;
+  return out;
+}
+
+type EmbeddedItemRow = ItemRow & {
+  exam_question_item_bricks: { brick_id: string; bloom_level: number | null }[] | null;
+};
 type EmbeddedGroupRow = GroupRow & { exam_question_items: EmbeddedItemRow[] | null };
 
 /** Questions d'un groupe **triées par position**, et leurs notions. Le tri se
@@ -119,7 +139,10 @@ function unpackGroup(row: EmbeddedGroupRow): { items: ItemRow[]; notionsByItem: 
   const embedded = row.exam_question_items ?? [];
   const notionsByItem: NotionLinkMap = {};
   for (const item of embedded) {
-    notionsByItem[item.id] = (item.exam_question_item_bricks ?? []).map((link) => link.brick_id);
+    notionsByItem[item.id] = (item.exam_question_item_bricks ?? []).map((link) => ({
+      notionId: link.brick_id,
+      bloomLevel: link.bloom_level === null || link.bloom_level === undefined ? null : toBloomLevel(link.bloom_level),
+    }));
   }
   const items = [...embedded].sort((a, b) => a.sort_order - b.sort_order);
   return { items, notionsByItem };
@@ -131,7 +154,7 @@ function embeddedToQuestion(row: EmbeddedGroupRow): Question {
   return rowToQuestion(row, items, notionsByItem);
 }
 
-function itemToPart(row: ItemRow, notionIds: string[]): QuestionPart {
+function itemToPart(row: ItemRow, links: NotionLink[]): QuestionPart {
   return {
     id: row.id,
     content: row.content ?? '',
@@ -146,8 +169,8 @@ function itemToPart(row: ItemRow, notionIds: string[]): QuestionPart {
     textLines: row.text_lines ?? 4,
     typeOptions: normalizeTypeOptions(row.type_options),
     expectations: row.expectations ?? '',
-    bloomLevel: toBloomLevel(row.bloom_level),
-    notionIds,
+    notionIds: links.map((link) => link.notionId),
+    notionBloom: withNotionBloom(links),
   };
 }
 
@@ -159,7 +182,7 @@ function rowToQuestion(row: GroupRow, items: ItemRow[], notionsByItem: NotionLin
   const [head, ...linked] = items;
   const headPart = head
     ? itemToPart(head, notionsByItem[head.id] ?? [])
-    : itemToPart({ id: row.id, group_id: row.id, sort_order: 0, content: '', response_type: 'textuelle', answer: '', choices: [], correct_choices: [], shuffle_choices: false, text_lines: 4, type_options: {}, expectations: '', bloom_level: 1 }, []);
+    : itemToPart({ id: row.id, group_id: row.id, sort_order: 0, content: '', response_type: 'textuelle', answer: '', choices: [], correct_choices: [], shuffle_choices: false, text_lines: 4, type_options: {}, expectations: '' }, []);
 
   return {
     id: row.id,
@@ -177,9 +200,8 @@ function rowToQuestion(row: GroupRow, items: ItemRow[], notionsByItem: NotionLin
     shuffleChoices: headPart.shuffleChoices,
     textLines: headPart.textLines,
     typeOptions: headPart.typeOptions,
-    expectations: headPart.expectations,
-    bloomLevel: headPart.bloomLevel,
-    notionIds: headPart.notionIds,
+    expectations: headPart.expectations,    notionIds: headPart.notionIds,
+    notionBloom: headPart.notionBloom,
 
     parts: linked.map((item) => itemToPart(item, notionsByItem[item.id] ?? [])),
 
@@ -230,8 +252,8 @@ function itemRowsOf(q: Question) {
       textLines: q.textLines ?? 4,
       typeOptions: q.typeOptions ?? {},
       expectations: q.expectations ?? '',
-      bloomLevel: q.bloomLevel,
       notionIds: q.notionIds ?? [],
+      notionBloom: q.notionBloom ?? {},
     },
     ...parts.map((part) => ({ ...part, id: part.id || crypto.randomUUID() })),
   ];
@@ -250,10 +272,10 @@ function itemRowsOf(q: Question) {
       text_lines: item.textLines ?? 4,
       type_options: item.typeOptions ?? {},
       expectations: item.expectations ?? '',
-      bloom_level: toBloomLevel(item.bloomLevel),
       updated_at: new Date().toISOString(),
     },
     notionIds: item.notionIds ?? [],
+    notionBloom: item.notionBloom ?? {},
   }));
 }
 
@@ -271,12 +293,17 @@ async function loadNotionLinks(itemIds: string[]): Promise<NotionLinkMap> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from('exam_question_item_bricks')
-    .select('item_id, brick_id')
+    .select('item_id, brick_id, bloom_level')
     .in('item_id', itemIds);
   if (error) throw new Error(error.message);
 
   const map: NotionLinkMap = {};
-  for (const row of data ?? []) (map[row.item_id] ??= []).push(row.brick_id);
+  for (const row of data ?? []) {
+    (map[row.item_id] ??= []).push({
+      notionId: row.brick_id,
+      bloomLevel: row.bloom_level === null ? null : toBloomLevel(row.bloom_level),
+    });
+  }
   return map;
 }
 
@@ -352,25 +379,50 @@ async function syncQuestionItems(q: Question): Promise<void> {
     .upsert(wanted.map((w) => w.row));
   if (upsertError) throw new Error(upsertError.message);
 
-  await syncItemNotions(wanted.map((w) => ({ itemId: w.row.id, notionIds: w.notionIds })));
+  await syncItemNotions(
+    wanted.map((w) => ({ itemId: w.row.id, notionIds: w.notionIds, notionBloom: w.notionBloom })),
+  );
 }
 
 /** Remplace les liens notion↔question de tout un groupe. Une seule insertion
  *  pour l'ensemble ; les retraits sont rares et se font par question (un groupe
  *  en compte une poignée — ce n'est pas un chemin de lecture). */
-async function syncItemNotions(items: { itemId: string; notionIds: string[] }[]): Promise<void> {
+async function syncItemNotions(
+  items: { itemId: string; notionIds: string[]; notionBloom: Record<string, BloomLevel> }[],
+): Promise<void> {
   if (items.length === 0) return;
   const supabase = getSupabaseServerClient();
 
   const existing = await loadNotionLinks(items.map((i) => i.itemId));
 
-  const toAdd: { item_id: string; brick_id: string }[] = [];
+  const toAdd: { item_id: string; brick_id: string; bloom_level: number }[] = [];
   for (const item of items) {
-    const before = new Set(existing[item.itemId] ?? []);
+    const before = new Map((existing[item.itemId] ?? []).map((link) => [link.notionId, link.bloomLevel]));
     const after = new Set(item.notionIds);
-    for (const notionId of after) if (!before.has(notionId)) toAdd.push({ item_id: item.itemId, brick_id: notionId });
+    // Toujours une valeur : depuis que la question n'a plus de niveau à elle, un
+    // lien sans niveau n'aurait plus rien à suivre.
+    const wanted = (notionId: string) => item.notionBloom[notionId] ?? DEFAULT_BLOOM_LEVEL;
 
-    const toRemove = [...before].filter((id) => !after.has(id));
+    for (const notionId of after) {
+      if (!before.has(notionId)) {
+        toAdd.push({ item_id: item.itemId, brick_id: notionId, bloom_level: wanted(notionId) });
+        continue;
+      }
+      // Le lien existe : seul son niveau peut avoir changé. Réécrire ceux qui
+      // n'ont pas bougé ferait passer la question pour modifiée (`updated_at`),
+      // et un import annulable cesserait de l'être à la première sauvegarde. Un
+      // niveau encore vide en base vaut le défaut, comme à la lecture : une
+      // ré-écriture de masse n'a pas à les remplir un par un.
+      if ((before.get(notionId) ?? DEFAULT_BLOOM_LEVEL) === wanted(notionId)) continue;
+      const { error } = await supabase
+        .from('exam_question_item_bricks')
+        .update({ bloom_level: wanted(notionId) })
+        .eq('item_id', item.itemId)
+        .eq('brick_id', notionId);
+      if (error) throw new Error(error.message);
+    }
+
+    const toRemove = [...before.keys()].filter((id) => !after.has(id));
     if (toRemove.length > 0) {
       const { error } = await supabase
         .from('exam_question_item_bricks')
@@ -603,89 +655,267 @@ export async function resolveMediaUrls(keys: string[]): Promise<Record<string, s
   return Object.fromEntries(entries.filter((entry): entry is [string, string] => entry[1] !== null));
 }
 
-/** Identifiants des questions de parcours qui couvrent un chapitre.
+/** Retient qu'une grappe a été posée à ce membre — appelé à la CORRECTION et non
+ *  au tirage (règle révisée le 29/08/2026 : une question vue puis abandonnée ne
+ *  compte pas comme posée, elle reste disponible). L'écriture ne fait rien si la
+ *  ligne existe déjà : la date de première rencontre ne rajeunit pas.
  *
- *  Une question n'est pas rattachée à un chapitre : elle **hérite de celui de
- *  ses notions** (19/08/2026, en remplacement de `exam_questions.chapter_id` et
- *  de son sélecteur dans la liste). C'est déjà la règle du filtre « chapitre »
- *  de la banque d'examen (`chaptersOfQuestion`), et c'est ce qui fait qu'une
- *  question posée sur des notions de deux chapitres est tirable dans les deux.
- *  Corollaire assumé : une question sans notion — ou dont aucune notion n'est
- *  rangée — n'est jamais tirée.
- *
- *  Trois sauts, faute de jointure côté PostgREST : notions du chapitre →
- *  questions (`exam_question_item_bricks`) → groupes (`exam_question_items`),
- *  puis on ne garde que les groupes de CET atelier en contexte parcours. */
-async function parcoursQuestionIdsOfChapter(workshopId: string, chapterId: string): Promise<string[]> {
+ *  Ne lève pas : perdre cette trace repose une question un jour, ce qui ne
+ *  justifie pas de refuser au membre la correction qu'il vient de demander. */
+export async function markParcoursAsked(
+  workshopId: string,
+  userId: string,
+  groupId: string,
+  pace: { answerMs: number | null; correct: boolean | null } = { answerMs: null, correct: null }
+): Promise<void> {
   const supabase = getSupabaseServerClient();
 
-  // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
-  const { data: notions, error: notionsError } = await supabase
-    .from('workshop_bricks')
-    .select('id')
-    .eq('workshop_id', workshopId)
-    .eq('chapter_id', chapterId);
-  if (notionsError) throw new Error(notionsError.message);
+  // ─── Une ligne par GRAPPE, une entrée par QUESTION (30/08/2026) ───────────
+  //
+  // La ligne dit « cette grappe a été posée à ce membre » : elle est unique,
+  // parce que le tirage travaille par grappe — ses questions sont inséparables
+  // et ne reviennent jamais séparément. Elle est écrite dès la PREMIÈRE
+  // question validée : sa réponse a été dévoilée, la grappe est consommée,
+  // même si le membre s'arrête là.
+  //
+  // La colonne `answers` porte, elle, une entrée par question répondue — c'est
+  // elle que lit le détecteur de rythme, qui compte les fautes expédiées
+  // question par question et non par grappe (une grappe de cinq questions
+  // bâclées doit se voir comme cinq fautes, pas comme une).
+  //
+  // Deux requêtes plutôt qu'une fonction en base : le volume est d'une ligne,
+  // et rien d'autre n'écrit cette colonne au même instant — les questions d'une
+  // grappe se valident l'une après l'autre, jamais en parallèle.
+  const { data: existing } = await supabase
+    .from('parcours_asked')
+    .select('answers')
+    .eq('user_id', userId)
+    .eq('group_id', groupId)
+    .maybeSingle();
 
-  const notionIds = (notions ?? []).map((n) => n.id as string);
-  if (notionIds.length === 0) return [];
+  const previous = Array.isArray(existing?.answers) ? (existing.answers as unknown[]) : [];
+  const entry = { ms: pace.answerMs, correct: pace.correct, at: new Date().toISOString() };
 
-  const { data: links, error: linksError } = await supabase
-    .from('exam_question_item_bricks')
-    .select('item_id')
-    .in('brick_id', notionIds);
-  if (linksError) throw new Error(linksError.message);
-
-  const itemIds = [...new Set((links ?? []).map((l) => l.item_id as string))];
-  if (itemIds.length === 0) return [];
-
-  const { data: items, error: itemsError } = await supabase
-    .from('exam_question_items')
-    .select('group_id')
-    .in('id', itemIds);
-  if (itemsError) throw new Error(itemsError.message);
-
-  const groupIds = [...new Set((items ?? []).map((i) => i.group_id as string))];
-  if (groupIds.length === 0) return [];
-
-  const { data: groups, error: groupsError } = await supabase
-    .from('exam_questions')
-    .select('id')
-    .eq('workshop_id', workshopId)
-    .eq('context', 'parcours')
-    .in('id', groupIds);
-  if (groupsError) throw new Error(groupsError.message);
-
-  return (groups ?? []).map((g) => g.id as string);
+  const { error } = await supabase.from('parcours_asked').upsert(
+    {
+      workshop_id: workshopId,
+      user_id: userId,
+      group_id: groupId,
+      answers: [...previous, entry],
+      // Colonnes de rythme d'avant `answers`, tenues à jour par compatibilité :
+      // elles portent la dernière réponse en date. Leur suppression attend le
+      // déploiement de ce code (EN-ATTENTE-DEPLOIEMENT.md).
+      answer_ms: pace.answerMs,
+      correct: pace.correct,
+    },
+    { onConflict: 'user_id,group_id' }
+  );
+  if (error) console.error('markParcoursAsked error:', error);
 }
 
-// Tirage uniforme parmi les questions du chapitre. `excludeId` évite de
-// retomber sur la question qu'on vient de faire quand il y a de quoi varier —
-// avec une seule question dans le chapitre, on la retire logiquement.
+/** Les dernières réponses d'un membre dans un atelier, la plus récente en tête —
+ *  de quoi juger son rythme (voir `looksRandom`, @/lib/workshops/answerPace).
+ *
+ *  Ne lève pas : un détecteur d'avertissement ne doit jamais faire échouer la
+ *  correction qu'un membre vient de demander. */
+export async function recentAnswerPace(
+  workshopId: string,
+  userId: string,
+  limit: number
+): Promise<AnswerPaceRow[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('parcours_asked')
+    .select('answers, answer_ms, correct, asked_at')
+    .eq('workshop_id', workshopId)
+    .eq('user_id', userId)
+    .order('asked_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('recentAnswerPace error:', error);
+    return [];
+  }
+
+  // Une grappe porte plusieurs réponses : on lit les `limit` dernières GRAPPES,
+  // on déplie leurs questions, et on garde les `limit` réponses les plus
+  // récentes. Les plus récentes sont forcément dans les grappes les plus
+  // récentes, donc rien ne peut manquer.
+  const rows: AnswerPaceRow[] = (data ?? []).flatMap((row) => {
+    const entries = Array.isArray(row.answers) ? (row.answers as { ms?: unknown; correct?: unknown; at?: unknown }[]) : [];
+    // Lignes écrites avant la colonne `answers` : la grappe n'y compte que pour
+    // une réponse, ce qui reste juste — c'est ainsi qu'elle a été jouée.
+    if (entries.length === 0) {
+      return [
+        {
+          answerMs: (row.answer_ms as number | null) ?? null,
+          correct: (row.correct as boolean | null) ?? null,
+          answeredAt: new Date(row.asked_at as string).getTime(),
+        },
+      ];
+    }
+    return entries.map((entry) => ({
+      answerMs: typeof entry.ms === 'number' ? entry.ms : null,
+      correct: typeof entry.correct === 'boolean' ? entry.correct : null,
+      answeredAt: new Date(String(entry.at ?? row.asked_at)).getTime(),
+    }));
+  });
+
+  return rows.sort((a, b) => b.answeredAt - a.answeredAt).slice(0, limit);
+}
+
+/** Efface ce qu'un membre a déjà répondu dans un atelier. Appelé par la remise à
+ *  zéro de la progression (`resetUserMastery`) : sans ça, une progression remise
+ *  à zéro repartirait sans plus aucune question à tirer. */
+export async function clearParcoursAsked(workshopId: string, userId: string): Promise<number> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('parcours_asked')
+    .delete()
+    .eq('workshop_id', workshopId)
+    .eq('user_id', userId)
+    .select('id');
+  if (error) throw new Error(error.message);
+  return (data ?? []).length;
+}
+
+/** Ce que coûte UN énoncé du budget de l'exercice : le plus haut niveau de
+ *  Bloom qu'il demande, sur l'ensemble de ses notions.
+ *
+ *  Un énoncé sans notion coûte le niveau par défaut plutôt que rien : il occupe
+ *  le membre, il ne peut pas être gratuit. Cette règle est la copie fidèle de
+ *  celle du tirage, qui vit en base (`cout_enonce` dans `parcours_pick`, voir
+ *  docs/migrations/2026-08-30-tirage-sans-repeter-la-notion.sql) — les deux doivent bouger
+ *  ensemble, sinon la barre d'avancement ne dirait plus la même chose que le
+ *  budget réellement engagé. */
+function statementCost(statement: { notionIds?: string[]; notionBloom: Record<string, BloomLevel> }): number {
+  const ids = statement.notionIds ?? [];
+  if (ids.length === 0) return DEFAULT_BLOOM_LEVEL;
+  return Math.max(...ids.map((id) => statement.notionBloom[id] ?? DEFAULT_BLOOM_LEVEL));
+}
+
+export type ParcoursDraw = {
+  prompt: ExercisePrompt | null;
+  /** Ce que la GRAPPE consomme du budget de l'exercice (12 niveaux de Bloom).
+   *  Réservé d'un bloc au tirage : on doit savoir ce que coûte l'ensemble avant
+   *  de l'engager, sans quoi on dépasserait en cours de route. */
+  cost: number;
+  /** Ce que coûte chaque énoncé, dans l'ordre d'affichage — la question
+   *  principale puis ses questions liées. C'est ce détail qui fait avancer la
+   *  barre question par question, et non d'un bond à la fin de la grappe. */
+  costs: number[];
+  /** `null` quand une question a été tirée. Sinon la raison de l'arrêt :
+   *  `budget` (fin normale de l'exercice), `exhausted` (plus rien d'inédit à
+   *  portée — anomalie) ou `empty` (le chapitre n'a aucune question). */
+  failure: 'budget' | 'exhausted' | 'empty' | null;
+};
+
+/** Ce que rend la fonction de tirage, en base. */
+type PickRow = {
+  group_id: string | null;
+  cost: number | null;
+  /** Grappes inédites ET à portée, budget mis à part. */
+  eligible_total: number;
+  /** Grappes du chapitre, avant toute règle. */
+  chapter_total: number;
+};
+
+/**
+ * La prochaine question d'un exercice : celle qui fait travailler la notion la
+ * moins maîtrisée, à portée du membre, jamais répondue par lui, et qui tient
+ * dans ce qui reste des 12 niveaux.
+ *
+ * ⚠️ **Le choix se fait en base** (`parcours_pick`, voir
+ * docs/migrations/2026-08-30-tirage-sans-repeter-la-notion.sql, qui porte l'énoncé des règles).
+ * L'application chargeait auparavant tout le chapitre pour n'en garder qu'une
+ * question : intenable à la cible du produit (2 000 notions et 100 000 questions
+ * par atelier). Ici, il ne remonte qu'un identifiant, son coût et de quoi
+ * distinguer les impasses — l'énoncé complet n'est lu qu'ensuite, pour la seule
+ * question retenue.
+ *
+ * `excludeIds` porte les grappes déjà posées dans CET exercice : la trace en
+ * base n'étant écrite qu'à la correction, elle ne suffit pas à éviter de
+ * reposer une question dont la correction n'a pas abouti.
+ */
 export async function drawParcoursQuestion(
   workshopId: string,
   chapterId: string,
-  excludeId?: string
-): Promise<ExercisePrompt | null> {
+  userId: string,
+  options: { remaining: number; excludeIds?: string[] }
+): Promise<ParcoursDraw> {
   const supabase = getSupabaseServerClient();
 
-  let pool = await parcoursQuestionIdsOfChapter(workshopId, chapterId);
-  if (pool.length === 0) return null;
-  if (excludeId && pool.length > 1) pool = pool.filter((id) => id !== excludeId);
+  // ─── Un chapitre caché ne tire rien (29/08/2026) ─────────────────────────
+  //
+  // Il est sorti du parcours : plus de pot dans l'onglet Programme, plus de page
+  // d'exercice. La vérification est refaite ICI parce qu'une server action est
+  // une URL POST publique — l'écran qui n'affiche plus le chapitre n'empêche
+  // personne de demander une question dessus. Réponse `empty`, la même qu'un
+  // chapitre sans question : de l'extérieur, il n'y a rien à y prendre.
+  const { data: chapter, error: chapterError } = await supabase
+    .from('workshop_chapters')
+    .select('hidden')
+    .eq('workshop_id', workshopId)
+    .eq('id', chapterId)
+    .maybeSingle();
 
-  const picked = pool[Math.floor(Math.random() * pool.length)];
+  if (chapterError) throw new Error(chapterError.message);
+  if (!chapter || chapter.hidden === true) return { prompt: null, cost: 0, costs: [], failure: 'empty' };
+
+  const { data, error } = await supabase.rpc('parcours_pick', {
+    p_workshop: workshopId,
+    p_chapter: chapterId,
+    p_user: userId,
+    p_remaining: options.remaining,
+    p_reach: BLOOM_REACH,
+    p_exclude: options.excludeIds ?? [],
+  });
+
+  if (error) throw new Error(error.message);
+
+  // La fonction rend toujours exactement une ligne, quitte à ce que la question
+  // y soit nulle.
+  const pick = (data as PickRow[] | null)?.[0];
+  if (!pick || pick.chapter_total === 0) return { prompt: null, cost: 0, costs: [], failure: 'empty' };
+
+  if (!pick.group_id) {
+    // ⚠️ ANOMALIE À REMONTER le jour où la collecte d'erreurs existe (voir
+    // docs/backlog.md) : un chapitre sans plus aucune question inédite à portée
+    // est exactement ce que la recharge automatique doit empêcher. Le membre,
+    // lui, ne voit qu'un exercice qui s'arrête — il n'a rien à se reprocher.
+    if (pick.eligible_total === 0) {
+      console.error('[parcours] plus aucune question inédite à portée', {
+        workshopId,
+        chapterId,
+        userId,
+        chapterTotal: pick.chapter_total,
+      });
+      return { prompt: null, cost: 0, costs: [], failure: 'exhausted' };
+    }
+    // Il reste des questions, mais aucune n'entre dans ce qui reste du budget :
+    // fin normale de l'exercice, rien à signaler.
+    return { prompt: null, cost: 0, costs: [], failure: 'budget' };
+  }
 
   const { data: row, error: rowError } = await supabase
     .from('exam_questions')
     .select(GROUP_WITH_ITEMS)
     .eq('workshop_id', workshopId)
-    .eq('id', picked)
+    .eq('id', pick.group_id)
     .maybeSingle();
 
   if (rowError) throw new Error(rowError.message);
-  if (!row) return null;
+  if (!row) return { prompt: null, cost: 0, costs: [], failure: 'exhausted' };
 
-  return await toPrompt(embeddedToQuestion(row as unknown as EmbeddedGroupRow));
+  const question = embeddedToQuestion(row as unknown as EmbeddedGroupRow);
+  const statements = [question, ...(question.parts ?? [])];
+
+  return {
+    prompt: await toPrompt(question),
+    cost: pick.cost ?? 0,
+    costs: statements.map(statementCost),
+    failure: null,
+  };
 }
 
 /** Notions à créditer après une bonne réponse, telles que le SERVEUR les
@@ -693,19 +923,46 @@ export async function drawParcoursQuestion(
 export type RewardTarget = { notionIds: string[]; bloomLevel: number };
 
 
-// `answers[0]` porte la réponse de la question principale, `answers[i+1]` celle
-// de la question liée `i` — même ordre que `ExercisePrompt.parts`. Un index
-// absent vaut « rien de répondu ».
+/** Notions à créditer pour un énoncé, regroupées par palier de Bloom : une même
+ *  question peut faire restituer une notion et en faire analyser une autre. */
+function rewardsFor(
+  correct: boolean | null,
+  notionIds: string[],
+  notionBloom: Record<string, BloomLevel>,
+): RewardTarget[] {
+  if (correct !== true || notionIds.length === 0) return [];
+  const byLevel = new Map<BloomLevel, string[]>();
+  for (const notionId of notionIds) {
+    const level = notionBloom[notionId] ?? DEFAULT_BLOOM_LEVEL;
+    byLevel.set(level, [...(byLevel.get(level) ?? []), notionId]);
+  }
+  return [...byLevel].map(([level, ids]) => ({ notionIds: ids, bloomLevel: level }));
+}
+
+// ─── Une grappe se corrige énoncé par énoncé (30/08/2026) ───────────────────
+//
+// `index` désigne l'énoncé qu'on vient de valider : 0 = la question principale,
+// `i + 1` = la question liée `i` (même ordre que `ExercisePrompt.parts`). On ne
+// corrige QUE celui-là — les suivants n'ont pas encore été posés, et leur
+// correction ne doit pas descendre au navigateur d'avance.
+//
+// `answers` est indexé par énoncé (l'écran renvoie tout le tableau, la case
+// utile est celle d'`index`) : chaque question est jugée pour elle-même, au
+// moment où elle est validée, et rien n'est rejugé ensuite.
 //
 // `rewards` n'est PAS destiné au client : il ne sort pas de l'action serveur,
-// qui s'en sert pour créditer la maîtrise des notions de chaque énoncé
-// correctement traité (la question principale et chaque question liée ont les
-// leurs, voir `QuestionPart`).
+// qui s'en sert pour créditer la maîtrise des notions de l'énoncé corrigé.
 export async function gradeParcoursAnswer(
   workshopId: string,
   questionId: string,
-  answers: ExerciseAnswer[]
-): Promise<{ result: ExerciseResult; rewards: RewardTarget[] } | null> {
+  answers: ExerciseAnswer[],
+  index: number,
+): Promise<{
+  result: ExerciseResult;
+  rewards: RewardTarget[];
+  /** L'énoncé corrigé est-il le dernier de la grappe ? */
+  isLast: boolean;
+} | null> {
   const supabase = getSupabaseServerClient();
 
   const { data: row, error } = await supabase
@@ -720,29 +977,24 @@ export async function gradeParcoursAnswer(
   if (!row) return null;
 
   const q = embeddedToQuestion(row as unknown as EmbeddedGroupRow);
-  const parts = q.parts ?? [];
+  // Les énoncés de la grappe, dans l'ordre où le candidat les traite.
+  const statements = [q, ...(q.parts ?? [])];
 
   // Ce qui arrive du navigateur n'est jamais tenu pour bien formé : une server
-  // action est une URL POST publique (voir `toExerciseAnswer`).
+  // action est une URL POST publique (voir `toExerciseAnswer`). L'index non
+  // plus — il désigne une case d'un tableau relu en base.
   const given = (Array.isArray(answers) ? answers : []).map(toExerciseAnswer);
-  const main = gradeStatement(q, given[0] ?? emptyExerciseAnswer());
-  const partResults = parts.map((part, i) => gradeStatement(part, given[i + 1] ?? emptyExerciseAnswer()));
+  const at = Math.max(0, Math.min(Math.floor(Number(index) || 0), statements.length - 1));
+  const statement = statements[at];
 
-  // Chaque énoncé crédite SES notions avec SON niveau de Bloom : une question
-  // liée juste fait progresser les siennes même si la principale est ratée.
-  // Notions et niveau sont relus de la base ici, jamais reçus du client.
-  const rewards: RewardTarget[] = [
-    { correct: main.correct, notionIds: q.notionIds ?? [], bloomLevel: q.bloomLevel },
-    ...parts.map((part, i) => ({
-      correct: partResults[i]?.correct ?? null,
-      notionIds: part.notionIds ?? [],
-      bloomLevel: part.bloomLevel,
-    })),
-  ]
-    .filter((target) => target.correct === true && target.notionIds.length > 0)
-    .map(({ notionIds, bloomLevel }) => ({ notionIds, bloomLevel }));
+  const result = gradeStatement(statement, given[at] ?? emptyExerciseAnswer());
 
-  return { result: { ...main, parts: partResults }, rewards };
+  // L'énoncé crédite SES notions, chacune à SON niveau : une question liée
+  // juste fait progresser les siennes même si la principale est ratée. Notions
+  // et niveaux sont relus de la base ici, jamais reçus du client.
+  const rewards = rewardsFor(result.correct, statement.notionIds ?? [], statement.notionBloom);
+
+  return { result, rewards, isLast: at === statements.length - 1 };
 }
 
 export async function saveQuestions(workshopId: string, questions: Question[]): Promise<void> {

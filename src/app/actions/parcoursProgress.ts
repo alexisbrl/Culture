@@ -3,6 +3,8 @@
 import { requireMember } from '@/lib/authz';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import * as masteryLib from '@/lib/workshops/mastery';
+import * as examLib from '@/lib/workshops/exam';
+import { paceVerdict, PACE_WINDOW } from '@/lib/workshops/answerPace';
 
 // Avancement d'un membre sur son parcours — alimente les barres de progression
 // de l'onglet parcours. Logique métier : voir @/lib/workshops/mastery.
@@ -37,6 +39,36 @@ export async function resetMyParcoursProgress(
   if (!ctx) return { success: false, cleared: 0, error: 'Accès refusé' };
 
   const result = await masteryLib.resetUserMastery(workshopId, ctx.userId);
+
+  // Les deux vont ensemble : remettre la maîtrise à zéro sans oublier les
+  // questions déjà répondues laisserait un parcours vierge et sans plus rien à
+  // tirer. Une erreur ici n'annule pas la remise à zéro, qui a bien eu lieu.
+  try {
+    await examLib.clearParcoursAsked(workshopId, ctx.userId);
+  } catch (err) {
+    console.error('resetMyParcoursProgress asked error:', err);
+  }
+
   if (result.success) revalidateWorkshop();
   return result;
+}
+
+// Combien de temps il reste avant qu'un membre puisse relancer un exercice.
+//
+// Rendu en DURÉE et non en date : l'écran s'en sert pour désactiver les boutons
+// puis se réarmer tout seul au bout du compte, sans jamais lire l'horloge
+// pendant un rendu (règle React Compiler du projet). 0 = rien ne bloque.
+//
+// ⚠️ La pause ne vit pas dans le navigateur : elle se déduit des dernières
+// réponses enregistrées (voir @/lib/workshops/answerPace). Recharger la page,
+// fermer l'onglet ou changer d'appareil n'y change donc rien — et le tirage la
+// vérifie de son côté, l'écran n'en est que le reflet.
+export async function getParcoursPause(workshopId: string): Promise<number> {
+  const ctx = await requireMember(workshopId);
+  if (!ctx) return 0;
+
+  const verdict = paceVerdict(await examLib.recentAnswerPace(workshopId, ctx.userId, PACE_WINDOW));
+  if (verdict.state !== 'blocked') return 0;
+
+  return Math.max(0, verdict.until - Date.now());
 }

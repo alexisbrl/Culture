@@ -63,10 +63,17 @@ export function questionsPerNotion(distribution: BloomDistribution = DEFAULT_BLO
  *  500 à 1000 (§9) — c'est pourquoi rien dans le pipeline ne suppose « tout le
  *  lot dans une seule réponse ».
  *
- *  À 50, il bloquait à 2 % de la volumétrie cible (§16.2). Relevé à 300 **le
- *  temps des tests** : c'est un garde-fou contre une boucle qui part en vrille,
- *  il doit rester bas tant que les coûts réels ne sont pas constatés. */
-export const MAX_QUESTIONS_PER_IMPORT = 300;
+ *  À 50, il bloquait à 2 % de la volumétrie cible (§16.2). Passé à 300, puis à
+ *  500 le 30/08/2026 : c'est un **fusible**, pas un quota. Il ne doit jamais se
+ *  déclencher en usage normal — un lancement réel n'en approche pas le volume —
+ *  et ne sert qu'à arrêter une boucle qui part en vrille. Un plafond réglé sous
+ *  l'usage nominal ne protège plus, il gêne.
+ *
+ *  Il ne borne PAS la dépense d'un compte : chaque lot rouvre le compteur, et
+ *  relancer une génération est un geste humain, délibéré et visible. Le vrai
+ *  plafond de dépense serait un quota par utilisateur adossé à l'abonnement — il
+ *  n'existe pas encore (`docs/backlog.md`). */
+export const MAX_QUESTIONS_PER_IMPORT = 500;
 
 // ─── L'examen : une volumétrie qui ne se compte pas par notion ───────────────
 //
@@ -391,11 +398,19 @@ Ne réduis pas ce qui n'a pas à l'être : un découpage juste que tu rabotes fa
 
 Un chapitre est une unité d'enseignement, pas une section de mise en page : deux sous-parties qui traitent du même sujet forment un seul chapitre. Vise le découpage qu'un enseignant ferait pour organiser sa progression.
 
-**Le mot « chapitre » est le nôtre, pas celui du document.** Un cours nomme ses grandes parties comme il veut — thèmes, séquences, modules, parties, unités —, ou ne les nomme pas du tout. Ce qu'on te demande est un NIVEAU DE DÉCOUPAGE, pas la recherche d'un mot. Si le cours s'organise en thèmes contenant eux-mêmes des chapitres, les deux niveaux sont des découpages possibles : choisis celui qui correspond à la demande de l'utilisateur, et à défaut de demande, celui des grandes parties.
+**Le mot « chapitre » est le nôtre, pas celui du document.** Un cours nomme ses grandes parties comme il veut — thèmes, séquences, modules, parties, unités —, ou ne les nomme pas du tout. Ce qu'on te demande est un NIVEAU DE DÉCOUPAGE, pas la recherche d'un mot.
+
+**UN SEUL NIVEAU, JAMAIS DEUX.** Quand le cours emboîte ses divisions — des thèmes qui contiennent des chapitres, des parties qui contiennent des séquences —, tu choisis UN de ces niveaux et tu t'y tiens d'un bout à l'autre du cours. Une liste qui mélange un thème et les chapitres d'un autre thème est une réponse fausse, même si chaque nom pris isolément existe dans le document : le programme s'y lit alors sur deux échelles à la fois, et une notion ne sait plus où se ranger.
+
+Le niveau à prendre, sauf demande contraire de l'utilisateur : **le plus fin des niveaux emboîtés, celui qui porte réellement le contenu du cours**. Si le cours est fait de thèmes contenant des chapitres, ce sont les CHAPITRES, et les thèmes ne sont alors rien d'autre que des étiquettes de regroupement — ils ne deviennent jamais des chapitres à eux seuls, et n'ont pas à figurer dans ta réponse.
+
+**Une division annoncée mais jamais développée n'existe pas.** Un cours saute parfois une partie de son propre plan : le titre est là, et rien dessous — pas de contenu, pas de sous-partie, pas une ligne à apprendre. Ne la reprends pas, ni comme chapitre ni comme notion. On ne met pas au programme une partie qui n'a rien à enseigner, et signaler son absence n'est pas ton travail ici.
 
 Ordre de grandeur : un cours en compte typiquement ${PLAUSIBLE_CHAPTERS.min} à ${PLAUSIBLE_CHAPTERS.max}, davantage pour un programme annuel ou un découpage fin explicitement demandé. C'est une indication et non une limite — dépasse-la si le contenu ou la demande le justifient.
 
-Donne à chacun une référence courte et unique (ch1, ch2…), et un nom de 120 caractères maximum. Un chapitre qui existe déjà se réutilise en reprenant SA référence telle quelle, sans le recréer.
+Donne à chacun une référence courte et unique (ch1, ch2…), et un nom de 120 caractères maximum.
+
+**Ne mets dans \`chapters\` que les chapitres que tu CRÉES.** Ceux qui existent déjà sont listés plus haut avec leur référence : ils n'ont rien à y faire, et les y remettre ne les met pas à jour — leur nom et leur place ne changent pas. Tu les nommes dans \`chapterOrder\`, et là seulement, pour dire leur rang. Un cours qu'on repasse à l'identique se répond donc avec un \`chapters\` VIDE, et c'est la bonne réponse.
 
 **Situe chaque chapitre dans le cours** : le document où il commence, sa première et sa dernière page approximatives. Une autre étape s'en servira pour ranger les notions sans avoir à relire le cours. Approximatif suffit largement ; mets 0 quand tu ne peux vraiment pas dire.
 
@@ -431,9 +446,16 @@ ${notionsToArrange(notions)}`;
 export function notionsInstruction(document: { fileName: string }): string {
   return `Extrais les NOTIONS du document « ${document.fileName} ». Traite-le en entier ; ne t'occupe d'aucun autre document.
 
-Une notion est l'unité minimale de connaissance : UNE idée, en UNE phrase de 280 caractères maximum, autoportante et vérifiable. « La Loire est le plus long fleuve de France » est une notion ; « Les fleuves » n'en est pas une, c'est un thème.
+Une notion est l'unité minimale de connaissance : UNE idée, en UNE phrase de 500 caractères maximum, autoportante et vérifiable. « La Loire est le plus long fleuve de France » est une notion ; « Les fleuves » n'en est pas une, c'est un thème.
 
 Découpe assez fin pour qu'on puisse interroger chaque notion séparément, mais pas au point de séparer une idée en deux moitiés qui ne veulent plus rien dire seules.
+
+**CHAQUE NOTION SERA LUE SEULE, sans le cours et sans les autres notions.** C'est la règle la plus importante de cette consigne : une notion est posée telle quelle à un élève, des semaines plus tard, sans rien autour. Écris donc chacune comme si c'était la première phrase qu'on lit sur le sujet.
+
+Concrètement, aucune notion ne commence ni ne continue par un renvoi vers l'extérieur : pas de « ce », « cette », « ces », « cet », « il », « elle », « y », « en » qui désignent quelque chose d'absent de la phrase, pas de « comme vu plus haut », pas de « cette période », pas de « ces améliorations ». Nomme ce dont tu parles, à chaque fois, même si ça t'oblige à répéter d'une notion à l'autre — la répétition ne coûte rien, le renvoi rend la notion inutilisable.
+
+À éviter : « Ces améliorations ont permis d'augmenter la quantité de livres produits. » — quelles améliorations ?
+À écrire : « La réduction du format, les lettres romaines et le papier ont permis d'augmenter la quantité de livres produits. »
 
 **Ne range rien dans un chapitre** : à ce stade il n'y en a pas, et ce n'est pas ton travail ici.
 
@@ -466,7 +488,7 @@ ${lines.join('\n')}`;
  *  ⚠️ **Elle ne reçoit aucun document**, et c'est tout son intérêt. Ce qui
  *  remplace le cours, ce sont deux nombres : la page d'où vient la notion, et
  *  les pages que couvre le chapitre. Renvoyer le corpus pour décider où va une
- *  phrase de 280 caractères serait refaire l'erreur de coût du 22/08/2026.
+ *  notion d’une phrase serait refaire l'erreur de coût du 22/08/2026.
  *
  *  ⚠️ **La page indique, le contenu décide.** Un chapitre ne s'arrête pas au bas
  *  d'une page : une notion du haut de la page 40 appartient souvent encore au
@@ -558,7 +580,7 @@ export function bloomInstruction(distribution: BloomDistribution = DEFAULT_BLOOM
 
   const total = questionsPerNotion(distribution);
   const enumeration = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} et ${parts[parts.length - 1]}`;
-  return `Pour CHAQUE notion à couvrir : ${enumeration}, soit ${total} questions par notion. N'en produis pas d'autres niveaux.`;
+  return `Pour CHAQUE notion à couvrir : ${enumeration}, soit ${total} questions par notion. Ce niveau est celui que tu inscris à côté de la notion dans \`notions\`. N'en produis pas d'autres niveaux.`;
 }
 
 /** Le TEMPS DE RÉPONSE visé, par niveau de Bloom (arbitrage du 25/08/2026).
@@ -584,9 +606,15 @@ const PARCOURS_PACE: Record<BloomLevel, string> = {
  *  annoncer une durée pour un niveau qu'on ne produit pas attirerait l'attention
  *  sur ce qu'on ne veut justement pas voir. */
 export function paceInstruction(distribution: BloomDistribution = DEFAULT_BLOOM_DISTRIBUTION): string {
-  const parts = BLOOM_LEVELS.filter((level) => distribution[level] > 0).map(
-    (level) => `${PARCOURS_PACE[level]} au niveau ${level}`,
-  );
+  return paceForLevels(BLOOM_LEVELS.filter((level) => distribution[level] > 0));
+}
+
+/** La même règle, à partir des niveaux réellement demandés — la forme qu'il
+ *  faut quand la volumétrie vient d'une demande explicite et non d'une
+ *  répartition (voir @/lib/ingest/demand). */
+export function paceForLevels(levels: BloomLevel[]): string {
+  const wanted = BLOOM_LEVELS.filter((level) => levels.includes(level));
+  const parts = wanted.map((level) => `${PARCOURS_PACE[level]} au niveau ${level}`);
   if (parts.length === 0) return '';
   return `**Un entraînement s'enchaîne** : vise ${parts.join(', ')}. C'est le temps de réponse attendu, et c'est lui qui dicte l'ampleur de l'énoncé comme celle de la réponse.`;
 }
@@ -672,7 +700,16 @@ function responseTypeCatalog(context: 'parcours' | 'exam'): string {
 export function questionsInstruction(input: {
   chapter: { id: string; name: string };
   workshop?: WorkshopIdentity | null;
-  notions: { id: string; title: string; missing?: number }[];
+  /** `want` porte la DEMANDE explicite : ce qu'il faut produire sur cette
+   *  notion, niveau par niveau. Présente pour un chapitre neuf comme pour une
+   *  recharge ; absente pour une consigne libre, où le modèle choisit
+   *  (voir @/lib/ingest/demand). */
+  notions: {
+    id: string;
+    title: string;
+    missing?: number;
+    want?: { bloomLevel: BloomLevel; count: number }[];
+  }[];
   /** Les autres notions du chapitre, en contexte seulement (§16.21). La passe ne
    *  reçoit plus les documents : ce sont elles qui remplacent le cours. */
   neighbours?: { id: string; title: string }[];
@@ -688,10 +725,23 @@ export function questionsInstruction(input: {
   // consigne qui dit déjà 12 n'apporte rien et brouille la règle générale.
   const list = input.notions
     .map((n) => {
+      // La demande explicite prime : elle dit le nombre ET le niveau, il n'y a
+      // plus rien à déduire d'une règle générale.
+      if (n.want && n.want.length > 0) {
+        const parts = n.want.map((w) => `${w.count} de niveau ${w.bloomLevel} (${BLOOM_VERBS[w.bloomLevel]})`);
+        return `- ${n.id} — ${n.title} : ${parts.join(', ')}`;
+      }
       const missing = typeof n.missing === 'number' && n.missing > 0 ? ` [il en manque ${n.missing}]` : '';
       return `- ${n.id} — ${n.title}${missing}`;
     })
     .join('\n');
+
+  // Les niveaux réellement demandés, pour la règle de rythme : face à une
+  // demande explicite, la répartition par défaut ne dit plus rien de juste.
+  const wantedLevels = new Set<BloomLevel>(
+    input.notions.flatMap((n) => (n.want ?? []).map((w) => w.bloomLevel)),
+  );
+  const hasDemand = wantedLevels.size > 0;
   const neighbours = input.neighbours ?? [];
 
   // Le contexte vient APRÈS les notions à couvrir et se termine par un rappel :
@@ -709,10 +759,14 @@ Notions à couvrir :
 ${list}
 ${context}
 Règles de production :
-- ${bloomInstruction(input.distribution)}
-- Chaque question porte dans \`notionRefs\` la ou les notions qu'elle fait travailler, avec les références ci-dessus. Une question sans notion ne sera jamais posée à personne.
-- **Une question, une notion.** Ici, une question est tirée pour réviser SA notion : elle doit se répondre avec elle et rien d'autre.
-- ${paceInstruction(input.distribution)}
+- ${hasDemand
+    ? "**Produis exactement ce qui est demandé en face de chaque notion** — le nombre et le niveau y sont écrits. Ce niveau est celui que tu inscris à côté de la notion dans `notions`. N'en ajoute pas, et ne produis aucun autre niveau."
+    : bloomInstruction(input.distribution)}
+- Chaque question porte dans \`notions\` la ou les notions qu'elle fait travailler, avec les références ci-dessus, **et pour chacune le niveau auquel cette question-là la fait travailler**. Une question sans notion ne sera jamais posée à personne.
+- ${hasDemand
+    ? "**Une question est écrite POUR une notion, au niveau demandé.** Si elle en mobilise d'autres, déclare-les toutes — mais **aucune à un niveau supérieur à celui de sa notion principale**. Une question qui exige d'une notion secondaire plus que de sa notion principale ne pourra être posée à personne : elle serait hors de portée de ceux-là mêmes pour qui on l'écrit."
+    : "**Une question, une notion.** Ici, une question est tirée pour réviser SA notion : elle doit se répondre avec elle et rien d'autre."}
+- ${hasDemand ? paceForLevels([...wantedLevels]) : paceInstruction(input.distribution)}
 ${responseTypeCatalog('parcours')}
 - Pour une réponse libre : renseigne les critères de correction — ce qui est attendu, ce qui est accepté. C'est là-dessus que la réponse sera jugée.
 - Pour un QCM : des propositions fausses PLAUSIBLES. Une proposition manifestement absurde ne teste rien, elle se raye d'office.
@@ -764,10 +818,13 @@ export function examInstruction(input: {
     .map((c) => `## ${c.name}\n${c.notions.map((n) => `- ${n.id} — ${n.title}`).join('\n')}`)
     .join('\n\n');
 
-  const bloom = examBloomCounts(input.budget);
+  // En PROPORTIONS et non en nombres depuis le 28/08/2026 : le niveau porte sur
+  // le couple question ↔ notion, et une question d'examen en croise plusieurs.
+  // Annoncer « 10 de niveau 2 » sur un budget de 40 questions laisserait croire
+  // qu'on compte des questions.
   const mix = ([2, 3, 4] as const)
-    .filter((level) => bloom[level] > 0)
-    .map((level) => `${bloom[level]} de niveau ${level} (${BLOOM_VERBS[level]})`)
+    .filter((level) => EXAM_BLOOM_MIX[level] > 0)
+    .map((level) => `${Math.round(EXAM_BLOOM_MIX[level] * 100)} % de niveau ${level} (${BLOOM_VERBS[level]})`)
     .join(', ');
 
   const grouped = examGroupedCount(input.budget);
@@ -790,8 +847,9 @@ ${program}
 Règles de production :
 - Écris **exactement ${input.budget} questions**, pas une de plus.
 - **Chaque question croise PLUSIEURS notions** dès que c'est possible : c'est ce qui distingue un examen d'une série de questions de cours. Une question qui ne porte que sur une seule notion doit être l'exception, pas la règle.
-- Répartition visée : ${mix}. Aucune question de simple restitution : le parcours s'en charge.
-- Chaque question porte dans \`notionRefs\` TOUTES les notions qu'elle fait travailler, avec les références ci-dessus. Une question sans notion ne sera jamais retenue.
+- Chaque question porte dans \`notions\` TOUTES les notions qu'elle fait travailler, avec les références ci-dessus. Une question sans notion ne sera jamais retenue.
+- **Le niveau se déclare notion par notion, pas pour la question.** Écris l'énoncé, regarde ce qu'il mobilise, puis dis pour chaque notion ce que la question en demande : une même question peut faire simplement RESTITUER une notion de contexte et faire ANALYSER celle qui est réellement en jeu. Ne mets pas tout le monde au même niveau par facilité.
+- Répartition visée sur l'ensemble de ces couples question ↔ notion : ${mix}. Aucun couple de simple restitution : le parcours s'en charge.
 ${groups}
 ${responseTypeCatalog('exam')}
 - **Une question d'examen se donne plus de temps qu'une question d'entraînement du même niveau** : compte 1 à 2 minutes au niveau 2, 3 à 5 minutes aux niveaux 3 et 4. C'est ce temps qui autorise un énoncé plus fourni et une réponse construite.

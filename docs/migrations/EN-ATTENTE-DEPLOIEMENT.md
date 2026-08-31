@@ -33,11 +33,40 @@ et l'incident du 22/06/2026 dans `docs/changelog.md`.
 
 ## À appliquer
 
-AUCUN
+- **`2026-08-28-bloom-uniquement-par-notion.sql` — étape 2 seulement**
+  (`alter table public.exam_question_items drop column bloom_level;`, ligne
+  commentée en fin de fichier).
+  - **Prérequis** : la branche `feat/cout-ingestion-ia` mergée dans `main` et
+    **déployée** sur Vercel. Le code en ligne lit encore cette colonne ; la
+    retirer avant casserait la lecture des questions, souvent en silence.
+  - L'étape 1 du même fichier (reprise des niveaux sur les liens question ↔
+    notion) est **déjà appliquée** — 28/08/2026, 51 liens renseignés.
+  - Après application : régénérer `src/lib/database.types.ts`, retirer cette
+    entrée, laisser une ligne dans `docs/changelog.md`.
+
+- **`parcours_asked.answer_ms` et `parcours_asked.correct`** — remplacées par
+  la colonne `answers` (une entrée par question répondue,
+  `2026-08-30-rythme-par-question.sql`). Le détecteur de rythme ne les lit plus
+  que pour les lignes écrites avant cette date.
+  - **Prérequis** : `feat/cout-ingestion-ia` mergée et déployée, ET toutes les
+    lignes antérieures sorties de la fenêtre de lecture du rythme (les cinq
+    dernières réponses d'un membre) — autant dire quelques exercices. Sans
+    urgence : deux colonnes inutilisées ne coûtent rien.
+  - **SQL** : `alter table parcours_asked drop column answer_ms, drop column correct;`
 
 ---
 
 ## Appliqué / sans objet
+
+- **30/08/2026 — `2026-08-30-rythme-par-question.sql` appliquée le jour même.**
+  Purement additive (`parcours_asked.answers`, jsonb, défaut `[]`) : le code en
+  ligne l'ignore, les lignes existantes valent tableau vide et restent lues par
+  les colonnes qu'elle remplace. `src/lib/database.types.ts` régénéré.
+
+- **29/08/2026 — `2026-08-29-une-generation-a-la-fois.sql` appliquée le jour
+  même.** Purement additive (`ai_imports.beat_at`, `ai_imports.closed_at`, un
+  index partiel) : le code en ligne les ignore, rien à attendre.
+  `src/lib/database.types.ts` régénéré dans la foulée.
 
 - **19/08/2026 — Tout le retard de migrations soldé après le déploiement de la
   PR #40** (`7532c78`, production Vercel `READY`). Les six entrées ci-dessous

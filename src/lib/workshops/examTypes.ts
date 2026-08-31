@@ -19,6 +19,28 @@
 // URL — l'URL signée est résolue à la demande, côté serveur uniquement.
 export type QuestionMedia = { key: string };
 
+// ─── Décision : un média se porte sur l'ÉNONCÉ, jamais sur une réponse ───────
+//
+// Arrêté le 30/08/2026 après examen, à ne pas rediscuter sans élément nouveau :
+// les propositions d'un QCM, les éléments d'une liste, les cases d'un tableau
+// et les paires à relier restent du TEXTE. Pas d'image ni d'audio dans une
+// proposition de réponse.
+//
+// Ce n'est pas un manque de temps, c'est un mauvais rapport : le même exercice
+// s'obtient en mettant le média sur l'énoncé (une planche, un extrait sonore)
+// et en faisant choisir parmi des options écrites — « lequel de ces éléments
+// est en A ? ». Le résultat pédagogique est quasiment identique, alors que le
+// coût, lui, ne l'est pas : il faudrait un dépôt de fichier par proposition,
+// autant d'URL signées à résoudre à chaque tirage, un rendu à inventer sur la
+// feuille A4 comme dans l'exercice du parcours, la reprise de la correction
+// (qui compare des textes), du barème, de la copie de question, du contrat
+// exposé à l'IA et à une future API — pour chacun des types à propositions.
+//
+// Conséquence pratique : `QuestionMedia` n'apparaît que sur la question (image,
+// audio), et `choices` reste un tableau de chaînes partout où il existe. Si
+// l'envie revient, elle doit d'abord expliquer ce que l'énoncé ne sait pas déjà
+// faire.
+
 // Une question vit soit dans la banque d'examen, soit dans le parcours
 // pédagogique (colonne `exam_questions.context`). Même table, même éditeur,
 // deux surfaces de gestion distinctes.
@@ -246,11 +268,18 @@ export const MATCH_SPLIT_MIN = 0.05;
 export const MATCH_SPLIT_MAX = 0.95;
 export const MATCH_SPLIT_DEFAULT = 0.5;
 
-// Taxonomie de Bloom — niveau cognitif VISÉ par la question (1 mémoriser,
-// 2 comprendre, 3 appliquer, 4 analyser, 5 évaluer, 6 créer). À ne pas confondre
-// avec `brick_mastery.bloom_level`, qui mesure le niveau ATTEINT par un candidat
-// sur une notion. Obligatoire : jamais nul, jamais absent, 1 par défaut — la
-// contrainte `exam_questions_bloom_level_check` le garantit jusqu'en base.
+// Taxonomie de Bloom — niveau cognitif VISÉ **par le couple question ↔ notion**
+// (1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser, 5 évaluer, 6 créer). À ne
+// pas confondre avec `brick_mastery.bloom_level`, qui mesure le niveau ATTEINT
+// par un candidat sur une notion.
+//
+// ⚠️ Une question n'a PLUS de niveau à elle (28/08/2026). Elle en portait un,
+// dont les niveaux par notion n'étaient qu'un raffinement facultatif : deux
+// sources pour la même information, dont une seule était affichée. Le niveau vit
+// désormais uniquement sur le lien vers la notion — c'est-à-dire à l'endroit
+// exact où il a un sens, puisqu'il dit ce que la question fait faire de CETTE
+// notion-là. Colonne `exam_question_items.bloom_level` en attente de suppression
+// (EN-ATTENTE-DEPLOIEMENT.md).
 // Quatre niveaux dans toute l'application (09/08/2026) : mémoriser, comprendre,
 // appliquer, analyser. « Évaluer » et « Créer » ont été retirés — ils n'étaient
 // pas exploitables en correction et `mastery.ts` plafonnait déjà à 4 niveaux
@@ -270,6 +299,26 @@ export function toBloomLevel(value: unknown): BloomLevel {
   if (n >= 4) return 4;
   return BLOOM_LEVELS.includes(n as BloomLevel) ? (n as BloomLevel) : DEFAULT_BLOOM_LEVEL;
 }
+
+// Ce que vaut UN exercice du parcours : 12 niveaux de Bloom, et non 12 questions
+// (règle produit du 29/08/2026). Un énoncé coûte le plus haut niveau qu'il
+// demande, une grappe la somme de ses énoncés : douze énoncés « mémoriser », ou
+// un « analyser » + deux « appliquer » + deux « mémoriser ». Ici plutôt que dans
+// `parcoursDraw.ts` parce que l'écran d'exercice en a besoin pour sa barre
+// d'avancement, et qu'il ne doit rien importer qui touche à la base.
+export const EXERCISE_BLOOM_BUDGET = 12;
+
+// Combien de niveaux au-dessus de ce qu'il a atteint une question peut demander
+// à un membre. Un membre qui a atteint le niveau N sur une notion travaille le
+// N+1 ; on accepte donc jusqu'à N+2 — un cran d'avance, pas deux. La règle
+// s'applique à CHAQUE notion de CHAQUE énoncé de la grappe, qui se pose d'un
+// bloc : une seule notion hors de portée l'écarte entière.
+//
+// Elle est appliquée par la base (docs/migrations/2026-08-29-tirage-en-base.sql,
+// qui reçoit ce nombre en paramètre) : le tirage et le radar croisent trop de
+// lignes pour se faire ici. La valeur reste ici parce que c'est une règle
+// produit, pas un détail de requête.
+export const BLOOM_REACH = 2;
 
 // ─── Question liée ───────────────────────────────────────────────────────────
 //
@@ -318,11 +367,11 @@ export type QuestionPart = {
   typeOptions: QuestionTypeOptions;
   /** Attendus de correction, propres à cette question liée. */
   expectations: string;
-  /** Niveau de Bloom visé par cette question liée, indépendant du principal. */
-  bloomLevel: BloomLevel;
   /** Notions couvertes par cette question liée, comme pour la principale :
    *  reliées à la QUESTION (`exam_question_item_bricks`), pas au groupe. */
   notionIds: string[];
+  /** Niveau de Bloom **par notion**, même règle que sur la principale. */
+  notionBloom: Record<string, BloomLevel>;
 };
 
 // Pas de titre : une question n'a que son énoncé (19/08/2026). Le champ
@@ -353,10 +402,6 @@ export type Question = {
   // Pas de chapitre sur une question : elle hérite de ceux de ses notions, des
   // deux côtés (filtre de la banque, tirage du parcours). Voir
   // `parcoursQuestionIdsOfChapter` dans `lib/workshops/exam.ts`.
-  // Niveau de Bloom visé. Non optionnel : toute construction d'une Question doit
-  // le fournir (emptyQuestion() met 1), pour qu'il soit impossible d'aboutir en
-  // base sans valeur.
-  bloomLevel: BloomLevel;
   // Réglages propres au type de réponse (liste, tableau, fichier, dessin).
   typeOptions?: QuestionTypeOptions;
   // « Attendus » : instructions de correction en texte libre (détails attendus,
@@ -369,6 +414,21 @@ export type Question = {
   // et non au groupe depuis le 11/08/2026 ; l'ancienne `exam_question_bricks` a
   // été supprimée le 19/08/2026.
   notionIds: string[];
+  /** ─── Le niveau de Bloom, notion par notion (28/08/2026) ─────────────────
+   *
+   *  Une même question peut faire RESTITUER une notion (niveau 1) et en faire
+   *  ANALYSER une autre (niveau 4) : le niveau qualifie le couple question ↔
+   *  notion, pas la question. C'est la SEULE forme du niveau depuis cette date ;
+   *  la question n'en porte plus.
+   *
+   *  Une clé par entrée de `notionIds`, sans exception — c'est ce que garantit
+   *  `withNotionBloom` (exam.ts), par où passe toute lecture. Une notion dont le
+   *  niveau manque (question d'avant ce changement, entrée extérieure muette)
+   *  reçoit `DEFAULT_BLOOM_LEVEL` : jamais de trou, donc jamais de « suit le
+   *  niveau de sa question » à réinventer côté lecteur. Stocké dans la colonne
+   *  `bloom_level` de la table de jonction, qui reste nullable en base — un NULL
+   *  y signifie « pas encore renseigné », et se lit comme le niveau par défaut. */
+  notionBloom: Record<string, BloomLevel>;
 };
 
 // ─── Exercice du parcours ────────────────────────────────────────────────────
@@ -512,10 +572,14 @@ export type ExerciseResult = {
   correctList?: string[];
   /** matching — les paires attendues, remises côte à côte. */
   correctPairs?: { left: string; right: string }[];
-  /** Correction de chaque question liée, dans le même ordre que
-   *  `ExercisePrompt.parts`. Absent (ou vide) quand la question n'en a pas. */
-  parts?: ExerciseResult[];
 };
+
+// Une correction porte UN énoncé, jamais la grappe entière : depuis le
+// 30/08/2026, les questions liées se posent et se corrigent une par une, donc
+// la correction de la suivante n'existe pas encore quand on rend celle-ci. Le
+// champ `parts` qui les portait toutes d'un coup a disparu avec cette règle —
+// le rendre à ce type reviendrait à faire descendre au navigateur des réponses
+// à des questions qui ne sont pas encore posées.
 
 export type IdentitySide = 'left' | 'right' | 'hidden';
 
