@@ -444,30 +444,24 @@ export type Database = {
       }
       parcours_asked: {
         Row: {
-          answer_ms: number | null
           answers: Json
           asked_at: string
-          correct: boolean | null
           group_id: string
           id: string
           user_id: string
           workshop_id: string
         }
         Insert: {
-          answer_ms?: number | null
           answers?: Json
           asked_at?: string
-          correct?: boolean | null
           group_id: string
           id?: string
           user_id: string
           workshop_id: string
         }
         Update: {
-          answer_ms?: number | null
           answers?: Json
           asked_at?: string
-          correct?: boolean | null
           group_id?: string
           id?: string
           user_id?: string
