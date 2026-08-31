@@ -785,7 +785,7 @@ export async function clearParcoursAsked(workshopId: string, userId: string): Pr
  *  Un énoncé sans notion coûte le niveau par défaut plutôt que rien : il occupe
  *  le membre, il ne peut pas être gratuit. Cette règle est la copie fidèle de
  *  celle du tirage, qui vit en base (`cout_enonce` dans `parcours_pick`, voir
- *  docs/migrations/2026-08-29-tirage-en-base.sql) — les deux doivent bouger
+ *  docs/migrations/2026-08-30-tirage-sans-repeter-la-notion.sql) — les deux doivent bouger
  *  ensemble, sinon la barre d'avancement ne dirait plus la même chose que le
  *  budget réellement engagé. */
 function statementCost(statement: { notionIds?: string[]; notionBloom: Record<string, BloomLevel> }): number {
@@ -826,7 +826,7 @@ type PickRow = {
  * dans ce qui reste des 12 niveaux.
  *
  * ⚠️ **Le choix se fait en base** (`parcours_pick`, voir
- * docs/migrations/2026-08-29-tirage-en-base.sql, qui porte l'énoncé des règles).
+ * docs/migrations/2026-08-30-tirage-sans-repeter-la-notion.sql, qui porte l'énoncé des règles).
  * L'application chargeait auparavant tout le chapitre pour n'en garder qu'une
  * question : intenable à la cible du produit (2 000 notions et 100 000 questions
  * par atelier). Ici, il ne remonte qu'un identifiant, son coût et de quoi

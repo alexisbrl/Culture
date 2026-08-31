@@ -15,6 +15,13 @@
 -- fonction serveur portait tout le chapitre en mémoire pour n'en garder qu'une
 -- question.
 --
+-- ⚠️ POUR `parcours_pick`, CE FICHIER EST PÉRIMÉ depuis le 30/08/2026 : la
+--    définition qui fait foi est `2026-08-30-tirage-sans-repeter-la-notion.sql`
+--    (elle ajoute la préférence « pas deux fois la même notion dans un même
+--    exercice »). Ce qui suit reste exact pour `parcours_radar`, inchangée, et
+--    pour l'énoncé des règles 1 à 5 — le fichier du 30/08 n'en modifie aucune,
+--    il n'ajoute qu'un critère de tri en tête.
+--
 -- ⚠️ CE FICHIER EST DÉSORMAIS LA SEULE DÉFINITION DES RÈGLES DE TIRAGE. Elles
 -- vivaient en double (module TypeScript testé + cette requête) ; deux copies
 -- d'une même règle finissent toujours par diverger, et c'est celle qui tourne
