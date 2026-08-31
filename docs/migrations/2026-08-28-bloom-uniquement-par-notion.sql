@@ -37,4 +37,7 @@ update public.exam_question_item_bricks link
 -- plus, produit donc des lignes valides sans elle. Il n'y a rien à faire d'autre
 -- qu'attendre.
 --
--- alter table public.exam_question_items drop column bloom_level;
+-- ✅ ÉTAPE 2 APPLIQUÉE le 31/08/2026, après le déploiement de la PR #48.
+--    Les 108 énoncés dont le niveau n'existait que là n'avaient aucune notion
+--    attachée : aucun couple question ↔ notion n'a perdu son niveau.
+alter table public.exam_question_items drop column bloom_level;

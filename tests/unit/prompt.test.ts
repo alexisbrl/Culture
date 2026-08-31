@@ -5,6 +5,7 @@ import {
   bloomInstruction,
   chaptersInstruction,
   DEFAULT_BLOOM_DISTRIBUTION,
+  EXAM_QUESTIONS_RANGE,
   existingContentBlock,
   MAX_QUESTIONS_PER_IMPORT,
   notionsInstruction,
@@ -371,10 +372,13 @@ describe('volumétrie — répartition de Bloom paramétrable (§16.1)', () => {
     expect(questionsPerNotion()).toBe(12);
   });
 
-  it('le plafond de débit est à 300 le temps des tests', () => {
-    // Garde-fou volontairement bas : c'est la seule barrière contre une boucle
-    // qui part en vrille (§16.2).
-    expect(MAX_QUESTIONS_PER_IMPORT).toBe(300);
+  it('le plafond de débit reste au-dessus de la volumétrie cible', () => {
+    // C'est un FUSIBLE, pas un quota : il n'existe que pour arrêter une boucle
+    // qui part en vrille (§16.2), et ne doit jamais se déclencher en usage
+    // normal. La cible produit étant de 500 à 1000 questions (§9), un plafond
+    // réglé en dessous couperait au milieu d'une génération nominale.
+    expect(MAX_QUESTIONS_PER_IMPORT).toBe(500);
+    expect(MAX_QUESTIONS_PER_IMPORT).toBeGreaterThanOrEqual(EXAM_QUESTIONS_RANGE.max);
   });
 
   it('un niveau à zéro n’apparaît pas dans l’instruction', () => {
