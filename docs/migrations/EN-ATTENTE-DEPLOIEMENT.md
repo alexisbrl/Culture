@@ -33,30 +33,40 @@ et l'incident du 22/06/2026 dans `docs/changelog.md`.
 
 ## À appliquer
 
-- **`2026-08-28-bloom-uniquement-par-notion.sql` — étape 2 seulement**
-  (`alter table public.exam_question_items drop column bloom_level;`, ligne
-  commentée en fin de fichier).
-  - **Prérequis** : la branche `feat/cout-ingestion-ia` mergée dans `main` et
-    **déployée** sur Vercel. Le code en ligne lit encore cette colonne ; la
-    retirer avant casserait la lecture des questions, souvent en silence.
-  - L'étape 1 du même fichier (reprise des niveaux sur les liens question ↔
-    notion) est **déjà appliquée** — 28/08/2026, 51 liens renseignés.
-  - Après application : régénérer `src/lib/database.types.ts`, retirer cette
-    entrée, laisser une ligne dans `docs/changelog.md`.
-
 - **`parcours_asked.answer_ms` et `parcours_asked.correct`** — remplacées par
   la colonne `answers` (une entrée par question répondue,
   `2026-08-30-rythme-par-question.sql`). Le détecteur de rythme ne les lit plus
   que pour les lignes écrites avant cette date.
-  - **Prérequis** : `feat/cout-ingestion-ia` mergée et déployée, ET toutes les
-    lignes antérieures sorties de la fenêtre de lecture du rythme (les cinq
-    dernières réponses d'un membre) — autant dire quelques exercices. Sans
-    urgence : deux colonnes inutilisées ne coûtent rien.
+  - **Prérequis** : la PR #48 est mergée et **déployée** (31/08/2026), première
+    moitié du prérequis levée. Il reste la seconde : toutes les lignes
+    antérieures doivent être sorties de la fenêtre de lecture du rythme (les
+    cinq dernières réponses d'un membre). **Vérifié le 31/08/2026 : pas encore.**
+    22 lignes au total, 18 sans la colonne `answers`, dont **1 encore dans la
+    fenêtre** — elle en sortira après quelques questions répondues par ce
+    membre. Sans urgence : deux colonnes inutilisées ne coûtent rien.
+  - Requête de contrôle avant d'appliquer (doit rendre 0) :
+    ```sql
+    select count(*) from (
+      select row_number() over (partition by user_id order by asked_at desc) as rang, answers
+      from parcours_asked
+    ) t where t.rang <= 5 and (t.answers is null or t.answers = '[]'::jsonb);
+    ```
   - **SQL** : `alter table parcours_asked drop column answer_ms, drop column correct;`
 
 ---
 
 ## Appliqué / sans objet
+
+- **31/08/2026 — `2026-08-28-bloom-uniquement-par-notion.sql`, étape 2 appliquée**
+  (`alter table public.exam_question_items drop column bloom_level;`), après le
+  déploiement en production de la PR #48 (Vercel `READY` sur `b420b0e`). Deux
+  vérifications avant de supprimer, à refaire telles quelles pour toute
+  suppression du même genre : (1) plus aucune écriture n'alimentait la colonne —
+  l'insertion des énoncés ne la mentionne plus ; (2) les **108 énoncés dont le
+  niveau n'existait qu'ici n'avaient aucune notion attachée**, donc aucun couple
+  question ↔ notion n'a perdu son niveau (592 liens, tous renseignés). Un énoncé
+  sans notion ne porte pas de couple : son niveau n'avait plus de sens dans le
+  nouveau modèle. `src/lib/database.types.ts` mis à jour.
 
 - **30/08/2026 — `2026-08-30-rythme-par-question.sql` appliquée le jour même.**
   Purement additive (`parcours_asked.answers`, jsonb, défaut `[]`) : le code en

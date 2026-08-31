@@ -300,7 +300,6 @@ export type Database = {
       exam_question_items: {
         Row: {
           answer: string
-          bloom_level: number
           choices: Json
           content: string
           correct_choices: Json
@@ -317,7 +316,6 @@ export type Database = {
         }
         Insert: {
           answer?: string
-          bloom_level?: number
           choices?: Json
           content?: string
           correct_choices?: Json
@@ -334,7 +332,6 @@ export type Database = {
         }
         Update: {
           answer?: string
-          bloom_level?: number
           choices?: Json
           content?: string
           correct_choices?: Json

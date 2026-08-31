@@ -278,8 +278,8 @@ export const MATCH_SPLIT_DEFAULT = 0.5;
 // sources pour la même information, dont une seule était affichée. Le niveau vit
 // désormais uniquement sur le lien vers la notion — c'est-à-dire à l'endroit
 // exact où il a un sens, puisqu'il dit ce que la question fait faire de CETTE
-// notion-là. Colonne `exam_question_items.bloom_level` en attente de suppression
-// (EN-ATTENTE-DEPLOIEMENT.md).
+// notion-là. La colonne `exam_question_items.bloom_level` a été supprimée le
+// 31/08/2026 : il n'y a plus de seconde source à tenir en accord.
 // Quatre niveaux dans toute l'application (09/08/2026) : mémoriser, comprendre,
 // appliquer, analyser. « Évaluer » et « Créer » ont été retirés — ils n'étaient
 // pas exploitables en correction et `mastery.ts` plafonnait déjà à 4 niveaux
