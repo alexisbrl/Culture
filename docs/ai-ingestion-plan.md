@@ -1857,7 +1857,9 @@ vidé en chemin. Aucun n'efface, un clic annule les deux.
    complète : 25 Mo par fichier **et 25 Mo par atelier** (le plafond par fichier
    ne bornait rien tant qu'on pouvait en déposer trente), 2 000 notions par
    atelier création manuelle comprise, 1 à 200 énoncés d'examen par lancement,
-   300 questions par import, et le mur de lecture — `MAX_CORPUS_TOKENS` = 868 000
+   500 questions par import (300 jusqu'au 30/08/2026 : c'est un fusible contre
+   une boucle emballée, pas un quota, et il doit rester au-dessus de l'usage
+   nominal), et le mur de lecture — `MAX_CORPUS_TOKENS` = 868 000
    tokens : la plus grande fenêtre (1 M) moins la réserve de sortie (32 k,
    **raisonnement compris** — les tokens de réflexion se prélèvent sur
    `max_tokens`, ils ne s'ajoutent pas à côté) moins 100 k pour ce que la mesure
