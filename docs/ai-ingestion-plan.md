@@ -35,7 +35,14 @@ suive, et quatre affirmations y étaient devenues fausses. Corrigé ici :
 - **Le contrat exposé à l'IA existe déjà** : `src/lib/workshops/questionGroup.ts`
   (`QuestionGroup`, `normalizeGroupInput`) — écrit le 11/08/2026, exactement la
   façade que ce plan appelait de ses vœux.
-- **Bloom est à 4 niveaux**, pas 6 (contrainte `exam_question_items_bloom_level_check`).
+- **Bloom est à 4 niveaux**, pas 6 — tenu par le CODE (`BLOOM_LEVELS`,
+  `src/lib/ingest/prompt.ts`, et `toBloomLevel` côté examen), plus par la base.
+  La contrainte `exam_question_items_bloom_level_check` citée ici jusqu'au
+  31/08/2026 **n'existe plus** : elle est partie avec la colonne qui la portait.
+  Celle qui reste, sur le lien question ↔ notion
+  (`exam_question_item_bricks_bloom_level_range`), tolère encore 1 à 6 — plus
+  large que le produit, sans conséquence tant que rien n'écrit au-delà de 4,
+  mais à ne pas citer comme la garantie des 4 niveaux.
 - **Trois types de réponse ont été retirés** (`sondage`, `ordre`, `fill_blank`,
   09/08/2026). Les 9 types réels font foi : `src/lib/workshops/examTypes.ts`.
   ⚠️ `docs/product-spec.md` en annonce encore certains — c'est le code qui fait foi.

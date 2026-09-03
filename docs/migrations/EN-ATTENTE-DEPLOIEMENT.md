@@ -33,29 +33,32 @@ et l'incident du 22/06/2026 dans `docs/changelog.md`.
 
 ## À appliquer
 
-- **`parcours_asked.answer_ms` et `parcours_asked.correct`** — remplacées par
-  la colonne `answers` (une entrée par question répondue,
-  `2026-08-30-rythme-par-question.sql`).
-  - **Prérequis** : la PR #49 mergée **et déployée** sur Vercel. Rien d'autre.
-  - ⚠️ **Le prérequis noté ici jusqu'au 31/08/2026 était faux**, et l'erreur
-    mérite d'être gardée : on attendait que les lignes d'avant `answers` sortent
-    de la fenêtre de lecture du rythme, comme si le blocage était une question de
-    DONNÉES. Il était de CODE — `recentAnswerPace` nommait les deux colonnes dans
-    son `select`, et l'écriture les tenait à jour. Les supprimer aurait cassé la
-    lecture quelle que soit l'ancienneté des lignes, et **en silence** : ce
-    `select` ignore son erreur pour ne jamais faire échouer une correction.
-    Vérifier ce que le code NOMME, jamais seulement ce que les lignes contiennent.
-  - Depuis la PR #49 : plus rien n'écrit ni ne lit ces deux colonnes, et une
-    grappe d'avant `answers` ne compte simplement pour aucune réponse dans le
-    détecteur de rythme. Les 18 lignes concernées n'ont donc plus besoin de
-    « sortir » de quoi que ce soit.
-  - **SQL** : `alter table parcours_asked drop column answer_ms, drop column correct;`
-  - Après application : mettre à jour `src/lib/database.types.ts` et déplacer
-    cette entrée plus bas.
+AUCUN
 
 ---
 
 ## Appliqué / sans objet
+
+- **31/08/2026 — `parcours_asked.answer_ms` et `parcours_asked.correct` supprimées**
+  (`alter table public.parcours_asked drop column answer_ms, drop column correct;`),
+  après le déploiement en production de la PR #49 (Vercel `READY` sur `440982f`,
+  `get-culture.com` aliasé dessus). Le rythme ne vit plus que dans la colonne
+  `answers`, une entrée par question répondue.
+  - ⚠️ **Le prérequis noté ici jusqu'au 31/08/2026 était faux, et l'erreur vaut
+    d'être gardée.** On attendait que les lignes d'avant `answers` sortent de la
+    fenêtre de lecture du rythme, comme si le blocage était une question de
+    DONNÉES. Il était de CODE : `recentAnswerPace` **nommait** les deux colonnes
+    dans son `select`, et l'écriture les tenait à jour. Les supprimer sur ce
+    prérequis-là aurait cassé la lecture du rythme quelle que soit l'ancienneté
+    des lignes, et **en silence** — ce `select` ignore délibérément son erreur
+    pour ne jamais faire échouer une correction qu'un membre vient de demander.
+  - **La règle à retenir : un prérequis de suppression se vérifie sur ce que le
+    code NOMME, jamais seulement sur ce que les lignes contiennent.** L'origine
+    de l'erreur était une note de référence périmée (`.claude/rules/server-architecture.md`),
+    corrigée dans la même PR — une note fausse est plus dangereuse qu'une note
+    absente, on la croit sur parole au lieu d'aller voir.
+  - Aucune ligne n'a été supprimée : la ligne qu'on croyait bloquante ne
+    bloquait rien.
 
 - **31/08/2026 — `2026-08-28-bloom-uniquement-par-notion.sql`, étape 2 appliquée**
   (`alter table public.exam_question_items drop column bloom_level;`), après le
