@@ -1027,32 +1027,23 @@ async function loadNotionsToArrange(workshopId: string) {
  *    • `movedNotions` — les notions RÉELLEMENT déplacées, que l'écran marquera.
  *      Annoncer comme « déplacée » une notion restée dans son chapitre ferait
  *      douter de tout le reste de l'affichage.
- *    • `setAsideNotions` — celles que le modèle a explicitement laissées sans
- *      chapitre. C'est la seule chose que le ménage de fin pourra effacer.
+ *    • `strandedNotions` — celles que le modèle n'a rangées nulle part et qui
+ *      GARDENT leur chapitre (elles existaient avant l'import). Elles ne
+ *      suffisent plus à faire vivre un chapitre, voir `hideEmptyChapters`.
  *
  *  ⚠️ **Lecture-modification-écriture, et les lots tournent en parallèle** :
  *  deux lots qui aboutissent en même temps peuvent s'écraser l'un l'autre. La
- *  conséquence est bénigne pour `movedNotions` (un marquage manquant) mais pas
- *  pour `setAsideNotions` : une perte y fait seulement *moins* effacer, jamais
- *  plus — l'erreur va donc du bon côté. À reprendre par une écriture atomique
+ *  conséquence est bénigne — un marquage manquant, un chapitre vidé qui reste
+ *  visible — et se corrige en relançant. À reprendre par une écriture atomique
  *  côté base le jour où ça compte (voir docs/backlog.md). */
 async function recordProgress(
   importId: string,
   entries: {
     movedNotions: readonly string[];
-    setAsideNotions: readonly string[];
-    /** Les notions que le modèle n'a rangées nulle part et qui GARDENT leur
-     *  chapitre. Elles ne sont pas écartées — on ne les efface jamais — mais
-     *  elles ne suffisent plus à faire vivre un chapitre (voir
-     *  `hideEmptiedChapters`). */
     strandedNotions: readonly string[];
   },
 ): Promise<void> {
-  if (
-    entries.movedNotions.length === 0
-    && entries.setAsideNotions.length === 0
-    && entries.strandedNotions.length === 0
-  ) return;
+  if (entries.movedNotions.length === 0 && entries.strandedNotions.length === 0) return;
   const supabase = getSupabaseServerClient();
   const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
   const scope = (data?.scope as Record<string, unknown> | null) ?? {};
@@ -1066,18 +1057,10 @@ async function recordProgress(
       scope: {
         ...scope,
         movedNotions: merge('movedNotions', entries.movedNotions),
-        setAsideNotions: merge('setAsideNotions', entries.setAsideNotions),
         strandedNotions: merge('strandedNotions', entries.strandedNotions),
       },
     })
     .eq('id', importId);
-}
-
-async function setAsideOf(importId: string): Promise<string[]> {
-  const supabase = getSupabaseServerClient();
-  const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
-  const scope = (data?.scope as Record<string, unknown> | null) ?? {};
-  return Array.isArray(scope.setAsideNotions) ? (scope.setAsideNotions as string[]) : [];
 }
 
 async function strandedOf(importId: string): Promise<string[]> {
@@ -1181,6 +1164,12 @@ export async function ingestAssignments(
   //     Une notion neuve n'était nulle part, elle n'y bouge pas ; une ancienne
   //     garde son chapitre, qui sera écarté avec elle s'il ne reste que ça.
   //
+  // ⚠️ La distinction ne décide plus de ce qui SURVIT (03/09/2026), seulement de
+  // ce qu'on écrit maintenant : le ménage de fin efface toute notion née de cet
+  // import et qu'il n'a pas rangée, redite ou oubli. Elle continue en revanche
+  // de commander le sort des ANCIENNES — une redite perd son chapitre et sort du
+  // programme, un oubli garde le sien.
+  //
   // Ce que ça évite : offrir les chapitres écartés au modèle comme troisième
   // choix. Ce serait la réponse confortable pour tout ce qu'il ne veut pas
   // trancher, et le hors-programme grossirait tout seul sous une étiquette qui a
@@ -1201,11 +1190,7 @@ export async function ingestAssignments(
   // et le seul fait de les toucher rend l'import non annulable.
   await assertImportOpen(importId);
   const movedIds = await applyAssignments(workshopId, effective, new Map(), before);
-  await recordProgress(importId, {
-    movedNotions: movedIds,
-    setAsideNotions: setAside,
-    strandedNotions: stranded,
-  });
+  await recordProgress(importId, { movedNotions: movedIds, strandedNotions: stranded });
 
   // ⚠️ **Soumis vs répondu — la seule façon de distinguer un oubli d'un refus.**
   // La consigne dit « réponds pour CHAQUE notion » ; quand une notion ressort
@@ -1301,9 +1286,6 @@ export async function finishIngestion(
         notions: notions.map((n) => ({ id: n.id, chapterId: n.chapterId, importId: n.importId })),
       },
       importId,
-      // Seules les notions que le modèle a explicitement écartées. Une notion
-      // qu'il n'a jamais examinée reste, quoi qu'il arrive.
-      await setAsideOf(importId),
     );
     await removeOrphans(workshopId, cleanup);
 

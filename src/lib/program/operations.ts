@@ -243,32 +243,23 @@ export type ImportCleanup = {
  *  de passe ① les supprimerait TOUTES. C'est le piège de cette fonction, et
  *  c'est pour ça qu'elle prend un `importId` explicite plutôt que de deviner.
  *
+ *  ⚠️ **Peu importe POURQUOI elle n'a pas de chapitre** (03/09/2026). La règle
+ *  exigeait auparavant que le modèle ait **explicitement** écarté la notion,
+ *  pour ne pas effacer ce qu'il avait seulement oublié de ranger. En pratique,
+ *  ça produisait l'inverse de ce qu'on voulait : les oublis s'accumulaient à
+ *  chaque génération sous l'étiquette « sans chapitre », hors programme, jamais
+ *  tirés par un exercice et jamais rangés par personne. Une notion créée par un
+ *  import et que ce même import n'a pas rangée ne sert à rien ; si c'est un
+ *  raté, relancer la génération la recrée. On préfère perdre un oubli que
+ *  garder un déchet.
+ *
  *  À ne pas confondre avec le chapitre VIDÉ (feuille de route §5) : celui-là
  *  existait avant l'import, porte peut-être un titre écrit à la main, et on le
- *  conserve. C'est exactement ce que la condition sur `importId` distingue. */
-export function planImportCleanup(
-  produce: ImportProduce,
-  importId: string,
-  /** Les notions que le modèle a **explicitement** laissées sans chapitre.
-   *
-   *  ⚠️ **Sans ce filtre, le ménage est une bombe.** « Créé par cet import et
-   *  sans chapitre » décrit deux situations que rien ne distingue en base : la
-   *  notion que le modèle a écartée comme redite (déchet, à effacer) — et la
-   *  notion qu'il n'a **jamais examinée**, parce que le rangement s'est arrêté
-   *  avant elle, a échoué, ou n'a trouvé aucun chapitre où ranger. Effacer la
-   *  seconde détruit du contenu que personne n'a jugé.
-   *
-   *  Le cas limite qui l'a révélé : générer des notions sur un atelier SANS
-   *  chapitre. Le rangement n'a nulle part où ranger, il ne range rien, et le
-   *  ménage effaçait alors **la totalité de ce que l'import venait de produire**.
-   *
-   *  Une liste vide n'efface donc aucune notion — le silence ne vaut jamais
-   *  autorisation de supprimer. */
-  explicitlyUnassigned: readonly string[] = [],
-): ImportCleanup {
-  const judged = new Set(explicitlyUnassigned);
+ *  conserve. C'est exactement ce que la condition sur `importId` distingue —
+ *  une notion antérieure restée sans chapitre n'est jamais touchée non plus. */
+export function planImportCleanup(produce: ImportProduce, importId: string): ImportCleanup {
   const notionIds = produce.notions
-    .filter((n) => n.importId === importId && n.chapterId === null && judged.has(n.id))
+    .filter((n) => n.importId === importId && n.chapterId === null)
     .map((n) => n.id);
 
   const occupied = new Set(

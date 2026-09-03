@@ -278,12 +278,10 @@ describe('shouldCacheDocuments — le marqueur n’est pas gratuit (§16.17)', (
 
 // ─── « Aucun chapitre » : une décision, ou un oubli ? ────────────────────────
 //
-// Deux raisons de tester ça ici plutôt que de le regarder dans l'app :
-//   • `setAside` borne la SEULE suppression du système (`planImportCleanup`) —
-//     y laisser entrer une notion que le modèle n'a jamais jugée efface du
-//     travail saisi à la main ;
-//   • `effective` décide d'un `update` par lot : une ligne de trop et une notion
-//     perd son chapitre sans que personne ne l'ait demandé.
+// La raison de tester ça ici plutôt que de le regarder dans l'app : `effective`
+// décide d'un `update` par lot, et une ligne de trop fait perdre son chapitre à
+// une notion ANCIENNE — donc sortir du programme un contenu que personne n'a
+// demandé à retirer.
 describe('splitUnplaced', () => {
   const nowhere = new Map<string, string | null>();
 
@@ -322,7 +320,8 @@ describe('splitUnplaced', () => {
 
   it('une redite sortie de nulle part reste une redite', () => {
     // Le cas de la notion NEUVE jugée redondante : elle n'a pas de chapitre à
-    // conserver, et le ménage de fin doit pouvoir l'effacer.
+    // conserver, et le ménage de fin l'effacera — comme toute notion de cet
+    // import restée sans chapitre, jugée ou simplement oubliée.
     const split = splitUnplaced([{ notionRef: 'n1' }], new Set(['n1']), nowhere);
     expect(split.setAside).toEqual(['n1']);
     expect(split.stranded).toEqual([]);

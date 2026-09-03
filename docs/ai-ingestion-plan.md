@@ -1678,8 +1678,20 @@ désormais **côté serveur, jamais côté modèle** :
 
 | Ce que le modèle dit | Ce que ça veut dire | Ce qu'on en fait |
 |---|---|---|
-| pas de chapitre, notion dont la RESSEMBLANCE lui a été soumise | c'est une redite, il a tranché en faveur de l'autre | sans chapitre — hors programme, et effaçable par le ménage de fin |
+| pas de chapitre, notion dont la RESSEMBLANCE lui a été soumise | c'est une redite, il a tranché en faveur de l'autre | sans chapitre — hors programme |
 | pas de chapitre, tout le reste | il n'a rien trouvé de mieux | **elle reste où elle était** |
+
+**Révision du 03/09/2026 — une notion NEUVE non rangée n'est plus créée.** La
+distinction ci-dessus ne décide plus du sort des notions que l'import vient
+d'écrire : à la fin, toute notion née de cet import et restée sans chapitre est
+effacée, redite jugée ou simple oubli du modèle. Le motif de la règle
+précédente — ne pas détruire ce que personne n'a jugé — s'est retourné en
+pratique : les oublis s'accumulaient d'une génération à l'autre sous l'étiquette
+« sans chapitre », hors programme, jamais tirés par un exercice et jamais rangés
+par personne. Le remède au rangement raté est de **relancer la génération**, qui
+recrée la notion. Les notions ANTÉRIEURES à l'import ne sont, elles, jamais
+touchées : une redite perd son chapitre et sort du programme, un oubli garde le
+sien.
 
 Le chapitre suit ses notions : un chapitre dont il ne reste que des notions que
 personne n'a su placer est **écarté avec elles dedans**. « Vidé » veut donc dire
@@ -1700,7 +1712,9 @@ et depuis cette révision, on ne lui dit même plus « actuellement dans X » qu
 X est écarté : citer une référence absente de sa liste est au mieux du bruit.
 
 La règle de partage est pure et testée (`splitUnplaced`, `passInput.ts`) : elle
-décide d'écritures par lot, et `setAside` borne la seule suppression du système.
+décide d'écritures par lot sur des notions existantes. La seule suppression du
+système, elle, est bornée par `planImportCleanup` (`program/operations.ts`) :
+créé par cet import ET sans chapitre à la fin.
 
 ### 18.3 Les groupes ne sont plus réservés à l'examen
 
