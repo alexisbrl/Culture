@@ -45,6 +45,7 @@ import {
   MATCH_SPLIT_MAX,
   MATCH_SPLIT_MIN,
   MAX_CHOICES,
+  MAX_LIST_ANSWERS,
   MAX_PAIRS,
   MAX_TABLE_COLS,
   MAX_TABLE_ROWS,
@@ -354,9 +355,9 @@ export function resolveQuestion(raw: QuestionInput): ResolvedQuestion {
       // casse donc rien.
       choices = nonEmpty(raw.choices);
       if (choices.length === 0) return { adjusted, discard: 'liste sans réponse attendue' };
-      if (choices.length > MAX_CHOICES) {
-        adjusted.push(`plus de ${MAX_CHOICES} réponses attendues — les suivantes sont retirées`);
-        choices = choices.slice(0, MAX_CHOICES);
+      if (choices.length > MAX_LIST_ANSWERS) {
+        adjusted.push(`plus de ${MAX_LIST_ANSWERS} réponses attendues — les suivantes sont retirées`);
+        choices = choices.slice(0, MAX_LIST_ANSWERS);
       }
       correctChoices = [];
       typeOptions.listExpected = Math.max(1, Math.min(opts.listExpected ?? choices.length, choices.length));

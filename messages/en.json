@@ -1239,6 +1239,10 @@
     "busy": "A generation is already running on this workshop, in another tab. Wait for it to finish, or stop it before starting another.",
     "runningCounts": "{chapters} chapters · {notions} notions · {questions} questions",
     "doneCounts": "{chapters} chapters, {notions} notions and {questions} questions added",
+    "timer": {
+      "elapsed": "Timer: {value}",
+      "chaptersAt": "chapters sent at {value}"
+    },
     "discarded": "Discarded",
     "adjusted": "Adjusted",
     "cancellable": "You can undo this import for 24 hours, as long as nothing has been edited.",

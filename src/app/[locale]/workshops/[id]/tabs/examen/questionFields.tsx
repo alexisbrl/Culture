@@ -30,7 +30,8 @@ import {
 import { palette, ink, withAlpha } from '@/lib/theme';
 import {
   BLOOM_LEVELS, DEFAULT_BLOOM_LEVEL, DEFAULT_FILE_TYPES, FILE_TYPE_KEYS,
-  MATCH_SEPARATOR, MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MAX, MATCH_SPLIT_MIN, MAX_TABLE_COLS, MAX_TEXT_LINES,
+  MATCH_SEPARATOR, MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MAX, MATCH_SPLIT_MIN,
+  MAX_CHOICES, MAX_LIST_ANSWERS, MAX_PAIRS, MAX_TABLE_COLS, MAX_TABLE_ROWS, MAX_TEXT_LINES,
   clampTextLines, toMatchChoice,
   type BloomLevel, type QuestionPart, type QuestionTypeOptions, type QuestionWeight, type ResponseType,
 } from '@/lib/workshops/examTypes';
@@ -341,9 +342,11 @@ export function QuestionFields({
               hideAddButton
             />
             <ControlRow trailing={attendusButton}>
-              <button type="button" onClick={() => patch({ choices: [...values.choices, ''] })} style={addLink}>
-                {t('choices.addOption')}
-              </button>
+              {values.choices.length < MAX_CHOICES && (
+                <button type="button" onClick={() => patch({ choices: [...values.choices, ''] })} style={addLink}>
+                  {t('choices.addOption')}
+                </button>
+              )}
               <PillToggle
                 on={rt === 'qcs'}
                 onClick={() => patch({ responseType: rt === 'qcs' ? 'qcm' : 'qcs', correctChoices: [] })}
@@ -435,7 +438,9 @@ export function QuestionFields({
                 suite. Les mêler laissait « numéros » isolé entre deux commandes
                 d'un autre genre. */}
             <ControlRow trailing={attendusButton}>
-              <button type="button" onClick={() => commit([...items, ''], 1)} style={addLink}>{t('inline.addRow')}</button>
+              {items.length < MAX_LIST_ANSWERS && (
+                <button type="button" onClick={() => commit([...items, ''], 1)} style={addLink}>{t('inline.addRow')}</button>
+              )}
               {advancedOpen && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 11.5, color: palette.inkMuted }}>{t('inline.expectedAnswers')}</span>
@@ -554,7 +559,9 @@ export function QuestionFields({
               </div>
             )}
             <ControlRow trailing={attendusButton}>
-              <button type="button" onClick={() => patchOptions({ tableRows: [...rows, ''] })} style={addLink}>{t('inline.addTableRow')}</button>
+              {rows.length < MAX_TABLE_ROWS && (
+                <button type="button" onClick={() => patchOptions({ tableRows: [...rows, ''] })} style={addLink}>{t('inline.addTableRow')}</button>
+              )}
               {cols.length < MAX_TABLE_COLS && (
                 <button type="button" onClick={() => patchOptions({ tableCols: [...cols, ''] })} style={addLink}>{t('inline.addTableCol')}</button>
               )}
@@ -625,7 +632,9 @@ export function QuestionFields({
               ))}
             </div>
             <ControlRow trailing={attendusButton}>
-              <button type="button" onClick={() => commit([...pairs, { l: '', r: '' }])} style={addLink}>{t('inline.addRow')}</button>
+              {pairs.length < MAX_PAIRS && (
+                <button type="button" onClick={() => commit([...pairs, { l: '', r: '' }])} style={addLink}>{t('inline.addRow')}</button>
+              )}
               {oralAnswerToggle}
             </ControlRow>
           </div>

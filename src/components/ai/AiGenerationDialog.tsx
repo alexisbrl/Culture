@@ -171,6 +171,21 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   const [counts, setCounts] = useState({ chapters: 0, notions: 0, questions: 0 });
   const [issues, setIssues] = useState<{ discarded: PlanIssue[]; adjusted: PlanIssue[] }>({ discarded: [], adjusted: [] });
 
+  // ⚠️ TEMPORAIRE — outil de mesure, pas une fonctionnalité produit (01/09/2026).
+  // Le marqueur de cache entre les notions et les chapitres a été retiré faute
+  // de savoir si la passe chapitres démarre assez vite après la dernière
+  // extraction pour tenir dans la fenêtre de 5 minutes (voir `providers/claude.ts`,
+  // fonction `documentUsesOf`). Ce chrono chiffre l'attente réelle ; une fois la
+  // mesure faite sur de vrais imports, à retirer avec le bloc d'affichage plus
+  // bas. De vrais états et non des refs : `generate()` n'a jamais besoin de
+  // relire ces valeurs, seulement de les écrire — contrairement à
+  // `stopped`/`importIdRef` ci-dessus, qui pilotent son propre déroulement.
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [chaptersSentAt, setChaptersSentAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const elapsedMs = startedAt === null ? null : now - startedAt;
+  const chaptersElapsedMs = startedAt === null || chaptersSentAt === null ? null : chaptersSentAt - startedAt;
+
   // Le téléversement en cours n'est pas interruptible proprement : on ferme la
   // sortie tant qu'il dure, comme pendant la génération.
   const running = phase.step === 'running' || phase.step === 'preparing';
@@ -222,6 +237,15 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     return () => { cancelled = true; };
   }, [workshopId]);
 
+  // ⚠️ TEMPORAIRE — fait tourner le chrono ci-dessus, voir la note sur
+  // `startedAtRef`. Rien ne tourne hors de la phase « running » : pas de
+  // minuterie qui traîne une fois le dialogue fermé ou terminé.
+  useEffect(() => {
+    if (phase.step !== 'running') return;
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [phase.step]);
+
   /** Téléverse les documents, puis enchaîne directement sur la génération. */
   async function prepare() {
     setPhase({ step: 'preparing' });
@@ -251,6 +275,9 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   }
 
   async function generate(importId: string, documents: number) {
+    // ⚠️ TEMPORAIRE — voir la note sur `startedAt` plus haut.
+    setStartedAt(Date.now());
+    setChaptersSentAt(null);
     const discarded: PlanIssue[] = [];
     const adjusted: PlanIssue[] = [];
     const tally = { chapters: 0, notions: 0, questions: 0 };
@@ -338,6 +365,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // les ranger.
     if (stopped.current) return;
     if (withChapters) {
+      // ⚠️ TEMPORAIRE — voir la note sur `startedAt` plus haut : comparé à
+      // `startedAt`, c'est ce délai qui dira si le marqueur de cache peut
+      // revenir sur le premier document de la passe notions.
+      setChaptersSentAt(Date.now());
       setPhase({ step: 'running', label: t('progress.chapters'), done: stepAt('chapters'), total: totalSteps });
       const structure = await ingestWorkshopChapters(workshopId, importId);
       if (!structure.ok) return setPhase({ step: 'error', message: structure.error });
@@ -896,6 +927,13 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         {!stopAsk && phase.step === 'running' && (
           <div style={{ padding: '4px 0 8px' }}>
             <ProgressBar animated value={phase.done} max={phase.total} label={phase.label} />
+            {/* ⚠️ TEMPORAIRE — voir la note sur `startedAt` plus haut. */}
+            {elapsedMs !== null && (
+              <p style={{ fontFamily: 'monospace', fontSize: 12, color: palette.inkFaint, marginTop: 10 }}>
+                {t('timer.elapsed', { value: formatElapsed(elapsedMs) })}
+                {chaptersElapsedMs !== null && ` · ${t('timer.chaptersAt', { value: formatElapsed(chaptersElapsedMs) })}`}
+              </p>
+            )}
             <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 14 }}>{t('keepOpen')}</p>
             <p style={{ fontSize: 12.5, color: palette.inkFaint, marginTop: 6 }}>
               {t('runningCounts', { chapters: counts.chapters, notions: counts.notions, questions: counts.questions })}
@@ -914,6 +952,14 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             </div>
             <IssueList heading={t('discarded')} issues={issues.discarded} tone="warn" />
             <IssueList heading={t('adjusted')} issues={issues.adjusted} tone="soft" />
+            {/* ⚠️ TEMPORAIRE — voir la note sur `startedAt` plus haut. Reste
+                affiché ici après la fin, pour que la mesure ne disparaisse pas
+                avec l'écran « running ». */}
+            {chaptersElapsedMs !== null && (
+              <p style={{ fontFamily: 'monospace', fontSize: 12, color: palette.inkFaint, marginTop: 10 }}>
+                {t('timer.chaptersAt', { value: formatElapsed(chaptersElapsedMs) })}
+              </p>
+            )}
             <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 12 }}>{t('cancellable')}</p>
             <Actions>
               <Primary onClick={requestClose}>{t('close')}</Primary>
@@ -936,6 +982,16 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       </div>
     </Modal>
   );
+}
+
+/** ⚠️ TEMPORAIRE — voir la note sur `startedAtRef` plus haut. mm:ss, sans heure :
+ *  une génération qui dépasserait l'heure aurait un problème plus grave que
+ *  l'affichage du chrono. */
+function formatElapsed(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {

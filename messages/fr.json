@@ -1239,6 +1239,10 @@
     "busy": "Une génération est déjà en cours sur cet atelier, dans un autre onglet. Attends qu’elle se termine, ou arrête-la avant d’en lancer une autre.",
     "runningCounts": "{chapters} chapitres · {notions} notions · {questions} questions",
     "doneCounts": "{chapters} chapitres, {notions} notions et {questions} questions ajoutés",
+    "timer": {
+      "elapsed": "Chrono : {value}",
+      "chaptersAt": "chapitres envoyés à {value}"
+    },
     "discarded": "Écarté",
     "adjusted": "Corrigé",
     "cancellable": "Tu peux annuler cet import pendant 24 h, tant que rien n’a été modifié.",

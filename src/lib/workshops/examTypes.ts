@@ -296,13 +296,19 @@ export const MATCH_SPLIT_DEFAULT = 0.5;
 // par un. Ils sont annoncés au modèle comme des limites, et tenus à l'écriture
 // (`resolveQuestion`) : ce qui dépasse est coupé, jamais accepté en silence.
 //
-// ⚠️ **Les COLONNES font exception, à 5.** Ce n'est pas un garde-fou anti-dérive
-// mais une contrainte de largeur : au-delà, la grille ne tient plus sur une page
-// A4. L'éditeur la tenait déjà de son côté (le bouton « ajouter une colonne »
-// disparaît à 5) ; elle vit ici depuis le 01/09/2026, pour que l'IA ne puisse
-// pas produire une grille qu'un humain n'aurait pas le droit de construire — ni,
-// surtout, de reprendre à la main ensuite.
+// ⚠️ **Deux exceptions.**
+// - Les COLONNES, à 5 : pas un garde-fou anti-dérive mais une contrainte de
+//   largeur — au-delà, la grille ne tient plus sur une page A4. L'éditeur la
+//   tenait déjà de son côté (le bouton « ajouter une colonne » disparaît à 5) ;
+//   elle vit ici depuis le 01/09/2026, pour que l'IA ne puisse pas produire une
+//   grille qu'un humain n'aurait pas le droit de construire.
+// - La LISTE, à 200 : ses réponses ne sont pas des propositions qu'un candidat
+//   doit lire une par une comme un QCM, mais des réponses ACCEPTÉES — une liste
+//   qui en cite beaucoup (les régions de France, les éléments d'un tableau
+//   périodique) reste une seule question légitime. `MAX_TEXT_LINES` fixe le
+//   même ordre de grandeur pour la même raison : une longue énumération.
 export const MAX_CHOICES = 20;
+export const MAX_LIST_ANSWERS = 200;
 export const MAX_TABLE_ROWS = 20;
 export const MAX_TABLE_COLS = 5;
 export const MAX_PAIRS = 20;

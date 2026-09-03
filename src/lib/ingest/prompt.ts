@@ -23,6 +23,7 @@
 
 import {
   MAX_CHOICES,
+  MAX_LIST_ANSWERS,
   MAX_PAIRS,
   MAX_TABLE_COLS,
   MAX_TABLE_ROWS,
@@ -732,7 +733,7 @@ function responseTypeCatalog(context: 'parcours' | 'exam'): string {
 
   // ⚠️ **Des plafonds, pas des cibles**, et c'est écrit ainsi : annoncer « 20 »
   // sans le dire ferait converger le modèle vers 20 propositions par QCM.
-  const caps = `**Ces nombres sont des PLAFONDS, jamais des objectifs** : au plus ${MAX_CHOICES} propositions à un QCM, ${MAX_CHOICES} réponses à une liste, ${MAX_TABLE_ROWS} lignes et ${MAX_TABLE_COLS} colonnes à une grille, ${MAX_PAIRS} paires à un appariement. Une bonne question en compte presque toujours beaucoup moins ; ce qui dépasse est coupé.`;
+  const caps = `**Ces nombres sont des PLAFONDS, jamais des objectifs** : au plus ${MAX_CHOICES} propositions à un QCM, ${MAX_LIST_ANSWERS} réponses à une liste, ${MAX_TABLE_ROWS} lignes et ${MAX_TABLE_COLS} colonnes à une grille, ${MAX_PAIRS} paires à un appariement. Une bonne question en compte presque toujours beaucoup moins ; ce qui dépasse est coupé.`;
 
   if (context === 'exam') {
     return [
