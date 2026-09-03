@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   assignInstruction,
+  bloomDefinitions,
   bloomInstruction,
   chaptersInstruction,
   DEFAULT_BLOOM_DISTRIBUTION,
@@ -16,6 +17,7 @@ import {
   type BloomDistribution,
   type ExistingContent,
 } from '@/lib/ingest/prompt';
+import { examInstruction } from '@/lib/ingest/prompt';
 import {
   EXAM_RESPONSE_TYPES,
   PARCOURS_RESPONSE_TYPES,
@@ -84,15 +86,15 @@ describe('existingContentBlock — la portée, poste de coût numéro un (§16.3
     ],
   };
 
-  it('passe chapitres : les chapitres ET les notions — mais jamais les énoncés', () => {
-    // Depuis l'inversion, cette passe ne nomme plus seulement des boîtes : elle
-    // RÉPARTIT. La liste des notions est son entrée principale.
+  it('passe chapitres : les chapitres SEULS — ni notions, ni énoncés', () => {
+    // 31/08/2026 : la liste des notions y pesait jusqu'à ~20 000 tokens pour
+    // rien. Cette passe ne range pas, et ce qui décide qu'un chapitre n'est plus
+    // couvert, c'est le COURS — pas une liste dont une partie peut dater d'une
+    // version périmée.
     const block = existingContentBlock(atelier, { pass: 'chapters' });
     expect(block).toContain('Les fleuves');
     expect(block).toContain('Les montagnes');
-    expect(block).toContain('La Loire');
-    // Les énoncés restent dehors : ils pèsent ~75 000 tokens et n'aident en
-    // rien à ranger une notion (§16.3).
+    expect(block).not.toContain('La Loire');
     expect(block).not.toContain('Énoncé');
   });
 
@@ -234,11 +236,9 @@ describe('instructions de passe', () => {
   it('la passe chapitres SITUE les chapitres et ne range rien', () => {
     // Le rangement est une passe à part depuis le 24/08/2026 : ranger 500
     // notions dans une seule réponse dépasserait le plafond de sortie.
-    const instruction = chaptersInstruction([], [{ id: 'n1', title: 'La Loire est le plus long fleuve' }]);
+    const instruction = chaptersInstruction([]);
     expect(instruction).toMatch(/Situe chaque chapitre/);
-    expect(instruction).toMatch(/Tu ne ranges rien ici/);
-    // Les notions restent visibles : elles disent ce que le cours contient.
-    expect(instruction).toContain('La Loire');
+    expect(instruction).toMatch(/Tu ne ranges aucune notion ici/);
     expect(instruction).not.toMatch(/question/i);
   });
 });
@@ -279,7 +279,7 @@ describe('chaptersInstruction — N documents, UN SEUL cours (§16.15)', () => {
     // Elle ne remplace pas la consigne : l'API est sans état, le second appel
     // ne voit pas le premier (§16.8).
     const previous = Array.from({ length: 28 }, (_, i) => `Partie ${i + 1}`);
-    const instruction = chaptersInstruction(sept, [], { previous });
+    const instruction = chaptersInstruction(sept, { previous });
     // Les noms, pas seulement le nombre : c'est ce qui rend le jugement possible.
     expect(instruction).toContain('28 parties');
     expect(instruction).toContain('1. Partie 1');
@@ -295,6 +295,22 @@ describe('chaptersInstruction — N documents, UN SEUL cours (§16.15)', () => {
     expect(chaptersInstruction(sept)).not.toMatch(/SOUS-PARTIES/);
   });
 
+  it('la relance d’un découpage trop GROSSIER dit l’inverse de celle d’un trop fin', () => {
+    // Les deux issues sont les mêmes — reconduire, ou reprendre à une autre
+    // échelle —, mais l'échelle à viser est opposée (31/08/2026).
+    const tropPeu = chaptersInstruction(sept, { previous: ['Le cours', 'Annexes'] });
+    expect(tropPeu).toContain('2 parties');
+    expect(tropPeu).toMatch(/REGROUPEMENTS/);
+    expect(tropPeu).not.toMatch(/SOUS-PARTIES/);
+    expect(tropPeu).toMatch(/Reconduis-le tel quel/);
+  });
+
+  it('une relance sans aucun chapitre ne parle pas de « 0 parties »', () => {
+    const rien = chaptersInstruction(sept, { previous: [] });
+    expect(rien).toMatch(/Tu n’as proposé aucun chapitre|Tu n'as proposé aucun chapitre/);
+    expect(rien).not.toContain('0 parties');
+  });
+
   it('sans nom de fichier, la consigne reste utilisable', () => {
     const instruction = chaptersInstruction();
     expect(instruction).toContain('CHAPITRES');
@@ -306,8 +322,10 @@ describe('wireSchema — ce qu’on autorise le modèle à produire', () => {
   it('ouvre tous les types du menu, le dépôt de fichier et l’énoncé muet à l’examen seulement', () => {
     // Les deux exclus de l'entraînement supposent un correcteur humain : la
     // copie n'y est relue par personne (décision du 25/08/2026).
+    // « Réponse unique » (`qcs`) n'y est plus (01/09/2026) : c'est un réglage
+    // d'affichage du QCM, pas un type de question à faire trancher au modèle.
     expect([...PARCOURS_RESPONSE_TYPES]).toEqual([
-      'qcs', 'qcm', 'textuelle', 'liste', 'tableau', 'matching', 'dessin',
+      'qcm', 'textuelle', 'liste', 'tableau', 'matching', 'dessin',
     ]);
     expect(PARCOURS_RESPONSE_TYPES).not.toContain('fichier');
     expect(PARCOURS_RESPONSE_TYPES).not.toContain('sans_reponse');
@@ -461,7 +479,10 @@ describe('assignInstruction — la page range, elle ne juge pas', () => {
       similar: [{ notionId: 'n1', other: 'Autre', proximity: 0.5 }],
     });
     expect(instruction).toMatch(/Ce calcul ne juge rien/);
-    expect(instruction).toMatch(/FAIT VÉRIFIABLE DE PLUS/);
+    expect(instruction).toMatch(/SE DÉMARQUE VRAIMENT/);
+    // C'est toujours la NOUVELLE qui s'efface : l'ancienne peut déjà porter des
+    // questions, et cette passe n'a pas les documents pour en juger.
+    expect(instruction).toMatch(/celle de cette liste qui s.efface/);
   });
 
   it('se passe de provenance sans broncher', () => {
@@ -501,5 +522,69 @@ describe('assignInstruction — la page range, elle ne juge pas', () => {
   it('le dit quand il n’y a aucun chapitre où ranger', () => {
     const instruction = assignInstruction({ notions: base.notions, chapters: [], similar: [] });
     expect(instruction).toMatch(/Aucun chapitre n'existe/);
+  });
+});
+
+describe('les quatre niveaux — une progression, et ce qu’elle exige', () => {
+  const chapter = { id: 'c1', name: 'Les fleuves' };
+  const notion = { id: 'n1', title: 'La Loire est le plus long fleuve de France.' };
+
+  it('ne définit QUE les niveaux réellement demandés', () => {
+    // Même règle que pour le rythme : décrire un niveau qu'on ne veut pas voir
+    // produit attire l'attention dessus.
+    const deux = bloomDefinitions([1, 2]);
+    expect(deux).toContain('niveau 1 (reconnaître)');
+    expect(deux).toContain('niveau 2 (restituer)');
+    expect(deux).not.toContain('niveau 3');
+    expect(deux).not.toContain('niveau 4');
+    expect(bloomDefinitions([])).toBe('');
+  });
+
+  it('donne au chiffre un contenu dans la consigne des questions', () => {
+    // Sans ça, « niveau 3 » n'était qu'une étiquette à recopier à côté de la
+    // notion : rien ne disait ce que la question devait exiger.
+    const instruction = questionsInstruction({
+      chapter,
+      notions: [{ ...notion, want: [{ bloomLevel: 3, count: 2 }] }],
+      budget: 40,
+    });
+    expect(instruction).toContain('niveau 3 (appliquer)');
+    expect(instruction).toMatch(/c'est la question qui doit l'exiger/);
+    // Le repère de forme cite les deux bouts de l'échelle — c'est le dégradé
+    // lui-même —, mais aucune DÉFINITION d'un niveau non demandé n'apparaît.
+    expect(instruction).not.toContain('- niveau 4 (analyser) —');
+  });
+
+  it('n’emploie plus les noms de Bloom nulle part', () => {
+    const all = [
+      systemPrompt(),
+      questionsInstruction({ chapter, notions: [notion], budget: 40 }),
+      examInstruction({ chapters: [{ name: 'Les fleuves', notions: [notion] }], budget: 10 }),
+    ].join('\n');
+    expect(all).not.toMatch(/mémoriser|comprendre \(/);
+  });
+});
+
+describe('les plafonds d’une question', () => {
+  it('sont annoncés comme des limites, jamais comme des cibles', () => {
+    // Annoncer « 20 » sans le dire ferait converger le modèle vers 20
+    // propositions par QCM.
+    const instruction = questionsInstruction({
+      chapter: { id: 'c1', name: 'Les fleuves' },
+      notions: [{ id: 'n1', title: 'La Loire est le plus long fleuve de France.' }],
+      budget: 40,
+    });
+    expect(instruction).toMatch(/PLAFONDS, jamais des objectifs/);
+    expect(instruction).toContain('20 propositions');
+  });
+
+  it('le nombre de lignes n’est demandé qu’à l’examen', () => {
+    // Dans le parcours, la zone de saisie s'ajuste seule : le demander serait
+    // payer des jetons pour un réglage que personne ne verra.
+    const notions = [{ id: 'n1', title: 'La Loire est le plus long fleuve de France.' }];
+    const exam = examInstruction({ chapters: [{ name: 'Les fleuves', notions }], budget: 10 });
+    const parcours = questionsInstruction({ chapter: { id: 'c1', name: 'Les fleuves' }, notions, budget: 40 });
+    expect(exam).toContain('textLines');
+    expect(parcours).not.toContain('textLines');
   });
 });

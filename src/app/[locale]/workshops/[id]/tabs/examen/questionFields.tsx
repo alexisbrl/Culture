@@ -30,7 +30,8 @@ import {
 import { palette, ink, withAlpha } from '@/lib/theme';
 import {
   BLOOM_LEVELS, DEFAULT_BLOOM_LEVEL, DEFAULT_FILE_TYPES, FILE_TYPE_KEYS,
-  MATCH_SEPARATOR, MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MAX, MATCH_SPLIT_MIN, toMatchChoice,
+  MATCH_SEPARATOR, MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MAX, MATCH_SPLIT_MIN, MAX_TABLE_COLS, MAX_TEXT_LINES,
+  clampTextLines, toMatchChoice,
   type BloomLevel, type QuestionPart, type QuestionTypeOptions, type QuestionWeight, type ResponseType,
 } from '@/lib/workshops/examTypes';
 // Les icônes de types de réponse sont partagées avec la banque de questions.
@@ -65,7 +66,6 @@ export function emptyPart(): QuestionPart {
 
 const DEFAULT_TABLE_ROWS = 2;
 const DEFAULT_TABLE_COLS = 3;
-const MAX_TABLE_COLS = 5;
 
 // Le sous-ensemble de `Question` que ce composant sait éditer. `QuestionPart` le
 // satisfait entièrement, `Question` aussi (avec des champs en plus) : c'est
@@ -384,8 +384,9 @@ export function QuestionFields({
                 <input
                   type="number"
                   min={1}
+                  max={MAX_TEXT_LINES}
                   value={values.textLines ?? 3}
-                  onChange={e => patch({ textLines: Math.max(1, Number(e.target.value) || 1) })}
+                  onChange={e => patch({ textLines: clampTextLines(Number(e.target.value) || 1) })}
                   style={{ ...numInput, width: 54 }}
                 />
               </div>

@@ -720,32 +720,45 @@ export async function ingestChapters(
   });
   const prepared = await preparedOf(importId);
 
-  const [chaptersOnly, notionsOnly, refs] = await Promise.all([
+  const [chaptersOnly, refs] = await Promise.all([
     loadExistingChapters(workshopId),
-    loadAllNotions(workshopId),
     loadExistingRefs(workshopId),
   ]);
-  const existing: ExistingContent = { ...chaptersOnly, notions: notionsOnly.notions };
-  const toArrange = notionsOnly.notions.map((n) => ({ id: n.id, title: n.title }));
+  // Aucune notion (31/08/2026) : cette passe nomme des chapitres et dit lesquels
+  // le cours ne couvre plus — les deux se décident sur les DOCUMENTS. La liste
+  // des notions y pesait jusqu'à ~20 000 tokens par appel pour rien.
+  const existing: ExistingContent = { ...chaptersOnly, notions: [] };
 
   // Un découpage trop fin est le multiplicateur de tout ce qui suit (§16.15) :
   // au-delà du seuil, on relance UNE fois — une VÉRIFICATION, pas une
   // correction imposée. Si la seconde réponse dépasse encore, on écrit ce
   // qu'elle donne : jamais de blocage, jamais de troisième appel, et surtout
   // aucune validation humaine (§16.18).
+  // Les chapitres existants que la réponse GARDE au programme, par leur nom :
+  // ceux qu'elle ne nomme pas gardent leur place, ceux qu'elle met au rang 0
+  // sortent. Sert à mesurer le découpage résultant, et à le montrer au modèle
+  // si on le lui fait vérifier.
+  const keptChapters = (order: { ref: string; rank: number }[]): string[] => {
+    const retired = new Set(order.filter((o) => o.rank === 0).map((o) => o.ref));
+    return chaptersOnly.chapters.filter((c) => !retired.has(c.id)).map((c) => c.name);
+  };
+
   const { result: plan } = await withChapterRetry(
     async (retry) => {
       const attempt = await provider.documentToPlan(prepared, existing, {
         pass: 'chapters',
-        notions: toArrange,
         retry,
       });
       // Les deux essais sont facturés : les deux sont comptés.
       await addImportUsage(importId, attempt.usage);
       return parsePlanLogged('chapitres', attempt.plan, refs, attempt.truncated);
     },
-    (parsed) => parsed.chapters.length,
-    (parsed) => parsed.chapters.map((c) => c.name),
+    // ⚠️ On mesure le PROGRAMME qui résulte de la réponse : les chapitres
+    // nouveaux, plus les existants que le modèle n'a pas mis au rang 0. Compter
+    // les seuls nouveaux relancerait à chaque mise à jour qui n'ajoute qu'un
+    // chapitre, et laisserait passer un cours entièrement réduit à deux boîtes.
+    (parsed) => parsed.chapters.length + keptChapters(parsed.chapterOrder).length,
+    (parsed) => [...keptChapters(parsed.chapterOrder), ...parsed.chapters.map((c) => c.name)],
   );
 
   // ⚠️ **Un chapitre proposé en double est REDIRIGÉ, jamais écarté.**

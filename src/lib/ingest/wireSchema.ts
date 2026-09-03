@@ -53,19 +53,23 @@
 
 import { z } from 'zod';
 
-import { FILE_TYPE_KEYS } from '@/lib/workshops/examTypes';
+import { FILE_TYPE_KEYS, MAX_TEXT_LINES } from '@/lib/workshops/examTypes';
 
 /** Les types de réponse que l'IA a le droit de produire dans le PARCOURS.
  *
- *  ⚠️ `qcs` et `qcm` sont **le même type pour l'utilisateur** : le menu de
- *  l'éditeur n'affiche que « QCM » (`RESPONSE_TYPE_ORDER` ne contient pas `qcs`),
- *  et la pastille « réponse unique » bascule de l'un à l'autre. Ils portent
- *  d'ailleurs le même libellé en fr comme en en. Les exposer séparément ici est
- *  correct — c'est bien la valeur stockée — mais le prompt doit dire qu'il
- *  s'agit d'une OPTION et non de deux types, sinon un modèle qui alterne les
- *  deux croit varier alors que l'utilisateur voit un mur de QCM. */
+ *  ⚠️ **`qcs` n'y figure plus** (01/09/2026). `qcs` et `qcm` sont le même type
+ *  pour l'utilisateur — le menu n'affiche que « QCM », et la pastille « réponse
+ *  unique » bascule de l'un à l'autre. Les exposer tous les deux revenait à
+ *  faire trancher au modèle une question d'affichage : un modèle qui alterne les
+ *  deux croit varier alors que l'utilisateur voit un mur de QCM.
+ *
+ *  Le choix est désormais fait pour lui, et dans un seul sens : jamais de
+ *  « réponse unique ». Des cases à cocher plutôt que des ronds retirent au
+ *  candidat l'indice « il n'y en a qu'une », qui était offert gratuitement. Rien
+ *  n'est perdu au passage : une question à une seule bonne réponse reste
+ *  parfaitement valide, elle s'affiche simplement en cases. */
 export const PARCOURS_RESPONSE_TYPES = [
-  'qcs', 'qcm', 'textuelle', 'liste', 'tableau', 'matching', 'dessin',
+  'qcm', 'textuelle', 'liste', 'tableau', 'matching', 'dessin',
 ] as const;
 
 /** À l'examen, deux de plus : le dépôt de fichier et l'énoncé sans réponse
@@ -78,9 +82,20 @@ export const EXAM_RESPONSE_TYPES = [...PARCOURS_RESPONSE_TYPES, 'fichier', 'sans
  *  a pas besoin n'écrit rien.
  *
  *  Sous-ensemble volontaire de `QuestionTypeOptions` : n'y figure que ce qu'un
- *  modèle peut décider À PARTIR DU COURS. La largeur de colonne d'une paire, la
- *  numérotation d'une liste, le mélange des lignes d'un tableau sont des choix
- *  de mise en page — ils gardent leur défaut, et l'auteur les règle à l'œil. */
+ *  modèle peut décider À PARTIR DU COURS. La largeur de colonne d'une paire ou
+ *  le mélange des lignes d'un tableau sont des choix de mise en page — ils
+ *  gardent leur défaut, ou sont imposés à l'écriture.
+ *
+ *  ⚠️ **`listNumbered` et `listExpected` en font partie depuis le 01/09/2026**,
+ *  et ce ne sont PAS des choix de mise en page : la numérotation dit que l'ordre
+ *  des réponses compte, et `listExpected` dit combien de réponses on réclame
+ *  quand on n'attend pas la liste complète (« cite trois fleuves » : huit
+ *  réponses acceptées, trois demandées). Les deux changent ce que la question
+ *  demande — seul le modèle, qui vient d'écrire l'énoncé, peut les décider.
+ *
+ *  ⚠️ **`tableUnique` en est sorti** le même jour : « une seule case par ligne »
+ *  est un réglage d'affichage que le modèle déduisait de la forme de sa grille
+ *  au lieu de l'intention pédagogique. */
 const wireTypeOptionsSchema = z.object({
   tableRows: z
     .array(z.string())
@@ -96,10 +111,20 @@ const wireTypeOptionsSchema = z.object({
     .describe(
       'tableau — les cases à cocher : une entrée par ligne, dans le même ordre que tableRows, contenant les index (à partir de 0) des colonnes justes de cette ligne. Tableau vide pour une ligne sans case juste.',
     ),
-  tableUnique: z
+  listNumbered: z
     .boolean()
     .optional()
-    .describe('tableau — vrai si chaque ligne n’admet qu’UNE seule case cochée (classer chaque élément dans une catégorie).'),
+    .describe(
+      "liste — vrai si l'ordre des réponses COMPTE et doit être celui de `choices` ; les réponses sont alors numérotées. Omettre (ou faux) laisse le candidat répondre dans l'ordre qu'il veut.",
+    ),
+  listExpected: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe(
+      "liste — combien de réponses le candidat doit donner, quand tu n'attends pas la liste complète : « cite trois fleuves français » se rédige avec les huit réponses acceptées dans `choices` et 3 ici. Omettre pour les demander toutes.",
+    ),
   fileTypes: z
     .array(z.enum(FILE_TYPE_KEYS))
     .optional()
@@ -109,22 +134,40 @@ const wireTypeOptionsSchema = z.object({
 /** Le schéma d'une question, pour un jeu de types donné. Une fonction et non
  *  deux schémas recopiés : parcours et examen ne diffèrent QUE par la liste des
  *  types ouverts, et deux copies divergeraient au premier ajout de champ. */
-function questionSchemaFor<T extends readonly [string, ...string[]]>(types: T) {
+function questionSchemaFor<T extends readonly [string, ...string[]]>(types: T, opts: { textLines?: boolean } = {}) {
   return z.object({
+    // ⚠️ **À l'examen seulement.** Une copie d'examen est imprimée : le nombre
+    // de lignes laissées sous la question EST une consigne pour le candidat, et
+    // seul celui qui vient d'écrire la réponse attendue sait ce qu'elle occupe.
+    // Dans le parcours, la zone de saisie s'ajuste toute seule — le demander au
+    // modèle serait payer des jetons pour un réglage que personne ne verra.
+    ...(opts.textLines
+      ? {
+          textLines: z
+            .number()
+            .int()
+            .min(1)
+            .max(MAX_TEXT_LINES)
+            .optional()
+            .describe(
+              `textuelle — nombre de lignes laissées sur la copie pour répondre (${MAX_TEXT_LINES} au maximum). Compte ce qu'une bonne réponse occupe réellement. Omettre pour la valeur par défaut.`,
+            ),
+        }
+      : {}),
     content: z.string().describe("L'énoncé de la question, tel qu'il sera lu par le candidat."),
     responseType: z
       .enum(types)
       .describe(
-        "Comment le candidat répond. « qcs »/« qcm » : propositions à cocher (une seule juste, ou plusieurs — c'est la même chose à ses yeux). « textuelle » : réponse rédigée. « liste » : plusieurs réponses courtes. « tableau » : grille de cases à cocher. « matching » : relier deux colonnes. « dessin » : tracer un schéma. « fichier » : déposer un document. « sans_reponse » : aucune réponse attendue.",
+        "Comment le candidat répond. « qcm » : propositions à cocher, une ou plusieurs justes. « textuelle » : réponse rédigée. « liste » : plusieurs réponses courtes. « tableau » : grille de cases à cocher. « matching » : relier deux colonnes. « dessin » : tracer un schéma. « fichier » : déposer un document. « sans_reponse » : aucune réponse attendue.",
       ),
     choices: z
       .array(z.string())
       .describe(
-        'Selon le type : les propositions pour qcs et qcm, les réponses attendues pour liste. Tableau vide pour tous les autres types.',
+        'Selon le type : les propositions pour qcm, TOUTES les réponses acceptées pour liste. Tableau vide pour tous les autres types.',
       ),
     correctChoices: z
       .array(z.number().int())
-      .describe('Index (à partir de 0) des propositions correctes, pour qcs et qcm uniquement.'),
+      .describe('Index (à partir de 0) des propositions correctes, pour qcm uniquement.'),
     pairs: z
       .array(
         z.object({
@@ -161,7 +204,7 @@ function questionSchemaFor<T extends readonly [string, ...string[]]>(types: T) {
             .min(1)
             .max(4)
             .describe(
-              'Ce que la question demande de CETTE notion-là : 1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser ou créer.',
+              'Ce que la question demande de CETTE notion-là : 1 reconnaître, 2 restituer, 3 appliquer, 4 analyser.',
             ),
         }),
       )
@@ -170,7 +213,7 @@ function questionSchemaFor<T extends readonly [string, ...string[]]>(types: T) {
 }
 
 export const wireQuestionSchema = questionSchemaFor(PARCOURS_RESPONSE_TYPES);
-export const wireExamQuestionSchema = questionSchemaFor(EXAM_RESPONSE_TYPES);
+export const wireExamQuestionSchema = questionSchemaFor(EXAM_RESPONSE_TYPES, { textLines: true });
 
 /** Un groupe, pour un jeu de types donné. Même raison que ci-dessus de passer
  *  par une fonction : la seule différence entre les deux est la liste des types

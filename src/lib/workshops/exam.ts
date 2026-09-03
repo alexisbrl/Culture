@@ -30,6 +30,7 @@ import type {
 import {
   BLOOM_REACH,
   DEFAULT_BLOOM_LEVEL,
+  clampTextLines,
   emptyExerciseAnswer,
   matchPairs,
   normalizeTypeOptions,
@@ -166,7 +167,9 @@ function itemToPart(row: ItemRow, links: NotionLink[]): QuestionPart {
     choices: row.choices ?? [],
     correctChoices: row.correct_choices ?? [],
     shuffleChoices: row.shuffle_choices ?? false,
-    textLines: row.text_lines ?? 4,
+    // Une ligne écrite avant le plafond (incident du 01/09/2026) peut porter
+    // n'importe quelle valeur : on la ramène dans les bornes à la lecture.
+    textLines: clampTextLines(row.text_lines),
     typeOptions: normalizeTypeOptions(row.type_options),
     expectations: row.expectations ?? '',
     notionIds: links.map((link) => link.notionId),
@@ -269,7 +272,7 @@ function itemRowsOf(q: Question) {
       choices: item.choices ?? [],
       correct_choices: item.correctChoices ?? [],
       shuffle_choices: item.shuffleChoices ?? false,
-      text_lines: item.textLines ?? 4,
+      text_lines: clampTextLines(item.textLines),
       type_options: item.typeOptions ?? {},
       expectations: item.expectations ?? '',
       updated_at: new Date().toISOString(),

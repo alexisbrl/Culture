@@ -247,8 +247,24 @@ export function shouldCacheDocuments(documentUses: number): boolean {
  *  chapitres peut tenir dans un seul PDF (§16.18). */
 export const MAX_PLAUSIBLE_CHAPTERS = 16;
 
+/** En deçà, on soupçonne l'inverse : un découpage pris sur les grands
+ *  regroupements du cours là où les unités qu'ils contiennent portaient le
+ *  contenu. Un cours entier en deux chapitres entasse tout dans deux boîtes,
+ *  et le rangement n'a plus rien à distinguer (31/08/2026). */
+export const MIN_PLAUSIBLE_CHAPTERS = 3;
+
+/** ⚠️ **`chapterCount` est la taille du PROGRAMME qui résulte de la réponse**,
+ *  et non le nombre de chapitres nouveaux (01/09/2026). Les deux coïncident au
+ *  premier import ; sur une mise à jour, non : « 1 chapitre nouveau » à côté de
+ *  12 conservés n'est pas un découpage en une partie, alors qu'un cours
+ *  entièrement redécoupé met les anciens à 0 et retombe bien sous le seuil.
+ *
+ *  C'est ce qui permet au seuil bas de valoir **à chaque import** sans se
+ *  déclencher à tort : on ne sait jamais d'avance si un cours a été changé de
+ *  fond en comble, et un programme entier réduit à deux boîtes doit être
+ *  vérifié, que ce soit sa première version ou sa dixième. */
 export function needsChapterRetry(chapterCount: number): boolean {
-  return chapterCount > MAX_PLAUSIBLE_CHAPTERS;
+  return chapterCount > MAX_PLAUSIBLE_CHAPTERS || chapterCount < MIN_PLAUSIBLE_CHAPTERS;
 }
 
 /** Enchaîne **au plus deux** appels de la passe chapitres.

@@ -266,12 +266,72 @@ export function parseTableCellKey(key: unknown): { row: number; col: number } | 
 
 export const MATCH_SPLIT_MIN = 0.05;
 export const MATCH_SPLIT_MAX = 0.95;
+
+// ─── Lignes de réponse d'une question textuelle ──────────────────────────────
+//
+// Le nombre de lignes est DESSINÉ : l'éditeur A4 et la page d'exercice tracent
+// une ligne (ou un `rows` de zone de saisie) par unité. Sans plafond, une
+// valeur saisie à la main de quelques milliers fige la page — incident du
+// 01/09/2026. 200 lignes valent déjà plusieurs pages A4, bien au-delà de tout
+// usage réel. Toute valeur venue de l'extérieur (saisie, IA, import, ligne
+// déjà en base) passe par `clampTextLines`.
+export const DEFAULT_TEXT_LINES = 4;
+export const MAX_TEXT_LINES = 200;
+
+export function clampTextLines(value: number | null | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_TEXT_LINES;
+  return Math.min(MAX_TEXT_LINES, Math.max(1, Math.round(value)));
+}
 export const MATCH_SPLIT_DEFAULT = 0.5;
 
-// Taxonomie de Bloom — niveau cognitif VISÉ **par le couple question ↔ notion**
-// (1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser, 5 évaluer, 6 créer). À ne
-// pas confondre avec `brick_mastery.bloom_level`, qui mesure le niveau ATTEINT
-// par un candidat sur une notion.
+// ─── Combien d'éléments une question peut porter ─────────────────────────────
+//
+// Des PLAFONDS, pas des cibles : une bonne question en compte presque toujours
+// beaucoup moins. Ils existent parce que rien n'en fixait jusqu'ici — une
+// réponse de modèle partie en boucle, ou un import mal formé, produisait une
+// grille de cent lignes que plus personne ne pouvait relire ni corriger.
+//
+// Vingt partout, délibérément : c'est déjà au-delà de tout usage réel, et un
+// seul nombre à retenir vaut mieux que des seuils qu'il faudrait justifier un
+// par un. Ils sont annoncés au modèle comme des limites, et tenus à l'écriture
+// (`resolveQuestion`) : ce qui dépasse est coupé, jamais accepté en silence.
+//
+// ⚠️ **Les COLONNES font exception, à 5.** Ce n'est pas un garde-fou anti-dérive
+// mais une contrainte de largeur : au-delà, la grille ne tient plus sur une page
+// A4. L'éditeur la tenait déjà de son côté (le bouton « ajouter une colonne »
+// disparaît à 5) ; elle vit ici depuis le 01/09/2026, pour que l'IA ne puisse
+// pas produire une grille qu'un humain n'aurait pas le droit de construire — ni,
+// surtout, de reprendre à la main ensuite.
+export const MAX_CHOICES = 20;
+export const MAX_TABLE_ROWS = 20;
+export const MAX_TABLE_COLS = 5;
+export const MAX_PAIRS = 20;
+
+// Les quatre niveaux — ce que le couple question ↔ notion demande au candidat.
+// À ne pas confondre avec `brick_mastery.bloom_level`, qui mesure le niveau
+// ATTEINT par un candidat sur une notion.
+//
+// ─── Une PROGRESSION, et non la taxonomie de Bloom (01/09/2026) ─────────────
+//
+//   1 RECONNAÎTRE — identifier la bonne réponse parmi d'autres, dire si un
+//     énoncé est juste. On ne demande pas de produire la connaissance.
+//   2 RESTITUER   — produire la connaissance de mémoire : la définition, la
+//     date, la liste, et ce à quoi elle sert.
+//   3 APPLIQUER   — s'en servir dans une situation où son emploi est évident.
+//   4 ANALYSER    — reconnaître de soi-même qu'elle est utile dans un cas moins
+//     évident, souvent en la croisant avec d'autres, et s'en servir.
+//
+// Les deux premiers niveaux portaient les noms de Bloom — « mémoriser » puis
+// « comprendre » —, deux NATURES d'effort et non deux degrés : une définition à
+// écrire (mémoriser) est plus dure qu'un choix entre propositions (comprendre),
+// si bien que deux questions du même niveau n'avaient pas la même difficulté et
+// qu'un parcours pouvait redescendre en montant. L'échelle ci-dessus se lit
+// comme une progression du plus simple au plus exigeant, ce que le produit
+// mesure réellement. Elle s'écarte donc des noms de Bloom, et c'est délibéré :
+// le nom du champ (`bloom_level`) est conservé, lui, pour ne pas migrer la base.
+//
+// ⚠️ Les niveaux déjà en base gardent leur NUMÉRO ; c'est leur sens qui bouge.
+// Sans conséquence à ce jour (données de test), impensable après le lancement.
 //
 // ⚠️ Une question n'a PLUS de niveau à elle (28/08/2026). Elle en portait un,
 // dont les niveaux par notion n'étaient qu'un raffinement facultatif : deux
@@ -280,9 +340,9 @@ export const MATCH_SPLIT_DEFAULT = 0.5;
 // exact où il a un sens, puisqu'il dit ce que la question fait faire de CETTE
 // notion-là. La colonne `exam_question_items.bloom_level` a été supprimée le
 // 31/08/2026 : il n'y a plus de seconde source à tenir en accord.
-// Quatre niveaux dans toute l'application (09/08/2026) : mémoriser, comprendre,
-// appliquer, analyser. « Évaluer » et « Créer » ont été retirés — ils n'étaient
-// pas exploitables en correction et `mastery.ts` plafonnait déjà à 4 niveaux
+// Quatre niveaux dans toute l'application (09/08/2026). Les deux derniers de
+// Bloom, « évaluer » et « créer », n'ont jamais existé ici : ils n'étaient pas
+// exploitables en correction et `mastery.ts` plafonnait déjà à 4 niveaux
 // (`MAX_LEVEL`, score de maîtrise sur 40).
 export type BloomLevel = 1 | 2 | 3 | 4;
 
@@ -291,8 +351,7 @@ export const BLOOM_LEVELS: BloomLevel[] = [1, 2, 3, 4];
 export const DEFAULT_BLOOM_LEVEL: BloomLevel = 1;
 
 /** Ramène n'importe quelle entrée (null, undefined, valeur hors bornes) sur un
- *  niveau valide. Les anciens niveaux 5 et 6 sont ramenés à 4, le plus haut :
- *  une question « créer » reste la plus exigeante de l'échelle réduite. */
+ *  niveau valide. Tout ce qui dépasse 4 est ramené à 4, le plus haut. */
 export function toBloomLevel(value: unknown): BloomLevel {
   const n = Math.round(Number(value));
   if (!Number.isFinite(n)) return DEFAULT_BLOOM_LEVEL;
@@ -302,8 +361,8 @@ export function toBloomLevel(value: unknown): BloomLevel {
 
 // Ce que vaut UN exercice du parcours : 12 niveaux de Bloom, et non 12 questions
 // (règle produit du 29/08/2026). Un énoncé coûte le plus haut niveau qu'il
-// demande, une grappe la somme de ses énoncés : douze énoncés « mémoriser », ou
-// un « analyser » + deux « appliquer » + deux « mémoriser ». Ici plutôt que dans
+// demande, une grappe la somme de ses énoncés : douze énoncés « reconnaître », ou
+// un « analyser » + deux « appliquer » + deux « reconnaître ». Ici plutôt que dans
 // `parcoursDraw.ts` parce que l'écran d'exercice en a besoin pour sa barre
 // d'avancement, et qu'il ne doit rien importer qui touche à la base.
 export const EXERCISE_BLOOM_BUDGET = 12;

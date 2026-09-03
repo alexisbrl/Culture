@@ -61,14 +61,12 @@ export type PreparedDocument = {
 export type IngestScope =
   | {
       pass: 'chapters';
-      /** Les notions à répartir — TOUTES celles de l'atelier, celles que la
-       *  passe précédente vient d'extraire comme celles qu'il portait déjà.
+      /** ⚠️ **Aucune notion ici** (31/08/2026). La passe a longtemps reçu toutes
+       *  celles de l'atelier ; elles ne servaient à rien — elle ne range pas, et
+       *  ce qui décide qu'un chapitre n'est plus couvert, c'est le COURS. Voir
+       *  `inScope` dans `prompt.ts`.
        *
-       *  C'est l'entrée principale de la passe depuis l'inversion du
-       *  23/08/2026 : elle ne nomme plus seulement des boîtes, elle dit ce
-       *  qu'on met dedans. */
-      notions: { id: string; title: string }[];
-      /** Présent au SECOND essai seulement : le nombre de chapitres rendu au
+       *  Présent au SECOND essai seulement : le nombre de chapitres rendu au
        *  premier, que la consigne rappelle au modèle (§16.18). */
       retry?: { previous: string[] };
     }

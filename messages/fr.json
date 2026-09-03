@@ -335,8 +335,8 @@
     "noStatement": "(sans énoncé)",
     "irreversible": "Cette action est irréversible.",
     "bloom": {
-      "1": "Mémoriser",
-      "2": "Comprendre",
+      "1": "Reconnaître",
+      "2": "Restituer",
       "3": "Appliquer",
       "4": "Analyser"
     },
@@ -407,8 +407,8 @@
       "partStatementPlaceholder": "Énoncé de cette partie…",
       "addPart": "+ ajouter une partie",
       "optionsDivider": "Options par question",
-      "bloomLabel": "Niveau de Bloom visé",
-      "bloomHint": "obligatoire — niveau cognitif que la question fait travailler",
+      "bloomLabel": "Niveau visé",
+      "bloomHint": "obligatoire — ce que la question demande de cette notion",
       "notionsLabel": "Notions",
       "notionsHint": "facultatif — les notions que la question mobilise, toutes chapitres confondus",
       "addNotionOption": "associer une notion…",

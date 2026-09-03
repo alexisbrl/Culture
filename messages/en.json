@@ -335,8 +335,8 @@
     "noStatement": "(no statement)",
     "irreversible": "This action is irreversible.",
     "bloom": {
-      "1": "Remember",
-      "2": "Understand",
+      "1": "Recognise",
+      "2": "Recall",
       "3": "Apply",
       "4": "Analyse"
     },
@@ -407,8 +407,8 @@
       "partStatementPlaceholder": "Statement for this part…",
       "addPart": "+ add a part",
       "optionsDivider": "Per-question options",
-      "bloomLabel": "Target Bloom level",
-      "bloomHint": "required — the cognitive level the question exercises",
+      "bloomLabel": "Target level",
+      "bloomHint": "required — what the question asks of this notion",
       "notionsLabel": "Notions",
       "notionsHint": "optional — the notions the question draws on, across all chapters",
       "addNotionOption": "link a notion…",

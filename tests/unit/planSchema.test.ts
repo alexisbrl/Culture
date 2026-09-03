@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { parsePlan, planSchema } from '@/lib/ingest/planSchema';
+import { MAX_CHOICES } from '@/lib/workshops/examTypes';
 
 // Le contrat d'entrée de l'ingestion. Deux propriétés à tenir, et elles tirent
 // en sens opposé :
@@ -423,6 +424,9 @@ describe('types à réglages — la question tombe, jamais le lot', () => {
       tableRows: ['Chat', 'Truite'],
       tableCols: ['Mammifère', 'Poisson'],
       tableChecked: ['0-0', '1-1'],
+      // Imposé comme l'ordre aléatoire d'un QCM : une grille dont les lignes
+      // tombent dans l'ordre du cours se répond de mémoire.
+      tableShuffleRows: true,
     });
   });
 
@@ -507,8 +511,32 @@ describe('types à réglages — la question tombe, jamais le lot', () => {
     expect(plan.adjusted[0].reason).toContain('hors de la liste');
   });
 
-  it('« réponse unique » ne retient qu’une bonne réponse', () => {
+  it('« réponse unique » est replié sur le QCM, ses bonnes réponses intactes', () => {
+    // 01/09/2026 : plus aucune question générée n'est en « réponse unique ». Un
+    // import peut encore en envoyer une — elle devient un QCM, et rien n'est
+    // perdu au passage.
     const plan = parsePlan({ groups: [group({ questions: [question({ responseType: 'qcs', correctChoices: [1, 0] })] })] });
-    expect(plan.groups[0].questions[0].correctChoices).toEqual([0]);
+    expect(plan.groups[0].questions[0].responseType).toBe('qcm');
+    expect(plan.groups[0].questions[0].correctChoices).toEqual([0, 1]);
+  });
+
+  it('un QCM est TOUJOURS en ordre aléatoire, sans que le modèle le demande', () => {
+    // L'ordre dans lequel le modèle énumère ses propositions suit celui du
+    // cours : la bonne réponse tomberait toujours au même endroit.
+    const plan = parsePlan({ groups: [group({ questions: [question({ responseType: 'qcm' })] })] });
+    expect(plan.groups[0].questions[0].shuffleChoices).toBe(true);
+  });
+
+  it('coupe ce qui dépasse les plafonds, sans jeter la question', () => {
+    const many = Array.from({ length: 26 }, (_, i) => `Proposition ${i + 1}`);
+    const plan = parsePlan({
+      groups: [group({ questions: [question({ responseType: 'qcm', choices: many, correctChoices: [0, 24] })] })],
+    });
+    const q = plan.groups[0].questions[0];
+    expect(q.choices).toHaveLength(MAX_CHOICES);
+    // La bonne réponse n°24 tombait au-delà du plafond : elle disparaît avec sa
+    // proposition, et la question survit sur celles qui restent.
+    expect(q.correctChoices).toEqual([0]);
+    expect(plan.adjusted.some((a) => a.reason.includes(`${MAX_CHOICES} propositions`))).toBe(true);
   });
 });

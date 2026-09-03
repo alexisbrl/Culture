@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { MAX_TEXT_LINES } from '@/lib/workshops/examTypes';
 import type { Question } from '@/lib/workshops/examTypes';
 import {
   fromGroup,
@@ -188,6 +189,17 @@ describe('normalizeGroupInput — entrée non fiable (IA, import, API)', () => {
     // `examIds` décrit l'appartenance à une copie déjà composée : ça ne se
     // décide pas à la génération.
     expect(normalizeGroupInput({ examIds: ['examen-existant'] }, 'g1').examIds).toEqual([]);
+  });
+
+  // Le nombre de lignes est dessiné trait par trait : une valeur démesurée fige
+  // l'éditeur A4 et la page d'exercice (incident du 01/09/2026).
+  it('borne le nombre de lignes de réponse au plafond', () => {
+    const group = normalizeGroupInput({
+      questions: [{ textLines: 5000 }, { textLines: 12 }],
+    }, 'g1');
+
+    expect(group.questions[0].textLines).toBe(MAX_TEXT_LINES);
+    expect(group.questions[1].textLines).toBe(12);
   });
 
   it('renumérote les questions liées sans jamais réutiliser l’identifiant du groupe', () => {
