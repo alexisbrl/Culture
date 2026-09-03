@@ -280,7 +280,7 @@ function instructionFor(scope: IngestScope, fileNames: string[]): string {
       // Les noms de fichiers sont dans la consigne, pas seulement dans les blocs
       // `document` : c'est là que le modèle peut apprendre qu'ils forment un
       // seul cours (§16.15).
-      return chaptersInstruction(fileNames, scope.notions, scope.retry);
+      return chaptersInstruction(fileNames, scope.retry);
     case 'notions':
       return notionsInstruction(scope.document);
     case 'assign':
@@ -343,6 +343,21 @@ function documentUsesOf(scope: IngestScope): number {
     case 'notions':
       // Un appel par DOCUMENT, et chacun ne porte que le sien : aucun préfixe
       // commun, donc rien à relire. Le corpus part une fois en tout.
+      //
+      // ⚠️ **Le premier document est en théorie relu par la passe chapitres**
+      // (même contenu, même position — juste après le système) mais **pas
+      // marqué pour autant** (01/09/2026, retour arrière sur un essai du même
+      // jour). Aucune des deux durées ne convient tant qu'on n'a pas mesuré :
+      // l'heure coûte 2× l'écriture pour une seule lecture garantie (sans
+      // relance) — 2 + 0,1 = 2,1 contre 2 sans rien poser, donc PLUS cher que
+      // ne rien faire ; les 5 minutes ne coûtent que 1,25× et seraient
+      // rentables (1,35 contre 2), mais rien ne dit que la passe chapitres
+      // démarre avant que ce délai n'expire sur un import à plusieurs
+      // documents, où les autres extractions tournent encore. Le dialogue
+      // d'import affiche désormais l'instant où la passe chapitres part,
+      // chronomètre à la main sur l'écran ; si la mesure montre que c'est
+      // systématiquement en dessous de 5 minutes, remettre le marqueur ici. Voir
+      // `docs/backlog.md`.
       return 1;
     case 'assign':
     case 'questions':
@@ -485,11 +500,21 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
         type: 'document',
         source: { type: 'file', file_id: doc.ref },
         title: doc.fileName,
-        // Le marqueur ne va que sur le DERNIER document : il met en cache tout
-        // ce qui le précède, système compris. TTL par défaut (5 minutes) : le
-        // TTL d'une heure se justifiait quand une ingestion s'étalait sur des
-        // dizaines d'appels sur le même cours, et son écriture coûte 2× l'entrée
-        // au lieu de 1,25× (§16.16).
+        // Le marqueur ne va que sur le DERNIER document envoyé dans cet appel :
+        // il met en cache tout ce qui le précède, système compris.
+        //
+        // ⚠️ **TTL par défaut (5 minutes), pas l'heure** (01/09/2026). L'heure a
+        // été envisagée pour l'unique cas cacheable aujourd'hui — le premier
+        // document de la passe notions, relu par la passe chapitres après que
+        // tous les autres documents ont fini leur propre extraction — pour
+        // couvrir les imports à beaucoup de documents, où l'attente peut
+        // dépasser 5 minutes. Mais l'heure double le prix de l'écriture (2× au
+        // lieu de 1,25×), et il n'y a qu'UNE lecture garantie (la passe
+        // chapitres, sans relance) : 2 + 0,1 = 2,1 contre 2 sans aucun marqueur
+        // — plus cher que de ne rien poser. Le défaut reste rentable dans le cas
+        // courant (1,25 + 0,1 = 1,35) ; le pire qu'il risque sur un très gros
+        // import, c'est de manquer la fenêtre et de payer la même chose que sans
+        // marqueur — jamais plus.
         ...(cacheable && i === sent.length - 1 ? { cache_control: { type: 'ephemeral' as const } } : {}),
       }));
 

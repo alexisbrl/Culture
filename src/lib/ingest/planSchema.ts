@@ -44,6 +44,12 @@ import {
   FILE_TYPE_KEYS,
   MATCH_SPLIT_MAX,
   MATCH_SPLIT_MIN,
+  MAX_CHOICES,
+  MAX_LIST_ANSWERS,
+  MAX_PAIRS,
+  MAX_TABLE_COLS,
+  MAX_TABLE_ROWS,
+  MAX_TEXT_LINES,
   matchPairs,
   parseResponseType,
   parseTableCellKey,
@@ -152,7 +158,12 @@ const responseTypeSchema = z.unknown().transform((value, ctx) => {
     ctx.addIssue({ code: 'custom', message: `type de réponse inconnu : ${JSON.stringify(value)}` });
     return z.NEVER;
   }
-  return parsed satisfies ResponseType;
+  // ⚠️ **Aucune question générée n'est en « réponse unique »** (01/09/2026).
+  // Le type n'est plus offert au modèle, mais un import ou un fournisseur sans
+  // sortie contrainte peut encore l'envoyer : on le replie ici, une fois, plutôt
+  // que de laisser un cas à traiter dans chaque consommateur. Rien n'est perdu —
+  // une question à une seule bonne réponse s'affiche simplement en cases.
+  return (parsed === 'qcs' ? 'qcm' : parsed) satisfies ResponseType;
 });
 
 /** Bloom : 5 et 6 sont ramenés à 4 (mapping fondé, l'échelle a été réduite).
@@ -205,7 +216,7 @@ const questionSchema = z.object({
   choices: z.array(z.string()).default([]),
   correctChoices: z.array(z.number().int().min(0)).default([]),
   shuffleChoices: z.boolean().default(false),
-  textLines: z.number().int().min(1).max(40).default(4),
+  textLines: z.number().int().min(1).max(MAX_TEXT_LINES).default(4),
   expectations: z.string().default(''),
   /** Le niveau vit sur le lien vers la notion (28/08/2026) : une question peut
    *  faire restituer l'une et analyser l'autre. C'est la forme demandée au
@@ -314,7 +325,6 @@ export function resolveQuestion(raw: QuestionInput): ResolvedQuestion {
   const typeOptions: QuestionTypeOptions = {};
 
   switch (type) {
-    case 'qcs':
     case 'qcm': {
       // Les propositions ne sont NI filtrées NI retriées : `correctChoices`
       // désigne des positions, et toute retouche de la liste déplacerait la
@@ -323,15 +333,19 @@ export function resolveQuestion(raw: QuestionInput): ResolvedQuestion {
       if (raw.choices.length < 2) return { adjusted, discard: 'QCM à moins de deux propositions' };
       if (raw.choices.some((c) => !c.trim())) return { adjusted, discard: 'QCM à proposition vide' };
 
+      // Le plafond coupe par la FIN, seul endroit où l'on sache que les index
+      // de `correctChoices` restent valides pour tout ce qu'on garde.
+      if (raw.choices.length > MAX_CHOICES) {
+        adjusted.push(`plus de ${MAX_CHOICES} propositions — les suivantes sont retirées`);
+        choices = raw.choices.slice(0, MAX_CHOICES);
+      }
+
       const unique = [...new Set(raw.correctChoices)];
-      const inside = unique.filter((i) => i < raw.choices.length);
+      const inside = unique.filter((i) => i < choices.length);
       if (inside.length < unique.length) adjusted.push('bonne réponse hors de la liste des propositions — retirée');
       if (inside.length === 0) return { adjusted, discard: 'QCM sans bonne réponse' };
 
-      if (type === 'qcs' && inside.length > 1) {
-        adjusted.push('« réponse unique » avec plusieurs bonnes réponses — la première est retenue');
-      }
-      correctChoices = type === 'qcs' ? [Math.min(...inside)] : inside.sort((a, b) => a - b);
+      correctChoices = inside.sort((a, b) => a - b);
       break;
     }
 
@@ -341,6 +355,10 @@ export function resolveQuestion(raw: QuestionInput): ResolvedQuestion {
       // casse donc rien.
       choices = nonEmpty(raw.choices);
       if (choices.length === 0) return { adjusted, discard: 'liste sans réponse attendue' };
+      if (choices.length > MAX_LIST_ANSWERS) {
+        adjusted.push(`plus de ${MAX_LIST_ANSWERS} réponses attendues — les suivantes sont retirées`);
+        choices = choices.slice(0, MAX_LIST_ANSWERS);
+      }
       correctChoices = [];
       typeOptions.listExpected = Math.max(1, Math.min(opts.listExpected ?? choices.length, choices.length));
       if (opts.listNumbered !== undefined) typeOptions.listNumbered = opts.listNumbered;
@@ -357,6 +375,10 @@ export function resolveQuestion(raw: QuestionInput): ResolvedQuestion {
       // Une seule paire n'est pas un exercice d'appariement : il n'y a rien à
       // choisir, la réponse est donnée par l'affichage.
       if (pairs.length < 2) return { adjusted, discard: 'mise en paires : moins de deux paires complètes' };
+      if (pairs.length > MAX_PAIRS) {
+        adjusted.push(`plus de ${MAX_PAIRS} paires — les suivantes sont retirées`);
+        pairs.length = MAX_PAIRS;
+      }
 
       choices = pairs.map((p) => toMatchChoice(p.left, p.right));
       correctChoices = [];
@@ -369,6 +391,16 @@ export function resolveQuestion(raw: QuestionInput): ResolvedQuestion {
       const cols = nonEmpty(opts.tableCols);
       if (rows.length === 0 || cols.length === 0) {
         return { adjusted, discard: 'tableau sans lignes ou sans colonnes' };
+      }
+      // Couper AVANT de relire les cases justes : `inside` les borne ensuite sur
+      // la grille effectivement conservée.
+      if (rows.length > MAX_TABLE_ROWS) {
+        adjusted.push(`plus de ${MAX_TABLE_ROWS} lignes — les suivantes sont retirées`);
+        rows.length = MAX_TABLE_ROWS;
+      }
+      if (cols.length > MAX_TABLE_COLS) {
+        adjusted.push(`plus de ${MAX_TABLE_COLS} colonnes — les suivantes sont retirées`);
+        cols.length = MAX_TABLE_COLS;
       }
       typeOptions.tableRows = rows;
       typeOptions.tableCols = cols;
@@ -393,7 +425,9 @@ export function resolveQuestion(raw: QuestionInput): ResolvedQuestion {
         typeOptions.tableChecked = [...new Set(inside.map((c) => tableCellKey(c.row, c.col)))];
       }
 
-      if (opts.tableShuffleRows !== undefined) typeOptions.tableShuffleRows = opts.tableShuffleRows;
+      // Toujours mélangées, comme les propositions d'un QCM : une grille dont
+      // les lignes tombent dans l'ordre du cours se répond de mémoire.
+      typeOptions.tableShuffleRows = true;
       choices = [];
       correctChoices = [];
       break;
@@ -431,7 +465,11 @@ export function resolveQuestion(raw: QuestionInput): ResolvedQuestion {
       answer: raw.answer,
       choices,
       correctChoices,
-      shuffleChoices: raw.shuffleChoices,
+      // ⚠️ **Imposé, jamais demandé au modèle** (01/09/2026). L'ordre dans lequel
+      // il énumère ses propositions suit celui du cours, et la bonne réponse
+      // tombe alors toujours au même endroit. C'est un réglage d'affichage : il
+      // n'a rien à coûter de jetons, et rien à dépendre d'une réponse.
+      shuffleChoices: type === 'qcm' ? true : raw.shuffleChoices,
       textLines: raw.textLines,
       expectations: raw.expectations,
       notions,

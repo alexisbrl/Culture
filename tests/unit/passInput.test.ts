@@ -4,6 +4,7 @@ import {
   batchNotions,
   documentsForPass,
   MAX_PLAUSIBLE_CHAPTERS,
+  MIN_PLAUSIBLE_CHAPTERS,
   needsChapterRetry,
   shouldCacheDocuments,
   NOTIONS_PER_QUESTION_BATCH,
@@ -186,7 +187,7 @@ describe('withChapterRetry — une relance, jamais deux (§16.18)', () => {
   /** Ce que fait `ingestChapters`, sans la base : appeler, compter, relancer. */
   async function pass(provider: ReturnType<typeof chapterProvider>) {
     return withChapterRetry(
-      (retry) => provider.documentToPlan([], empty, { pass: 'chapters', notions: [], retry }),
+      (retry) => provider.documentToPlan([], empty, { pass: 'chapters', retry }),
       (result) => (result.plan as { chapters: unknown[] }).chapters.length,
       (result) => (result.plan as { chapters: { name: string }[] }).chapters.map((c) => c.name),
     );
@@ -242,6 +243,15 @@ describe('withChapterRetry — une relance, jamais deux (§16.18)', () => {
   it('le seuil de relance ne se déclenche qu’au-delà du plausible', () => {
     expect(needsChapterRetry(MAX_PLAUSIBLE_CHAPTERS)).toBe(false);
     expect(needsChapterRetry(MAX_PLAUSIBLE_CHAPTERS + 1)).toBe(true);
+  });
+
+  it('un découpage trop GROSSIER relance aussi, à chaque import', () => {
+    // Un cours entier en deux chapitres entasse tout dans deux boîtes : le
+    // rangement n'a plus rien à distinguer. Et on ne sait jamais d'avance si un
+    // cours a été changé de fond en comble (01/09/2026).
+    expect(needsChapterRetry(MIN_PLAUSIBLE_CHAPTERS)).toBe(false);
+    expect(needsChapterRetry(MIN_PLAUSIBLE_CHAPTERS - 1)).toBe(true);
+    expect(needsChapterRetry(0)).toBe(true);
   });
 });
 
