@@ -13,11 +13,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MAX_GENERATED_LENGTH,
-  MAX_REQUESTED_DOCUMENTS,
   composeDocument,
   extractBody,
+  questionCountFromHint,
   readResourceOutput,
 } from '@/lib/ingest/resource';
+import { MAX_QUESTIONS_PER_IMPORT } from '@/lib/ingest/prompt';
 
 describe('readResourceOutput', () => {
   it('lit une réponse complète', () => {
@@ -73,11 +74,13 @@ describe('readResourceOutput', () => {
       expect(readResourceOutput({ needs: [1, -1, 1.5, '2', null, NaN] }).needs).toEqual([1]);
     });
 
-    it('plafonne : « donne-moi tout » ne doit pas passer par ce champ', () => {
+    it('ne plafonne pas : « relis tout mon cours » est une demande légitime', () => {
+      // Un plafond a existé une demi-journée. Il cassait le cas le plus banal —
+      // « relis mon cours et corrige les erreurs » — en n'en relisant qu'une
+      // partie, sans le dire. Ce qui borne la dépense, c'est que le contenu ne
+      // parte que sur demande, pas un compte arbitraire.
       const many = Array.from({ length: 20 }, (_, i) => i);
-      expect(readResourceOutput({ needs: many })).toMatchObject({
-        needs: many.slice(0, MAX_REQUESTED_DOCUMENTS),
-      });
+      expect(readResourceOutput({ needs: many }).needs).toEqual(many);
     });
 
     it('un champ absent ou mal formé ne demande rien', () => {
@@ -105,5 +108,30 @@ describe('le document et son en-tête', () => {
     // Cas d'un document écrit par une version antérieure du format : deux lignes
     // d'en-tête en trop valent mieux qu'un cours effacé.
     expect(extractBody('Un vieux document sans marque.')).toBe('Un vieux document sans marque.');
+  });
+});
+
+describe('questionCountFromHint', () => {
+  it('un prompt fait de chiffres seuls est un nombre de questions', () => {
+    expect(questionCountFromHint('40')).toBe(40);
+    // Les espaces autour viennent de la frappe, pas d'une intention.
+    expect(questionCountFromHint('  12  ')).toBe(12);
+  });
+
+  it('tout ce qui n’est pas QUE des chiffres reste une consigne', () => {
+    // « 40 questions » porte une intention que le seul nombre ne porte pas :
+    // des questions, et non des notions. Ça se lit, ça ne se devine pas.
+    for (const hint of ['40 questions', '40,50', '4 0', 'quarante', '40 !', '']) {
+      expect(questionCountFromHint(hint)).toBeNull();
+    }
+  });
+
+  it('ramène au plafond plutôt que de refuser', () => {
+    // Quelqu'un qui tape 5000 veut « beaucoup », pas un message d'erreur.
+    expect(questionCountFromHint('5000')).toBe(MAX_QUESTIONS_PER_IMPORT);
+  });
+
+  it('zéro n’est pas une demande', () => {
+    expect(questionCountFromHint('0')).toBeNull();
   });
 });

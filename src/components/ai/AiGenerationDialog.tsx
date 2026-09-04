@@ -11,10 +11,10 @@ import { INGEST_CONCURRENCY, QUESTIONS_CONCURRENCY, mapWithConcurrency } from '@
 import {
   DEFAULT_EXAM_QUESTIONS,
   EXAM_QUESTIONS_PER_CALL,
-  EXAM_QUESTIONS_RANGE,
   MAX_QUESTIONS_PER_IMPORT as MAX_QUESTIONS,
 } from '@/lib/ingest/prompt';
 import { chapterStartBudgets } from '@/lib/ingest/demand';
+import { questionCountFromHint } from '@/lib/ingest/resource';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import {
@@ -153,7 +153,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // encore : le dialogue ne peut pas décider de ce qu'il va faire avant de
   // l'avoir, donc il attend plutôt que de supposer.
   const [visibleNotions, setVisibleNotions] = useState<number | null>(null);
-  const [examCount, setExamCount] = useState(DEFAULT_EXAM_QUESTIONS);
+  // ⚠️ Le nombre de questions ne se saisit plus à part (04/09/2026) : un prompt
+  // fait UNIQUEMENT de chiffres EST ce nombre. Deux champs disaient la même
+  // chose, et un seul des deux était visible selon le bouton d’entrée.
+  // `null` = la consigne est une vraie consigne, ou il n’y en a pas.
   // ⚠️ TEMPORAIRE — phase de test. Le fournisseur de la passe questions est
   // exposé le temps de comparer Claude et DeepSeek sur un vrai corpus ; il n'a
   // pas vocation à rester un choix d'utilisateur. Seule cette passe est
@@ -165,6 +168,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // d'où l'on peut encore demander Claude, et c'est alors un geste délibéré.
   const [questionsProvider, setQuestionsProvider] = useState<'claude' | 'deepseek'>('deepseek');
   const [hint, setHint] = useState('');
+  // Un prompt fait uniquement de chiffres n'est pas une consigne : c'est un
+  // nombre de questions. Il court-circuite l'étape 0 — il n'y a rien à
+  // interpréter, rien à écrire — et va droit au reste de la génération.
+  const askedCount = questionCountFromHint(hint);
   const [phase, setPhase] = useState<Phase>({ step: 'select' });
   // ─── L'arrêt, et pourquoi il tient dans des refs ────────────────────────
   //
@@ -261,10 +268,12 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       // qu'un import a voulu faire.
       program: needsProgram,
       context,
-      examQuestions: context === 'exam' ? examCount : undefined,
+      examQuestions: context === 'exam' ? (askedCount ?? DEFAULT_EXAM_QUESTIONS) : undefined,
       // Rangée dans le `scope` de l'import : chaque passe la relit depuis la
       // base, y compris celles qui s'exécutent dans des appels ultérieurs.
-      hint: hint.trim(),
+      // Un nombre seul n'est pas une consigne : le transmettre en ferait une,
+      // et chaque étape lirait « 40 » comme une instruction de rédaction.
+      hint: askedCount === null ? hint.trim() : '',
       questionsProvider,
       // Le bouton par lequel on est entré — journal de bord, rien d'autre.
       origin,
@@ -312,7 +321,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // (04/09/2026) : c'est la seule étape qui parte d'une demande écrite plutôt
     // que d'un document. Sans consigne, elle n'a rien à interpréter et ne part
     // pas — ce qui est le cas de la plupart des générations.
-    const withResource = hint.trim().length > 0;
+    const withResource = hint.trim().length > 0 && askedCount === null;
     const withNotions = needsProgram;
     const withChapters = needsProgram;
     const withAssign = needsProgram;
@@ -542,7 +551,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       // quarante questions ne les portera pas davantage au troisième, et chaque
       // tour coûte des appels.
       for (let round = 0; round < 2; round += 1) {
-        const short = Math.min(examCount, MAX_QUESTIONS) - tally.questions;
+        const short = Math.min(askedCount ?? DEFAULT_EXAM_QUESTIONS, MAX_QUESTIONS) - tally.questions;
         if (short <= 0) break;
 
         const calls = Math.max(1, Math.ceil(short / EXAM_QUESTIONS_PER_CALL));
@@ -847,42 +856,11 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
               </Hint>
             </div>
 
-            {/* Le nombre de questions d'examen — le seul réglage qui reste, et
-                le seul qui n'a pas de bonne valeur par défaut universelle : un
-                contrôle de dix questions et un examen blanc de soixante sortent
-                du même bouton. Le parcours, lui, n'en a pas besoin : son volume
-                se déduit du nombre de notions. */}
-            {context === 'exam' && (
-              <>
-                <SectionLabel>{t('examCount.label')}</SectionLabel>
-                <input
-                  type="number"
-                  value={examCount}
-                  min={EXAM_QUESTIONS_RANGE.min}
-                  max={EXAM_QUESTIONS_RANGE.max}
-                  onChange={(e) => {
-                    const value = Number(e.target.value);
-                    // Champ vide ou saisie en cours : on ne corrige rien tant
-                    // que la valeur n'est pas un nombre, sinon on empêche
-                    // d'effacer pour retaper.
-                    if (Number.isNaN(value)) return;
-                    setExamCount(value);
-                  }}
-                  onBlur={() => setExamCount((v) =>
-                    Math.min(EXAM_QUESTIONS_RANGE.max, Math.max(EXAM_QUESTIONS_RANGE.min, Math.round(v) || DEFAULT_EXAM_QUESTIONS)),
-                  )}
-                  style={{
-                    width: 90, boxSizing: 'border-box', fontFamily: 'inherit', fontSize: 13,
-                    padding: '8px 10px', borderRadius: radius.md,
-                    border: `1px solid ${ink(0.12)}`, background: palette.surfaceInput,
-                    color: palette.ink, outline: 'none',
-                  }}
-                />
-                <div style={{ marginTop: 6, marginBottom: 20 }}>
-                  <Hint>{t('examCount.help')}</Hint>
-                </div>
-              </>
-            )}
+            {/* ⚠️ **Le champ « nombre de questions » a été retiré le 04/09/2026.**
+                Il disait la même chose que la consigne, et n’apparaissait que sur
+                un des deux boutons d’entrée. Un prompt fait UNIQUEMENT de
+                chiffres EST ce nombre — « 40 » demande quarante questions, sans
+                passer par l’IA de lecture ni coûter un appel de plus. */}
 
             {/* ⚠️ TEMPORAIRE — phase de test : comparer les deux fournisseurs sur
                 un vrai corpus. Seule la passe questions est concernée, et c'est

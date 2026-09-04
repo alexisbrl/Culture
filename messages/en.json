@@ -1217,7 +1217,7 @@
     "hint": {
       "label": "DETAILS (OPTIONAL)",
       "placeholder": "e.g. split by themes, there are 4 — the document calls them “Units”.",
-      "help": "What the AI cannot guess: how many parts you expect, the level of splitting (broad themes or sub-chapters), the word used in the document, the students’ level. This takes precedence over our defaults."
+      "help": "What the AI cannot guess: the students’ level, the expected structure, the word used in the document. It can also write or extend a course if you ask it to. A bare number (“40”) simply asks for that many questions."
     },
     "provider": {
       "label": "MODEL FOR QUESTIONS",
@@ -1279,10 +1279,6 @@
       "examQuestions": "The AI will write exam questions across the whole programme — each crossing several notions, some following on from one another. The documents are not read again.",
       "questionsOnly": "No readable document in this workshop: the AI will not touch the programme. It will write the practice questions still missing from the existing notions.",
       "nothing": "Nothing to work from yet: this workshop has neither a readable document nor a notion in its programme. Add a PDF or a text file in Resources."
-    },
-    "examCount": {
-      "label": "NUMBER OF QUESTIONS",
-      "help": "Individual questions, for the whole programme rather than per chapter — a ballpark, not an exact count. A third of them will come in groups of two or three. Running it again adds as many, without repeating existing ones."
     },
     "stop": {
       "aria": "stop generating",

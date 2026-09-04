@@ -36,6 +36,36 @@
 // sans base ni réseau, ce qui est la règle pour toute lecture d'une entrée non
 // fiable (`CLAUDE.md` §7).
 
+import { MAX_QUESTIONS_PER_IMPORT } from './prompt';
+
+/** Un prompt qui n'est QUE des chiffres n'est pas une consigne : c'est un nombre
+ *  de questions (décision d'Alexis du 04/09/2026). **Fonction pure.**
+ *
+ *  Elle remplace le champ « nombre de questions » qui vivait à côté du champ de
+ *  consigne : deux façons de dire la même chose, dont une seule était visible
+ *  selon le bouton d'entrée. Taper « 40 » suffit.
+ *
+ *  ⚠️ **Strictement des chiffres, et rien d'autre.** Ni espace, ni virgule, ni
+ *  mot : « 40 questions » est une consigne, pas un nombre, et doit être lue par
+ *  l'IA — elle porte une intention (« des questions », et non « des notions »)
+ *  que le seul nombre ne porte pas. Les espaces autour sont ignorés : ils
+ *  viennent de la frappe, pas d'une intention.
+ *
+ *  Quand elle rend un nombre, l'étape 0 **ne part pas du tout** : il n'y a rien
+ *  à interpréter, rien à écrire, et la génération enchaîne directement sur le
+ *  reste. Un appel au modèle économisé sur ce qui est probablement le réglage le
+ *  plus courant.
+ *
+ *  Au-delà du plafond d'un import, on ne refuse pas : on ramène au plafond. Un
+ *  utilisateur qui tape 5000 veut « beaucoup », pas une erreur. */
+export function questionCountFromHint(hint: string): number | null {
+  const trimmed = hint.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const value = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return Math.min(value, MAX_QUESTIONS_PER_IMPORT);
+}
+
 /** Le nom du document, tel qu'il apparaît dans les ressources de l'atelier. */
 export const GENERATED_FILE_NAME = 'Cours écrit par l’IA.md';
 
@@ -91,13 +121,20 @@ export type ResourceOutcome = {
   needs: number[];
 };
 
-/** Combien de documents l'étape accepte de joindre sur demande.
- *
- *  Un plafond, pas une règle produit : un modèle qui réclamerait « tout » ferait
- *  exactement ce qu'on cherche à éviter. Au-delà, on prend les premiers — un
- *  travail sur quatre documents en même temps n'a de toute façon plus grand sens
- *  pour une demande de complément ciblée. */
-export const MAX_REQUESTED_DOCUMENTS = 4;
+// ⚠️ **Aucun plafond sur le nombre de documents demandés** (04/09/2026).
+//
+// Un plafond de quatre a existé une demi-journée, sur l'idée qu'un modèle
+// réclamant « tout » ferait exactement ce qu'on cherche à éviter. Il était faux,
+// et l'exemple qui l'a fait tomber (Alexis, même jour) est le cas le plus banal
+// qui soit : « relis mon cours et corrige les erreurs ». Un professeur qui
+// demande ça veut que TOUT son cours soit relu ; lui en relire quatre cinquièmes
+// et se taire sur le reste est pire que de refuser.
+//
+// Ce qui borne la dépense, ce n'est pas un compte de documents : c'est que le
+// contenu ne part **que sur demande**, et que la porte se referme après un seul
+// envoi. Un plafond n'aurait rien protégé — le corpus entier tient de toute façon
+// sous `MAX_CORPUS_TOKENS`, puisque la passe chapitres le reçoit en entier à
+// chaque génération.
 
 /** Relit la réponse du modèle. **Fonction pure**, et volontairement méfiante :
  *  tout ce qui n'est pas exploitable devient « ne touche à rien », jamais une
@@ -125,13 +162,14 @@ export function readResourceOutput(raw: unknown): ResourceOutcome {
     ? document.content.trim()
     : null;
 
-  // Les numéros viennent du modèle : on ne garde que des entiers positifs,
-  // dédoublonnés et plafonnés. Un « donne-moi tout » ne doit pas pouvoir se
-  // faufiler par ce champ — ce serait rouvrir le robinet qu'il ferme.
+  // Les numéros viennent du modèle : on ne garde que des entiers positifs, et on
+  // dédoublonne. Pas de plafond — voir la note ci-dessus : « relis tout mon
+  // cours » est une demande légitime, et la borner en silence rendrait la
+  // réponse fausse sans que personne ne le sache.
   const needs = Array.isArray(value.needs)
     ? [...new Set(
         value.needs.filter((n): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0),
-      )].slice(0, MAX_REQUESTED_DOCUMENTS)
+      )]
     : [];
 
   return {

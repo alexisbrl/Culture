@@ -229,9 +229,10 @@ Deux gestes qu'on confond souvent, et un seul est permis :
 ORDRE D'AUTORITÉ. Quand deux sources se contredisent, il ne change jamais :
 
 1. LA CONSIGNE DE L'UTILISATEUR — elle prime sur tout le reste : la forme du travail, le découpage attendu, le niveau de détail, le vocabulaire, et jusqu'à la correction d'une erreur du cours. Elle ne t'autorise jamais, en revanche, à traiter un sujet que les documents n'abordent pas.
-2. LES DOCUMENTS DU COURS — ils font foi sur les faits, et sur eux seuls repose ce que tu écris.
-3. LE TITRE ET LA DESCRIPTION DE L'ATELIER — de quoi DÉDUIRE le contexte de l'atelier : à qui il s'adresse, le niveau d'exigence, le registre. Jamais une information sur ce que le cours contient.
-4. CE QUI EXISTE DÉJÀ DANS L'ATELIER — de la matière à compléter, jamais une preuve. Un contenu déjà présent a pu être écrit à partir d'une version précédente du cours : il ne contredit pas un document, il est corrigé par lui.
+2. LE DOCUMENT ÉCRIT PAR L'IA, s'il y en a un — il porte une en-tête qui le dit, et il est le seul du lot dans ce cas. Il a été rédigé à la demande de l'utilisateur, APRÈS les autres, précisément pour les compléter ou les corriger. Sur les points qu'il traite, c'est donc lui qui l'emporte ; partout ailleurs, il n'a rien à dire et ne retire rien aux autres documents. Il ne les remplace jamais : il s'y ajoute.
+3. LES DOCUMENTS DU COURS — ils font foi sur les faits, et sur eux repose ce que tu écris.
+4. LE TITRE ET LA DESCRIPTION DE L'ATELIER — de quoi DÉDUIRE le contexte de l'atelier : à qui il s'adresse, le niveau d'exigence, le registre. Jamais une information sur ce que le cours contient.
+5. CE QUI EXISTE DÉJÀ DANS L'ATELIER — de la matière à compléter, jamais une preuve. Un contenu déjà présent a pu être écrit à partir d'une version précédente du cours : il ne contredit pas un document, il est corrigé par lui.
 
 Tu écris dans la langue du document, pas dans la tienne.`;
 
@@ -429,7 +430,11 @@ export function resourceInstruction(input: {
     ? ''
     : has.size > 0
       ? '\nLes documents que tu avais demandés sont joints à cet appel : tu as maintenant tout ce qu’il te faut. Ne redemande rien, et travaille avec ce que tu as sous les yeux.\n'
-      : `\n⚠️ **Tu n'as pour l'instant que les NOMS de ces documents, pas leur contenu.** Si — et seulement si — ta tâche exige de les lire (compléter une partie existante, corriger une erreur, éviter de redire ce qui y est déjà), indique leurs numéros dans le champ prévu : ils te seront joints et on te redemandera. Si ta tâche n'exige pas de les lire — écrire un cours sur un sujet qu'ils ne traitent pas, ou une consigne qui ne porte que sur la forme du travail à venir —, ne demande rien et fais le travail tout de suite. Lire un cours coûte cher : ne le réclame que pour t'en servir.\n`;
+      : `\n⚠️ **Tu n'as pour l'instant que les NOMS de ces documents, pas leur contenu.** Indique les numéros de ceux dont tu as besoin dans le champ prévu : ils te seront joints, et on te redemandera. Demandes-en autant que nécessaire — s'il te les faut tous, demande-les tous.
+
+**Tu les demandes dès que tu comptes écrire quoi que ce soit.** Écrire sans avoir lu ce qui existe déjà produit des redites, et une redite ne coûte pas rien : chaque notion écrite en double entraîne derrière elle une douzaine de questions en double, qu'il faudra ensuite trier à la main. Tu les demandes aussi, évidemment, pour compléter une partie existante ou en corriger une erreur — on ne corrige pas un texte qu'on n'a pas lu.
+
+Tu ne demandes rien, en revanche, quand tu n'as pas à les lire : une consigne qui ne porte que sur la forme du travail à venir (« des questions plus difficiles », « en anglais »), ou un sujet dont tu vois par leurs seuls noms qu'ils ne le traitent pas. Lire un cours coûte cher — ne le réclame que pour t'en servir, mais ne t'en prive jamais quand tu écris.\n`;
 
   return `${workshopBlock(input.workshop)}Tu es la PREMIÈRE étape d'un générateur de programme pédagogique. Les étapes suivantes liront des documents pour en tirer des notions, des chapitres et des questions ; toi, tu lis la demande d'un utilisateur et tu prépares leur matière.
 
