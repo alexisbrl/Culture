@@ -1278,7 +1278,8 @@
       "parcoursQuestions": "L’IA va compléter les questions du parcours pour les notions qui n’ont pas encore leur compte. Les documents ne sont pas relus.",
       "examQuestions": "L’IA va écrire des questions d’examen sur l’ensemble du programme — chacune croisant plusieurs notions, certaines s’enchaînant. Les documents ne sont pas relus.",
       "questionsOnly": "Aucun document lisible dans cet atelier : l’IA ne touchera pas au programme. Elle écrira les questions d’entraînement qui manquent encore aux notions en place.",
-      "nothing": "Rien sur quoi travailler : cet atelier n’a ni document lisible, ni notion au programme. Ajoute un PDF ou un fichier texte dans Ressources."
+      "nothing": "Rien sur quoi travailler : cet atelier n’a ni document lisible, ni notion au programme. Ajoute un PDF ou un fichier texte dans Ressources — ou demande à l’IA d’écrire le cours dans la case ci-dessous.",
+      "fromHint": "Aucun document dans cet atelier : l’IA va écrire le cours à partir de ta consigne, puis en tirer les notions, les chapitres et les questions. Le cours qu’elle écrit apparaîtra dans Ressources."
     },
     "stop": {
       "aria": "arrêter la génération",
@@ -1286,6 +1287,7 @@
       "body": "Ce qui a déjà été écrit sera retiré : l’atelier revient à son état d’avant. La fenêtre se ferme tout de suite, le retrait se termine seul.",
       "keep": "continuer la génération",
       "confirm": "arrêter et défaire"
-    }
+    },
+    "nothingWritten": "L’IA n’a rien écrit à partir de ta consigne, et cet atelier n’a ni document ni notion : il n’y avait donc rien à construire. Reformule en disant ce que le cours doit contenir, ou ajoute un document."
   }
 }

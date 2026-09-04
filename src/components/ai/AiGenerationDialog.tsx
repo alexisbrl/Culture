@@ -226,12 +226,21 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   //     cours pour lui écrire des questions de plus : on saute les trois premiers
   //     étages et on rédige. Avant, le bouton restait simplement éteint, sans un
   //     mot — un atelier dont on avait retiré les PDF devenait ingénérable.
+  //   • ⚠️ **…et depuis le 04/09/2026, une CONSIGNE est elle-même de la matière.**
+  //     « Fais-moi un cours d'histoire pour des 4e » sur un atelier vide n'avait
+  //     rien à lire, donc le bouton restait éteint — alors que c'est exactement
+  //     le cas pour lequel l'étape 0 existe : elle écrit le cours, et les étages
+  //     suivants travaillent dessus. Un nombre seul ne compte pas : il ne
+  //     demande que des questions, et n'écrit rien.
   const hasFiles = usable.length > 0;
-  const needsProgram = hasFiles && (forcedContext === null || visibleNotions === 0);
-  const needsFiles = needsProgram;
-  // Ni document ni programme : il n'y a rien à lire et rien à faire travailler.
-  // C'est le seul vrai blocage qui reste.
-  const nothingToDo = !hasFiles && visibleNotions === 0;
+  const hasHint = askedCount === null && hint.trim().length > 0;
+  const needsProgram = (hasFiles || hasHint) && (forcedContext === null || visibleNotions === 0);
+  // On ne téléverse que ce qui existe : une consigne seule n'a aucun fichier à
+  // remettre au fournisseur.
+  const needsFiles = needsProgram && hasFiles;
+  // Ni document, ni programme, ni consigne : il n'y a rien à lire, rien à faire
+  // travailler, et rien à écrire. C'est le seul vrai blocage qui reste.
+  const nothingToDo = !hasFiles && visibleNotions === 0 && !hasHint;
 
   // La liste des chapitres porte déjà le compte de notions et l'état écarté :
   // pas besoin d'une lecture dédiée. Montée à l'ouverture — le dialogue n'est
@@ -349,6 +358,9 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       const resource = await ingestWorkshopResource(workshopId, importId);
       if (!resource.ok) return setPhase({ step: 'error', message: resource.error });
       documents = resource.documents;
+      if (documents === 0 && (visibleNotions ?? 0) === 0) {
+        return setPhase({ step: 'error', message: t('nothingWritten') });
+      }
     }
 
     // ── Étage 1 : les notions, document par document ──
@@ -404,8 +416,12 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // Décoché, on garde le programme tel quel : les notions qui viennent d'être
     // créées restent sans chapitre, consultables, et un import ultérieur pourra
     // les ranger.
+    // ⚠️ **Pas de document, pas de découpage.** Sans fichier déposé, le seul
+    // document possible est celui que l'étape 0 vient d'écrire — et elle a pu
+    // n'avoir rien à écrire. Demander un découpage sans cours produirait des
+    // chapitres inventés, ce que tout le reste du pipeline interdit.
     if (stopped.current) return;
-    if (withChapters) {
+    if (withChapters && documents > 0) {
       // ⚠️ TEMPORAIRE — voir la note sur `startedAt` plus haut : comparé à
       // `startedAt`, c'est ce délai qui dira si le marqueur de cache peut
       // revenir sur le premier document de la passe notions.
@@ -427,7 +443,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // ici que les ressemblances repérées mécaniquement sont soumises au
     // jugement du modèle — le calcul signale, le modèle tranche.
     if (stopped.current) return;
-    if (withAssign) {
+    if (withAssign && documents > 0) {
       let error: string | null = null;
       const showAssign = (done: number, total: number) => setPhase({
         step: 'running',
@@ -846,6 +862,8 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
               <Hint>
                 {nothingToDo
                   ? t('plan.nothing')
+                  : !hasFiles && hasHint
+                    ? t('plan.fromHint')
                   : forcedContext === null
                     ? needsProgram
                       ? t('plan.program')

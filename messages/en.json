@@ -1278,7 +1278,8 @@
       "parcoursQuestions": "The AI will top up the practice questions for notions that are still short. The documents are not read again.",
       "examQuestions": "The AI will write exam questions across the whole programme — each crossing several notions, some following on from one another. The documents are not read again.",
       "questionsOnly": "No readable document in this workshop: the AI will not touch the programme. It will write the practice questions still missing from the existing notions.",
-      "nothing": "Nothing to work from yet: this workshop has neither a readable document nor a notion in its programme. Add a PDF or a text file in Resources."
+      "nothing": "Nothing to work from: this workshop has no readable document and no notion in the programme. Add a PDF or a text file under Resources — or ask the AI to write the course in the box below.",
+      "fromHint": "No document in this workshop: the AI will write the course from your instructions, then draw the notions, chapters and questions from it. The course it writes will appear under Resources."
     },
     "stop": {
       "aria": "stop generating",
@@ -1286,6 +1287,7 @@
       "body": "Whatever was written will be removed: the workshop goes back to how it was. This closes right away, the cleanup finishes on its own.",
       "keep": "keep generating",
       "confirm": "stop and undo"
-    }
+    },
+    "nothingWritten": "The AI wrote nothing from your instructions, and this workshop has no document and no notion: there was nothing to build. Say what the course should contain, or add a document."
   }
 }
