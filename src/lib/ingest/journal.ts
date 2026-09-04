@@ -37,7 +37,7 @@ import { BUSY_ERROR, CLOSED_ERROR } from './lock';
 /** Les étapes qui appellent un modèle. Le téléversement et le ménage de fin n'y
  *  figurent pas : ils ne coûtent pas de tokens et ne peuvent pas être relancés
  *  au sens où on l'entend ici. */
-export type StepName = 'chapters' | 'notions' | 'assign' | 'questions' | 'exam';
+export type StepName = 'resource' | 'chapters' | 'notions' | 'assign' | 'questions' | 'exam';
 
 /** La liste FERMÉE des causes. En ajouter une se fait ici et nulle part
  *  ailleurs — c'est ce qui garantit qu'un décompte par cause reste exhaustif.

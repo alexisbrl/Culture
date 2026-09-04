@@ -51,6 +51,27 @@ export async function readObject(key: string): Promise<Uint8Array | null> {
   return new Uint8Array(await data.arrayBuffer());
 }
 
+/** Écrit un objet **depuis le serveur**, sans ticket ni client.
+ *
+ *  L'exception au modèle habituel — un fichier arrive normalement du navigateur,
+ *  qui le pousse lui-même via une URL signée. Ici, le contenu est produit par le
+ *  serveur (le document que l'IA rédige à partir d'une consigne) : il n'y a
+ *  aucun navigateur dans la boucle, et lui faire faire l'aller-retour n'aurait
+ *  aucun sens.
+ *
+ *  Rend `false` plutôt que de lever : l'appelant décide si l'échec est fatal. */
+export async function writeObject(key: string, bytes: Uint8Array, mimeType: string): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase.storage
+    .from(WORKSHOP_FILES_BUCKET)
+    .upload(key, bytes, { contentType: mimeType, upsert: true });
+  if (error) {
+    console.error('writeObject error:', error);
+    return false;
+  }
+  return true;
+}
+
 export async function deleteObject(key: string): Promise<void> {
   const supabase = getSupabaseServerClient();
   await supabase.storage.from(WORKSHOP_FILES_BUCKET).remove([key]);

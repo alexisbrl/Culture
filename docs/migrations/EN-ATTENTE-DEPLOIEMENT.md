@@ -39,6 +39,12 @@ AUCUN
 
 ## Appliqué / sans objet
 
+- **04/09/2026 — le document écrit par l'IA**
+  (`docs/migrations/2026-09-04-document-ecrit-par-l-ia.sql`) : colonne
+  `workshop_files.generated` + index unique « un seul document généré par
+  atelier ». **Appliquée tout de suite, rien à attendre** : purement additive, et
+  le défaut `false` laisse tous les documents existants exactement où ils sont.
+
 - **04/09/2026 — journal de bord des générations IA**
   (`docs/migrations/2026-09-04-journal-des-generations.sql`) : table
   `ai_import_events`, plus `outcome`, `origin` et `finished_at` sur `ai_imports`.

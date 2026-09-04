@@ -25,6 +25,7 @@ import {
   ingestDocumentNotions,
   ingestParcoursQuestions,
   ingestWorkshopAssignments,
+  ingestWorkshopResource,
   ingestWorkshopChapters,
   ingestWorkshopExamQuestions,
   prepareWorkshopIngestion,
@@ -281,7 +282,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     await generate(prepared.importId, prepared.documents);
   }
 
-  async function generate(importId: string, documents: number) {
+  async function generate(importId: string, documentCount: number) {
+    // Le nombre de documents peut GRANDIR en cours de route : l'étage 0 en écrit
+    // un, que les notions doivent ensuite parcourir comme les autres.
+    let documents = documentCount;
     // ⚠️ TEMPORAIRE — voir la note sur `startedAt` plus haut.
     setStartedAt(Date.now());
     setChaptersSentAt(null);
@@ -303,10 +307,17 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // Le RANGEMENT est un étage à part entière, pas une conséquence : il tourne
     // dès qu'il y a quelque chose à placer — des notions neuves, ou une
     // structure qui vient de changer.
+    //
+    // ⚠️ **L'étage 0 ne dépend pas du point d'entrée, mais de la CONSIGNE**
+    // (04/09/2026) : c'est la seule étape qui parte d'une demande écrite plutôt
+    // que d'un document. Sans consigne, elle n'a rien à interpréter et ne part
+    // pas — ce qui est le cas de la plupart des générations.
+    const withResource = hint.trim().length > 0;
     const withNotions = needsProgram;
     const withChapters = needsProgram;
     const withAssign = needsProgram;
     const steps = [
+      ...(withResource ? ['resource' as const] : []),
       ...(withNotions ? ['notions' as const] : []),
       ...(withChapters ? ['chapters' as const] : []),
       ...(withAssign ? ['assign' as const] : []),
@@ -316,6 +327,20 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // Le rang d'un étage dans la barre dépend de ce qui est coché : sans les
     // chapitres, les notions occupent le premier cran, pas le deuxième.
     const stepAt = (name: (typeof steps)[number]) => Math.max(0, steps.indexOf(name));
+
+    // ── Étage 0 : la consigne, et la matière qui manque ──
+    //
+    // Elle peut écrire un document, et c'est pourquoi elle passe avant tout le
+    // reste : ce qu'elle écrit est de la matière que les étages suivants vont
+    // lire. Le nombre de documents change donc sous nos pieds — d'où la
+    // réaffectation plutôt qu'une constante.
+    if (stopped.current) return;
+    if (withResource) {
+      setPhase({ step: 'running', label: t('progress.resource'), done: stepAt('resource'), total: totalSteps });
+      const resource = await ingestWorkshopResource(workshopId, importId);
+      if (!resource.ok) return setPhase({ step: 'error', message: resource.error });
+      documents = resource.documents;
+    }
 
     // ── Étage 1 : les notions, document par document ──
     //

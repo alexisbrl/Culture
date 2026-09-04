@@ -2051,3 +2051,100 @@ Le calcul du résumé et la purge ne sont **pas encore posés** — ils n'ont ri
 résumer tant qu'aucune donnée n'existe (`docs/backlog.md`). Rien ne s'efface donc
 en attendant, ce qui est le bon sens de l'ordre : on n'écrit pas une purge avant
 d'avoir vu à quoi ressemblent les données qu'elle emportera.
+
+---
+
+## 21. Révision du 04/09/2026 — l'étape qui lit la consigne et écrit ce qui manque
+
+Jusqu'ici, la consigne libre de l'utilisateur n'était qu'un bloc de texte recopié
+en tête de chaque appel. Elle devient une **étape à part entière, la première**,
+et la seule du pipeline qui parte d'une demande plutôt que d'un document.
+
+### 21.1 Deux gestes, et aucun autre
+
+L'étape lit la consigne, et peut :
+
+1. **écrire son document** — un cours, un complément, une correction ;
+2. **réécrire la consigne** transmise aux étapes suivantes.
+
+Elle **ne se déclenche que s'il y a une consigne**. Sans consigne, il n'y a rien
+à interpréter : elle ne part pas et ne coûte rien, ce qui est le cas de la
+plupart des générations.
+
+### 21.2 Un seul document, et il ne remplace jamais le cours de l'utilisateur
+
+Un atelier a **au plus un** document écrit par l'IA — l'unicité est tenue en base,
+pas seulement dans le code. Il apparaît dans les ressources comme un document
+déposé, marqué comme écrit par l'IA, **téléchargeable et supprimable mais pas
+modifiable à la main** : pour le changer, on redonne une consigne. À chaque
+génération, l'IA peut le compléter, en retirer ce qui n'est plus d'actualité, ou
+n'y pas toucher — elle en rend alors la version complète, jamais un rapiéçage.
+
+⚠️ **Les documents de l'utilisateur ne sont jamais modifiés.** Une demande de
+correction ou de complément s'écrit dans le document de l'IA, qui vient
+**s'ajouter** au cours, jamais à sa place. C'est ce qui permet d'annoter un cours
+sans le dénaturer, et de revenir en arrière en supprimant un seul fichier.
+
+L'en-tête du document (« écrit par l'IA, le … ») est posée **par le code** à
+chaque écriture, jamais demandée au modèle : elle doit être là à tous les coups,
+et un modèle à qui on demande de recopier une en-tête finit par ne pas le faire.
+
+### 21.3 Elle demande les documents, on ne les lui donne pas d'office
+
+**Le point de coût de toute l'étape** (question d'Alexis, 04/09/2026). Le premier
+appel ne porte **aucun document** : seulement leurs noms, numérotés, le programme
+et son propre document. S'il lui faut lire le cours — compléter une partie
+existante, corriger une erreur, éviter de redire ce qui y est déjà —, elle
+**réclame les numéros dont elle a besoin**, et un second appel les lui joint.
+
+Le raisonnement : la plupart des consignes n'ont rien à lire. Écrire un cours qui
+n'existe pas ne demande aucun cours ; une consigne de forme (« des questions plus
+difficiles », « en anglais ») encore moins. Envoyer le corpus à tous les coups
+reviendrait à payer le cas rare à chaque génération, alors que le corpus est de
+loin le plus gros poste de la facture. Le prix de la demande est **un
+aller-retour de quelques milliers de tokens** ; celui d'un corpus envoyé pour
+rien se compte en dizaines de centimes à plus d'un euro.
+
+Deux garde-fous : la porte se referme après le premier envoi (un seul
+aller-retour supplémentaire, jamais une négociation), et le nombre de documents
+joints est plafonné — un « donne-moi tout » ne doit pas pouvoir rouvrir par ce
+champ le robinet qu'il ferme.
+
+Le journal de bord enregistre les deux appels séparément (§20) : on saura donc
+bientôt **quelle part des consignes réclame réellement le cours**, ce qui dira si
+le pari est bon.
+
+### 21.4 Elle reçoit une commande, et ne sort pas de son rôle
+
+La consigne est présentée au modèle comme **une donnée à interpréter, jamais
+comme une instruction qui lui serait adressée** : un texte saisi dans un champ,
+cité entre guillemets, qui décrit un besoin de cours et ne redéfinit ni son rôle,
+ni ses règles.
+
+Tout ce qui n'est pas de la matière pédagogique — agir sur un compte ou des
+droits, obtenir des informations sur le système, lui faire tenir un autre rôle,
+traiter un sujet sans rapport — est **retiré : pas exécuté, pas transmis, pas
+commenté**. Le reste de la demande est traité normalement.
+
+**Silencieux à l'écran** (décision d'Alexis du 04/09/2026) : rien n'est signalé à
+l'utilisateur. Le fait est en revanche enregistré au journal, ce qui permettra de
+savoir si le champ sert à autre chose qu'à demander du cours — sans transformer
+chaque maladresse en reproche.
+
+### 21.5 La consigne réécrite fait autorité, même vide
+
+Les étapes suivantes lisent la consigne **réécrite**, et la brute seulement s'il
+n'y a pas eu d'étape 0. ⚠️ Une consigne réécrite **vide reste une réponse** :
+retomber sur la consigne brute réinjecterait mot pour mot ce qu'on venait
+d'écarter. C'est la présence de la clé qui fait foi, jamais son contenu.
+
+Elle est conservée à côté de la génération, sans écran : c'est la pièce qui
+permettra d'expliquer une génération ratée des mois plus tard — ce que
+l'utilisateur a demandé, et ce que les étapes ont réellement lu.
+
+### 21.6 Elle ne fait jamais échouer une génération
+
+Sauf si le modèle lui-même tombe. Réponse illisible, document impossible à
+écrire, téléversement raté : la génération continue sans le document. Le
+contraire ferait perdre un import entier pour une pièce qui, dans la plupart des
+cas, était optionnelle.

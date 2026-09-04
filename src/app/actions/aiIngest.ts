@@ -35,6 +35,16 @@ export type PlanIssue = {
   reason: string;
 };
 
+export type ResourcePassResult =
+  | {
+      ok: true;
+      /** L'IA a-t-elle écrit ou réécrit son document ? */
+      written: boolean;
+      /** Documents du lot après son passage — le sien compris. */
+      documents: number;
+    }
+  | { ok: false; error: string };
+
 export type ChapterStructureResult =
   | {
       ok: true;
@@ -189,6 +199,32 @@ export async function ingestDocumentNotions(
     return { ok: true, ...result };
   } catch (error) {
     return { ok: false, error: failed('notions', error, { workshopId, importId, documentIndex }) };
+  }
+}
+
+/** Étape 0 — lit la consigne de l'utilisateur, et écrit la matière qui manque.
+ *
+ *  Ne part que s'il y a une consigne : sans elle, il n'y a rien à interpréter.
+ *  L'écran le sait avant d'appeler, le serveur le revérifie — une garde ne se
+ *  délègue pas au client.
+ *
+ *  Rend le nombre de documents du lot APRÈS son passage : si l'IA a écrit, il y
+ *  en a un de plus, et c'est celui-là que la passe notions devra parcourir. */
+export async function ingestWorkshopResource(
+  workshopId: string,
+  importId: string,
+): Promise<ResourcePassResult> {
+  const ctx = await requireManager(workshopId);
+  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
+
+  try {
+    const result = await run.ingestResource(workshopId, ctx.userId, importId);
+    // Le document apparaît dans les ressources de l'atelier : la page doit le
+    // montrer sans attendre un rechargement manuel.
+    if (result.written) revalidateWorkshop();
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: failed('ressource', error, { workshopId, importId }) };
   }
 }
 

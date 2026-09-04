@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Check, Download, Loader2, Pencil, Trash2, Upload, X } from 'lucide-react';
+import { Check, Download, Loader2, Pencil, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { palette, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AiGenerationButton from '@/components/ai/AiGenerationButton';
@@ -310,17 +310,49 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                           </Tooltip>
                         </div>
                       ) : (
-                        <div
-                          style={{
-                            fontSize: 14,
-                            fontWeight: 600,
-                            color: palette.ink,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {base}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: 14,
+                              fontWeight: 600,
+                              color: palette.ink,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              minWidth: 0,
+                            }}
+                          >
+                            {base}
+                          </div>
+                          {/* Le document que l'IA a rédigé se reconnaît au premier
+                              coup d'œil : c'est de la matière que personne n'a
+                              déposée, et sur laquelle tout le programme s'appuie
+                              ensuite. Il se télécharge et se supprime comme les
+                              autres, mais ne se renomme ni ne se modifie — pour
+                              le changer, on redonne une consigne. */}
+                          {file.generated && (
+                            <Tooltip content={t('files.generatedHint')}>
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  flexShrink: 0,
+                                  padding: '2px 7px',
+                                  borderRadius: 999,
+                                  background: withAlpha(palette.green, 0.10),
+                                  border: `1px solid ${withAlpha(palette.green, 0.28)}`,
+                                  color: palette.greenBrand,
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                <Sparkles size={11} strokeWidth={2} />
+                                {t('files.generatedBadge')}
+                              </span>
+                            </Tooltip>
+                          )}
                         </div>
                       )}
                       <div style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 2 }}>
@@ -329,15 +361,21 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
                     </div>
                     {!isEditing && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                        <Tooltip content={t('files.renameTitle')}>
-                          <button
-                            onClick={() => startEditingFile(file)}
-                            aria-label={t('files.renameTitle')}
-                            className="flex size-[34px] cursor-pointer items-center justify-center rounded-[10px] border-none bg-transparent p-0 text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-body)]"
-                          >
-                            <Pencil size={16} strokeWidth={1.75} />
-                          </button>
-                        </Tooltip>
+                        {/* Le document de l'IA porte son nom comme une étiquette :
+                            il dit qui l'a écrit. Le renommer le déguiserait en
+                            document déposé. Le refus tient aussi côté serveur —
+                            cacher un bouton ne protège rien. */}
+                        {!file.generated && (
+                          <Tooltip content={t('files.renameTitle')}>
+                            <button
+                              onClick={() => startEditingFile(file)}
+                              aria-label={t('files.renameTitle')}
+                              className="flex size-[34px] cursor-pointer items-center justify-center rounded-[10px] border-none bg-transparent p-0 text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-body)]"
+                            >
+                              <Pencil size={16} strokeWidth={1.75} />
+                            </button>
+                          </Tooltip>
+                        )}
                         <Tooltip content={t('files.downloadTitle')}>
                           <button
                             onClick={() => handleDownloadFile(file.id)}

@@ -811,6 +811,8 @@
       "saveTitle": "enregistrer",
       "cancelTitle": "annuler",
       "downloadTitle": "télécharger",
+      "generatedBadge": "IA",
+      "generatedHint": "Ce document a été écrit par l’IA à partir de tes consignes. Il se télécharge et se supprime, mais ne se modifie pas à la main : pour le changer, redonne une consigne à la génération.",
       "renameTitle": "renommer",
       "deleteTitle": "supprimer",
       "deleteFileTitle": "Supprimer ce fichier ?",
@@ -1228,6 +1230,7 @@
     "close": "fermer",
     "retry": "réessayer",
     "progress": {
+      "resource": "Lecture de ta consigne…",
       "chapters": "Découpage du cours en chapitres…",
       "notionsDocuments": "Notions — {done}/{n} documents lus",
       "assign": "Rangement des notions — {done}/{n} lots",

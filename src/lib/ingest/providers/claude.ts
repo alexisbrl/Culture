@@ -33,6 +33,7 @@ import {
   notionsInstruction,
   examInstruction,
   questionsInstruction,
+  resourceInstruction,
   systemPrompt,
   type ExistingContent,
   type ExistingScope,
@@ -44,7 +45,9 @@ import {
   wireExamGroupsOutput,
   wireGroupsOutput,
   wireNotionsOutput,
+  wireResourceOutput,
 } from '@/lib/ingest/wireSchema';
+import { MAX_GENERATED_LENGTH } from '@/lib/ingest/resource';
 
 import type {
   IngestScope,
@@ -176,6 +179,10 @@ export const MAX_CORPUS_TOKENS = 1_000_000 - MAX_TOKENS_THINKING - WORKSHOP_CONT
 /** Le modèle voulu pour chaque passe : Sonnet 5 sur le programme, Haiku 4.5 sur
  *  les questions (voir le bloc ci-dessus pour le pourquoi et les coûts). */
 export const PASS_MODELS: Record<IngestScope['pass'], ModelId> = {
+  // L'étape 0 écrit du COURS, et ce qu'elle écrit fait ensuite foi pour tout
+  // l'atelier — notions, chapitres et questions en sortiront. C'est le dernier
+  // endroit du pipeline où économiser, et elle ne coûte qu'un appel, rare.
+  resource: MODELS.sonnet,
   chapters: MODELS.sonnet,
   notions: MODELS.sonnet,
   // Le rangement passait pour la tâche la plus mécanique du pipeline — croiser
@@ -294,6 +301,20 @@ function tuningFor(model: ModelId): {
 
 function instructionFor(scope: IngestScope, fileNames: string[]): string {
   switch (scope.pass) {
+    case 'resource':
+      return resourceInstruction({
+        hint: scope.hint,
+        workshop: scope.workshop,
+        chapters: scope.chapters,
+        // Le CATALOGUE (tous les documents, par leur numéro) et ce qui est
+        // réellement joint (`granted`) sont deux choses distinctes, et la
+        // consigne le dit : c'est ce qui permet au modèle de demander ce qu'il
+        // n'a pas plutôt que de faire semblant de l'avoir lu.
+        catalogue: scope.catalogue,
+        granted: scope.granted,
+        current: scope.current,
+        maxLength: MAX_GENERATED_LENGTH,
+      });
     case 'chapters':
       // Les noms de fichiers sont dans la consigne, pas seulement dans les blocs
       // `document` : c'est là que le modèle peut apprendre qu'ils forment un
@@ -329,6 +350,8 @@ function instructionFor(scope: IngestScope, fileNames: string[]): string {
  *  documents, la passe ignore le rendu. */
 function existingScopeFor(scope: IngestScope): ExistingScope {
   switch (scope.pass) {
+    case 'resource':
+      return { pass: 'resource' };
     case 'chapters':
       return { pass: 'chapters' };
     case 'notions':
@@ -354,6 +377,11 @@ function existingScopeFor(scope: IngestScope): ExistingScope {
  *  marqueur posé sur un petit corpus peut donc n'avoir aucun effet. */
 function documentUsesOf(scope: IngestScope): number {
   switch (scope.pass) {
+    case 'resource':
+      // Un seul appel, et c'est le premier de tous : personne n'a écrit ce
+      // préfixe avant elle, personne ne le relira dans cette position. Rien à
+      // marquer.
+      return 1;
     case 'chapters':
       // Un seul appel sur ce préfixe (deux si relance, mais on ne le sait pas
       // d'avance et une relance reste l'exception).
@@ -387,6 +415,8 @@ function documentUsesOf(scope: IngestScope): number {
 
 function outputSchemaFor(scope: IngestScope) {
   switch (scope.pass) {
+    case 'resource':
+      return wireResourceOutput;
     case 'chapters':
       return wireChaptersOutput;
     case 'notions':
@@ -503,7 +533,12 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
       // Dernière barrière avant la facture : la passe questions ne reçoit aucun
       // document, quoi qu'on lui passe (§16.3). Sans documents, aucun bloc
       // `document` n'est posé — donc aucun marqueur de cache non plus.
-      const sent = documentsForPass(scope.pass, documents, scope.pass === 'notions' ? scope.document.index : undefined);
+      const sent = documentsForPass(
+        scope.pass,
+        documents,
+        scope.pass === 'notions' ? scope.document.index : undefined,
+        scope.pass === 'resource' ? scope.granted : undefined,
+      );
 
       // Poser un marqueur sur un contenu jamais relu coûte 25 % de plus que ne
       // rien poser (§16.17). On ne le pose donc que si les mêmes documents

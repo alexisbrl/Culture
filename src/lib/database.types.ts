@@ -711,6 +711,7 @@ export type Database = {
           category: string
           created_at: string
           created_by: string | null
+          generated: boolean
           id: string
           mime_type: string
           name: string
@@ -722,6 +723,7 @@ export type Database = {
           category: string
           created_at?: string
           created_by?: string | null
+          generated?: boolean
           id?: string
           mime_type: string
           name: string
@@ -733,6 +735,7 @@ export type Database = {
           category?: string
           created_at?: string
           created_by?: string | null
+          generated?: boolean
           id?: string
           mime_type?: string
           name?: string

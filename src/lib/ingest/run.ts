@@ -50,7 +50,7 @@
 // re-téléverserait le cours entier —, et les chapitres écrits portent déjà leur
 // identifiant réel, qui sert de référence aux passes suivantes.
 
-import { readObject } from '@/lib/storage';
+import { buildWorkshopFileKey, deleteObject, readObject, writeObject } from '@/lib/storage';
 import { getSupabaseServerClient } from '@/lib/supabase';
 
 import { planImportCleanup } from '@/lib/program/operations';
@@ -73,6 +73,13 @@ import { MAX_NOTIONS_PER_WORKSHOP, countNotions } from '@/lib/workshops/notions'
 import { dropRepeatedQuestions, flagSimilar, findExistingMatch } from './duplicates';
 import { batchNotions, examSliceCount, sliceProgram, splitBudget, splitUnplaced, withChapterRetry } from './passInput';
 import { classifyFailure, logStep, markOutcome, withRetry, type Attempted, type StepName } from './journal';
+import {
+  GENERATED_FILE_NAME,
+  GENERATED_MIME_TYPE,
+  composeDocument,
+  extractBody,
+  readResourceOutput,
+} from './resource';
 import type { BloomLevel } from '@/lib/workshops/examTypes';
 import { demandByNotion, demandForChapterStart, type QuestionDemand } from './demand';
 import { BUSY_ERROR, assertImportOpen, closeImport, liveImportOf } from './lock';
@@ -467,15 +474,31 @@ async function corpusTokensOf(importId: string): Promise<number | null> {
  *  On enregistre le MODÈLE écarté, pas un booléen « corpus trop gros » : trop
  *  gros pour qui ? La fenêtre est une propriété du modèle, et le jour où
  *  `PASS_MODELS` change, un booléen mentirait tandis que cette liste reste vraie. */
-/** La consigne libre de l'utilisateur, saisie au lancement et rangée dans le
- *  `scope` de l'import — donc relue par CHAQUE passe, y compris celles qui
- *  s'exécutent dans des server actions ultérieures. */
+/** La consigne que reçoivent les passes — **celle que l'étape 0 a réécrite**, et
+ *  la brute seulement s'il n'y a pas eu d'étape 0.
+ *
+ *  ⚠️ **Une consigne réécrite VIDE reste une réponse, et elle prime.** L'étape 0
+ *  retire de la consigne ce qui ne concerne pas les passes suivantes : la demande
+ *  de génération elle-même, et tout ce qui sortait du rôle. Si elle n'en laisse
+ *  rien, retomber sur la consigne brute réinjecterait mot pour mot ce qu'on
+ *  venait d'écarter — c'est-à-dire exactement le contraire du but. La présence de
+ *  la clé fait donc foi, pas son contenu. */
 async function userHintOf(importId: string): Promise<string | undefined> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
   if (error || !data) return undefined;
-  const value = (data.scope as { hint?: unknown } | null)?.hint;
+  const scope = (data.scope as { hint?: unknown; instruction?: unknown } | null) ?? {};
+  const value = 'instruction' in scope ? scope.instruction : scope.hint;
   return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+/** La consigne BRUTE, telle que l'utilisateur l'a tapée. Ne sert qu'à l'étape 0 —
+ *  c'est son entrée de travail, et elle est la seule à devoir la voir entière. */
+async function rawHintOf(importId: string): Promise<string> {
+  const supabase = getSupabaseServerClient();
+  const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
+  const value = (data?.scope as { hint?: unknown } | null)?.hint;
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 /** Le fournisseur de la passe QUESTIONS. **DeepSeek par défaut** (30/08/2026) —
@@ -811,6 +834,274 @@ async function openCorpus(
   if (attachError) throw new Error(attachError.message);
 
   return { importId, documents: prepared.length, corpusTokens };
+}
+
+export type ResourcePassResult = {
+  /** L'IA a-t-elle écrit ou réécrit son document ? */
+  written: boolean;
+  /** Le nombre de documents que porte désormais le lot — le sien compris s'il
+   *  vient d'être écrit. C'est ce nombre que la passe notions doit parcourir :
+   *  le rendre ici évite à l'écran de relire la base pour s'en apercevoir. */
+  documents: number;
+};
+
+/** ÉTAPE 0 — lire la consigne de l'utilisateur, et écrire la matière qui manque.
+ *
+ *  ⚠️ **Elle ne part que s'il y a une consigne.** Sans consigne, il n'y a rien à
+ *  interpréter : l'étape ne coûte rien et ne change rien, ce qui est le cas de la
+ *  grande majorité des générations. C'est l'appelant qui le sait le plus tôt —
+ *  mais on le revérifie ici, parce qu'une garde côté serveur ne se délègue pas.
+ *
+ *  ─── Ce qu'elle écrit, et ce qu'elle ne touche pas ─────────────────────────
+ *
+ *  Elle dispose d'UN document, le sien, et l'atelier n'en a jamais deux (index
+ *  unique en base). Les documents de l'utilisateur ne sont **jamais** modifiés :
+ *  une correction ou un complément s'écrit dans le document de l'IA, qui vient
+ *  s'ajouter au cours, jamais à sa place.
+ *
+ *  ─── Pourquoi elle est première, et pourquoi elle re-téléverse ─────────────
+ *
+ *  Ce qu'elle écrit est de la matière : les notions, les chapitres et les
+ *  questions doivent pouvoir la lire. Son document rejoint donc les poignées du
+ *  lot (`ai_imports.file_ids`) au même titre que les cours déposés, et la passe
+ *  notions le traitera comme un document de plus.
+ *
+ *  ─── Elle n'échoue jamais la génération ────────────────────────────────────
+ *
+ *  Sauf si le modèle lui-même tombe. Une réponse illisible, un document qu'on
+ *  n'arrive pas à écrire, un téléversement raté : la génération continue sans le
+ *  document. Le contraire ferait perdre un import entier pour une pièce qui,
+ *  dans la plupart des cas, était optionnelle. */
+export async function ingestResource(
+  workshopId: string,
+  actorId: string,
+  importId: string,
+  options: { provider?: PlanProvider } = {},
+): Promise<ResourcePassResult> {
+  const prepared = await preparedOf(importId);
+  const hint = await rawHintOf(importId);
+  if (!hint) return { written: false, documents: prepared.length };
+
+  const [corpusTokens, oversizeModels] = await Promise.all([
+    corpusTokensOf(importId),
+    oversizeModelsOf(importId),
+  ]);
+  // Pas de `userHint` sur le fournisseur : la consigne est ICI l'objet du
+  // travail, elle voyage dans l'instruction de l'étape. La coller en plus dans
+  // le préfixe la ferait lire deux fois, dans deux rôles contradictoires.
+  const provider = options.provider ?? createClaudeProvider({
+    corpusTokens: corpusTokens ?? undefined,
+    oversizeModels,
+    onOversize: (model) => recordOversizeModel(importId, model),
+  });
+
+  const [workshop, chapters, existing] = await Promise.all([
+    loadWorkshopIdentity(workshopId),
+    loadVisibleChapters(workshopId),
+    loadGeneratedFile(workshopId),
+  ]);
+
+  // ─── À l'aveugle d'abord, sur demande ensuite ────────────────────────────
+  //
+  // Le premier appel ne porte AUCUN document : seulement leurs noms. La plupart
+  // des consignes n'ont rien à lire — écrire un cours qui n'existe pas ne demande
+  // aucun cours, une consigne de forme non plus — et le corpus est le plus gros
+  // poste de la facture. Le modèle réclame ce dont il a besoin, on le lui joint,
+  // et on ne recommence pas : un aller-retour de plus au maximum, ce qui reste
+  // sans commune mesure avec le prix d'un corpus envoyé pour rien.
+  const catalogue = prepared.map((document, index) => ({ index, fileName: document.fileName }));
+  const ask = (granted: number[]) => ({
+    pass: 'resource' as const,
+    hint,
+    workshop,
+    chapters: chapters.map((c) => ({ name: c.name })),
+    current: existing?.body ?? null,
+    catalogue,
+    granted,
+  });
+
+  const meta: StepMeta = { importId, workshopId, step: 'resource', batch: 0, provider };
+  let call = await modelCall(meta, () => provider.documentToPlan(prepared, EMPTY, ask([])));
+  await addImportUsage(importId, call.result.usage);
+  let outcome = readResourceOutput(call.result.plan);
+
+  // Le premier appel garde sa ligne au journal : c'est en comparant les deux
+  // qu'on saura quelle part des consignes réclame vraiment le cours.
+  await stepDone(meta, call, {
+    documentsDemandes: outcome.needs.length,
+    documentsDisponibles: catalogue.length,
+    consigneReecrite: outcome.instruction.length > 0,
+    partieEcartee: outcome.dropped,
+  });
+
+  const granted = outcome.needs.filter((index) => index < prepared.length);
+  if (granted.length > 0) {
+    const second: StepMeta = { ...meta, batch: 1 };
+    call = await modelCall(second, () => provider.documentToPlan(prepared, EMPTY, ask(granted)));
+    await addImportUsage(importId, call.result.usage);
+    outcome = readResourceOutput(call.result.plan);
+    await stepDone(second, call, {
+      documentsJoints: granted.length,
+      documentEcrit: outcome.body !== null,
+      tailleDuDocument: outcome.body?.length ?? 0,
+    });
+  }
+
+  // La consigne réécrite est rangée AVANT toute écriture de document : c'est
+  // elle que les passes suivantes liront, et elle doit être en place même si
+  // l'écriture du document échoue ensuite. La clé est posée dans tous les cas,
+  // vide comprise — son absence signifierait « l'étape n'a pas eu lieu ».
+  await recordInstruction(importId, outcome.instruction);
+
+  let documents = prepared.length;
+  let written = false;
+  if (outcome.body) {
+    const file = await writeGeneratedFile(workshopId, actorId, outcome.body, existing);
+    if (file) {
+      written = true;
+      // Le document rejoint le lot : sans ce téléversement, il existerait dans
+      // les ressources sans qu'aucune passe de CETTE génération ne le lise — et
+      // la matière qu'on vient d'écrire n'arriverait qu'à la génération suivante.
+      const attached = await attachDocument(importId, provider, prepared, file);
+      documents = attached;
+    }
+  }
+
+  console.info('[ingest] étape 0', {
+    workshopId,
+    documentsDemandes: granted.length,
+    documentEcrit: written,
+    // Écarté en silence côté écran (décision du 04/09/2026) : la trace, elle,
+    // dira si le champ sert à autre chose qu'à demander du cours.
+    partieEcartee: outcome.dropped,
+    resume: outcome.summary,
+  });
+
+  return { written, documents };
+}
+
+/** Le document déjà écrit par l'IA pour cet atelier, s'il existe. Rend son corps
+ *  sans l'en-tête : le modèle ne voit que ce qu'il a lui-même rédigé. */
+async function loadGeneratedFile(
+  workshopId: string,
+): Promise<{ id: string; storagePath: string; body: string } | null> {
+  const supabase = getSupabaseServerClient();
+  const { data } = await supabase
+    .from('workshop_files')
+    .select('id, storage_path')
+    .eq('workshop_id', workshopId)
+    .eq('generated', true)
+    .maybeSingle();
+  if (!data) return null;
+
+  const bytes = await readObject(data.storage_path as string);
+  return {
+    id: data.id as string,
+    storagePath: data.storage_path as string,
+    // Objet introuvable : on garde la ligne et on repart d'un corps vide plutôt
+    // que de faire échouer l'étape. Le document sera simplement réécrit.
+    body: bytes ? extractBody(new TextDecoder().decode(bytes)) : '',
+  };
+}
+
+/** Écrit le document de l'IA dans le stockage et en base. Rend la ligne écrite,
+ *  ou `null` si quoi que ce soit a échoué — l'appelant continue sans document.
+ *
+ *  ⚠️ **Une nouvelle clé de stockage à chaque écriture, et l'ancienne effacée.**
+ *  Réécrire au même endroit paraîtrait plus simple, mais les objets sont servis
+ *  avec une durée de cache d'une heure : l'utilisateur téléchargerait l'ancienne
+ *  version sans comprendre pourquoi. */
+async function writeGeneratedFile(
+  workshopId: string,
+  actorId: string,
+  body: string,
+  existing: { id: string; storagePath: string } | null,
+): Promise<{ fileId: string; key: string; fileName: string; mimeType: string; bytes: Uint8Array } | null> {
+  const content = composeDocument(body);
+  const bytes = new TextEncoder().encode(content);
+  const key = buildWorkshopFileKey(workshopId, GENERATED_FILE_NAME);
+
+  if (!(await writeObject(key, bytes, GENERATED_MIME_TYPE))) return null;
+
+  const supabase = getSupabaseServerClient();
+  const row = {
+    workshop_id: workshopId,
+    name: GENERATED_FILE_NAME,
+    size: bytes.byteLength,
+    mime_type: GENERATED_MIME_TYPE,
+    category: 'texte',
+    storage_path: key,
+    created_by: actorId,
+    generated: true,
+  };
+
+  const { data, error } = existing
+    ? await supabase.from('workshop_files').update(row).eq('id', existing.id).select('id').single()
+    : await supabase.from('workshop_files').insert(row).select('id').single();
+
+  if (error || !data) {
+    console.warn('[ingest] document de l’IA non enregistré :', error?.message);
+    // Le fichier est déjà dans le stockage : sans ligne en base, personne ne
+    // pourra plus le retrouver ni l'effacer. On le retire tout de suite.
+    await deleteObject(key);
+    return null;
+  }
+
+  // L'ancienne version ne sert plus à rien une fois la ligne repointée.
+  if (existing) await deleteObject(existing.storagePath);
+
+  return {
+    fileId: data.id as string,
+    key,
+    fileName: GENERATED_FILE_NAME,
+    mimeType: GENERATED_MIME_TYPE,
+    bytes,
+  };
+}
+
+/** Remet le document fraîchement écrit au fournisseur et l'ajoute au lot.
+ *  Rend le nombre de documents du lot après l'opération.
+ *
+ *  Ne lève jamais : un téléversement raté prive la génération de cette matière,
+ *  ce qui est fâcheux mais rattrapable à la génération suivante — la faire
+ *  échouer entière ne le serait pas. */
+async function attachDocument(
+  importId: string,
+  provider: PlanProvider,
+  prepared: PreparedDocument[],
+  file: { fileId: string; key: string; fileName: string; mimeType: string; bytes: Uint8Array },
+): Promise<number> {
+  try {
+    const [uploaded] = await provider.prepare([file]);
+    if (!uploaded) return prepared.length;
+
+    const supabase = getSupabaseServerClient();
+    const next = [...prepared, uploaded];
+    const { error } = await supabase
+      .from('ai_imports')
+      .update({ file_ids: next as unknown as string[] })
+      .eq('id', importId);
+    if (error) throw new Error(error.message);
+
+    return next.length;
+  } catch (error) {
+    console.warn('[ingest] document de l’IA non remis au modèle :', error instanceof Error ? error.message : error);
+    return prepared.length;
+  }
+}
+
+/** Range la consigne réécrite à côté du lot, sans écraser le reste du `scope`.
+ *  C'est la pièce qui permettra d'expliquer une génération ratée des mois plus
+ *  tard : ce que l'utilisateur a demandé, et ce que les passes ont réellement lu. */
+async function recordInstruction(importId: string, instruction: string): Promise<void> {
+  try {
+    const supabase = getSupabaseServerClient();
+    const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
+    const scope = (data?.scope as Record<string, unknown> | null) ?? {};
+    await supabase.from('ai_imports').update({ scope: { ...scope, instruction } }).eq('id', importId);
+  } catch (error) {
+    console.warn('[ingest] consigne réécrite non enregistrée :', error instanceof Error ? error.message : error);
+  }
 }
 
 /** Passe 2 — écrit les CHAPITRES **et y range les notions**.

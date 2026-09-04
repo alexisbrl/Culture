@@ -811,6 +811,8 @@
       "saveTitle": "save",
       "cancelTitle": "cancel",
       "downloadTitle": "download",
+      "generatedBadge": "AI",
+      "generatedHint": "This document was written by the AI from your instructions. You can download or delete it, but not edit it by hand: to change it, give the generation a new instruction.",
       "renameTitle": "rename",
       "deleteTitle": "delete",
       "deleteFileTitle": "Delete this file?",
@@ -1228,6 +1230,7 @@
     "close": "close",
     "retry": "try again",
     "progress": {
+      "resource": "Reading your instructions…",
       "chapters": "Splitting the course into chapters…",
       "notionsDocuments": "Notions — {done}/{n} documents read",
       "assign": "Filing the notions — {done}/{n} batches",
