@@ -1242,10 +1242,6 @@
     "busy": "A generation is already running on this workshop, in another tab. Wait for it to finish, or stop it before starting another.",
     "runningCounts": "{chapters} chapters · {notions} notions · {questions} questions",
     "doneCounts": "{chapters} chapters, {notions} notions and {questions} questions added",
-    "timer": {
-      "elapsed": "Timer: {value}",
-      "chaptersAt": "chapters sent at {value}"
-    },
     "discarded": "Discarded",
     "adjusted": "Adjusted",
     "cancellable": "You can undo this import for 24 hours, as long as nothing has been edited.",
@@ -1288,6 +1284,7 @@
       "keep": "keep generating",
       "confirm": "stop and undo"
     },
-    "nothingWritten": "The AI wrote nothing from your instructions, and this workshop has no document and no notion: there was nothing to build. Say what the course should contain, or add a document."
+    "nothingWritten": "The AI wrote nothing from your instructions, and this workshop has no document and no notion: there was nothing to build. Say what the course should contain, or add a document.",
+    "writtenNotRead": "The course was written and now appears under Resources, but this generation could not read it back to build the programme. Run it again: it will start from that course."
   }
 }

@@ -616,7 +616,10 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
           model: id,
           max_tokens: maxTokensFor(id),
           betas: [FILES_BETA],
-          system: [{ type: 'text', text: systemPrompt() }],
+          // L'étape 0 a son propre socle : le commun lui interdisait
+          // explicitement d'écrire ce qui n'est dans aucun document, ce qui est
+          // pourtant tout son travail (voir `resourceSystemPrompt`).
+          system: [{ type: 'text', text: systemPrompt(scope.pass) }],
           thinking: tuning.thinking,
           output_config: {
             // `effort` est absent sur Haiku 4.5 : il y est refusé (voir `tuningFor`).

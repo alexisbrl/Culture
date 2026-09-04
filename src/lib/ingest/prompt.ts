@@ -236,10 +236,52 @@ ORDRE D'AUTORITÉ. Quand deux sources se contredisent, il ne change jamais :
 
 Tu écris dans la langue du document, pas dans la tienne.`;
 
+/** ÉTAPE 0 — son propre socle, et il le fallait (04/09/2026).
+ *
+ *  ⚠️ **Le socle commun lui interdisait exactement ce qu'on lui demande.** Il
+ *  répète trois fois, sous trois formes, qu'on n'écrit rien qui ne soit dans les
+ *  documents : « tu n'inventes rien », « AJOUTER un sujet que le document
+ *  n'aborde pas est interdit », et jusque dans l'ordre d'autorité — « la consigne
+ *  ne t'autorise jamais à traiter un sujet que les documents n'abordent pas ».
+ *  Sur un atelier sans aucun document, tout sujet est hors documents : le modèle
+ *  a donc refusé d'écrire, et il avait raison de le faire.
+ *
+ *  Constaté sur le premier essai réel (« crée-moi un cours d'histoire pour des
+ *  élèves de 4e ») : 63 secondes de réflexion, une consigne réécrite, et aucun
+ *  document. Le journal de bord l'a montré du premier coup — c'est exactement ce
+ *  pour quoi il a été posé.
+ *
+ *  D'où un socle à elle. Il garde la discipline de sortie et la langue, et
+ *  remplace la règle de fidélité par celle qui la concerne : elle est la SEULE
+ *  étape autorisée à écrire ce qui ne figure nulle part, et elle répond de ce
+ *  qu'elle écrit, puisque tout le reste de l'atelier s'appuiera dessus.
+ *
+ *  Le coût de cache est nul : cette étape ne partage son préfixe avec personne —
+ *  elle est seule de son espèce et ne tourne qu'une fois par génération. */
+const RESOURCE_SYSTEM = `Tu es l'étape d'entrée d'un générateur de programme pédagogique. Tu lis la demande d'un utilisateur, et tu prépares la matière sur laquelle les étapes suivantes travailleront.
+
+Tu produis une structure exploitable directement par l'application, jamais du commentaire : pas d'introduction, pas de conclusion, pas de remarque sur ton propre travail. Tu ne t'adresses jamais à l'utilisateur — personne ne lit ce que tu écris comme une réponse.
+
+⚠️ **Tu es la SEULE étape autorisée à écrire ce qui ne figure dans aucun document.** C'est même ta raison d'être : les étapes suivantes ne savent que lire des documents, et il faut bien que quelqu'un écrive le cours d'un atelier qui n'en a pas. Quand la demande appelle de la matière qui n'existe pas encore, tu l'écris — c'est attendu de toi, ce n'est pas une transgression.
+
+Cette autorisation a une contrepartie, et elle est lourde : **ce que tu écris devient un document de l'atelier et fait foi comme les autres.** Les notions, les chapitres et les questions en seront tirés sans que personne ne relise. Trois exigences, dans cet ordre :
+
+1. EXACTITUDE. Tu n'écris que ce que tu sais établi. Sur un point douteux, contesté ou que tu ne maîtrises pas, tu te tais : une lacune se comble à la génération suivante, une erreur se propage à tout l'atelier et ne se corrige jamais, parce que rien ne la signale.
+2. PÉRIMÈTRE. Tu écris ce qui a été demandé, et rien de plus. Un cours d'histoire pour des quatrièmes n'est pas un cours d'histoire général qu'on aurait raccourci : c'est le contenu, le niveau et le vocabulaire de ce public-là.
+3. AUTONOMIE. Ce que tu écris sera découpé en unités de connaissance lisibles séparément. Écris donc des énoncés complets, qui se comprennent hors de leur paragraphe.
+
+**Ce que l'utilisateur a déjà déposé, tu ne le modifies jamais.** Ses documents sont sa référence. Ce que tu écris s'ajoute aux siens ; sur les points que tu traites, ton document fera autorité — parce qu'il a été écrit après eux et pour les compléter ou les corriger — mais il ne les remplace pas et ne les efface pas.
+
+Tu écris dans la langue de la demande, pas dans la tienne.`;
+
 /** Le bloc système — strictement identique d'un appel à l'autre, c'est ce qui le
- *  rend cacheable. Ne jamais y glisser de date, d'identifiant ou de compteur. */
-export function systemPrompt(): string {
-  return SYSTEM;
+ *  rend cacheable. Ne jamais y glisser de date, d'identifiant ou de compteur.
+ *
+ *  Une exception, et une seule : l'étape 0, dont le socle dit le contraire du
+ *  socle commun sur le seul point qui compte pour elle — le droit d'écrire ce
+ *  qui n'est nulle part. Voir `RESOURCE_SYSTEM`. */
+export function systemPrompt(pass?: string): string {
+  return pass === 'resource' ? RESOURCE_SYSTEM : SYSTEM;
 }
 
 /** Ce que la portée retient de l'existant. Fonction pure et séparée du rendu :

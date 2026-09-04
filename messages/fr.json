@@ -1242,10 +1242,6 @@
     "busy": "Une génération est déjà en cours sur cet atelier, dans un autre onglet. Attends qu’elle se termine, ou arrête-la avant d’en lancer une autre.",
     "runningCounts": "{chapters} chapitres · {notions} notions · {questions} questions",
     "doneCounts": "{chapters} chapitres, {notions} notions et {questions} questions ajoutés",
-    "timer": {
-      "elapsed": "Chrono : {value}",
-      "chaptersAt": "chapitres envoyés à {value}"
-    },
     "discarded": "Écarté",
     "adjusted": "Corrigé",
     "cancellable": "Tu peux annuler cet import pendant 24 h, tant que rien n’a été modifié.",
@@ -1288,6 +1284,7 @@
       "keep": "continuer la génération",
       "confirm": "arrêter et défaire"
     },
-    "nothingWritten": "L’IA n’a rien écrit à partir de ta consigne, et cet atelier n’a ni document ni notion : il n’y avait donc rien à construire. Reformule en disant ce que le cours doit contenir, ou ajoute un document."
+    "nothingWritten": "L’IA n’a rien écrit à partir de ta consigne, et cet atelier n’a ni document ni notion : il n’y avait donc rien à construire. Reformule en disant ce que le cours doit contenir, ou ajoute un document.",
+    "writtenNotRead": "Le cours a bien été écrit et il apparaît dans Ressources, mais cette génération n’a pas pu le relire pour en tirer le programme. Relance la génération : elle repartira de ce cours."
   }
 }

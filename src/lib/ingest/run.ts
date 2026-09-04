@@ -932,6 +932,14 @@ export async function ingestResource(
     documentsDisponibles: catalogue.length,
     consigneReecrite: outcome.instruction.length > 0,
     partieEcartee: outcome.dropped,
+    // ⚠️ **Enregistré dès le PREMIER appel, et c'est ce qui a manqué le
+    // 04/09/2026** : la première génération réelle n'a rien écrit, et la ligne
+    // de journal ne disait pas si le modèle avait proposé un texte qu'on avait
+    // mal relu, ou s'il avait décidé de n'en écrire aucun. C'était la seconde —
+    // le socle commun lui interdisait d'écrire hors des documents — mais il a
+    // fallu le déduire au lieu de le lire.
+    documentPropose: outcome.body !== null,
+    tailleProposee: outcome.body?.length ?? 0,
   });
 
   const granted = outcome.needs.filter((index) => index < prepared.length);
