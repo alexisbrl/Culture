@@ -2039,6 +2039,14 @@ C'est ce résumé qui portera l'évolution sur des années, pas le détail.
 La ligne de génération, elle, vit aussi longtemps que son atelier : elle est déjà
 l'ancre de l'annulation et du coût, et elle ne pèse rien.
 
+⚠️ **On ne supprime jamais un mois qui n'a pas déjà son résumé.** Les deux gestes
+sont séparés de six mois, et c'est ce décalage qui rend l'erreur possible : un
+résumé qui n'a pas tourné — base en pause, job en échec — laisserait la purge
+emporter des lignes que plus rien ne compte. La purge vérifie donc la présence du
+résumé du mois visé et **refuse d'agir sans lui**, au lieu de se fier au
+calendrier. Un mois non résumé s'accumule, ce qui se voit et se répare ; un mois
+effacé sans résumé est perdu pour toujours.
+
 Le calcul du résumé et la purge ne sont **pas encore posés** — ils n'ont rien à
 résumer tant qu'aucune donnée n'existe (`docs/backlog.md`). Rien ne s'efface donc
 en attendant, ce qui est le bon sens de l'ordre : on n'écrit pas une purge avant

@@ -188,7 +188,25 @@ export const PASS_MODELS: Record<IngestScope['pass'], ModelId> = {
 };
 
 /** Le repli quand la fenêtre du modèle voulu ne suffit pas. Sonnet 5 et non
- *  Opus 5 : même fenêtre d'un million, trois fois moins cher en entrée. */
+ *  Opus 5 : même fenêtre d'un million, trois fois moins cher en entrée.
+ *
+ *  ⚠️ **DORMANT au 04/09/2026, et ce n'est pas un oubli.** Avec la table
+ *  ci-dessus, le repli ne peut rien changer : les trois passes qui portent des
+ *  documents demandent déjà Sonnet — c'est-à-dire le repli lui-même — et les
+ *  deux autres n'en reçoivent aucun, donc `modelForCall` leur rend le modèle
+ *  voulu sans condition. Aucun appel ne bascule aujourd'hui.
+ *
+ *  On le garde pour une raison précise : `PASS_MODELS` est un **réglage de
+ *  coût**, et il a déjà bougé deux fois. Le jour où une passe à documents
+ *  repasse sur Haiku — la première économie qu'on regardera —, le repli
+ *  redevient actif dans la seconde, et son absence se paierait par un import qui
+ *  meurt sur un gros cours au lieu de coûter un peu plus cher.
+ *
+ *  Ce qui a changé le 04/09/2026, c'est qu'il n'est plus silencieux : le modèle
+ *  qui a RÉELLEMENT répondu est enregistré à chaque appel (journal de bord,
+ *  @/lib/ingest/journal). Une bascule se verra donc dans les chiffres au lieu de
+ *  se deviner. S'il est encore dormant dans quelques mois, il se supprime — la
+ *  question est au backlog. */
 export const OVERSIZE_FALLBACK: ModelId = MODELS.sonnet;
 
 /** (modèle souhaité, taille du corpus) → modèle retenu. **Fonction pure.**
