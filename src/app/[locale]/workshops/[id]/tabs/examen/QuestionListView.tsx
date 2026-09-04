@@ -485,6 +485,7 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
           workshopId={workshopId}
           files={aiFiles ?? []}
           forcedContext={aiContext}
+          origin={aiContext === 'exam' ? 'questions-exam' : 'questions-parcours'}
           onClose={() => setGenerating(false)}
           onDone={() => window.location.reload()}
         />

@@ -175,7 +175,13 @@ export function createDeepSeekProvider(options: DeepSeekOptions = {}): PlanProvi
         // Le corps porte le motif réel (quota, clé, modèle inconnu) : le perdre
         // ferait d'une erreur diagnosticable un « 400 » opaque.
         const body = await response.text().catch(() => '');
-        throw new Error(`DeepSeek ${response.status} : ${body.slice(0, 400)}`);
+        const failure = new Error(`DeepSeek ${response.status} : ${body.slice(0, 400)}`);
+        // Le code HTTP est posé SUR l'erreur, comme le fait le SDK d'Anthropic :
+        // c'est lui qui permet de ranger la panne (saturation, débit, panne du
+        // fournisseur) sans lire un texte qui peut changer du jour au lendemain.
+        // Voir `classifyFailure` (@/lib/ingest/journal).
+        Object.assign(failure, { status: response.status });
+        throw failure;
       }
 
       const payload = (await response.json()) as {
@@ -188,6 +194,7 @@ export function createDeepSeekProvider(options: DeepSeekOptions = {}): PlanProvi
         // Volontairement NON validé ici : `parsePlan` est le contrôle à la
         // réception, et il doit voir la sortie telle qu'elle est arrivée.
         plan: safeJson(text),
+        model,
         // Une réponse coupée au plafond est un JSON incomplet, donc illisible :
         // sans ce drapeau, l'appel disparaît en silence (aucun écart à signaler,
         // aucune question écrite) et personne ne sait pourquoi le compte n'y est

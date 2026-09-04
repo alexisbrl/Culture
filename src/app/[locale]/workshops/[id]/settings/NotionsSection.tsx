@@ -569,7 +569,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
           réellement annulable, et disparaît de lui-même. */}
       <ImportBanner workshopId={workshopId} scope="programme" onCancelled={() => window.location.reload()} />
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <AiGenerationButton workshopId={workshopId} onDone={() => window.location.reload()} />
+        <AiGenerationButton workshopId={workshopId} origin="settings-notions" onDone={() => window.location.reload()} />
       </div>
 
       {(

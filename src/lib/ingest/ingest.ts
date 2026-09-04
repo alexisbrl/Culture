@@ -35,6 +35,11 @@ import { parsePlan, type ExistingRefs, type PlanIssue } from './planSchema';
 export type IngestMeta = {
   /** Ce qui a été demandé — repris tel quel dans `ai_imports.scope`. */
   scope?: Record<string, unknown>;
+  /** D'où vient la commande : le bouton des ressources, celui des notions, une
+   *  des deux listes de questions, ou la recharge automatique. En COLONNE et
+   *  pas seulement dans le `scope`, parce que c'est un axe de comptage — « quel
+   *  bouton produit le plus de générations, et lesquelles échouent ». */
+  origin?: string | null;
   /** Clés de stockage des fichiers soumis au modèle. */
   fileIds?: string[];
   inputTokens?: number;
@@ -76,6 +81,7 @@ export async function createImport(
       workshop_id: workshopId,
       created_by: actorId,
       scope: meta.scope ?? {},
+      origin: meta.origin ?? null,
       file_ids: meta.fileIds ?? [],
       input_tokens: meta.inputTokens ?? 0,
       output_tokens: meta.outputTokens ?? 0,

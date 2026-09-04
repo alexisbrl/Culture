@@ -1959,3 +1959,87 @@ second onglet**. Celui qui travaille reste intact derrière ; on va faire autre
 chose dans l'autre. Un vrai lien (`target="_blank"`, `rel="noopener"`), pas un
 `window.open` : il survit aux bloqueurs de fenêtres, et `noopener` empêche la
 page ouverte d'atteindre l'onglet qu'on cherche justement à protéger.
+
+---
+
+## 20. Révision du 04/09/2026 — le journal de bord des générations
+
+Une saturation du fournisseur en pleine mise à jour d'atelier a montré le trou :
+l'écran affichait l'erreur brute, les journaux du serveur la gardaient quelques
+heures, et **rien ne permettait de dire si ça arrivait une fois par mois ou
+trois fois par jour**. Une panne qu'on ne compte pas ne se traite pas.
+
+### 20.1 Deux niveaux, un principe
+
+- **Une ligne par génération** — sur `ai_imports`, qui portait déjà les tokens,
+  le périmètre et la consigne : s'y ajoutent son **issue** (`outcome`), **d'où
+  vient la commande** (`origin`) et l'**état de l'atelier avant** (dans le
+  `scope` : nombre de chapitres, de notions, de groupes de questions, plus le
+  nom et la description de l'atelier).
+- **Une ligne par appel au modèle** — `ai_import_events` : l'étape, le lot, le
+  fournisseur, le **modèle qui a réellement répondu**, le nombre d'essais, la
+  durée, les quatre compteurs de tokens, ce que l'appel a produit, et la cause
+  s'il a échoué.
+
+Le principe qui tient l'ensemble : **la cause vient d'une liste fermée**
+(`overloaded`, `unavailable`, `rate_limited`, `oversize`, `truncated`,
+`unreadable`, `closed`, `unknown`), doublée de la phrase brute du fournisseur.
+On compte les codes, on lit les phrases — une cause en texte libre ne se compte
+pas, et un journal qui ne se compte pas ne répond à aucune question.
+
+Trois règles de forme, valables pour tout journal qu'on ajouterait ailleurs :
+écrire dans le journal ne doit **jamais** faire échouer ce qu'il observe ; on y
+met des **comptes et des motifs, jamais du contenu** de document ni de donnée
+personnelle ; et le **classement des pannes est pur** (`classifyFailure`,
+`isTransient` dans `src/lib/ingest/journal.ts`), donc testé sans base ni réseau —
+c'est lui qui décide de dépenser un appel de plus.
+
+### 20.2 L'issue se déduit aussi de ce qui n'est pas écrit
+
+`finished`, `stopped` (annulation), `failed` — et **rien** quand la génération
+n'a jamais été refermée. Ce silence, c'est l'interruption : onglet fermé, machine
+éteinte, serveur perdu. Aucun code ne pourrait l'écrire, puisque plus personne
+n'est là pour le faire ; on la lit donc à l'absence d'issue, comme le bandeau
+d'import lit déjà l'absence de battement.
+
+La première issue écrite gagne : un `failed` ne doit pas être recouvert par un
+`finished` de politesse arrivé derrière.
+
+### 20.3 Une relance, et une seule
+
+Une panne passagère est relancée **une fois**, après trois secondes. Ce qui n'est
+pas passager ne l'est jamais : un corpus trop volumineux le sera encore dans
+trois secondes, une réponse illisible aussi, et une annulation doit rester une
+annulation — relancer là-dessus, c'est payer deux fois le même échec.
+
+Le plafond d'un seul essai supplémentaire est **volontairement bas** (décision
+d'Alexis du 03/09/2026) : on trace d'abord, on affinera sur des chiffres. Le
+journal enregistre le nombre d'essais réellement faits, donc il dira combien de
+relances ont sauvé une génération — et si une deuxième vaudrait le coup.
+
+### 20.4 Ce que coûte un échec
+
+Le refus lui-même ne coûte rien : une demande refusée pour saturation n'est pas
+traitée, donc pas facturée. Ce qui coûte, c'est **tout ce qui a été payé avant
+l'arrêt et qu'il faut repayer en relançant** — l'ordre de grandeur étant celui
+d'un renvoi complet du cours à la passe chapitres, mesuré entre ~0,04 $ sur un
+petit atelier et ~1,40 $ sur le plus gros corpus testé (§16). Le chiffre exact
+cesse d'être une estimation à partir de maintenant : les tokens sont enregistrés
+par étape, et l'issue de chaque génération avec eux.
+
+### 20.5 Conservation
+
+Décidé le 04/09/2026 : le **détail par étape se garde six mois**, assez pour
+comparer deux saisons et pour instruire une panne rare après coup, assez peu pour
+que la table reste petite. Avant chaque suppression, un **résumé mensuel est
+calculé et conservé pour toujours** — par mois, point d'entrée, étape et cause :
+générations, échecs, relances réussies, tokens, durée moyenne, volume produit.
+C'est ce résumé qui portera l'évolution sur des années, pas le détail.
+
+La ligne de génération, elle, vit aussi longtemps que son atelier : elle est déjà
+l'ancre de l'annulation et du coût, et elle ne pèse rien.
+
+Le calcul du résumé et la purge ne sont **pas encore posés** — ils n'ont rien à
+résumer tant qu'aucune donnée n'existe (`docs/backlog.md`). Rien ne s'efface donc
+en attendant, ce qui est le bon sens de l'ordre : on n'écrit pas une purge avant
+d'avoir vu à quoi ressemblent les données qu'elle emportera.

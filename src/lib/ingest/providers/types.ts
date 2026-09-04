@@ -159,6 +159,14 @@ export type IngestScope =
  *  de `parsePlan` — et ce que l'appel a coûté. */
 export type ProviderResult = {
   plan: unknown;
+  /** Le modèle qui a RÉELLEMENT répondu, tel qu'il se nomme lui-même.
+   *
+   *  Pas celui qu'on a demandé : un corpus trop volumineux fait basculer l'appel
+   *  sur un modèle à plus grande fenêtre, silencieusement et à un autre prix
+   *  (voir `modelForCall`). Sans cette valeur, le journal de bord attribuerait
+   *  la facture au mauvais modèle — et toutes les étapes n'utilisent de toute
+   *  façon ni le même modèle ni le même fournisseur. */
+  model?: string;
   /** La réponse a-t-elle été **coupée au plafond de sortie** ?
    *
    *  Un JSON tronqué ne se relit pas : l'appel entier est perdu, et sans ce

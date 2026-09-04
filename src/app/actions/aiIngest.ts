@@ -1,6 +1,7 @@
 'use server';
 
 import { requireManager } from '@/lib/authz';
+import * as journal from '@/lib/ingest/journal';
 import * as lock from '@/lib/ingest/lock';
 import { BUSY_ERROR, CLOSED_ERROR } from '@/lib/ingest/lock';
 import * as run from '@/lib/ingest/run';
@@ -153,10 +154,21 @@ export async function beatWorkshopImport(workshopId: string, importId: string): 
 }
 
 /** Referme un lot piloté : terminé, arrêté ou en erreur. Relâche le verrou tout
- *  de suite, au lieu d'attendre son expiration. */
-export async function closeWorkshopImport(workshopId: string, importId: string): Promise<void> {
+ *  de suite, au lieu d'attendre son expiration.
+ *
+ *  `outcome` est ce que l'écran SAIT et que le serveur ne peut pas deviner : la
+ *  génération a-t-elle abouti, ou s'est-elle arrêtée sur une panne ? Une
+ *  génération qui ne repasse jamais par ici n'a pas d'issue du tout — et c'est
+ *  très bien ainsi : ce silence, c'est l'interruption (onglet fermé, machine
+ *  éteinte), qu'aucun code ne pourrait écrire puisque plus personne n'est là. */
+export async function closeWorkshopImport(
+  workshopId: string,
+  importId: string,
+  outcome?: 'finished' | 'failed',
+): Promise<void> {
   if (!(await requireManager(workshopId))) return;
   await lock.closeImport(importId);
+  if (outcome) await journal.markOutcome(importId, outcome);
 }
 
 /** Passe 1 — les notions d'UN document.
@@ -257,12 +269,15 @@ export async function ingestParcoursQuestions(
    *  le client lance plusieurs lots en parallèle : sans elle, chacun croirait
    *  disposer du plafond entier (voir `run.ingestParcoursQuestions`). */
   budgetShare?: number,
+  /** Le budget de démarrage de CE chapitre, calculé par le client sur
+   *  l'atelier entier (`chapterStartBudgets`, `@/lib/ingest/demand`). */
+  startBudget?: number,
 ): Promise<QuestionPassResult> {
   const ctx = await requireManager(workshopId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
-    const result = await run.ingestParcoursQuestions(workshopId, ctx.userId, importId, chapter, batchIndex, { budgetShare });
+    const result = await run.ingestParcoursQuestions(workshopId, ctx.userId, importId, chapter, batchIndex, { budgetShare, startBudget });
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
@@ -363,6 +378,9 @@ export async function cancelWorkshopImport(
     // son expiration. Posé AVANT le reste — une annulation refusée (lot déjà
     // annulé, délai dépassé) ne laisse pas pour autant une génération en cours.
     await lock.closeImport(importId);
+    // Une génération arrêtée par quelqu'un n'est pas une génération en panne :
+    // les mélanger fausserait le taux d'échec dans les deux sens.
+    await journal.markOutcome(importId, 'stopped');
 
     const result = await imports.cancelImport(workshopId, importId);
     if (!result.cancelled) {

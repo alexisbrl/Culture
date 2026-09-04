@@ -14,6 +14,7 @@ import {
   EXAM_QUESTIONS_RANGE,
   MAX_QUESTIONS_PER_IMPORT as MAX_QUESTIONS,
 } from '@/lib/ingest/prompt';
+import { chapterStartBudgets } from '@/lib/ingest/demand';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import {
@@ -30,6 +31,7 @@ import {
   releaseWorkshopImportFiles,
   type PlanIssue,
 } from '@/app/actions/aiIngest';
+import type { GenerationOrigin } from '@/lib/ingest/journal';
 
 // Le dialogue de génération par IA — **un seul composant pour tous les points
 // d'entrée** (Ressources, Chapitre & Notion, et les deux listes de questions).
@@ -126,11 +128,14 @@ type Props = {
   /** Contexte imposé quand on entre par une liste de questions ; `null` quand on
    *  entre par les Paramètres, où l'utilisateur choisit. */
   forcedContext?: 'parcours' | 'exam' | null;
+  /** Par quelle porte l'utilisateur est entré. Sert au journal de bord et à rien
+   *  d'autre : le dialogue se comporte exactement pareil d'un bouton à l'autre. */
+  origin: GenerationOrigin;
   onClose: () => void;
   onDone?: () => void;
 };
 
-export default function AiGenerationDialog({ workshopId, files, forcedContext = null, onClose, onDone }: Props) {
+export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, onDone }: Props) {
   const t = useTranslations('ai');
   const locale = useLocale();
 
@@ -260,6 +265,8 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       // base, y compris celles qui s'exécutent dans des appels ultérieurs.
       hint: hint.trim(),
       questionsProvider,
+      // Le bouton par lequel on est entré — journal de bord, rien d'autre.
+      origin,
     });
     // Une génération tourne déjà sur cet atelier, dans un autre onglet : le
     // serveur a refusé avant le moindre téléversement. Le message affiché est le
@@ -544,7 +551,12 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // être explicite — un chapitre restauré plus tard les recevra.
     const chapters = (await getWorkshopChapters(workshopId))
       .filter((c) => !c.hidden)
-      .map((c) => ({ id: c.id, name: c.name }));
+      .map((c) => ({ id: c.id, name: c.name, position: c.position }));
+
+    // Le chapitre n°1 du programme reçoit 25 questions d'office, le reste du
+    // budget se répartit également entre tous les autres — calculé une fois ici
+    // sur l'atelier ENTIER, jamais chapitre par chapitre (voir `chapterStartBudgets`).
+    const startBudgets = chapterStartBudgets(chapters);
 
     if (chapters.length > 0) {
       let error: string | null = null;
@@ -579,7 +591,9 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         const remaining = MAX_QUESTIONS - tally.questions;
         if (remaining <= 0) return null;
         const share = Math.max(1, Math.floor(remaining / QUESTIONS_CONCURRENCY));
-        const result = await ingestParcoursQuestions(workshopId, importId, job.chapter, job.batchIndex, share);
+        const result = await ingestParcoursQuestions(
+          workshopId, importId, job.chapter, job.batchIndex, share, startBudgets.get(job.chapter.id),
+        );
         doneCalls += 1;
         if (!result.ok) { error ??= result.error; showQuestions(); return null; }
         discarded.push(...result.discarded);
@@ -641,7 +655,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   useEffect(() => {
     if (phase.step !== 'done' && phase.step !== 'error') return;
     const importId = importIdRef.current;
-    if (importId) void closeWorkshopImport(workshopId, importId);
+    // L'issue part avec la fermeture : c'est l'écran, et lui seul, qui sait si
+    // l'enchaînement est allé au bout ou s'il s'est arrêté sur une panne (voir
+    // le journal de bord, @/lib/ingest/journal).
+    if (importId) void closeWorkshopImport(workshopId, importId, phase.step === 'done' ? 'finished' : 'failed');
   }, [phase.step, workshopId]);
 
   // ─── Quitter la PAGE pendant une génération ──────────────────────────────

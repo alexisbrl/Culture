@@ -608,6 +608,9 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
         // Volontairement NON validé ici : `parsePlan` est le contrôle à la
         // réception, et il doit voir la sortie telle qu'elle est arrivée.
         plan: safeJson(text),
+        // Ce qui a répondu, tel qu'il se nomme — et non ce qu'on a demandé : la
+        // bascule de fenêtre change le modèle sans rien dire à l'appelant.
+        model: message.model,
         // Même mesure que chez DeepSeek : une réponse arrêtée par le plafond de
         // sortie rend un JSON incomplet, donc perdu. On le dit.
         truncated: message.stop_reason === 'max_tokens',

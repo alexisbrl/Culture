@@ -81,6 +81,33 @@ Une question doit avoir **au moins un caractère d'énoncé**, la principale com
 
 Le refus serveur porte sur **`saveQuestion` seulement** (création/modification), jamais sur `saveQuestions` : une ré-écriture de masse (suppression d'un libellé, d'une question) ne touche pas aux énoncés, et échouer sur le contenu d'une question sans rapport ferait avorter une opération qui n'a rien demandé. Un refus annule **tout** l'enregistrement, jamais seulement l'énoncé fautif : conserver l'ancien texte et enregistrer le reste serait une réparation silencieuse.
 
+## Journaliser pour compter — `src/lib/ingest/journal.ts`
+
+Le journal de bord des générations IA est le patron à reprendre pour toute
+observabilité qu'on ajouterait ailleurs (04/09/2026, `docs/ai-ingestion-plan.md`
+§20). Quatre règles, et elles ne sont pas négociables :
+
+- **La cause vient d'une liste fermée**, doublée du message brut. On compte les
+  codes, on lit les phrases. Une cause en texte libre ne se compte pas — et un
+  journal qui ne se compte pas ne répond à aucune question.
+- **Écrire dans le journal ne doit jamais faire échouer ce qu'il observe.**
+  `logStep`/`markOutcome` avalent leurs erreurs : au pire il manque une ligne.
+- **Des comptes et des motifs, jamais du contenu.** Ni titre, ni énoncé, ni
+  extrait de document, ni donnée personnelle. « Combien, à quelle fréquence,
+  combien de temps, pour quel prix » — pas « quoi ».
+- **Enregistrer aussi les réussites**, et l'heure de début. Sans le total, un
+  nombre d'échecs ne veut rien dire ; et une opération dont la fin n'est jamais
+  écrite se reconnaît alors d'elle-même (c'est ainsi qu'une génération
+  interrompue se distingue d'une génération en panne : personne n'était plus là
+  pour écrire son issue).
+
+Le classement des pannes (`classifyFailure`) et la décision de relancer
+(`isTransient`) sont **purs et testés** : ils décident de repayer un appel. On
+lit le **code HTTP** posé sur l'erreur avant son texte — les fournisseurs
+reformulent leurs messages, ils ne renumérotent pas leurs codes ; c'est pourquoi
+`deepseek.ts` pose lui-même `status` sur l'erreur qu'il lève, comme le fait le
+SDK d'Anthropic.
+
 ## Éviter les requêtes N+1
 
 Ne jamais boucler un appel réseau (Clerk `getUser`, envoi d'email…) dans une server action — utiliser un appel batch (`clerkClient().users.getUserList({ userId: [...] })`) ou `Promise.all`. Regrouper les requêtes Supabase indépendantes en `Promise.all` (voir `getExamBankData`, `getUserWorkshops`).

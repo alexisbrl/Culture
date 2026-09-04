@@ -170,7 +170,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
           <ImportBanner workshopId={workshopId} scope="programme" onCancelled={() => window.location.reload()} />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
             <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{t('files.title')}</div>
-            <AiGenerationButton workshopId={workshopId} onDone={() => window.location.reload()} />
+            <AiGenerationButton workshopId={workshopId} origin="settings-files" onDone={() => window.location.reload()} />
           </div>
 
           {/* Zone de dépôt — bordure pointillée `--line-strong`, vire au vert au

@@ -72,6 +72,7 @@ import { reorderChapters } from '@/lib/workshops/chapters';
 import { MAX_NOTIONS_PER_WORKSHOP, countNotions } from '@/lib/workshops/notions';
 import { dropRepeatedQuestions, flagSimilar, findExistingMatch } from './duplicates';
 import { batchNotions, examSliceCount, sliceProgram, splitBudget, splitUnplaced, withChapterRetry } from './passInput';
+import { classifyFailure, logStep, markOutcome, withRetry, type Attempted, type StepName } from './journal';
 import type { BloomLevel } from '@/lib/workshops/examTypes';
 import { demandByNotion, demandForChapterStart, type QuestionDemand } from './demand';
 import { BUSY_ERROR, assertImportOpen, closeImport, liveImportOf } from './lock';
@@ -86,7 +87,7 @@ import {
 } from './prompt';
 import { MAX_CORPUS_TOKENS, createClaudeProvider, type ModelId } from './providers/claude';
 import { createDeepSeekProvider } from './providers/deepseek';
-import type { PlanProvider, PreparedDocument } from './providers/types';
+import type { PlanProvider, PreparedDocument, ProviderResult } from './providers/types';
 
 export type IngestContext = 'parcours' | 'exam';
 
@@ -353,6 +354,38 @@ async function importOpenedAt(importId: string): Promise<string> {
   return data.created_at as string;
 }
 
+/** L'état de l'atelier **avant** la génération — trois comptes et son identité.
+ *
+ *  C'est ce qui rend une génération relisible des mois plus tard : « 40 notions
+ *  écrites » ne veut pas dire la même chose sur un atelier vide et sur un
+ *  atelier qui en portait déjà 500. Trois comptes et deux chaînes, pas le
+ *  contenu : le journal dit combien, jamais quoi.
+ *
+ *  Ne lève jamais — un compte manquant ne doit pas empêcher une génération de
+ *  démarrer. */
+async function snapshotBefore(workshopId: string): Promise<Record<string, unknown>> {
+  try {
+    const supabase = getSupabaseServerClient();
+    const [chapters, notions, questions, identity] = await Promise.all([
+      supabase.from('workshop_chapters').select('id', { count: 'exact', head: true }).eq('workshop_id', workshopId),
+      // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
+      supabase.from('workshop_bricks').select('id', { count: 'exact', head: true }).eq('workshop_id', workshopId),
+      supabase.from('exam_questions').select('id', { count: 'exact', head: true }).eq('workshop_id', workshopId),
+      loadWorkshopIdentity(workshopId),
+    ]);
+    return {
+      chapitres: chapters.count ?? 0,
+      notions: notions.count ?? 0,
+      groupesDeQuestions: questions.count ?? 0,
+      atelier: identity?.name ?? null,
+      description: identity?.description ?? null,
+    };
+  } catch (error) {
+    console.warn('[journal] état de départ non relevé :', error instanceof Error ? error.message : error);
+    return {};
+  }
+}
+
 async function loadWorkshopIdentity(workshopId: string): Promise<WorkshopIdentity | null> {
   const supabase = getSupabaseServerClient();
   const { data } = await supabase.from('workshops').select('name, description').eq('id', workshopId).maybeSingle();
@@ -533,6 +566,88 @@ function parsePlanLogged(
   return plan;
 }
 
+// ─── Le journal de bord : une ligne par APPEL au modèle ──────────────────────
+//
+// Deux aides, et deux seulement, pour que le branchement ne défigure pas les
+// passes : `modelCall` porte la relance et la ligne d'ÉCHEC, `stepDone` porte la
+// ligne de RÉUSSITE. La séparation n'est pas cosmétique — une réussite ne se
+// journalise qu'une fois connu ce qu'elle a produit, c'est-à-dire après
+// l'écriture, alors qu'un échec doit être noté là où il se produit, avant que
+// l'erreur ne remonte à l'écran (voir @/lib/ingest/journal).
+
+type StepMeta = {
+  importId: string;
+  workshopId: string;
+  step: StepName;
+  /** Indice du document ou du lot. Absent quand l'étape est unique. */
+  batch?: number;
+  provider: PlanProvider;
+};
+
+/** Appelle le modèle : relance UNE fois si la panne est passagère, et laisse une
+ *  ligne au journal si elle ne l'est pas.
+ *
+ *  ⚠️ La ligne d'échec est écrite ICI, et jamais par l'appelant : une passe qui
+ *  échoue remonte son erreur à l'écran sans repasser par nulle part, et c'est
+ *  précisément l'échec qu'on cherche à compter. */
+async function modelCall(
+  meta: StepMeta,
+  call: () => Promise<ProviderResult>,
+): Promise<Attempted<ProviderResult>> {
+  const started = Date.now();
+  let attempts = 0;
+  try {
+    return await withRetry(
+      () => {
+        attempts += 1;
+        return call();
+      },
+      (cause) => console.info(`[ingest] passe ${meta.step} : ${cause}, seconde tentative`),
+    );
+  } catch (error) {
+    await logStep({
+      importId: meta.importId,
+      workshopId: meta.workshopId,
+      step: meta.step,
+      batch: meta.batch,
+      provider: meta.provider.name,
+      attempt: attempts,
+      status: 'failed',
+      cause: classifyFailure(error),
+      message: error instanceof Error ? error.message : String(error),
+      durationMs: Date.now() - started,
+    });
+    throw error;
+  }
+}
+
+/** La ligne de réussite. `produced` ne porte que des COMPTES — jamais un titre,
+ *  un énoncé ni un extrait de document.
+ *
+ *  Une réponse coupée au plafond de sortie reste une réussite : l'appel a abouti
+ *  et a été facturé. Elle est simplement marquée comme telle, parce que c'est
+ *  exactement ce qu'on veut pouvoir compter — de l'argent dépensé pour rien. */
+async function stepDone(
+  meta: StepMeta,
+  call: Attempted<ProviderResult>,
+  produced: Record<string, unknown>,
+): Promise<void> {
+  await logStep({
+    importId: meta.importId,
+    workshopId: meta.workshopId,
+    step: meta.step,
+    batch: meta.batch,
+    provider: meta.provider.name,
+    model: call.result.model,
+    attempt: call.attempts,
+    status: 'ok',
+    cause: call.result.truncated ? 'truncated' : undefined,
+    durationMs: call.durationMs,
+    usage: call.result.usage,
+    produced,
+  });
+}
+
 /** Combien de questions ce lot a-t-il déjà produites ? Le plafond porte sur
  *  l'import entier, pas sur un chapitre (§9). */
 async function questionsWritten(importId: string): Promise<number> {
@@ -580,7 +695,14 @@ export async function prepareIngestion(
   // la seule fenêtre où deux lancements peuvent réellement se croiser — celle du
   // téléversement, qui dure des dizaines de secondes. Les poignées de fichiers et
   // la taille du corpus le rejoignent ensuite, quand elles sont connues.
-  const importId = await createImport(workshopId, actorId, { scope: options.scope ?? {}, live: true });
+  const scope = options.scope ?? {};
+  const importId = await createImport(workshopId, actorId, {
+    scope,
+    live: true,
+    // Le point d'entrée voyage dans le `scope` depuis l'écran ; il monte en
+    // colonne parce qu'on comptera par lui.
+    origin: typeof scope.origin === 'string' ? scope.origin : null,
+  });
 
   try {
     return await openCorpus(workshopId, importId, fileIds, options);
@@ -590,6 +712,9 @@ export async function prepareIngestion(
     // resterait bloqué deux minutes après une erreur que l'utilisateur vient de
     // lire, et sa première réaction — réessayer — se ferait refuser.
     await closeImport(importId);
+    // Un lot qui n'a jamais pu s'ouvrir est une génération échouée comme une
+    // autre : elle doit apparaître au dénominateur.
+    await markOutcome(importId, 'failed');
     throw error;
   }
 }
@@ -676,7 +801,10 @@ async function openCorpus(
   const { error: attachError } = await supabase
     .from('ai_imports')
     .update({
-      scope: { ...(options.scope ?? {}), corpusTokens },
+      // `before` : l'état de l'atelier au moment du lancement. Relevé ICI, une
+      // fois le corpus accepté et avant le premier appel au modèle — c'est le
+      // dernier instant où il est encore vrai.
+      scope: { ...(options.scope ?? {}), corpusTokens, before: await snapshotBefore(workshopId) },
       file_ids: prepared as unknown as string[],
     })
     .eq('id', importId);
@@ -743,15 +871,28 @@ export async function ingestChapters(
     return chaptersOnly.chapters.filter((c) => !retired.has(c.id)).map((c) => c.name);
   };
 
+  const meta: StepMeta = { importId, workshopId, step: 'chapters', provider };
+
   const { result: plan } = await withChapterRetry(
     async (retry) => {
-      const attempt = await provider.documentToPlan(prepared, existing, {
+      const attempt = await modelCall(meta, () => provider.documentToPlan(prepared, existing, {
         pass: 'chapters',
         retry,
-      });
+      }));
       // Les deux essais sont facturés : les deux sont comptés.
-      await addImportUsage(importId, attempt.usage);
-      return parsePlanLogged('chapitres', attempt.plan, refs, attempt.truncated);
+      await addImportUsage(importId, attempt.result.usage);
+      const parsed = parsePlanLogged('chapitres', attempt.result.plan, refs, attempt.result.truncated);
+      // ⚠️ Une ligne de journal par APPEL, y compris la vérification du
+      // découpage : ce que porte cette étape, c'est une PROPOSITION — les
+      // chapitres réellement créés se comptent une fois pour toute la passe,
+      // après la fusion des doublons, et se lisent au niveau de la génération.
+      await stepDone(meta, attempt, {
+        proposes: parsed.chapters.length,
+        ecartes: parsed.discarded.length,
+        corriges: parsed.adjusted.length,
+        verification: retry !== undefined,
+      });
+      return parsed;
     },
     // ⚠️ On mesure le PROGRAMME qui résulte de la réponse : les chapitres
     // nouveaux, plus les existants que le modèle n'a pas mis au rang 0. Compter
@@ -1121,7 +1262,8 @@ export async function ingestAssignments(
   // référence absente de sa liste — au mieux du bruit, au pire une invitation à
   // la recopier et à ranger dans une boîte mise de côté.
   const visibleIds = new Set(chapters.map((c) => c.id));
-  const result = await provider.documentToPlan([], EMPTY, {
+  const meta: StepMeta = { importId, workshopId, step: 'assign', batch: batchIndex, provider };
+  const call = await modelCall(meta, () => provider.documentToPlan([], EMPTY, {
     pass: 'assign',
     notions: batch.map((n) => ({
       id: n.id,
@@ -1132,7 +1274,8 @@ export async function ingestAssignments(
     })),
     chapters,
     similar,
-  });
+  }));
+  const result = call.result;
   await addImportUsage(importId, result.usage);
 
   // ⚠️ Les références de chapitre acceptables sont les VISIBLES, pas toutes
@@ -1201,6 +1344,19 @@ export async function ingestAssignments(
   // deux imports d'affilée).
   const answered = new Set(plan.assignments.map((a) => a.notionRef));
   const omitted = batch.filter((n) => !answered.has(n.id));
+  // Le journal retient l'écart entre ce qu'on a soumis et ce qui est revenu :
+  // c'est ce qui distingue, sur la durée, un modèle qui juge d'un modèle qui
+  // saute des lignes.
+  await stepDone(meta, call, {
+    soumises: batch.length,
+    repondues: answered.size,
+    omises: omitted.length,
+    deplacees: movedIds.length,
+    sansPlace: setAside.length,
+    laisseesSurPlace: stranded.length,
+    ecartes: plan.discarded.length,
+    corriges: plan.adjusted.length,
+  });
   console.info('[ingest] rangement', {
     lot: batchIndex,
     soumises: batch.length,
@@ -1337,10 +1493,12 @@ export async function ingestDocumentNotions(
   // qui recrée sous d'autres mots ce qui existe déjà fait gonfler l'atelier à
   // chaque import.
   const existing = await loadAllNotions(workshopId);
-  const result = await provider.documentToPlan(prepared, existing, {
+  const meta: StepMeta = { importId, workshopId, step: 'notions', batch: documentIndex, provider };
+  const call = await modelCall(meta, () => provider.documentToPlan(prepared, existing, {
     pass: 'notions',
     document: { index: documentIndex, fileName: document.fileName },
-  });
+  }));
+  const result = call.result;
   await addImportUsage(importId, result.usage);
 
   const refs = await loadExistingRefs(workshopId);
@@ -1392,6 +1550,13 @@ export async function ingestDocumentNotions(
     new Map(),
   );
 
+  await stepDone(meta, call, {
+    ecrites: created.size,
+    proposees: plan.notions.length,
+    ecartes: plan.discarded.length,
+    corriges: plan.adjusted.length,
+  });
+
   return {
     written: created.size,
     discarded: plan.discarded,
@@ -1409,7 +1574,16 @@ export async function ingestParcoursQuestions(
   importId: string,
   chapter: { id: string; name: string },
   batchIndex = 0,
-  options: { provider?: PlanProvider; budgetShare?: number; demand?: QuestionDemand[] } = {},
+  options: {
+    provider?: PlanProvider;
+    budgetShare?: number;
+    demand?: QuestionDemand[];
+    /** Le budget de démarrage propre à CE chapitre, calculé par l'appelant sur
+     *  l'atelier entier (voir `chapterStartBudgets`). Absent, on retombe sur le
+     *  défaut de `demandForChapterStart` — utile aux appels qui n'ont pas ce
+     *  contexte (tests, recharge). */
+    startBudget?: number;
+  } = {},
 ): Promise<QuestionPassResult> {
   const context: IngestContext = 'parcours';
   const [userHint, choice] = await Promise.all([userHintOf(importId), questionsProviderOf(importId)]);
@@ -1440,9 +1614,10 @@ export async function ingestParcoursQuestions(
   //
   //   • l'appelant, quand il sait — c'est la RECHARGE automatique, qui reçoit
   //     du radar les couples en manque et leur compte ;
-  //   • ce module, pour un chapitre neuf : 25 questions de niveau 1 réparties
-  //     sur ses notions, de quoi tenir deux exercices. On retranche l'existant,
-  //     pour qu'un second passage ne rajoute pas 25 questions par-dessus ;
+  //   • ce module, pour un chapitre neuf : un budget de niveau 1 réparti sur
+  //     ses notions — `options.startBudget` si l'appelant l'a calculé sur
+  //     l'atelier entier, 25 par défaut sinon. On retranche l'existant, pour
+  //     qu'un second passage ne rajoute pas le budget entier par-dessus ;
   //   • personne, quand une CONSIGNE LIBRE est donnée : « fais des questions sur
   //     la Révolution » ne dit rien du stock de chaque notion, et un ciblage
   //     écarterait silencieusement ce que l'utilisateur demande. On envoie large
@@ -1455,7 +1630,7 @@ export async function ingestParcoursQuestions(
       chapterNotions.map((n) => n.id),
       await importOpenedAt(importId),
     );
-    demand = demandForChapterStart(chapterNotions.map((n) => n.id))
+    demand = demandForChapterStart(chapterNotions.map((n) => n.id), options.startBudget)
       .map((item) => ({
         ...item,
         count: Math.max(0, item.count - (perLevel.get(item.notionId)?.get(item.bloomLevel) ?? 0)),
@@ -1515,14 +1690,16 @@ export async function ingestParcoursQuestions(
     loadNotionQuestions(notions.map((n) => n.id)),
     loadWorkshopIdentity(workshopId),
   ]);
-  const result = await provider.documentToPlan([], existing, {
+  const meta: StepMeta = { importId, workshopId, step: 'questions', batch: batchIndex, provider };
+  const call = await modelCall(meta, () => provider.documentToPlan([], existing, {
     pass: 'questions',
     chapter,
     workshop,
     notions: notions.map((n) => ({ ...n, want: wanted.get(n.id) })),
     neighbours,
     budget,
-  });
+  }));
+  const result = call.result;
   await addImportUsage(importId, result.usage);
 
   const refs = await loadExistingRefs(workshopId);
@@ -1552,15 +1729,27 @@ export async function ingestParcoursQuestions(
   // le plafond de débit a coupé. Sans cette ligne, on ne peut que supposer
   // (constaté le 29/08/2026 sur un import qui a rendu 43 questions pour ~71
   // demandées, sans qu'aucune trace ne permette de trancher).
+  const returned = plan.groups.reduce((sum, g) => sum + g.questions.length, 0);
   console.info('[ingest] questions parcours', {
     chapitre: chapter.name,
     lot: batchIndex,
     notionsDuLot: notions.length,
     demandees: Number.isFinite(asked) ? asked : null,
     plafondDeCetAppel: budget,
-    renduesParLeModele: plan.groups.reduce((sum, g) => sum + g.questions.length, 0),
+    renduesParLeModele: returned,
     ecarteesALaLecture: plan.discarded.length,
     ecrites: written,
+  });
+  // Les mêmes trois nombres, mais gardés : c'est leur écart, sur la durée, qui
+  // dira si le modèle sous-produit ou si c'est la lecture qui écarte.
+  await stepDone(meta, call, {
+    notionsDuLot: notions.length,
+    demandees: Number.isFinite(asked) ? asked : null,
+    plafond: budget,
+    rendues: returned,
+    ecrites: written,
+    ecartes: plan.discarded.length,
+    corriges: plan.adjusted.length,
   });
 
   return { written, discarded: plan.discarded, adjusted: plan.adjusted, batches: batches.length };
@@ -1646,12 +1835,14 @@ export async function ingestExamQuestions(
     loadWorkshopIdentity(workshopId),
   ]);
 
-  const result = await provider.documentToPlan([], existing, {
+  const meta: StepMeta = { importId, workshopId, step: 'exam', batch: sliceIndex, provider };
+  const call = await modelCall(meta, () => provider.documentToPlan([], existing, {
     pass: 'exam',
     chapters,
     budget,
     workshop,
-  });
+  }));
+  const result = call.result;
   await addImportUsage(importId, result.usage);
 
   const refs = await loadExistingRefs(workshopId);
@@ -1688,5 +1879,18 @@ export async function ingestExamQuestions(
   }
 
   const written = await insertGroups(workshopId, importId, capped, new Map());
+
+  await stepDone(meta, call, {
+    chapitresDeLaTranche: chapters.length,
+    plafond: budget,
+    rendues: plan.groups.reduce((sum, g) => sum + g.questions.length, 0),
+    ecrites: written,
+    // Les redites de l'entraînement comptent à part : elles ne disent pas la
+    // même chose qu'une réponse mal formée.
+    redites: removed.length,
+    ecartes: plan.discarded.length,
+    corriges: plan.adjusted.length,
+  });
+
   return { written, discarded: plan.discarded, adjusted: plan.adjusted, batches: slices.length };
 }
