@@ -10,9 +10,9 @@ import { ink, palette, radius } from '@/lib/theme';
 import { INGEST_CONCURRENCY, QUESTIONS_CONCURRENCY, mapWithConcurrency } from '@/lib/ingest/concurrency';
 import {
   DEFAULT_EXAM_QUESTIONS,
-  EXAM_QUESTIONS_PER_CALL,
   MAX_QUESTIONS_PER_IMPORT as MAX_QUESTIONS,
 } from '@/lib/ingest/prompt';
+import { planExamCalls } from '@/lib/ingest/passInput';
 import { chapterStartBudgets } from '@/lib/ingest/demand';
 import { questionCountFromHint } from '@/lib/ingest/resource';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
@@ -521,14 +521,16 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       // payés — mais aucun nouveau ne part.
       let emptyStreak = 0;
 
-      const runSlice = async (sliceIndex: number, target?: number, budget?: number) => {
+      const runSlice = async (slice: { index: number; count: number; budget: number; grouped: boolean }) => {
         if (stopped.current || emptyStreak >= 2) return null;
         // Même raison que pour le parcours : le serveur ne voit qu'un appel à la
         // fois, seul le client sait combien il en a en vol.
         const remaining = MAX_QUESTIONS - tally.questions;
         if (remaining <= 0) return null;
-        const share = budget ?? target ?? Math.max(1, Math.floor(remaining / QUESTIONS_CONCURRENCY));
-        const result = await ingestWorkshopExamQuestions(workshopId, importId, sliceIndex, share, target);
+        const result = await ingestWorkshopExamQuestions(workshopId, importId, {
+          ...slice,
+          budget: Math.min(slice.budget, remaining),
+        });
         doneCalls += 1;
         if (!result.ok) { error ??= result.error; showExam(); return null; }
         discarded.push(...result.discarded);
@@ -540,32 +542,25 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         return result;
       };
 
+      // ─── Une seule vague, parce que le plan est connu d'avance ────────────
+      //
+      // ⚠️ **Plus d'appel de découverte** (06/09/2026). Le premier appel partait
+      // seul, sa réponse servant à apprendre en combien de tranches l'examen se
+      // découpait : une attente entière de plus, à chaque génération, pour un
+      // chiffre que le client sait maintenant calculer lui-même
+      // (`planExamCalls`). Il compose aussi la FORME de chaque appel — que des
+      // groupes, aux tailles voulues, ou que des questions isolées.
+      const plan = planExamCalls(Math.min(examTarget, MAX_QUESTIONS));
+      totalCalls = Math.max(1, plan.length);
       showExam();
-      // Le nombre de tranches n'est connu qu'à la réponse de la première : elle
-      // part seule, les suivantes ensemble.
-      const first = await runSlice(0);
-      if (error) return setPhase({ step: 'error', message: error });
-
-      const slices = first?.batches ?? 0;
-      if (slices > 1) {
-        totalCalls = slices;
-        showExam();
-        await mapWithConcurrency(
-          Array.from({ length: slices - 1 }, (_, i) => i + 1),
-          QUESTIONS_CONCURRENCY,
-          // ⚠️ **Surtout pas `runSlice` tout court.** `mapWithConcurrency`
-          // appelle sa tâche avec `(élément, indice)` — le second argument
-          // serait donc reçu comme le NOMBRE DE QUESTIONS VISÉ. Toutes les
-          // tranches sauf la première partaient ainsi avec un total fantaisiste
-          // (0, 1, 2…), lequel réduisait le découpage côté serveur au point que
-          // leur propre tranche n'existait plus : elles rendaient la main sans
-          // appeler le modèle et **sans laisser une ligne au journal**. Constaté
-          // le 05/09/2026 — une génération de 40 questions n'écrivait que la
-          // part de sa première tranche, et c'est le rattrapage qui faisait tout
-          // le travail, appel après appel. Ce qui expliquait aussi sa longueur.
-          (sliceIndex) => runSlice(sliceIndex),
-        );
-      }
+      await mapWithConcurrency(
+        plan,
+        QUESTIONS_CONCURRENCY,
+        // Chaque appel reçoit le nombre TOTAL d'appels du plan : c'est lui qui
+        // découpe le programme côté serveur, et deux appels du même plan doivent
+        // en voir exactement la même découpe pour ne pas se recouvrir.
+        (call, i) => runSlice({ index: i, count: plan.length, budget: call.budget, grouped: call.grouped }),
+      );
       if (error) return setPhase({ step: 'error', message: error });
 
       // ─── Le rattrapage ────────────────────────────────────────────────────
@@ -589,13 +584,17 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       // et on rend ce qu'on a en le disant.
       const short = Math.min(examTarget, MAX_QUESTIONS) - tally.questions;
       if (short > 0 && emptyStreak < 2) {
-        const calls = Math.max(1, Math.ceil(short / EXAM_QUESTIONS_PER_CALL));
-        totalCalls += calls;
+        // Le manque se replanifie comme un examen à part entière : il retrouve
+        // donc sa part de groupes et de questions isolées, et son propre
+        // découpage du programme — sans quoi le rattrapage écrirait toujours sur
+        // le début du cours.
+        const catchUp = planExamCalls(short);
+        totalCalls += catchUp.length;
         showExam();
         await mapWithConcurrency(
-          Array.from({ length: calls }, (_, i) => i),
+          catchUp,
           QUESTIONS_CONCURRENCY,
-          (sliceIndex) => runSlice(sliceIndex, short, Math.ceil(short / calls)),
+          (call, i) => runSlice({ index: i, count: catchUp.length, budget: call.budget, grouped: call.grouped }),
         );
         if (error) return setPhase({ step: 'error', message: error });
       }

@@ -8,12 +8,13 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import Modal from '@/components/Modal';
 import AiGenerationDialog, { useWorkshopFiles } from '@/components/ai/AiGenerationDialog';
 import ImportBanner from '@/components/ai/ImportBanner';
-import { type Question, type ResponseType } from '../QuestionEditor';
+import { type Question, type ResponseType, type BloomLevel } from '../QuestionEditor';
+import { BLOOM_LEVELS } from '@/lib/workshops/examTypes';
 import { RESPONSE_TYPE_ORDER } from './questionFields';
 import {
   type Pool, type Exam, type SortBy, type SortDir,
   DEFAULT_SORT_DIR, NEVER_EXAM_ID, CARD_LINE, CARD_ACTION_BTN, LIST_INSET_X,
-  RESPONSE_TYPE_ICONS, RESPONSE_TYPE_COLORS,
+  RESPONSE_TYPE_ICONS,
   TypeIcon, IconBtn, ListToolbar, FilterButton, ListCard, LabelPill, LabelEditor,
   useDismissOnOutsideClick,
 } from './examShared';
@@ -33,6 +34,37 @@ const typeMatches = (filter: ResponseType, actual: ResponseType) =>
 // le filtre « tableau ».
 const typesOfQuestion = (q: Question): ResponseType[] =>
   [q.responseType, ...q.parts.map(p => p.responseType)];
+
+// Niveau d'une grappe : le PLUS ÉLEVÉ de ceux portés par ses notions, questions
+// liées comprises — décision d'Alexis du 06/09/2026. Une question n'a plus de
+// niveau à elle depuis le 28/08/2026 : il vit sur le lien vers chaque notion, et
+// une même question peut donc en porter plusieurs (reconnaître une notion tout
+// en en faisant analyser une autre). Retenir le plus haut, c'est ranger la
+// question à ce qu'elle demande de plus exigeant — le reste, elle le demande
+// aussi.
+//
+// `null` quand la grappe n'a aucune notion : il n'y a alors pas de niveau à
+// afficher, et elle ne peut être retenue par aucun filtre de niveau.
+//
+// ⚠️ **Ce que ce choix coûte, et pourquoi on l'accepte.** Une grappe qui mêle
+// une question « reconnaître » et une question « analyser » ne remonte que sous
+// « analyser » : cherchez les questions faciles, celle-là vous échappe alors
+// qu'elle en contient une. C'est assumé, parce qu'**une grappe ne se coupe pas**
+// — ses questions se posent ensemble et dans l'ordre, la première posant le
+// décor des suivantes. La faire apparaître sous « reconnaître » promettrait donc
+// une question qu'on ne peut pas prendre seule ; annoncer le niveau le plus
+// exigeant décrit au contraire ce qu'il faudra réellement savoir faire pour
+// venir à bout du bloc.
+//
+// L'autre lecture possible — la grappe apparaît sous CHACUN des niveaux de ses
+// questions — n'est pas absurde pour autant : elle sert la recherche plutôt que
+// la description. Si on y passe un jour, ce sera ici, en renvoyant l'ensemble
+// des niveaux plutôt que leur maximum ; le filtre, lui, teste déjà une
+// appartenance et n'aurait presque rien à changer.
+const levelOfQuestion = (q: Question): BloomLevel | null => {
+  const levels = [q, ...(q.parts ?? [])].flatMap(part => Object.values(part.notionBloom ?? {}));
+  return levels.length > 0 ? (Math.max(...levels) as BloomLevel) : null;
+};
 
 // Filtre « sans chapitre » : les questions dont aucune notion associée n'est
 // rattachée à un chapitre (y compris celles sans notion du tout).
@@ -146,6 +178,10 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   const [filterChapters, setFilterChapters] = useState<string[]>([]);
   const [filterExams, setFilterExams] = useState<string[]>([]);
   const [filterLinked, setFilterLinked] = useState<string[]>([]);
+  // Niveaux retenus, en TEXTE ('1'…'4') : le cycle inclus/exclu (`cycleFilter`)
+  // et le registre des côtés (`filterModes`) s'indexent par chaîne, comme les
+  // quatre autres familles. La conversion se fait au moment de comparer.
+  const [filterLevels, setFilterLevels] = useState<string[]>([]);
   // Côté de chaque filtre actif — inclusion par défaut, exclusion au clic
   // suivant (voir `cycleFilter`). Indexé par clé « catégorie:valeur », les
   // quatre familles de filtres se partageant le même registre.
@@ -163,8 +199,9 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
   const [pendingDeleteQuestion, setPendingDeleteQuestion] = useState<Question | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
 
-  const activeFilterCount = filterPools.length + filterTypes.length + filterChapters.length + filterExams.length + filterLinked.length;
+  const activeFilterCount = filterPools.length + filterTypes.length + filterChapters.length + filterExams.length + filterLinked.length + filterLevels.length;
   // Trier par libellé n'a de sens que là où il y en a.
   const sortOptions = showLabels ? BANK_SORTS : BANK_SORTS.filter(so => so !== 'label');
 
@@ -191,6 +228,140 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   // était ouvert — chaque couche se prononce sur le même geste — et il ne fait
   // rien d'autre. Voir `useDismissOnOutsideClick`.
   useDismissOnOutsideClick(filterOpen, filterRef, () => setFilterOpen(false));
+
+  // Ouvrir une question amène son formulaire SOUS LES YEUX (06/09/2026). Sans
+  // ça, la carte visée pouvait être n'importe où dans une liste de cent
+  // questions — voire nulle part, quand les filtres l'écartent et que le
+  // formulaire va tout en haut —, et le clic semblait ne rien faire. Le geste
+  // vient parfois d'un autre écran (double-clic sur la copie d'examen), ce qui
+  // rend le recadrage indispensable : la liste n'a alors même pas bougé.
+  //
+  // ⚠️ **Pas de `scrollIntoView`, et ce n'est pas un caprice** : la colonne des
+  // questions est mise à l'échelle (`--exam-list-zoom`), et le défilement
+  // demandé par le navigateur n'y arrivait tout simplement pas — le panneau
+  // restait où il était, le formulaire s'ouvrait hors de l'écran, et le clic
+  // paraissait sans effet. On vise donc le panneau défilant nous-mêmes.
+  //
+  // Les deux repères ne sont pas dans la même unité : un rectangle est dans le
+  // repère de la FENÊTRE (donc mis à l'échelle), `scrollTop` en unités LOCALES.
+  // D'où la calibration sur le panneau lui-même (hauteur mesurée / hauteur
+  // locale) avant de convertir l'écart. Un `rAF` laisse la mise en page se poser
+  // — le formulaire vient de remplacer une carte, les hauteurs bougent.
+  //
+  // ⚠️ **La barre de navigation est COLLANTE : elle recouvre le haut de ce qui
+  // défile sous elle.** Amener le formulaire au ras du bord haut revenait donc à
+  // le glisser sous la barre, et l'énoncé — la première ligne, celle qu'on vient
+  // ouvrir — était coupé (constaté le 06/09/2026). On vise donc le premier
+  // pixel réellement VISIBLE : sous la barre quand elle est là, le haut du
+  // panneau sinon. La barre se mesure (`data-app-header`) plutôt que de recopier
+  // sa hauteur ici — en mobile elle est absente, et mesure alors zéro.
+  //
+  // ─── Du MINIMUM, comme la copie d'examen ──────────────────────────────────
+  //
+  // Même règle des deux côtés (06/09/2026) : on défile juste de ce qu'il faut
+  // pour voir le formulaire en entier. Déjà entièrement visible, rien ne bouge —
+  // ouvrir une question qu'on a sous les yeux ne doit pas faire sauter la liste.
+  // Plus haut que la zone d'affichage (une grappe, une liste de quinze réponses),
+  // on aligne son HAUT : l'énoncé reste visible, c'est la partie sans laquelle
+  // le reste ne se comprend pas.
+  //
+  // ⚠️ **Le défilement animé n'aboutit pas toujours, et il échoue en silence**
+  // (voir `.claude/rules/frontend-patterns.md`, même famille que le
+  // `scrollIntoView` inopérant sous un ancêtre `zoom`). On anime, puis on
+  // REPASSE poser la position si elle n'a pas pris.
+  useEffect(() => {
+    if (editingQuestionId === null) return;
+    let retry = 0;
+
+    // ⚠️ **Un geste de l'utilisateur annule la seconde passe.** Elle est là pour
+    // rattraper un défilement qui n'a pas pris, jamais pour reprendre la main :
+    // qui fait défiler la liste juste après avoir ouvert une question voyait
+    // sinon l'écran se recadrer une seconde fois sous ses doigts (signalé par
+    // Alexis le 06/09/2026). On écoute le GESTE — molette, doigt, touche — et
+    // non la position : un défilement qu'on a demandé soi-même bouge lui aussi
+    // la position, il ne se distinguerait pas.
+    let userMoved = false;
+    const noteUserScroll = () => { userMoved = true; };
+    window.addEventListener('wheel', noteUserScroll, { passive: true });
+    window.addEventListener('touchmove', noteUserScroll, { passive: true });
+    window.addEventListener('keydown', noteUserScroll);
+
+    /** Amène le formulaire entièrement à l'écran, en défilant du MINIMUM.
+     *
+     *  ⚠️ **Rejoué une seconde fois, et RECALCULÉ**, pas seulement rejoué : le
+     *  formulaire grandit après son montage (les champs du type de réponse
+     *  arrivent, une image se charge). Au premier passage il tient parfois tout
+     *  entier à l'écran — donc rien à faire —, et c'est en grandissant qu'il
+     *  déborde. Un second passage qui se contenterait de reposer la position
+     *  calculée au premier ne verrait pas ce débordement (constaté le
+     *  06/09/2026). */
+    function settle(last: boolean) {
+      const el = editorRef.current;
+      if (!el) return;
+      const header = document.querySelector('[data-app-header]');
+      const covered = header ? header.getBoundingClientRect().bottom : 0;
+      // Une marge de respiration : collé au bord, le formulaire donne
+      // l'impression d'être coupé.
+      const GAP = 12;
+
+      let panel: HTMLElement | null = el.parentElement;
+      while (panel) {
+        const oy = getComputedStyle(panel).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && panel.scrollHeight > panel.clientHeight) break;
+        panel = panel.parentElement;
+      }
+
+      // Le cadre réellement visible, dans le repère de la FENÊTRE : le panneau
+      // défilant quand il y en a un, la fenêtre elle-même sinon (c'est alors la
+      // page qui défile, cas du parcours).
+      const panelRect = panel ? panel.getBoundingClientRect() : null;
+      const frameTop = Math.max(panelRect ? panelRect.top : 0, covered) + GAP;
+      const frameBottom = (panelRect ? panelRect.bottom : window.innerHeight) - GAP;
+
+      const rect = el.getBoundingClientRect();
+      // Déplacement à faire, en pixels de FENÊTRE. Positif = descendre.
+      let shift = 0;
+      if (rect.height > frameBottom - frameTop || rect.top < frameTop) {
+        // Plus haut que la place disponible, ou il commence au-dessus : on
+        // aligne son HAUT — l'énoncé, la seule partie qu'il faille voir.
+        shift = rect.top - frameTop;
+      } else if (rect.bottom > frameBottom) {
+        // Il dépasse par le bas : on descend juste de ce qui manque.
+        shift = rect.bottom - frameBottom;
+      }
+      if (Math.abs(shift) < 1) return;
+
+      if (!panel) {
+        // La PAGE défile : ses coordonnées sont celles de la fenêtre, rien à
+        // convertir. `scrollIntoView` la poserait sous la barre collante.
+        const top = Math.max(0, window.scrollY + shift);
+        // Le défilement animé n'aboutit pas toujours, et il échoue en silence :
+        // le second passage POSE la position (voir frontend-patterns.md).
+        window.scrollTo(last ? { top } : { top, behavior: 'smooth' });
+        return;
+      }
+      // `scrollTop` est en unités LOCALES, un rectangle dans le repère de la
+      // fenêtre : on ramène l'écart à l'échelle du panneau avant de le poser.
+      const scale = panel.clientHeight > 0 && panelRect ? panelRect.height / panel.clientHeight : 1;
+      const top = Math.max(0, panel.scrollTop + shift / (scale || 1));
+      if (last) panel.scrollTop = top;
+      else panel.scrollTo({ top, behavior: 'smooth' });
+    }
+
+    // Un `rAF` laisse la mise en page se poser — le formulaire vient de
+    // remplacer une carte, les hauteurs bougent.
+    const raf = requestAnimationFrame(() => {
+      settle(false);
+      if (!userMoved) retry = window.setTimeout(() => { if (!userMoved) settle(true); }, 700);
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(retry);
+      window.removeEventListener('wheel', noteUserScroll);
+      window.removeEventListener('touchmove', noteUserScroll);
+      window.removeEventListener('keydown', noteUserScroll);
+    };
+  }, [editingQuestionId]);
 
   useEffect(() => {
     if (!filterOpen) return;
@@ -270,12 +441,14 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   function toggleChapterFilter(id: string) { cycleFilter(id, `chapter:${id}`, filterChapters, setFilterChapters); }
   function toggleExamFilter(id: string) { cycleFilter(id, `exam:${id}`, filterExams, setFilterExams); }
   function toggleLinkedFilter() { cycleFilter(LINKED_ID, `linked:${LINKED_ID}`, filterLinked, setFilterLinked); }
+  function toggleLevelFilter(level: BloomLevel) { cycleFilter(String(level), `level:${level}`, filterLevels, setFilterLevels); }
   function resetFilters() {
     setFilterPools([]);
     setFilterTypes([]);
     setFilterChapters([]);
     setFilterExams([]);
     setFilterLinked([]);
+    setFilterLevels([]);
     setFilterModes({});
   }
   function addLabel() {
@@ -303,6 +476,8 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   const posExams = filterExams.filter(e => modeOf(`exam:${e}`) === 'pos');
   const negExams = filterExams.filter(e => modeOf(`exam:${e}`) === 'neg');
   const linkedMode = filterLinked.length > 0 ? modeOf(`linked:${LINKED_ID}`) : null;
+  const posLevels = filterLevels.filter(l => modeOf(`level:${l}`) === 'pos');
+  const negLevels = filterLevels.filter(l => modeOf(`level:${l}`) === 'neg');
 
   /** État d'une pastille de filtre, à étaler sur `LabelPill`. */
   const pillState = (key: string, selected: boolean) => ({
@@ -311,8 +486,8 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   });
   // La légende du panneau ne montre que les états réellement en jeu : tant que
   // rien n'est exclu, « exclu » n'a rien à expliquer et ne prend pas de place.
-  const hasIncluded = posPools.length + posTypes.length + posChapters.length + posExams.length > 0 || linkedMode === 'pos';
-  const hasExcluded = negPools.length + negTypes.length + negChapters.length + negExams.length > 0 || linkedMode === 'neg';
+  const hasIncluded = posPools.length + posTypes.length + posChapters.length + posExams.length + posLevels.length > 0 || linkedMode === 'pos';
+  const hasExcluded = negPools.length + negTypes.length + negChapters.length + negExams.length + negLevels.length > 0 || linkedMode === 'neg';
 
   let filtered = questions.filter(q => {
     const qPools = new Set(q.pools);
@@ -329,6 +504,12 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
     if (negChapters.length && negChapters.some(c => qChapters.has(c))) return false;
     if (posExams.length && !posExams.some(f => f === NEVER_EXAM_ID ? neverExam : qExamIds.has(f))) return false;
     if (negExams.length && negExams.some(f => f === NEVER_EXAM_ID ? neverExam : qExamIds.has(f))) return false;
+    // Un seul niveau par grappe, le plus haut : une question sans notion n'en a
+    // aucun, elle ne peut donc être RETENUE par aucun niveau — mais rien ne
+    // l'exclut non plus, elle ne porte pas celui qu'on écarte.
+    const qLevel = levelOfQuestion(q);
+    if (posLevels.length && (qLevel === null || !posLevels.includes(String(qLevel)))) return false;
+    if (negLevels.length && qLevel !== null && negLevels.includes(String(qLevel))) return false;
     // Inclus = seulement les grappes, exclu = seulement les questions seules.
     if (linkedMode === 'pos' && q.parts.length === 0) return false;
     if (linkedMode === 'neg' && q.parts.length > 0) return false;
@@ -544,7 +725,13 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
                 )}
               </div>
               <div style={{ overflowY: 'auto', padding: '0 14px 14px', flex: 1, minHeight: 0 }}>
-                {/* Type de réponse */}
+                {/* Type de réponse — pastilles NEUTRES. La couleur est réservée
+                    aux libellés (06/09/2026) : eux seuls sont créés par
+                    l'utilisateur, qui leur choisit une teinte pour les
+                    reconnaître d'un coup d'œil. La donner aussi aux types en
+                    faisait un code couleur de plus à apprendre, et affaiblissait
+                    le seul qui veut dire quelque chose. Le pictogramme, lui,
+                    reste : il identifie le type sans prétendre le classer. */}
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.rTypeSection')}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
                   {RESPONSE_TYPE_ORDER.map(ty => {
@@ -553,13 +740,30 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
                       <LabelPill
                         key={ty}
                         name={tr(`responseType.${ty}`)}
-                        color={RESPONSE_TYPE_COLORS[ty]}
                         icon={<Icon size={11} strokeWidth={1.75} />}
                         {...pillState(`type:${ty}`, filterTypes.includes(ty))}
                         onClick={() => toggleTypeFilter(ty)}
                       />
                     );
                   })}
+                </div>
+                {/* Niveau — celui de la grappe, c'est-à-dire le plus élevé de
+                    ses notions (`levelOfQuestion`). Les quatre pastilles sont
+                    toujours proposées, même si aucune question ne porte encore
+                    le niveau : ce sont quatre valeurs fixes du produit, pas une
+                    liste qui dépend des données comme les libellés ou les
+                    chapitres. Rangées de la plus simple à la plus exigeante,
+                    dans l'ordre de la progression. */}
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.levelSection')}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                  {BLOOM_LEVELS.map(level => (
+                    <LabelPill
+                      key={level}
+                      name={tr(`bloom.${level}`)}
+                      {...pillState(`level:${level}`, filterLevels.includes(String(level)))}
+                      onClick={() => toggleLevelFilter(level)}
+                    />
+                  ))}
                 </div>
                 {/* Statut */}
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.statusSection')}</div>
@@ -663,10 +867,10 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
             par les filtres actifs, et la voir disparaître sous le formulaire
             qu'on vient d'ouvrir n'aurait aucun sens. Elle rejoint la liste — ou
             s'efface, si les filtres l'écartent — une fois l'édition terminée. */}
-        {renderEditor && editingQuestionId !== null && !filtered.some(q => q.id === editingQuestionId) && renderEditor()}
+        {renderEditor && editingQuestionId !== null && !filtered.some(q => q.id === editingQuestionId) && <div ref={editorRef}>{renderEditor()}</div>}
         {filtered.map(q => (
           renderEditor && q.id === editingQuestionId
-            ? <div key={q.id}>{renderEditor()}</div>
+            ? <div key={q.id} ref={editorRef}>{renderEditor()}</div>
             : renderQuestionCard(q)
         ))}
         {filtered.length === 0 && editingQuestionId === null && (

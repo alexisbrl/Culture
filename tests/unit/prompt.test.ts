@@ -559,7 +559,7 @@ describe('les quatre niveaux — une progression, et ce qu’elle exige', () => 
     const all = [
       systemPrompt(),
       questionsInstruction({ chapter, notions: [notion], budget: 40 }),
-      examInstruction({ chapters: [{ name: 'Les fleuves', notions: [notion] }], budget: 10 }),
+      examInstruction({ chapters: [{ name: 'Les fleuves', notions: [notion] }], budget: 10, grouped: false }),
     ].join('\n');
     expect(all).not.toMatch(/mémoriser|comprendre \(/);
   });
@@ -582,7 +582,7 @@ describe('les plafonds d’une question', () => {
     // Dans le parcours, la zone de saisie s'ajuste seule : le demander serait
     // payer des jetons pour un réglage que personne ne verra.
     const notions = [{ id: 'n1', title: 'La Loire est le plus long fleuve de France.' }];
-    const exam = examInstruction({ chapters: [{ name: 'Les fleuves', notions }], budget: 10 });
+    const exam = examInstruction({ chapters: [{ name: 'Les fleuves', notions }], budget: 10, grouped: false });
     const parcours = questionsInstruction({ chapter: { id: 'c1', name: 'Les fleuves' }, notions, budget: 40 });
     expect(exam).toContain('textLines');
     expect(parcours).not.toContain('textLines');

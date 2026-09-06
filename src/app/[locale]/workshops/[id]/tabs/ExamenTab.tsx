@@ -3,8 +3,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, ArrowRight, FileText, Search, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, FileText, Search, X } from 'lucide-react';
 import { palette, ink, radius, withAlpha, categoryTones } from '@/lib/theme';
+import { useIsPhone } from '@/lib/useIsPhone';
 import { type Question, emptyQuestion } from './QuestionEditor';
 import {
   getExamBankData, saveQuestion, createPool as createPoolAction, updatePool as updatePoolAction,
@@ -14,12 +15,13 @@ import {
 import {
   type Exam, type Pool, type ExamConfig, type SheetFocus,
   defaultExamConfig, normalizeExamConfig, configQuestionIds, formatDuration, clearWeightingFor,
-  toggleQuestionInSections, isPageBreakId, pruneUnknownQuestions, LIST_INSET_X,
+  toggleQuestionInSections, isPageBreakId, pruneUnknownQuestions, LIST_INSET_X, partWeightKey,
 } from './examen/examShared';
 import { Tooltip } from '@/components/ui/tooltip';
 import HistoryContent from './examen/HistoryContent';
 import BankContent from './examen/BankContent';
 import GeneratorContent from './examen/GeneratorContent';
+import InlineQuestionEditor from './examen/InlineQuestionEditor';
 
 // Onglet actif de la colonne gauche — « generator » (la feuille A4) n'est plus
 // un onglet : c'est une colonne à part, toujours visible (variante retenue
@@ -48,6 +50,25 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const [editing, setEditing] = useState<Exam | null>(null);
   const [pendingDeleteExam, setPendingDeleteExam] = useState<Exam | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  // Ce que le formulaire porte À L'INSTANT, frappe par frappe : la copie
+  // l'affiche à la place de la question enregistrée, pour qu'on voie sur la
+  // feuille ce qu'on écrit dans la liste (06/09/2026). Remis à `null` en même
+  // temps que le formulaire se ferme — sans quoi la copie garderait un aperçu
+  // qui ne correspond plus à rien.
+  const [editingDraft, setEditingDraft] = useState<Question | null>(null);
+  // ─── Téléphone : une seule des deux colonnes à la fois ────────────────────
+  //
+  // La liste et la copie ne tiennent pas ensemble sur un écran de téléphone. On
+  // en montre donc UNE, et l'autre reste montée mais masquée — ce qui préserve
+  // la recherche, le tri et le défilement en cours, comme la bascule entre les
+  // deux onglets de la colonne de gauche.
+  //
+  // Le parcours normal : on arrive sur la liste ; ouvrir un examen bascule sur
+  // la copie ; la flèche de retour ramène à la liste, où l'on ajoute des
+  // questions en les touchant (autant qu'on veut) ; une barre « retour à
+  // l'examen » ramène à la copie tant qu'un examen est en cours.
+  const isPhone = useIsPhone();
+  const [phonePane, setPhonePane] = useState<'list' | 'sheet'>('list');
   const [newQuestionId, setNewQuestionId] = useState<string | null>(null);
   const [draftIds, setDraftIds] = useState<string[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -67,6 +88,9 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   // rejoue le recadrage quand la même ligne est visée deux fois de suite.
   const [sheetFocus, setSheetFocus] = useState<SheetFocus | null>(null);
 
+  /** La copie recadre du MINIMUM sur la ligne visée (voir `GeneratorContent`) :
+   *  une ligne déjà entièrement visible ne la fait donc pas bouger, et aucun
+   *  appelant n'a de précaution à prendre pour ça. */
   function requestSheetFocus(key: string) {
     setSheetFocus(prev => ({ key, token: (prev?.token ?? 0) + 1 }));
   }
@@ -169,8 +193,11 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   // toujours visible dans la colonne de droite, donc no-op. Signature conservée
   // pour ne pas toucher les appelants (`requestEditExam`, `handleGenerate`…).
   function focus(id: LeftTab | 'generator') {
-    if (id === 'generator') return;
+    // Sur grand écran, la copie est déjà visible en permanence : « generator »
+    // n'a rien à faire. Sur téléphone, c'est le geste qui l'amène à l'écran.
+    if (id === 'generator') { setPhonePane('sheet'); return; }
     setLeftTab(id);
+    setPhonePane('list');
   }
 
   function handleGenerate() {
@@ -224,7 +251,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   // deux formulaires ouverts, ce serait deux brouillons concurrents pour un même
   // examen. Rappuyer sur le bouton de la question déjà ouverte referme le
   // formulaire — même effet que son bouton « annuler ».
-  function handleOpenQuestion(id: string) {
+  function handleOpenQuestion(id: string, rowKey?: string) {
     const q = questions.find(p => p.id === id);
     if (!q) return;
     if (editingQuestion) {
@@ -233,25 +260,61 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       return;
     }
     setEditingQuestion(q);
-    requestSheetFocus(id);
+    setEditingDraft(q);
+    // Le formulaire s'ouvre dans la liste : encore faut-il qu'elle soit au
+    // premier plan. Sans ça, cliquer une question de la copie depuis l'onglet
+    // « mes examens » ouvrait un formulaire que personne ne voyait. Sur
+    // téléphone, il s'ouvre sur la copie elle-même : on n'en bouge pas.
+    if (!isPhone) focus('bank');
+    // ⚠️ **On vise la LIGNE cliquée, pas la grappe** (06/09/2026) : le
+    // double-clic sur la troisième question d'un enchaînement ramenait la copie
+    // sur la première, qui pouvait être une page plus haut. Et comme le
+    // recadrage défile du minimum, une ligne déjà entièrement visible — celle
+    // qu'on vient de cliquer, le plus souvent — ne fait rien bouger.
+    requestSheetFocus(rowKey ?? id);
   }
 
-  // Crayon de la banque : l'édition se fait sur la feuille, donc une question qui
-  // n'est pas encore dans l'examen l'y rejoint (fin de la dernière partie).
+  // Crayon de la banque : le formulaire s'ouvre DANS LA LISTE, à la place de la
+  // carte (06/09/2026, comme les questions du parcours).
+  //
+  // ⚠️ La question n'est plus ajoutée à l'examen au passage. Elle l'était parce
+  // que l'édition se faisait sur la copie, et qu'il fallait donc l'y mettre pour
+  // pouvoir la modifier : corriger une faute de frappe depuis la banque
+  // l'imposait à l'examen en cours de composition, sans que personne ne l'ait
+  // demandé. La copie ne recadre que sur une question qui s'y trouve déjà.
   function requestEditQuestion(q: Question) {
     if (editingQuestion) {
       if (editingQuestion.id === q.id) { handleCancelQuestion(); return; }
       blockForOpenQuestion('open');
       return;
     }
-    if (!configQuestionIds(examConfig).includes(q.id)) handleToggleQuestionInExam(q.id);
     setEditingQuestion(q);
-    requestSheetFocus(q.id);
+    setEditingDraft(q);
+    if (configQuestionIds(examConfig).includes(q.id)) requestSheetFocus(q.id);
   }
 
   // « nouvelle » : la question n'existe qu'en mémoire tant qu'elle n'est pas
   // enregistrée, mais la feuille ne sait afficher que des questions connues —
   // on l'insère donc tout de suite, et l'annulation la retire partout.
+  // ⚠️ **La question NEUVE est retirée de la LISTE** le temps qu'elle soit
+  // enregistrée (06/09/2026). Elle existe bien dans `questions` — il le faut, la
+  // copie doit pouvoir l'afficher —, mais dans la liste elle se rangeait selon le
+  // tri en cours : sans date de création, « du plus récent » la mettait tout en
+  // BAS, et le formulaire qu'on venait d'ouvrir partait avec elle. Absente de la
+  // liste, elle passe par le cas « pas de carte où se poser » de
+  // `QuestionListView`, qui pose le formulaire tout en HAUT — exactement ce que
+  // fait déjà le parcours. Elle rejoint la liste, datée, à l'enregistrement.
+  const bankQuestions = newQuestionId ? questions.filter(q => q.id !== newQuestionId) : questions;
+
+  // ⚠️ **Un seul formulaire à l'écran, jamais deux.** Sur téléphone, quand la
+  // copie est affichée, la liste n'est pas visible : le formulaire s'ouvre alors
+  // SUR la copie, à la place de la ligne — sans quoi modifier une question
+  // depuis la copie n'ouvrirait rien de visible. Partout ailleurs il vit dans la
+  // liste. Les deux sont le même composant ; ce qui change, c'est où il est
+  // rendu, et la liste cesse de le rendre dès que la copie s'en charge (deux
+  // instances voudraient dire deux brouillons pour une seule question).
+  const sheetCarriesEditor = isPhone && phonePane === 'sheet' && editingQuestion !== null;
+
   function handleNewQuestion() {
     if (editingQuestion) {
       blockForOpenQuestion('open');
@@ -263,6 +326,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     setDraftIds(prev => [...prev, q.id]);
     setNewQuestionId(q.id);
     setEditingQuestion(q);
+    setEditingDraft(q);
     requestSheetFocus(q.id);
   }
 
@@ -279,19 +343,84 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     }
     setNewQuestionId(null);
     setEditingQuestion(null);
+    setEditingDraft(null);
+  }
+
+  /** Le formulaire de question, rendu DANS LA LISTE (06/09/2026) — à la place
+   *  de la carte quand elle est visible, en tête sinon (c'est `QuestionListView`
+   *  qui décide où). Il se réglait auparavant sur la feuille A4, à la place de la
+   *  ligne : la copie ne montrait alors plus la question, et modifier une
+   *  question qui n'était pas dans l'examen l'y faisait entrer de force.
+   *
+   *  `key` sur l'identifiant, comme côté parcours : passer d'une question à
+   *  l'autre sans quitter la liste garde le formulaire au même endroit de
+   *  l'arbre, et React réutiliserait son état — le brouillon de la précédente
+   *  resterait affiché sous le titre de la suivante.
+   *
+   *  Le décalage des pondérations au retrait d'une question liée se fait ici :
+   *  elles sont indexées par POSITION (`partWeightKey`), donc retirer la
+   *  deuxième doit remonter toutes les suivantes d'un cran. C'est l'examen qui
+   *  les porte, et c'est ici qu'il vit. */
+  function renderQuestionEditor(frame: 'plain' | 'sheet' = 'plain', number?: number) {
+    if (!editingQuestion) return null;
+    return (
+      <InlineQuestionEditor
+        key={editingQuestion.id}
+        workshopId={workshopId}
+        question={editingQuestion}
+        number={frame === 'sheet' ? number : undefined}
+        isNew={newQuestionId === editingQuestion.id}
+        frame={frame}
+        pools={pools}
+        notions={notions}
+        onDraftChange={setEditingDraft}
+        onRemovePart={idx => shiftPartWeights(editingQuestion.id, idx)}
+        onCreatePool={handleCreatePool}
+        onUpdatePool={handleUpdatePool}
+        onDeletePool={handleDeletePool}
+        poolUsageCount={pid => questions.filter(qq => qq.pools.includes(pid)).length}
+        onSave={handleSaveQuestion}
+        onCancel={handleCancelQuestion}
+      />
+    );
+  }
+
+  /** Les pondérations d'une grappe sont indexées par position : retirer la
+   *  question liée `removedIdx` fait remonter toutes les suivantes d'un cran,
+   *  et la dernière clé disparaît. */
+  function shiftPartWeights(questionId: string, removedIdx: number) {
+    setExamConfig(prev => {
+      const weighting = { ...prev.weighting };
+      let i = removedIdx;
+      for (;;) {
+        const next = weighting[partWeightKey(questionId, i + 1)];
+        if (!next) break;
+        weighting[partWeightKey(questionId, i)] = next;
+        i += 1;
+      }
+      delete weighting[partWeightKey(questionId, i)];
+      return { ...prev, weighting };
+    });
   }
 
   function handleSaveQuestion(q: Question) {
-    setQuestions(prev => {
-      const exists = prev.some(p => p.id === q.id);
-      if (exists) return prev.map(p => (p.id === q.id ? q : p));
-      const withCreatedAt = q.createdAt ? q : { ...q, createdAt: new Date().toISOString() };
-      return [withCreatedAt, ...prev];
-    });
+    // ⚠️ **La date se pose AVANT de choisir la branche, jamais dans une seule
+    // des deux** (06/09/2026). Une question neuve existe déjà dans `questions` —
+    // il le faut, la copie doit pouvoir l'afficher — donc `exists` est vrai pour
+    // elle aussi, et la branche « nouvelle » qui datait la question n'était
+    // jamais empruntée. Sans date, le tri « du plus récent » la renvoyait tout
+    // en bas jusqu'au rechargement de la page. La base fait toujours foi (défaut
+    // de la colonne) ; cette date-ci ne sert qu'à trier en attendant de la relire.
+    const saved = q.createdAt ? q : { ...q, createdAt: new Date().toISOString() };
+    setQuestions(prev => (
+      prev.some(p => p.id === saved.id)
+        ? prev.map(p => (p.id === saved.id ? saved : p))
+        : [saved, ...prev]
+    ));
     setEditingQuestion(null);
+    setEditingDraft(null);
     setNewQuestionId(null);
-    const toSave = q.createdAt ? q : { ...q, createdAt: new Date().toISOString() };
-    saveQuestion(workshopId, toSave).catch(err => console.error('enregistrement question échoué', err));
+    saveQuestion(workshopId, saved).catch(err => console.error('enregistrement question échoué', err));
   }
 
   function handleDeleteQuestion(deleted: Question) {
@@ -443,7 +572,24 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             devenues inertes). Ce sont des blocs vides, ils n'ont aucune raison
             de recevoir un clic. */}
         <div className="hidden md:block" style={{ flex: '1 1 0', minWidth: 22, pointerEvents: 'none' }} />
-        <div className="exam-list-col" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 420 }}>
+        {/* Sur téléphone, une seule colonne à la fois — l'autre reste MONTÉE,
+            masquée : la recherche, le tri et le défilement en cours survivent à
+            l'aller-retour, comme entre les deux onglets de cette colonne. */}
+        <div className="exam-list-col" style={{ flexShrink: 0, display: isPhone && phonePane !== 'list' ? 'none' : 'flex', flexDirection: 'column', minHeight: 420 }}>
+          {/* Retour à l'examen en cours — téléphone seulement, et seulement s'il
+              y a un examen à retrouver. C'est le pendant de la flèche de la
+              copie : on vient ici prendre des questions (les toucher les ajoute,
+              autant qu'on veut), puis on repart voir la feuille. */}
+          {isPhone && phonePane === 'list' && !isEditorEmpty() && (
+            <button
+              type="button"
+              onClick={() => setPhonePane('sheet')}
+              style={{ display: 'flex', alignItems: 'center', gap: 7, alignSelf: 'flex-start', margin: `0 ${LIST_INSET_X}px 10px`, fontSize: 12.5, fontWeight: 600, color: palette.ink, background: palette.surfaceRaised, border: `1px solid ${palette.lineStrong}`, borderRadius: 999, padding: '7px 13px', cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              <ArrowLeft size={14} strokeWidth={1.75} />
+              {t('tab.phoneBackToExam')}
+            </button>
+          )}
           {/* Colonne sans cadre : ni bordure ni panneau autour de la liste, la
               séparation se fait par le fond (cartes en `surfaceRaised` posées
               sur le crème de la page). Il ne reste que le filet sous les
@@ -489,12 +635,13 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
               <div style={{ zoom: 'var(--exam-list-zoom, 1)' }}>
               <BankContent
                 workshopId={workshopId}
-                questions={questions}
+                questions={bankQuestions}
                 pools={pools}
                 exams={exams}
                 notions={notions}
                 chapters={chapters}
                 draftIds={draftIds}
+                renderEditor={sheetCarriesEditor ? undefined : () => renderQuestionEditor('plain')}
                 editingQuestionId={editingQuestion?.id ?? null}
                 openId={openId}
                 setOpenId={setOpenId}
@@ -515,7 +662,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             celui du papier lui-même (bordure + ombre du bloc A4), comme dans la
             maquette. Un panneau blanc de plus créait un encadré dans l'encadré. */}
         <div className="hidden md:block" style={{ flex: '2 1 0', minWidth: 'calc(36px * var(--exam-scale, 1) + 8px)', pointerEvents: 'none' }} />
-        <div className="exam-sheet-col" style={{ minWidth: 0, minHeight: 420, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="exam-sheet-col" style={{ minWidth: 0, minHeight: 420, display: isPhone && phonePane !== 'sheet' ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <GeneratorContent
             workshopId={workshopId}
             questions={questions}
@@ -527,17 +674,11 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             onOpenQuestion={handleOpenQuestion}
             onRemoveFromDraft={handleRemoveFromDraft}
             onClearEditor={handleClearEditor}
-            editingQuestion={editingQuestion}
-            newQuestionId={newQuestionId}
+            previewQuestion={editingDraft}
+            sheetEditor={sheetCarriesEditor && editingQuestion ? { questionId: editingQuestion.id, render: (number: number) => renderQuestionEditor('sheet', number) } : undefined}
+            onBack={isPhone ? () => setPhonePane('list') : undefined}
             focusRequest={sheetFocus}
             onRequestFocus={requestSheetFocus}
-            pools={pools}
-            notions={notions}
-            onCreatePool={handleCreatePool}
-            onUpdatePool={handleUpdatePool}
-            onDeletePool={handleDeletePool}
-            onSaveQuestion={handleSaveQuestion}
-            onCancelQuestion={handleCancelQuestion}
             onDragActiveChange={setSheetDragging}
           />
         </div>

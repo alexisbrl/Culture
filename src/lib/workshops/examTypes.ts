@@ -132,10 +132,20 @@ export type QuestionTypeOptions = {
    *  choix, c'était ce défaut. Ne pas le remettre à vrai « pour l'esthétique » :
    *  ce drapeau porte une INTENTION, pas une décoration.
    *
-   *  Rappel de l'état d'avancement : la correction ne vérifie pas encore l'ordre
-   *  (elle compare deux ensembles), voir `docs/backlog.md`. */
+   *  ⚠️ **Il rend la liste EXHAUSTIVE** (arbitrage d'Alexis du 06/09/2026) : un
+   *  classement ne se demande pas à moitié, donc `listExpected` cesse d'être lu
+   *  tant qu'il vaut vrai — voir `listAnswerCount`, par où passent les trois
+   *  écrans et la correction. La valeur enregistrée n'est pas effacée pour
+   *  autant : décocher le réglage la remet en vigueur telle quelle. */
   listNumbered?: boolean;
-  /** liste — nombre de réponses attendues de l'élève. */
+  /** liste — nombre de réponses attendues de l'élève, quand l'auteur n'attend
+   *  pas la liste complète (« cite trois fleuves » parmi huit acceptés).
+   *
+   *  ⚠️ **Ne jamais le lire directement : passer par `listAnswerCount`.** Il est
+   *  sans effet sur une liste numérotée, et il se borne au nombre de réponses
+   *  réellement saisies — le lire brut a laissé, du 01 au 06/09/2026, une
+   *  correction qui exigeait les huit réponses là où l'écran n'en demandait
+   *  trois, donc des questions impossibles à réussir. */
   listExpected?: number;
   /** tableau — libellés des lignes et des colonnes de la grille à cocher. */
   tableRows?: string[];
@@ -229,6 +239,41 @@ export function shufflesAnswerItems(source: {
     default:
       return false;
   }
+}
+
+/** Combien de réponses une LISTE réclame au candidat : le nombre de lignes de
+ *  saisie qu'il voit, et le nombre de bonnes réponses qu'il doit donner.
+ *
+ *  Deux règles, dans cet ordre :
+ *
+ *  - **Une liste numérotée est exhaustive.** `listNumbered` dit que l'ordre
+ *    compte ; or l'ordre d'un extrait n'a pas de référence — « classe trois de
+ *    ces huit événements » ne dit pas lesquels trois, donc ne dit pas quel
+ *    ordre. On demande alors la liste entière (arbitrage d'Alexis du
+ *    06/09/2026). `listExpected` reste enregistré et reprend effet si le
+ *    réglage est décoché : décocher ne doit pas faire perdre un réglage.
+ *  - **Sinon, le nombre demandé par l'auteur**, borné par ce qui est
+ *    réellement saisi : on ne peut pas réclamer plus de réponses qu'il n'y en a
+ *    d'acceptées, ni moins d'une.
+ *
+ *  `undefined` quand aucune réponse n'est saisie : il n'y a rien à borner et
+ *  rien à corriger (certaines questions écrites à la main portent leurs
+ *  attendus dans le texte libre). L'appelant retombe alors sur son propre
+ *  défaut d'affichage.
+ *
+ *  Fonction PARTAGÉE, et c'est tout l'intérêt : l'éditeur, la feuille A4,
+ *  l'exercice et la correction doivent compter pareil. Une divergence d'un seul
+ *  d'entre eux produit une question qu'on ne peut pas réussir, sans erreur
+ *  visible nulle part. */
+export function listAnswerCount(source: {
+  choices?: string[];
+  typeOptions?: QuestionTypeOptions | null;
+}): number | undefined {
+  const accepted = (source.choices ?? []).filter((entry) => entry.trim().length > 0).length;
+  if (accepted === 0) return undefined;
+  if (source.typeOptions?.listNumbered === true) return accepted;
+  const asked = source.typeOptions?.listExpected ?? accepted;
+  return Math.min(Math.max(asked, 1), accepted);
 }
 
 // ─── Encodage des réponses structurées ──────────────────────────────────────
@@ -686,8 +731,20 @@ export type QuestionWeight = {
   points: number;
   negative: { enabled: boolean; value: number };
   eliminatory: boolean;
-  /** Le gain décroît avec le temps mis à répondre (au lieu d'être fixe). */
+  /** Le gain décroît avec le temps mis à répondre (au lieu d'être fixe).
+   *
+   *  ⚠️ Exclusif de `fastestWins` : les deux répondent à la même question — que
+   *  vaut la vitesse ? — et l'un dégrade le gain quand l'autre le donne en
+   *  entier au premier. Cocher l'un décoche l'autre côté interface ; un état où
+   *  les deux seraient vrais n'a pas de sens et ne doit pas être écrit. */
   timed?: boolean;
+  /** Le PREMIER à répondre emporte la totalité des points ; les suivants n'en
+   *  ont aucun. Exclusif de `timed` (voir ci-dessus).
+   *
+   *  Comme `timed`, le drapeau ne fait à ce jour qu'IDENTIFIER l'intention : il
+   *  décrit un examen passé en direct, et rien ne mesure encore qui a répondu le
+   *  premier (le passage en ligne reste à brancher, voir `docs/backlog.md`). */
+  fastestWins?: boolean;
   /** La pénalité (malus ou élimination) s'applique aussi à une absence de réponse,
    *  pas seulement à une mauvaise réponse. */
   penalizeUnanswered?: boolean;

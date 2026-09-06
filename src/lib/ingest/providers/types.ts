@@ -189,6 +189,11 @@ export type IngestScope =
       chapters: { id: string; name: string; notions: { id: string; title: string }[] }[];
       /** Nombre de questions à écrire dans CET appel. */
       budget: number;
+      /** La forme de cet appel, décidée en amont (`planExamCalls`) : `true` =
+       *  toutes ses questions vont dans des groupes, `false` = que des questions
+       *  isolées. Un appel ne mélange jamais les deux (06/09/2026) ; les tailles
+       *  des groupes, elles, restent au modèle. */
+      grouped: boolean;
       workshop?: { name: string; description?: string | null } | null;
     };
 

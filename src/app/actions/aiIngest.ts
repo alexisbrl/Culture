@@ -330,27 +330,27 @@ export async function ingestParcoursQuestions(
  *
  *  Rien de commun avec la précédente sinon le format de sortie : elle ne compte
  *  pas par notion mais rend un nombre total de questions pour tout le programme,
- *  chacune croisant plusieurs notions (§ examen, 24/08/2026). Le nombre de
- *  tranches se lit dans la réponse du premier appel, comme partout ailleurs. */
+ *  chacune croisant plusieurs notions (§ examen, 24/08/2026).
+ *
+ *  ⚠️ **L'appel arrive tout composé** (06/09/2026) : le lancement a décidé
+ *  combien d'appels au total, le budget de chacun et sa nature — que des groupes,
+ *  ou que des questions isolées. Le serveur n'en décide plus rien : la
+ *  répartition se calcule sur l'examen entier, ce qu'un appel ne peut pas voir.
+ *  Les tailles des groupes, elles, restent au modèle. */
 export async function ingestWorkshopExamQuestions(
   workshopId: string,
   importId: string,
-  sliceIndex = 0,
-  budgetShare?: number,
-  /** Remplace le nombre de questions demandé au lancement. Sert au RATTRAPAGE :
-   *  quand des questions ont été écartées, on redemande le manque et rien de
-   *  plus — sans quoi un examen de 40 en rendrait 34 sans le dire. */
-  target?: number,
+  slice: { index: number; count: number; budget: number; grouped: boolean },
 ): Promise<QuestionPassResult> {
   const ctx = await requireManager(workshopId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
-    const result = await run.ingestExamQuestions(workshopId, ctx.userId, importId, sliceIndex, { budgetShare, target });
+    const result = await run.ingestExamQuestions(workshopId, ctx.userId, importId, slice);
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
-    return { ok: false, error: failed("questions d'examen", error, { workshopId, importId, sliceIndex }) };
+    return { ok: false, error: failed("questions d'examen", error, { workshopId, importId, sliceIndex: slice.index }) };
   }
 }
 

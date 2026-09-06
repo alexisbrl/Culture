@@ -96,7 +96,14 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
     }
     setQuestions((prev) => {
       const exists = prev.some((x) => x.id === question.id);
-      return exists ? prev.map((x) => (x.id === question.id ? question : x)) : [...prev, question];
+      if (exists) return prev.map((x) => (x.id === question.id ? question : x));
+      // ⚠️ **Une question neuve doit porter sa date de création tout de suite.**
+      // Sans elle, la liste — qui trie par « plus récentes » — la renvoyait tout
+      // en bas, à la place d'une question sans date, et il fallait recharger la
+      // page pour la voir remonter en tête (06/09/2026). La date fait foi en
+      // base (défaut de la colonne) ; celle-ci ne sert qu'à trier ici, en
+      // attendant la relecture.
+      return [{ ...question, createdAt: question.createdAt ?? new Date().toISOString() }, ...prev];
     });
     setEditing(null);
   }

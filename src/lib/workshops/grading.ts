@@ -8,7 +8,7 @@
 // que l'ouverture de la correction à la liste, au tableau et aux paires.
 
 import { isListCorrect, sameAnswerText } from '@/lib/workshops/answerMatch';
-import { matchPairs } from '@/lib/workshops/examTypes';
+import { listAnswerCount, matchPairs } from '@/lib/workshops/examTypes';
 import type {
   ExerciseAnswer,
   ExerciseResult,
@@ -43,8 +43,9 @@ export function sameChoiceSet(a: number[], b: number[]): boolean {
  *
  *  • **Ce qui se CHOISIT** — QCM, tableau, paires — porte une réponse juste
  *    connue sans ambiguïté : la machine tranche dans les deux sens, juste ou
- *    faux. La LISTE s'y rattache : sa référence est close (l'auteur a écrit
- *    toutes les réponses qu'il attend, et le candidat en donne autant).
+ *    faux. La LISTE s'y rattache : sa référence est close — l'auteur a écrit
+ *    toutes les réponses qu'il accepte, et le nombre qu'il en réclame se lit au
+ *    même endroit que l'écran (`listAnswerCount`).
  *  • **Ce qui s'ÉCRIT librement** — la réponse rédigée — ne peut être que
  *    CONFIRMÉE. Correspondre à la référence prouve qu'on a raison ; ne pas y
  *    correspondre ne prouve rien, une bonne réponse formulée autrement ne lui
@@ -89,7 +90,18 @@ export function gradeStatement(source: GradableStatement, answer: ExerciseAnswer
       // `choices` porte les réponses attendues (jamais envoyées au candidat).
       const expected = (source.choices ?? []).filter((entry) => entry.trim().length > 0);
       if (expected.length === 0) return { ...base, correct: null };
-      return { ...base, correct: isListCorrect(answer.list, expected), correctList: expected };
+      // ⚠️ **Le nombre à donner et l'ordre viennent du MÊME calcul que l'écran**
+      // (`listAnswerCount`) : la correction ne doit jamais exiger autre chose
+      // que ce que le candidat a eu sous les yeux. Une liste numérotée réclame
+      // la liste entière, dans l'ordre de l'auteur ; les autres se contentent
+      // du nombre demandé, dans n'importe quel ordre.
+      const ordered = source.typeOptions?.listNumbered === true;
+      const required = listAnswerCount({ choices: expected, typeOptions: source.typeOptions });
+      return {
+        ...base,
+        correct: isListCorrect(answer.list, expected, { required, ordered }),
+        correctList: expected,
+      };
     }
 
     case 'tableau': {

@@ -71,7 +71,7 @@ import {
 import { reorderChapters } from '@/lib/workshops/chapters';
 import { MAX_NOTIONS_PER_WORKSHOP, countNotions } from '@/lib/workshops/notions';
 import { dropRepeatedQuestions, flagSimilar, findExistingMatch } from './duplicates';
-import { batchNotions, examSliceCount, sliceProgram, splitBudget, splitUnplaced, withChapterRetry } from './passInput';
+import { batchNotions, sliceProgram, splitBudget, splitUnplaced, withChapterRetry } from './passInput';
 import { classifyFailure, logStep, markOutcome, withRetry, type Attempted, type StepName } from './journal';
 import {
   GENERATED_FILE_NAME,
@@ -91,8 +91,7 @@ import { BUSY_ERROR, assertImportOpen, closeImport, liveImportOf } from './lock'
 import { parsePlan, type PlanIssue } from './planSchema';
 import { releaseDocuments } from './release';
 import {
-  DEFAULT_EXAM_QUESTIONS,
-  EXAM_QUESTIONS_PER_CALL,
+  EXAM_GROUP_SIZE,
   MAX_QUESTIONS_PER_IMPORT,
   type ExistingContent,
   type WorkshopIdentity,
@@ -1181,8 +1180,12 @@ async function recordInstruction(importId: string, instruction: string): Promise
  *  de la demande. Même écriture lecture-modification-écriture que
  *  `recordInstruction`, et rangée avant elle dans le fil d'exécution — mais
  *  écrite séparément : les deux clés vivent dans le même `scope`, et écraser
- *  l'une ne doit pas effacer l'autre. `examTargetOf` relit cette valeur à
- *  chaque tranche, y compris celles qui tournent en parallèle. */
+ *  l'une ne doit pas effacer l'autre.
+ *
+ *  Personne ne la relit côté serveur : c'est le lancement qui compose le plan
+ *  des appels et porte donc le nombre visé (06/09/2026). Elle reste écrite parce
+ *  qu'elle dit ce que l'import a réellement demandé — un import se relit après
+ *  coup, et un chiffre absent du `scope` ne se retrouve nulle part. */
 async function recordExamTarget(importId: string, examQuestions: number): Promise<void> {
   try {
     const supabase = getSupabaseServerClient();
@@ -2148,17 +2151,6 @@ export async function ingestParcoursQuestions(
   return { written, discarded: plan.discarded, adjusted: plan.adjusted, batches: batches.length };
 }
 
-/** Le nombre de questions d'examen demandé au lancement, rangé dans le `scope`
- *  de l'import comme la consigne libre — donc relu par chaque tranche, y compris
- *  celles qui s'exécutent dans des appels ultérieurs. */
-async function examTargetOf(importId: string): Promise<number> {
-  const supabase = getSupabaseServerClient();
-  const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
-  const value = (data?.scope as { examQuestions?: unknown } | null)?.examQuestions;
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-    ? Math.floor(value)
-    : DEFAULT_EXAM_QUESTIONS;
-}
 
 /** Passe EXAMEN — une TRANCHE du programme, pour une part du budget.
  *
@@ -2172,11 +2164,19 @@ async function examTargetOf(importId: string): Promise<number> {
  *
  *  ─── Ce que découpe le découpage ───────────────────────────────────────────
  *
- *  Le BUDGET d'abord (dix questions par appel, pour ne pas tronquer la réponse),
+ *  Le BUDGET d'abord (six questions par appel, pour ne pas tronquer la réponse),
  *  et la matière suit : chaque appel reçoit une tranche contiguë du cours. Deux
  *  appels ne voient donc jamais la même partie du programme et ne peuvent pas
  *  écrire deux fois la même question — ce qui compte d'autant plus qu'ils
  *  tournent en parallèle et qu'aucun ne voit ce que l'autre vient d'écrire.
+ *
+ *  ⚠️ **Le découpage n'est plus décidé ici mais par l'appelant** (06/09/2026) :
+ *  il lui arrive tout fait (`planExamCalls`) — combien d'appels en tout, le
+ *  budget de celui-ci, et sa forme (des groupes de telles tailles, ou des
+ *  questions isolées). Deux raisons : la répartition groupes/isolées se calcule
+ *  sur l'examen ENTIER, ce qu'un appel ne peut pas voir ; et le plan étant connu
+ *  d'avance, plus aucun appel n'a besoin de partir seul pour révéler aux autres
+ *  en combien de tranches ils se découpent.
  *
  *  Ne reçoit **aucun document** : comme la passe parcours, elle lit le
  *  programme, jamais le cours (§16.3). */
@@ -2184,18 +2184,19 @@ export async function ingestExamQuestions(
   workshopId: string,
   actorId: string,
   importId: string,
-  sliceIndex = 0,
-  options: { provider?: PlanProvider; budgetShare?: number; target?: number } = {},
+  /** L'appel à faire, tel que le plan l'a composé. `count` est le nombre TOTAL
+   *  d'appels du plan : c'est lui qui découpe le programme, sans quoi deux
+   *  appels du même plan ne verraient pas la même découpe. */
+  slice: { index: number; count: number; budget: number; grouped: boolean },
+  options: { provider?: PlanProvider } = {},
 ): Promise<QuestionPassResult> {
-  const [userHint, choice, scopeTarget] = await Promise.all([
+  const [userHint, choice] = await Promise.all([
     userHintOf(importId),
     questionsProviderOf(importId),
-    examTargetOf(importId),
   ]);
   const provider = options.provider
     ?? (choice === 'deepseek' ? createDeepSeekProvider({ userHint }) : createClaudeProvider({ userHint }));
 
-  const target = options.target ?? scopeTarget;
   const program = await loadVisibleProgram(workshopId);
   // Aucun programme visible : rien à évaluer. C'est le cas que le dialogue
   // intercepte en amont — il construit l'atelier d'abord — mais la passe doit
@@ -2203,36 +2204,36 @@ export async function ingestExamQuestions(
   if (program.length === 0) return { written: 0, discarded: [], adjusted: [], batches: 0 };
 
   // `sliceProgram` peut rendre MOINS de tranches que demandé quand le programme
-  // compte moins de notions que d'appels prévus. C'est sa découpe qui fait foi
-  // pour la répartition du budget : la calculer sur le nombre demandé laisserait
-  // des questions dans une tranche qui n'existe pas.
-  const slices = sliceProgram(program, examSliceCount(target, EXAM_QUESTIONS_PER_CALL));
-  const budgets = splitBudget(target, slices.length);
-
-  const chapters = slices[sliceIndex];
+  // compte moins de notions que d'appels prévus : les appels du plan qui tombent
+  // au-delà n'ont rien à évaluer et se taisent, plutôt que de repasser sur une
+  // tranche déjà traitée par un appel concurrent.
+  const slices = sliceProgram(program, slice.count);
+  const chapters = slices[slice.index];
   if (!chapters) return { written: 0, discarded: [], adjusted: [], batches: slices.length };
 
-  // Même garde que la passe parcours : le plafond de l'import est l'autorité, la
-  // part du budget n'est qu'une restriction de plus. Des appels parallèles qui
-  // liraient tous le même compteur se croiraient chacun seuls.
+  // Même garde que la passe parcours : le plafond de l'import est l'autorité, le
+  // budget de l'appel n'est qu'une restriction de plus. Des appels parallèles
+  // qui liraient tous le même compteur se croiraient chacun seuls.
   const alreadyWritten = await questionsWritten(importId);
-  const budget = Math.min(
-    MAX_QUESTIONS_PER_IMPORT - alreadyWritten,
-    budgets[sliceIndex] ?? 0,
-    options.budgetShare ?? Number.POSITIVE_INFINITY,
-  );
+  const budget = Math.min(MAX_QUESTIONS_PER_IMPORT - alreadyWritten, slice.budget);
   if (budget <= 0) return { written: 0, discarded: [], adjusted: [], batches: slices.length };
+
+  // Le plafond a rogné le budget au point qu'il n'y a plus de quoi faire un
+  // groupe : l'appel bascule en questions isolées plutôt que d'en réclamer un
+  // d'une seule question.
+  const grouped = slice.grouped && budget >= EXAM_GROUP_SIZE.min;
 
   const [existing, workshop] = await Promise.all([
     loadExamQuestions(workshopId),
     loadWorkshopIdentity(workshopId),
   ]);
 
-  const meta: StepMeta = { importId, workshopId, step: 'exam', batch: sliceIndex, provider };
+  const meta: StepMeta = { importId, workshopId, step: 'exam', batch: slice.index, provider };
   const call = await modelCall(meta, () => provider.documentToPlan([], existing, {
     pass: 'exam',
     chapters,
     budget,
+    grouped,
     workshop,
   }));
   const result = call.result;
@@ -2276,6 +2277,9 @@ export async function ingestExamQuestions(
   await stepDone(meta, call, {
     chapitresDeLaTranche: chapters.length,
     plafond: budget,
+    // La forme demandée, pour pouvoir relire dans le journal ce que l'examen a
+    // réellement demandé — « 3+3 » ou « isolées » — quand ses groupes déçoivent.
+    forme: grouped ? 'groupes' : 'isolées',
     rendues: plan.groups.reduce((sum, g) => sum + g.questions.length, 0),
     ecrites: written,
     // Les redites de l'entraînement comptent à part : elles ne disent pas la

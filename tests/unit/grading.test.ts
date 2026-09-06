@@ -57,6 +57,45 @@ describe('liste — appariement des réponses', () => {
   it('une attente manquante rend la liste fausse', () => {
     expect(isListCorrect(['foie', 'reins'], expected)).toBe(false);
   });
+
+  it('on n’exige que le nombre de réponses DEMANDÉ, pas toutes celles acceptées', () => {
+    // « cite deux organes » : trois réponses acceptées, deux réclamées. Exiger
+    // les trois rendait la question impossible à réussir, l'écran ne proposant
+    // que deux lignes (cas réel du 01 au 06/09/2026).
+    expect(isListCorrect(['foie', 'peau'], expected, { required: 2 })).toBe(true);
+    expect(isListCorrect(['foie'], expected, { required: 2 })).toBe(false);
+    expect(isListCorrect(['foie', 'rate'], expected, { required: 2 })).toBe(false);
+  });
+});
+
+describe('liste numérotée — l’ordre compte', () => {
+  const expected = ['Sol', 'Herbe', 'Vache', 'Homme'];
+  const ordered = { ordered: true };
+
+  it('juste seulement si chaque ligne porte SA réponse', () => {
+    expect(isListCorrect(['sol', 'herbe', 'vache', 'homme'], expected, ordered)).toBe(true);
+    // Mêmes réponses, ordre faux : la chaîne alimentaire est le contenu même de
+    // la question, la donner à l'envers n'est pas la savoir.
+    expect(isListCorrect(['herbe', 'sol', 'vache', 'homme'], expected, ordered)).toBe(false);
+  });
+
+  it('une liste décalée d’un cran est fausse, et les champs disent où', () => {
+    const given = ['', 'sol', 'herbe', 'vache'];
+    expect(isListCorrect(given, expected, ordered)).toBe(false);
+    // Chaque champ est jugé à SA place : le premier est vide, les suivants
+    // portent la réponse du voisin — aucun ne se colore en vert.
+    expect(matchListEntries(given, expected, ordered)).toEqual([null, null, null, null]);
+  });
+
+  it('une ligne vide ne décale rien : elle rate sa propre attente, et elle seule', () => {
+    const given = ['sol', '', 'vache', 'homme'];
+    expect(isListCorrect(given, expected, ordered)).toBe(false);
+    expect(matchListEntries(given, expected, ordered)).toEqual([0, null, 2, 3]);
+  });
+
+  it('sans ordre imposé, la même saisie serait juste', () => {
+    expect(isListCorrect(['homme', 'vache', 'herbe', 'sol'], expected)).toBe(true);
+  });
 });
 
 describe('gradeStatement — les quatre types jugés', () => {
@@ -71,6 +110,31 @@ describe('gradeStatement — les quatre types jugés', () => {
     const result = gradeStatement(q, answer({ list: ['rouge', 'BLEU'] }));
     expect(result.correct).toBe(true);
     expect(result.correctList).toEqual(['Bleu', 'Rouge']);
+  });
+
+  it('liste numérotée : corrigée dans l’ordre, et demandée en entier', () => {
+    // ⚠️ `listExpected` est mis en sommeil par la numérotation : l'ordre d'un
+    // extrait n'a pas de référence. Les deux réglages arrivent pourtant
+    // ensemble depuis l'IA, c'est donc le cas à tenir.
+    const q: GradableStatement = {
+      responseType: 'liste',
+      choices: ['Bleu', 'Blanc', 'Rouge'],
+      typeOptions: { listNumbered: true, listExpected: 2 },
+    };
+    expect(gradeStatement(q, answer({ list: ['bleu', 'blanc', 'rouge'] })).correct).toBe(true);
+    expect(gradeStatement(q, answer({ list: ['rouge', 'blanc', 'bleu'] })).correct).toBe(false);
+    // Les deux premières seulement : la liste numérotée les veut toutes.
+    expect(gradeStatement(q, answer({ list: ['bleu', 'blanc'] })).correct).toBe(false);
+  });
+
+  it('liste : le nombre demandé par l’auteur fait foi, pas le nombre accepté', () => {
+    const q: GradableStatement = {
+      responseType: 'liste',
+      choices: ['Loire', 'Seine', 'Rhône', 'Garonne'],
+      typeOptions: { listExpected: 2 },
+    };
+    expect(gradeStatement(q, answer({ list: ['garonne', 'seine'] })).correct).toBe(true);
+    expect(gradeStatement(q, answer({ list: ['seine'] })).correct).toBe(false);
   });
 
   it('tableau : toutes les cases justes, et aucune de trop', () => {
