@@ -948,7 +948,7 @@ function ListAnswer({ statement, extra, result, onExtra }: {
   }
   // Numérotation activée par défaut : sans réglage explicite, une liste se lit
   // numérotée (c'est le cas de la maquette).
-  const numbered = statement.typeOptions.listNumbered ?? true;
+  const numbered = statement.typeOptions.listNumbered ?? false;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

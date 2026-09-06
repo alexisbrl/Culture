@@ -289,6 +289,16 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     const discarded: PlanIssue[] = [];
     const adjusted: PlanIssue[] = [];
     const tally = { chapters: 0, notions: 0, questions: 0 };
+    // ⚠️ **Le total d'examen VISÉ, distinct du total ENVOYÉ au lancement**
+    // (04/09/2026). `askedCount` est figé à l'ouverture du dialogue — il ne
+    // sait rien de ce que l'étage 0 décide ensuite. Le rattrapage plus bas
+    // (Ligne « short ») doit viser le total réel, sous peine de rattraper
+    // jusqu'à un chiffre déjà périmé : c'est exactement ce qui a fait tourner
+    // une demande d'« une seule question » comme un examen de 40 — l'étage 0
+    // avait bien compris et corrigé le total côté serveur, mais l'écran
+    // continuait de rattraper vers son propre total de lancement, jamais
+    // rafraîchi. Réaffectée juste après l'étage 0, si celui-ci a tranché.
+    let examTarget = askedCount ?? DEFAULT_EXAM_QUESTIONS;
 
     // ─── Les étages, et ce qui décide de leur présence ──────────────────────
     //
@@ -337,6 +347,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       const resource = await ingestWorkshopResource(workshopId, importId);
       if (!resource.ok) return setPhase({ step: 'error', message: resource.error });
       documents = resource.documents;
+      if (resource.examQuestionCount !== null) examTarget = resource.examQuestionCount;
       // On distingue les deux échecs : « elle n'a rien écrit » et « elle a
       // écrit, mais son document n'a pas pu être relu par CETTE génération »
       // (téléversement raté). Les confondre enverrait l'utilisateur reformuler
@@ -495,8 +506,23 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         total: totalSteps,
       });
 
+      // ─── Deux appels à vide d'affilée, et on arrête ───────────────────────
+      //
+      // ⚠️ **Un appel qui n'écrit rien n'est pas un appel à retenter** (décision
+      // d'Alexis du 05/09/2026, sur les chiffres du journal de bord). Quand le
+      // modèle rend zéro question, ce n'est presque jamais un accident : c'est
+      // que la demande ne peut pas être satisfaite telle quelle. Le journal l'a
+      // montré en grand — vingt-cinq appels de suite à zéro question, quarante
+      // minutes d'attente, rien d'écrit. Insister n'a jamais rien changé.
+      //
+      // Un appel à vide isolé reste toléré (une tranche de programme peut être
+      // trop pauvre pour son budget) ; deux d'affilée arrêtent l'étape. Les
+      // appels déjà en vol vont au bout — on ne les interrompt pas, ils sont
+      // payés — mais aucun nouveau ne part.
+      let emptyStreak = 0;
+
       const runSlice = async (sliceIndex: number, target?: number, budget?: number) => {
-        if (stopped.current) return null;
+        if (stopped.current || emptyStreak >= 2) return null;
         // Même raison que pour le parcours : le serveur ne voit qu'un appel à la
         // fois, seul le client sait combien il en a en vol.
         const remaining = MAX_QUESTIONS - tally.questions;
@@ -507,6 +533,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         if (!result.ok) { error ??= result.error; showExam(); return null; }
         discarded.push(...result.discarded);
         adjusted.push(...result.adjusted);
+        emptyStreak = result.written > 0 ? 0 : emptyStreak + 1;
         tally.questions += result.written;
         setCounts({ ...tally });
         showExam();
@@ -526,7 +553,17 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         await mapWithConcurrency(
           Array.from({ length: slices - 1 }, (_, i) => i + 1),
           QUESTIONS_CONCURRENCY,
-          runSlice,
+          // ⚠️ **Surtout pas `runSlice` tout court.** `mapWithConcurrency`
+          // appelle sa tâche avec `(élément, indice)` — le second argument
+          // serait donc reçu comme le NOMBRE DE QUESTIONS VISÉ. Toutes les
+          // tranches sauf la première partaient ainsi avec un total fantaisiste
+          // (0, 1, 2…), lequel réduisait le découpage côté serveur au point que
+          // leur propre tranche n'existait plus : elles rendaient la main sans
+          // appeler le modèle et **sans laisser une ligne au journal**. Constaté
+          // le 05/09/2026 — une génération de 40 questions n'écrivait que la
+          // part de sa première tranche, et c'est le rattrapage qui faisait tout
+          // le travail, appel après appel. Ce qui expliquait aussi sa longueur.
+          (sliceIndex) => runSlice(sliceIndex),
         );
       }
       if (error) return setPhase({ step: 'error', message: error });
@@ -540,18 +577,18 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       // la banque, donc il ne réécrit pas ce qui vient d'être écrit.
       //
       // ⚠️ **Autant d'appels que le manque en exige**, et non un seul
-      // (28/08/2026). Un appel n'écrit qu'une part du total — dix questions, la
-      // taille d'un appel — si bien qu'un rattrapage unique plafonnait à un
-      // dixième : sur quarante demandées dont vingt manquantes, il n'en rendait
-      // jamais plus de dix.
+      // (28/08/2026). Un appel n'écrit qu'une part du total — la taille d'un
+      // appel — si bien qu'un rattrapage unique plafonnait à cette part : sur
+      // quarante demandées dont vingt manquantes, il n'en rendait jamais plus.
       //
-      // Deux tours au maximum : un atelier dont le programme ne porte pas
-      // quarante questions ne les portera pas davantage au troisième, et chaque
-      // tour coûte des appels.
-      for (let round = 0; round < 2; round += 1) {
-        const short = Math.min(askedCount ?? DEFAULT_EXAM_QUESTIONS, MAX_QUESTIONS) - tally.questions;
-        if (short <= 0) break;
-
+      // ⚠️ **UN SEUL tour, et non deux** (05/09/2026). Le second tour n'a jamais
+      // rien rattrapé que le premier n'aurait pas rattrapé : quand le premier
+      // rend zéro question, le second rend zéro question aussi, et il double
+      // simplement l'attente — c'est ce qui faisait douze appels et quarante
+      // minutes pour une demande d'une seule question. Une passe, un rattrapage,
+      // et on rend ce qu'on a en le disant.
+      const short = Math.min(examTarget, MAX_QUESTIONS) - tally.questions;
+      if (short > 0 && emptyStreak < 2) {
         const calls = Math.max(1, Math.ceil(short / EXAM_QUESTIONS_PER_CALL));
         totalCalls += calls;
         showExam();

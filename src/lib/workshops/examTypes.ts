@@ -119,7 +119,21 @@ const RESPONSE_TYPES: ResponseType[] = [
 // nouveau type en apporte deux ou trois, et une colonne par réglage ferait
 // grossir la table sans que la majorité des questions les utilise.
 export type QuestionTypeOptions = {
-  /** liste — numéros affichés à gauche de chaque ligne de réponse. */
+  /** liste — l'ordre des réponses compte, et il est celui de `choices` ; des
+   *  numéros sont alors affichés à gauche de chaque ligne de réponse.
+   *
+   *  ⚠️ **Absent = FAUX**, et ce n'était pas le cas avant le 06/09/2026 : les
+   *  trois endroits qui l'affichent retombaient sur VRAI, si bien que toute
+   *  liste était numérotée — y compris une simple énumération, où l'ordre n'a
+   *  aucun sens. Le candidat pouvait en déduire qu'il devait répondre dans un
+   *  ordre précis. Vérifié dans les questions écrites par l'IA : elle ne demande
+   *  ce réglage que sur de vrais classements (« donne, dans l'ordre… ») et le
+   *  laisse de côté partout ailleurs — ce qu'on voyait n'était donc pas son
+   *  choix, c'était ce défaut. Ne pas le remettre à vrai « pour l'esthétique » :
+   *  ce drapeau porte une INTENTION, pas une décoration.
+   *
+   *  Rappel de l'état d'avancement : la correction ne vérifie pas encore l'ordre
+   *  (elle compare deux ensembles), voir `docs/backlog.md`. */
   listNumbered?: boolean;
   /** liste — nombre de réponses attendues de l'élève. */
   listExpected?: number;

@@ -91,6 +91,10 @@ export type IngestScope =
        *  à chaque génération. Le modèle demande, on lui donne, et on ne recommence
        *  pas : un seul aller-retour supplémentaire, jamais deux. */
       granted: number[];
+      /** D'où vient la demande — décide si le modèle peut fixer un nombre de
+       *  questions d'examen (§ voir `resourceInstruction`). Le parcours n'a pas
+       *  de notion de total, donc ce pouvoir ne lui est même pas proposé. */
+      context: 'parcours' | 'exam';
     }
   | {
       pass: 'chapters';

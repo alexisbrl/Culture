@@ -81,7 +81,12 @@ import {
   readResourceOutput,
 } from './resource';
 import type { BloomLevel } from '@/lib/workshops/examTypes';
-import { demandByNotion, demandForChapterStart, type QuestionDemand } from './demand';
+import {
+  CHAPTER_START_QUESTIONS,
+  demandByNotion,
+  demandForChapterStart,
+  type QuestionDemand,
+} from './demand';
 import { BUSY_ERROR, assertImportOpen, closeImport, liveImportOf } from './lock';
 import { parsePlan, type PlanIssue } from './planSchema';
 import { releaseDocuments } from './release';
@@ -526,6 +531,17 @@ async function questionsProviderOf(importId: string): Promise<'claude' | 'deepse
     : 'deepseek';
 }
 
+/** Le périmètre par lequel ce lot est entré — parcours ou examen. Décide, entre
+ *  autres, si l'étape 0 a même le droit de fixer un nombre de questions
+ *  (§ voir `resourceInstruction`). Un lot de type « programme » (paramètres)
+ *  n'a pas de liste de questions propre : il retombe sur le parcours, qui est
+ *  le régime par défaut de tout le pipeline. */
+async function contextOf(importId: string): Promise<'parcours' | 'exam'> {
+  const supabase = getSupabaseServerClient();
+  const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
+  return (data?.scope as { context?: unknown } | null)?.context === 'exam' ? 'exam' : 'parcours';
+}
+
 async function oversizeModelsOf(importId: string): Promise<ModelId[]> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
@@ -843,6 +859,18 @@ export type ResourcePassResult = {
    *  vient d'être écrit. C'est ce nombre que la passe notions doit parcourir :
    *  le rendre ici évite à l'écran de relire la base pour s'en apercevoir. */
   documents: number;
+  /** Le nombre de questions d'examen que l'étape a fixé, s'il y en a un.
+   *
+   *  ⚠️ **Indispensable côté écran, et pas qu'anecdotique** (04/09/2026). Le
+   *  DIALOGUE orchestre lui-même le rattrapage d'un examen incomplet (des
+   *  tours d'appels supplémentaires tant que le compte n'y est pas), à partir
+   *  d'un total qu'IL connaît — celui saisi au lancement. Sans ce champ, il
+   *  continuerait de viser ce total de lancement même quand l'étape 0 vient de
+   *  le corriger, et rattraperait donc jusqu'au chiffre PÉRIMÉ : exactement le
+   *  bug qui a fait tourner une demande d'« une seule question » comme un
+   *  examen de 40. Voir `AiGenerationDialog`, où ce champ remplace `askedCount`
+   *  pour tout calcul fait APRÈS cette étape. */
+  examQuestionCount: number | null;
 };
 
 /** ÉTAPE 0 — lire la consigne de l'utilisateur, et écrire la matière qui manque.
@@ -880,11 +908,12 @@ export async function ingestResource(
 ): Promise<ResourcePassResult> {
   const prepared = await preparedOf(importId);
   const hint = await rawHintOf(importId);
-  if (!hint) return { written: false, documents: prepared.length };
+  if (!hint) return { written: false, documents: prepared.length, examQuestionCount: null };
 
-  const [corpusTokens, oversizeModels] = await Promise.all([
+  const [corpusTokens, oversizeModels, context] = await Promise.all([
     corpusTokensOf(importId),
     oversizeModelsOf(importId),
+    contextOf(importId),
   ]);
   // Pas de `userHint` sur le fournisseur : la consigne est ICI l'objet du
   // travail, elle voyage dans l'instruction de l'étape. La coller en plus dans
@@ -909,19 +938,31 @@ export async function ingestResource(
   // poste de la facture. Le modèle réclame ce dont il a besoin, on le lui joint,
   // et on ne recommence pas : un aller-retour de plus au maximum, ce qui reste
   // sans commune mesure avec le prix d'un corpus envoyé pour rien.
-  const catalogue = prepared.map((document, index) => ({ index, fileName: document.fileName }));
+  // ⚠️ **Rien de tout cela quand la demande vient de l'EXAMEN** (arbitrage
+  // d'Alexis du 06/09/2026). L'étape n'y a plus le droit d'écrire — elle n'en a
+  // même plus le moyen, son schéma de sortie n'ayant pas de champ pour un
+  // document — donc le catalogue, le document courant (jusqu'à 100 000
+  // caractères) et le second appel n'ont plus d'objet. L'appel rétrécit d'autant :
+  // il ne porte que la demande, le nom de l'atelier et la liste des chapitres.
+  const isExam = context === 'exam';
+  const catalogue = isExam
+    ? []
+    : prepared.map((document, index) => ({ index, fileName: document.fileName }));
   const ask = (granted: number[]) => ({
     pass: 'resource' as const,
     hint,
     workshop,
     chapters: chapters.map((c) => ({ name: c.name })),
-    current: existing?.body ?? null,
+    current: isExam ? null : (existing?.body ?? null),
     catalogue,
     granted,
+    context,
   });
 
   const meta: StepMeta = { importId, workshopId, step: 'resource', batch: 0, provider };
-  let call = await modelCall(meta, () => provider.documentToPlan(prepared, EMPTY, ask([])));
+  // Côté examen, les documents ne partent pas non plus : ils ne serviraient
+  // qu'à écrire, et il n'y a plus rien à écrire.
+  let call = await modelCall(meta, () => provider.documentToPlan(isExam ? [] : prepared, EMPTY, ask([])));
   await addImportUsage(importId, call.result.usage);
   let outcome = readResourceOutput(call.result.plan);
 
@@ -940,9 +981,21 @@ export async function ingestResource(
     // fallu le déduire au lieu de le lire.
     documentPropose: outcome.body !== null,
     tailleProposee: outcome.body?.length ?? 0,
+    nombreExamenFixe: outcome.examQuestionCount,
   });
 
-  const granted = outcome.needs.filter((index) => index < prepared.length);
+  // ⚠️ **Écrire ⇒ tout le corpus, sans que le modèle ait eu à le demander**
+  // (arbitrage d'Alexis, 04/09/2026). Un nom de fichier ne dit pas fiablement
+  // ce qu'il contient — le modèle ne doit donc plus deviner, sur ce seul
+  // indice, lesquels lire avant d'écrire : une décision d'écrire force
+  // désormais le second appel avec TOUT joint, quoi que `needs` contienne.
+  // `needs` ne garde son rôle que pour l'autre cas, rare : une lecture SANS
+  // décision d'écrire (voir `resourceInstruction`).
+  const granted = isExam
+    ? []
+    : outcome.body !== null
+      ? prepared.map((_, index) => index)
+      : outcome.needs.filter((index) => index < prepared.length);
   if (granted.length > 0) {
     const second: StepMeta = { ...meta, batch: 1 };
     call = await modelCall(second, () => provider.documentToPlan(prepared, EMPTY, ask(granted)));
@@ -952,6 +1005,7 @@ export async function ingestResource(
       documentsJoints: granted.length,
       documentEcrit: outcome.body !== null,
       tailleDuDocument: outcome.body?.length ?? 0,
+      nombreExamenFixe: outcome.examQuestionCount,
     });
   }
 
@@ -960,10 +1014,21 @@ export async function ingestResource(
   // l'écriture du document échoue ensuite. La clé est posée dans tous les cas,
   // vide comprise — son absence signifierait « l'étape n'a pas eu lieu ».
   await recordInstruction(importId, outcome.instruction);
+  // Ne s'applique QUE côté examen (`context`), et seulement si le modèle a
+  // vraiment tiré un nombre de la demande — sinon le réglage déjà en place
+  // (celui du lancement) continue de faire foi.
+  if (context === 'exam' && outcome.examQuestionCount !== null) {
+    await recordExamTarget(importId, outcome.examQuestionCount);
+  }
 
   let documents = prepared.length;
   let written = false;
-  if (outcome.body) {
+  // ⚠️ **Garde de dernier recours côté examen.** Le schéma de sortie n'y offre
+  // aucun champ pour un document, donc `body` y est toujours nul — mais cette
+  // garantie vit chez le fournisseur, et un fournisseur sans sortie contrainte
+  // pourrait un jour en renvoyer un quand même. L'invariant « une demande partie
+  // de l'examen ne modifie pas le cours » se tient ici, où l'écriture a lieu.
+  if (!isExam && outcome.body) {
     const file = await writeGeneratedFile(workshopId, actorId, outcome.body, existing);
     if (file) {
       written = true;
@@ -985,7 +1050,7 @@ export async function ingestResource(
     resume: outcome.summary,
   });
 
-  return { written, documents };
+  return { written, documents, examQuestionCount: context === 'exam' ? outcome.examQuestionCount : null };
 }
 
 /** Le document déjà écrit par l'IA pour cet atelier, s'il existe. Rend son corps
@@ -1109,6 +1174,23 @@ async function recordInstruction(importId: string, instruction: string): Promise
     await supabase.from('ai_imports').update({ scope: { ...scope, instruction } }).eq('id', importId);
   } catch (error) {
     console.warn('[ingest] consigne réécrite non enregistrée :', error instanceof Error ? error.message : error);
+  }
+}
+
+/** Remplace le nombre de questions d'examen visé, quand l'étape 0 en a tiré un
+ *  de la demande. Même écriture lecture-modification-écriture que
+ *  `recordInstruction`, et rangée avant elle dans le fil d'exécution — mais
+ *  écrite séparément : les deux clés vivent dans le même `scope`, et écraser
+ *  l'une ne doit pas effacer l'autre. `examTargetOf` relit cette valeur à
+ *  chaque tranche, y compris celles qui tournent en parallèle. */
+async function recordExamTarget(importId: string, examQuestions: number): Promise<void> {
+  try {
+    const supabase = getSupabaseServerClient();
+    const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
+    const scope = (data?.scope as Record<string, unknown> | null) ?? {};
+    await supabase.from('ai_imports').update({ scope: { ...scope, examQuestions } }).eq('id', importId);
+  } catch (error) {
+    console.warn('[ingest] nombre de questions d’examen non enregistré :', error instanceof Error ? error.message : error);
   }
 }
 
@@ -1964,12 +2046,24 @@ export async function ingestParcoursQuestions(
   const alreadyWritten = await questionsWritten(importId);
   // Une demande explicite est aussi un plafond : on ne paie jamais pour plus
   // que ce qui a été demandé sur les notions de CE lot.
+  //
+  // ⚠️ **Une CONSIGNE LIBRE ne lève pas le plafond du chapitre** (05/09/2026).
+  // Elle décide seulement qu'on ne CIBLE pas les couples notion × niveau — « fais
+  // des questions sur la Révolution » ne dit rien du stock de chacun, donc on
+  // laisse le modèle choisir où frapper. Elle ne dit rien non plus du VOLUME, et
+  // c'est deux choses différentes : jusqu'à cette date, écrire une consigne
+  // faisait tomber le plafond à l'infini, si bien que chaque lot montait à la
+  // part de concurrence (~41 questions) et que le seul frein restant était le
+  // fusible de l'import. Constaté sur un atelier de 11 chapitres : 330 questions
+  // écrites et toujours en cours, là où le budget de démarrage en prévoyait 275.
+  // Le budget du chapitre s'applique donc dans les deux régimes, réparti entre
+  // ses lots.
   const asked = demand
     ? notions.reduce(
         (sum, n) => sum + (wanted.get(n.id) ?? []).reduce((s, w) => s + w.count, 0),
         0,
       )
-    : Number.POSITIVE_INFINITY;
+    : splitBudget(options.startBudget ?? CHAPTER_START_QUESTIONS, batches.length)[batchIndex] ?? 0;
   const budget = Math.min(
     MAX_QUESTIONS_PER_IMPORT - alreadyWritten,
     options.budgetShare ?? Number.POSITIVE_INFINITY,

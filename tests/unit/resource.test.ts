@@ -18,7 +18,7 @@ import {
   questionCountFromHint,
   readResourceOutput,
 } from '@/lib/ingest/resource';
-import { MAX_QUESTIONS_PER_IMPORT } from '@/lib/ingest/prompt';
+import { EXAM_QUESTIONS_RANGE, MAX_QUESTIONS_PER_IMPORT } from '@/lib/ingest/prompt';
 
 describe('readResourceOutput', () => {
   it('lit une réponse complète', () => {
@@ -86,6 +86,30 @@ describe('readResourceOutput', () => {
     it('un champ absent ou mal formé ne demande rien', () => {
       expect(readResourceOutput({ needs: 'tout' }).needs).toEqual([]);
       expect(readResourceOutput({}).needs).toEqual([]);
+    });
+  });
+
+  describe('le nombre de questions d’examen', () => {
+    // Répare le cas qui a fait tourner une génération d'une seule question
+    // aussi longtemps qu'un examen entier de 40 (04/09/2026) : une demande en
+    // toutes lettres ne passait par aucune lecture et retombait donc sur le
+    // défaut, quel que soit ce qui était réellement demandé.
+    it('lit un nombre explicite', () => {
+      expect(readResourceOutput({ examQuestionCount: 1 }).examQuestionCount).toBe(1);
+      expect(readResourceOutput({ examQuestionCount: 20 }).examQuestionCount).toBe(20);
+    });
+
+    it('ramène dans la plage plutôt que de refuser', () => {
+      expect(readResourceOutput({ examQuestionCount: 0 }).examQuestionCount).toBeNull();
+      expect(readResourceOutput({ examQuestionCount: -3 }).examQuestionCount).toBeNull();
+      expect(readResourceOutput({ examQuestionCount: 5000 }).examQuestionCount).toBe(EXAM_QUESTIONS_RANGE.max);
+    });
+
+    it('un champ absent, décimal ou mal formé ne fixe rien : le réglage déjà en place s’applique', () => {
+      expect(readResourceOutput({}).examQuestionCount).toBeNull();
+      expect(readResourceOutput({ examQuestionCount: null }).examQuestionCount).toBeNull();
+      expect(readResourceOutput({ examQuestionCount: 4.5 }).examQuestionCount).toBeNull();
+      expect(readResourceOutput({ examQuestionCount: '10' }).examQuestionCount).toBeNull();
     });
   });
 });

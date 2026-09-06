@@ -114,6 +114,8 @@ Ne jamais boucler un appel réseau (Clerk `getUser`, envoi d'email…) dans une 
 
 ## Storage — `src/lib/storage.ts`
 
+> **Piège : une clé d'objet n'accepte que de l'ASCII.** Un accent, une apostrophe typographique ou un idéogramme dans le nom du fichier fait rejeter l'écriture entière (« Invalid key »), sans qu'un seul octet parte. `buildWorkshopFileKey` translittère donc le nom avant d'en faire une clé — **le nom affiché, lui, vit en base et ne change pas** ; c'est lui qu'on propose au téléchargement (`createSignedDownloadUrl(key, downloadName)`). Ne jamais reconstruire une clé à la main à partir d'un nom de fichier. Précédent (04-05/09/2026) : le document que l'IA rédige s'appelle « Cours écrit par l'IA.md », donc il n'a jamais pu s'écrire — et comme l'étape qui l'écrit avale ses échecs par conception, rien ne le signalait ; la génération repartait simplement sans matière.
+
 Point d'entrée unique du stockage de fichiers, provider-agnostic. En base, on stocke uniquement des **clés/chemins d'objet** (`buildWorkshopFileKey`), jamais une URL de provider — les URLs sont générées à la demande (`UploadTicket`, `createSignedUploadUrl`/`createSignedDownloadUrl`). Le client fait lui-même le `PUT` direct vers le stockage (XHR pour la progression d'upload). Une migration future vers un autre provider (ex. S3) ne devrait toucher que ce fichier — jamais appeler un SDK de provider directement ailleurs dans le code.
 
 ## Nettoyage planifié — `pg_cron`

@@ -42,6 +42,11 @@ export type ResourcePassResult =
       written: boolean;
       /** Documents du lot après son passage — le sien compris. */
       documents: number;
+      /** Le nombre de questions d'examen que l'étape a fixé, s'il y en a un —
+       *  `null` en dehors d'un examen, ou si rien n'a été précisé. Le dialogue
+       *  DOIT s'en servir pour tout calcul de rattrapage fait après cette étape
+       *  (voir `ResourcePassResult` dans `@/lib/ingest/run.ts`). */
+      examQuestionCount: number | null;
     }
   | { ok: false; error: string };
 

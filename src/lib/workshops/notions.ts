@@ -76,6 +76,33 @@ function validate(title: string): string | null {
   return null;
 }
 
+/** Les notions d'un atelier, **par ordre alphabétique**.
+ *
+ *  ⚠️ **Ce n'est pas un changement de tri, c'est l'apparition d'un tri.** La
+ *  liste sortait jusqu'ici par date de création, ce qui donnait l'illusion de
+ *  suivre l'ordre du cours. Elle ne suivait rien : une génération écrit toutes
+ *  ses notions **d'un seul coup**, donc elles portent toutes exactement le même
+ *  horodatage — mesuré le 05/09/2026, 47 notions pour une seule date. Trier sur
+ *  une valeur constante, c'est laisser la base rendre les lignes dans l'ordre
+ *  qui l'arrange, lequel peut changer d'une lecture à l'autre.
+ *
+ *  L'alphabétique n'est donc pas « mieux que l'ordre du cours » : c'est le
+ *  premier ordre réel, et celui qui sert l'usage de cet écran — retrouver une
+ *  notion précise parmi des centaines. Les CHAPITRES, eux, gardent l'ordre du
+ *  programme : leur rang est une donnée, pas une déduction.
+ *
+ *  Le tri se fait ici et non en base : `localeCompare` range « Élbe » avec les
+ *  E, ce que le classement par octets de Postgres ne fait pas.
+ *
+ *  ⚠️ **Le « fr » est codé en dur, et c'est une dette assumée.** Les notions ne
+ *  sont pas traduites — elles portent le contenu du cours, donc SA langue — et
+ *  chaque langue a son ordre. C'est juste tant que les ateliers sont
+ *  francophones, faux au premier qui ne l'est pas. La reprise (stocker la langue
+ *  du contenu sur l'atelier et trier avec, plus le cas japonais qui ne se trie
+ *  pas sans donnée supplémentaire) est décrite dans `docs/backlog.md` —
+ *  « Trier les notions quand l'application parlera beaucoup de langues ». Ne pas
+ *  la traiter à moitié ici : un tri paramétré par une langue qu'on ne stocke pas
+ *  encore serait un demi-invariant. */
 export async function listNotions(workshopId: string): Promise<Notion[]> {
   const supabase = getSupabaseServerClient();
 
@@ -83,20 +110,21 @@ export async function listNotions(workshopId: string): Promise<Notion[]> {
   const { data, error } = await supabase
     .from('workshop_bricks')
     .select('id, title, chapter_id, created_at')
-    .eq('workshop_id', workshopId)
-    .order('created_at', { ascending: true });
+    .eq('workshop_id', workshopId);
 
   if (error) {
     console.error('listNotions error:', error);
     return [];
   }
 
-  return (data ?? []).map((b) => ({
-    id: b.id,
-    title: b.title,
-    chapterId: b.chapter_id,
-    createdAt: b.created_at,
-  }));
+  return (data ?? [])
+    .map((b) => ({
+      id: b.id,
+      title: b.title,
+      chapterId: b.chapter_id,
+      createdAt: b.created_at,
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base', numeric: true }));
 }
 
 // Vérifie qu'un chapitre appartient bien à cet atelier avant de l'associer —

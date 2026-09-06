@@ -36,7 +36,7 @@
 // sans base ni réseau, ce qui est la règle pour toute lecture d'une entrée non
 // fiable (`CLAUDE.md` §7).
 
-import { MAX_QUESTIONS_PER_IMPORT } from './prompt';
+import { EXAM_QUESTIONS_RANGE, MAX_QUESTIONS_PER_IMPORT } from './prompt';
 
 /** Un prompt qui n'est QUE des chiffres n'est pas une consigne : c'est un nombre
  *  de questions (décision d'Alexis du 04/09/2026). **Fonction pure.**
@@ -91,10 +91,21 @@ const BODY_MARKER = '<!-- culture:corps -->';
  *
  *  Ce n'est pas une limite de qualité mais de faisabilité : le document est
  *  RÉÉCRIT en entier à chaque fois qu'il change, donc sa longueur est payée en
- *  sortie à chaque génération qui y touche, et doit tenir sous le plafond de
- *  réponse. 40 000 caractères, c'est déjà une trentaine de pages — largement de
- *  quoi porter un cours de synthèse, ce que ce document est censé être. */
-export const MAX_GENERATED_LENGTH = 40_000;
+ *  sortie à chaque génération qui y touche — en temps de génération surtout, le
+ *  coût en tokens restant marginal (quelques centimes entre 60k et 100k, très en
+ *  deçà du plafond de réponse du modèle : 64 000 jetons de raisonnement ET de
+ *  sortie confondus sur Sonnet 5, voir `MAX_TOKENS_THINKING` dans
+ *  `providers/claude.ts`).
+ *
+ *  100 000 caractères, c'est une soixantaine de pages — largement de quoi
+ *  couvrir un cours dense écrit en texte simple (bien plus compact qu'un PDF où
+ *  chaque page part aussi en image, voir §3 du plan d'ingestion). Ce plafond ne
+ *  vise cependant PAS à loger un cours entier : la consigne dit explicitement de
+ *  n'écrire que ce qui MANQUE (`resourceInstruction`), et « un cours de
+ *  synthèse, pas un manuel » reste la limite qui compte le plus — la longueur
+ *  n'est qu'un filet, pas un objectif. Relevé de 40 000 à 60 000 puis 100 000 le
+ *  04/09/2026, à la demande d'Alexis. */
+export const MAX_GENERATED_LENGTH = 100_000;
 
 /** Ce que l'étape rend, une fois la réponse du modèle relue. */
 export type ResourceOutcome = {
@@ -119,6 +130,17 @@ export type ResourceOutcome = {
    *  C'est ce qui permet de ne payer le cours que lorsqu'il faut réellement le
    *  lire — et non à chaque génération portant une consigne. */
   needs: number[];
+  /** Le nombre de questions d'examen que le modèle a compris de la demande, s'il
+   *  y en avait un. `null` = rien à en tirer, le réglage déjà en place s'applique.
+   *
+   *  ⚠️ **N'existe que pour l'examen** (04/09/2026) — le parcours ne connaît pas
+   *  la notion de total, sa volumétrie est automatique par notion, et l'étape ne
+   *  lui propose même pas ce champ (voir `resourceInstruction`, `context`). C'est
+   *  ce qui répare le cas où l'utilisateur écrit sa quantité en toutes lettres
+   *  (« une seule question ») plutôt qu'en chiffre nu (« 1 ») : le premier ne
+   *  passait par aucune lecture et retombait donc, avant cette date, sur le
+   *  défaut de 40 questions — indépendamment de ce qui était demandé. */
+  examQuestionCount: number | null;
 };
 
 // ⚠️ **Aucun plafond sur le nombre de documents demandés** (04/09/2026).
@@ -146,7 +168,9 @@ export type ResourceOutcome = {
  *  appel cher pour un dépassement sans conséquence. La coupe est nette (aucune
  *  tentative de finir la phrase) et le journal enregistre qu'elle a eu lieu. */
 export function readResourceOutput(raw: unknown): ResourceOutcome {
-  const empty: ResourceOutcome = { body: null, instruction: '', dropped: false, summary: '', needs: [] };
+  const empty: ResourceOutcome = {
+    body: null, instruction: '', dropped: false, summary: '', needs: [], examQuestionCount: null,
+  };
   if (!raw || typeof raw !== 'object') return empty;
 
   const value = raw as Record<string, unknown>;
@@ -172,12 +196,22 @@ export function readResourceOutput(raw: unknown): ResourceOutcome {
       )]
     : [];
 
+  // Un entier hors bornes est ramené dans la plage plutôt que rejeté : demander
+  // 5000 questions veut dire « beaucoup », pas « erreur » — même logique que
+  // `questionCountFromHint`. Une valeur qui ne ressemble à rien (texte, décimal,
+  // zéro ou négatif) vaut « aucune décision » : le réglage déjà en place reste.
+  const rawCount = value.examQuestionCount;
+  const examQuestionCount = typeof rawCount === 'number' && Number.isInteger(rawCount) && rawCount > 0
+    ? Math.min(Math.max(rawCount, EXAM_QUESTIONS_RANGE.min), EXAM_QUESTIONS_RANGE.max)
+    : null;
+
   return {
     body: body ? body.slice(0, MAX_GENERATED_LENGTH) : null,
     instruction,
     dropped,
     summary,
     needs,
+    examQuestionCount,
   };
 }
 

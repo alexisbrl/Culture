@@ -46,6 +46,7 @@ import {
   wireGroupsOutput,
   wireNotionsOutput,
   wireResourceOutput,
+  wireResourceOutputExam,
 } from '@/lib/ingest/wireSchema';
 import { MAX_GENERATED_LENGTH } from '@/lib/ingest/resource';
 
@@ -314,6 +315,7 @@ function instructionFor(scope: IngestScope, fileNames: string[]): string {
         granted: scope.granted,
         current: scope.current,
         maxLength: MAX_GENERATED_LENGTH,
+        context: scope.context,
       });
     case 'chapters':
       // Les noms de fichiers sont dans la consigne, pas seulement dans les blocs
@@ -416,7 +418,10 @@ function documentUsesOf(scope: IngestScope): number {
 function outputSchemaFor(scope: IngestScope) {
   switch (scope.pass) {
     case 'resource':
-      return wireResourceOutput;
+      // Deux formes pour la même étape : partie de l'examen, elle n'a pas de
+      // champ `document` — elle ne PEUT donc pas en écrire un, plutôt que d'en
+      // avoir le droit et l'interdiction (voir `wireResourceOutputExam`).
+      return scope.context === 'exam' ? wireResourceOutputExam : wireResourceOutput;
     case 'chapters':
       return wireChaptersOutput;
     case 'notions':
@@ -462,6 +467,26 @@ export type ClaudeProviderOptions = {
   onOversize?: (model: ModelId) => void | Promise<void>;
 };
 
+/** Le type déclaré au téléversement — celui du fichier, sauf quand le modèle ne
+ *  sait pas le lire. **Fonction pure.**
+ *
+ *  ⚠️ **Le modèle n'accepte que deux formats de document : le PDF et le texte
+ *  BRUT.** Un fichier texte annoncé sous un type plus précis — `text/markdown`,
+ *  `text/csv` — est accepté au téléversement puis refusé à l'APPEL, avec une
+ *  erreur qui remonte jusqu'à l'écran (« Unsupported document file format ») et
+ *  fait échouer la génération entière. Le contenu, lui, était parfaitement
+ *  lisible : c'est l'étiquette qui gênait, pas le fichier.
+ *
+ *  Constaté le 05/09/2026 sur le premier cours réellement écrit par l'IA — son
+ *  document est du Markdown — mais le même piège attend n'importe quel fichier
+ *  texte déposé par un utilisateur, le dépôt les acceptant tous (`categoryFor`).
+ *  On normalise donc ici, au plus près de la contrainte : c'est une limite de CE
+ *  fournisseur, elle n'a pas à remonter dans le reste du code, et le type réel
+ *  du fichier reste celui qu'on affiche et qu'on sert au téléchargement. */
+function uploadTypeFor(mimeType: string): string {
+  return mimeType.startsWith('text/') ? 'text/plain' : mimeType;
+}
+
 export function createClaudeProvider(options: ClaudeProviderOptions | string = {}): PlanProvider {
   const opts = typeof options === 'string' ? { apiKey: options } : options;
   const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
@@ -481,7 +506,7 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
       return Promise.all(
         documents.map(async (doc) => {
           const uploaded = await client.beta.files.upload({
-            file: await toFile(Buffer.from(doc.bytes), doc.fileName, { type: doc.mimeType }),
+            file: await toFile(Buffer.from(doc.bytes), doc.fileName, { type: uploadTypeFor(doc.mimeType) }),
             betas: [FILES_BETA],
           });
           return { fileId: doc.fileId, key: doc.key, fileName: doc.fileName, mimeType: doc.mimeType, ref: uploaded.id };
@@ -619,7 +644,7 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
           // L'étape 0 a son propre socle : le commun lui interdisait
           // explicitement d'écrire ce qui n'est dans aucun document, ce qui est
           // pourtant tout son travail (voir `resourceSystemPrompt`).
-          system: [{ type: 'text', text: systemPrompt(scope.pass) }],
+          system: [{ type: 'text', text: systemPrompt(scope.pass === 'resource' && scope.context === 'exam' ? 'resource-exam' : scope.pass) }],
           thinking: tuning.thinking,
           output_config: {
             // `effort` est absent sur Haiku 4.5 : il y est refusé (voir `tuningFor`).
