@@ -51,9 +51,13 @@ describe('splitBudget — le total demandé est le total écrit', () => {
 });
 
 describe('examSliceCount — combien d’appels', () => {
-  it('un appel par tranche de dix questions', () => {
-    expect(examSliceCount(40, EXAM_QUESTIONS_PER_CALL)).toBe(4);
-    expect(examSliceCount(41, EXAM_QUESTIONS_PER_CALL)).toBe(5);
+  // Exprimé À PARTIR de la taille d'un appel, jamais avec le chiffre en dur :
+  // cette taille a déjà changé (dix, puis cinq le 05/09/2026) et un test qui la
+  // recopie casse à chaque réglage sans rien signaler d'utile.
+  it('un appel par tranche pleine, un de plus dès qu’il déborde', () => {
+    const n = EXAM_QUESTIONS_PER_CALL;
+    expect(examSliceCount(n * 4, EXAM_QUESTIONS_PER_CALL)).toBe(4);
+    expect(examSliceCount(n * 4 + 1, EXAM_QUESTIONS_PER_CALL)).toBe(5);
   });
 
   it('toujours au moins un appel, même pour un budget nul', () => {

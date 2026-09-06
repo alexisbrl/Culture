@@ -23,6 +23,77 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_import_events: {
+        Row: {
+          attempt: number
+          batch: number | null
+          cache_creation_tokens: number
+          cached_tokens: number
+          cause: string | null
+          created_at: string
+          duration_ms: number | null
+          id: string
+          import_id: string
+          input_tokens: number
+          message: string | null
+          model: string | null
+          output_tokens: number
+          produced: Json
+          provider: string | null
+          status: string
+          step: string
+          workshop_id: string
+        }
+        Insert: {
+          attempt?: number
+          batch?: number | null
+          cache_creation_tokens?: number
+          cached_tokens?: number
+          cause?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          import_id: string
+          input_tokens?: number
+          message?: string | null
+          model?: string | null
+          output_tokens?: number
+          produced?: Json
+          provider?: string | null
+          status: string
+          step: string
+          workshop_id: string
+        }
+        Update: {
+          attempt?: number
+          batch?: number | null
+          cache_creation_tokens?: number
+          cached_tokens?: number
+          cause?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          import_id?: string
+          input_tokens?: number
+          message?: string | null
+          model?: string | null
+          output_tokens?: number
+          produced?: Json
+          provider?: string | null
+          status?: string
+          step?: string
+          workshop_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_import_events_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "ai_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_imports: {
         Row: {
           beat_at: string | null
@@ -31,8 +102,11 @@ export type Database = {
           created_at: string
           created_by: string
           file_ids: Json
+          finished_at: string | null
           id: string
           input_tokens: number
+          origin: string | null
+          outcome: string | null
           output_tokens: number
           scope: Json
           workshop_id: string
@@ -44,8 +118,11 @@ export type Database = {
           created_at?: string
           created_by: string
           file_ids?: Json
+          finished_at?: string | null
           id?: string
           input_tokens?: number
+          origin?: string | null
+          outcome?: string | null
           output_tokens?: number
           scope?: Json
           workshop_id: string
@@ -57,8 +134,11 @@ export type Database = {
           created_at?: string
           created_by?: string
           file_ids?: Json
+          finished_at?: string | null
           id?: string
           input_tokens?: number
+          origin?: string | null
+          outcome?: string | null
           output_tokens?: number
           scope?: Json
           workshop_id?: string
@@ -631,6 +711,7 @@ export type Database = {
           category: string
           created_at: string
           created_by: string | null
+          generated: boolean
           id: string
           mime_type: string
           name: string
@@ -642,6 +723,7 @@ export type Database = {
           category: string
           created_at?: string
           created_by?: string | null
+          generated?: boolean
           id?: string
           mime_type: string
           name: string
@@ -653,6 +735,7 @@ export type Database = {
           category?: string
           created_at?: string
           created_by?: string | null
+          generated?: boolean
           id?: string
           mime_type?: string
           name?: string

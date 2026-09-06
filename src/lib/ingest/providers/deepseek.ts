@@ -53,15 +53,26 @@ export const DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
 /** Le plafond de sortie qu'on s'impose, très en deçà de celui du modèle.
  *
- *  Il ne sert plus à tenir dans la limite technique (384 000 tokens chez v4)
+ *  Il ne sert pas à tenir dans la limite technique (384 000 tokens chez v4)
  *  mais à borner une réponse qui partirait en vrille.
  *
- *  ⚠️ **Mesuré, pas deviné** : un appel de dix questions d'examen a consommé
- *  16 182 tokens de sortie le 28/08/2026 — ce modèle réfléchit avant de répondre
- *  et sa réflexion compte dans la sortie. Un plafond à 16 000 serait donc frôlé
- *  à chaque appel, et frôlé veut dire dépassé un jour sur deux — or une réponse
- *  coupée est **entièrement perdue**. Le double laisse la marge qui manquait. */
-const MAX_TOKENS = 32_768;
+ *  ⚠️ **Un plafond réglé au plus juste n'est pas une économie, c'est une perte
+ *  sèche** — et le journal de bord l'a chiffré le 05/09/2026 : sur les 30 appels
+ *  d'examen enregistrés, **25 ont été coupés à 32 768 tokens pile**, chacun après
+ *  presque cinq minutes de génération, et chacun rendant **zéro question** (un
+ *  JSON coupé ne se relit pas). On payait la sortie entière pour ne rien écrire.
+ *
+ *  L'erreur était de régler ce plafond sur une mesure d'un jour — 16 182 tokens
+ *  pour dix questions le 28/08/2026 — puis de la doubler « pour la marge ». Les
+ *  énoncés se sont allongés (critères de correction, notions par question) et le
+ *  même lot en coûte désormais 32 000 : la marge a été mangée sans que rien ne
+ *  le signale. Le plafond est donc porté à un niveau qu'un lot NORMAL ne peut
+ *  pas atteindre, et le nombre de questions par appel a été divisé par deux
+ *  (voir `EXAM_QUESTIONS_PER_CALL`) — les deux corrections vont ensemble.
+ *
+ *  Il reste très en deçà de la limite du modèle : ce qu'il arrête, c'est une
+ *  boucle, pas un lot de questions. */
+const MAX_TOKENS = 64_000;
 
 /** La forme attendue, **dérivée du schéma Zod** et non recopiée à la main.
  *
@@ -175,7 +186,13 @@ export function createDeepSeekProvider(options: DeepSeekOptions = {}): PlanProvi
         // Le corps porte le motif réel (quota, clé, modèle inconnu) : le perdre
         // ferait d'une erreur diagnosticable un « 400 » opaque.
         const body = await response.text().catch(() => '');
-        throw new Error(`DeepSeek ${response.status} : ${body.slice(0, 400)}`);
+        const failure = new Error(`DeepSeek ${response.status} : ${body.slice(0, 400)}`);
+        // Le code HTTP est posé SUR l'erreur, comme le fait le SDK d'Anthropic :
+        // c'est lui qui permet de ranger la panne (saturation, débit, panne du
+        // fournisseur) sans lire un texte qui peut changer du jour au lendemain.
+        // Voir `classifyFailure` (@/lib/ingest/journal).
+        Object.assign(failure, { status: response.status });
+        throw failure;
       }
 
       const payload = (await response.json()) as {
@@ -188,6 +205,7 @@ export function createDeepSeekProvider(options: DeepSeekOptions = {}): PlanProvi
         // Volontairement NON validé ici : `parsePlan` est le contrôle à la
         // réception, et il doit voir la sortie telle qu'elle est arrivée.
         plan: safeJson(text),
+        model,
         // Une réponse coupée au plafond est un JSON incomplet, donc illisible :
         // sans ce drapeau, l'appel disparaît en silence (aucun écart à signaler,
         // aucune question écrite) et personne ne sait pourquoi le compte n'y est

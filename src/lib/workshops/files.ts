@@ -17,6 +17,12 @@ export type WorkshopFile = {
   mimeType: string;
   category: FileCategory;
   createdAt: string;
+  /** Écrit par l'IA à partir d'une consigne, jamais téléversé (04/09/2026). Un
+   *  atelier en a **au plus un** — l'unicité est tenue en base, pas seulement
+   *  ici. Il se télécharge et se supprime comme les autres ; il ne se renomme
+   *  pas, et ne se modifie que par une nouvelle consigne. Voir
+   *  @/lib/ingest/resource. */
+  generated: boolean;
 };
 
 // 25 Mo (abaissé de 50 le 20/08/2026). Le plafond n'est plus dicté par Supabase
@@ -70,7 +76,7 @@ export async function listFiles(workshopId: string): Promise<WorkshopFile[]> {
   const supabase = getSupabaseServerClient();
   const { data } = await supabase
     .from('workshop_files')
-    .select('id, name, size, mime_type, category, created_at')
+    .select('id, name, size, mime_type, category, created_at, generated')
     .eq('workshop_id', workshopId)
     .order('created_at', { ascending: false });
 
@@ -81,6 +87,7 @@ export async function listFiles(workshopId: string): Promise<WorkshopFile[]> {
     mimeType: f.mime_type,
     category: f.category as FileCategory,
     createdAt: f.created_at,
+    generated: f.generated === true,
   }));
 }
 
@@ -136,7 +143,7 @@ export async function finalizeUpload(
       storage_path: path,
       created_by: uploaderId,
     })
-    .select('id, name, size, mime_type, category, created_at')
+    .select('id, name, size, mime_type, category, created_at, generated')
     .single();
 
   if (insertError || !row) {
@@ -154,6 +161,7 @@ export async function finalizeUpload(
       mimeType: row.mime_type,
       category: row.category as FileCategory,
       createdAt: row.created_at,
+      generated: row.generated === true,
     },
   };
 }
@@ -192,12 +200,18 @@ export async function rename(
   const supabase = getSupabaseServerClient();
   const { data: row } = await supabase
     .from('workshop_files')
-    .select('name')
+    .select('name, generated')
     .eq('id', fileId)
     .eq('workshop_id', workshopId)
     .single();
 
   if (!row) return { success: false, error: 'Fichier introuvable' };
+  // Le document de l'IA porte son nom comme une étiquette : il dit qui l'a
+  // écrit. Le refus est posé ICI et pas seulement dans l'écran — une action
+  // serveur est une URL publique, cacher un bouton ne protège rien.
+  if (row.generated === true) {
+    return { success: false, error: 'Le document écrit par l’IA ne se renomme pas' };
+  }
 
   const dotIndex = row.name.lastIndexOf('.');
   const extension = dotIndex > 0 ? row.name.slice(dotIndex) : '';

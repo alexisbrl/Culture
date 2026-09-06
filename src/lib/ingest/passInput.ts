@@ -8,7 +8,7 @@
 
 import type { PreparedDocument } from './providers/types';
 
-export type IngestPass = 'chapters' | 'notions' | 'assign' | 'questions' | 'exam';
+export type IngestPass = 'resource' | 'chapters' | 'notions' | 'assign' | 'questions' | 'exam';
 
 /** Les documents qu'une passe reçoit.
  *
@@ -28,7 +28,21 @@ export function documentsForPass(
   /** Index du document à traiter — **obligatoire pour la passe notions**, qui
    *  travaille document par document depuis l'inversion du 23/08/2026. */
   documentIndex?: number,
+  /** Les documents que l'étape 0 a **demandés**, par numéro. Elle est la seule
+   *  passe à recevoir ses documents sur demande plutôt que d'office : elle part
+   *  à l'aveugle, avec le seul catalogue des noms, et n'obtient le contenu que
+   *  si elle dit en avoir besoin (04/09/2026). */
+  granted?: readonly number[],
 ): PreparedDocument[] {
+  // L'étape 0 ne reçoit QUE ce qu'elle a demandé, et rien par défaut. Une
+  // demande vide — le cas le plus fréquent — ne coûte donc pas un token de
+  // corpus. Un numéro hors liste est ignoré : il vient du modèle.
+  if (pass === 'resource') {
+    return (granted ?? [])
+      .map((index) => prepared[index])
+      .filter((document): document is PreparedDocument => Boolean(document));
+  }
+
   // Ni le rangement ni les questions ne reçoivent de document : le premier
   // travaille sur des pages et des titres, les seconds sur des notions (§16.3).
   // La passe examen suit exactement la même règle — elle lit le programme, pas

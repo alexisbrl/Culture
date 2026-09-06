@@ -11,9 +11,10 @@ import { INGEST_CONCURRENCY, QUESTIONS_CONCURRENCY, mapWithConcurrency } from '@
 import {
   DEFAULT_EXAM_QUESTIONS,
   EXAM_QUESTIONS_PER_CALL,
-  EXAM_QUESTIONS_RANGE,
   MAX_QUESTIONS_PER_IMPORT as MAX_QUESTIONS,
 } from '@/lib/ingest/prompt';
+import { chapterStartBudgets } from '@/lib/ingest/demand';
+import { questionCountFromHint } from '@/lib/ingest/resource';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import {
@@ -24,12 +25,14 @@ import {
   ingestDocumentNotions,
   ingestParcoursQuestions,
   ingestWorkshopAssignments,
+  ingestWorkshopResource,
   ingestWorkshopChapters,
   ingestWorkshopExamQuestions,
   prepareWorkshopIngestion,
   releaseWorkshopImportFiles,
   type PlanIssue,
 } from '@/app/actions/aiIngest';
+import type { GenerationOrigin } from '@/lib/ingest/journal';
 
 // Le dialogue de génération par IA — **un seul composant pour tous les points
 // d'entrée** (Ressources, Chapitre & Notion, et les deux listes de questions).
@@ -126,11 +129,14 @@ type Props = {
   /** Contexte imposé quand on entre par une liste de questions ; `null` quand on
    *  entre par les Paramètres, où l'utilisateur choisit. */
   forcedContext?: 'parcours' | 'exam' | null;
+  /** Par quelle porte l'utilisateur est entré. Sert au journal de bord et à rien
+   *  d'autre : le dialogue se comporte exactement pareil d'un bouton à l'autre. */
+  origin: GenerationOrigin;
   onClose: () => void;
   onDone?: () => void;
 };
 
-export default function AiGenerationDialog({ workshopId, files, forcedContext = null, onClose, onDone }: Props) {
+export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, onDone }: Props) {
   const t = useTranslations('ai');
   const locale = useLocale();
 
@@ -147,7 +153,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // encore : le dialogue ne peut pas décider de ce qu'il va faire avant de
   // l'avoir, donc il attend plutôt que de supposer.
   const [visibleNotions, setVisibleNotions] = useState<number | null>(null);
-  const [examCount, setExamCount] = useState(DEFAULT_EXAM_QUESTIONS);
+  // ⚠️ Le nombre de questions ne se saisit plus à part (04/09/2026) : un prompt
+  // fait UNIQUEMENT de chiffres EST ce nombre. Deux champs disaient la même
+  // chose, et un seul des deux était visible selon le bouton d’entrée.
+  // `null` = la consigne est une vraie consigne, ou il n’y en a pas.
   // ⚠️ TEMPORAIRE — phase de test. Le fournisseur de la passe questions est
   // exposé le temps de comparer Claude et DeepSeek sur un vrai corpus ; il n'a
   // pas vocation à rester un choix d'utilisateur. Seule cette passe est
@@ -159,6 +168,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // d'où l'on peut encore demander Claude, et c'est alors un geste délibéré.
   const [questionsProvider, setQuestionsProvider] = useState<'claude' | 'deepseek'>('deepseek');
   const [hint, setHint] = useState('');
+  // Un prompt fait uniquement de chiffres n'est pas une consigne : c'est un
+  // nombre de questions. Il court-circuite l'étape 0 — il n'y a rien à
+  // interpréter, rien à écrire — et va droit au reste de la génération.
+  const askedCount = questionCountFromHint(hint);
   const [phase, setPhase] = useState<Phase>({ step: 'select' });
   // ─── L'arrêt, et pourquoi il tient dans des refs ────────────────────────
   //
@@ -171,20 +184,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   const [counts, setCounts] = useState({ chapters: 0, notions: 0, questions: 0 });
   const [issues, setIssues] = useState<{ discarded: PlanIssue[]; adjusted: PlanIssue[] }>({ discarded: [], adjusted: [] });
 
-  // ⚠️ TEMPORAIRE — outil de mesure, pas une fonctionnalité produit (01/09/2026).
-  // Le marqueur de cache entre les notions et les chapitres a été retiré faute
-  // de savoir si la passe chapitres démarre assez vite après la dernière
-  // extraction pour tenir dans la fenêtre de 5 minutes (voir `providers/claude.ts`,
-  // fonction `documentUsesOf`). Ce chrono chiffre l'attente réelle ; une fois la
-  // mesure faite sur de vrais imports, à retirer avec le bloc d'affichage plus
-  // bas. De vrais états et non des refs : `generate()` n'a jamais besoin de
-  // relire ces valeurs, seulement de les écrire — contrairement à
-  // `stopped`/`importIdRef` ci-dessus, qui pilotent son propre déroulement.
-  const [startedAt, setStartedAt] = useState<number | null>(null);
-  const [chaptersSentAt, setChaptersSentAt] = useState<number | null>(null);
-  const [now, setNow] = useState(() => Date.now());
-  const elapsedMs = startedAt === null ? null : now - startedAt;
-  const chaptersElapsedMs = startedAt === null || chaptersSentAt === null ? null : chaptersSentAt - startedAt;
+  // Le chrono de mesure du 01/09/2026 a été retiré le 04/09/2026 : le journal
+  // de bord enregistre désormais la durée de CHAQUE étape, en base et pour de
+  // bon (@/lib/ingest/journal). Un affichage à l'écran ne mesurait qu'une
+  // génération — celle qu'on regardait — et disparaissait avec elle.
 
   // Le téléversement en cours n'est pas interruptible proprement : on ferme la
   // sortie tant qu'il dure, comme pendant la génération.
@@ -213,12 +216,21 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   //     cours pour lui écrire des questions de plus : on saute les trois premiers
   //     étages et on rédige. Avant, le bouton restait simplement éteint, sans un
   //     mot — un atelier dont on avait retiré les PDF devenait ingénérable.
+  //   • ⚠️ **…et depuis le 04/09/2026, une CONSIGNE est elle-même de la matière.**
+  //     « Fais-moi un cours d'histoire pour des 4e » sur un atelier vide n'avait
+  //     rien à lire, donc le bouton restait éteint — alors que c'est exactement
+  //     le cas pour lequel l'étape 0 existe : elle écrit le cours, et les étages
+  //     suivants travaillent dessus. Un nombre seul ne compte pas : il ne
+  //     demande que des questions, et n'écrit rien.
   const hasFiles = usable.length > 0;
-  const needsProgram = hasFiles && (forcedContext === null || visibleNotions === 0);
-  const needsFiles = needsProgram;
-  // Ni document ni programme : il n'y a rien à lire et rien à faire travailler.
-  // C'est le seul vrai blocage qui reste.
-  const nothingToDo = !hasFiles && visibleNotions === 0;
+  const hasHint = askedCount === null && hint.trim().length > 0;
+  const needsProgram = (hasFiles || hasHint) && (forcedContext === null || visibleNotions === 0);
+  // On ne téléverse que ce qui existe : une consigne seule n'a aucun fichier à
+  // remettre au fournisseur.
+  const needsFiles = needsProgram && hasFiles;
+  // Ni document, ni programme, ni consigne : il n'y a rien à lire, rien à faire
+  // travailler, et rien à écrire. C'est le seul vrai blocage qui reste.
+  const nothingToDo = !hasFiles && visibleNotions === 0 && !hasHint;
 
   // La liste des chapitres porte déjà le compte de notions et l'état écarté :
   // pas besoin d'une lecture dédiée. Montée à l'ouverture — le dialogue n'est
@@ -237,14 +249,6 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     return () => { cancelled = true; };
   }, [workshopId]);
 
-  // ⚠️ TEMPORAIRE — fait tourner le chrono ci-dessus, voir la note sur
-  // `startedAtRef`. Rien ne tourne hors de la phase « running » : pas de
-  // minuterie qui traîne une fois le dialogue fermé ou terminé.
-  useEffect(() => {
-    if (phase.step !== 'running') return;
-    const id = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(id);
-  }, [phase.step]);
 
   /** Téléverse les documents, puis enchaîne directement sur la génération. */
   async function prepare() {
@@ -255,11 +259,15 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       // qu'un import a voulu faire.
       program: needsProgram,
       context,
-      examQuestions: context === 'exam' ? examCount : undefined,
+      examQuestions: context === 'exam' ? (askedCount ?? DEFAULT_EXAM_QUESTIONS) : undefined,
       // Rangée dans le `scope` de l'import : chaque passe la relit depuis la
       // base, y compris celles qui s'exécutent dans des appels ultérieurs.
-      hint: hint.trim(),
+      // Un nombre seul n'est pas une consigne : le transmettre en ferait une,
+      // et chaque étape lirait « 40 » comme une instruction de rédaction.
+      hint: askedCount === null ? hint.trim() : '',
       questionsProvider,
+      // Le bouton par lequel on est entré — journal de bord, rien d'autre.
+      origin,
     });
     // Une génération tourne déjà sur cet atelier, dans un autre onglet : le
     // serveur a refusé avant le moindre téléversement. Le message affiché est le
@@ -274,13 +282,23 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     await generate(prepared.importId, prepared.documents);
   }
 
-  async function generate(importId: string, documents: number) {
-    // ⚠️ TEMPORAIRE — voir la note sur `startedAt` plus haut.
-    setStartedAt(Date.now());
-    setChaptersSentAt(null);
+  async function generate(importId: string, documentCount: number) {
+    // Le nombre de documents peut GRANDIR en cours de route : l'étage 0 en écrit
+    // un, que les notions doivent ensuite parcourir comme les autres.
+    let documents = documentCount;
     const discarded: PlanIssue[] = [];
     const adjusted: PlanIssue[] = [];
     const tally = { chapters: 0, notions: 0, questions: 0 };
+    // ⚠️ **Le total d'examen VISÉ, distinct du total ENVOYÉ au lancement**
+    // (04/09/2026). `askedCount` est figé à l'ouverture du dialogue — il ne
+    // sait rien de ce que l'étage 0 décide ensuite. Le rattrapage plus bas
+    // (Ligne « short ») doit viser le total réel, sous peine de rattraper
+    // jusqu'à un chiffre déjà périmé : c'est exactement ce qui a fait tourner
+    // une demande d'« une seule question » comme un examen de 40 — l'étage 0
+    // avait bien compris et corrigé le total côté serveur, mais l'écran
+    // continuait de rattraper vers son propre total de lancement, jamais
+    // rafraîchi. Réaffectée juste après l'étage 0, si celui-ci a tranché.
+    let examTarget = askedCount ?? DEFAULT_EXAM_QUESTIONS;
 
     // ─── Les étages, et ce qui décide de leur présence ──────────────────────
     //
@@ -296,10 +314,17 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // Le RANGEMENT est un étage à part entière, pas une conséquence : il tourne
     // dès qu'il y a quelque chose à placer — des notions neuves, ou une
     // structure qui vient de changer.
+    //
+    // ⚠️ **L'étage 0 ne dépend pas du point d'entrée, mais de la CONSIGNE**
+    // (04/09/2026) : c'est la seule étape qui parte d'une demande écrite plutôt
+    // que d'un document. Sans consigne, elle n'a rien à interpréter et ne part
+    // pas — ce qui est le cas de la plupart des générations.
+    const withResource = hint.trim().length > 0 && askedCount === null;
     const withNotions = needsProgram;
     const withChapters = needsProgram;
     const withAssign = needsProgram;
     const steps = [
+      ...(withResource ? ['resource' as const] : []),
       ...(withNotions ? ['notions' as const] : []),
       ...(withChapters ? ['chapters' as const] : []),
       ...(withAssign ? ['assign' as const] : []),
@@ -309,6 +334,31 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // Le rang d'un étage dans la barre dépend de ce qui est coché : sans les
     // chapitres, les notions occupent le premier cran, pas le deuxième.
     const stepAt = (name: (typeof steps)[number]) => Math.max(0, steps.indexOf(name));
+
+    // ── Étage 0 : la consigne, et la matière qui manque ──
+    //
+    // Elle peut écrire un document, et c'est pourquoi elle passe avant tout le
+    // reste : ce qu'elle écrit est de la matière que les étages suivants vont
+    // lire. Le nombre de documents change donc sous nos pieds — d'où la
+    // réaffectation plutôt qu'une constante.
+    if (stopped.current) return;
+    if (withResource) {
+      setPhase({ step: 'running', label: t('progress.resource'), done: stepAt('resource'), total: totalSteps });
+      const resource = await ingestWorkshopResource(workshopId, importId);
+      if (!resource.ok) return setPhase({ step: 'error', message: resource.error });
+      documents = resource.documents;
+      if (resource.examQuestionCount !== null) examTarget = resource.examQuestionCount;
+      // On distingue les deux échecs : « elle n'a rien écrit » et « elle a
+      // écrit, mais son document n'a pas pu être relu par CETTE génération »
+      // (téléversement raté). Les confondre enverrait l'utilisateur reformuler
+      // une consigne qui n'avait rien à se reprocher.
+      if (resource.written && documents === 0) {
+        return setPhase({ step: 'error', message: t('writtenNotRead') });
+      }
+      if (!resource.written && (visibleNotions ?? 0) === 0) {
+        return setPhase({ step: 'error', message: t('nothingWritten') });
+      }
+    }
 
     // ── Étage 1 : les notions, document par document ──
     //
@@ -363,12 +413,12 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // Décoché, on garde le programme tel quel : les notions qui viennent d'être
     // créées restent sans chapitre, consultables, et un import ultérieur pourra
     // les ranger.
+    // ⚠️ **Pas de document, pas de découpage.** Sans fichier déposé, le seul
+    // document possible est celui que l'étape 0 vient d'écrire — et elle a pu
+    // n'avoir rien à écrire. Demander un découpage sans cours produirait des
+    // chapitres inventés, ce que tout le reste du pipeline interdit.
     if (stopped.current) return;
-    if (withChapters) {
-      // ⚠️ TEMPORAIRE — voir la note sur `startedAt` plus haut : comparé à
-      // `startedAt`, c'est ce délai qui dira si le marqueur de cache peut
-      // revenir sur le premier document de la passe notions.
-      setChaptersSentAt(Date.now());
+    if (withChapters && documents > 0) {
       setPhase({ step: 'running', label: t('progress.chapters'), done: stepAt('chapters'), total: totalSteps });
       const structure = await ingestWorkshopChapters(workshopId, importId);
       if (!structure.ok) return setPhase({ step: 'error', message: structure.error });
@@ -386,7 +436,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // ici que les ressemblances repérées mécaniquement sont soumises au
     // jugement du modèle — le calcul signale, le modèle tranche.
     if (stopped.current) return;
-    if (withAssign) {
+    if (withAssign && documents > 0) {
       let error: string | null = null;
       const showAssign = (done: number, total: number) => setPhase({
         step: 'running',
@@ -456,8 +506,23 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         total: totalSteps,
       });
 
+      // ─── Deux appels à vide d'affilée, et on arrête ───────────────────────
+      //
+      // ⚠️ **Un appel qui n'écrit rien n'est pas un appel à retenter** (décision
+      // d'Alexis du 05/09/2026, sur les chiffres du journal de bord). Quand le
+      // modèle rend zéro question, ce n'est presque jamais un accident : c'est
+      // que la demande ne peut pas être satisfaite telle quelle. Le journal l'a
+      // montré en grand — vingt-cinq appels de suite à zéro question, quarante
+      // minutes d'attente, rien d'écrit. Insister n'a jamais rien changé.
+      //
+      // Un appel à vide isolé reste toléré (une tranche de programme peut être
+      // trop pauvre pour son budget) ; deux d'affilée arrêtent l'étape. Les
+      // appels déjà en vol vont au bout — on ne les interrompt pas, ils sont
+      // payés — mais aucun nouveau ne part.
+      let emptyStreak = 0;
+
       const runSlice = async (sliceIndex: number, target?: number, budget?: number) => {
-        if (stopped.current) return null;
+        if (stopped.current || emptyStreak >= 2) return null;
         // Même raison que pour le parcours : le serveur ne voit qu'un appel à la
         // fois, seul le client sait combien il en a en vol.
         const remaining = MAX_QUESTIONS - tally.questions;
@@ -468,6 +533,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         if (!result.ok) { error ??= result.error; showExam(); return null; }
         discarded.push(...result.discarded);
         adjusted.push(...result.adjusted);
+        emptyStreak = result.written > 0 ? 0 : emptyStreak + 1;
         tally.questions += result.written;
         setCounts({ ...tally });
         showExam();
@@ -487,7 +553,17 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         await mapWithConcurrency(
           Array.from({ length: slices - 1 }, (_, i) => i + 1),
           QUESTIONS_CONCURRENCY,
-          runSlice,
+          // ⚠️ **Surtout pas `runSlice` tout court.** `mapWithConcurrency`
+          // appelle sa tâche avec `(élément, indice)` — le second argument
+          // serait donc reçu comme le NOMBRE DE QUESTIONS VISÉ. Toutes les
+          // tranches sauf la première partaient ainsi avec un total fantaisiste
+          // (0, 1, 2…), lequel réduisait le découpage côté serveur au point que
+          // leur propre tranche n'existait plus : elles rendaient la main sans
+          // appeler le modèle et **sans laisser une ligne au journal**. Constaté
+          // le 05/09/2026 — une génération de 40 questions n'écrivait que la
+          // part de sa première tranche, et c'est le rattrapage qui faisait tout
+          // le travail, appel après appel. Ce qui expliquait aussi sa longueur.
+          (sliceIndex) => runSlice(sliceIndex),
         );
       }
       if (error) return setPhase({ step: 'error', message: error });
@@ -501,18 +577,18 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       // la banque, donc il ne réécrit pas ce qui vient d'être écrit.
       //
       // ⚠️ **Autant d'appels que le manque en exige**, et non un seul
-      // (28/08/2026). Un appel n'écrit qu'une part du total — dix questions, la
-      // taille d'un appel — si bien qu'un rattrapage unique plafonnait à un
-      // dixième : sur quarante demandées dont vingt manquantes, il n'en rendait
-      // jamais plus de dix.
+      // (28/08/2026). Un appel n'écrit qu'une part du total — la taille d'un
+      // appel — si bien qu'un rattrapage unique plafonnait à cette part : sur
+      // quarante demandées dont vingt manquantes, il n'en rendait jamais plus.
       //
-      // Deux tours au maximum : un atelier dont le programme ne porte pas
-      // quarante questions ne les portera pas davantage au troisième, et chaque
-      // tour coûte des appels.
-      for (let round = 0; round < 2; round += 1) {
-        const short = Math.min(examCount, MAX_QUESTIONS) - tally.questions;
-        if (short <= 0) break;
-
+      // ⚠️ **UN SEUL tour, et non deux** (05/09/2026). Le second tour n'a jamais
+      // rien rattrapé que le premier n'aurait pas rattrapé : quand le premier
+      // rend zéro question, le second rend zéro question aussi, et il double
+      // simplement l'attente — c'est ce qui faisait douze appels et quarante
+      // minutes pour une demande d'une seule question. Une passe, un rattrapage,
+      // et on rend ce qu'on a en le disant.
+      const short = Math.min(examTarget, MAX_QUESTIONS) - tally.questions;
+      if (short > 0 && emptyStreak < 2) {
         const calls = Math.max(1, Math.ceil(short / EXAM_QUESTIONS_PER_CALL));
         totalCalls += calls;
         showExam();
@@ -544,7 +620,12 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // être explicite — un chapitre restauré plus tard les recevra.
     const chapters = (await getWorkshopChapters(workshopId))
       .filter((c) => !c.hidden)
-      .map((c) => ({ id: c.id, name: c.name }));
+      .map((c) => ({ id: c.id, name: c.name, position: c.position }));
+
+    // Le chapitre n°1 du programme reçoit 25 questions d'office, le reste du
+    // budget se répartit également entre tous les autres — calculé une fois ici
+    // sur l'atelier ENTIER, jamais chapitre par chapitre (voir `chapterStartBudgets`).
+    const startBudgets = chapterStartBudgets(chapters);
 
     if (chapters.length > 0) {
       let error: string | null = null;
@@ -579,7 +660,9 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         const remaining = MAX_QUESTIONS - tally.questions;
         if (remaining <= 0) return null;
         const share = Math.max(1, Math.floor(remaining / QUESTIONS_CONCURRENCY));
-        const result = await ingestParcoursQuestions(workshopId, importId, job.chapter, job.batchIndex, share);
+        const result = await ingestParcoursQuestions(
+          workshopId, importId, job.chapter, job.batchIndex, share, startBudgets.get(job.chapter.id),
+        );
         doneCalls += 1;
         if (!result.ok) { error ??= result.error; showQuestions(); return null; }
         discarded.push(...result.discarded);
@@ -641,7 +724,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   useEffect(() => {
     if (phase.step !== 'done' && phase.step !== 'error') return;
     const importId = importIdRef.current;
-    if (importId) void closeWorkshopImport(workshopId, importId);
+    // L'issue part avec la fermeture : c'est l'écran, et lui seul, qui sait si
+    // l'enchaînement est allé au bout ou s'il s'est arrêté sur une panne (voir
+    // le journal de bord, @/lib/ingest/journal).
+    if (importId) void closeWorkshopImport(workshopId, importId, phase.step === 'done' ? 'finished' : 'failed');
   }, [phase.step, workshopId]);
 
   // ─── Quitter la PAGE pendant une génération ──────────────────────────────
@@ -795,6 +881,8 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
               <Hint>
                 {nothingToDo
                   ? t('plan.nothing')
+                  : !hasFiles && hasHint
+                    ? t('plan.fromHint')
                   : forcedContext === null
                     ? needsProgram
                       ? t('plan.program')
@@ -805,42 +893,11 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
               </Hint>
             </div>
 
-            {/* Le nombre de questions d'examen — le seul réglage qui reste, et
-                le seul qui n'a pas de bonne valeur par défaut universelle : un
-                contrôle de dix questions et un examen blanc de soixante sortent
-                du même bouton. Le parcours, lui, n'en a pas besoin : son volume
-                se déduit du nombre de notions. */}
-            {context === 'exam' && (
-              <>
-                <SectionLabel>{t('examCount.label')}</SectionLabel>
-                <input
-                  type="number"
-                  value={examCount}
-                  min={EXAM_QUESTIONS_RANGE.min}
-                  max={EXAM_QUESTIONS_RANGE.max}
-                  onChange={(e) => {
-                    const value = Number(e.target.value);
-                    // Champ vide ou saisie en cours : on ne corrige rien tant
-                    // que la valeur n'est pas un nombre, sinon on empêche
-                    // d'effacer pour retaper.
-                    if (Number.isNaN(value)) return;
-                    setExamCount(value);
-                  }}
-                  onBlur={() => setExamCount((v) =>
-                    Math.min(EXAM_QUESTIONS_RANGE.max, Math.max(EXAM_QUESTIONS_RANGE.min, Math.round(v) || DEFAULT_EXAM_QUESTIONS)),
-                  )}
-                  style={{
-                    width: 90, boxSizing: 'border-box', fontFamily: 'inherit', fontSize: 13,
-                    padding: '8px 10px', borderRadius: radius.md,
-                    border: `1px solid ${ink(0.12)}`, background: palette.surfaceInput,
-                    color: palette.ink, outline: 'none',
-                  }}
-                />
-                <div style={{ marginTop: 6, marginBottom: 20 }}>
-                  <Hint>{t('examCount.help')}</Hint>
-                </div>
-              </>
-            )}
+            {/* ⚠️ **Le champ « nombre de questions » a été retiré le 04/09/2026.**
+                Il disait la même chose que la consigne, et n’apparaissait que sur
+                un des deux boutons d’entrée. Un prompt fait UNIQUEMENT de
+                chiffres EST ce nombre — « 40 » demande quarante questions, sans
+                passer par l’IA de lecture ni coûter un appel de plus. */}
 
             {/* ⚠️ TEMPORAIRE — phase de test : comparer les deux fournisseurs sur
                 un vrai corpus. Seule la passe questions est concernée, et c'est
@@ -927,13 +984,6 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         {!stopAsk && phase.step === 'running' && (
           <div style={{ padding: '4px 0 8px' }}>
             <ProgressBar animated value={phase.done} max={phase.total} label={phase.label} />
-            {/* ⚠️ TEMPORAIRE — voir la note sur `startedAt` plus haut. */}
-            {elapsedMs !== null && (
-              <p style={{ fontFamily: 'monospace', fontSize: 12, color: palette.inkFaint, marginTop: 10 }}>
-                {t('timer.elapsed', { value: formatElapsed(elapsedMs) })}
-                {chaptersElapsedMs !== null && ` · ${t('timer.chaptersAt', { value: formatElapsed(chaptersElapsedMs) })}`}
-              </p>
-            )}
             <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 14 }}>{t('keepOpen')}</p>
             <p style={{ fontSize: 12.5, color: palette.inkFaint, marginTop: 6 }}>
               {t('runningCounts', { chapters: counts.chapters, notions: counts.notions, questions: counts.questions })}
@@ -952,14 +1002,6 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             </div>
             <IssueList heading={t('discarded')} issues={issues.discarded} tone="warn" />
             <IssueList heading={t('adjusted')} issues={issues.adjusted} tone="soft" />
-            {/* ⚠️ TEMPORAIRE — voir la note sur `startedAt` plus haut. Reste
-                affiché ici après la fin, pour que la mesure ne disparaisse pas
-                avec l'écran « running ». */}
-            {chaptersElapsedMs !== null && (
-              <p style={{ fontFamily: 'monospace', fontSize: 12, color: palette.inkFaint, marginTop: 10 }}>
-                {t('timer.chaptersAt', { value: formatElapsed(chaptersElapsedMs) })}
-              </p>
-            )}
             <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 12 }}>{t('cancellable')}</p>
             <Actions>
               <Primary onClick={requestClose}>{t('close')}</Primary>
@@ -983,17 +1025,6 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     </Modal>
   );
 }
-
-/** ⚠️ TEMPORAIRE — voir la note sur `startedAtRef` plus haut. mm:ss, sans heure :
- *  une génération qui dépasserait l'heure aurait un problème plus grave que
- *  l'affichage du chrono. */
-function formatElapsed(ms: number): string {
-  const totalSeconds = Math.max(0, Math.round(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
-}
-
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', color: palette.inkFaint, marginBottom: 8 }}>

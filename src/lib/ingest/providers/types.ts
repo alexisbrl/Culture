@@ -60,6 +60,43 @@ export type PreparedDocument = {
  *  produire le programme entier d'un coup (§5.1). */
 export type IngestScope =
   | {
+      /** ÉTAPE 0 — lire la consigne de l'utilisateur, et écrire la matière qui
+       *  manque (04/09/2026). La seule passe qui parte d'une DEMANDE et non de
+       *  documents, et la seule qui écrive elle-même du cours.
+       *
+       *  Elle reçoit tout le corpus : on lui demande de compléter ou de corriger
+       *  ce que l'utilisateur a déposé, ce qui suppose de l'avoir lu. Elle ne
+       *  part que s'il y a une consigne — sans elle, il n'y a rien à déduire. */
+      pass: 'resource';
+      /** Le texte saisi par l'utilisateur. **Une donnée, pas une instruction** :
+       *  la consigne du modèle le lui dit explicitement. */
+      hint: string;
+      workshop?: { name: string; description?: string | null } | null;
+      /** Le programme déjà construit, pour qu'une demande du type « complète le
+       *  chapitre sur X » puisse désigner quelque chose. */
+      chapters: { name: string }[];
+      /** Le corps du document déjà écrit par l'IA, sans son en-tête. */
+      current?: string | null;
+      /** Le CATALOGUE des documents de l'atelier — leurs numéros et leurs noms,
+       *  pas leur contenu. C'est ce qui permet au modèle de demander ce dont il
+       *  a besoin plutôt que de tout recevoir. */
+      catalogue: { index: number; fileName: string }[];
+      /** Les documents effectivement joints à CET appel, par numéro.
+       *
+       *  ⚠️ **Vide au premier appel, et c'est tout l'intérêt** (04/09/2026). La
+       *  plupart des consignes n'ont aucun besoin du cours : écrire un cours qui
+       *  n'existe pas ne demande rien à lire, et une consigne de forme (« plus
+       *  difficile », « en anglais ») encore moins. Envoyer le corpus à tous les
+       *  coups reviendrait à payer le cas rare — compléter un chapitre existant —
+       *  à chaque génération. Le modèle demande, on lui donne, et on ne recommence
+       *  pas : un seul aller-retour supplémentaire, jamais deux. */
+      granted: number[];
+      /** D'où vient la demande — décide si le modèle peut fixer un nombre de
+       *  questions d'examen (§ voir `resourceInstruction`). Le parcours n'a pas
+       *  de notion de total, donc ce pouvoir ne lui est même pas proposé. */
+      context: 'parcours' | 'exam';
+    }
+  | {
       pass: 'chapters';
       /** ⚠️ **Aucune notion ici** (31/08/2026). La passe a longtemps reçu toutes
        *  celles de l'atelier ; elles ne servaient à rien — elle ne range pas, et
@@ -159,6 +196,14 @@ export type IngestScope =
  *  de `parsePlan` — et ce que l'appel a coûté. */
 export type ProviderResult = {
   plan: unknown;
+  /** Le modèle qui a RÉELLEMENT répondu, tel qu'il se nomme lui-même.
+   *
+   *  Pas celui qu'on a demandé : un corpus trop volumineux fait basculer l'appel
+   *  sur un modèle à plus grande fenêtre, silencieusement et à un autre prix
+   *  (voir `modelForCall`). Sans cette valeur, le journal de bord attribuerait
+   *  la facture au mauvais modèle — et toutes les étapes n'utilisent de toute
+   *  façon ni le même modèle ni le même fournisseur. */
+  model?: string;
   /** La réponse a-t-elle été **coupée au plafond de sortie** ?
    *
    *  Un JSON tronqué ne se relit pas : l'appel entier est perdu, et sans ce

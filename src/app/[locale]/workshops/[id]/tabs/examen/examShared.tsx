@@ -1214,7 +1214,7 @@ export function renderAnswerSpace(q: Question) {
     // correction, il ne s'imprime pas sur la copie de l'élève.
     case 'liste': {
       const expected = Math.max(1, q.typeOptions?.listExpected ?? q.choices.filter(c => c.trim()).length ?? 3);
-      const numbered = q.typeOptions?.listNumbered ?? true;
+      const numbered = q.typeOptions?.listNumbered ?? false;
       return (
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: A4_ANSWER_LINE_GAP }}>
           {Array.from({ length: expected }, (_, i) => (

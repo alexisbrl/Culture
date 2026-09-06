@@ -811,6 +811,8 @@
       "saveTitle": "save",
       "cancelTitle": "cancel",
       "downloadTitle": "download",
+      "generatedBadge": "AI",
+      "generatedHint": "This document was written by the AI from your instructions. You can download or delete it, but not edit it by hand: to change it, give the generation a new instruction.",
       "renameTitle": "rename",
       "deleteTitle": "delete",
       "deleteFileTitle": "Delete this file?",
@@ -1215,7 +1217,7 @@
     "hint": {
       "label": "DETAILS (OPTIONAL)",
       "placeholder": "e.g. split by themes, there are 4 — the document calls them “Units”.",
-      "help": "What the AI cannot guess: how many parts you expect, the level of splitting (broad themes or sub-chapters), the word used in the document, the students’ level. This takes precedence over our defaults."
+      "help": "What the AI cannot guess: the students’ level, the expected structure, the word used in the document. It can also write or extend a course if you ask it to. A bare number (“40”) simply asks for that many questions."
     },
     "provider": {
       "label": "MODEL FOR QUESTIONS",
@@ -1228,6 +1230,7 @@
     "close": "close",
     "retry": "try again",
     "progress": {
+      "resource": "Reading your instructions…",
       "chapters": "Splitting the course into chapters…",
       "notionsDocuments": "Notions — {done}/{n} documents read",
       "assign": "Filing the notions — {done}/{n} batches",
@@ -1239,10 +1242,6 @@
     "busy": "A generation is already running on this workshop, in another tab. Wait for it to finish, or stop it before starting another.",
     "runningCounts": "{chapters} chapters · {notions} notions · {questions} questions",
     "doneCounts": "{chapters} chapters, {notions} notions and {questions} questions added",
-    "timer": {
-      "elapsed": "Timer: {value}",
-      "chaptersAt": "chapters sent at {value}"
-    },
     "discarded": "Discarded",
     "adjusted": "Adjusted",
     "cancellable": "You can undo this import for 24 hours, as long as nothing has been edited.",
@@ -1275,11 +1274,8 @@
       "parcoursQuestions": "The AI will top up the practice questions for notions that are still short. The documents are not read again.",
       "examQuestions": "The AI will write exam questions across the whole programme — each crossing several notions, some following on from one another. The documents are not read again.",
       "questionsOnly": "No readable document in this workshop: the AI will not touch the programme. It will write the practice questions still missing from the existing notions.",
-      "nothing": "Nothing to work from yet: this workshop has neither a readable document nor a notion in its programme. Add a PDF or a text file in Resources."
-    },
-    "examCount": {
-      "label": "NUMBER OF QUESTIONS",
-      "help": "Individual questions, for the whole programme rather than per chapter — a ballpark, not an exact count. A third of them will come in groups of two or three. Running it again adds as many, without repeating existing ones."
+      "nothing": "Nothing to work from: this workshop has no readable document and no notion in the programme. Add a PDF or a text file under Resources — or ask the AI to write the course in the box below.",
+      "fromHint": "No document in this workshop: the AI will write the course from your instructions, then draw the notions, chapters and questions from it. The course it writes will appear under Resources."
     },
     "stop": {
       "aria": "stop generating",
@@ -1287,6 +1283,8 @@
       "body": "Whatever was written will be removed: the workshop goes back to how it was. This closes right away, the cleanup finishes on its own.",
       "keep": "keep generating",
       "confirm": "stop and undo"
-    }
+    },
+    "nothingWritten": "The AI wrote nothing from your instructions, and this workshop has no document and no notion: there was nothing to build. Say what the course should contain, or add a document.",
+    "writtenNotRead": "The course was written and now appears under Resources, but this generation could not read it back to build the programme. Run it again: it will start from that course."
   }
 }

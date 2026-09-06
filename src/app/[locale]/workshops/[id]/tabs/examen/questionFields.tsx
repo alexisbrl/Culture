@@ -402,7 +402,7 @@ export function QuestionFields({
       // saisies ici sont les réponses de référence, pas ce qui s'imprime.
       case 'liste': {
         const items = values.choices.length ? values.choices : ['', '', ''];
-        const numbered = opts.listNumbered ?? true;
+        const numbered = opts.listNumbered ?? false;
         const expected = opts.listExpected ?? items.length;
         // Le nombre de réponses attendues suit l'ajout/retrait de lignes, borné
         // par [1, nombre de lignes] : on ne peut pas en attendre plus qu'il n'y

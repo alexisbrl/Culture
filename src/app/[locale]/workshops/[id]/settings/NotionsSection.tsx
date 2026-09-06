@@ -455,9 +455,13 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
     setChapters((prev) => prev.map((c) => (c.id === chapterId ? { ...c, hidden: false } : c)));
     setSelectedChapterId(chapterId);
   }
-  const activeNotions = selectedChapterId === UNASSIGNED
+  // Alphabétique, et retrié ICI plutôt que de faire confiance à l'ordre reçu du
+  // serveur : une notion qu'on vient d'ajouter ou de renommer doit rejoindre sa
+  // place tout de suite, sans attendre un rechargement de la page.
+  const activeNotions = (selectedChapterId === UNASSIGNED
     ? unassignedNotions
-    : notions.filter((n) => n.chapterId === selectedChapterId);
+    : notions.filter((n) => n.chapterId === selectedChapterId)
+  ).slice().sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base', numeric: true }));
   // Menu ⋮ d'une ligne (chapitre ou notion) : « modifier » et « supprimer »,
   // là où les deux listes alignaient un crayon et une corbeille. Deux cibles de
   // 32px par ligne coûtaient 70px de largeur dans des colonnes déjà étroites,
@@ -569,7 +573,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
           réellement annulable, et disparaît de lui-même. */}
       <ImportBanner workshopId={workshopId} scope="programme" onCancelled={() => window.location.reload()} />
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <AiGenerationButton workshopId={workshopId} onDone={() => window.location.reload()} />
+        <AiGenerationButton workshopId={workshopId} origin="settings-notions" onDone={() => window.location.reload()} />
       </div>
 
       {(
