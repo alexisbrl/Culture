@@ -149,21 +149,43 @@ export const EXAM_QUESTIONS_RANGE = { min: 1, max: 200 } as const;
  *  `providers/deepseek.ts`), mais un lot plus petit reste préférable pour deux
  *  raisons qui n'ont rien à voir avec la coupe : un appel deux fois plus court
  *  répond deux fois plus vite, et comme les appels partent en parallèle, c'est
- *  la durée d'UN appel que l'utilisateur attend, pas leur somme. */
-export const EXAM_QUESTIONS_PER_CALL = 5;
+ *  la durée d'UN appel que l'utilisateur attend, pas leur somme.
+ *
+ *  **Six depuis le 06/09/2026**, et une question de plus n'est pas un caprice :
+ *  c'est la plus petite taille qui laisse un appel composer 3+3 ou 4+2 plutôt
+ *  qu'un unique triplet (voir `planExamCalls`). Le pas suivant — dix — a été
+ *  écarté : il double la durée d'un appel, donc l'attente entière. */
+export const EXAM_QUESTIONS_PER_CALL = 6;
 
 /** La part des questions rassemblées en groupes qui s'enchaînent.
  *
- *  Un tiers (arbitrage du 24/08/2026) : assez pour qu'un examen comporte de
- *  vrais enchaînements, pas au point d'en faire un dossier à traiter d'un bloc. */
+ *  **60 %** (arbitrage d'Alexis du 06/09/2026, contre un tiers depuis le
+ *  24/08/2026) : l'enchaînement devient la forme dominante d'un examen, la
+ *  question isolée restant une part solide. Sur un examen de 40 questions, ça
+ *  fait environ 24 questions en groupes et 16 questions seules.
+ *
+ *  ⚠️ **Cette part se calcule sur l'examen ENTIER, plus appel par appel**
+ *  (06/09/2026). Tenue à l'échelle d'un appel, elle donnait la bonne proportion
+ *  et une variété nulle : trois questions à grouper sur cinq, c'est un groupe de
+ *  trois, et c'était le seul groupe que l'examen sache produire. Le partage se
+ *  fait donc en amont (`planExamCalls`), et un appel reçoit une forme homogène —
+ *  que des groupes, ou que des questions isolées. */
+export const EXAM_GROUPED_SHARE = 0.6;
+
 export function examGroupedCount(budget: number): number {
-  return Math.round(budget / 3);
+  return Math.round(budget * EXAM_GROUPED_SHARE);
 }
 
-/** Taille d'un groupe, **en général** et non par contrat (élargi à 4 le
- *  25/08/2026). Le risque reste le même — un candidat qui rate la première perd
- *  le fil du bloc — mais quatre questions restent un enchaînement lisible, et
- *  imposer trois coupait des raisonnements qui en demandaient un de plus. */
+/** Taille USUELLE d'un groupe (élargie à 4 le 25/08/2026), et un conseil plutôt
+ *  qu'un contrat. Le risque reste le même — un candidat qui rate la première
+ *  perd le fil du bloc — mais quatre questions restent un enchaînement lisible,
+ *  et imposer trois coupait des raisonnements qui en demandaient un de plus.
+ *
+ *  ⚠️ **Ce n'est pas un plafond dur** (arbitrage d'Alexis, 06/09/2026) : un
+ *  appel groupé peut composer un groupe plus grand — jusqu'à son budget entier —
+ *  quand la situation le nourrit, et il le doit si la consigne de l'utilisateur
+ *  réclame un enchaînement de six questions. Le plan (`planExamCalls`) fixe la
+ *  nature et le budget d'un appel, jamais la taille de ses groupes. */
 export const EXAM_GROUP_SIZE = { min: 2, max: 4 } as const;
 
 /** La répartition de Bloom d'un examen, **en proportions** et non en nombres
@@ -1163,6 +1185,12 @@ export function examInstruction(input: {
   chapters: { name: string; notions: { id: string; title: string }[] }[];
   /** Nombre de questions à écrire dans cet appel. */
   budget: number;
+  /** La FORME de cet appel, décidée en amont (`planExamCalls`) : `true` = toutes
+   *  ses questions vont dans des groupes, `false` = que des questions isolées.
+   *  Un appel ne mélange jamais les deux — c'est ce qui donne à l'examen des
+   *  groupes de tailles variées au lieu d'un triplet par appel. Les tailles,
+   *  elles, restent au modèle. */
+  grouped: boolean;
 }): string {
   const program = input.chapters
     .map((c) => `## ${c.name}\n${c.notions.map((n) => `- ${n.id} — ${n.title}`).join('\n')}`)
@@ -1177,14 +1205,22 @@ export function examInstruction(input: {
     .map((level) => `${Math.round(EXAM_BLOOM_MIX[level] * 100)} % de niveau ${level} (${BLOOM_VERBS[level]})`)
     .join(', ');
 
-  const grouped = examGroupedCount(input.budget);
-  const groups =
-    grouped >= EXAM_GROUP_SIZE.min
-      ? `- **Un GROUPE se conçoit d'un bloc**, jamais en rapprochant des questions déjà écrites : tu poses une situation — un cas, un extrait, un jeu de données, un document — puis tu écris les ${EXAM_GROUP_SIZE.min} à ${EXAM_GROUP_SIZE.max} questions qui l'exploitent tour à tour. Des questions qui tiendraient seules ne font pas un groupe.
-- Vise environ ${grouped} questions réparties dans de tels groupes — un ordre de grandeur, pas une règle —, le reste étant des questions isolées (un groupe d'une seule question).
-- **Écris les GROUPES EN PREMIER**, les questions isolées ensuite. Si le compte doit être coupé, il le sera par la fin : un groupe entamé en dernier perdrait ses dernières questions, et l'enchaînement avec.
+  // La NATURE de l'appel est dictée — que des groupes, ou que des questions
+  // isolées —, mais **pas les tailles** : imposer « 4+2 » interdirait un groupe
+  // de six là où la consigne de l'utilisateur en demande un, et c'est son examen
+  // (arbitrage d'Alexis, 06/09/2026). On conseille une taille usuelle, une seule
+  // fois — « 2 à 4 » et « autour de 3 » disent la même chose, et deux façons de
+  // dire la même consigne la font passer pour deux consignes — puis on laisse
+  // composer : répartir les questions en groupes est le travail du modèle, pas
+  // celui du découpage.
+  const groups = input.grouped
+    ? `- **Cet appel n'écrit QUE des groupes** : ses ${input.budget} questions vont toutes dans des enchaînements, à toi de les composer. N'écris aucune question isolée ici — d'autres appels s'en chargent.
+- **Un GROUPE se conçoit d'un bloc**, jamais en rapprochant des questions déjà écrites : tu poses une situation — un cas, un extrait, un jeu de données, un document — puis tu écris les questions qui l'exploitent tour à tour. Des questions qui tiendraient seules ne font pas un groupe.
+- **Compte ${EXAM_GROUP_SIZE.min} à ${EXAM_GROUP_SIZE.max} questions par groupe** — c'est le conseil, pas une règle. Un groupe plus grand, jusqu'aux ${input.budget} questions de cet appel, est le bienvenu quand la situation le nourrit vraiment, et il s'impose si la consigne de l'utilisateur le demande.
+- Si le compte ne tombe pas juste, **laisse une question seule plutôt que d'étirer un groupe** : un enchaînement cohérent vaut mieux qu'un compte rond.
+- Chaque groupe a sa PROPRE situation : deux groupes du même appel ne partagent ni le cas, ni l'extrait, ni les données.
 - Un groupe n'a pas d'énoncé commun séparé : tout ce qui est nécessaire à une question est écrit dans les précédentes. Les questions se répondent dans l'ordre : la PREMIÈRE pose le décor, les suivantes s'appuient dessus sans le répéter. Elles seront toujours présentées ensemble et dans cet ordre. C'est la seule exception à la règle d'autonomie : c'est le GROUPE qui se comprend seul, pas chacune de ses questions.`
-      : '- Chaque groupe ne contient qu\'une question : le budget de cet appel est trop court pour un enchaînement.';
+    : '- **Cet appel n\'écrit QUE des questions isolées** : chacune est seule dans son groupe et se comprend sans les autres. Les enchaînements sont écrits par d\'autres appels — une question qui dépendrait d\'une voisine serait perdue ici.';
 
   return `${workshopBlock(input.workshop)}Rédige les QUESTIONS D'EXAMEN qui évaluent cette partie du programme.
 

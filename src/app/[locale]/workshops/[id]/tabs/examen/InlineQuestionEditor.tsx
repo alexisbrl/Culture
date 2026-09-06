@@ -31,11 +31,11 @@
 // que la feuille se lise comme la suite d'énoncés qu'elle est. Modèle :
 // `QuestionPart` dans @/lib/workshops/examTypes.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { AudioLines, ImageIcon, Link2, SlidersHorizontal } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
-import type { Question, QuestionPart, QuestionWeight } from '@/lib/workshops/examTypes';
+import type { Question, QuestionPart } from '@/lib/workshops/examTypes';
 import { QuestionFields, emptyPart } from './questionFields';
 import { MediaAttachment, useQuestionMediaDrop } from './questionMedia';
 import { type Pool, LabelPill, LabelEditor, LabelPicker } from './examShared';
@@ -56,22 +56,10 @@ type Props = {
   pools?: { id: string; name: string; color: string }[];
   showLabels?: boolean;
   notions: { id: string; title: string }[];
-  /** Pondération de la question — elle appartient à l'examen, pas à la question. */
-  /** Barème — il appartient à l'EXAMEN, pas à la question. Absent côté parcours,
-   *  qui n'a pas de copie : `QuestionFields` n'affiche alors aucun barème (le
-   *  socle partagé le prévoit déjà). */
-  weight?: QuestionWeight;
-  onWeightChange?: (patch: Partial<QuestionWeight>) => void;
   /** Cadre du bloc. `sheet` : posé sur la feuille A4, teinté et cerné de vert
    *  pour se détacher du rendu figé des autres questions. `plain` : hors feuille
    *  (parcours), où il n'y a rien dont se détacher — un simple cadre neutre. */
   frame?: 'sheet' | 'plain';
-  /** Pondération d'une question liée. Lue par index et non passée en tableau :
-   *  l'éditeur peut en ajouter au brouillon avant enregistrement, donc réclamer
-   *  un index que l'examen ne connaît pas encore (l'appelant retombe alors sur
-   *  le barème par défaut). */
-  partWeight?: (idx: number) => QuestionWeight;
-  onPartWeightChange?: (idx: number, patch: Partial<QuestionWeight>) => void;
   /** Retrait d'une question liée : l'appelant décale les pondérations suivantes
    *  (elles sont indexées par position, voir `partWeightKey`). */
   onRemovePart?: (idx: number) => void;
@@ -86,13 +74,19 @@ type Props = {
   /** Nombre de questions portant un libellé, pour la confirmation de suppression
    *  (seul l'appelant connaît la banque complète). */
   poolUsageCount?: (poolId: string) => number;
+  /** Brouillon en cours, à chaque frappe — pour que la copie d'examen montre en
+   *  DIRECT ce qui s'écrit dans le formulaire, alors qu'il vit ailleurs (dans la
+   *  liste). Rien n'est enregistré pour autant : `onSave` reste le seul moment
+   *  où la question change vraiment. Absent côté parcours, qui n'a pas de copie
+   *  à tenir à jour. */
+  onDraftChange?: (draft: Question) => void;
   onSave: (q: Question) => void;
   onCancel: () => void;
 };
 
 export default function InlineQuestionEditor({
-  workshopId, question, number, isNew, notions, weight, onWeightChange,
-  partWeight, onPartWeightChange, onRemovePart, onCreatePool, onUpdatePool,
+  workshopId, question, number, isNew, notions, onDraftChange,
+  onRemovePart, onCreatePool, onUpdatePool,
   onDeletePool, poolUsageCount, onSave, onCancel, frame = 'sheet',
   pools = [], showLabels = true,
 }: Props) {
@@ -103,6 +97,18 @@ export default function InlineQuestionEditor({
     expectations: question.expectations ?? '',
     typeOptions: question.typeOptions ?? {},
   });
+  // L'aperçu de la copie suit le brouillon, à chaque frappe.
+  //
+  // Par un effet, et non depuis les fonctions de modification : celles-ci
+  // passent par un updater (`setDraft(d => …)`), qui s'exécute PENDANT le rendu
+  // — y appeler le `setState` du parent lèverait « Cannot update a component
+  // while rendering a different component ». Le rappel est gardé en référence
+  // pour que l'effet ne dépende que du brouillon : l'appelant le redéfinit à
+  // chaque rendu (fonction fléchée), et le mettre en dépendance rejouerait
+  // l'effet en boucle.
+  const draftChangeRef = useRef(onDraftChange);
+  useEffect(() => { draftChangeRef.current = onDraftChange; });
+  useEffect(() => { draftChangeRef.current?.(draft); }, [draft]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [editingPool, setEditingPool] = useState<string | null>(null);
 
@@ -177,8 +183,6 @@ export default function InlineQuestionEditor({
         number={number}
         advancedOpen={advancedOpen}
         notions={notions}
-        weight={weight}
-        onWeightChange={onWeightChange}
         hasImage={!!draft.image}
         statementPlaceholder={t('inline.statementPlaceholder')}
         media={
@@ -226,9 +230,6 @@ export default function InlineQuestionEditor({
             advancedOpen={advancedOpen}
             notions={notions}
             // Sans barème (parcours), les questions liées n'en affichent pas
-            // non plus : `QuestionFields` masque le bloc quand `weight` manque.
-            weight={partWeight?.(idx)}
-            onWeightChange={onPartWeightChange ? (p) => onPartWeightChange(idx, p) : undefined}
             // L'image appartient à la grappe : une question liée peut donc, elle
             // aussi, demander une réponse posée dessus.
             hasImage={!!draft.image}

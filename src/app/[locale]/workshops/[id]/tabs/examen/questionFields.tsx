@@ -25,15 +25,15 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
-  Ban, ChevronDown, CircleMinus, Clock, File, Link2, Palette, Search, X,
+  ChevronDown, File, Link2, Palette, Search, X,
 } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
 import {
   BLOOM_LEVELS, DEFAULT_BLOOM_LEVEL, DEFAULT_FILE_TYPES, FILE_TYPE_KEYS,
   MATCH_SEPARATOR, MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MAX, MATCH_SPLIT_MIN,
   MAX_CHOICES, MAX_LIST_ANSWERS, MAX_PAIRS, MAX_TABLE_COLS, MAX_TABLE_ROWS, MAX_TEXT_LINES,
-  clampTextLines, toMatchChoice,
-  type BloomLevel, type QuestionPart, type QuestionTypeOptions, type QuestionWeight, type ResponseType,
+  clampTextLines, listAnswerCount, toMatchChoice,
+  type BloomLevel, type QuestionPart, type QuestionTypeOptions, type ResponseType,
 } from '@/lib/workshops/examTypes';
 // Les icônes de types de réponse sont partagées avec la banque de questions.
 import { RESPONSE_TYPE_ICONS as TYPE_ICONS, useDismissOnOutsideClick, SHEET_PANEL_Z } from './examShared';
@@ -96,10 +96,6 @@ type Props = {
   /** Révèle les réglages secondaires à leur place naturelle (voir InlineQuestionEditor). */
   advancedOpen: boolean;
   notions: { id: string; title: string }[];
-  /** Barème — il appartient à l'examen, pas à la question. Absent (éditeur du
-   *  parcours, qui n'a pas de copie) : aucun barème n'est affiché. */
-  weight?: QuestionWeight;
-  onWeightChange?: (patch: Partial<QuestionWeight>) => void;
   /** Boutons de pièce jointe : seule la question principale en reçoit. */
   media?: React.ReactNode;
   /** Une image est jointe à l'énoncé. Elle appartient à la GRAPPE (saisie une
@@ -140,7 +136,7 @@ function RemoveLinkedButton({ onClick, title }: { onClick: () => void; title: st
 }
 
 export function QuestionFields({
-  values, onChange, number, advancedOpen, notions, weight, onWeightChange, media, hasImage = false, onRemove, statementPlaceholder,
+  values, onChange, number, advancedOpen, notions, media, hasImage = false, onRemove, statementPlaceholder,
 }: Props) {
   const t = useTranslations('examen');
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
@@ -287,10 +283,6 @@ export function QuestionFields({
     borderRadius: 8, padding: '6px 8px', background: palette.surfaceRaised, outline: 'none',
     fontFamily: 'inherit', textAlign: 'center',
   };
-  const groupLabel: React.CSSProperties = {
-    width: 56, flex: 'none', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
-    color: palette.inkMuted, lineHeight: 1.3,
-  };
   const cardField: React.CSSProperties = {
     border: `1px solid ${palette.lineStrong}`, borderRadius: 8, background: palette.surfaceRaised,
     fontFamily: 'inherit', color: palette.ink, outline: 'none', boxSizing: 'border-box',
@@ -402,13 +394,25 @@ export function QuestionFields({
       // saisies ici sont les réponses de référence, pas ce qui s'imprime.
       case 'liste': {
         const items = values.choices.length ? values.choices : ['', '', ''];
+        // La pastille s'appelle « classer » depuis le 06/09/2026 — elle demande
+        // un ordre, les numéros ne sont que la façon de le montrer. Le réglage
+        // stocké garde son nom (`listNumbered`) : le renommer voudrait dire
+        // réécrire les réglages de toutes les questions déjà enregistrées, pour
+        // un mot que personne ne lit.
         const numbered = opts.listNumbered ?? false;
-        const expected = opts.listExpected ?? items.length;
+        // Deux valeurs, et il ne faut pas les confondre : celle que l'auteur a
+        // ENREGISTRÉE, qu'une liste numérotée met en sommeil sans l'effacer, et
+        // celle qui S'APPLIQUE — c'est la seconde qui s'affiche, et c'est elle
+        // que l'élève verra (`listAnswerCount`, partagée avec la copie A4,
+        // l'exercice et la correction).
+        const stored = opts.listExpected ?? items.length;
+        const expected = listAnswerCount({ choices: items, typeOptions: opts }) ?? items.length;
         // Le nombre de réponses attendues suit l'ajout/retrait de lignes, borné
         // par [1, nombre de lignes] : on ne peut pas en attendre plus qu'il n'y
-        // a de références saisies.
+        // a de références saisies. Tant que la liste est numérotée, le réglage
+        // dort — on se contente de le garder valide.
         const commit = (arr: string[], expectedDelta: number) => {
-          const next = Math.min(Math.max(expected + expectedDelta, 1), arr.length);
+          const next = Math.min(Math.max(stored + (numbered ? 0 : expectedDelta), 1), arr.length);
           patch({ choices: arr, typeOptions: { ...(values.typeOptions ?? {}), listExpected: next } });
         };
         return (
@@ -442,19 +446,26 @@ export function QuestionFields({
                 <button type="button" onClick={() => commit([...items, ''], 1)} style={addLink}>{t('inline.addRow')}</button>
               )}
               {advancedOpen && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 11.5, color: palette.inkMuted }}>{t('inline.expectedAnswers')}</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={items.length}
-                    value={expected}
-                    onChange={e => patchOptions({ listExpected: Math.min(Math.max(Number(e.target.value) || 1, 1), items.length) })}
-                    style={{ ...numInput, width: 54 }}
-                  />
-                </div>
+                // Liste numérotée = liste entière : le champ montre alors le
+                // nombre réel de réponses et se verrouille, plutôt que d'afficher
+                // un chiffre qui ne s'appliquerait pas. L'infobulle est sur le
+                // groupe, un champ désactivé n'émettant aucun événement de souris.
+                <Tooltip content={numbered ? t('inline.expectedAnswersLocked') : ''}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 11.5, color: numbered ? palette.inkFaint : palette.inkMuted }}>{t('inline.expectedAnswers')}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={items.length}
+                      value={expected}
+                      disabled={numbered}
+                      onChange={e => patchOptions({ listExpected: Math.min(Math.max(Number(e.target.value) || 1, 1), items.length) })}
+                      style={{ ...numInput, width: 54, opacity: numbered ? 0.5 : 1, cursor: numbered ? 'not-allowed' : undefined }}
+                    />
+                  </div>
+                </Tooltip>
               )}
-              <PillToggle on={numbered} onClick={() => patchOptions({ listNumbered: !numbered })} label={t('inline.numbers')} title={t('inline.numbersHint')} />
+              <PillToggle on={numbered} onClick={() => patchOptions({ listNumbered: !numbered })} label={t('inline.rank')} title={t('inline.rankHint')} />
               {answerOnImageToggle}
               {oralAnswerToggle}
             </ControlRow>
@@ -781,78 +792,13 @@ export function QuestionFields({
         </div>
         </div>
 
-        {/* Barème : « / n pts » discret par défaut, deux lignes étiquetées
-            (gain puis pénalité) une fois les paramètres avancés ouverts. */}
-        {weight && onWeightChange && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              {advancedOpen && <span style={groupLabel}>{t('inline.scoreLabel').toUpperCase()}</span>}
-              {!advancedOpen && <span style={{ fontSize: 14, fontWeight: 600, color: palette.inkMuted }}>/</span>}
-              <Tooltip content={t('inline.pointsTitle')}>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  value={weight.points}
-                  onChange={e => onWeightChange({ points: Math.max(0, Number(e.target.value) || 0) })}
-                  aria-label={t('inline.pointsTitle')}
-                  style={numInput}
-                />
-              </Tooltip>
-              <span style={{ fontSize: 10.5, color: palette.inkFaint }}>{t('inline.points')}</span>
-              {advancedOpen && (
-                <IconToggle
-                  active={weight.timed ?? false}
-                  title={t('inline.timedScore')}
-                  onClick={() => onWeightChange({ timed: !weight.timed })}
-                >
-                  <Clock size={16} strokeWidth={1.75} />
-                </IconToggle>
-              )}
-            </div>
-
-            {advancedOpen && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={groupLabel}>{t('inline.penaltyLabel').toUpperCase()}</span>
-                {!weight.eliminatory && (
-                  <>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: palette.danger }}>−</span>
-                    <Tooltip content={t('inline.penaltyTitle')}>
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.5}
-                        value={weight.negative.value}
-                        onChange={e => {
-                          const v = Math.max(0, Number(e.target.value) || 0);
-                          onWeightChange({ negative: { enabled: v > 0, value: v } });
-                        }}
-                        aria-label={t('inline.penaltyTitle')}
-                        style={{ ...numInput, color: weight.negative.value > 0 ? palette.danger : palette.ink }}
-                      />
-                    </Tooltip>
-                    <span style={{ fontSize: 10.5, color: palette.inkFaint }}>{t('inline.points')}</span>
-                  </>
-                )}
-                <IconToggle
-                  active={weight.eliminatory}
-                  activeTone="danger"
-                  title={t('inline.eliminatory')}
-                  onClick={() => onWeightChange({ eliminatory: !weight.eliminatory, negative: weight.eliminatory ? weight.negative : { enabled: false, value: 0 } })}
-                >
-                  <Ban size={16} strokeWidth={1.75} />
-                </IconToggle>
-                <IconToggle
-                  active={weight.penalizeUnanswered ?? false}
-                  title={t('inline.penaltyScope')}
-                  onClick={() => onWeightChange({ penalizeUnanswered: !weight.penalizeUnanswered })}
-                >
-                  <CircleMinus size={16} strokeWidth={1.75} />
-                </IconToggle>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Le BARÈME n'est plus ici (06/09/2026). Il appartient à l'examen et non
+            à la question — la même question vaut deux points ici et un demi-point
+            là —, et la base le rangeait déjà ainsi. Il se règle désormais sur la
+            copie elle-même, en marge de chaque ligne, dès que « personnaliser »
+            est ouvert (`sheetPoints`, GeneratorContent). Ne pas le réintroduire
+            ici : l'éditeur redeviendrait une seconde source pour une donnée qui
+            n'est pas la sienne. */}
       </div>
 
       {renderTypeBlock()}
@@ -1195,29 +1141,3 @@ function MatchPairRow({
   );
 }
 
-/** Petit bouton carré à bascule du barème avancé (gain dégressif, éliminatoire,
- *  pénalité sur absence de réponse). */
-function IconToggle({ active = false, activeTone = 'green', title, onClick, children }: {
-  active?: boolean; activeTone?: 'green' | 'danger';
-  title: string; onClick: () => void; children: React.ReactNode;
-}) {
-  const accent = activeTone === 'danger' ? palette.danger : palette.green;
-  return (
-    <Tooltip content={title}>
-      <button
-        type="button"
-        aria-label={title}
-        onClick={onClick}
-        style={{
-          width: 30, height: 30, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          borderRadius: 8, cursor: 'pointer',
-          background: active ? accent : palette.surfaceRaised,
-          border: `1px solid ${active ? accent : palette.lineStrong}`,
-          color: active ? palette.parchment : palette.inkMuted,
-        }}
-      >
-        {children}
-      </button>
-    </Tooltip>
-  );
-}

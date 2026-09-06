@@ -28,7 +28,7 @@ import type {
   ExamPool, GeneratedExam,
 } from '@/lib/workshops/examTypes';
 // bornes du curseur de partage gauche/droite des paires — la copie applique le même réglage que l'éditeur
-import { MATCH_SEPARATOR, MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MAX, MATCH_SPLIT_MIN } from '@/lib/workshops/examTypes';
+import { MATCH_SEPARATOR, MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MAX, MATCH_SPLIT_MIN, listAnswerCount } from '@/lib/workshops/examTypes';
 export type { IdentitySide, CandidateIdentity, CustomField, ExamPresentation, ExamSection, QuestionWeight, ExamConfig };
 export type Pool = ExamPool;
 export type Exam = GeneratedExam;
@@ -41,17 +41,12 @@ export const IDENTITY_LABELS: Record<keyof CandidateIdentity, string> = { nom: '
 export const BAREME_KEY = 'bareme';
 
 // ---- small helpers ----
-export const RESPONSE_TYPE_COLORS: Record<ResponseType, string> = {
-  sans_reponse: palette.inkSoft,
-  qcs: palette.greenSoft,
-  qcm: palette.greenSoft,
-  textuelle: categoryTones.blueGray,
-  liste: categoryTones.steelBlue,
-  tableau: palette.amberLight,
-  matching: categoryTones.mauve,
-  dessin: categoryTones.mauve,
-  fichier: categoryTones.rust,
-};
+// Il y avait ici une couleur par type de réponse, portée par le pictogramme des
+// cartes et par les pastilles du panneau de filtres. Retirée le 06/09/2026 : la
+// couleur est réservée aux LIBELLÉS (`LABEL_COLORS`), seuls objets que
+// l'utilisateur crée et teinte lui-même. La table est supprimée plutôt que
+// laissée inutilisée — sinon elle serait rebranchée un jour « puisqu'elle est
+// là », et le code couleur des libellés y reperdrait son sens.
 
 // La difficulté a été retirée des critères de tri le 09/08/2026 (elle reste un
 // filtre) : cinq critères pour une colonne étroite, dont un que personne ne
@@ -73,6 +68,14 @@ export const DEFAULT_SORT_DIR: Record<SortBy, SortDir> = {
 const TOOLBAR_H = 34;
 const TOOLBAR_GAP = 6;
 const TOOLBAR_MB = 12;
+
+/** Le temps qu'on laisse à un second clic avant d'appliquer le premier, sur une
+ *  carte où les deux gestes font des choses différentes (`ListCard`).
+ *
+ *  200 ms, et pas le seuil du système (> 500 ms sur Windows) : c'est le clic
+ *  simple qui paie l'attente, et une sélection qui répond une demi-seconde plus
+ *  tard se ressent comme une panne. */
+const DOUBLE_CLICK_MS = 200;
 
 /** Bouton de sens de tri : la double flèche ↑↓ habituelle, celle du sens actif
  *  en gras et à pleine encre, l'autre effacée. Deux icônes Lucide serrées l'une
@@ -516,7 +519,10 @@ export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter,
  *  `h-<id de partie>` pour un titre de partie). Le jeton ne sert qu'à
  *  redéclencher le recadrage sur une ligne déjà visée juste avant — sans lui,
  *  renvoyer deux fois la même question sur la feuille ne bougerait plus rien. */
-export type SheetFocus = { key: string; token: number };
+export type SheetFocus = {
+  key: string;
+  token: number;
+};
 
 export const NEVER_EXAM_ID = '__never__';
 export const NO_DIFFICULTY = 0;
@@ -1007,23 +1013,35 @@ export const RESPONSE_TYPE_ICONS: Record<ResponseType, LucideIcon> = {
   sans_reponse: File,
 };
 
+// ⚠️ **Neutre, comme les pastilles de type du panneau de filtres**
+// (06/09/2026) : la couleur est réservée aux LIBELLÉS, seuls objets que
+// l'utilisateur crée et teinte lui-même pour les reconnaître d'un coup d'œil.
+// Une seconde famille colorée en faisait un code couleur de plus à apprendre,
+// et affaiblissait le seul qui veut dire quelque chose. Le pictogramme suffit à
+// identifier le type — il n'a pas à le classer en plus.
 export function TypeIcon({ type, size = 14 }: { type: ResponseType; size?: number }) {
   const t = useTranslations('examen');
   const Icon = RESPONSE_TYPE_ICONS[type] ?? File;
-  const c = RESPONSE_TYPE_COLORS[type] || palette.inkSoft;
   return (
     <Tooltip content={t(`responseType.${type}`)}>
-      <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: size + 8, height: size + 8, borderRadius: 7, background: withAlpha(c, 0.22), color: palette.inkMuted }}>
+      <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: size + 8, height: size + 8, borderRadius: 7, background: ink(0.06), color: palette.inkMuted }}>
         <Icon size={size} strokeWidth={1.75} />
       </span>
     </Tooltip>
   );
 }
 
-// La pondération ne se règle plus depuis la gouttière de la feuille (elle
-// encombrait la marge sans être lisible) : elle vit dans l'éditeur de question
-// posé sur la copie — barème simple par défaut, malus/éliminatoire dans les
-// paramètres avancés. Voir `InlineQuestionEditor`.
+// Le barème se règle EN MARGE DE LA COPIE, mais seulement quand
+// « personnaliser » est ouvert (06/09/2026) — `sheetPoints`, GeneratorContent.
+//
+// ⚠️ Ce n'est pas un retour en arrière, malgré les apparences. Il s'était réglé
+// dans cette marge en permanence, ce qui l'encombrait sans être lisible ; il est
+// ensuite passé dans l'éditeur de question, ce qui le faisait passer pour une
+// propriété de la question — or la même question vaut deux points ici et un
+// demi-point là, et la base le range depuis toujours dans l'examen
+// (`ExamConfig.weighting`). Il est donc revenu à sa place, la copie, mais
+// **derrière un mode** : la marge reste du texte imprimable tant qu'on ne
+// personnalise pas. Ne pas le remettre dans l'éditeur de question.
 
 // Le statut « réponse incomplète » (pastille d'alerte sur la feuille, filtre de
 // la banque, garde-fou avant enregistrement) a été retiré le 09/08/2026 : avec
@@ -1147,6 +1165,29 @@ export function partAsQuestion(q: Question, part: QuestionPart): Question {
   };
 }
 
+// ─── QCM sur deux colonnes (06/09/2026) ─────────────────────────────────────
+//
+// Les propositions s'imprimaient les unes sous les autres, une par ligne : un
+// QCM de quatre propositions courtes mangeait quatre lignes de copie pour trois
+// mots. Sur une feuille, la place est comptée — elles se rangent donc sur DEUX
+// colonnes.
+//
+// ⚠️ **L'écran d'exercice, lui, en garde UNE** (`QCM_ANSWER_COLUMNS`,
+// ExerciseClient) : arbitrage d'Alexis du 06/09/2026 après avoir vu les deux.
+// Les deux surfaces n'ont pas la même contrainte — à l'écran on défile, et une
+// proposition par ligne se lit et se vise mieux. Ne pas « réaligner » l'une sur
+// l'autre en croyant réparer un oubli.
+//
+// ⚠️ **Revenir en arrière tient à ce nombre** : le mettre à 1 rend exactement la
+// mise en page d'avant (une colonne, une proposition par ligne). C'est la raison
+// pour laquelle la disposition passe par une grille paramétrée plutôt que par
+// deux mises en page écrites côte à côte — l'ancienne n'est pas « gardée » dans
+// du code mort, elle est le cas 1 de celle-ci.
+const QCM_COLUMNS = 2;
+// Interligne d'une proposition. Nommé parce qu'il sert deux fois : au texte, et
+// au décalage qui aligne la case sur sa première ligne.
+const QCM_LINE = 18;
+
 // espace de réponse générique affiché dans l'aperçu A4 — proportionné/structuré selon le type de réponse.
 export function renderAnswerSpace(q: Question) {
   const blankLines = (n: number) => (
@@ -1161,12 +1202,26 @@ export function renderAnswerSpace(q: Question) {
     case 'qcm':
     case 'qcs': {
       if (q.choices.length === 0) return blankLines(3);
+      // Grille plutôt que deux colonnes indépendantes, pour la même raison que
+      // les paires plus bas : les propositions d'une même rangée commencent à la
+      // même hauteur, donc une proposition qui passe à la ligne creuse SA
+      // rangée sans décaler celles d'après. La lecture reste de gauche à droite
+      // puis à la ligne, comme sur une copie imprimée.
       return (
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
+        <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: `repeat(${QCM_COLUMNS}, minmax(0, 1fr))`, columnGap: 22, rowGap: 10 }}>
           {q.choices.map((c, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            /* Case ET texte CENTRÉS dans la hauteur de la rangée (arbitrage
+               d'Alexis du 06/09/2026). La cellule s'étire à la hauteur de sa
+               rangée (comportement de grille par défaut) : centrer son contenu
+               revient donc à poser les deux cases d'une même rangée à la même
+               hauteur, gauche et droite, même quand l'une des propositions tient
+               sur trois lignes et l'autre sur une. Un alignement sur la première
+               ligne les aurait mises à la même hauteur AUSSI — mais avec le
+               texte long qui descend seul sous sa case, la colonne courte
+               paraissant décrochée. */
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
               <span style={{ width: 14, height: 14, border: `1.5px solid ${ink(0.35)}`, borderRadius: q.responseType === 'qcm' ? 3 : 999, flexShrink: 0, display: 'inline-block' }} />
-              <span style={{ fontSize: 13, color: palette.inkMuted }}>{c}</span>
+              <span style={{ minWidth: 0, fontSize: 13, lineHeight: `${QCM_LINE}px`, color: palette.inkMuted, overflowWrap: 'anywhere' as const }}>{c}</span>
             </div>
           ))}
         </div>
@@ -1213,7 +1268,9 @@ export function renderAnswerSpace(q: Question) {
     // si l'option l'est. Le contenu saisi côté éditeur est la référence de
     // correction, il ne s'imprime pas sur la copie de l'élève.
     case 'liste': {
-      const expected = Math.max(1, q.typeOptions?.listExpected ?? q.choices.filter(c => c.trim()).length ?? 3);
+      // Même calcul que l'exercice et la correction : une liste numérotée se
+      // demande en entier, les autres au nombre voulu par l'auteur.
+      const expected = Math.max(1, listAnswerCount(q) ?? 3);
       const numbered = q.typeOptions?.listNumbered ?? false;
       return (
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: A4_ANSWER_LINE_GAP }}>
@@ -1628,10 +1685,38 @@ export function ListCard({ onClick, onDoubleClick, tint, borderColor, leading, i
   actions?: React.ReactNode;
   children?: React.ReactNode;
 }) {
+  // ─── Un clic, ou deux : il faut choisir avant d'agir ──────────────────────
+  //
+  // Quand la carte porte les DEUX gestes, le navigateur les applique tous les
+  // deux : la carte entrait puis ressortait de l'examen avant que le formulaire
+  // ne s'ouvre. On retient donc le clic simple le temps de savoir si un second
+  // suit (06/09/2026). Une fenêtre courte — l'attente se paie sur le geste le
+  // plus fréquent, qui est le clic simple ; le seuil du système, lui, dépasse
+  // les 500 ms et rendrait la sélection molle.
+  //
+  // Une carte qui n'a qu'un seul des deux gestes ne retient rien : il n'y a rien
+  // à départager, et le clic doit rester instantané.
+  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (pending.current) clearTimeout(pending.current); }, []);
+
+  const arbitrate = onClick && onDoubleClick
+    ? () => {
+        if (pending.current) {
+          // Deuxième clic dans la fenêtre : le premier est annulé sans avoir
+          // rien fait, et c'est le double-clic qui s'applique.
+          clearTimeout(pending.current);
+          pending.current = null;
+          onDoubleClick();
+          return;
+        }
+        pending.current = setTimeout(() => { pending.current = null; onClick(); }, DOUBLE_CLICK_MS);
+      }
+    : onClick;
+
   return (
     <div
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
+      onClick={arbitrate}
+      onDoubleClick={onClick ? undefined : onDoubleClick}
       style={{
         cursor: onClick ? 'pointer' : 'default', display: 'flex', flexDirection: 'column', padding: `${CARD_PAD_Y}px ${CARD_PAD_X}px`, borderRadius: 12,
         userSelect: onDoubleClick ? 'none' : undefined,

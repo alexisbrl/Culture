@@ -343,6 +343,7 @@ function instructionFor(scope: IngestScope, fileNames: string[]): string {
         workshop: scope.workshop,
         chapters: scope.chapters,
         budget: scope.budget,
+        grouped: scope.grouped,
       });
   }
 }

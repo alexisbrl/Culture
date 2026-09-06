@@ -32,6 +32,7 @@ import {
   DEFAULT_BLOOM_LEVEL,
   clampTextLines,
   emptyExerciseAnswer,
+  listAnswerCount,
   matchPairs,
   normalizeTypeOptions,
   toBloomLevel,
@@ -602,7 +603,12 @@ function toExerciseTypeOptions(source: ChoiceSource & { typeOptions?: QuestionTy
         ? shuffled(matchSides(source.choices ?? []).right)
         : undefined,
     listNumbered: options.listNumbered,
-    listExpected: options.listExpected,
+    // ⚠️ Le nombre de lignes part CALCULÉ, pas brut : le candidat ne reçoit
+    // jamais les réponses acceptées (elles sont la correction), il ne peut donc
+    // pas borner lui-même le réglage de l'auteur ni savoir qu'une liste
+    // numérotée se demande en entier. C'est ici, et seulement ici, que les deux
+    // se rejoignent — la correction fait le même calcul de son côté.
+    listExpected: listAnswerCount(source) ?? options.listExpected,
     tableRows: options.tableRows,
     tableCols: options.tableCols,
     tableUnique: options.tableUnique,

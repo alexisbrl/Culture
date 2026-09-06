@@ -2418,3 +2418,70 @@ du §22.6 (déterministe, dans le code, réparé avec certitude), celui-ci touch
 au comportement d'un modèle de langage — la retouche réduit la probabilité de
 la même erreur, elle ne l'élimine pas par construction. **À revérifier sur un
 essai réel identique avant de considérer le sujet clos.**
+
+---
+
+## 23. Révision du 06/09/2026 — la forme de l'examen se décide avant le premier appel
+
+### 23.1 Le constat : une proportion tenue, une variété nulle
+
+La part de questions en groupes (60 % depuis le 06/09/2026, un tiers avant) était
+demandée **appel par appel** : « sur ces cinq questions, vise-en environ trois en
+groupes ». Le modèle répondait exactement ce qu'on lui demandait — un groupe de
+trois, et deux questions seules — et il le répondait à **chaque** appel. Un
+examen de quarante questions n'était donc qu'une suite de triplets, et aucun
+groupe ne pouvait dépasser la taille d'un appel.
+
+Deux options ont été pesées :
+
+- **Agrandir le lot d'un appel** (dix questions au lieu de cinq) : le modèle
+  aurait la place de composer lui-même 4+2 ou 3+3. Écarté — les appels partent en
+  parallèle, donc l'attente à l'écran est la durée d'UN appel : la doubler
+  double l'attente entière.
+- **Faire varier la cible d'un appel à l'autre** : gratuit, et la variété devient
+  certaine plutôt qu'espérée. Retenu, sous une forme plus stricte que la
+  proposition initiale (voir ci-dessous).
+
+### 23.2 Ce qui est en place
+
+Le plan de l'examen se compose **avant le premier appel** (`planExamCalls`,
+`src/lib/ingest/passInput.ts`), à partir du seul total demandé :
+
+- la part de 60 % se calcule sur l'examen **entier**, plus appel par appel ;
+- chaque appel reçoit une forme **homogène** : ou bien toutes ses questions vont
+  dans des groupes, ou bien il n'écrit que des questions isolées ;
+- **les tailles des groupes ne sont PAS dictées** (arbitrage d'Alexis) : imposer
+  `4+2` interdirait un groupe de six là où la consigne de l'utilisateur en
+  demande un, et c'est son examen. La consigne conseille 2 à 4 questions par
+  groupe — **une seule formulation, pas deux** : « 2 à 4 » et « autour de 3 »
+  disent la même chose, et deux façons de dire une consigne la font passer pour
+  deux consignes —, autorise plus grand quand la situation le nourrit, et préfère
+  explicitement **une question laissée seule à un groupe étiré** : un appel qui
+  rend `5+1` est un bon appel ;
+- **le découpage ne sert pas non plus à fabriquer de la variété.** Faire varier
+  la taille des appels pour pousser le modèle à composer autrement a été essayé
+  puis écarté le jour même : un appel ne réfléchit pas, il exécute — et une place
+  rognée casserait une demande de l'utilisateur sans que rien ne le dise. La
+  règle est donc la plus bête possible (`callBudgets`) : **des appels pleins, et
+  le dernier s'ajuste** pour que le compte tombe juste. Un dernier appel trop
+  court pour un groupe prend au précédent (`6+6+6+6+1` devient `6+6+6+5+2`) ;
+- les appels isolés sont **répartis entre** les appels groupés — sinon le début
+  du cours n'aurait que des enchaînements et sa fin que des questions seules ;
+- la taille d'un appel passe de 5 à **6** : c'est la plus petite qui laisse
+  composer deux groupes plutôt qu'un unique triplet.
+
+Exemple, pour dix questions demandées : un appel de six questions en groupes, un
+appel de quatre questions isolées.
+
+### 23.3 L'appel de découverte disparaît
+
+Conséquence directe, et c'est elle qui se voit à l'écran : le premier appel
+partait **seul**, sa réponse servant à apprendre en combien de tranches l'examen
+se découpait. Une attente entière de plus, à chaque génération, pour un chiffre
+que le lancement sait maintenant calculer. Toute la passe part en une vague.
+
+Le serveur ne décide donc plus rien du découpage : il reçoit l'indice de sa
+tranche, le nombre total de tranches du plan (c'est lui qui découpe le programme,
+et deux appels du même plan doivent en voir la même découpe), son budget et sa
+forme. Le rattrapage se replanifie de la même façon, et retrouve ainsi sa part de
+groupes et son propre découpage du programme.

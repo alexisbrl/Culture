@@ -69,32 +69,80 @@ export function sameAnswerText(given: string, expected: string): boolean {
  *
  *  Renvoie, pour chaque saisie et dans son ordre, l'index de l'attente qu'elle
  *  satisfait — ou `null`. C'est ce détail qui permet à l'écran d'exercice de
- *  colorer chaque champ, là où un simple booléen ne dirait que « raté ». */
-export function matchListEntries(given: string[], expected: string[]): (number | null)[] {
+ *  colorer chaque champ, là où un simple booléen ne dirait que « raté ».
+ *
+ *  ⚠️ **`ordered` change la question posée.** Sans lui, on demande « cette
+ *  réponse figure-t-elle quelque part parmi les attentes ? » ; avec lui, « la
+ *  ligne 3 porte-t-elle la 3ᵉ réponse attendue ? ». Une liste numérotée étant
+ *  toujours exhaustive (voir `listAnswerCount`), les positions ont un sens des
+ *  deux côtés : la ligne N fait face à l'attente N, sans appariement à
+ *  chercher. Une ligne laissée vide ne décale donc rien — elle rate sa propre
+ *  attente, et elle seule. */
+export function matchListEntries(
+  given: string[],
+  expected: string[],
+  options?: { ordered?: boolean },
+): (number | null)[] {
+  const want = expected ?? [];
+  if (options?.ordered) {
+    return (given ?? []).map((entry, row) => (sameAnswerText(entry, want[row] ?? '') ? row : null));
+  }
   const used = new Set<number>();
   return (given ?? []).map((entry) => {
-    const hit = (expected ?? []).findIndex(
-      (want, i) => !used.has(i) && sameAnswerText(entry, want),
-    );
+    const hit = want.findIndex((w, i) => !used.has(i) && sameAnswerText(entry, w));
     if (hit < 0) return null;
     used.add(hit);
     return hit;
   });
 }
 
-/** Une liste est juste quand TOUTES les réponses attendues sont couvertes et
- *  qu'aucune saisie ne tombe à côté.
+/** Une liste est juste quand le candidat donne le nombre de bonnes réponses
+ *  qu'on lui demande (`required`, voir `listAnswerCount`) et qu'aucune de ses
+ *  saisies ne tombe à côté.
  *
  *  Le « aucune à côté » compte autant que le reste : sans lui, un candidat qui
  *  remplit chaque ligne d'une réponse différente finirait par tomber juste
  *  partout. Les lignes laissées VIDES, elles, ne pénalisent pas d'elles-mêmes —
- *  elles font simplement manquer une attente, ce que la première condition
- *  sanctionne déjà. */
-export function isListCorrect(given: string[], expected: string[]): boolean {
+ *  elles font simplement manquer une réponse, ce que le compte sanctionne déjà.
+ *
+ *  ⚠️ **`required` n'est pas toujours le nombre de réponses acceptées.** Une
+ *  question peut en accepter huit et n'en réclamer que trois (« cite trois
+ *  fleuves ») : exiger les huit rendait la question impossible à réussir, alors
+ *  que l'écran ne proposait que trois lignes — c'était le cas du 01 au
+ *  06/09/2026.
+ *
+ *  ⚠️ **`ordered` compare LIGNE À LIGNE**, la ligne N face à la Nᵉ réponse
+ *  attendue : c'est le sens du réglage « numéros » de l'éditeur (l'auteur écrit
+ *  ses réponses dans l'ordre attendu, et l'IA reçoit la même consigne). Le
+ *  verdict reste tout-ou-rien comme partout ailleurs — une liste juste mais
+ *  décalée d'un cran est fausse, et les champs colorés à l'écran montrent
+ *  exactement où le décalage commence. */
+export function isListCorrect(
+  given: string[],
+  expected: string[],
+  options?: { required?: number; ordered?: boolean },
+): boolean {
   const wanted = (expected ?? []).filter((e) => e.trim().length > 0);
   if (wanted.length === 0) return false;
+  const required = Math.min(Math.max(options?.required ?? wanted.length, 1), wanted.length);
+
+  if (options?.ordered) {
+    // Pas de filtrage des lignes vides : leur position fait partie de la
+    // réponse. Au-delà de ce qui est demandé, en revanche, il ne doit rien y
+    // avoir — une réponse de trop reste une réponse à côté.
+    const rows = Math.max(required, (given ?? []).length);
+    for (let row = 0; row < rows; row += 1) {
+      const entry = (given ?? [])[row] ?? '';
+      if (row < required) {
+        if (!sameAnswerText(entry, wanted[row] ?? '')) return false;
+      } else if (entry.trim().length > 0) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   const filled = (given ?? []).filter((e) => e.trim().length > 0);
   const hits = matchListEntries(filled, wanted);
-  return hits.every((hit) => hit !== null) && new Set(hits).size === wanted.length;
+  return hits.every((hit) => hit !== null) && new Set(hits).size === required;
 }

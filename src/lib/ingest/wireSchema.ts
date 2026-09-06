@@ -94,20 +94,19 @@ export const EXAM_RESPONSE_TYPES = [...PARCOURS_RESPONSE_TYPES, 'fichier', 'sans
  *
  *  ⚠️ **`listNumbered` en fait partie AUSSI, et il y reste** — arbitrage
  *  d'Alexis du 06/09/2026, après qu'on l'en eut retiré la veille. Le motif du
- *  retrait était que la correction d'une liste compare deux ENSEMBLES et ne
- *  regarde jamais l'ordre (`gradeStatement`) : le réglage promettait donc
- *  quelque chose que le produit ne tient pas encore. Ce n'est pas une raison de
- *  le cacher au modèle. **Les briques se posent l'une après l'autre** : on règle
- *  d'abord ce que l'IA produit, on vérifie qu'elle emploie ce réglage à bon
- *  escient, et on revient ensuite rendre toutes les options réellement
- *  opérantes côté correction. Retirer l'option en attendant ferait perdre
- *  l'occasion de l'observer, et il faudrait la remettre à l'identique plus tard.
+ *  retrait était que la correction d'une liste comparait deux ENSEMBLES sans
+ *  jamais regarder l'ordre : le réglage promettait quelque chose que le produit
+ *  ne tenait pas. On a préféré le garder pour observer si le modèle l'employait
+ *  à bon escient, puis brancher la correction — ce qui a été fait le jour même
+ *  (`isListCorrect`, option `ordered`). Une liste numérotée est désormais
+ *  corrigée LIGNE À LIGNE.
  *
- *  ⚠️ **Ce qui reste à faire est donc au backlog** — « l'ordre d'une liste ne
- *  compte pas encore à la correction ». Tant que ce n'est pas fait, une liste
- *  numérotée par le modèle est correctement AFFICHÉE (numéros à gauche des
- *  lignes) mais notée sans tenir compte de l'ordre. Personne n'est pénalisé ;
- *  c'est une fonctionnalité en attente, pas un bug de notation.
+ *  ⚠️ **Les deux réglages s'excluent** : une liste numérotée est demandée en
+ *  entier, donc `listExpected` n'est plus lu tant que `listNumbered` vaut vrai
+ *  (`listAnswerCount`). L'ordre d'un extrait n'a pas de référence — « trois de
+ *  ces huit, dans l'ordre » ne dit pas lesquelles trois. Une valeur envoyée
+ *  quand même n'est pas une erreur : elle est simplement mise en sommeil, et
+ *  reprend effet si un gestionnaire décoche la numérotation.
  *
  *  ⚠️ **`tableUnique` en est sorti** le même jour : « une seule case par ligne »
  *  est un réglage d'affichage que le modèle déduisait de la forme de sa grille
@@ -131,7 +130,7 @@ const wireTypeOptionsSchema = z.object({
     .boolean()
     .optional()
     .describe(
-      "liste — vrai si l'ordre des réponses COMPTE ; elles sont alors numérotées. Omettre (ou faux) laisse le candidat répondre dans l'ordre qu'il veut, ce qui est le cas de très loin le plus fréquent : ne le mets à vrai que si l'énoncé demande explicitement un classement, une chronologie ou une progression. ⚠️ Quand tu le mets à vrai, `choices` DOIT être écrit dans l'ordre attendu, de la première réponse à la dernière : c'est cette liste qui fait référence pour la correction, et une énumération rangée au hasard ferait de l'ordre juste un ordre faux.",
+      "liste — vrai si l'ordre des réponses COMPTE ; elles sont alors numérotées et corrigées dans cet ordre. Omettre (ou faux) laisse le candidat répondre dans l'ordre qu'il veut, ce qui est le cas de très loin le plus fréquent : ne le mets à vrai que si l'énoncé demande explicitement un classement, une chronologie ou une progression. ⚠️ Quand tu le mets à vrai, `choices` DOIT être écrit dans l'ordre attendu, de la première réponse à la dernière : c'est cette liste qui fait référence pour la correction, et une énumération rangée au hasard ferait de l'ordre juste un ordre faux.",
     ),
   listExpected: z
     .number()

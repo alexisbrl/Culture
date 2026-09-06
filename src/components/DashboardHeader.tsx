@@ -191,9 +191,16 @@ export default function DashboardHeader({ userId, initialWorkshop }: Props) {
       {/* `sticky` plutôt que `fixed` : la barre reste dans le flux, donc aucune
           page n'a besoin d'une compensation de hauteur. Les rares blocs collants
           des pages (barre latérale des paramètres, colonne de création) ont leur
-          `top` décalé de 60 px en conséquence. */}
+          `top` décalé de 60 px en conséquence.
+
+          `data-app-header` : la barre se pose PAR-DESSUS ce qui défile sous
+          elle, donc tout recadrage automatique (amener un formulaire sous les
+          yeux) doit lui laisser sa hauteur, sans quoi il coupe le haut de ce
+          qu'il visait. On la mesure plutôt que de recopier 60 quelque part —
+          cachée en mobile, elle mesure alors zéro, ce qui est la bonne réponse. */}
       {!isExercise && (
       <header
+        data-app-header
         className="sticky top-0 z-50 hidden items-center gap-6 px-6 md:flex"
         style={{ height: 60, borderBottom: '1px solid var(--line)', background: 'var(--surface-raised)' }}
       >

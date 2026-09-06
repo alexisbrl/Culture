@@ -23,25 +23,56 @@ import { createQuestionMediaUploadTicket, getQuestionMediaUrls } from '@/app/act
 // persisté) évite de re-résoudre la même clé quand une question s'affiche à
 // plusieurs endroits à la fois (banque + feuille A4).
 const mediaUrlCache = new Map<string, Promise<string | null>>();
+/** Les URL DÉJÀ résolues, lisibles sans attendre — c'est ce que la promesse
+ *  ci-dessus ne sait pas faire : même tenue, elle ne se relit qu'au tour de
+ *  boucle suivant, donc un composant qui se remonte repasse par un rendu SANS
+ *  son image (voir `useQuestionMediaUrl`). */
+const mediaUrlResolved = new Map<string, string | null>();
+
+function mediaCacheKey(workshopId: string, key: string): string {
+  return `${workshopId}:${key}`;
+}
 
 function resolveMediaUrl(workshopId: string, key: string): Promise<string | null> {
-  const cacheKey = `${workshopId}:${key}`;
+  const cacheKey = mediaCacheKey(workshopId, key);
   let pending = mediaUrlCache.get(cacheKey);
   if (!pending) {
-    pending = getQuestionMediaUrls(workshopId, [key]).then((urls) => urls[key] ?? null);
+    pending = getQuestionMediaUrls(workshopId, [key]).then((urls) => {
+      const url = urls[key] ?? null;
+      mediaUrlResolved.set(cacheKey, url);
+      return url;
+    });
     mediaUrlCache.set(cacheKey, pending);
   }
   return pending;
 }
 
 /** Résout la clé de stockage d'une pièce jointe en URL affichable. `null` tant
- *  que non résolue ou si `media` est absent. */
+ *  que non résolue ou si `media` est absent.
+ *
+ *  ⚠️ **Une URL déjà connue est rendue DÈS LE PREMIER rendu**, sans repasser par
+ *  `null` (07/09/2026). Ce détail n'en est pas un sur la copie d'examen : y
+ *  ajouter une question illustrée sous une autre faisait clignoter l'image et
+ *  tourner le rendu en boucle. Le mécanisme, à retenir pour tout média mesuré :
+ *
+ *  1. l'image se charge, la ligne grandit, la pagination la renvoie à la page
+ *     suivante — donc React la **démonte et la remonte** (elle change de parent) ;
+ *  2. remontée, ce hook repartait de `null` : le temps d'un rendu, la ligne
+ *     était mesurée **sans son image**, donc plus courte ;
+ *  3. plus courte, elle repassait sur la page précédente… et tout recommençait.
+ *
+ *  Servir l'URL connue sans attendre casse la boucle au point 2 : la ligne garde
+ *  la même hauteur d'un montage à l'autre, la pagination se stabilise. */
 export function useQuestionMediaUrl(workshopId: string, media: QuestionMedia | null | undefined): string | null {
-  const [url, setUrl] = useState<string | null>(null);
   const key = media?.key ?? null;
+  const [url, setUrl] = useState<string | null>(() => (key ? mediaUrlResolved.get(mediaCacheKey(workshopId, key)) ?? null : null));
 
   useEffect(() => {
     if (!key) { setUrl(null); return; }
+    const known = mediaUrlResolved.get(mediaCacheKey(workshopId, key));
+    // Déjà résolue : rien à attendre. `setUrl` avec la même valeur ne provoque
+    // aucun rendu — React s'arrête sur une valeur identique.
+    if (known !== undefined) { setUrl(known); return; }
     let cancelled = false;
     resolveMediaUrl(workshopId, key).then((resolved) => { if (!cancelled) setUrl(resolved); });
     return () => { cancelled = true; };

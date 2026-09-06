@@ -144,6 +144,7 @@ export function createDeepSeekProvider(options: DeepSeekOptions = {}): PlanProvi
               workshop: scope.workshop,
               chapters: scope.chapters,
               budget: scope.budget,
+              grouped: scope.grouped,
             })
           : questionsInstruction({
               chapter: scope.chapter,
