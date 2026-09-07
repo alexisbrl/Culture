@@ -1221,9 +1221,10 @@
     "hint": {
       "label": "PRÉCISIONS (FACULTATIF)",
       "placeholder": "ex. : découpe par thèmes, il y en a 4 — dans le document ils sont appelés « Séquences ».",
+      "placeholderExam": "génère-moi {count} questions sur l’ensemble des chapitres…",
       "help": "Ce que l’IA ne peut pas deviner : le niveau des élèves, le découpage attendu, le mot employé dans le document. Elle peut aussi écrire ou compléter un cours si tu le lui demandes. Un nombre seul (« 40 ») demande simplement ce nombre de questions.",
-      "info": "L’IA écrit des questions d’examen à partir des notions du programme de l’atelier.",
-      "infoIdeas": "Tu peux l’orienter : le nombre de questions, le niveau des élèves, les notions ou chapitres à couvrir, les types de réponse attendus, le vocabulaire à employer."
+      "info": "L’IA écrit des questions d’examen à partir des notions de l’atelier.",
+      "infoIdeas": "Tu peux l’orienter : le nombre de questions, les notions ou chapitres à couvrir, les types de réponse attendus, le niveau des élèves, le vocabulaire à employer."
     },
     "provider": {
       "label": "MODÈLE POUR LES QUESTIONS",

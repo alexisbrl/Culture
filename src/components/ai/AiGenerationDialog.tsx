@@ -1016,7 +1016,14 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
               onChange={(e) => setHint(e.target.value)}
               rows={3}
               maxLength={600}
-              placeholder={t('hint.placeholder')}
+              // ⚠️ **Le texte grisé dit ce qui se passe si l'on n'écrit rien**
+              // (07/09/2026, demandé par Alexis) : c'est exactement l'appel que
+              // le champ vide déclenche, nombre par défaut compris — il est
+              // interpolé depuis `DEFAULT_EXAM_QUESTIONS` et non recopié, pour
+              // qu'il ne puisse pas mentir le jour où la constante bouge.
+              // En fenêtre, le champ sert aussi à construire un programme : son
+              // exemple d'origine y reste plus juste.
+              placeholder={frame === 'inline' ? t('hint.placeholderExam', { count: DEFAULT_EXAM_QUESTIONS }) : t('hint.placeholder')}
               style={{
                 width: '100%', boxSizing: 'border-box', resize: 'vertical',
                 fontFamily: 'inherit', fontSize: 13, lineHeight: 1.45,

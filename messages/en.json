@@ -1221,9 +1221,10 @@
     "hint": {
       "label": "DETAILS (OPTIONAL)",
       "placeholder": "e.g. split by themes, there are 4 — the document calls them “Units”.",
+      "placeholderExam": "write me {count} questions across all chapters…",
       "help": "What the AI cannot guess: the students’ level, the expected structure, the word used in the document. It can also write or extend a course if you ask it to. A bare number (“40”) simply asks for that many questions.",
-      "info": "AI writes exam questions from the notions in the workshop’s programme.",
-      "infoIdeas": "You can steer it: the number of questions, the students’ level, which notions or chapters to cover, the answer types you want, the wording to use."
+      "info": "AI writes exam questions from the workshop’s notions.",
+      "infoIdeas": "You can steer it: the number of questions, which notions or chapters to cover, the answer types you want, the students’ level, the wording to use."
     },
     "provider": {
       "label": "MODEL FOR QUESTIONS",
