@@ -118,6 +118,10 @@ export default function InlineQuestionEditor({
   useEffect(() => { draftChangeRef.current = onDraftChange; });
   useEffect(() => { draftChangeRef.current?.(draft); }, [draft]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  /** Question liée qui vient d'être ajoutée : son intitulé prend le curseur, au
+   *  même titre que celui d'une question neuve. `null` le reste du temps —
+   *  l'ouverture d'un formulaire existant ne doit voler le focus à personne. */
+  const [newPartIdx, setNewPartIdx] = useState<number | null>(null);
   const [editingPool, setEditingPool] = useState<string | null>(null);
 
   // Glisser-déposer un fichier n'importe où sur la carte : reconnu comme
@@ -141,6 +145,9 @@ export default function InlineQuestionEditor({
   }
   function removePart(idx: number) {
     setDraft(d => ({ ...d, parts: d.parts.filter((_, i) => i !== idx) }));
+    // Les questions liées sont repérées par leur rang : après un retrait, celui
+    // qu'on avait mémorisé ne désigne plus la même.
+    setNewPartIdx(null);
     // Côté examen, l'appelant décale les pondérations suivantes. Côté parcours
     // il n'y a pas de barème, donc rien à décaler.
     onRemovePart?.(idx);
@@ -204,6 +211,9 @@ export default function InlineQuestionEditor({
         notions={notions}
         hasImage={!!draft.image}
         statementPlaceholder={t('inline.statementPlaceholder')}
+        // Une question qu'on vient de créer n'attend rien d'autre que son
+        // intitulé : le curseur y est posé d'office, sans avoir à cliquer.
+        autoFocus={isNew}
         media={
           <>
             <MediaAttachment
@@ -254,6 +264,7 @@ export default function InlineQuestionEditor({
             hasImage={!!draft.image}
             onRemove={() => removePart(idx)}
             statementPlaceholder={t('inline.linkedStatementPlaceholder')}
+            autoFocus={newPartIdx === idx}
           />
         </div>
       ))}
@@ -336,7 +347,7 @@ export default function InlineQuestionEditor({
         </button>
         <button
           type="button"
-          onClick={() => patch({ parts: [...draft.parts, emptyPart()] })}
+          onClick={() => { setNewPartIdx(draft.parts.length); patch({ parts: [...draft.parts, emptyPart()] }); }}
           style={{ ...footerBtn, border: `1.5px dashed ${palette.lineStrong}`, background: 'transparent', color: palette.tanStrong }}
         >
           <Link2 size={15} strokeWidth={1.75} />
