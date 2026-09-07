@@ -110,7 +110,16 @@ SDK d'Anthropic.
 
 ## Éviter les requêtes N+1
 
-Ne jamais boucler un appel réseau (Clerk `getUser`, envoi d'email…) dans une server action — utiliser un appel batch (`clerkClient().users.getUserList({ userId: [...] })`) ou `Promise.all`. Regrouper les requêtes Supabase indépendantes en `Promise.all` (voir `getExamBankData`, `getUserWorkshops`).
+Ne jamais boucler un appel réseau (Clerk `getUser`, envoi d'email…) dans une server action — utiliser un appel batch (`clerkClient().users.getUserList({ userId: [...] })`) ou `Promise.all`. Regrouper les requêtes Supabase indépendantes en `Promise.all` (voir `getExamPageData`, `getUserWorkshops`).
+
+## ⚠️ Les server actions s'exécutent EN FILE, une par une
+
+Next sérialise les server actions déclenchées depuis le client : deux appels lancés ensemble **ne se chevauchent pas**, le second attend que le premier ait fini. Conséquences, toutes vérifiées au chronomètre sur l'onglet examen (07/09/2026, journal du serveur de dev) :
+
+- **`Promise.all([actionA(), actionB()])` côté client ne parallélise RIEN** — il coûte au contraire un aller-retour complet de plus, et une seconde vérification de rôle. Deux lectures qui vont ensemble se fusionnent en **une seule action** dont le corps fait le `Promise.all` (là, côté serveur, il est réel) : c'est ce qu'est `getExamPageData`.
+- **Tout appel monté au chargement d'un écran passe devant ce que cet écran affiche.** La liste de questions arrivait en 3ᵉ position, derrière le bandeau d'import (~600 ms) et la liste des documents de l'atelier (~250-500 ms) — deux lectures accessoires, dont une qui ne sert qu'à garnir d'avance un dialogue qu'on n'ouvre presque jamais. Elles portent désormais un `waitFor` que l'hôte lève une fois ses propres données arrivées ; la liste est passée de ~1,2 s à ~220 ms.
+
+Règle : **avant d'ajouter une lecture au montage d'un écran, se demander ce qu'elle fait patienter.** Ce qui n'est pas le contenu principal de l'écran attend son tour.
 
 ## Storage — `src/lib/storage.ts`
 

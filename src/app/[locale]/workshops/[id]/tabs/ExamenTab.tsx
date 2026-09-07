@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, ArrowLeft, ArrowRight, FileText, Search, X } from 'lucide-react';
@@ -8,9 +8,9 @@ import { palette, ink, radius, withAlpha, categoryTones } from '@/lib/theme';
 import { useIsPhone } from '@/lib/useIsPhone';
 import { type Question, emptyQuestion } from './QuestionEditor';
 import {
-  getExamBankData, saveQuestion, createPool as createPoolAction, updatePool as updatePoolAction,
+  getExamPageData, saveQuestion, createPool as createPoolAction, updatePool as updatePoolAction,
   deletePool as deletePoolAction, deleteQuestion as deleteQuestionAction, saveGeneratedExam,
-  deleteGeneratedExam, getExamDraft, saveExamDraft,
+  deleteGeneratedExam, saveExamDraft,
 } from '@/app/actions/examQuestions';
 import {
   type Exam, type Pool, type ExamConfig, type SheetFocus,
@@ -40,6 +40,18 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const [sheetDragging, setSheetDragging] = useState(false);
   const [exams, setExams] = useState<Exam[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
+  /** Les questions et les examens ne sont pas encore arrivés du serveur.
+   *
+   *  ⚠️ **Ce n'est pas qu'un habillage** (07/09/2026) : tant que c'est vrai,
+   *  RIEN ne doit pouvoir créer ni modifier de question. La réponse du serveur
+   *  remplace la liste des questions et le brouillon de la copie ; une question
+   *  créée entre-temps n'existait qu'en mémoire, elle disparaissait donc à
+   *  l'arrivée des données — mais le formulaire, lui, restait « ouvert » dans le
+   *  dos de l'application, ce qui bloquait toute création et toute modification
+   *  jusqu'au rechargement de la page (signalé par Alexis). Les listes montrent
+   *  des encadrés d'attente pendant ce temps, et les gestes de création sont
+   *  éteints : le geste refusé est ainsi visible, au lieu d'être perdu. */
+  const [loading, setLoading] = useState(true);
   const [pools, setPools] = useState<Pool[]>([]);
   // `chapterId` sur la notion + la liste des chapitres : de quoi filtrer la
   // banque par chapitre, qu'une question ne porte pas elle-même (elle en hérite
@@ -80,7 +92,13 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   // seconde question, ou enregistrer l'examen.
   const [blockedAction, setBlockedAction] = useState<'open' | 'save' | null>(null);
   const blockedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [introOpen, setIntroOpen] = useState(false);
+  /** ⚠️ **Il n'y a plus de fenêtre d'accueil** (07/09/2026, demandé par Alexis).
+   *  « + nouvel » ouvrait une présentation en trois étapes dont le bouton final
+   *  ne faisait que ce qu'on demandait : vider la copie et montrer les questions.
+   *  Le geste le fait maintenant directement. Reste cette confirmation, et
+   *  uniquement quand il y a quelque chose à perdre : la copie en cours est
+   *  jetée, et rien ailleurs ne la rattrape.  */
+  const [confirmNewExamOpen, setConfirmNewExamOpen] = useState(false);
   // Ligne de la feuille à ramener au centre du panneau de droite. Tout ce qui
   // ajoute ou ouvre quelque chose sur la copie passe par là : la question
   // envoyée depuis la banque, le formulaire en ligne, « + partie » et « + saut
@@ -108,6 +126,23 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     return editing === null && draftIds.length === 0 && examConfig.title.trim() === '' && configQuestionIds(examConfig).length === 0;
   }
 
+  /** Ouvre une copie vierge. La confirmation n'apparaît que si la copie en
+   *  cours porte quelque chose — sinon il n'y a rien à jeter, et demander
+   *  serait une question pour rien. */
+  function requestNewExam() {
+    if (isEditorEmpty()) { startNewExam(); return; }
+    setConfirmNewExamOpen(true);
+  }
+
+  function startNewExam() {
+    setConfirmNewExamOpen(false);
+    handleClearEditor();
+    // La banque au premier plan : une copie vierge se remplit de questions, et
+    // c'est là qu'on les prend. Sur téléphone, c'est aussi ce que faisait le
+    // bouton final de l'ancienne fenêtre d'accueil.
+    focus('bank');
+  }
+
   function requestEditExam(e: Exam) {
     if (editing?.id === e.id || isEditorEmpty()) {
       setEditing(e);
@@ -123,7 +158,9 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    Promise.all([getExamBankData(workshopId), getExamDraft(workshopId)]).then(([{ questions, pools, exams, notions, chapters }, draft]) => {
+    // Un seul aller-retour : Next met les server actions à la queue leu leu, donc
+    // deux appels « en parallèle » n'en sont pas — voir `getExamPageData`.
+    getExamPageData(workshopId).then(({ questions, pools, exams, notions, chapters, draft }) => {
       const mappedExams = exams.map(e => ({ id: e.id, title: e.title, date: e.date, q: e.q, dur: e.dur, avg: e.avg, status: e.status, taken: e.taken, questionIds: e.questionIds, config: e.config }));
       setQuestions(questions);
       setPools(pools);
@@ -154,7 +191,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         }
       }
     }).catch(err => console.error('chargement banque de questions échoué', err))
-      .finally(() => { draftLoaded.current = true; });
+      .finally(() => { draftLoaded.current = true; setLoading(false); });
   }, [workshopId]);
 
   // Sauvegarde du brouillon de l'éditeur d'examen (reprise après reconnexion /
@@ -315,14 +352,36 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   // instances voudraient dire deux brouillons pour une seule question).
   const sheetCarriesEditor = isPhone && phonePane === 'sheet' && editingQuestion !== null;
 
-  function handleNewQuestion() {
+  function handleNewQuestion(initialStatement?: string) {
+    handleNewQuestionInSection(-1, initialStatement);
+  }
+
+  /** Question neuve posée à la FIN D'UNE PARTIE précise — c'est ce que demande
+   *  le double-clic dans le blanc de la copie (07/09/2026) : le vide d'une page
+   *  prolonge la partie qui s'y trouve, la question doit donc s'y ranger, et pas
+   *  filer à la fin de l'examen quand un saut de page laisse du blanc au milieu.
+   *  Un index qui ne désigne aucune partie (-1) vaut « à la fin de l'examen » :
+   *  c'est le cas du bouton « nouvelle question » de la banque, qui ne vise
+   *  aucun endroit. */
+  function handleNewQuestionInSection(sectionIdx: number, initialStatement?: string) {
+    // Tant que le serveur n'a pas répondu, sa réponse écraserait la question
+    // qu'on créerait ici — voir `loading`. Les affordances sont déjà éteintes ;
+    // ce filet couvre ce qui pourrait les contourner (double-clic sur la copie).
+    if (loading) return;
     if (editingQuestion) {
       blockForOpenQuestion('open');
       return;
     }
-    const q = emptyQuestion();
+    // L'énoncé peut arriver pré-rempli : c'est le texte qu'on avait commencé à
+    // écrire côté IA, que la bascule fait suivre (voir `sharedText`).
+    const q = { ...emptyQuestion(), content: initialStatement ?? '' };
     setQuestions(prev => [q, ...prev]);
-    setExamConfig(prev => ({ ...prev, sections: toggleQuestionInSections(prev.sections, q.id) }));
+    setExamConfig(prev => ({
+      ...prev,
+      sections: prev.sections[sectionIdx]
+        ? prev.sections.map((sec, i) => (i === sectionIdx ? { ...sec, questionIds: [...sec.questionIds, q.id] } : sec))
+        : toggleQuestionInSections(prev.sections, q.id),
+    }));
     setDraftIds(prev => [...prev, q.id]);
     setNewQuestionId(q.id);
     setEditingQuestion(q);
@@ -361,11 +420,12 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
    *  elles sont indexées par POSITION (`partWeightKey`), donc retirer la
    *  deuxième doit remonter toutes les suivantes d'un cran. C'est l'examen qui
    *  les porte, et c'est ici qu'il vit. */
-  function renderQuestionEditor(frame: 'plain' | 'sheet' = 'plain', number?: number) {
+  function renderQuestionEditor(frame: 'plain' | 'sheet' | 'bare' = 'plain', number?: number, hideTitle?: boolean) {
     if (!editingQuestion) return null;
     return (
       <InlineQuestionEditor
         key={editingQuestion.id}
+        hideTitle={hideTitle}
         workshopId={workshopId}
         question={editingQuestion}
         number={frame === 'sheet' ? number : undefined}
@@ -628,7 +688,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 est conservée. */}
             <div className="scroll-panel" style={{ display: leftTab === 'history' ? 'block' : 'none', height: '100%', overflowY: sheetDragging ? 'hidden' : undefined }}>
               <div style={{ zoom: 'var(--exam-list-zoom, 1)' }}>
-                <HistoryContent exams={exams} justAddedId={justAdded} onEdit={requestEditExam} onNew={() => setIntroOpen(true)} onDelete={e => setPendingDeleteExam(e)} />
+                <HistoryContent workshopId={workshopId} exams={exams} loading={loading} justAddedId={justAdded} onEdit={requestEditExam} onNew={requestNewExam} onDelete={e => setPendingDeleteExam(e)} />
               </div>
             </div>
             <div className="scroll-panel" style={{ display: leftTab === 'bank' ? 'block' : 'none', height: '100%', position: 'relative', overflowY: sheetDragging ? 'hidden' : undefined }}>
@@ -636,17 +696,23 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
               <BankContent
                 workshopId={workshopId}
                 questions={bankQuestions}
+                loading={loading}
                 pools={pools}
                 exams={exams}
                 notions={notions}
                 chapters={chapters}
                 draftIds={draftIds}
-                renderEditor={sheetCarriesEditor ? undefined : () => renderQuestionEditor('plain')}
+                // La liste passe ses consignes de rendu : dans l'encadré de
+                // création, le formulaire n'a ni cadre propre ni titre seul.
+                renderEditor={sheetCarriesEditor ? undefined : opts => renderQuestionEditor(opts?.bare ? 'bare' : 'plain', undefined, opts?.hideTitle)}
                 editingQuestionId={editingQuestion?.id ?? null}
+                editingIsNew={editingQuestion !== null && editingQuestion.id === newQuestionId}
                 openId={openId}
                 setOpenId={setOpenId}
                 onEditQuestion={requestEditQuestion}
                 onNewQuestion={handleNewQuestion}
+                onCancelNewQuestion={handleCancelQuestion}
+                draftStatement={editingDraft?.content ?? ''}
                 onToggleInExam={handleToggleQuestionInExam}
                 onCreatePool={handleCreatePool}
                 onUpdatePool={handleUpdatePool}
@@ -672,6 +738,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             onCancelEdit={() => setEditing(null)}
             onGenerate={handleGenerate}
             onOpenQuestion={handleOpenQuestion}
+            onNewQuestionInSection={handleNewQuestionInSection}
             onRemoveFromDraft={handleRemoveFromDraft}
             onClearEditor={handleClearEditor}
             previewQuestion={editingDraft}
@@ -702,6 +769,21 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         </div>,
         document.body
       )}
+      {confirmNewExamOpen && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={() => setConfirmNewExamOpen(false)} style={{ position: 'absolute', inset: 0, background: ink(0.42), backdropFilter: 'blur(2px)' }} />
+          <div style={{ position: 'relative', zIndex: 1, background: palette.cream, borderRadius: 20, padding: '32px 28px 24px', maxWidth: 380, width: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: withAlpha(palette.danger, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>!</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>{t('tab.newExamTitle')}</div>
+            <div style={{ fontSize: 13, color: palette.inkMuted, lineHeight: 1.5 }}>{t('tab.newExamDesc')}</div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 8, width: '100%' }}>
+              <button onClick={() => setConfirmNewExamOpen(false)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: `1px solid ${ink(0.15)}`, background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: palette.inkMuted, cursor: 'pointer' }}>{t('cancel')}</button>
+              <button onClick={startNewExam} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: palette.green, fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: palette.paper, cursor: 'pointer' }}>{t('tab.newExamConfirm')}</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
       {pendingEditExam && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div onClick={() => setPendingEditExam(null)} style={{ position: 'absolute', inset: 0, background: ink(0.42), backdropFilter: 'blur(2px)' }} />
@@ -726,106 +808,6 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         </div>,
         document.body
       )}
-      {introOpen && (() => {
-        const steps = [
-          { title: t('tab.introStep1Title'), text: t('tab.introStep1Text'), side: 'left' as const },
-          { title: t('tab.introStep2Title'), text: t('tab.introStep2Text'), side: 'right' as const },
-          { title: t('tab.introStep3Title'), text: t('tab.introStep3Text'), side: 'left' as const },
-        ];
-        // bandes verticales (% de la hauteur totale de la popup) : en-tête, 3 lignes égales, pied de page
-        const HEADER_PCT = 16;
-        const FOOTER_PCT = 13;
-        const ROW_PCT = (100 - HEADER_PCT - FOOTER_PCT) / steps.length;
-        return createPortal(
-          <div style={{ position: 'fixed', inset: 0, zIndex: 95, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div onClick={() => setIntroOpen(false)} style={{ position: 'absolute', inset: 0, background: ink(0.46), backdropFilter: 'blur(3px)' }} />
-            <div style={{ position: 'relative', height: '90vh', width: 'calc(90vh * 0.75)', maxWidth: '92vw' }}>
-              {/* carte : fond, texte, bouton — clippée pour les coins arrondis */}
-              <div style={{ position: 'absolute', inset: 0, borderRadius: 28, overflow: 'hidden', background: `linear-gradient(160deg, ${palette.creamAlt} 0%, ${palette.tanTint} 100%)`, boxShadow: `0 28px 70px ${ink(0.32)}` }}>
-                <Tooltip content={t('tab.introClose')}>
-                  <button onClick={() => setIntroOpen(false)} aria-label={t('tab.introClose')} style={{ position: 'absolute', top: 18, right: 18, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: '50%', border: `1px solid ${ink(0.12)}`, background: palette.paper, color: palette.ink, cursor: 'pointer' }}>
-                    <X size={17} strokeWidth={2} />
-                  </button>
-                </Tooltip>
-
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: `${HEADER_PCT}%`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 70px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 23, fontWeight: 600, color: palette.ink }}>{t('tab.introTitle')}</div>
-                  <div style={{ fontSize: 13.5, color: palette.inkFaint, marginTop: 8 }}>{t('tab.introSubtitle')}</div>
-                </div>
-
-                {steps.map((step, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      position: 'absolute',
-                      top: `${HEADER_PCT + ROW_PCT * i}%`,
-                      height: `${ROW_PCT}%`,
-                      left: step.side === 'left' ? '46%' : '6%',
-                      right: step.side === 'left' ? '6%' : '46%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <div style={{ fontSize: 16, fontWeight: 600, color: palette.tanStrong, marginBottom: 8 }}>{step.title}</div>
-                    <div style={{ fontSize: 13.5, color: palette.inkMuted, lineHeight: 1.65 }}>{step.text}</div>
-                  </div>
-                ))}
-
-                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${FOOTER_PCT}%`, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 32px', borderTop: `1px solid ${ink(0.08)}` }}>
-                  <button
-                    onClick={() => { setIntroOpen(false); handleClearEditor(); focus('bank'); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 10, border: 'none', background: palette.green, color: palette.paper, fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    {t('tab.introStart')}
-                    <ArrowRight size={16} strokeWidth={2} />
-                  </button>
-                </div>
-              </div>
-
-              {/* images : par-dessus la carte, non clippées — débordent du cadre pour l'effet « pop-out » */}
-              {steps.map((step, i) => (
-                <div
-                  key={i}
-                  style={{
-                    position: 'absolute',
-                    top: `${HEADER_PCT + ROW_PCT * (i + 0.5)}%`,
-                    transform: `translateY(-50%) rotate(${step.side === 'left' ? -4 : 4}deg)`,
-                    left: step.side === 'left' ? -64 : undefined,
-                    right: step.side === 'left' ? undefined : -64,
-                    width: 260,
-                    height: 230,
-                    zIndex: 2,
-                    pointerEvents: 'none',
-                  }}
-                >
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    borderRadius: '46% 54% 58% 42% / 50% 46% 54% 50%',
-                    background: `radial-gradient(circle at 32% 28%, ${palette.goldTint} 0%, ${palette.gold} 55%, ${palette.amberLight} 100%)`,
-                    boxShadow: `0 20px 46px ${withAlpha(palette.amber, 0.38)}`,
-                  }} />
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: withAlpha(palette.tanStrong, 0.55),
-                    textAlign: 'center',
-                  }}>
-                    {t('tab.introImage', { n: i + 1 })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>,
-          document.body
-        );
-      })()}
     </div>
   );
 }

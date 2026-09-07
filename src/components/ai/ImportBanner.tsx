@@ -49,9 +49,21 @@ type Props = {
   scope: ImportBannerScope;
   /** Remonté après une annulation réussie, pour que l'écran se rafraîchisse. */
   onCancelled?: () => void;
+  /** Attendre avant d'aller chercher les lots annulables (07/09/2026).
+   *
+   *  ⚠️ **Next met les server actions à la queue leu leu** : elles ne se
+   *  chevauchent pas, elles s'attendent. Ce bandeau part au montage de son
+   *  écran, donc DEVANT la liste qu'il surmonte — mesuré à ~600 ms passés à
+   *  faire patienter la liste pour un bandeau qui, la plupart du temps, ne
+   *  s'affiche même pas. L'hôte peut donc le faire passer après : le bandeau
+   *  arrive une demi-seconde plus tard, ce qui ne coûte rien (il annonce un
+   *  import déjà terminé), et la liste arrive d'autant plus tôt.
+   *
+   *  Absent = pas d'attente, comportement d'origine. */
+  waitFor?: boolean;
 };
 
-export default function ImportBanner({ workshopId, scope, onCancelled }: Props) {
+export default function ImportBanner({ workshopId, scope, onCancelled, waitFor = false }: Props) {
   const t = useTranslations('ai');
   // ⚠️ **Une LISTE, pas un lot** (28/08/2026). Trois essais dans la même heure
   // laissaient deux lots annulables mais invisibles, donc perdus à l'expiration.
@@ -63,13 +75,14 @@ export default function ImportBanner({ workshopId, scope, onCancelled }: Props) 
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
+    if (waitFor) return;
     let cancelled = false;
     getImportBanners(workshopId)
       .then((list) => { if (!cancelled) setBanners(list); })
       // Le bandeau est un confort : son échec ne doit rien empêcher.
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [workshopId]);
+  }, [workshopId, waitFor]);
 
   /** Les volumes du lot, rangés en « ce que cet écran montre » et « le reste,
    *  que l'annulation emportera quand même ». Les zéros sont écartés : un lot

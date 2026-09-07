@@ -31,29 +31,38 @@ export type ExamDraft = ExamDraftType;
 // via `requireManager`/`assertManager` (cf. src/lib/authz.ts) — ne jamais se fier au
 // fait que l'onglet est masqué côté client. Logique métier : voir @/lib/workshops/exam.
 
-export async function getExamBankData(workshopId: string): Promise<{
+/** Tout ce dont l'onglet examen a besoin pour s'afficher, en UN SEUL
+ *  aller-retour (07/09/2026).
+ *
+ *  ⚠️ **Next met les server actions à la queue leu leu** : deux appels lancés
+ *  ensemble depuis le client ne se chevauchent pas, ils s'attendent. La banque
+ *  et le brouillon partaient en `Promise.all` — ce qui ne parallélisait rien et
+ *  coûtait un aller-retour complet de plus (mesuré : ~150 ms, plus une seconde
+ *  vérification de rôle). Ici les deux lectures sont réellement parallèles,
+ *  côté serveur, sous un seul contrôle d'accès. */
+export async function getExamPageData(workshopId: string): Promise<{
   questions: Question[];
   pools: ExamPool[];
   exams: GeneratedExam[];
   notions: QuestionNotion[];
   chapters: QuestionChapter[];
+  draft: ExamDraft | null;
 }> {
-  // Lecture réservée aux gestionnaires (la banque contient les réponses).
-  if (!(await requireManager(workshopId))) {
-    return { questions: [], pools: [], exams: [], notions: [], chapters: [] };
-  }
+  const ctx = await requireManager(workshopId);
+  if (!ctx) return { questions: [], pools: [], exams: [], notions: [], chapters: [], draft: null };
 
-  // Trois domaines indépendants → en parallèle (règle N+1).
-  const [data, notions, chapters] = await Promise.all([
+  const [data, notions, chapters, draft] = await Promise.all([
     examLib.getExamBankData(workshopId),
     notionsLib.listNotions(workshopId),
     chaptersLib.listChapters(workshopId),
+    examLib.getExamDraft(workshopId, ctx.userId),
   ]);
 
   return {
     ...data,
     notions: notions.map((n) => ({ id: n.id, title: n.title, chapterId: n.chapterId })),
     chapters: chapters.map((c) => ({ id: c.id, name: c.name })),
+    draft,
   };
 }
 
@@ -100,12 +109,6 @@ export async function saveGeneratedExam(workshopId: string, exam: GeneratedExam)
   await assertManager(workshopId);
   await examLib.saveGeneratedExam(workshopId, exam);
   revalidateWorkshop();
-}
-
-export async function getExamDraft(workshopId: string): Promise<ExamDraft | null> {
-  const ctx = await requireManager(workshopId);
-  if (!ctx) return null;
-  return await examLib.getExamDraft(workshopId, ctx.userId);
 }
 
 export async function deleteGeneratedExam(workshopId: string, examId: string): Promise<void> {

@@ -479,8 +479,19 @@ export function FilterButton({ title, count = 0, open = false, disabled = false,
  *  action primaire, sur une seule rangée (T48), comme la maquette. Les
  *  dimensions sont figées ici et le bouton de filtre est un emplacement —
  *  chaque liste passe son propre `FilterButton`, avec les critères qui la
- *  concernent. */
-export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter, sortOptions, sortBy, onSortByChange, sortDir, onToggleSortDir, actionLabel, actionTitle, onAction }: {
+/** L'action « créer » d'une barre d'outils : un bouton, et rien de plus.
+ *
+ *  Un slider à deux destinations (« manuel » d'un côté, « par IA » de l'autre)
+ *  a tenu quelques heures ici, le 07/09/2026, avant de céder la place à un
+ *  bouton ordinaire des deux côtés : sur la liste de questions le choix a
+ *  déménagé dans l'encadré de création, et sur la liste d'examens il n'y avait
+ *  qu'une seule destination réelle. Le type reste une union d'une seule forme :
+ *  c'est là qu'une seconde se rebrancherait, sans toucher aux appelants.
+ */
+export type ListToolbarAction =
+  | { kind: 'button'; label: string; title: string; onClick: () => void; disabled?: boolean };
+
+export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter, sortOptions, sortBy, onSortByChange, sortDir, onToggleSortDir, action }: {
   search: string;
   onSearchChange: (v: string) => void;
   searchPlaceholder: string;
@@ -490,9 +501,11 @@ export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter,
   onSortByChange: (v: SortBy) => void;
   sortDir: SortDir;
   onToggleSortDir: () => void;
-  actionLabel: string;
-  actionTitle: string;
-  onAction: () => void;
+  /** L'action « créer » de la liste. Éteinte tant que la liste n'est pas arrivée
+   *  du serveur : elle garde sa place et sa géométrie, et le geste est REFUSÉ
+   *  VISIBLEMENT au lieu d'être accepté puis perdu (voir `loading` dans
+   *  ExamenTab). */
+  action: ListToolbarAction;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'stretch', gap: TOOLBAR_GAP, marginBottom: TOOLBAR_MB }}>
@@ -502,12 +515,24 @@ export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter,
       </div>
       {filter}
       <SortControl options={sortOptions} value={sortBy} onChange={onSortByChange} dir={sortDir} onToggleDir={onToggleSortDir} />
-      {/* Seule action primaire de la colonne (T48) — la maquette la met en vert. */}
-      {/* Pas d'`aria-label` : `actionLabel` est visible dans le bouton, c'est
-          lui le nom accessible. L'infobulle ne fait que le préciser. */}
-      <Tooltip content={actionTitle}>
-        <button onClick={onAction} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, minHeight: TOOLBAR_H, padding: '0 11px', borderRadius: 9, background: palette.green, color: palette.onGreen, border: 'none', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-          <Plus size={15} strokeWidth={2.25} /> {actionLabel}
+      {/* Seule action primaire de la colonne (T48), et la même dans les deux
+          listes de l'onglet : elle n'annonce aucune destination. Côté questions,
+          le choix entre écrire soi-même et laisser l'IA proposer se fait dans
+          l'encadré de création qui s'ouvre ; côté examens, il n'y en a qu'une. */}
+      <Tooltip content={action.title}>
+        <button
+          onClick={action.onClick}
+          disabled={action.disabled}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+            minHeight: TOOLBAR_H, padding: '0 11px', borderRadius: 9,
+            background: palette.green, color: palette.onGreen, border: 'none',
+            fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700,
+            cursor: action.disabled ? 'default' : 'pointer',
+            opacity: action.disabled ? 0.5 : 1, flexShrink: 0,
+          }}
+        >
+          <Plus size={15} strokeWidth={2.25} /> {action.label}
         </button>
       </Tooltip>
     </div>
@@ -1751,6 +1776,131 @@ export function ListCard({ onClick, onDoubleClick, tint, borderColor, leading, i
         )}
       </div>
       {children}
+    </div>
+  );
+}
+
+/** Silhouette d'une carte, montrée le temps que la liste arrive du serveur
+ *  (07/09/2026).
+ *
+ *  ⚠️ **Sa géométrie est celle de `ListCard`, à l'identique** — même retrait,
+ *  même rayon, même fond, et surtout la même hauteur intérieure (deux lignes de
+ *  titre, plus une de garnitures quand la carte en a). C'est toute la raison
+ *  d'être de l'encadré : la liste ne doit pas sauter au moment où les vraies
+ *  cartes prennent sa place. Toute retouche de la hauteur de `ListCard` doit
+ *  donc être reportée ici.
+ *
+ *  Les largeurs des barres sont volontairement inégales et FIXES pour un rang
+ *  donné : un tirage au hasard changerait à chaque rendu, et la silhouette
+ *  frémirait au lieu de battre. */
+export function ListCardSkeleton({ index = 0, meta = true }: {
+  /** Rang dans la liste : décide des largeurs de barres et décale le battement,
+   *  pour que la colonne respire au lieu de clignoter d'un bloc. */
+  index?: number;
+  /** La carte imitée porte-t-elle une ligne de garnitures (libellés, décompte) ?
+   *  Faux pour une liste à deux lignes — voir `meta` de `ListCard`. */
+  meta?: boolean;
+}) {
+  const titleWidths = ['92%', '78%', '86%', '70%'];
+  const secondWidths = ['54%', '66%', '46%', '60%'];
+  const bar = (width: string, height: number): CSSProperties => ({
+    width, height, borderRadius: 999, background: ink(0.07),
+  });
+  return (
+    <div
+      aria-hidden
+      className="list-skeleton"
+      style={{
+        display: 'flex', flexDirection: 'column', padding: `${CARD_PAD_Y}px ${CARD_PAD_X}px`, borderRadius: 12,
+        background: palette.surfaceRaised, border: '1px solid transparent',
+        animationDelay: `${(index % 4) * 0.12}s`,
+      }}
+    >
+      <div style={{ height: (meta ? 3 : 2) * CARD_LINE, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 7 }}>
+        <div style={bar(titleWidths[index % titleWidths.length], 9)} />
+        <div style={bar(secondWidths[index % secondWidths.length], 9)} />
+        {meta && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
+            <div style={bar('64px', 11)} />
+            <div style={bar('42px', 11)} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Combien d'encadrés d'attente montrer, d'après ce que la liste contenait à la
+ *  visite précédente.
+ *
+ *  ⚠️ **On ne va PAS chercher un décompte auprès du serveur pour ça.** Ce serait
+ *  un aller-retour de plus — dans la file d'attente, devant la liste qu'on
+ *  cherche justement à faire arriver plus tôt : on ralentirait le chargement
+ *  pour mieux l'habiller. Le nombre de la dernière visite donne la même illusion
+ *  pour rien.
+ *
+ *  La lecture se fait après le montage, jamais au rendu : le serveur ne connaît
+ *  pas le stockage du navigateur, et lire ici ferait diverger le premier rendu
+ *  de l'HTML envoyé. Le repli s'affiche donc une image avant le nombre mémorisé
+ *  — imperceptible, l'attente se compte en centaines de millisecondes. */
+export function useRememberedCount(storageKey: string, fallback: number): readonly [number, (n: number) => void] {
+  const [count, setCount] = useState(fallback);
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      const n = raw === null ? NaN : Number(raw);
+      // Borné : une banque de 300 questions ne doit pas peindre 300 silhouettes.
+      if (Number.isFinite(n) && n > 0) setCount(Math.min(Math.round(n), 8));
+    } catch {
+      // Stockage indisponible (navigation privée, site data bloqué) : le repli
+      // fait très bien l'affaire, il n'y a rien à signaler.
+    }
+  }, [storageKey]);
+  const remember = useCallback((n: number) => {
+    try { window.localStorage.setItem(storageKey, String(n)); } catch { /* voir ci-dessus */ }
+  }, [storageKey]);
+  return [count, remember] as const;
+}
+
+/** Bascule à deux positions, posée en haut à gauche d'un encadré (07/09/2026).
+ *
+ *  Elle ne dit pas « oui/non » comme `PillToggle` : elle choisit entre deux
+ *  contenus qui prennent la même place, et les deux libellés restent lisibles
+ *  pour qu'on sache ce qu'il y a de l'autre côté avant d'y aller. */
+export function SegmentedToggle<T extends string>({ value, options, onChange, disabled = false }: {
+  value: T;
+  options: readonly { value: T; label: string; icon?: ReactNode }[];
+  onChange: (value: T) => void;
+  /** Le choix est verrouillé (une génération est en cours : en partir la
+   *  perdrait). Les deux positions restent lisibles, aucune n'est cliquable. */
+  disabled?: boolean;
+}) {
+  return (
+    <div style={{ display: 'inline-flex', padding: 2, borderRadius: 999, background: palette.surfaceInput, border: `1px solid ${palette.line}`, opacity: disabled ? 0.55 : 1 }}>
+      {options.map(opt => {
+        const on = opt.value === value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            disabled={disabled}
+            onClick={() => { if (!on) onChange(opt.value); }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '5px 11px', borderRadius: 999, border: 'none',
+              background: on ? palette.surfaceRaised : 'transparent',
+              boxShadow: on ? `0 1px 3px ${ink(0.10)}` : 'none',
+              color: on ? palette.greenBrand : palette.inkMuted,
+              fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600,
+              cursor: disabled || on ? 'default' : 'pointer',
+              transition: 'background 0.12s, color 0.12s',
+            }}
+          >
+            {opt.icon}
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

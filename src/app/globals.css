@@ -620,3 +620,48 @@
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* Encadrés d'attente des listes (voir `ListCardSkeleton`).
+
+   Une liste qui met une seconde à arriver ne doit pas être un panneau vide : on
+   pose à la place la SILHOUETTE des cartes à venir, au bon nombre (mémorisé de
+   la visite précédente) et à la bonne géométrie — la liste ne saute donc pas
+   quand les vraies cartes prennent leur place.
+
+   Un battement d'opacité, pas un reflet qui balaie : la palette n'a pas de blanc
+   pur, et un dégradé clair sur le crème des cartes se verrait comme un défaut
+   d'affichage. Les barres tirent leur couleur de leur style en ligne
+   (`ink()`), l'animation n'en impose aucune. */
+@keyframes list-skeleton-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+.list-skeleton {
+  animation: list-skeleton-pulse 1.5s ease-in-out infinite;
+}
+/* Le battement est décoratif : il se coupe quand la personne a demandé moins
+   d'animations, et la silhouette reste — c'est elle qui porte l'information. */
+@media (prefers-reduced-motion: reduce) {
+  .list-skeleton { animation: none; }
+}
+
+/* Texte d'exemple d'un champ qui grandit avec son contenu (voir `AutoTextarea`,
+   `MatchPairRow`, `SheetAutoText`).
+
+   ⚠️ **Un texte grisé ne doit JAMAIS agrandir sa case** — seul le texte
+   réellement saisi en a le droit. Sans ça, la hauteur d'un champ vide est celle
+   de son texte d'exemple : dans l'éditeur de paires, une colonne rétrécie au
+   curseur de partage écrivait « correspondance… » à la verticale, une lettre par
+   ligne, et étirait la rangée sur 400 px (signalé par Alexis, capture à l'appui).
+   La cause est que `scrollHeight` d'un champ vide tient compte du texte
+   d'exemple ; `white-space: nowrap` le remet sur une seule ligne, donc le champ
+   vide retombe à sa hauteur d'une ligne, et l'`overflow: hidden` du champ coupe
+   ce qui dépasse.
+
+   Le champ garde son texte d'exemple entier dans le DOM : rien n'est perdu pour
+   les lecteurs d'écran, c'est l'affichage seul qui est borné. */
+.placeholder-one-line::placeholder {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

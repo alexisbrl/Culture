@@ -148,3 +148,13 @@ Trois comportements que le hook tient et qu'il ne faut pas réécrire à la main
 **La zone de déclenchement, c'est le lien lui-même.** Un halo plus large (marge intérieure + marge négative) a été essayé puis retiré le 30/08/2026 : il attrape aussi les CLICS, et il n'y a que 12 px de vide entre l'engrenage des paramètres et la cloche de notifications — au-delà, on avale les clics du voisin ou on déborde sous la barre sur le contenu de la page.
 
 Sans effet en développement : Next ne prépare rien hors production.
+
+## Tabulation verticale dans un bloc en lignes — `verticalTabOrder`
+
+`src/app/[locale]/workshops/[id]/tabs/examen/questionFields.tsx`. Dans un bloc où chaque ligne répète les mêmes cases (QCM, liste, tableau, paires), Tab suit le DOM, donc l'ordre visuel : case à cocher → champ → croix, puis ligne suivante. Or on saisit **une colonne à la fois** — les cinq réponses, pas la première réponse et sa croix.
+
+Chaque case porte donc un rang `data-vtab={vtab(groupe, index)}` (le groupe d'abord, l'index ensuite), et le conteneur des lignes reçoit `onKeyDown={verticalTabOrder}`, qui relit les rangs à chaque frappe et déplace le focus dans cet ordre-là. Rien n'est mémorisé : ajouter ou retirer une ligne en cours de saisie ne dérègle rien.
+
+⚠️ **Jamais de `tabIndex` positif pour obtenir le même résultat.** Une valeur positive ne réordonne pas un bloc : elle en sort les cases de l'ordre du document pour les placer AVANT tout le reste de la page. Tab depuis l'énoncé sauterait alors dans les réponses d'un autre bloc.
+
+⚠️ **Le conteneur ne doit contenir QUE les lignes.** Au bord du groupe (dernier rang, ou premier en `Shift+Tab`), la sortie se calcule en cherchant le premier élément focusable **hors** du conteneur — une rangée de commandes laissée à l'intérieur serait sautée. D'où le `<div>` intermédiaire autour des lignes, distinct de celui qui porte `ControlRow`.

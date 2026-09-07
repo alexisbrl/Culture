@@ -9,11 +9,15 @@
 import { type ReactNode } from 'react';
 import { type Question } from '../QuestionEditor';
 import { type Pool, type Exam } from './examShared';
-import QuestionListView from './QuestionListView';
+import QuestionListView, { type EditorSlotOptions } from './QuestionListView';
 
-function BankContent({ workshopId, questions, pools, exams, notions, chapters, draftIds, renderEditor, editingQuestionId, openId, setOpenId, onEditQuestion, onNewQuestion, onToggleInExam, onCreatePool, onUpdatePool, onDeletePool, onDeleteQuestion }: {
+function BankContent({ workshopId, questions, loading, pools, exams, notions, chapters, draftIds, renderEditor, editingQuestionId, editingIsNew, openId, setOpenId, onEditQuestion, onNewQuestion, onCancelNewQuestion, draftStatement, onToggleInExam, onCreatePool, onUpdatePool, onDeletePool, onDeleteQuestion }: {
   workshopId: string;
   questions: Question[];
+  /** Les questions ne sont pas encore arrivées du serveur — voir `loading` de
+   *  `QuestionListView`, qui en tire l'encadré d'attente et l'extinction de la
+   *  création. */
+  loading: boolean;
   pools: Pool[];
   exams: Exam[];
   notions: { id: string; title: string; chapterId: string | null }[];
@@ -27,12 +31,19 @@ function BankContent({ workshopId, questions, pools, exams, notions, chapters, d
    *  porte le formulaire (la liste n'est pas visible), et l'appelant ne le passe
    *  alors pas — deux instances voudraient dire deux brouillons pour une seule
    *  question. */
-  renderEditor?: () => ReactNode;
+  renderEditor?: (options?: EditorSlotOptions) => ReactNode;
   editingQuestionId: string | null;
+  /** La question ouverte vient d'être créée — voir `editingIsNew` de
+   *  `QuestionListView`. */
+  editingIsNew: boolean;
+  /** Abandonne la création en cours (bascule vers l'IA). */
+  onCancelNewQuestion: () => void;
+  /** L'énoncé en cours de frappe, que la bascule emporte vers la consigne. */
+  draftStatement: string;
   openId: string | null;
   setOpenId: (id: string | null) => void;
   onEditQuestion: (q: Question) => void;
-  onNewQuestion: () => void;
+  onNewQuestion: (initialStatement?: string) => void;
   onToggleInExam: (id: string) => void;
   onCreatePool: (name: string) => string;
   onUpdatePool: (pool: Pool) => void;
@@ -44,6 +55,7 @@ function BankContent({ workshopId, questions, pools, exams, notions, chapters, d
       workshopId={workshopId}
       aiContext="exam"
       questions={questions}
+      loading={loading}
       notions={notions}
       chapters={chapters}
       labels={{ pools, onCreate: onCreatePool, onUpdate: onUpdatePool, onDelete: onDeletePool }}
@@ -51,10 +63,13 @@ function BankContent({ workshopId, questions, pools, exams, notions, chapters, d
       renderEditor={renderEditor}
       editOnDoubleClick
       editingQuestionId={editingQuestionId}
+      editingIsNew={editingIsNew}
       openId={openId}
       setOpenId={setOpenId}
       onEditQuestion={onEditQuestion}
       onNewQuestion={onNewQuestion}
+      onCancelNewQuestion={onCancelNewQuestion}
+      draftStatement={draftStatement}
       onDeleteQuestion={onDeleteQuestion}
     />
   );

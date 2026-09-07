@@ -58,10 +58,20 @@ function SheetAutoText({ value, onChange, placeholder, title, style }: {
       // d'en-tête de la copie est mesuré, pas estimé — la pagination suit.
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
+      // Le texte d'exemple ne grandit pas le champ : seul le titre saisi le peut
+      // (voir `.placeholder-one-line` dans globals.css).
+      className="placeholder-one-line"
       style={{
         width: '100%', textAlign: 'center' as const, fontFamily: 'inherit', background: 'transparent',
         border: 'none', borderRadius: 6, outline: 'none', padding: '2px 0', boxSizing: 'border-box' as const,
         resize: 'none' as const, overflow: 'hidden', display: 'block',
+        // ⚠️ Un MOT plus long qu'une ligne ne se coupe pas tout seul : le retour
+        // à la ligne normal ne cherche que les espaces, et le mot débordait donc
+        // du champ — invisible, puisque le champ masque ce qui dépasse
+        // (signalé par Alexis, 07/09/2026). `anywhere` autorise la coupure au
+        // milieu d'un mot, mais seulement quand il n'y a pas d'autre issue : un
+        // titre ordinaire continue de se couper aux espaces.
+        overflowWrap: 'anywhere' as const,
         ...style,
       }}
     />
@@ -86,6 +96,13 @@ const STATEMENT_LINE_H = 22.4;
 // écrire « 12,5 » à la main sans mordre sur l'énoncé.
 const MARK_SPACE = 44;
 const SECTION_TITLE_LINE_H = 20;
+/** Ce qui, sur la feuille, n'est PAS du blanc : les lignes de la copie et son
+ *  en-tête. Le double-clic sur le blanc ajoute une question ; sur ces zones-là,
+ *  il garde le sens qu'il a déjà (ouvrir la question, sélectionner un mot du
+ *  titre, renommer une partie). Marqueur plutôt qu'une comparaison à
+ *  `currentTarget` : le blanc d'une page n'est pas seulement le vide sous la
+ *  dernière ligne, c'est tout ce qui n'est pas une ligne. */
+const SHEET_SOLID = '[data-sheet-solid]';
 // Retrait haut du texte dans sa ligne, repris tel quel par la gouttière.
 const STATEMENT_PAD_TOP = 20;
 const SECTION_TITLE_PAD_TOP = 14;
@@ -176,7 +193,7 @@ const SHEET_ALIGNED: React.CSSProperties = {
 };
 
 // ---- GENERATOR / APERÇU EN DIRECT ----
-function GeneratorContent({ workshopId, questions, config, onConfigChange, editing, onCancelEdit, onGenerate, onOpenQuestion, onRemoveFromDraft, onClearEditor, previewQuestion, sheetEditor, onBack, focusRequest, onRequestFocus, onDragActiveChange }: {
+function GeneratorContent({ workshopId, questions, config, onConfigChange, editing, onCancelEdit, onGenerate, onOpenQuestion, onNewQuestionInSection, onRemoveFromDraft, onClearEditor, previewQuestion, sheetEditor, onBack, focusRequest, onRequestFocus, onDragActiveChange }: {
   workshopId: string;
   questions: Question[];
   config: ExamConfig;
@@ -185,6 +202,12 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   onCancelEdit: () => void;
   onGenerate: () => void;
   onOpenQuestion: (id: string, rowKey?: string) => void;
+  /** Double-clic dans le BLANC de la copie : une question neuve s'ajoute à la
+   *  fin de la partie où se trouve ce blanc. C'est le pendant exact du
+   *  double-clic sur une ligne, qui l'ouvre en modification — le même geste, sur
+   *  le vide, en crée une. La feuille ne sait pas fabriquer une question (elle
+   *  ne connaît ni les notions, ni l'enregistrement) : elle dit seulement OÙ. */
+  onNewQuestionInSection: (sectionIdx: number) => void;
   onRemoveFromDraft: (ids: string[]) => void;
   onClearEditor: () => void;
   /** Brouillon de la question en cours de modification — le formulaire, lui,
@@ -1424,6 +1447,10 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
             // copie. Même chose pour la bande « saut de page », déplaçable
             // directement (elle n'a pas de double-clic : rien à y modifier).
             const questionRowProps = (gi: number, sectionIdx: number, qid: string, firstKey: string, lastKey: string, rowKey: string) => ({
+              // Une ligne de question n'est pas du blanc : le double-clic y
+              // ouvre le formulaire, il ne doit pas AUSSI créer une question.
+              // Voir SHEET_SOLID et `onSheetDoubleClick` plus bas.
+              'data-sheet-solid': '',
               draggable: true,
               onDragStart: (e: React.DragEvent) => {
                 e.dataTransfer.effectAllowed = 'move';
@@ -1510,6 +1537,18 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
               // main dès que la modification est terminée : le formulaire rendu
               // à sa hauteur de question redevient une ligne comme une autre.
               const growsForEditor = chunk.some(r => r.kind === 'editor');
+              // Le blanc d'une page appartient à la dernière partie qui s'y
+              // trouve : c'est elle qui se poursuivrait si on continuait à
+              // écrire. Une page sans aucune ligne (feuille vierge) renvoie -1,
+              // que l'appelant lit comme « à la fin de l'examen ».
+              const blankSectionIdx = chunk.length > 0 ? chunk[chunk.length - 1].sectionIdx : -1;
+              const onSheetDoubleClick = (e: React.MouseEvent) => {
+                // Rien pendant un glisser : le double-clic qui termine un
+                // déplacement ne doit pas créer une question au passage.
+                if (dragFlatIdx !== null || dragSectionIdx !== null) return;
+                if ((e.target as HTMLElement).closest(SHEET_SOLID)) return;
+                onNewQuestionInSection(blankSectionIdx);
+              };
               return (
                 <div key={chunkIdx} style={{ marginBottom: 14 }}>
                   {/* centrage via margin:auto plutôt que justifyContent:center — quand le contenu dépasse,
@@ -1563,14 +1602,16 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                     </div>
 
                     {/* colonne centrale : la feuille A4 elle-même (fond blanc, bordure, ombre) */}
-                    <div style={{ width: A4_BLOCK_WIDTH, height: growsForEditor ? undefined : A4_PAGE_HEIGHT, minHeight: growsForEditor ? A4_PAGE_HEIGHT : undefined, flexShrink: 0, position: 'relative' as const, background: palette.paper, border: `1px solid ${ink(0.08)}`, borderRadius: 4, boxShadow: `0 2px 14px ${ink(0.06)}`, overflow: 'hidden' }}>
+                    <div
+                      onDoubleClick={onSheetDoubleClick}
+                      style={{ width: A4_BLOCK_WIDTH, height: growsForEditor ? undefined : A4_PAGE_HEIGHT, minHeight: growsForEditor ? A4_PAGE_HEIGHT : undefined, flexShrink: 0, position: 'relative' as const, background: palette.paper, border: `1px solid ${ink(0.08)}`, borderRadius: 4, boxShadow: `0 2px 14px ${ink(0.06)}`, overflow: 'hidden' }}>
                       <div style={{ height: A4_MARGIN_PX, flexShrink: 0 }} />
                       {/* En-tête de la copie. En mode « personnaliser », les deux
                           zones deviennent les cibles de dépôt des pilules et le
                           titre s'édite directement ici — il n'y a plus de panneau
                           de paramètres séparé. */}
                       {chunkIdx === 0 && (
-                        <div ref={el => { qRefs.current['__page1_header__'] = el; }}>
+                        <div data-sheet-solid="" ref={el => { qRefs.current['__page1_header__'] = el; }}>
                           {/* Le haut de l'en-tête ne garde que le retrait minimal
                               sous la marge non imprimable : la copie commençait
                               trop bas dans le vide. */}
@@ -1633,12 +1674,13 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                           const editingTitle = focusedSectionIdx === row.sectionIdx;
                           const titleStyle: React.CSSProperties = {
                             flex: 1, minWidth: 0, fontSize: 16, fontWeight: 600, color: palette.tanStrong,
-                            fontFamily: 'inherit', boxSizing: 'border-box' as const,
+                            fontFamily: 'inherit', boxSizing: 'border-box' as const, overflowWrap: 'anywhere' as const,
                             padding: `${SECTION_TITLE_PAD_TOP}px 0 10px 34px`, lineHeight: `${SECTION_TITLE_LINE_H}px`,
                           };
                           return (
                             <Tooltip key={row.key} content={editingTitle ? undefined : t('generator.dragSection')}>
                             <div
+                              data-sheet-solid=""
                               ref={el => { qRefs.current[row.key] = el; }}
                               // Toute la ligne de titre est la poignée de la
                               // partie — sauf pendant qu'on renomme : un champ de
@@ -1686,6 +1728,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                `offsetHeight`. */
                             <div
                               key={row.key}
+                              data-sheet-solid=""
                               ref={el => { qRefs.current[row.key] = el; }}
                               {...emptyDropPropsFor(start, row.sectionIdx, row.key)}
                               style={{ padding: '0 34px 14px' }}
@@ -1713,6 +1756,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                question liée. */
                             <Tooltip key={row.key} content={t('generator.dragReorder')}>
                             <div
+                              data-sheet-solid=""
                               draggable
                               onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', row.key); beginRowDrag(gi); }}
                               onDragEnd={endDrag}
@@ -1736,7 +1780,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                         // pagination comme n'importe quelle ligne.
                         if (row.kind === 'editor') {
                           return (
-                            <div key={row.key} ref={el => { qRefs.current[row.key] = el; }}>
+                            <div key={row.key} data-sheet-solid="" ref={el => { qRefs.current[row.key] = el; }}>
                               {sheetEditor?.render(row.number)}
                             </div>
                           );
@@ -1761,7 +1805,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                     propre ligne : c'est bien la ligne de la copie
                                     qui porte des points, pas la grappe. */}
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap' as const }}>
+                                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap' as const, overflowWrap: 'anywhere' as const }}>
                                     <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{row.number}.</span>
                                     {part.content || t('noStatement')}
                                     {isEliminatory(row.key) && eliminatoryMark()}
@@ -1798,7 +1842,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                   contiennent que des blancs et un saut de ligne
                                   sont supprimées à la compilation. */}
                               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                                <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap' as const }}>
+                                <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap' as const, overflowWrap: 'anywhere' as const }}>
                                   <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{row.number}.</span>
                                   {q.content || t('noStatement')}
                                   {isEliminatory(q.id) && eliminatoryMark()}

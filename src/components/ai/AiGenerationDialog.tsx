@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { Sparkles, AlertTriangle, Check, ExternalLink, X } from 'lucide-react';
+import { Sparkles, AlertTriangle, Check, ExternalLink, Info, X } from 'lucide-react';
 
 import Modal from '@/components/Modal';
+import { Tooltip } from '@/components/ui/tooltip';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ink, palette, radius } from '@/lib/theme';
 import { INGEST_CONCURRENCY, QUESTIONS_CONCURRENCY, mapWithConcurrency } from '@/lib/ingest/concurrency';
@@ -68,6 +69,17 @@ import type { GenerationOrigin } from '@/lib/ingest/journal';
  *  Supabase de service, qui n'a rien à faire dans un composant client. */
 const LIVE_BEAT_MS = 30_000;
 
+// ─── Champ de consigne : hauteur suivie, plancher de trois lignes ───────────
+// Les mesures sont sorties du style pour que le plancher se CALCULE au lieu
+// d'être un nombre choisi à l'œil : changer la taille du texte ou le retrait
+// garde automatiquement les trois lignes promises.
+const HINT_FONT_SIZE = 13;
+const HINT_LINE_HEIGHT = 1.45;
+const HINT_PAD_Y = 8;
+const HINT_MIN_LINES = 3;
+// `box-sizing: border-box` : la hauteur minimale comprend les retraits et le filet.
+const HINT_MIN_HEIGHT = Math.round(HINT_MIN_LINES * HINT_FONT_SIZE * HINT_LINE_HEIGHT) + 2 * HINT_PAD_Y + 2;
+
 /** Ce que l'API accepte aujourd'hui (§6). Les autres formats restent visibles
  *  mais non sélectionnables : mieux vaut le dire à la sélection qu'échouer au
  *  milieu d'une génération. */
@@ -97,9 +109,16 @@ export type DialogFile = { id: string; name: string; mimeType: string; size: num
  *  jamais par `null`, et une lecture ratée ne vide pas une liste déjà obtenue :
  *  rouvrir le dialogue ne doit pas faire clignoter « aucun document » le temps
  *  d'un aller-retour serveur. */
-export function useWorkshopFiles(workshopId: string, refreshOn?: unknown): DialogFile[] | null {
+export function useWorkshopFiles(workshopId: string, refreshOn?: unknown, waitFor = false): DialogFile[] | null {
   const [files, setFiles] = useState<DialogFile[] | null>(null);
   useEffect(() => {
+    // ⚠️ **Next met les server actions à la queue leu leu** (07/09/2026) : la
+    // liste des documents partait au montage de l'écran, donc DEVANT les données
+    // que cet écran affiche — mesuré à 250-500 ms d'attente ajoutés à la liste
+    // de questions, pour garnir un dialogue que l'on n'ouvrira peut-être jamais.
+    // L'hôte peut donc la faire passer après ; elle reste chargée d'avance, le
+    // dialogue s'ouvre toujours déjà rempli.
+    if (waitFor) return;
     let cancelled = false;
     getWorkshopFiles(workshopId)
       .then((rows) => { if (!cancelled) setFiles(rows.map((f) => ({ id: f.id, name: f.name, mimeType: f.mimeType, size: f.size }))); })
@@ -108,7 +127,7 @@ export function useWorkshopFiles(workshopId: string, refreshOn?: unknown): Dialo
       // ne doit pas effacer la liste qu'on affichait déjà.
       .catch(() => { if (!cancelled) setFiles((prev) => prev ?? []); });
     return () => { cancelled = true; };
-  }, [workshopId, refreshOn]);
+  }, [workshopId, refreshOn, waitFor]);
   return files;
 }
 
@@ -134,9 +153,29 @@ type Props = {
   origin: GenerationOrigin;
   onClose: () => void;
   onDone?: () => void;
+  /** Où le dialogue est posé (07/09/2026).
+   *
+   *  `modal` (défaut) : la fenêtre flottante habituelle, avec son fond flouté et
+   *  son piège à tabulation. `inline` : le MÊME contenu, sans coquille — il est
+   *  alors rendu dans l'encadré de création d'une liste de questions, à côté du
+   *  formulaire manuel dont une bascule le sépare. Rien d'autre ne change : les
+   *  étapes, l'arrêt et les messages sont les mêmes des deux côtés, et c'est bien
+   *  le but — il n'y a qu'une génération, pas deux. */
+  frame?: 'modal' | 'inline';
+  /** Une génération est en cours (préparation ou passes du modèle). L'encadré de
+   *  création s'en sert pour VERROUILLER sa bascule : passer au formulaire
+   *  manuel démonterait le dialogue en pleine génération, donc sans passer par
+   *  la demande d'arrêt qui, seule, défait ce qui a déjà été écrit. */
+  onRunningChange?: (running: boolean) => void;
+  /** La consigne, pilotée de l'extérieur. L'encadré de création s'en sert pour
+   *  **partager le texte avec le champ d'énoncé du formulaire manuel** : ce qu'on
+   *  a commencé à écrire d'un côté se retrouve de l'autre, tant que rien n'a été
+   *  ni enregistré ni lancé. Absents, le dialogue garde sa consigne pour lui. */
+  hint?: string;
+  onHintChange?: (hint: string) => void;
 };
 
-export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, onDone }: Props) {
+export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, onDone, frame = 'modal', onRunningChange, hint: hintProp, onHintChange }: Props) {
   const t = useTranslations('ai');
   const locale = useLocale();
 
@@ -167,7 +206,11 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // existera, qui ne proposera aucun choix). Ce dialogue est le seul endroit
   // d'où l'on peut encore demander Claude, et c'est alors un geste délibéré.
   const [questionsProvider, setQuestionsProvider] = useState<'claude' | 'deepseek'>('deepseek');
-  const [hint, setHint] = useState('');
+  const [ownHint, setOwnHint] = useState('');
+  const hintRef = useRef<HTMLTextAreaElement>(null);
+  // Consigne pilotée par l'appelant quand il en fournit une (voir `hint`).
+  const hint = hintProp ?? ownHint;
+  const setHint = onHintChange ?? setOwnHint;
   // Un prompt fait uniquement de chiffres n'est pas une consigne : c'est un
   // nombre de questions. Il court-circuite l'étape 0 — il n'y a rien à
   // interpréter, rien à écrire — et va droit au reste de la génération.
@@ -192,6 +235,18 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // Le téléversement en cours n'est pas interruptible proprement : on ferme la
   // sortie tant qu'il dure, comme pendant la génération.
   const running = phase.step === 'running' || phase.step === 'preparing';
+  // Hauteur du champ de consigne : recalculée à chaque frappe. `field-sizing:
+  // content` ferait ça tout seul mais n'est pas encore partout, d'où la mesure
+  // explicite — la même qu'`AutoTextarea` côté examen.
+  useLayoutEffect(() => {
+    const el = hintRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [hint, frame]);
+
+  // L'encadré qui accueille le dialogue verrouille sa bascule pendant ce temps.
+  useEffect(() => { onRunningChange?.(running); }, [running, onRunningChange]);
   const context = forcedContext ?? 'parcours';
 
   // ─── Ce que ce lancement va faire, et qui n'est plus une case à cocher ────
@@ -231,6 +286,28 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // Ni document, ni programme, ni consigne : il n'y a rien à lire, rien à faire
   // travailler, et rien à écrire. C'est le seul vrai blocage qui reste.
   const nothingToDo = !hasFiles && visibleNotions === 0 && !hasHint;
+  /** Ce que ce lancement va faire, dit d'une phrase. Affichée telle quelle en
+   *  fenêtre ; repliée derrière le point d'information de la consigne quand le
+   *  dialogue est posé dans une liste, où la place est comptée. */
+  /** ⚠️ **En ligne, l'arrêt n'a plus de croix où se poser** : ces deux étapes
+   *  n'ont aucun autre bouton, et sans lui une génération lancée ne pourrait plus
+   *  être arrêtée du tout. En fenêtre, la croix du coin fait déjà ce travail. */
+  const stopAction = frame === 'inline' ? (
+    <Actions>
+      <Ghost onClick={requestClose}>{t('stop.aria')}</Ghost>
+    </Actions>
+  ) : null;
+  const planText = nothingToDo
+    ? t('plan.nothing')
+    : !hasFiles && hasHint
+      ? t('plan.fromHint')
+      : forcedContext === null
+        ? needsProgram
+          ? t('plan.program')
+          : t('plan.questionsOnly')
+        : needsProgram
+          ? t('plan.programThenQuestions')
+          : t(forcedContext === 'exam' ? 'plan.examQuestions' : 'plan.parcoursQuestions');
 
   // La liste des chapitres porte déjà le compte de notions et l'état écarté :
   // pas besoin d'une lecture dédiée. Montée à l'ouverture — le dialogue n'est
@@ -823,29 +900,46 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     })();
   }
 
-  return (
-    <Modal onClose={requestClose} width={520} portal>
-      <div style={{ textAlign: 'left' }}>
+  // Le corps est écrit une seule fois : seule la coquille change (voir `frame`).
+  // `position: relative` en ligne — la croix se pose en absolu, et sans repère
+  // elle irait se caler sur le premier ancêtre positionné de la page.
+  const body = (
+      <div style={{ textAlign: 'left', position: frame === 'inline' ? 'relative' : undefined }}>
         {/* La croix : une sortie visible, au même endroit à chaque étape. Sans
             elle, la seule façon de quitter une génération était de fermer
-            l'onglet. */}
-        <button
-          type="button"
-          onClick={requestClose}
-          aria-label={t(running ? 'stop.aria' : 'close')}
-          style={{
-            position: 'absolute', top: 12, right: 12, display: 'flex',
-            padding: 6, borderRadius: radius.md, border: 'none',
-            background: 'transparent', color: palette.inkFaint, cursor: 'pointer',
-          }}
-        >
-          <X size={17} />
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <Sparkles size={18} color={palette.green} />
-          <h2 style={{ fontSize: 17, fontWeight: 600, color: palette.ink, margin: 0 }}>{t('title')}</h2>
-        </div>
-        <p style={{ fontSize: 13, color: palette.inkSoft, margin: '0 0 18px' }}>{t('subtitle')}</p>
+            l'onglet — et l'étape « en cours » n'a pas d'autre sortie que celle-ci.
+            En fenêtre elle se pose dans le coin ; en ligne elle rejoint la ligne
+            de titre, à côté de la bascule, faute de coin où se poser. */}
+        {frame === 'modal' && (
+          <button
+            type="button"
+            onClick={requestClose}
+            aria-label={t(running ? 'stop.aria' : 'close')}
+            style={{
+              position: 'absolute', top: 12, right: 12, display: 'flex',
+              padding: 6, borderRadius: radius.md, border: 'none',
+              background: 'transparent', color: palette.inkFaint, cursor: 'pointer',
+            }}
+          >
+            <X size={17} />
+          </button>
+        )}
+        {/* ⚠️ **En ligne, ni titre, ni sous-titre, ni croix** (07/09/2026).
+            L'encadré de création porte déjà sa ligne de titre — « NOUVELLE
+            QUESTION » et la bascule —, et le côté IA n'a aucune raison de
+            s'annoncer autrement que le côté manuel : c'est la même chose qu'on
+            crée, par deux chemins. La sortie passe par « annuler », comme en
+            face ; l'étape « en cours », qui n'a pas de bouton d'annulation,
+            reçoit le sien plus bas. */}
+        {frame === 'modal' && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <Sparkles size={18} color={palette.green} />
+              <h2 style={{ fontSize: 17, fontWeight: 600, color: palette.ink, margin: 0 }}>{t('title')}</h2>
+            </div>
+            <p style={{ fontSize: 13, color: palette.inkSoft, margin: '0 0 18px' }}>{t('subtitle')}</p>
+          </>
+        )}
 
         {/* La demande d'arrêt prend toute la place : on ne fait pas cohabiter une
             question grave avec une barre de progression qui continue d'avancer. */}
@@ -876,21 +970,15 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             {/* Ce que ce lancement va faire, dit d'une phrase. Il n'y a plus rien
                 à cocher, donc il faut le dire — sans quoi le même bouton ferait
                 deux choses différentes sans jamais l'annoncer. */}
-            <div style={{ marginBottom: 18 }}>
-              <Hint>
-                {nothingToDo
-                  ? t('plan.nothing')
-                  : !hasFiles && hasHint
-                    ? t('plan.fromHint')
-                  : forcedContext === null
-                    ? needsProgram
-                      ? t('plan.program')
-                      : t('plan.questionsOnly')
-                    : needsProgram
-                      ? t('plan.programThenQuestions')
-                      : t(forcedContext === 'exam' ? 'plan.examQuestions' : 'plan.parcoursQuestions')}
-              </Hint>
-            </div>
+            {/* ⚠️ **Ce que la génération va faire n'est plus étalé sur trois
+                lignes** (07/09/2026, demandé par Alexis) : la phrase est
+                toujours là, mot pour mot, mais repliée derrière un point
+                d'information. Elle explique, elle ne commande pas — et un
+                encadré posé dans une liste ne peut pas se permettre le même
+                bavardage qu'une fenêtre qui occupe l'écran. Même traitement
+                pour l'aide du modèle et celle de la consigne, plus bas.
+                En fenêtre, la phrase reste affichée : la place ne manque pas. */}
+            {frame === 'modal' && <div style={{ marginBottom: 18 }}><Hint>{planText}</Hint></div>}
 
             {/* ⚠️ **Le champ « nombre de questions » a été retiré le 04/09/2026.**
                 Il disait la même chose que la consigne, et n’apparaissait que sur
@@ -903,6 +991,9 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 dit — elle ne reçoit aucun document, donc rien ne s'y perd à
                 changer de modèle ; les chapitres et les notions restent sur
                 Claude, qui seul lit les PDF. */}
+            {/* Pas de point d'information ici : ce réglage est temporaire (voir
+                plus haut), et il n'en reste qu'un seul dans l'encadré — celui de
+                la consigne, qui est le seul champ à remplir. */}
             <SectionLabel>{t('provider.label')}</SectionLabel>
             <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
               {(['claude', 'deepseek'] as const).map((id) => (
@@ -924,11 +1015,14 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 </button>
               ))}
             </div>
-            <div style={{ marginBottom: 20 }}>
-              <Hint>{t('provider.help')}</Hint>
-            </div>
+            {frame === 'modal' && (
+              <div style={{ marginBottom: 20 }}>
+                <Hint>{t('provider.help')}</Hint>
+              </div>
+            )}
+            {frame === 'inline' && <div style={{ marginBottom: 16 }} />}
 
-            <SectionLabel>{t('hint.label')}</SectionLabel>
+            <SectionLabel info={frame === 'inline' ? t('hint.info') : undefined} infoMore={frame === 'inline' ? t('hint.infoIdeas') : undefined}>{t('hint.label')}</SectionLabel>
             {/* Champ libre, facultatif, posé APRÈS les cases : il précise ce
                 qu'on vient de demander, il ne le remplace pas. L'exemple n'est
                 pas décoratif — sans lui, personne ne devine que c'est ici qu'on
@@ -936,22 +1030,40 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 Séquences dans le document », qui sont justement les deux choses
                 que le modèle ne peut pas inventer. */}
             <textarea
+              ref={hintRef}
               value={hint}
               onChange={(e) => setHint(e.target.value)}
               rows={3}
               maxLength={600}
-              placeholder={t('hint.placeholder')}
+              // ⚠️ **Le texte grisé dit ce qui se passe si l'on n'écrit rien**
+              // (07/09/2026, demandé par Alexis) : c'est exactement l'appel que
+              // le champ vide déclenche, nombre par défaut compris — il est
+              // interpolé depuis `DEFAULT_EXAM_QUESTIONS` et non recopié, pour
+              // qu'il ne puisse pas mentir le jour où la constante bouge.
+              // En fenêtre, le champ sert aussi à construire un programme : son
+              // exemple d'origine y reste plus juste.
+              placeholder={frame === 'inline' ? t('hint.placeholderExam', { count: DEFAULT_EXAM_QUESTIONS }) : t('hint.placeholder')}
               style={{
-                width: '100%', boxSizing: 'border-box', resize: 'vertical',
-                fontFamily: 'inherit', fontSize: 13, lineHeight: 1.45,
-                padding: '8px 10px', borderRadius: radius.md,
+                // ⚠️ **Plus de poignée de redimensionnement** (07/09/2026,
+                // demandé par Alexis) : la hauteur suit le texte saisi, comme le
+                // champ de réponse d'une question à réponse textuelle. Régler à
+                // la main la hauteur d'un champ qui sait la trouver seul n'est
+                // pas un réglage, c'est une corvée — et une poignée dans le coin
+                // d'un encadré posé au milieu d'une liste attire l'œil pour rien.
+                width: '100%', boxSizing: 'border-box', resize: 'none', overflow: 'hidden',
+                // Plancher de trois lignes : `height: auto` retombe dessus, donc
+                // `scrollHeight` est déjà borné et la mesure n'a pas à s'en
+                // occuper (même mécanique qu'`AutoTextarea`, côté examen).
+                minHeight: HINT_MIN_HEIGHT,
+                fontFamily: 'inherit', fontSize: HINT_FONT_SIZE, lineHeight: HINT_LINE_HEIGHT,
+                padding: `${HINT_PAD_Y}px 10px`, borderRadius: radius.md,
                 border: `1px solid ${ink(0.12)}`, background: palette.surfaceInput,
                 color: palette.ink, outline: 'none',
               }}
             />
-            <div style={{ marginTop: 6, marginBottom: 20 }}>
-              <Hint>{t('hint.help')}</Hint>
-            </div>
+            {frame === 'modal'
+              ? <div style={{ marginTop: 6, marginBottom: 20 }}><Hint>{t('hint.help')}</Hint></div>
+              : <div style={{ marginBottom: 4 }} />}
 
             <Actions>
               <Ghost onClick={requestClose}>{t('cancel')}</Ghost>
@@ -977,6 +1089,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             <ProgressBar animated value={0} max={1} label={t('estimate.preparing')} />
             <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 14 }}>{t('estimate.preparingHint')}</p>
             <SecondTab href={`/${locale}/dashboard`} label={t('newTab')} />
+            {stopAction}
           </div>
         )}
 
@@ -988,6 +1101,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
               {t('runningCounts', { chapters: counts.chapters, notions: counts.notions, questions: counts.questions })}
             </p>
             <SecondTab href={`/${locale}/dashboard`} label={t('newTab')} />
+            {stopAction}
           </div>
         )}
 
@@ -1021,14 +1135,53 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
           </div>
         )}
       </div>
-    </Modal>
+  );
+
+  if (frame === 'inline') return body;
+  return <Modal onClose={requestClose} width={520} portal>{body}</Modal>;
+}
+function SectionLabel({ children, info, infoMore }: { children: React.ReactNode; info?: string; infoMore?: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', color: palette.inkFaint, marginBottom: 8 }}>
+      {children}
+      {info && <InfoDot text={info} more={infoMore} />}
+    </div>
   );
 }
-function SectionLabel({ children }: { children: React.ReactNode }) {
+
+/** Point d'information : l'explication longue, repliée (07/09/2026).
+ *
+ *  ⚠️ **Il s'ouvre au survol ET au clic.** Les infobulles du projet sont
+ *  desktop seulement — Base UI n'écoute que la souris — et une explication qu'on
+ *  ne peut pas atteindre au doigt n'existe pas sur téléphone. Le clic pilote donc
+ *  l'ouverture (voir `open`/`onOpenChange` de `Tooltip`), et le délai de survol
+ *  est court : on ne frôle pas un point d'information par hasard, on le vise. */
+function InfoDot({ text, more }: { text: string; more?: string }) {
+  // ⚠️ **Un repère, pas une commande** (07/09/2026) : il informe au survol, et
+  // rien d'autre — d'où un `<span>` et non un `<button>`. Un bouton qui ne fait
+  // rien au clic promet une action qui n'existe pas, prend le focus au clavier
+  // et s'enfonce sous le doigt pour ne rien produire. Même choix que
+  // `ShuffleNoticeIcon` sur la copie d'examen, et même curseur : celui du
+  // document, qui n'annonce aucune interaction.
+  //
+  // Le texte reste porté pour les lecteurs d'écran (`role="img"` + `aria-label`),
+  // que l'infobulle de Base UI — desktop et souris seulement — n'atteint pas.
+  // Deux paragraphes, séparés : ce que fait la fonctionnalité, puis ce qu'on
+  // peut lui demander. D'où deux clés et non une seule chaîne à couper — un
+  // retour à la ligne se traduit mal, et la bulle rend du texte, pas du HTML.
+  const content = more
+    ? <><span>{text}</span><span style={{ display: 'block', marginTop: 7 }}>{more}</span></>
+    : text;
   return (
-    <div style={{ fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', color: palette.inkFaint, marginBottom: 8 }}>
-      {children}
-    </div>
+    <Tooltip content={content} delay={120} side="top">
+      <span
+        role="img"
+        aria-label={more ? `${text} ${more}` : text}
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, color: palette.inkFaint, flexShrink: 0 }}
+      >
+        <Info size={13} strokeWidth={2} />
+      </span>
+    </Tooltip>
   );
 }
 
