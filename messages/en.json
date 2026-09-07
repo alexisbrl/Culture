@@ -249,6 +249,27 @@
       "title": "tracking",
       "desc": "progress, mastery and detailed statistics"
     },
+    "passkeys": {
+      "sectionTitle": "security",
+      "title": "passkeys",
+      "desc": "sign in with your fingerprint, your face or your device code, no password needed",
+      "empty": "no passkey saved yet.",
+      "defaultName": "passkey",
+      "add": "add a passkey",
+      "adding": "saving…",
+      "added": "added on {date}",
+      "lastUsed": "used on {date}",
+      "neverUsed": "never used",
+      "rename": "rename",
+      "save": "save",
+      "cancel": "cancel",
+      "delete": "delete",
+      "deleteTitle": "delete this passkey?",
+      "deleteDesc": "“{name}” will no longer sign you in. You can save a new one at any time.",
+      "cancelled": "adding cancelled.",
+      "error": "we couldn't complete that. Please try again in a moment.",
+      "unsupported": "this device or browser doesn't support passkeys."
+    },
     "plan": {
       "free": "Free plan",
       "premium": "Premium plan",
