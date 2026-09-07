@@ -58,10 +58,20 @@ function SheetAutoText({ value, onChange, placeholder, title, style }: {
       // d'en-tête de la copie est mesuré, pas estimé — la pagination suit.
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
+      // Le texte d'exemple ne grandit pas le champ : seul le titre saisi le peut
+      // (voir `.placeholder-one-line` dans globals.css).
+      className="placeholder-one-line"
       style={{
         width: '100%', textAlign: 'center' as const, fontFamily: 'inherit', background: 'transparent',
         border: 'none', borderRadius: 6, outline: 'none', padding: '2px 0', boxSizing: 'border-box' as const,
         resize: 'none' as const, overflow: 'hidden', display: 'block',
+        // ⚠️ Un MOT plus long qu'une ligne ne se coupe pas tout seul : le retour
+        // à la ligne normal ne cherche que les espaces, et le mot débordait donc
+        // du champ — invisible, puisque le champ masque ce qui dépasse
+        // (signalé par Alexis, 07/09/2026). `anywhere` autorise la coupure au
+        // milieu d'un mot, mais seulement quand il n'y a pas d'autre issue : un
+        // titre ordinaire continue de se couper aux espaces.
+        overflowWrap: 'anywhere' as const,
         ...style,
       }}
     />
@@ -1664,7 +1674,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                           const editingTitle = focusedSectionIdx === row.sectionIdx;
                           const titleStyle: React.CSSProperties = {
                             flex: 1, minWidth: 0, fontSize: 16, fontWeight: 600, color: palette.tanStrong,
-                            fontFamily: 'inherit', boxSizing: 'border-box' as const,
+                            fontFamily: 'inherit', boxSizing: 'border-box' as const, overflowWrap: 'anywhere' as const,
                             padding: `${SECTION_TITLE_PAD_TOP}px 0 10px 34px`, lineHeight: `${SECTION_TITLE_LINE_H}px`,
                           };
                           return (
@@ -1795,7 +1805,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                     propre ligne : c'est bien la ligne de la copie
                                     qui porte des points, pas la grappe. */}
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap' as const }}>
+                                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap' as const, overflowWrap: 'anywhere' as const }}>
                                     <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{row.number}.</span>
                                     {part.content || t('noStatement')}
                                     {isEliminatory(row.key) && eliminatoryMark()}
@@ -1832,7 +1842,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                   contiennent que des blancs et un saut de ligne
                                   sont supprimées à la compilation. */}
                               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                                <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap' as const }}>
+                                <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap' as const, overflowWrap: 'anywhere' as const }}>
                                   <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{row.number}.</span>
                                   {q.content || t('noStatement')}
                                   {isEliminatory(q.id) && eliminatoryMark()}

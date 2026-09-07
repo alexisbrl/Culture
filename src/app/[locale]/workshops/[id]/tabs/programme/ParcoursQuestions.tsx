@@ -181,30 +181,32 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
         {error && <div style={{ fontSize: 12.5, color: palette.danger, marginTop: 10 }}>{error}</div>}
       </div>
 
-      {loading ? (
-        <div style={{ padding: '28px 0', textAlign: 'center', fontSize: 12.5, color: palette.inkSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-          <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> {t('questions.loading')}
-        </div>
-      ) : (
-        // Ni `labels` ni `exams` : le parcours n'a ni étiquettes ni examens, et
-        // leur absence retire les sections correspondantes au lieu de les
-        // désactiver (voir `QuestionListView`).
-        <QuestionListView
-          workshopId={workshopId}
-          aiContext="parcours"
-          questions={questions}
-          notions={notions}
-          chapters={chapters}
-          renderEditor={editeur}
-          editOnDoubleClick
-          editingQuestionId={editing?.id ?? null}
-          openId={openId}
-          setOpenId={setOpenId}
-          onEditQuestion={openEditor}
-          onNewQuestion={() => openEditor(emptyQuestion())}
-          onDeleteQuestion={handleDelete}
-        />
-      )}
+      {/* ⚠️ **La liste est montée DÈS LE CHARGEMENT** (07/09/2026), avec son état
+          d'attente — elle ne l'était pas, remplacée par une roue qui tournait au
+          milieu du vide. Deux raisons de préférer l'encadré d'attente : la barre
+          d'outils reste en place (donc rien ne saute quand les cartes
+          arrivent), et l'action « nouvelle question » est visiblement éteinte
+          tant que les données ne sont pas là, au lieu d'être absente.
+
+          Ni `labels` ni `exams` : le parcours n'a ni étiquettes ni examens, et
+          leur absence retire les sections correspondantes au lieu de les
+          désactiver (voir `QuestionListView`). */}
+      <QuestionListView
+        workshopId={workshopId}
+        aiContext="parcours"
+        questions={questions}
+        loading={loading}
+        notions={notions}
+        chapters={chapters}
+        renderEditor={editeur}
+        editOnDoubleClick
+        editingQuestionId={editing?.id ?? null}
+        openId={openId}
+        setOpenId={setOpenId}
+        onEditQuestion={openEditor}
+        onNewQuestion={() => openEditor(emptyQuestion())}
+        onDeleteQuestion={handleDelete}
+      />
       </div>
     </div>
   );

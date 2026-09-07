@@ -885,7 +885,12 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
             par les filtres actifs, et la voir disparaître sous le formulaire
             qu'on vient d'ouvrir n'aurait aucun sens. Elle rejoint la liste — ou
             s'efface, si les filtres l'écartent — une fois l'édition terminée. */}
-        {loading && Array.from({ length: skeletonCount }, (_, i) => <ListCardSkeleton key={i} index={i} />)}
+        {/* `meta` suit la carte imitée : la banque a une 3ᵉ ligne (ses
+            libellés), le parcours n'en a pas. Sans ça l'encadré d'attente du
+            parcours ferait 79 px pour des cartes de 59, et la liste sauterait à
+            l'arrivée des questions — c'est précisément ce qu'il est là pour
+            éviter (`showLabels`, voir le `meta` de la carte plus haut). */}
+        {loading && Array.from({ length: skeletonCount }, (_, i) => <ListCardSkeleton key={i} index={i} meta={showLabels} />)}
         {!loading && renderEditor && editingQuestionId !== null && !filtered.some(q => q.id === editingQuestionId) && <div ref={editorRef}>{renderEditor()}</div>}
         {!loading && filtered.map(q => (
           renderEditor && q.id === editingQuestionId

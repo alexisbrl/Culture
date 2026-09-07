@@ -1037,6 +1037,9 @@ export function AutoTextarea({ value, onChange, placeholder, minHeight, fontSize
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
+      // Le texte d'exemple ne grandit pas la case : seul le texte saisi le peut
+      // (voir `.placeholder-one-line` dans globals.css).
+      className="placeholder-one-line"
       style={{
         width: '100%', boxSizing: 'border-box', fontFamily: 'inherit', fontSize, fontWeight: bold ? 600 : 400,
         lineHeight: bold ? 1.4 : 1.7, color: palette.ink, background: palette.surfaceRaised,
@@ -1102,6 +1105,12 @@ function MatchPairRow({
   // Sans tableau de dépendances : la hauteur dépend aussi de la LARGEUR, donc
   // du curseur de partage, pas seulement du texte saisi. On n'écrit que du
   // style (jamais de setState) — aucun risque de boucle de rendu.
+  //
+  // ⚠️ `scrollHeight` d'un champ VIDE tient compte de son texte d'exemple : une
+  // colonne rétrécie au curseur de partage écrivait « correspondance… » à la
+  // verticale et étirait la rangée sur 400 px. D'où `placeholder-one-line` sur
+  // les deux cellules — le texte d'exemple tient sur une ligne, la case vide
+  // garde donc sa hauteur d'une ligne.
   useLayoutEffect(() => {
     for (const el of [leftRef.current, rightRef.current]) {
       if (!el) continue;
@@ -1116,7 +1125,7 @@ function MatchPairRow({
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
       <div style={{ flex: `${split} 1 0`, minWidth: 0 }}>
-        <textarea ref={leftRef} rows={1} value={left} onChange={e => onLeftChange(e.target.value)} placeholder={leftPlaceholder} style={cell} />
+        <textarea ref={leftRef} rows={1} value={left} onChange={e => onLeftChange(e.target.value)} placeholder={leftPlaceholder} className="placeholder-one-line" style={cell} />
       </div>
       <Tooltip content={splitTitle}>
         <span
@@ -1128,7 +1137,7 @@ function MatchPairRow({
         </span>
       </Tooltip>
       <div style={{ flex: `${1 - split} 1 0`, minWidth: 0 }}>
-        <textarea ref={rightRef} rows={1} value={right} onChange={e => onRightChange(e.target.value)} placeholder={rightPlaceholder} style={{ ...cell, textAlign: 'right' }} />
+        <textarea ref={rightRef} rows={1} value={right} onChange={e => onRightChange(e.target.value)} placeholder={rightPlaceholder} className="placeholder-one-line" style={{ ...cell, textAlign: 'right' }} />
       </div>
       {onRemove ? (
         <Tooltip content={removeTitle}>
