@@ -172,8 +172,12 @@ export default function InlineQuestionEditor({
         transition: 'background 0.1s, border-color 0.1s',
       }}
     >
+      {/* Le TYPE de réponse ne figure plus ici (07/09/2026) : le sélecteur juste
+          en dessous le dit déjà, en toutes lettres et avec son pictogramme, et
+          il se règle là — le répéter en titre donnait deux sources pour une même
+          information, dont une seule qu'on peut changer. */}
       <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: palette.green }}>
-        {(isNew ? t('inline.newQuestion') : t('inline.editQuestion')).toUpperCase()} · {t(`responseType.${draft.responseType}`).toUpperCase()}
+        {(isNew ? t('inline.newQuestion') : t('inline.editQuestion')).toUpperCase()}
       </div>
       {dropError && <div style={{ fontSize: 12, color: palette.danger }}>{dropError}</div>}
 
