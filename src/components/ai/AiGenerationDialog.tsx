@@ -973,7 +973,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 dit — elle ne reçoit aucun document, donc rien ne s'y perd à
                 changer de modèle ; les chapitres et les notions restent sur
                 Claude, qui seul lit les PDF. */}
-            <SectionLabel info={frame === 'inline' ? t('provider.help') : undefined}>{t('provider.label')}</SectionLabel>
+            {/* Pas de point d'information ici : ce réglage est temporaire (voir
+                plus haut), et il n'en reste qu'un seul dans l'encadré — celui de
+                la consigne, qui est le seul champ à remplir. */}
+            <SectionLabel>{t('provider.label')}</SectionLabel>
             <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
               {(['claude', 'deepseek'] as const).map((id) => (
                 <button
@@ -1001,7 +1004,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             )}
             {frame === 'inline' && <div style={{ marginBottom: 16 }} />}
 
-            <SectionLabel info={frame === 'inline' ? `${t('hint.help')} ${planText}` : undefined}>{t('hint.label')}</SectionLabel>
+            <SectionLabel info={frame === 'inline' ? t('hint.info') : undefined}>{t('hint.label')}</SectionLabel>
             {/* Champ libre, facultatif, posé APRÈS les cases : il précise ce
                 qu'on vient de demander, il ne le remplace pas. L'exemple n'est
                 pas décoratif — sans lui, personne ne devine que c'est ici qu'on
@@ -1118,22 +1121,24 @@ function SectionLabel({ children, info }: { children: React.ReactNode; info?: st
  *  l'ouverture (voir `open`/`onOpenChange` de `Tooltip`), et le délai de survol
  *  est court : on ne frôle pas un point d'information par hasard, on le vise. */
 function InfoDot({ text }: { text: string }) {
-  // ⚠️ **Survol seulement, et c'est une contrainte, pas un choix.** Les
-  // infobulles du projet sont celles de Base UI, qui n'écoute que la souris ; on
-  // a essayé d'y ajouter l'ouverture au clic en pilotant son état — la bulle
-  // s'ouvrait mais ne se refermait plus, les deux machineries se contredisant.
-  // Une bulle qui s'ouvre au doigt demanderait un composant à elle. En attendant,
-  // le délai est court : on ne frôle pas un point d'information par hasard, on le
-  // vise.
+  // ⚠️ **Un repère, pas une commande** (07/09/2026) : il informe au survol, et
+  // rien d'autre — d'où un `<span>` et non un `<button>`. Un bouton qui ne fait
+  // rien au clic promet une action qui n'existe pas, prend le focus au clavier
+  // et s'enfonce sous le doigt pour ne rien produire. Même choix que
+  // `ShuffleNoticeIcon` sur la copie d'examen, et même curseur : celui du
+  // document, qui n'annonce aucune interaction.
+  //
+  // Le texte reste porté pour les lecteurs d'écran (`role="img"` + `aria-label`),
+  // que l'infobulle de Base UI — desktop et souris seulement — n'atteint pas.
   return (
     <Tooltip content={text} delay={120} side="top">
-      <button
-        type="button"
+      <span
+        role="img"
         aria-label={text}
-        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, padding: 0, border: 'none', borderRadius: 999, background: 'transparent', color: palette.inkFaint, cursor: 'pointer', flexShrink: 0 }}
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, color: palette.inkFaint, flexShrink: 0 }}
       >
         <Info size={13} strokeWidth={2} />
-      </button>
+      </span>
     </Tooltip>
   );
 }
