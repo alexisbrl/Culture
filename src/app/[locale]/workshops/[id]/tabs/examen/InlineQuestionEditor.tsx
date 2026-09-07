@@ -31,7 +31,7 @@
 // que la feuille se lise comme la suite d'énoncés qu'elle est. Modèle :
 // `QuestionPart` dans @/lib/workshops/examTypes.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { AudioLines, ImageIcon, Link2, SlidersHorizontal } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
@@ -58,8 +58,15 @@ type Props = {
   notions: { id: string; title: string }[];
   /** Cadre du bloc. `sheet` : posé sur la feuille A4, teinté et cerné de vert
    *  pour se détacher du rendu figé des autres questions. `plain` : hors feuille
-   *  (parcours), où il n'y a rien dont se détacher — un simple cadre neutre. */
-  frame?: 'sheet' | 'plain';
+   *  (parcours), où il n'y a rien dont se détacher — un simple cadre neutre.
+   *  `bare` : **aucun cadre du tout**, parce que le formulaire est déjà DANS un
+   *  encadré (celui de la création, avec sa bascule) — un cadre de plus ferait
+   *  un cadre dans le cadre. */
+  frame?: 'sheet' | 'plain' | 'bare';
+  /** Posé au bout de la ligne de titre, à droite. C'est là que vit la bascule
+   *  « manuel / par IA » de l'encadré de création : sur la même ligne que
+   *  « NOUVELLE QUESTION », et non au-dessus. */
+  titleTrailing?: ReactNode;
   /** Retrait d'une question liée : l'appelant décale les pondérations suivantes
    *  (elles sont indexées par position, voir `partWeightKey`). */
   onRemovePart?: (idx: number) => void;
@@ -88,7 +95,7 @@ export default function InlineQuestionEditor({
   workshopId, question, number, isNew, notions, onDraftChange,
   onRemovePart, onCreatePool, onUpdatePool,
   onDeletePool, poolUsageCount, onSave, onCancel, frame = 'sheet',
-  pools = [], showLabels = true,
+  pools = [], showLabels = true, titleTrailing,
 }: Props) {
   const t = useTranslations('examen');
   const [draft, setDraft] = useState<Question>({
@@ -161,13 +168,18 @@ export default function InlineQuestionEditor({
     <div
       {...dropHandlers}
       style={{
-        margin: frame === 'sheet' ? '10px 26px' : 0, padding: '14px 16px', borderRadius: 14,
+        margin: frame === 'sheet' ? '10px 26px' : 0,
+        // `bare` : ni cadre, ni fond, ni retrait — l'encadré qui l'accueille les
+        // porte déjà. Le liseré du glisser-déposer d'un média, lui, reste : il
+        // ne décore pas, il désigne la cible du fichier qu'on tient.
+        padding: frame === 'bare' ? 0 : '14px 16px',
+        borderRadius: 14,
         border: dragOver
           ? `1.5px dashed ${palette.green}`
-          : `1px solid ${frame === 'sheet' ? palette.greenSoft : palette.line}`,
+          : frame === 'bare' ? 'none' : `1px solid ${frame === 'sheet' ? palette.greenSoft : palette.line}`,
         background: dragOver
           ? withAlpha(palette.green, 0.12)
-          : frame === 'sheet' ? withAlpha(palette.green, 0.06) : palette.surfaceRaised,
+          : frame === 'sheet' ? withAlpha(palette.green, 0.06) : frame === 'bare' ? 'transparent' : palette.surfaceRaised,
         display: 'flex', flexDirection: 'column', gap: 12, boxSizing: 'border-box', minWidth: 0,
         transition: 'background 0.1s, border-color 0.1s',
       }}
@@ -176,8 +188,11 @@ export default function InlineQuestionEditor({
           en dessous le dit déjà, en toutes lettres et avec son pictogramme, et
           il se règle là — le répéter en titre donnait deux sources pour une même
           information, dont une seule qu'on peut changer. */}
-      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: palette.green }}>
-        {(isNew ? t('inline.newQuestion') : t('inline.editQuestion')).toUpperCase()}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: titleTrailing ? 30 : undefined }}>
+        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: palette.green }}>
+          {(isNew ? t('inline.newQuestion') : t('inline.editQuestion')).toUpperCase()}
+        </div>
+        {titleTrailing}
       </div>
       {dropError && <div style={{ fontSize: 12, color: palette.danger }}>{dropError}</div>}
 

@@ -9,7 +9,7 @@
 import { type ReactNode } from 'react';
 import { type Question } from '../QuestionEditor';
 import { type Pool, type Exam } from './examShared';
-import QuestionListView from './QuestionListView';
+import QuestionListView, { type EditorSlotOptions } from './QuestionListView';
 
 function BankContent({ workshopId, questions, loading, pools, exams, notions, chapters, draftIds, renderEditor, editingQuestionId, editingIsNew, openId, setOpenId, onEditQuestion, onNewQuestion, onCancelNewQuestion, onToggleInExam, onCreatePool, onUpdatePool, onDeletePool, onDeleteQuestion }: {
   workshopId: string;
@@ -31,7 +31,7 @@ function BankContent({ workshopId, questions, loading, pools, exams, notions, ch
    *  porte le formulaire (la liste n'est pas visible), et l'appelant ne le passe
    *  alors pas — deux instances voudraient dire deux brouillons pour une seule
    *  question. */
-  renderEditor?: () => ReactNode;
+  renderEditor?: (options?: EditorSlotOptions) => ReactNode;
   editingQuestionId: string | null;
   /** La question ouverte vient d'être créée — voir `editingIsNew` de
    *  `QuestionListView`. */

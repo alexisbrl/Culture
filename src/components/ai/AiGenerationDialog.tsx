@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Sparkles, AlertTriangle, Check, ExternalLink, X } from 'lucide-react';
 
@@ -150,9 +150,18 @@ type Props = {
    *  étapes, l'arrêt et les messages sont les mêmes des deux côtés, et c'est bien
    *  le but — il n'y a qu'une génération, pas deux. */
   frame?: 'modal' | 'inline';
+  /** Posé au bout de la ligne de titre, à droite — la bascule « manuel / par
+   *  IA » de l'encadré de création. `inline` seulement : en fenêtre, la ligne de
+   *  titre n'a personne à accueillir. */
+  titleTrailing?: ReactNode;
+  /** Une génération est en cours (préparation ou passes du modèle). L'encadré de
+   *  création s'en sert pour VERROUILLER sa bascule : passer au formulaire
+   *  manuel démonterait le dialogue en pleine génération, donc sans passer par
+   *  la demande d'arrêt qui, seule, défait ce qui a déjà été écrit. */
+  onRunningChange?: (running: boolean) => void;
 };
 
-export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, onDone, frame = 'modal' }: Props) {
+export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, onDone, frame = 'modal', titleTrailing, onRunningChange }: Props) {
   const t = useTranslations('ai');
   const locale = useLocale();
 
@@ -208,6 +217,8 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // Le téléversement en cours n'est pas interruptible proprement : on ferme la
   // sortie tant qu'il dure, comme pendant la génération.
   const running = phase.step === 'running' || phase.step === 'preparing';
+  // L'encadré qui accueille le dialogue verrouille sa bascule pendant ce temps.
+  useEffect(() => { onRunningChange?.(running); }, [running, onRunningChange]);
   const context = forcedContext ?? 'parcours';
 
   // ─── Ce que ce lancement va faire, et qui n'est plus une case à cocher ────
@@ -846,22 +857,39 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       <div style={{ textAlign: 'left', position: frame === 'inline' ? 'relative' : undefined }}>
         {/* La croix : une sortie visible, au même endroit à chaque étape. Sans
             elle, la seule façon de quitter une génération était de fermer
-            l'onglet. */}
-        <button
-          type="button"
-          onClick={requestClose}
-          aria-label={t(running ? 'stop.aria' : 'close')}
-          style={{
-            position: 'absolute', top: 12, right: 12, display: 'flex',
-            padding: 6, borderRadius: radius.md, border: 'none',
-            background: 'transparent', color: palette.inkFaint, cursor: 'pointer',
-          }}
-        >
-          <X size={17} />
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            l'onglet — et l'étape « en cours » n'a pas d'autre sortie que celle-ci.
+            En fenêtre elle se pose dans le coin ; en ligne elle rejoint la ligne
+            de titre, à côté de la bascule, faute de coin où se poser. */}
+        {frame === 'modal' && (
+          <button
+            type="button"
+            onClick={requestClose}
+            aria-label={t(running ? 'stop.aria' : 'close')}
+            style={{
+              position: 'absolute', top: 12, right: 12, display: 'flex',
+              padding: 6, borderRadius: radius.md, border: 'none',
+              background: 'transparent', color: palette.inkFaint, cursor: 'pointer',
+            }}
+          >
+            <X size={17} />
+          </button>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, minHeight: frame === 'inline' ? 30 : undefined }}>
           <Sparkles size={18} color={palette.green} />
           <h2 style={{ fontSize: 17, fontWeight: 600, color: palette.ink, margin: 0 }}>{t('title')}</h2>
+          {frame === 'inline' && (
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+              {titleTrailing}
+              <button
+                type="button"
+                onClick={requestClose}
+                aria-label={t(running ? 'stop.aria' : 'close')}
+                style={{ display: 'flex', padding: 6, borderRadius: radius.md, border: 'none', background: 'transparent', color: palette.inkFaint, cursor: 'pointer' }}
+              >
+                <X size={17} />
+              </button>
+            </div>
+          )}
         </div>
         <p style={{ fontSize: 13, color: palette.inkSoft, margin: '0 0 18px' }}>{t('subtitle')}</p>
 

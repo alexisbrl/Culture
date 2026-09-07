@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, ArrowLeft, ArrowRight, FileText, Search, X } from 'lucide-react';
@@ -418,11 +418,12 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
    *  elles sont indexées par POSITION (`partWeightKey`), donc retirer la
    *  deuxième doit remonter toutes les suivantes d'un cran. C'est l'examen qui
    *  les porte, et c'est ici qu'il vit. */
-  function renderQuestionEditor(frame: 'plain' | 'sheet' = 'plain', number?: number) {
+  function renderQuestionEditor(frame: 'plain' | 'sheet' | 'bare' = 'plain', number?: number, titleTrailing?: ReactNode) {
     if (!editingQuestion) return null;
     return (
       <InlineQuestionEditor
         key={editingQuestion.id}
+        titleTrailing={titleTrailing}
         workshopId={workshopId}
         question={editingQuestion}
         number={frame === 'sheet' ? number : undefined}
@@ -699,7 +700,9 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 notions={notions}
                 chapters={chapters}
                 draftIds={draftIds}
-                renderEditor={sheetCarriesEditor ? undefined : () => renderQuestionEditor('plain')}
+                // La liste passe ses consignes de rendu : dans l'encadré de
+                // création, le formulaire n'a ni cadre propre ni titre seul.
+                renderEditor={sheetCarriesEditor ? undefined : opts => renderQuestionEditor(opts?.bare ? 'bare' : 'plain', undefined, opts?.titleTrailing)}
                 editingQuestionId={editingQuestion?.id ?? null}
                 editingIsNew={editingQuestion !== null && editingQuestion.id === newQuestionId}
                 openId={openId}

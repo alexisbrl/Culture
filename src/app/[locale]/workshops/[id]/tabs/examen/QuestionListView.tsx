@@ -110,6 +110,17 @@ type FilterMode = 'pos' | 'neg';
 // voir `examShared` — la liste d'examens suit exactement la même trame.
 const CARD_DRAFT_TINT = withAlpha(palette.green, 0.08); // teinte de la carte déjà posée sur la feuille
 
+/** Ce que la liste demande à l'appelant quand elle rend son éditeur.
+ *
+ *  Elle ne connaît pas le formulaire — elle décide seulement OÙ il va et, dans
+ *  l'encadré de création, comment il doit s'y tenir. */
+export type EditorSlotOptions = {
+  /** Le formulaire est déjà dans un encadré : qu'il ne pose pas le sien. */
+  bare?: boolean;
+  /** À poser au bout de sa ligne de titre, à droite (la bascule). */
+  titleTrailing?: ReactNode;
+};
+
 export type QuestionListLabels = {
   pools: Pool[];
   onCreate: (name: string) => string;
@@ -144,7 +155,7 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
    *  celle-ci est visible, tout en haut sinon (question nouvelle, ou question
    *  que les filtres actifs écartent). Absent = l'éditeur vit ailleurs, comme
    *  dans la feuille de la banque d'examen. */
-  renderEditor?: () => ReactNode;
+  renderEditor?: (options?: EditorSlotOptions) => ReactNode;
   /** Ouvre l'éditeur au double-clic sur une carte. Raccourci seulement : le
    *  crayon fait la même chose et reste le geste découvrable. */
   editOnDoubleClick?: boolean;
@@ -184,6 +195,35 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
    *  (côté manuel), soit on est passé à l'IA. Les deux occupent la MÊME boîte,
    *  en tête de liste, sous la même bascule. */
   const creating = generating || editingIsNew;
+  /** ⚠️ **La génération par IA n'existe que pour la banque d'examen**
+   *  (07/09/2026, décision d'Alexis). Le parcours retrouve donc exactement ce
+   *  qu'il avait : le bouton ouvre le formulaire, sans encadré ni bascule — il
+   *  n'y a pas de second côté vers lequel basculer. */
+  const aiAvailable = aiContext === 'exam' && !!workshopId;
+  /** Une génération est en cours : la bascule se verrouille. En partir
+   *  démonterait le dialogue en pleine passe, donc sans passer par la demande
+   *  d'arrêt — la seule qui défasse ce qui a déjà été écrit. La croix du
+   *  dialogue reste, elle, la sortie. */
+  const [aiRunning, setAiRunning] = useState(false);
+  /** La bascule de l'encadré. Elle n'est pas rendue ici : elle est posée sur la
+   *  LIGNE DE TITRE du côté affiché — « NOUVELLE QUESTION » à gauche et elle à
+   *  droite (demandé par Alexis) —, donc c'est le formulaire ou le dialogue qui
+   *  la reçoit et la place. */
+  const creationToggle = (
+    <SegmentedToggle
+      value={generating ? 'ai' : 'manual'}
+      disabled={aiRunning}
+      onChange={side => {
+        if (side === 'ai') { onCancelNewQuestion?.(); setGenerating(true); return; }
+        setGenerating(false);
+        onNewQuestion();
+      }}
+      options={[
+        { value: 'manual', label: tAi('chooseManual'), icon: <Pencil size={13} strokeWidth={1.9} /> },
+        { value: 'ai', label: tAi('chooseAi'), icon: <Sparkles size={13} strokeWidth={1.9} /> },
+      ]}
+    />
+  );
   // `generating` en second argument : la liste est relue à chaque ouverture du
   // dialogue (voir `useWorkshopFiles`), pas seulement au montage de la page.
   // `loading` en troisième : elle ne part qu'une fois les questions arrivées,
@@ -873,7 +913,10 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
             l'arrivée des questions — c'est précisément ce qu'il est là pour
             éviter (`showLabels`, voir le `meta` de la carte plus haut). */}
         {loading && Array.from({ length: skeletonCount }, (_, i) => <ListCardSkeleton key={i} index={i} meta={showLabels} />)}
-        {!loading && creating && (
+        {/* Sans IA (parcours), pas d'encadré ni de bascule : le formulaire garde
+            son propre cadre, exactement comme avant. */}
+        {!loading && creating && !aiAvailable && <div ref={editorRef}>{renderEditor?.()}</div>}
+        {!loading && creating && aiAvailable && (
           /* ─── Encadré de CRÉATION (07/09/2026) ─────────────────────────────
              Une seule boîte, tout en haut de la liste, avec une bascule en haut
              à gauche : à gauche le formulaire habituel, à droite la génération
@@ -885,19 +928,7 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
              tient le formulaire ouvert : la laisser derrière soi bloquerait
              toute autre création tant qu'on ne l'a pas retrouvée. Passer à l'IA
              l'annule donc, et revenir au manuel en ouvre une fraîche. */
-          <div ref={editorRef} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 12px 14px', borderRadius: 14, background: palette.surfaceRaised, border: `1px solid ${palette.line}` }}>
-            <SegmentedToggle
-              value={generating ? 'ai' : 'manual'}
-              onChange={side => {
-                if (side === 'ai') { onCancelNewQuestion?.(); setGenerating(true); return; }
-                setGenerating(false);
-                onNewQuestion();
-              }}
-              options={[
-                { value: 'manual', label: tAi('chooseManual'), icon: <Pencil size={13} strokeWidth={1.9} /> },
-                { value: 'ai', label: tAi('chooseAi'), icon: <Sparkles size={13} strokeWidth={1.9} /> },
-              ]}
-            />
+          <div ref={editorRef} style={{ padding: '14px 16px', borderRadius: 14, background: palette.surfaceRaised, border: `1px solid ${palette.line}` }}>
             {generating && workshopId
               ? (
                 <AiGenerationDialog
@@ -908,9 +939,14 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
                   onClose={() => setGenerating(false)}
                   onDone={() => window.location.reload()}
                   frame="inline"
+                  titleTrailing={creationToggle}
+                  onRunningChange={setAiRunning}
                 />
               )
-              : renderEditor?.()}
+              // ⚠️ `bare` : le formulaire ne pose PAS son propre cadre — celui de
+              // l'encadré l'entoure déjà, et deux cadres imbriqués donnaient une
+              // boîte dans la boîte (signalé par Alexis, capture à l'appui).
+              : renderEditor?.({ bare: true, titleTrailing: creationToggle })}
           </div>
         )}
         {!loading && !creating && renderEditor && editingQuestionId !== null && !filtered.some(q => q.id === editingQuestionId) && <div ref={editorRef}>{renderEditor()}</div>}
