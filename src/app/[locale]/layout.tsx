@@ -14,6 +14,7 @@ import Navbar from '@/components/Navbar';
 import DashboardHeader from '@/components/DashboardHeader';
 import Footer from '@/components/Footer';
 import SessionWatcher from '@/components/SessionWatcher';
+import GoogleOneTapGate from '@/components/GoogleOneTapGate';
 import { LAST_WORKSHOP_COOKIE, parseLastWorkshop } from '@/lib/lastWorkshopCache';
 
 const hankenGrotesk = Hanken_Grotesk({
@@ -65,6 +66,7 @@ export default async function LocaleLayout({ children, params }: Props) {
         <body className="min-h-full flex flex-col bg-white">
           <NextIntlClientProvider messages={messages}>
             <SessionWatcher />
+            <GoogleOneTapGate />
             {isLoggedIn ? (
               <Suspense fallback={<div style={{ height: 60, borderBottom: '1px solid var(--line)', background: 'var(--surface-raised)' }} className="hidden md:block" />}>
                 {/* Contexte d'atelier passé dès le HTML : `userId` vient de
