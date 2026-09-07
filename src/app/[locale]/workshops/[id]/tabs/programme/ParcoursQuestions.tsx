@@ -201,10 +201,15 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
         renderEditor={editeur}
         editOnDoubleClick
         editingQuestionId={editing?.id ?? null}
+        // Une question neuve n'est pas encore dans `questions` : c'est ce qui la
+        // distingue d'une question qu'on rouvre, et seule la première ouvre
+        // l'encadré de création avec sa bascule « manuel / par IA ».
+        editingIsNew={editing !== null && !questions.some((q) => q.id === editing.id)}
         openId={openId}
         setOpenId={setOpenId}
         onEditQuestion={openEditor}
         onNewQuestion={() => openEditor(emptyQuestion())}
+        onCancelNewQuestion={() => setEditing(null)}
         onDeleteQuestion={handleDelete}
       />
       </div>

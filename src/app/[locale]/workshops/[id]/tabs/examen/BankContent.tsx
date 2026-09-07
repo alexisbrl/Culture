@@ -11,7 +11,7 @@ import { type Question } from '../QuestionEditor';
 import { type Pool, type Exam } from './examShared';
 import QuestionListView from './QuestionListView';
 
-function BankContent({ workshopId, questions, loading, pools, exams, notions, chapters, draftIds, renderEditor, editingQuestionId, openId, setOpenId, onEditQuestion, onNewQuestion, onToggleInExam, onCreatePool, onUpdatePool, onDeletePool, onDeleteQuestion }: {
+function BankContent({ workshopId, questions, loading, pools, exams, notions, chapters, draftIds, renderEditor, editingQuestionId, editingIsNew, openId, setOpenId, onEditQuestion, onNewQuestion, onCancelNewQuestion, onToggleInExam, onCreatePool, onUpdatePool, onDeletePool, onDeleteQuestion }: {
   workshopId: string;
   questions: Question[];
   /** Les questions ne sont pas encore arrivées du serveur — voir `loading` de
@@ -33,6 +33,11 @@ function BankContent({ workshopId, questions, loading, pools, exams, notions, ch
    *  question. */
   renderEditor?: () => ReactNode;
   editingQuestionId: string | null;
+  /** La question ouverte vient d'être créée — voir `editingIsNew` de
+   *  `QuestionListView`. */
+  editingIsNew: boolean;
+  /** Abandonne la création en cours (bascule vers l'IA). */
+  onCancelNewQuestion: () => void;
   openId: string | null;
   setOpenId: (id: string | null) => void;
   onEditQuestion: (q: Question) => void;
@@ -56,10 +61,12 @@ function BankContent({ workshopId, questions, loading, pools, exams, notions, ch
       renderEditor={renderEditor}
       editOnDoubleClick
       editingQuestionId={editingQuestionId}
+      editingIsNew={editingIsNew}
       openId={openId}
       setOpenId={setOpenId}
       onEditQuestion={onEditQuestion}
       onNewQuestion={onNewQuestion}
+      onCancelNewQuestion={onCancelNewQuestion}
       onDeleteQuestion={onDeleteQuestion}
     />
   );

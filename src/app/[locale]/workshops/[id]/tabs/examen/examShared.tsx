@@ -480,8 +480,18 @@ export function FilterButton({ title, count = 0, open = false, disabled = false,
  *  dimensions sont figées ici et le bouton de filtre est un emplacement —
  *  chaque liste passe son propre `FilterButton`, avec les critères qui la
  *  concernent. */
-/** Ce que l'action « créer » d'une liste propose : deux destinations, choisies
- *  d'un même geste. */
+/** L'action « créer » d'une barre d'outils, sous l'une ou l'autre forme.
+ *
+ *  Les deux cohabitent volontairement : la liste des examens garde le slider
+ *  (deux destinations dans un geste), les listes de questions sont repassées à
+ *  un bouton ordinaire le temps d'essayer la bascule dans l'encadré de création
+ *  (07/09/2026). */
+export type ListToolbarAction =
+  | ({ kind: 'slider' } & NewItemAction)
+  | { kind: 'button'; label: string; title: string; onClick: () => void; disabled?: boolean };
+
+/** Ce que l'action « créer » d'une liste propose quand elle est un slider : deux
+ *  destinations, choisies d'un même geste. */
 export type NewItemAction = {
   /** Libellé lu à GAUCHE du +, et ce que fait le geste vers la gauche. */
   manualLabel: string;
@@ -671,11 +681,11 @@ export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter,
   onSortByChange: (v: SortBy) => void;
   sortDir: SortDir;
   onToggleSortDir: () => void;
-  /** L'action « créer » de la liste — voir `NewItemSlider`. Éteinte tant que la
-   *  liste n'est pas arrivée du serveur : elle garde sa place et sa géométrie,
-   *  et le geste est REFUSÉ VISIBLEMENT au lieu d'être accepté puis perdu (voir
-   *  `loading` dans ExamenTab). */
-  action: NewItemAction;
+  /** L'action « créer » de la liste. Éteinte tant que la liste n'est pas arrivée
+   *  du serveur : elle garde sa place et sa géométrie, et le geste est REFUSÉ
+   *  VISIBLEMENT au lieu d'être accepté puis perdu (voir `loading` dans
+   *  ExamenTab). */
+  action: ListToolbarAction;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'stretch', gap: TOOLBAR_GAP, marginBottom: TOOLBAR_MB }}>
@@ -685,12 +695,32 @@ export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter,
       </div>
       {filter}
       <SortControl options={sortOptions} value={sortBy} onChange={onSortByChange} dir={sortDir} onToggleDir={onToggleSortDir} />
-      {/* Seule action primaire de la colonne (T48). Ce fut un bouton vert
-          « + nouvelle », suivi d'une fenêtre demandant par quoi créer ; c'est
-          désormais un + qui se glisse vers l'une ou l'autre destination — la
-          question est posée par la forme même de la commande, plus par une
-          fenêtre de plus. */}
-      <NewItemSlider action={action} />
+      {/* Seule action primaire de la colonne (T48), sous deux formes.
+          Le SLIDER (liste des examens) porte deux destinations dans un seul
+          geste. Le BOUTON (listes de questions) n'en annonce aucune : le choix
+          entre écrire soi-même et laisser l'IA proposer se fait une fois
+          l'encadré de création ouvert, sur sa bascule — essai en cours,
+          07/09/2026. */}
+      {action.kind === 'slider'
+        ? <NewItemSlider action={action} />
+        : (
+          <Tooltip content={action.title}>
+            <button
+              onClick={action.onClick}
+              disabled={action.disabled}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                minHeight: TOOLBAR_H, padding: '0 11px', borderRadius: 9,
+                background: palette.green, color: palette.onGreen, border: 'none',
+                fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700,
+                cursor: action.disabled ? 'default' : 'pointer',
+                opacity: action.disabled ? 0.5 : 1, flexShrink: 0,
+              }}
+            >
+              <Plus size={15} strokeWidth={2.25} /> {action.label}
+            </button>
+          </Tooltip>
+        )}
     </div>
   );
 }
@@ -2016,6 +2046,49 @@ export function useRememberedCount(storageKey: string, fallback: number): readon
     try { window.localStorage.setItem(storageKey, String(n)); } catch { /* voir ci-dessus */ }
   }, [storageKey]);
   return [count, remember] as const;
+}
+
+/** Bascule à deux positions, posée en haut à gauche d'un encadré (07/09/2026).
+ *
+ *  Elle ne dit pas « oui/non » comme `PillToggle` : elle choisit entre deux
+ *  contenus qui prennent la même place, et les deux libellés restent lisibles
+ *  pour qu'on sache ce qu'il y a de l'autre côté avant d'y aller. */
+export function SegmentedToggle<T extends string>({ value, options, onChange, disabled = false }: {
+  value: T;
+  options: readonly { value: T; label: string; icon?: ReactNode }[];
+  onChange: (value: T) => void;
+  /** Le choix est verrouillé (une génération est en cours : en partir la
+   *  perdrait). Les deux positions restent lisibles, aucune n'est cliquable. */
+  disabled?: boolean;
+}) {
+  return (
+    <div style={{ display: 'inline-flex', padding: 2, borderRadius: 999, background: palette.surfaceInput, border: `1px solid ${palette.line}`, opacity: disabled ? 0.55 : 1 }}>
+      {options.map(opt => {
+        const on = opt.value === value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            disabled={disabled}
+            onClick={() => { if (!on) onChange(opt.value); }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '5px 11px', borderRadius: 999, border: 'none',
+              background: on ? palette.surfaceRaised : 'transparent',
+              boxShadow: on ? `0 1px 3px ${ink(0.10)}` : 'none',
+              color: on ? palette.greenBrand : palette.inkMuted,
+              fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600,
+              cursor: disabled || on ? 'default' : 'pointer',
+              transition: 'background 0.12s, color 0.12s',
+            }}
+          >
+            {opt.icon}
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 /** `active` : l'action du bouton est déjà en cours (question en cours de

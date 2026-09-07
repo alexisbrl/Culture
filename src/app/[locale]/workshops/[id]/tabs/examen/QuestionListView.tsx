@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, type Dispatch, type SetStateAction, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Link2, Pencil, Trash2 } from 'lucide-react';
+import { Link2, Pencil, Sparkles, Trash2 } from 'lucide-react';
 import { palette, withAlpha, ink } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AiGenerationDialog, { useWorkshopFiles } from '@/components/ai/AiGenerationDialog';
@@ -14,7 +14,7 @@ import {
   type Pool, type Exam, type SortBy, type SortDir,
   DEFAULT_SORT_DIR, NEVER_EXAM_ID, CARD_LINE, CARD_ACTION_BTN, LIST_INSET_X,
   RESPONSE_TYPE_ICONS,
-  TypeIcon, IconBtn, ListToolbar, FilterButton, ListCard, ListCardSkeleton, LabelPill, LabelEditor,
+  TypeIcon, IconBtn, ListToolbar, FilterButton, ListCard, ListCardSkeleton, LabelPill, LabelEditor, SegmentedToggle,
   useDismissOnOutsideClick, useRememberedCount,
 } from './examShared';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -124,7 +124,7 @@ export type QuestionListExams = {
   onToggleInExam: (id: string) => void;
 };
 
-function QuestionListView({ questions, notions, chapters, labels, exams: examsProp, renderEditor, editOnDoubleClick = false, editingQuestionId, openId, setOpenId, onEditQuestion, onNewQuestion, onDeleteQuestion, workshopId, aiContext, loading = false }: {
+function QuestionListView({ questions, notions, chapters, labels, exams: examsProp, renderEditor, editOnDoubleClick = false, editingQuestionId, editingIsNew = false, openId, setOpenId, onEditQuestion, onNewQuestion, onCancelNewQuestion, onDeleteQuestion, workshopId, aiContext, loading = false }: {
   questions: Question[];
   /** Requis pour la génération par IA ; absent, la liste se comporte comme avant. */
   workshopId?: string;
@@ -149,10 +149,20 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
    *  crayon fait la même chose et reste le geste découvrable. */
   editOnDoubleClick?: boolean;
   editingQuestionId: string | null;
+  /** La question ouverte est une question NEUVE, pas une question qu'on modifie.
+   *  C'est ce qui distingue l'encadré de CRÉATION — le seul à porter la bascule
+   *  « manuel / par IA » — de l'ouverture d'une question déjà écrite, où
+   *  proposer l'IA n'aurait aucun sens. */
+  editingIsNew?: boolean;
   openId: string | null;
   setOpenId: (id: string | null) => void;
   onEditQuestion: (q: Question) => void;
   onNewQuestion: () => void;
+  /** Referme la création en cours côté appelant (la question neuve n'existe
+   *  qu'en mémoire, et l'abandonner la retire partout). La bascule s'en sert
+   *  pour passer du formulaire manuel à l'IA : sans ça, le brouillon manuel
+   *  resterait ouvert dans le dos de l'application et bloquerait tout. */
+  onCancelNewQuestion?: () => void;
   onDeleteQuestion: (q: Question) => void;
   /** Les questions ne sont pas encore arrivées du serveur.
    *
@@ -170,6 +180,10 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   // Génération par IA : les documents sont chargés d'avance pour que le
   // dialogue s'ouvre déjà rempli.
   const [generating, setGenerating] = useState(false);
+  /** L'encadré de création est ouvert : soit l'appelant tient une question neuve
+   *  (côté manuel), soit on est passé à l'IA. Les deux occupent la MÊME boîte,
+   *  en tête de liste, sous la même bascule. */
+  const creating = generating || editingIsNew;
   // `generating` en second argument : la liste est relue à chaque ouverture du
   // dialogue (voir `useWorkshopFiles`), pas seulement au montage de la page.
   // `loading` en troisième : elle ne part qu'une fois les questions arrivées,
@@ -652,22 +666,6 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
         />
       )}
 
-      {/* ⚠️ **La fenêtre « par IA / manuellement » a disparu** (07/09/2026). Le
-          clic sur « + nouvelle » ouvrait une modale de deux boutons ; les deux
-          destinations se lisent désormais de part et d'autre du + de la barre
-          d'outils, et le geste qui l'y amène EST le choix. Une décision de moins
-          à prendre en deux temps. */}
-
-      {generating && workshopId && (
-        <AiGenerationDialog
-          workshopId={workshopId}
-          files={aiFiles ?? []}
-          forcedContext={aiContext}
-          origin={aiContext === 'exam' ? 'questions-exam' : 'questions-parcours'}
-          onClose={() => setGenerating(false)}
-          onDone={() => window.location.reload()}
-        />
-      )}
 
       {/* Barre d'outils commune aux deux listes (`ListToolbar`) : la banque n'y
           met que ce qui lui est propre — sa recherche, ses critères de tri, son
@@ -681,18 +679,16 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
         onSortByChange={changeSortBy}
         sortDir={sortDir}
         onToggleSortDir={() => setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')}
-        // Sans `aiContext` — donc partout où la génération n'a pas de sens — le
-        // côté IA se lit mais reste éteint, comme pour les examens : la commande
-        // garde la même forme d'une liste à l'autre.
+        // Un bouton qui n'annonce aucune destination : il ouvre l'encadré de
+        // création, et c'est LÀ que se choisit « manuel » ou « par IA », sur une
+        // bascule. Ouvrir l'encadré part toujours du côté manuel — le plus
+        // fréquent, et le seul qui existe partout.
         action={{
-          manualLabel: tAi('chooseManual'),
-          onManual: onNewQuestion,
-          aiLabel: tAi('chooseAi'),
-          onAi: () => setGenerating(true),
-          aiDisabled: !aiContext,
-          aiDisabledHint: aiContext ? undefined : tr('bank.aiUnavailable'),
+          kind: 'button',
+          label: tr('bank.newShort'),
+          title: tr('bank.newQuestion'),
+          onClick: () => { setGenerating(false); onNewQuestion(); },
           disabled: loading,
-          hint: tr('bank.newQuestionHint'),
         }}
         filter={
           <FilterButton
@@ -877,9 +873,52 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
             l'arrivée des questions — c'est précisément ce qu'il est là pour
             éviter (`showLabels`, voir le `meta` de la carte plus haut). */}
         {loading && Array.from({ length: skeletonCount }, (_, i) => <ListCardSkeleton key={i} index={i} meta={showLabels} />)}
-        {!loading && renderEditor && editingQuestionId !== null && !filtered.some(q => q.id === editingQuestionId) && <div ref={editorRef}>{renderEditor()}</div>}
+        {!loading && creating && (
+          /* ─── Encadré de CRÉATION (07/09/2026) ─────────────────────────────
+             Une seule boîte, tout en haut de la liste, avec une bascule en haut
+             à gauche : à gauche le formulaire habituel, à droite la génération
+             par IA — le même dialogue qu'avant, rendu sans sa fenêtre flottante
+             (`frame="inline"`).
+
+             ⚠️ **Changer de côté REFERME ce qu'on quitte.** Une question neuve
+             n'existe qu'en mémoire, mais elle est déjà posée sur la copie et
+             tient le formulaire ouvert : la laisser derrière soi bloquerait
+             toute autre création tant qu'on ne l'a pas retrouvée. Passer à l'IA
+             l'annule donc, et revenir au manuel en ouvre une fraîche. */
+          <div ref={editorRef} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 12px 14px', borderRadius: 14, background: palette.surfaceRaised, border: `1px solid ${palette.line}` }}>
+            <SegmentedToggle
+              value={generating ? 'ai' : 'manual'}
+              onChange={side => {
+                if (side === 'ai') { onCancelNewQuestion?.(); setGenerating(true); return; }
+                setGenerating(false);
+                onNewQuestion();
+              }}
+              options={[
+                { value: 'manual', label: tAi('chooseManual'), icon: <Pencil size={13} strokeWidth={1.9} /> },
+                { value: 'ai', label: tAi('chooseAi'), icon: <Sparkles size={13} strokeWidth={1.9} /> },
+              ]}
+            />
+            {generating && workshopId
+              ? (
+                <AiGenerationDialog
+                  workshopId={workshopId}
+                  files={aiFiles ?? []}
+                  forcedContext={aiContext}
+                  origin={aiContext === 'exam' ? 'questions-exam' : 'questions-parcours'}
+                  onClose={() => setGenerating(false)}
+                  onDone={() => window.location.reload()}
+                  frame="inline"
+                />
+              )
+              : renderEditor?.()}
+          </div>
+        )}
+        {!loading && !creating && renderEditor && editingQuestionId !== null && !filtered.some(q => q.id === editingQuestionId) && <div ref={editorRef}>{renderEditor()}</div>}
         {!loading && filtered.map(q => (
-          renderEditor && q.id === editingQuestionId
+          // `!creating` : l'encadré de création porte déjà le formulaire, en
+          // tête de liste. Sans ce garde, une question neuve qui se trouverait
+          // aussi dans la liste en afficherait un second.
+          renderEditor && !creating && q.id === editingQuestionId
             ? <div key={q.id} ref={editorRef}>{renderEditor()}</div>
             : renderQuestionCard(q)
         ))}

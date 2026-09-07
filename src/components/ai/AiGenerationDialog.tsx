@@ -141,9 +141,18 @@ type Props = {
   origin: GenerationOrigin;
   onClose: () => void;
   onDone?: () => void;
+  /** Où le dialogue est posé (07/09/2026).
+   *
+   *  `modal` (défaut) : la fenêtre flottante habituelle, avec son fond flouté et
+   *  son piège à tabulation. `inline` : le MÊME contenu, sans coquille — il est
+   *  alors rendu dans l'encadré de création d'une liste de questions, à côté du
+   *  formulaire manuel dont une bascule le sépare. Rien d'autre ne change : les
+   *  étapes, l'arrêt et les messages sont les mêmes des deux côtés, et c'est bien
+   *  le but — il n'y a qu'une génération, pas deux. */
+  frame?: 'modal' | 'inline';
 };
 
-export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, onDone }: Props) {
+export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, onDone, frame = 'modal' }: Props) {
   const t = useTranslations('ai');
   const locale = useLocale();
 
@@ -830,9 +839,11 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     })();
   }
 
-  return (
-    <Modal onClose={requestClose} width={520} portal>
-      <div style={{ textAlign: 'left' }}>
+  // Le corps est écrit une seule fois : seule la coquille change (voir `frame`).
+  // `position: relative` en ligne — la croix se pose en absolu, et sans repère
+  // elle irait se caler sur le premier ancêtre positionné de la page.
+  const body = (
+      <div style={{ textAlign: 'left', position: frame === 'inline' ? 'relative' : undefined }}>
         {/* La croix : une sortie visible, au même endroit à chaque étape. Sans
             elle, la seule façon de quitter une génération était de fermer
             l'onglet. */}
@@ -1028,8 +1039,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
           </div>
         )}
       </div>
-    </Modal>
   );
+
+  if (frame === 'inline') return body;
+  return <Modal onClose={requestClose} width={520} portal>{body}</Modal>;
 }
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (

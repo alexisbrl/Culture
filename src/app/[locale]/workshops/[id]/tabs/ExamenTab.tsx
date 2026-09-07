@@ -701,10 +701,12 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 draftIds={draftIds}
                 renderEditor={sheetCarriesEditor ? undefined : () => renderQuestionEditor('plain')}
                 editingQuestionId={editingQuestion?.id ?? null}
+                editingIsNew={editingQuestion !== null && editingQuestion.id === newQuestionId}
                 openId={openId}
                 setOpenId={setOpenId}
                 onEditQuestion={requestEditQuestion}
                 onNewQuestion={handleNewQuestion}
+                onCancelNewQuestion={handleCancelQuestion}
                 onToggleInExam={handleToggleQuestionInExam}
                 onCreatePool={handleCreatePool}
                 onUpdatePool={handleUpdatePool}

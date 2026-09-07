@@ -81,6 +81,7 @@ function HistoryContent({ workshopId, exams, loading, justAddedId, onEdit, onNew
         // plutôt que masqué pour que les deux listes de l'onglet aient la même
         // commande, et son infobulle dit que c'est à venir.
         action={{
+          kind: 'slider',
           manualLabel: tAi('chooseManual'),
           onManual: onNew,
           aiLabel: tAi('chooseAi'),
