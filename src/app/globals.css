@@ -620,3 +620,27 @@
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* Encadrés d'attente des listes (voir `ListCardSkeleton`).
+
+   Une liste qui met une seconde à arriver ne doit pas être un panneau vide : on
+   pose à la place la SILHOUETTE des cartes à venir, au bon nombre (mémorisé de
+   la visite précédente) et à la bonne géométrie — la liste ne saute donc pas
+   quand les vraies cartes prennent leur place.
+
+   Un battement d'opacité, pas un reflet qui balaie : la palette n'a pas de blanc
+   pur, et un dégradé clair sur le crème des cartes se verrait comme un défaut
+   d'affichage. Les barres tirent leur couleur de leur style en ligne
+   (`ink()`), l'animation n'en impose aucune. */
+@keyframes list-skeleton-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+.list-skeleton {
+  animation: list-skeleton-pulse 1.5s ease-in-out infinite;
+}
+/* Le battement est décoratif : il se coupe quand la personne a demandé moins
+   d'animations, et la silhouette reste — c'est elle qui porte l'information. */
+@media (prefers-reduced-motion: reduce) {
+  .list-skeleton { animation: none; }
+}

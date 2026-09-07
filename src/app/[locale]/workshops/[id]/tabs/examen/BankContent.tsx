@@ -11,9 +11,13 @@ import { type Question } from '../QuestionEditor';
 import { type Pool, type Exam } from './examShared';
 import QuestionListView from './QuestionListView';
 
-function BankContent({ workshopId, questions, pools, exams, notions, chapters, draftIds, renderEditor, editingQuestionId, openId, setOpenId, onEditQuestion, onNewQuestion, onToggleInExam, onCreatePool, onUpdatePool, onDeletePool, onDeleteQuestion }: {
+function BankContent({ workshopId, questions, loading, pools, exams, notions, chapters, draftIds, renderEditor, editingQuestionId, openId, setOpenId, onEditQuestion, onNewQuestion, onToggleInExam, onCreatePool, onUpdatePool, onDeletePool, onDeleteQuestion }: {
   workshopId: string;
   questions: Question[];
+  /** Les questions ne sont pas encore arrivées du serveur — voir `loading` de
+   *  `QuestionListView`, qui en tire l'encadré d'attente et l'extinction de la
+   *  création. */
+  loading: boolean;
   pools: Pool[];
   exams: Exam[];
   notions: { id: string; title: string; chapterId: string | null }[];
@@ -44,6 +48,7 @@ function BankContent({ workshopId, questions, pools, exams, notions, chapters, d
       workshopId={workshopId}
       aiContext="exam"
       questions={questions}
+      loading={loading}
       notions={notions}
       chapters={chapters}
       labels={{ pools, onCreate: onCreatePool, onUpdate: onUpdatePool, onDelete: onDeletePool }}

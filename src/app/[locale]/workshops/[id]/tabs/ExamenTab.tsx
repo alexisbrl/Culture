@@ -8,9 +8,9 @@ import { palette, ink, radius, withAlpha, categoryTones } from '@/lib/theme';
 import { useIsPhone } from '@/lib/useIsPhone';
 import { type Question, emptyQuestion } from './QuestionEditor';
 import {
-  getExamBankData, saveQuestion, createPool as createPoolAction, updatePool as updatePoolAction,
+  getExamPageData, saveQuestion, createPool as createPoolAction, updatePool as updatePoolAction,
   deletePool as deletePoolAction, deleteQuestion as deleteQuestionAction, saveGeneratedExam,
-  deleteGeneratedExam, getExamDraft, saveExamDraft,
+  deleteGeneratedExam, saveExamDraft,
 } from '@/app/actions/examQuestions';
 import {
   type Exam, type Pool, type ExamConfig, type SheetFocus,
@@ -40,6 +40,18 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const [sheetDragging, setSheetDragging] = useState(false);
   const [exams, setExams] = useState<Exam[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
+  /** Les questions et les examens ne sont pas encore arrivés du serveur.
+   *
+   *  ⚠️ **Ce n'est pas qu'un habillage** (07/09/2026) : tant que c'est vrai,
+   *  RIEN ne doit pouvoir créer ni modifier de question. La réponse du serveur
+   *  remplace la liste des questions et le brouillon de la copie ; une question
+   *  créée entre-temps n'existait qu'en mémoire, elle disparaissait donc à
+   *  l'arrivée des données — mais le formulaire, lui, restait « ouvert » dans le
+   *  dos de l'application, ce qui bloquait toute création et toute modification
+   *  jusqu'au rechargement de la page (signalé par Alexis). Les listes montrent
+   *  des encadrés d'attente pendant ce temps, et les gestes de création sont
+   *  éteints : le geste refusé est ainsi visible, au lieu d'être perdu. */
+  const [loading, setLoading] = useState(true);
   const [pools, setPools] = useState<Pool[]>([]);
   // `chapterId` sur la notion + la liste des chapitres : de quoi filtrer la
   // banque par chapitre, qu'une question ne porte pas elle-même (elle en hérite
@@ -123,7 +135,9 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    Promise.all([getExamBankData(workshopId), getExamDraft(workshopId)]).then(([{ questions, pools, exams, notions, chapters }, draft]) => {
+    // Un seul aller-retour : Next met les server actions à la queue leu leu, donc
+    // deux appels « en parallèle » n'en sont pas — voir `getExamPageData`.
+    getExamPageData(workshopId).then(({ questions, pools, exams, notions, chapters, draft }) => {
       const mappedExams = exams.map(e => ({ id: e.id, title: e.title, date: e.date, q: e.q, dur: e.dur, avg: e.avg, status: e.status, taken: e.taken, questionIds: e.questionIds, config: e.config }));
       setQuestions(questions);
       setPools(pools);
@@ -154,7 +168,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         }
       }
     }).catch(err => console.error('chargement banque de questions échoué', err))
-      .finally(() => { draftLoaded.current = true; });
+      .finally(() => { draftLoaded.current = true; setLoading(false); });
   }, [workshopId]);
 
   // Sauvegarde du brouillon de l'éditeur d'examen (reprise après reconnexion /
@@ -327,6 +341,10 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
    *  c'est le cas du bouton « nouvelle question » de la banque, qui ne vise
    *  aucun endroit. */
   function handleNewQuestionInSection(sectionIdx: number) {
+    // Tant que le serveur n'a pas répondu, sa réponse écraserait la question
+    // qu'on créerait ici — voir `loading`. Les affordances sont déjà éteintes ;
+    // ce filet couvre ce qui pourrait les contourner (double-clic sur la copie).
+    if (loading) return;
     if (editingQuestion) {
       blockForOpenQuestion('open');
       return;
@@ -644,7 +662,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 est conservée. */}
             <div className="scroll-panel" style={{ display: leftTab === 'history' ? 'block' : 'none', height: '100%', overflowY: sheetDragging ? 'hidden' : undefined }}>
               <div style={{ zoom: 'var(--exam-list-zoom, 1)' }}>
-                <HistoryContent exams={exams} justAddedId={justAdded} onEdit={requestEditExam} onNew={() => setIntroOpen(true)} onDelete={e => setPendingDeleteExam(e)} />
+                <HistoryContent workshopId={workshopId} exams={exams} loading={loading} justAddedId={justAdded} onEdit={requestEditExam} onNew={() => setIntroOpen(true)} onDelete={e => setPendingDeleteExam(e)} />
               </div>
             </div>
             <div className="scroll-panel" style={{ display: leftTab === 'bank' ? 'block' : 'none', height: '100%', position: 'relative', overflowY: sheetDragging ? 'hidden' : undefined }}>
@@ -652,6 +670,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
               <BankContent
                 workshopId={workshopId}
                 questions={bankQuestions}
+                loading={loading}
                 pools={pools}
                 exams={exams}
                 notions={notions}

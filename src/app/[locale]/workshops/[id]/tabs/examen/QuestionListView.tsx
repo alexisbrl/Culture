@@ -15,8 +15,8 @@ import {
   type Pool, type Exam, type SortBy, type SortDir,
   DEFAULT_SORT_DIR, NEVER_EXAM_ID, CARD_LINE, CARD_ACTION_BTN, LIST_INSET_X,
   RESPONSE_TYPE_ICONS,
-  TypeIcon, IconBtn, ListToolbar, FilterButton, ListCard, LabelPill, LabelEditor,
-  useDismissOnOutsideClick,
+  TypeIcon, IconBtn, ListToolbar, FilterButton, ListCard, ListCardSkeleton, LabelPill, LabelEditor,
+  useDismissOnOutsideClick, useRememberedCount,
 } from './examShared';
 import { Tooltip } from '@/components/ui/tooltip';
 
@@ -125,7 +125,7 @@ export type QuestionListExams = {
   onToggleInExam: (id: string) => void;
 };
 
-function QuestionListView({ questions, notions, chapters, labels, exams: examsProp, renderEditor, editOnDoubleClick = false, editingQuestionId, openId, setOpenId, onEditQuestion, onNewQuestion, onDeleteQuestion, workshopId, aiContext }: {
+function QuestionListView({ questions, notions, chapters, labels, exams: examsProp, renderEditor, editOnDoubleClick = false, editingQuestionId, openId, setOpenId, onEditQuestion, onNewQuestion, onDeleteQuestion, workshopId, aiContext, loading = false }: {
   questions: Question[];
   /** Requis pour la génération par IA ; absent, la liste se comporte comme avant. */
   workshopId?: string;
@@ -155,6 +155,16 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   onEditQuestion: (q: Question) => void;
   onNewQuestion: () => void;
   onDeleteQuestion: (q: Question) => void;
+  /** Les questions ne sont pas encore arrivées du serveur.
+   *
+   *  Trois effets, et le premier n'est pas cosmétique : la création est hors de
+   *  portée (une question créée avant l'arrivée des données était écrasée par
+   *  elles, et le formulaire resté ouvert bloquait tout — voir `loading` dans
+   *  ExamenTab) ; la liste montre la silhouette de ses cartes ; et les deux
+   *  lectures qui n'ont rien à voir avec elle — bandeau d'import, documents de
+   *  l'atelier — attendent leur tour au lieu de lui passer devant dans la file
+   *  des appels au serveur. */
+  loading?: boolean;
 }) {
   const tr = useTranslations('examen');
   const tAi = useTranslations('ai');
@@ -164,7 +174,13 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   const [generating, setGenerating] = useState(false);
   // `generating` en second argument : la liste est relue à chaque ouverture du
   // dialogue (voir `useWorkshopFiles`), pas seulement au montage de la page.
-  const aiFiles = useWorkshopFiles(workshopId ?? '', generating);
+  // `loading` en troisième : elle ne part qu'une fois les questions arrivées,
+  // pour ne pas leur passer devant dans la file des appels au serveur.
+  const aiFiles = useWorkshopFiles(workshopId ?? '', generating, loading);
+  // Le nombre d'encadrés d'attente est celui de la dernière visite — aucun
+  // aller-retour n'est fait pour l'obtenir (voir `useRememberedCount`).
+  const [skeletonCount, rememberCount] = useRememberedCount(`culture.listCount.${aiContext ?? 'questions'}.${workshopId ?? ''}`, 4);
+  useEffect(() => { if (!loading) rememberCount(questions.length); }, [loading, questions.length, rememberCount]);
   // Les deux familles optionnelles ramenées à des valeurs neutres : le reste du
   // composant s'écrit alors sans condition, seuls l'affichage des sections
   // concernées et les rappels regardent leur présence.
@@ -634,6 +650,7 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
           workshopId={workshopId}
           scope={aiContext === 'exam' ? 'exam' : 'programme'}
           onCancelled={() => window.location.reload()}
+          waitFor={loading}
         />
       )}
 
@@ -690,6 +707,7 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
         // (§8 du plan d'ingestion). Sans `aiContext` — donc partout où la
         // génération n'a pas de sens — le comportement d'avant est conservé.
         onAction={aiContext ? () => setChoosing(true) : onNewQuestion}
+        actionDisabled={loading}
         filter={
           <FilterButton
             title={tr('bank.filters')}
@@ -867,13 +885,14 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
             par les filtres actifs, et la voir disparaître sous le formulaire
             qu'on vient d'ouvrir n'aurait aucun sens. Elle rejoint la liste — ou
             s'efface, si les filtres l'écartent — une fois l'édition terminée. */}
-        {renderEditor && editingQuestionId !== null && !filtered.some(q => q.id === editingQuestionId) && <div ref={editorRef}>{renderEditor()}</div>}
-        {filtered.map(q => (
+        {loading && Array.from({ length: skeletonCount }, (_, i) => <ListCardSkeleton key={i} index={i} />)}
+        {!loading && renderEditor && editingQuestionId !== null && !filtered.some(q => q.id === editingQuestionId) && <div ref={editorRef}>{renderEditor()}</div>}
+        {!loading && filtered.map(q => (
           renderEditor && q.id === editingQuestionId
             ? <div key={q.id} ref={editorRef}>{renderEditor()}</div>
             : renderQuestionCard(q)
         ))}
-        {filtered.length === 0 && editingQuestionId === null && (
+        {!loading && filtered.length === 0 && editingQuestionId === null && (
           <div style={{ fontSize: 12.5, color: palette.inkFaint, padding: '20px 0', textAlign: 'center' as const }}>{tr('bank.noMatch')}</div>
         )}
       </div>

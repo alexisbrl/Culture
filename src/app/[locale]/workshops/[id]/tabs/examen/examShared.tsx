@@ -480,7 +480,7 @@ export function FilterButton({ title, count = 0, open = false, disabled = false,
  *  dimensions sont figées ici et le bouton de filtre est un emplacement —
  *  chaque liste passe son propre `FilterButton`, avec les critères qui la
  *  concernent. */
-export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter, sortOptions, sortBy, onSortByChange, sortDir, onToggleSortDir, actionLabel, actionTitle, onAction }: {
+export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter, sortOptions, sortBy, onSortByChange, sortDir, onToggleSortDir, actionLabel, actionTitle, onAction, actionDisabled = false }: {
   search: string;
   onSearchChange: (v: string) => void;
   searchPlaceholder: string;
@@ -493,6 +493,11 @@ export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter,
   actionLabel: string;
   actionTitle: string;
   onAction: () => void;
+  /** L'action primaire est hors de portée — la liste n'est pas encore arrivée
+   *  du serveur. Le bouton s'éteint plutôt que de disparaître : la barre garde
+   *  sa géométrie, et surtout le geste est REFUSÉ VISIBLEMENT au lieu d'être
+   *  accepté puis perdu (voir `loading` dans ExamenTab). */
+  actionDisabled?: boolean;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'stretch', gap: TOOLBAR_GAP, marginBottom: TOOLBAR_MB }}>
@@ -506,7 +511,7 @@ export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter,
       {/* Pas d'`aria-label` : `actionLabel` est visible dans le bouton, c'est
           lui le nom accessible. L'infobulle ne fait que le préciser. */}
       <Tooltip content={actionTitle}>
-        <button onClick={onAction} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, minHeight: TOOLBAR_H, padding: '0 11px', borderRadius: 9, background: palette.green, color: palette.onGreen, border: 'none', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+        <button onClick={onAction} disabled={actionDisabled} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, minHeight: TOOLBAR_H, padding: '0 11px', borderRadius: 9, background: palette.green, color: palette.onGreen, border: 'none', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: actionDisabled ? 'default' : 'pointer', opacity: actionDisabled ? 0.5 : 1, flexShrink: 0 }}>
           <Plus size={15} strokeWidth={2.25} /> {actionLabel}
         </button>
       </Tooltip>
@@ -1753,6 +1758,88 @@ export function ListCard({ onClick, onDoubleClick, tint, borderColor, leading, i
       {children}
     </div>
   );
+}
+
+/** Silhouette d'une carte, montrée le temps que la liste arrive du serveur
+ *  (07/09/2026).
+ *
+ *  ⚠️ **Sa géométrie est celle de `ListCard`, à l'identique** — même retrait,
+ *  même rayon, même fond, et surtout la même hauteur intérieure (deux lignes de
+ *  titre, plus une de garnitures quand la carte en a). C'est toute la raison
+ *  d'être de l'encadré : la liste ne doit pas sauter au moment où les vraies
+ *  cartes prennent sa place. Toute retouche de la hauteur de `ListCard` doit
+ *  donc être reportée ici.
+ *
+ *  Les largeurs des barres sont volontairement inégales et FIXES pour un rang
+ *  donné : un tirage au hasard changerait à chaque rendu, et la silhouette
+ *  frémirait au lieu de battre. */
+export function ListCardSkeleton({ index = 0, meta = true }: {
+  /** Rang dans la liste : décide des largeurs de barres et décale le battement,
+   *  pour que la colonne respire au lieu de clignoter d'un bloc. */
+  index?: number;
+  /** La carte imitée porte-t-elle une ligne de garnitures (libellés, décompte) ?
+   *  Faux pour une liste à deux lignes — voir `meta` de `ListCard`. */
+  meta?: boolean;
+}) {
+  const titleWidths = ['92%', '78%', '86%', '70%'];
+  const secondWidths = ['54%', '66%', '46%', '60%'];
+  const bar = (width: string, height: number): CSSProperties => ({
+    width, height, borderRadius: 999, background: ink(0.07),
+  });
+  return (
+    <div
+      aria-hidden
+      className="list-skeleton"
+      style={{
+        display: 'flex', flexDirection: 'column', padding: `${CARD_PAD_Y}px ${CARD_PAD_X}px`, borderRadius: 12,
+        background: palette.surfaceRaised, border: '1px solid transparent',
+        animationDelay: `${(index % 4) * 0.12}s`,
+      }}
+    >
+      <div style={{ height: (meta ? 3 : 2) * CARD_LINE, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 7 }}>
+        <div style={bar(titleWidths[index % titleWidths.length], 9)} />
+        <div style={bar(secondWidths[index % secondWidths.length], 9)} />
+        {meta && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
+            <div style={bar('64px', 11)} />
+            <div style={bar('42px', 11)} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Combien d'encadrés d'attente montrer, d'après ce que la liste contenait à la
+ *  visite précédente.
+ *
+ *  ⚠️ **On ne va PAS chercher un décompte auprès du serveur pour ça.** Ce serait
+ *  un aller-retour de plus — dans la file d'attente, devant la liste qu'on
+ *  cherche justement à faire arriver plus tôt : on ralentirait le chargement
+ *  pour mieux l'habiller. Le nombre de la dernière visite donne la même illusion
+ *  pour rien.
+ *
+ *  La lecture se fait après le montage, jamais au rendu : le serveur ne connaît
+ *  pas le stockage du navigateur, et lire ici ferait diverger le premier rendu
+ *  de l'HTML envoyé. Le repli s'affiche donc une image avant le nombre mémorisé
+ *  — imperceptible, l'attente se compte en centaines de millisecondes. */
+export function useRememberedCount(storageKey: string, fallback: number): readonly [number, (n: number) => void] {
+  const [count, setCount] = useState(fallback);
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      const n = raw === null ? NaN : Number(raw);
+      // Borné : une banque de 300 questions ne doit pas peindre 300 silhouettes.
+      if (Number.isFinite(n) && n > 0) setCount(Math.min(Math.round(n), 8));
+    } catch {
+      // Stockage indisponible (navigation privée, site data bloqué) : le repli
+      // fait très bien l'affaire, il n'y a rien à signaler.
+    }
+  }, [storageKey]);
+  const remember = useCallback((n: number) => {
+    try { window.localStorage.setItem(storageKey, String(n)); } catch { /* voir ci-dessus */ }
+  }, [storageKey]);
+  return [count, remember] as const;
 }
 
 /** `active` : l'action du bouton est déjà en cours (question en cours de

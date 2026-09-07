@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Download, Trash2 } from 'lucide-react';
 import { palette, withAlpha } from '@/lib/theme';
 import {
   type Exam, type SortBy, type SortDir,
   DEFAULT_SORT_DIR, CARD_ACTION_BTN, LIST_INSET_X,
-  IconBtn, ListToolbar, FilterButton, ListCard,
+  IconBtn, ListToolbar, FilterButton, ListCard, ListCardSkeleton, useRememberedCount,
 } from './examShared';
 
 // Critères de tri d'un examen : ni « type » ni « tag », qui n'existent que sur
@@ -36,8 +36,22 @@ const CARD_HOT_TINT = withAlpha(palette.gold, 0.14); // teinte de l'examen tout 
 // le filtre qui allait avec — `Exam.status` reste en donnée, plus rien ne
 // l'affiche. Le bouton « filtrer » demeure, désactivé, tant qu'aucun critère de
 // filtre n'existe pour cette liste. ----
-function HistoryContent({ exams, justAddedId, onEdit, onNew, onDelete }: { exams: Exam[]; justAddedId: string | null; onEdit: (e: Exam) => void; onNew: () => void; onDelete: (e: Exam) => void }) {
+function HistoryContent({ workshopId, exams, loading, justAddedId, onEdit, onNew, onDelete }: {
+  workshopId: string;
+  exams: Exam[];
+  /** Les examens ne sont pas encore arrivés du serveur : la liste montre leur
+   *  silhouette et l'action « nouvel examen » reste hors de portée. */
+  loading: boolean;
+  justAddedId: string | null;
+  onEdit: (e: Exam) => void;
+  onNew: () => void;
+  onDelete: (e: Exam) => void;
+}) {
   const t = useTranslations('examen');
+  // Le nombre d'encadrés d'attente est celui de la dernière visite — aucun
+  // aller-retour n'est fait pour l'obtenir (voir `useRememberedCount`).
+  const [skeletonCount, rememberCount] = useRememberedCount(`culture.listCount.exams.${workshopId}`, 3);
+  useEffect(() => { if (!loading) rememberCount(exams.length); }, [loading, exams.length, rememberCount]);
 
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('recent');
@@ -63,16 +77,18 @@ function HistoryContent({ exams, justAddedId, onEdit, onNew, onDelete }: { exams
         actionLabel={t('history.newExam')}
         actionTitle={t('history.newExam')}
         onAction={onNew}
+        actionDisabled={loading}
         filter={<FilterButton disabled title={t('history.filterNone')} />}
       />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {filtered.length === 0 && (
+        {loading && Array.from({ length: skeletonCount }, (_, i) => <ListCardSkeleton key={i} index={i} />)}
+        {!loading && filtered.length === 0 && (
           <div style={{ fontSize: 12.5, color: palette.inkFaint, textAlign: 'center', padding: '20px 0' }}>
             {t('history.noResults')}
           </div>
         )}
-        {filtered.map((e) => {
+        {!loading && filtered.map((e) => {
           const hot = e.id === justAddedId;
           return (
             <ListCard

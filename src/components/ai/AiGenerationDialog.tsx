@@ -97,9 +97,16 @@ export type DialogFile = { id: string; name: string; mimeType: string; size: num
  *  jamais par `null`, et une lecture ratée ne vide pas une liste déjà obtenue :
  *  rouvrir le dialogue ne doit pas faire clignoter « aucun document » le temps
  *  d'un aller-retour serveur. */
-export function useWorkshopFiles(workshopId: string, refreshOn?: unknown): DialogFile[] | null {
+export function useWorkshopFiles(workshopId: string, refreshOn?: unknown, waitFor = false): DialogFile[] | null {
   const [files, setFiles] = useState<DialogFile[] | null>(null);
   useEffect(() => {
+    // ⚠️ **Next met les server actions à la queue leu leu** (07/09/2026) : la
+    // liste des documents partait au montage de l'écran, donc DEVANT les données
+    // que cet écran affiche — mesuré à 250-500 ms d'attente ajoutés à la liste
+    // de questions, pour garnir un dialogue que l'on n'ouvrira peut-être jamais.
+    // L'hôte peut donc la faire passer après ; elle reste chargée d'avance, le
+    // dialogue s'ouvre toujours déjà rempli.
+    if (waitFor) return;
     let cancelled = false;
     getWorkshopFiles(workshopId)
       .then((rows) => { if (!cancelled) setFiles(rows.map((f) => ({ id: f.id, name: f.name, mimeType: f.mimeType, size: f.size }))); })
@@ -108,7 +115,7 @@ export function useWorkshopFiles(workshopId: string, refreshOn?: unknown): Dialo
       // ne doit pas effacer la liste qu'on affichait déjà.
       .catch(() => { if (!cancelled) setFiles((prev) => prev ?? []); });
     return () => { cancelled = true; };
-  }, [workshopId, refreshOn]);
+  }, [workshopId, refreshOn, waitFor]);
   return files;
 }
 
