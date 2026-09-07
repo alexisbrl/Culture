@@ -48,8 +48,6 @@ function HistoryContent({ workshopId, exams, loading, justAddedId, onEdit, onNew
   onDelete: (e: Exam) => void;
 }) {
   const t = useTranslations('examen');
-  // Les deux destinations du + se disent dans les mêmes mots que côté questions.
-  const tAi = useTranslations('ai');
   // Le nombre d'encadrés d'attente est celui de la dernière visite — aucun
   // aller-retour n'est fait pour l'obtenir (voir `useRememberedCount`).
   const [skeletonCount, rememberCount] = useRememberedCount(`culture.listCount.exams.${workshopId}`, 3);
@@ -76,20 +74,17 @@ function HistoryContent({ workshopId, exams, loading, justAddedId, onEdit, onNew
         onSortByChange={setSortBy}
         sortDir={sortDir}
         onToggleSortDir={() => setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
-        // Le côté IA est en place mais éteint : générer un examen entier n'existe
-        // pas encore (l'IA écrit des questions, pas des examens). Il est montré
-        // plutôt que masqué pour que les deux listes de l'onglet aient la même
-        // commande, et son infobulle dit que c'est à venir.
+        // Le même bouton que la liste de questions (07/09/2026) : le slider qui
+        // a tenu quelques heures ici annonçait une destination « par IA » qui
+        // n'existe pas — générer un examen entier n'est pas écrit, et une
+        // commande qui montre une porte fermée vaut moins qu'une commande qui
+        // n'en montre qu'une. Il ouvre directement une copie vierge.
         action={{
-          kind: 'slider',
-          manualLabel: tAi('chooseManual'),
-          onManual: onNew,
-          aiLabel: tAi('chooseAi'),
-          onAi: () => {},
-          aiDisabled: true,
-          aiDisabledHint: t('history.aiSoon'),
+          kind: 'button',
+          label: t('history.newExam'),
+          title: t('history.newExamTitle'),
+          onClick: onNew,
           disabled: loading,
-          hint: t('history.newExamHint'),
         }}
         filter={<FilterButton disabled title={t('history.filterNone')} />}
       />
