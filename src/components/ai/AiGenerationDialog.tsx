@@ -1004,7 +1004,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             )}
             {frame === 'inline' && <div style={{ marginBottom: 16 }} />}
 
-            <SectionLabel info={frame === 'inline' ? t('hint.info') : undefined}>{t('hint.label')}</SectionLabel>
+            <SectionLabel info={frame === 'inline' ? t('hint.info') : undefined} infoMore={frame === 'inline' ? t('hint.infoIdeas') : undefined}>{t('hint.label')}</SectionLabel>
             {/* Champ libre, facultatif, posé APRÈS les cases : il précise ce
                 qu'on vient de demander, il ne le remplace pas. L'exemple n'est
                 pas décoratif — sans lui, personne ne devine que c'est ici qu'on
@@ -1104,11 +1104,11 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   if (frame === 'inline') return body;
   return <Modal onClose={requestClose} width={520} portal>{body}</Modal>;
 }
-function SectionLabel({ children, info }: { children: React.ReactNode; info?: string }) {
+function SectionLabel({ children, info, infoMore }: { children: React.ReactNode; info?: string; infoMore?: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', color: palette.inkFaint, marginBottom: 8 }}>
       {children}
-      {info && <InfoDot text={info} />}
+      {info && <InfoDot text={info} more={infoMore} />}
     </div>
   );
 }
@@ -1120,7 +1120,7 @@ function SectionLabel({ children, info }: { children: React.ReactNode; info?: st
  *  ne peut pas atteindre au doigt n'existe pas sur téléphone. Le clic pilote donc
  *  l'ouverture (voir `open`/`onOpenChange` de `Tooltip`), et le délai de survol
  *  est court : on ne frôle pas un point d'information par hasard, on le vise. */
-function InfoDot({ text }: { text: string }) {
+function InfoDot({ text, more }: { text: string; more?: string }) {
   // ⚠️ **Un repère, pas une commande** (07/09/2026) : il informe au survol, et
   // rien d'autre — d'où un `<span>` et non un `<button>`. Un bouton qui ne fait
   // rien au clic promet une action qui n'existe pas, prend le focus au clavier
@@ -1130,11 +1130,17 @@ function InfoDot({ text }: { text: string }) {
   //
   // Le texte reste porté pour les lecteurs d'écran (`role="img"` + `aria-label`),
   // que l'infobulle de Base UI — desktop et souris seulement — n'atteint pas.
+  // Deux paragraphes, séparés : ce que fait la fonctionnalité, puis ce qu'on
+  // peut lui demander. D'où deux clés et non une seule chaîne à couper — un
+  // retour à la ligne se traduit mal, et la bulle rend du texte, pas du HTML.
+  const content = more
+    ? <><span>{text}</span><span style={{ display: 'block', marginTop: 7 }}>{more}</span></>
+    : text;
   return (
-    <Tooltip content={text} delay={120} side="top">
+    <Tooltip content={content} delay={120} side="top">
       <span
         role="img"
-        aria-label={text}
+        aria-label={more ? `${text} ${more}` : text}
         style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, color: palette.inkFaint, flexShrink: 0 }}
       >
         <Info size={13} strokeWidth={2} />
