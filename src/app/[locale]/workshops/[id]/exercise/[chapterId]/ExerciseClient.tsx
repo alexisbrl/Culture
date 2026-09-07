@@ -650,29 +650,24 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
                 {/* ─── La grappe se dévoile un énoncé à la fois ─────────────
                     Seuls les énoncés déjà découverts sont rendus (`shown`) :
                     le suivant n'apparaît qu'au clic sur « suivant », SOUS le
-                    précédent, qui reste lisible avec sa correction. Un énoncé
-                    corrigé prend une carte, l'énoncé actif est posé
-                    directement sur le fond — c'est le repère « ce qui est
-                    fait / ce qui reste ». */}
+                    précédent, qui reste lisible avec sa correction.
+
+                    ⚠️ **Un énoncé corrigé ne prend plus de carte** (07/09/2026,
+                    demandé par Alexis) : tous les énoncés sont posés directement
+                    sur le fond, corrigés comme actif. L'encadré blanc doublait
+                    une information déjà portée — et bien mieux — par le bloc de
+                    verdict de la correction, qui est coloré selon la réponse ;
+                    il ne faisait qu'ajouter un cadre dans le cadre à un écran
+                    qui n'en a aucun autre. Seul l'écart vertical sépare
+                    désormais deux énoncés. */}
                 {statements.slice(0, shown).map((statement, i) => {
                   const outcome = outcomes[i] ?? null;
                   const isMain = i === 0;
-                  const settled = outcome !== null;
                   return (
                     <div
                       key={i}
                       ref={i === shown - 1 ? activeRef : null}
-                      style={{
-                        marginTop: isMain ? 0 : 18,
-                        ...(settled
-                          ? {
-                              background: palette.surfaceRaised,
-                              border: `1px solid ${palette.line}`,
-                              borderRadius: 14,
-                              padding: '18px 20px',
-                            }
-                          : {}),
-                      }}
+                      style={{ marginTop: isMain ? 0 : 18 }}
                     >
                       {/* Le repère « où en est-on » compte TOUTES les questions
                           du groupe, la première comprise : elle n'a rien de
