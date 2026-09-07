@@ -480,7 +480,188 @@ export function FilterButton({ title, count = 0, open = false, disabled = false,
  *  dimensions sont figées ici et le bouton de filtre est un emplacement —
  *  chaque liste passe son propre `FilterButton`, avec les critères qui la
  *  concernent. */
-export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter, sortOptions, sortBy, onSortByChange, sortDir, onToggleSortDir, actionLabel, actionTitle, onAction, actionDisabled = false }: {
+/** Ce que l'action « créer » d'une liste propose : deux destinations, choisies
+ *  d'un même geste. */
+export type NewItemAction = {
+  /** Libellé lu à GAUCHE du +, et ce que fait le geste vers la gauche. */
+  manualLabel: string;
+  onManual: () => void;
+  /** Libellé lu à DROITE du +, et ce que fait le geste vers la droite. */
+  aiLabel: string;
+  onAi: () => void;
+  /** Le côté IA se lit mais ne mène nulle part (génération d'examen : prévue,
+   *  pas encore écrite). Il reste en place, en encre éteinte, et le geste ne
+   *  s'arme pas de ce côté. `aiDisabledHint` dit pourquoi. */
+  aiDisabled?: boolean;
+  aiDisabledHint?: string;
+  /** Toute l'action est hors de portée (la liste n'est pas encore arrivée). */
+  disabled?: boolean;
+  /** Infobulle du +, qui explique le geste — seul indice qu'il se glisse. */
+  hint: string;
+};
+
+/** Distance à parcourir avec le + avant qu'un côté ne s'arme, en px. Assez
+ *  grande pour qu'un tremblement n'arme rien, assez courte pour que le geste
+ *  reste bref — le + ne peut de toute façon pas aller au-delà du bord de sa
+ *  piste. */
+const SLIDER_ARM_PX = 22;
+/** Le + est une PASTILLE ALLONGÉE, pas un rond : plus de deux fois la largeur de
+ *  sa hauteur (demandé par Alexis le 07/09/2026 — le rond était trop petit pour
+ *  qu'on ait envie de l'attraper). Sa largeur commande le retrait intérieur des
+ *  deux libellés, qui doivent rester lisibles à côté de lui et non dessous. */
+const SLIDER_KNOB_H = TOOLBAR_H - 8;
+const SLIDER_KNOB_W = SLIDER_KNOB_H * 2 + 4;
+const SLIDER_LABEL_INSET = Math.round(SLIDER_KNOB_W / 2) + 6;
+
+/** Action « créer » d'une liste : un **+ que l'on glisse**, avec ses deux
+ *  destinations écrites de part et d'autre, en arrière-plan (07/09/2026,
+ *  demandé par Alexis — remplace les boutons « + nouvelle »/« + nouvel » et la
+ *  fenêtre de choix qui suivait le clic).
+ *
+ *  Vers la GAUCHE on écrit soi-même, vers la DROITE on laisse l'IA proposer. Le
+ *  + revient toujours au centre : il dit d'où l'on part, il n'est jamais l'état
+ *  d'un réglage.
+ *
+ *  ⚠️ **Les deux libellés sont de vrais boutons**, pas du décor. Glisser n'a ni
+ *  équivalent clavier ni existence pour un lecteur d'écran : ce sont eux qui
+ *  portent l'action, atteignables à la tabulation comme au clic, et le + n'est
+ *  donc pas un bouton de plus (il ferait un arrêt de tabulation qui ne mène
+ *  nulle part). Le glisser est un raccourci par-dessus, jamais le seul chemin. */
+export function NewItemSlider({ action }: { action: NewItemAction }) {
+  const { manualLabel, onManual, aiLabel, onAi, aiDisabled = false, aiDisabledHint, disabled = false, hint } = action;
+  const trackRef = useRef<HTMLDivElement>(null);
+  // Décalage du + par rapport au centre, en px. `null` = aucun glisser en
+  // cours : le + est au centre, et y revient en glissant (transition).
+  const [dragX, setDragX] = useState<number | null>(null);
+  const startX = useRef(0);
+
+  const armed = dragX === null ? null
+    : dragX <= -SLIDER_ARM_PX ? 'manual'
+    : dragX >= SLIDER_ARM_PX && !aiDisabled ? 'ai'
+    : null;
+
+  function fire(side: 'manual' | 'ai') {
+    if (disabled) return;
+    if (side === 'ai') {
+      if (!aiDisabled) onAi();
+      return;
+    }
+    onManual();
+  }
+
+  function handlePointerDown(e: React.PointerEvent) {
+    if (disabled) return;
+    // Sans ça, le navigateur amorce sa propre sélection de texte et le geste
+    // surligne les deux libellés au passage.
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    startX.current = e.clientX;
+    setDragX(0);
+  }
+  function handlePointerMove(e: React.PointerEvent) {
+    if (dragX === null) return;
+    // Borné à la demi-piste : le + ne sort jamais de son cadre.
+    const half = ((trackRef.current?.clientWidth ?? 178) - SLIDER_KNOB_W) / 2 - 3;
+    setDragX(Math.max(-half, Math.min(half, e.clientX - startX.current)));
+  }
+  function handlePointerUp() {
+    if (dragX === null) return;
+    if (armed) fire(armed);
+    setDragX(null);
+  }
+
+  function sideLabel(side: 'manual' | 'ai') {
+    const off = side === 'ai' && aiDisabled;
+    const lit = armed === side;
+    const button = (
+      <button
+        type="button"
+        disabled={disabled || off}
+        onClick={() => fire(side)}
+        style={{
+          position: 'absolute' as const, top: 0, bottom: 0, width: '50%',
+          [side === 'manual' ? 'left' : 'right']: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: side === 'manual' ? `0 ${SLIDER_LABEL_INSET}px 0 6px` : `0 6px 0 ${SLIDER_LABEL_INSET}px`,
+          border: 'none', background: 'transparent', fontFamily: 'inherit',
+          fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' as const, overflow: 'hidden',
+          color: lit ? palette.greenBrand : off ? palette.inkGhost : palette.inkMuted,
+          cursor: disabled || off ? 'default' : 'pointer',
+          transition: 'color 0.12s',
+        }}
+      >
+        {side === 'manual' ? manualLabel : aiLabel}
+      </button>
+    );
+    // Un bouton désactivé n'émet aucun événement de souris : l'infobulle qui
+    // explique POURQUOI il l'est doit être posée sur une cale, pas sur lui.
+    return off && aiDisabledHint
+      ? (
+        <Tooltip key={side} content={aiDisabledHint}>
+          <span style={{ position: 'absolute' as const, top: 0, bottom: 0, right: 0, width: '50%', display: 'flex' }}>
+            {/* La cale porte déjà la moitié droite : le bouton la remplit. */}
+            <button
+              type="button"
+              disabled
+              style={{
+                flex: 1, border: 'none', background: 'transparent', fontFamily: 'inherit',
+                fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' as const, overflow: 'hidden',
+                color: palette.inkGhost, cursor: 'default', padding: `0 6px 0 ${SLIDER_LABEL_INSET}px`,
+              }}
+            >
+              {aiLabel}
+            </button>
+          </span>
+        </Tooltip>
+      )
+      : <Fragment key={side}>{button}</Fragment>;
+  }
+
+  return (
+    <div
+      ref={trackRef}
+      style={{
+        position: 'relative' as const, flexShrink: 0, width: 178, minHeight: TOOLBAR_H, alignSelf: 'stretch',
+        borderRadius: 999, background: palette.surfaceInput, border: `1px solid ${palette.line}`,
+        overflow: 'hidden', opacity: disabled ? 0.5 : 1,
+        // La piste se cerne de vert du côté armé : on voit ce qui va se produire
+        // AVANT de lâcher, donc le geste reste annulable (on revient au centre).
+        boxShadow: armed ? `inset 0 0 0 1.5px ${palette.green}` : 'none',
+        transition: 'box-shadow 0.12s, opacity 0.12s',
+      }}
+    >
+      {sideLabel('manual')}
+      {sideLabel('ai')}
+      <Tooltip content={hint}>
+        <span
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          style={{
+            position: 'absolute' as const, top: '50%', left: '50%',
+            width: SLIDER_KNOB_W, height: SLIDER_KNOB_H, marginTop: -SLIDER_KNOB_H / 2, marginLeft: -SLIDER_KNOB_W / 2,
+            transform: `translateX(${dragX ?? 0}px)`,
+            // Le retour au centre s'anime ; le suivi du doigt, non — une
+            // transition pendant le glisser met le + en retard sur le curseur.
+            transition: dragX === null ? 'transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2)' : 'none',
+            borderRadius: 999, background: palette.green, color: palette.onGreen,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: disabled ? 'default' : dragX === null ? 'grab' : 'grabbing',
+            // `touchAction: none` : sans lui, le doigt fait défiler la page au
+            // lieu de déplacer le +.
+            touchAction: 'none', userSelect: 'none' as const,
+            boxShadow: `0 1px 4px ${ink(0.18)}`,
+          }}
+        >
+          <Plus size={15} strokeWidth={2.5} />
+        </span>
+      </Tooltip>
+    </div>
+  );
+}
+
+export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter, sortOptions, sortBy, onSortByChange, sortDir, onToggleSortDir, action }: {
   search: string;
   onSearchChange: (v: string) => void;
   searchPlaceholder: string;
@@ -490,14 +671,11 @@ export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter,
   onSortByChange: (v: SortBy) => void;
   sortDir: SortDir;
   onToggleSortDir: () => void;
-  actionLabel: string;
-  actionTitle: string;
-  onAction: () => void;
-  /** L'action primaire est hors de portée — la liste n'est pas encore arrivée
-   *  du serveur. Le bouton s'éteint plutôt que de disparaître : la barre garde
-   *  sa géométrie, et surtout le geste est REFUSÉ VISIBLEMENT au lieu d'être
-   *  accepté puis perdu (voir `loading` dans ExamenTab). */
-  actionDisabled?: boolean;
+  /** L'action « créer » de la liste — voir `NewItemSlider`. Éteinte tant que la
+   *  liste n'est pas arrivée du serveur : elle garde sa place et sa géométrie,
+   *  et le geste est REFUSÉ VISIBLEMENT au lieu d'être accepté puis perdu (voir
+   *  `loading` dans ExamenTab). */
+  action: NewItemAction;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'stretch', gap: TOOLBAR_GAP, marginBottom: TOOLBAR_MB }}>
@@ -507,14 +685,12 @@ export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter,
       </div>
       {filter}
       <SortControl options={sortOptions} value={sortBy} onChange={onSortByChange} dir={sortDir} onToggleDir={onToggleSortDir} />
-      {/* Seule action primaire de la colonne (T48) — la maquette la met en vert. */}
-      {/* Pas d'`aria-label` : `actionLabel` est visible dans le bouton, c'est
-          lui le nom accessible. L'infobulle ne fait que le préciser. */}
-      <Tooltip content={actionTitle}>
-        <button onClick={onAction} disabled={actionDisabled} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, minHeight: TOOLBAR_H, padding: '0 11px', borderRadius: 9, background: palette.green, color: palette.onGreen, border: 'none', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: actionDisabled ? 'default' : 'pointer', opacity: actionDisabled ? 0.5 : 1, flexShrink: 0 }}>
-          <Plus size={15} strokeWidth={2.25} /> {actionLabel}
-        </button>
-      </Tooltip>
+      {/* Seule action primaire de la colonne (T48). Ce fut un bouton vert
+          « + nouvelle », suivi d'une fenêtre demandant par quoi créer ; c'est
+          désormais un + qui se glisse vers l'une ou l'autre destination — la
+          question est posée par la forme même de la commande, plus par une
+          fenêtre de plus. */}
+      <NewItemSlider action={action} />
     </div>
   );
 }

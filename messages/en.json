@@ -435,6 +435,8 @@
     },
     "history": {
       "newExam": "new",
+      "newExamHint": "drag the + left to build an exam yourself; right, and AI will draft it",
+      "aiSoon": "generating a whole exam with AI: coming soon",
       "colQuestions": "questions",
       "edit": "edit",
       "export": "export",
@@ -460,6 +462,8 @@
       "statusLinked": "linked questions",
       "newQuestion": "new question",
       "newShort": "new",
+      "newQuestionHint": "drag the + left to write the question yourself; right, and AI will draft it",
+      "aiUnavailable": "AI generation is not available for this list",
       "searchPlaceholder": "search for a question…",
       "filters": "filters",
       "filtersReset": "reset",
@@ -545,22 +549,14 @@
       "tabBank": "questions",
       "phoneBackToExam": "back to the exam",
       "deleteExamTitle": "Delete the exam?",
+      "newExamTitle": "an exam is already being built",
+      "newExamDesc": "the current sheet will be cleared to start a blank exam. it is not saved anywhere.",
+      "newExamConfirm": "start over",
       "editorBusyTitle": "Editor already in use",
       "editorBusyDesc": "The exam editor already has changes in progress. Finish or clear the editor before editing {target}.",
       "editorBusyGo": "Go to the editor",
       "questionEditing": "question already being edited",
-      "questionEditingSave": "finish editing the question before saving the exam",
-      "introTitle": "How the exam generator works",
-      "introSubtitle": "Three steps to go from your question bank to a ready-to-give exam.",
-      "introStep1Title": "Build your question bank",
-      "introStep1Text": "Create your questions manually or let the AI handle it from the workshop files.",
-      "introStep2Title": "Compose your exam",
-      "introStep2Text": "Send your questions to the editor, drag them into sections, adjust weighting and difficulty.",
-      "introStep3Title": "Generate and share",
-      "introStep3Text": "The exam is ready: PDF export, online sitting, projection, or integration into the learning program.",
-      "introImage": "image {n}",
-      "introClose": "close",
-      "introStart": "Start"
+      "questionEditingSave": "finish editing the question before saving the exam"
     },
     "inline": {
       "newQuestion": "new question",
@@ -1273,7 +1269,7 @@
     },
     "button": "generate with AI",
     "chooseAi": "with AI",
-    "chooseManual": "manually",
+    "chooseManual": "manual",
     "estimate": {
       "preparing": "Preparing the documents…",
       "preparingHint": "The documents are sent to the provider; generation starts right after."

@@ -48,6 +48,8 @@ function HistoryContent({ workshopId, exams, loading, justAddedId, onEdit, onNew
   onDelete: (e: Exam) => void;
 }) {
   const t = useTranslations('examen');
+  // Les deux destinations du + se disent dans les mêmes mots que côté questions.
+  const tAi = useTranslations('ai');
   // Le nombre d'encadrés d'attente est celui de la dernière visite — aucun
   // aller-retour n'est fait pour l'obtenir (voir `useRememberedCount`).
   const [skeletonCount, rememberCount] = useRememberedCount(`culture.listCount.exams.${workshopId}`, 3);
@@ -74,10 +76,20 @@ function HistoryContent({ workshopId, exams, loading, justAddedId, onEdit, onNew
         onSortByChange={setSortBy}
         sortDir={sortDir}
         onToggleSortDir={() => setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
-        actionLabel={t('history.newExam')}
-        actionTitle={t('history.newExam')}
-        onAction={onNew}
-        actionDisabled={loading}
+        // Le côté IA est en place mais éteint : générer un examen entier n'existe
+        // pas encore (l'IA écrit des questions, pas des examens). Il est montré
+        // plutôt que masqué pour que les deux listes de l'onglet aient la même
+        // commande, et son infobulle dit que c'est à venir.
+        action={{
+          manualLabel: tAi('chooseManual'),
+          onManual: onNew,
+          aiLabel: tAi('chooseAi'),
+          onAi: () => {},
+          aiDisabled: true,
+          aiDisabledHint: t('history.aiSoon'),
+          disabled: loading,
+          hint: t('history.newExamHint'),
+        }}
         filter={<FilterButton disabled title={t('history.filterNone')} />}
       />
 

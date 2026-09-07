@@ -435,6 +435,8 @@
     },
     "history": {
       "newExam": "nouvel",
+      "newExamHint": "glisse le + à gauche pour composer un examen toi-même ; à droite, l’IA le proposera",
+      "aiSoon": "générer un examen entier par IA : à venir",
       "colQuestions": "questions",
       "edit": "modifier",
       "export": "exporter",
@@ -460,6 +462,8 @@
       "statusLinked": "questions liées",
       "newQuestion": "nouvelle question",
       "newShort": "nouvelle",
+      "newQuestionHint": "glisse le + à gauche pour écrire la question toi-même ; à droite, l’IA la proposera",
+      "aiUnavailable": "la génération par IA n’est pas disponible pour cette liste",
       "searchPlaceholder": "chercher une question…",
       "filters": "filtres",
       "filtersReset": "réinitialiser",
@@ -545,22 +549,14 @@
       "tabBank": "questions",
       "phoneBackToExam": "retour à l’examen",
       "deleteExamTitle": "Supprimer l'examen ?",
+      "newExamTitle": "un examen est en cours de composition",
+      "newExamDesc": "la copie en cours sera vidée pour repartir d’un examen vierge. elle n’est enregistrée nulle part.",
+      "newExamConfirm": "repartir de zéro",
       "editorBusyTitle": "Éditeur déjà en cours d'utilisation",
       "editorBusyDesc": "L'éditeur d'examen contient déjà des modifications en cours. Termine ou efface l'éditeur avant de modifier {target}.",
       "editorBusyGo": "Aller à l'éditeur",
       "questionEditing": "question déjà en cours d'édition",
-      "questionEditingSave": "terminez la modification de la question avant d'enregistrer l'examen",
-      "introTitle": "Comment fonctionne le générateur d'examen",
-      "introSubtitle": "Trois étapes pour passer de votre banque de questions à un examen prêt à être donné.",
-      "introStep1Title": "Constituez votre banque de questions",
-      "introStep1Text": "Créez vos questions manuellement ou laissez l'IA s'en charger à partir des fichiers de l'atelier.",
-      "introStep2Title": "Composez votre examen",
-      "introStep2Text": "Envoyez vos questions vers l'éditeur, glissez-les dans des sections, ajustez la pondération et la difficulté.",
-      "introStep3Title": "Générez et diffusez",
-      "introStep3Text": "L'examen est prêt : export PDF, passage en ligne, projection, ou intégration au programme éducatif.",
-      "introImage": "image {n}",
-      "introClose": "fermer",
-      "introStart": "Commencer"
+      "questionEditingSave": "terminez la modification de la question avant d'enregistrer l'examen"
     },
     "inline": {
       "newQuestion": "nouvelle question",
@@ -1273,7 +1269,7 @@
     },
     "button": "générer par IA",
     "chooseAi": "par IA",
-    "chooseManual": "manuellement",
+    "chooseManual": "manuel",
     "estimate": {
       "preparing": "Préparation des documents…",
       "preparingHint": "Les documents sont envoyés au fournisseur ; la génération démarre juste après."

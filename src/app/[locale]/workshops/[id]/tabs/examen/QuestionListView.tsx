@@ -2,10 +2,9 @@
 
 import { useState, useRef, useEffect, type Dispatch, type SetStateAction, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Link2, Pencil, Sparkles, Trash2 } from 'lucide-react';
+import { Link2, Pencil, Trash2 } from 'lucide-react';
 import { palette, withAlpha, ink } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import Modal from '@/components/Modal';
 import AiGenerationDialog, { useWorkshopFiles } from '@/components/ai/AiGenerationDialog';
 import ImportBanner from '@/components/ai/ImportBanner';
 import { type Question, type ResponseType, type BloomLevel } from '../QuestionEditor';
@@ -168,9 +167,8 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
 }) {
   const tr = useTranslations('examen');
   const tAi = useTranslations('ai');
-  // Génération par IA : le choix d'abord, le dialogue ensuite. Les documents sont
-  // chargés d'avance pour que le dialogue s'ouvre déjà rempli.
-  const [choosing, setChoosing] = useState(false);
+  // Génération par IA : les documents sont chargés d'avance pour que le
+  // dialogue s'ouvre déjà rempli.
   const [generating, setGenerating] = useState(false);
   // `generating` en second argument : la liste est relue à chaque ouverture du
   // dialogue (voir `useWorkshopFiles`), pas seulement au montage de la page.
@@ -654,29 +652,11 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
         />
       )}
 
-      {/* Le choix « par IA / manuellement ». Une modale plutôt qu'un menu ancré :
-          le bouton est rendu par `ListToolbar`, qui n'expose pas son nœud — et
-          deux options méritent d'être lisibles, pas tassées. */}
-      {choosing && (
-        <Modal onClose={() => setChoosing(false)} width={360} portal>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <button
-              type="button"
-              onClick={() => { setChoosing(false); setGenerating(true); }}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px 14px', borderRadius: 10, border: 'none', background: palette.green, color: palette.parchment, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
-            >
-              <Sparkles size={15} /> {tAi('chooseAi')}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setChoosing(false); onNewQuestion(); }}
-              style={{ padding: '11px 14px', borderRadius: 10, border: `1px solid ${palette.lineStrong}`, background: 'transparent', color: palette.inkMuted, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}
-            >
-              {tAi('chooseManual')}
-            </button>
-          </div>
-        </Modal>
-      )}
+      {/* ⚠️ **La fenêtre « par IA / manuellement » a disparu** (07/09/2026). Le
+          clic sur « + nouvelle » ouvrait une modale de deux boutons ; les deux
+          destinations se lisent désormais de part et d'autre du + de la barre
+          d'outils, et le geste qui l'y amène EST le choix. Une décision de moins
+          à prendre en deux temps. */}
 
       {generating && workshopId && (
         <AiGenerationDialog
@@ -701,13 +681,19 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
         onSortByChange={changeSortBy}
         sortDir={sortDir}
         onToggleSortDir={() => setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')}
-        actionLabel={tr('bank.newShort')}
-        actionTitle={tr('bank.newQuestion')}
-        // « + nouvelle » ne crée plus directement : elle demande d'abord PAR QUOI
-        // (§8 du plan d'ingestion). Sans `aiContext` — donc partout où la
-        // génération n'a pas de sens — le comportement d'avant est conservé.
-        onAction={aiContext ? () => setChoosing(true) : onNewQuestion}
-        actionDisabled={loading}
+        // Sans `aiContext` — donc partout où la génération n'a pas de sens — le
+        // côté IA se lit mais reste éteint, comme pour les examens : la commande
+        // garde la même forme d'une liste à l'autre.
+        action={{
+          manualLabel: tAi('chooseManual'),
+          onManual: onNewQuestion,
+          aiLabel: tAi('chooseAi'),
+          onAi: () => setGenerating(true),
+          aiDisabled: !aiContext,
+          aiDisabledHint: aiContext ? undefined : tr('bank.aiUnavailable'),
+          disabled: loading,
+          hint: tr('bank.newQuestionHint'),
+        }}
         filter={
           <FilterButton
             title={tr('bank.filters')}
