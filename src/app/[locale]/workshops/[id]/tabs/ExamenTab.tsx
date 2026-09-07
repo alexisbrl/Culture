@@ -352,8 +352,8 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   // instances voudraient dire deux brouillons pour une seule question).
   const sheetCarriesEditor = isPhone && phonePane === 'sheet' && editingQuestion !== null;
 
-  function handleNewQuestion() {
-    handleNewQuestionInSection(-1);
+  function handleNewQuestion(initialStatement?: string) {
+    handleNewQuestionInSection(-1, initialStatement);
   }
 
   /** Question neuve posée à la FIN D'UNE PARTIE précise — c'est ce que demande
@@ -363,7 +363,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
    *  Un index qui ne désigne aucune partie (-1) vaut « à la fin de l'examen » :
    *  c'est le cas du bouton « nouvelle question » de la banque, qui ne vise
    *  aucun endroit. */
-  function handleNewQuestionInSection(sectionIdx: number) {
+  function handleNewQuestionInSection(sectionIdx: number, initialStatement?: string) {
     // Tant que le serveur n'a pas répondu, sa réponse écraserait la question
     // qu'on créerait ici — voir `loading`. Les affordances sont déjà éteintes ;
     // ce filet couvre ce qui pourrait les contourner (double-clic sur la copie).
@@ -372,7 +372,9 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       blockForOpenQuestion('open');
       return;
     }
-    const q = emptyQuestion();
+    // L'énoncé peut arriver pré-rempli : c'est le texte qu'on avait commencé à
+    // écrire côté IA, que la bascule fait suivre (voir `sharedText`).
+    const q = { ...emptyQuestion(), content: initialStatement ?? '' };
     setQuestions(prev => [q, ...prev]);
     setExamConfig(prev => ({
       ...prev,
@@ -418,12 +420,12 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
    *  elles sont indexées par POSITION (`partWeightKey`), donc retirer la
    *  deuxième doit remonter toutes les suivantes d'un cran. C'est l'examen qui
    *  les porte, et c'est ici qu'il vit. */
-  function renderQuestionEditor(frame: 'plain' | 'sheet' | 'bare' = 'plain', number?: number, titleTrailing?: ReactNode) {
+  function renderQuestionEditor(frame: 'plain' | 'sheet' | 'bare' = 'plain', number?: number, hideTitle?: boolean) {
     if (!editingQuestion) return null;
     return (
       <InlineQuestionEditor
         key={editingQuestion.id}
-        titleTrailing={titleTrailing}
+        hideTitle={hideTitle}
         workshopId={workshopId}
         question={editingQuestion}
         number={frame === 'sheet' ? number : undefined}
@@ -702,7 +704,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 draftIds={draftIds}
                 // La liste passe ses consignes de rendu : dans l'encadré de
                 // création, le formulaire n'a ni cadre propre ni titre seul.
-                renderEditor={sheetCarriesEditor ? undefined : opts => renderQuestionEditor(opts?.bare ? 'bare' : 'plain', undefined, opts?.titleTrailing)}
+                renderEditor={sheetCarriesEditor ? undefined : opts => renderQuestionEditor(opts?.bare ? 'bare' : 'plain', undefined, opts?.hideTitle)}
                 editingQuestionId={editingQuestion?.id ?? null}
                 editingIsNew={editingQuestion !== null && editingQuestion.id === newQuestionId}
                 openId={openId}
@@ -710,6 +712,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 onEditQuestion={requestEditQuestion}
                 onNewQuestion={handleNewQuestion}
                 onCancelNewQuestion={handleCancelQuestion}
+                draftStatement={editingDraft?.content ?? ''}
                 onToggleInExam={handleToggleQuestionInExam}
                 onCreatePool={handleCreatePool}
                 onUpdatePool={handleUpdatePool}

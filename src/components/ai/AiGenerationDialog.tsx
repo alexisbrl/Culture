@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { Sparkles, AlertTriangle, Check, ExternalLink, X } from 'lucide-react';
+import { Sparkles, AlertTriangle, Check, ExternalLink, Info, X } from 'lucide-react';
 
 import Modal from '@/components/Modal';
+import { Tooltip } from '@/components/ui/tooltip';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ink, palette, radius } from '@/lib/theme';
 import { INGEST_CONCURRENCY, QUESTIONS_CONCURRENCY, mapWithConcurrency } from '@/lib/ingest/concurrency';
@@ -159,9 +160,15 @@ type Props = {
    *  manuel démonterait le dialogue en pleine génération, donc sans passer par
    *  la demande d'arrêt qui, seule, défait ce qui a déjà été écrit. */
   onRunningChange?: (running: boolean) => void;
+  /** La consigne, pilotée de l'extérieur. L'encadré de création s'en sert pour
+   *  **partager le texte avec le champ d'énoncé du formulaire manuel** : ce qu'on
+   *  a commencé à écrire d'un côté se retrouve de l'autre, tant que rien n'a été
+   *  ni enregistré ni lancé. Absents, le dialogue garde sa consigne pour lui. */
+  hint?: string;
+  onHintChange?: (hint: string) => void;
 };
 
-export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, onDone, frame = 'modal', titleTrailing, onRunningChange }: Props) {
+export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, onDone, frame = 'modal', titleTrailing, onRunningChange, hint: hintProp, onHintChange }: Props) {
   const t = useTranslations('ai');
   const locale = useLocale();
 
@@ -192,7 +199,10 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // existera, qui ne proposera aucun choix). Ce dialogue est le seul endroit
   // d'où l'on peut encore demander Claude, et c'est alors un geste délibéré.
   const [questionsProvider, setQuestionsProvider] = useState<'claude' | 'deepseek'>('deepseek');
-  const [hint, setHint] = useState('');
+  const [ownHint, setOwnHint] = useState('');
+  // Consigne pilotée par l'appelant quand il en fournit une (voir `hint`).
+  const hint = hintProp ?? ownHint;
+  const setHint = onHintChange ?? setOwnHint;
   // Un prompt fait uniquement de chiffres n'est pas une consigne : c'est un
   // nombre de questions. Il court-circuite l'étape 0 — il n'y a rien à
   // interpréter, rien à écrire — et va droit au reste de la génération.
@@ -258,6 +268,28 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // Ni document, ni programme, ni consigne : il n'y a rien à lire, rien à faire
   // travailler, et rien à écrire. C'est le seul vrai blocage qui reste.
   const nothingToDo = !hasFiles && visibleNotions === 0 && !hasHint;
+  /** Ce que ce lancement va faire, dit d'une phrase. Affichée telle quelle en
+   *  fenêtre ; repliée derrière le point d'information de la consigne quand le
+   *  dialogue est posé dans une liste, où la place est comptée. */
+  /** ⚠️ **En ligne, l'arrêt n'a plus de croix où se poser** : ces deux étapes
+   *  n'ont aucun autre bouton, et sans lui une génération lancée ne pourrait plus
+   *  être arrêtée du tout. En fenêtre, la croix du coin fait déjà ce travail. */
+  const stopAction = frame === 'inline' ? (
+    <Actions>
+      <Ghost onClick={requestClose}>{t('stop.aria')}</Ghost>
+    </Actions>
+  ) : null;
+  const planText = nothingToDo
+    ? t('plan.nothing')
+    : !hasFiles && hasHint
+      ? t('plan.fromHint')
+      : forcedContext === null
+        ? needsProgram
+          ? t('plan.program')
+          : t('plan.questionsOnly')
+        : needsProgram
+          ? t('plan.programThenQuestions')
+          : t(forcedContext === 'exam' ? 'plan.examQuestions' : 'plan.parcoursQuestions');
 
   // La liste des chapitres porte déjà le compte de notions et l'état écarté :
   // pas besoin d'une lecture dédiée. Montée à l'ouverture — le dialogue n'est
@@ -874,24 +906,22 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             <X size={17} />
           </button>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, minHeight: frame === 'inline' ? 30 : undefined }}>
-          <Sparkles size={18} color={palette.green} />
-          <h2 style={{ fontSize: 17, fontWeight: 600, color: palette.ink, margin: 0 }}>{t('title')}</h2>
-          {frame === 'inline' && (
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
-              {titleTrailing}
-              <button
-                type="button"
-                onClick={requestClose}
-                aria-label={t(running ? 'stop.aria' : 'close')}
-                style={{ display: 'flex', padding: 6, borderRadius: radius.md, border: 'none', background: 'transparent', color: palette.inkFaint, cursor: 'pointer' }}
-              >
-                <X size={17} />
-              </button>
+        {/* ⚠️ **En ligne, ni titre, ni sous-titre, ni croix** (07/09/2026).
+            L'encadré de création porte déjà sa ligne de titre — « NOUVELLE
+            QUESTION » et la bascule —, et le côté IA n'a aucune raison de
+            s'annoncer autrement que le côté manuel : c'est la même chose qu'on
+            crée, par deux chemins. La sortie passe par « annuler », comme en
+            face ; l'étape « en cours », qui n'a pas de bouton d'annulation,
+            reçoit le sien plus bas. */}
+        {frame === 'modal' && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <Sparkles size={18} color={palette.green} />
+              <h2 style={{ fontSize: 17, fontWeight: 600, color: palette.ink, margin: 0 }}>{t('title')}</h2>
             </div>
-          )}
-        </div>
-        <p style={{ fontSize: 13, color: palette.inkSoft, margin: '0 0 18px' }}>{t('subtitle')}</p>
+            <p style={{ fontSize: 13, color: palette.inkSoft, margin: '0 0 18px' }}>{t('subtitle')}</p>
+          </>
+        )}
 
         {/* La demande d'arrêt prend toute la place : on ne fait pas cohabiter une
             question grave avec une barre de progression qui continue d'avancer. */}
@@ -922,21 +952,15 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             {/* Ce que ce lancement va faire, dit d'une phrase. Il n'y a plus rien
                 à cocher, donc il faut le dire — sans quoi le même bouton ferait
                 deux choses différentes sans jamais l'annoncer. */}
-            <div style={{ marginBottom: 18 }}>
-              <Hint>
-                {nothingToDo
-                  ? t('plan.nothing')
-                  : !hasFiles && hasHint
-                    ? t('plan.fromHint')
-                  : forcedContext === null
-                    ? needsProgram
-                      ? t('plan.program')
-                      : t('plan.questionsOnly')
-                    : needsProgram
-                      ? t('plan.programThenQuestions')
-                      : t(forcedContext === 'exam' ? 'plan.examQuestions' : 'plan.parcoursQuestions')}
-              </Hint>
-            </div>
+            {/* ⚠️ **Ce que la génération va faire n'est plus étalé sur trois
+                lignes** (07/09/2026, demandé par Alexis) : la phrase est
+                toujours là, mot pour mot, mais repliée derrière un point
+                d'information. Elle explique, elle ne commande pas — et un
+                encadré posé dans une liste ne peut pas se permettre le même
+                bavardage qu'une fenêtre qui occupe l'écran. Même traitement
+                pour l'aide du modèle et celle de la consigne, plus bas.
+                En fenêtre, la phrase reste affichée : la place ne manque pas. */}
+            {frame === 'modal' && <div style={{ marginBottom: 18 }}><Hint>{planText}</Hint></div>}
 
             {/* ⚠️ **Le champ « nombre de questions » a été retiré le 04/09/2026.**
                 Il disait la même chose que la consigne, et n’apparaissait que sur
@@ -949,7 +973,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 dit — elle ne reçoit aucun document, donc rien ne s'y perd à
                 changer de modèle ; les chapitres et les notions restent sur
                 Claude, qui seul lit les PDF. */}
-            <SectionLabel>{t('provider.label')}</SectionLabel>
+            <SectionLabel info={frame === 'inline' ? t('provider.help') : undefined}>{t('provider.label')}</SectionLabel>
             <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
               {(['claude', 'deepseek'] as const).map((id) => (
                 <button
@@ -970,11 +994,14 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 </button>
               ))}
             </div>
-            <div style={{ marginBottom: 20 }}>
-              <Hint>{t('provider.help')}</Hint>
-            </div>
+            {frame === 'modal' && (
+              <div style={{ marginBottom: 20 }}>
+                <Hint>{t('provider.help')}</Hint>
+              </div>
+            )}
+            {frame === 'inline' && <div style={{ marginBottom: 16 }} />}
 
-            <SectionLabel>{t('hint.label')}</SectionLabel>
+            <SectionLabel info={frame === 'inline' ? `${t('hint.help')} ${planText}` : undefined}>{t('hint.label')}</SectionLabel>
             {/* Champ libre, facultatif, posé APRÈS les cases : il précise ce
                 qu'on vient de demander, il ne le remplace pas. L'exemple n'est
                 pas décoratif — sans lui, personne ne devine que c'est ici qu'on
@@ -995,9 +1022,9 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 color: palette.ink, outline: 'none',
               }}
             />
-            <div style={{ marginTop: 6, marginBottom: 20 }}>
-              <Hint>{t('hint.help')}</Hint>
-            </div>
+            {frame === 'modal'
+              ? <div style={{ marginTop: 6, marginBottom: 20 }}><Hint>{t('hint.help')}</Hint></div>
+              : <div style={{ marginBottom: 4 }} />}
 
             <Actions>
               <Ghost onClick={requestClose}>{t('cancel')}</Ghost>
@@ -1023,6 +1050,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             <ProgressBar animated value={0} max={1} label={t('estimate.preparing')} />
             <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 14 }}>{t('estimate.preparingHint')}</p>
             <SecondTab href={`/${locale}/dashboard`} label={t('newTab')} />
+            {stopAction}
           </div>
         )}
 
@@ -1034,6 +1062,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
               {t('runningCounts', { chapters: counts.chapters, notions: counts.notions, questions: counts.questions })}
             </p>
             <SecondTab href={`/${locale}/dashboard`} label={t('newTab')} />
+            {stopAction}
           </div>
         )}
 
@@ -1072,11 +1101,40 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   if (frame === 'inline') return body;
   return <Modal onClose={requestClose} width={520} portal>{body}</Modal>;
 }
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionLabel({ children, info }: { children: React.ReactNode; info?: string }) {
   return (
-    <div style={{ fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', color: palette.inkFaint, marginBottom: 8 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', color: palette.inkFaint, marginBottom: 8 }}>
       {children}
+      {info && <InfoDot text={info} />}
     </div>
+  );
+}
+
+/** Point d'information : l'explication longue, repliée (07/09/2026).
+ *
+ *  ⚠️ **Il s'ouvre au survol ET au clic.** Les infobulles du projet sont
+ *  desktop seulement — Base UI n'écoute que la souris — et une explication qu'on
+ *  ne peut pas atteindre au doigt n'existe pas sur téléphone. Le clic pilote donc
+ *  l'ouverture (voir `open`/`onOpenChange` de `Tooltip`), et le délai de survol
+ *  est court : on ne frôle pas un point d'information par hasard, on le vise. */
+function InfoDot({ text }: { text: string }) {
+  // ⚠️ **Survol seulement, et c'est une contrainte, pas un choix.** Les
+  // infobulles du projet sont celles de Base UI, qui n'écoute que la souris ; on
+  // a essayé d'y ajouter l'ouverture au clic en pilotant son état — la bulle
+  // s'ouvrait mais ne se refermait plus, les deux machineries se contredisant.
+  // Une bulle qui s'ouvre au doigt demanderait un composant à elle. En attendant,
+  // le délai est court : on ne frôle pas un point d'information par hasard, on le
+  // vise.
+  return (
+    <Tooltip content={text} delay={120} side="top">
+      <button
+        type="button"
+        aria-label={text}
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, padding: 0, border: 'none', borderRadius: 999, background: 'transparent', color: palette.inkFaint, cursor: 'pointer', flexShrink: 0 }}
+      >
+        <Info size={13} strokeWidth={2} />
+      </button>
+    </Tooltip>
   );
 }
 

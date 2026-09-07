@@ -31,7 +31,7 @@
 // que la feuille se lise comme la suite d'énoncés qu'elle est. Modèle :
 // `QuestionPart` dans @/lib/workshops/examTypes.
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { AudioLines, ImageIcon, Link2, SlidersHorizontal } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
@@ -63,10 +63,11 @@ type Props = {
    *  encadré (celui de la création, avec sa bascule) — un cadre de plus ferait
    *  un cadre dans le cadre. */
   frame?: 'sheet' | 'plain' | 'bare';
-  /** Posé au bout de la ligne de titre, à droite. C'est là que vit la bascule
-   *  « manuel / par IA » de l'encadré de création : sur la même ligne que
-   *  « NOUVELLE QUESTION », et non au-dessus. */
-  titleTrailing?: ReactNode;
+  /** L'encadré qui accueille le formulaire écrit lui-même sa ligne de titre —
+   *  « NOUVELLE QUESTION » et la bascule « manuel / par IA ». Le formulaire ne
+   *  la répète donc pas : elle doit être la MÊME des deux côtés de la bascule,
+   *  donc elle appartient à l'encadré, pas à l'un des deux contenus. */
+  hideTitle?: boolean;
   /** Retrait d'une question liée : l'appelant décale les pondérations suivantes
    *  (elles sont indexées par position, voir `partWeightKey`). */
   onRemovePart?: (idx: number) => void;
@@ -95,7 +96,7 @@ export default function InlineQuestionEditor({
   workshopId, question, number, isNew, notions, onDraftChange,
   onRemovePart, onCreatePool, onUpdatePool,
   onDeletePool, poolUsageCount, onSave, onCancel, frame = 'sheet',
-  pools = [], showLabels = true, titleTrailing,
+  pools = [], showLabels = true, hideTitle = false,
 }: Props) {
   const t = useTranslations('examen');
   const [draft, setDraft] = useState<Question>({
@@ -188,12 +189,11 @@ export default function InlineQuestionEditor({
           en dessous le dit déjà, en toutes lettres et avec son pictogramme, et
           il se règle là — le répéter en titre donnait deux sources pour une même
           information, dont une seule qu'on peut changer. */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: titleTrailing ? 30 : undefined }}>
+      {!hideTitle && (
         <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: palette.green }}>
           {(isNew ? t('inline.newQuestion') : t('inline.editQuestion')).toUpperCase()}
         </div>
-        {titleTrailing}
-      </div>
+      )}
       {dropError && <div style={{ fontSize: 12, color: palette.danger }}>{dropError}</div>}
 
       <QuestionFields

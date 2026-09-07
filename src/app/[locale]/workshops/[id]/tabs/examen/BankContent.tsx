@@ -11,7 +11,7 @@ import { type Question } from '../QuestionEditor';
 import { type Pool, type Exam } from './examShared';
 import QuestionListView, { type EditorSlotOptions } from './QuestionListView';
 
-function BankContent({ workshopId, questions, loading, pools, exams, notions, chapters, draftIds, renderEditor, editingQuestionId, editingIsNew, openId, setOpenId, onEditQuestion, onNewQuestion, onCancelNewQuestion, onToggleInExam, onCreatePool, onUpdatePool, onDeletePool, onDeleteQuestion }: {
+function BankContent({ workshopId, questions, loading, pools, exams, notions, chapters, draftIds, renderEditor, editingQuestionId, editingIsNew, openId, setOpenId, onEditQuestion, onNewQuestion, onCancelNewQuestion, draftStatement, onToggleInExam, onCreatePool, onUpdatePool, onDeletePool, onDeleteQuestion }: {
   workshopId: string;
   questions: Question[];
   /** Les questions ne sont pas encore arrivées du serveur — voir `loading` de
@@ -38,10 +38,12 @@ function BankContent({ workshopId, questions, loading, pools, exams, notions, ch
   editingIsNew: boolean;
   /** Abandonne la création en cours (bascule vers l'IA). */
   onCancelNewQuestion: () => void;
+  /** L'énoncé en cours de frappe, que la bascule emporte vers la consigne. */
+  draftStatement: string;
   openId: string | null;
   setOpenId: (id: string | null) => void;
   onEditQuestion: (q: Question) => void;
-  onNewQuestion: () => void;
+  onNewQuestion: (initialStatement?: string) => void;
   onToggleInExam: (id: string) => void;
   onCreatePool: (name: string) => string;
   onUpdatePool: (pool: Pool) => void;
@@ -67,6 +69,7 @@ function BankContent({ workshopId, questions, loading, pools, exams, notions, ch
       onEditQuestion={onEditQuestion}
       onNewQuestion={onNewQuestion}
       onCancelNewQuestion={onCancelNewQuestion}
+      draftStatement={draftStatement}
       onDeleteQuestion={onDeleteQuestion}
     />
   );
