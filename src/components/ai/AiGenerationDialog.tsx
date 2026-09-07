@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Sparkles, AlertTriangle, Check, ExternalLink, Info, X } from 'lucide-react';
 
@@ -68,6 +68,17 @@ import type { GenerationOrigin } from '@/lib/ingest/journal';
  *  constante est redéclarée ici plutôt qu'importée : `lock.ts` ouvre un client
  *  Supabase de service, qui n'a rien à faire dans un composant client. */
 const LIVE_BEAT_MS = 30_000;
+
+// ─── Champ de consigne : hauteur suivie, plancher de trois lignes ───────────
+// Les mesures sont sorties du style pour que le plancher se CALCULE au lieu
+// d'être un nombre choisi à l'œil : changer la taille du texte ou le retrait
+// garde automatiquement les trois lignes promises.
+const HINT_FONT_SIZE = 13;
+const HINT_LINE_HEIGHT = 1.45;
+const HINT_PAD_Y = 8;
+const HINT_MIN_LINES = 3;
+// `box-sizing: border-box` : la hauteur minimale comprend les retraits et le filet.
+const HINT_MIN_HEIGHT = Math.round(HINT_MIN_LINES * HINT_FONT_SIZE * HINT_LINE_HEIGHT) + 2 * HINT_PAD_Y + 2;
 
 /** Ce que l'API accepte aujourd'hui (§6). Les autres formats restent visibles
  *  mais non sélectionnables : mieux vaut le dire à la sélection qu'échouer au
@@ -151,10 +162,6 @@ type Props = {
    *  étapes, l'arrêt et les messages sont les mêmes des deux côtés, et c'est bien
    *  le but — il n'y a qu'une génération, pas deux. */
   frame?: 'modal' | 'inline';
-  /** Posé au bout de la ligne de titre, à droite — la bascule « manuel / par
-   *  IA » de l'encadré de création. `inline` seulement : en fenêtre, la ligne de
-   *  titre n'a personne à accueillir. */
-  titleTrailing?: ReactNode;
   /** Une génération est en cours (préparation ou passes du modèle). L'encadré de
    *  création s'en sert pour VERROUILLER sa bascule : passer au formulaire
    *  manuel démonterait le dialogue en pleine génération, donc sans passer par
@@ -168,7 +175,7 @@ type Props = {
   onHintChange?: (hint: string) => void;
 };
 
-export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, onDone, frame = 'modal', titleTrailing, onRunningChange, hint: hintProp, onHintChange }: Props) {
+export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, onDone, frame = 'modal', onRunningChange, hint: hintProp, onHintChange }: Props) {
   const t = useTranslations('ai');
   const locale = useLocale();
 
@@ -200,6 +207,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // d'où l'on peut encore demander Claude, et c'est alors un geste délibéré.
   const [questionsProvider, setQuestionsProvider] = useState<'claude' | 'deepseek'>('deepseek');
   const [ownHint, setOwnHint] = useState('');
+  const hintRef = useRef<HTMLTextAreaElement>(null);
   // Consigne pilotée par l'appelant quand il en fournit une (voir `hint`).
   const hint = hintProp ?? ownHint;
   const setHint = onHintChange ?? setOwnHint;
@@ -227,6 +235,16 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // Le téléversement en cours n'est pas interruptible proprement : on ferme la
   // sortie tant qu'il dure, comme pendant la génération.
   const running = phase.step === 'running' || phase.step === 'preparing';
+  // Hauteur du champ de consigne : recalculée à chaque frappe. `field-sizing:
+  // content` ferait ça tout seul mais n'est pas encore partout, d'où la mesure
+  // explicite — la même qu'`AutoTextarea` côté examen.
+  useLayoutEffect(() => {
+    const el = hintRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [hint, frame]);
+
   // L'encadré qui accueille le dialogue verrouille sa bascule pendant ce temps.
   useEffect(() => { onRunningChange?.(running); }, [running, onRunningChange]);
   const context = forcedContext ?? 'parcours';
@@ -1012,6 +1030,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 Séquences dans le document », qui sont justement les deux choses
                 que le modèle ne peut pas inventer. */}
             <textarea
+              ref={hintRef}
               value={hint}
               onChange={(e) => setHint(e.target.value)}
               rows={3}
@@ -1025,9 +1044,19 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
               // exemple d'origine y reste plus juste.
               placeholder={frame === 'inline' ? t('hint.placeholderExam', { count: DEFAULT_EXAM_QUESTIONS }) : t('hint.placeholder')}
               style={{
-                width: '100%', boxSizing: 'border-box', resize: 'vertical',
-                fontFamily: 'inherit', fontSize: 13, lineHeight: 1.45,
-                padding: '8px 10px', borderRadius: radius.md,
+                // ⚠️ **Plus de poignée de redimensionnement** (07/09/2026,
+                // demandé par Alexis) : la hauteur suit le texte saisi, comme le
+                // champ de réponse d'une question à réponse textuelle. Régler à
+                // la main la hauteur d'un champ qui sait la trouver seul n'est
+                // pas un réglage, c'est une corvée — et une poignée dans le coin
+                // d'un encadré posé au milieu d'une liste attire l'œil pour rien.
+                width: '100%', boxSizing: 'border-box', resize: 'none', overflow: 'hidden',
+                // Plancher de trois lignes : `height: auto` retombe dessus, donc
+                // `scrollHeight` est déjà borné et la mesure n'a pas à s'en
+                // occuper (même mécanique qu'`AutoTextarea`, côté examen).
+                minHeight: HINT_MIN_HEIGHT,
+                fontFamily: 'inherit', fontSize: HINT_FONT_SIZE, lineHeight: HINT_LINE_HEIGHT,
+                padding: `${HINT_PAD_Y}px 10px`, borderRadius: radius.md,
                 border: `1px solid ${ink(0.12)}`, background: palette.surfaceInput,
                 color: palette.ink, outline: 'none',
               }}
