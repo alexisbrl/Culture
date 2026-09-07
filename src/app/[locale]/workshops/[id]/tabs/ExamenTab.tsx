@@ -316,13 +316,29 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const sheetCarriesEditor = isPhone && phonePane === 'sheet' && editingQuestion !== null;
 
   function handleNewQuestion() {
+    handleNewQuestionInSection(-1);
+  }
+
+  /** Question neuve posée à la FIN D'UNE PARTIE précise — c'est ce que demande
+   *  le double-clic dans le blanc de la copie (07/09/2026) : le vide d'une page
+   *  prolonge la partie qui s'y trouve, la question doit donc s'y ranger, et pas
+   *  filer à la fin de l'examen quand un saut de page laisse du blanc au milieu.
+   *  Un index qui ne désigne aucune partie (-1) vaut « à la fin de l'examen » :
+   *  c'est le cas du bouton « nouvelle question » de la banque, qui ne vise
+   *  aucun endroit. */
+  function handleNewQuestionInSection(sectionIdx: number) {
     if (editingQuestion) {
       blockForOpenQuestion('open');
       return;
     }
     const q = emptyQuestion();
     setQuestions(prev => [q, ...prev]);
-    setExamConfig(prev => ({ ...prev, sections: toggleQuestionInSections(prev.sections, q.id) }));
+    setExamConfig(prev => ({
+      ...prev,
+      sections: prev.sections[sectionIdx]
+        ? prev.sections.map((sec, i) => (i === sectionIdx ? { ...sec, questionIds: [...sec.questionIds, q.id] } : sec))
+        : toggleQuestionInSections(prev.sections, q.id),
+    }));
     setDraftIds(prev => [...prev, q.id]);
     setNewQuestionId(q.id);
     setEditingQuestion(q);
@@ -672,6 +688,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             onCancelEdit={() => setEditing(null)}
             onGenerate={handleGenerate}
             onOpenQuestion={handleOpenQuestion}
+            onNewQuestionInSection={handleNewQuestionInSection}
             onRemoveFromDraft={handleRemoveFromDraft}
             onClearEditor={handleClearEditor}
             previewQuestion={editingDraft}
