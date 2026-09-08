@@ -92,20 +92,27 @@ const BODY_MARKER = '<!-- culture:corps -->';
  *  Ce n'est pas une limite de qualité mais de faisabilité : le document est
  *  RÉÉCRIT en entier à chaque fois qu'il change, donc sa longueur est payée en
  *  sortie à chaque génération qui y touche — en temps de génération surtout, le
- *  coût en tokens restant marginal (quelques centimes entre 60k et 100k, très en
- *  deçà du plafond de réponse du modèle : 64 000 jetons de raisonnement ET de
- *  sortie confondus sur Sonnet 5, voir `MAX_TOKENS_THINKING` dans
- *  `providers/claude.ts`).
+ *  coût en tokens restant marginal au regard de ce que le modèle accepte.
  *
- *  100 000 caractères, c'est une soixantaine de pages — largement de quoi
- *  couvrir un cours dense écrit en texte simple (bien plus compact qu'un PDF où
- *  chaque page part aussi en image, voir §3 du plan d'ingestion). Ce plafond ne
- *  vise cependant PAS à loger un cours entier : la consigne dit explicitement de
- *  n'écrire que ce qui MANQUE (`resourceInstruction`), et « un cours de
- *  synthèse, pas un manuel » reste la limite qui compte le plus — la longueur
- *  n'est qu'un filet, pas un objectif. Relevé de 40 000 à 60 000 puis 100 000 le
- *  04/09/2026, à la demande d'Alexis. */
-export const MAX_GENERATED_LENGTH = 100_000;
+ *  **250 000 caractères depuis le 08/09/2026**, à la demande d'Alexis : c'est
+ *  l’ordre de grandeur d’un cours qui porte 1 000 notions, le plafond retenu le
+ *  même jour pour un atelier. Environ 150 pages de texte simple.
+ *
+ *  ⚠️ **Ce chiffre n'était pas atteignable avant le 08/09/2026.** 250 000
+ *  caractères de français pèsent ~71 000 jetons de sortie, auxquels la réflexion
+ *  s'ajoute **en se prélevant sur le même budget** : au plafond que nous nous
+ *  imposions alors (64 000), la réponse aurait été tronquée, donc perdue. Il ne
+ *  passe que parce que le plafond est désormais celui du modèle — 128 000 sur
+ *  Sonnet 5, qui porte cette étape (`MAX_OUTPUT_TOKENS`, `providers/claude.ts`).
+ *  Marge restante : ~57 000 jetons pour la réflexion. **Ne pas relever ce
+ *  plafond sans refaire ce calcul**, et sans vérifier le modèle de l'étape 0.
+ *
+ *  Ce plafond ne vise cependant PAS à loger un cours entier : la consigne dit
+ *  explicitement de n'écrire que ce qui MANQUE (`resourceInstruction`), et « un
+ *  cours de synthèse, pas un manuel » reste la limite qui compte le plus — la
+ *  longueur n'est qu'un filet, pas un objectif. Relevé de 40 000 à 60 000, puis
+ *  100 000 le 04/09/2026, puis 250 000 le 08/09/2026. */
+export const MAX_GENERATED_LENGTH = 250_000;
 
 /** Ce que l'étape rend, une fois la réponse du modèle relue. */
 export type ResourceOutcome = {
