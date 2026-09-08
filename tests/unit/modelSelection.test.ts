@@ -27,10 +27,12 @@ describe('selectModel — (modèle voulu, taille du corpus) → modèle retenu',
   });
 
   it('réserve la place de la réponse dans la fenêtre', () => {
-    // 200 000 de fenêtre moins 32 000 de sortie : un corpus de 190 000 tokens
-    // ne « tient » pas, même s'il est sous la fenêtre nominale.
-    expect(selectModel(MODELS.haiku, 168_000)).toBe(MODELS.haiku);
-    expect(selectModel(MODELS.haiku, 190_000)).toBe(MODELS.sonnet);
+    // 200 000 de fenêtre moins 64 000 de sortie (le plafond réel de Haiku 4.5,
+    // pris depuis le 08/09/2026 au lieu des 32 000 qu'on s'imposait) : la place
+    // utile tombe à 136 000, donc un corpus de 168 000 tokens ne « tient » plus,
+    // même s'il reste sous la fenêtre nominale.
+    expect(selectModel(MODELS.haiku, 130_000)).toBe(MODELS.haiku);
+    expect(selectModel(MODELS.haiku, 168_000)).toBe(MODELS.sonnet);
   });
 
   // Une taille INCONNUE ne passe plus par ici : depuis le 22/08/2026 on essaie
