@@ -249,6 +249,27 @@
       "title": "suivi",
       "desc": "progression, maîtrise et statistiques détaillées"
     },
+    "passkeys": {
+      "sectionTitle": "sécurité",
+      "title": "clés d'accès",
+      "desc": "connecte-toi avec ton empreinte, ton visage ou le code de ton appareil, sans mot de passe",
+      "empty": "aucune clé d'accès enregistrée pour l'instant.",
+      "defaultName": "clé d'accès",
+      "add": "ajouter une clé d'accès",
+      "adding": "enregistrement…",
+      "added": "ajoutée le {date}",
+      "lastUsed": "utilisée le {date}",
+      "neverUsed": "jamais utilisée",
+      "rename": "renommer",
+      "save": "enregistrer",
+      "cancel": "annuler",
+      "delete": "supprimer",
+      "deleteTitle": "supprimer cette clé d'accès ?",
+      "deleteDesc": "« {name} » ne pourra plus servir à te connecter. Tu peux en enregistrer une nouvelle à tout moment.",
+      "cancelled": "ajout annulé.",
+      "error": "impossible de terminer l'opération. Réessaie dans un instant.",
+      "unsupported": "cet appareil ou ce navigateur ne gère pas les clés d'accès."
+    },
     "plan": {
       "free": "forfait Gratuit",
       "premium": "forfait Premium",

@@ -20,6 +20,7 @@ import { palette, withAlpha, shadow } from '@/lib/theme';
 import { Button } from '@/components/ui/button';
 import LinkButton from '@/components/LinkButton';
 import AvatarComposer from '@/components/avatar/AvatarComposer';
+import PasskeysCard from '@/components/PasskeysCard';
 import { AvatarConfig, loadAvatarConfig } from '@/components/avatar/avatarConfig';
 import { markIntentionalSignOut } from '@/lib/signOutIntent';
 import type { SubscriptionTier } from '@/lib/subscription';
@@ -363,6 +364,10 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
           </span>
           <ChevronRight size={18} strokeWidth={1.75} color={palette.inkMuted} />
         </Link>
+
+        {/* Sécurité — clés d'accès (l'écran de connexion Clerk les propose, mais
+            seule cette page permet d'en enregistrer une). */}
+        <PasskeysCard locale={locale} />
 
         {/* Paramètres */}
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', color: palette.inkMuted, margin: '26px 0 12px', textTransform: 'uppercase' }}>
