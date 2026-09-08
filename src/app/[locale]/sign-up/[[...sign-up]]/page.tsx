@@ -1,9 +1,24 @@
 import { SignUp } from '@clerk/nextjs';
+import { auth } from '@clerk/nextjs/server';
+import { redirect } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 
-export default async function SignUpPage() {
+export default async function SignUpPage({
+  params,
+}: {
+  params: Promise<{ 'sign-up'?: string[] }>;
+}) {
   const locale = await getLocale();
   const t = await getTranslations('auth.signUp');
+
+  // Déjà connecté : inutile de proposer une inscription, on renvoie dans l'app.
+  // Uniquement sur la page racine, pour ne pas interrompre les sous-étapes Clerk
+  // (retour d'un fournisseur externe, vérification d'e-mail).
+  const { 'sign-up': steps } = await params;
+  if (!steps?.length) {
+    const { userId } = await auth();
+    if (userId) redirect(`/${locale}/dashboard`);
+  }
 
   return (
     <section className="min-h-[80vh] flex items-center justify-center bg-gray-50 py-16 px-4">

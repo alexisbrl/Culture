@@ -1,14 +1,28 @@
 import { SignIn } from '@clerk/nextjs';
+import { auth } from '@clerk/nextjs/server';
+import { redirect } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 
 export default async function SignInPage({
+  params,
   searchParams,
 }: {
+  params: Promise<{ 'sign-in'?: string[] }>;
   searchParams: Promise<{ reason?: string }>;
 }) {
   const locale = await getLocale();
   const t = await getTranslations('auth.signIn');
   const { reason } = await searchParams;
+
+  // Déjà connecté : on renvoie directement dans l'app plutôt que d'afficher un
+  // formulaire de connexion inutile. Uniquement sur la page racine — les
+  // sous-étapes de Clerk (retour d'un fournisseur externe, second facteur,
+  // réinitialisation) doivent pouvoir se dérouler jusqu'au bout.
+  const { 'sign-in': steps } = await params;
+  if (!steps?.length) {
+    const { userId } = await auth();
+    if (userId) redirect(`/${locale}/dashboard`);
+  }
 
   return (
     <section className="min-h-[80vh] flex items-center justify-center bg-gray-50 py-16 px-4">
