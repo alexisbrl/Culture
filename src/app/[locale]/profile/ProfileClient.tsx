@@ -20,7 +20,8 @@ import { palette, withAlpha, shadow } from '@/lib/theme';
 import { Button } from '@/components/ui/button';
 import LinkButton from '@/components/LinkButton';
 import AvatarComposer from '@/components/avatar/AvatarComposer';
-import PasskeysCard from '@/components/PasskeysCard';
+// Masqué le 08/09/2026 — voir le bloc commenté plus bas.
+// import PasskeysCard from '@/components/PasskeysCard';
 import { AvatarConfig, loadAvatarConfig } from '@/components/avatar/avatarConfig';
 import { markIntentionalSignOut } from '@/lib/signOutIntent';
 import type { SubscriptionTier } from '@/lib/subscription';
@@ -365,9 +366,14 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
           <ChevronRight size={18} strokeWidth={1.75} color={palette.inkMuted} />
         </Link>
 
-        {/* Sécurité — clés d'accès (l'écran de connexion Clerk les propose, mais
-            seule cette page permet d'en enregistrer une). */}
-        <PasskeysCard locale={locale} />
+        {/* Sécurité — clés d'accès. MASQUÉ le 08/09/2026, à réafficher tel quel.
+            Clerk ne permet les clés d'accès qu'en offre payante : sur l'offre
+            Hobby, le bouton s'affiche et échoue à chaque clic, pour tout
+            visiteur. Le code reste ici, entier et vérifié, plutôt que supprimé
+            puis réécrit — il n'y a rien à corriger dedans, seulement un réglage
+            à souscrire. À rouvrir avec la ligne « les clés d'accès » de
+            docs/backlog.md, et pas avant d'avoir tranché le fournisseur.
+        <PasskeysCard locale={locale} /> */}
 
         {/* Paramètres */}
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', color: palette.inkMuted, margin: '26px 0 12px', textTransform: 'uppercase' }}>
