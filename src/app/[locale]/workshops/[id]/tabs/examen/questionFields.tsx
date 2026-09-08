@@ -25,13 +25,15 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
-  Ban, ChevronDown, CircleMinus, Clock, File, Link2, Palette, Search, X,
+  ChevronDown, File, Link2, Palette, Search, X,
 } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
 import {
   BLOOM_LEVELS, DEFAULT_BLOOM_LEVEL, DEFAULT_FILE_TYPES, FILE_TYPE_KEYS,
-  MATCH_SEPARATOR, MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MAX, MATCH_SPLIT_MIN, toMatchChoice,
-  type BloomLevel, type QuestionPart, type QuestionTypeOptions, type QuestionWeight, type ResponseType,
+  MATCH_SEPARATOR, MATCH_SPLIT_DEFAULT, MATCH_SPLIT_MAX, MATCH_SPLIT_MIN,
+  MAX_CHOICES, MAX_LIST_ANSWERS, MAX_PAIRS, MAX_TABLE_COLS, MAX_TABLE_ROWS, MAX_TEXT_LINES,
+  clampTextLines, listAnswerCount, toMatchChoice,
+  type BloomLevel, type QuestionPart, type QuestionTypeOptions, type ResponseType,
 } from '@/lib/workshops/examTypes';
 // Les icônes de types de réponse sont partagées avec la banque de questions.
 import { RESPONSE_TYPE_ICONS as TYPE_ICONS, useDismissOnOutsideClick, SHEET_PANEL_Z } from './examShared';
@@ -65,7 +67,6 @@ export function emptyPart(): QuestionPart {
 
 const DEFAULT_TABLE_ROWS = 2;
 const DEFAULT_TABLE_COLS = 3;
-const MAX_TABLE_COLS = 5;
 
 // Le sous-ensemble de `Question` que ce composant sait éditer. `QuestionPart` le
 // satisfait entièrement, `Question` aussi (avec des champs en plus) : c'est
@@ -95,10 +96,6 @@ type Props = {
   /** Révèle les réglages secondaires à leur place naturelle (voir InlineQuestionEditor). */
   advancedOpen: boolean;
   notions: { id: string; title: string }[];
-  /** Barème — il appartient à l'examen, pas à la question. Absent (éditeur du
-   *  parcours, qui n'a pas de copie) : aucun barème n'est affiché. */
-  weight?: QuestionWeight;
-  onWeightChange?: (patch: Partial<QuestionWeight>) => void;
   /** Boutons de pièce jointe : seule la question principale en reçoit. */
   media?: React.ReactNode;
   /** Une image est jointe à l'énoncé. Elle appartient à la GRAPPE (saisie une
@@ -108,6 +105,10 @@ type Props = {
   /** Retrait de l'énoncé : seules les questions liées en ont un. */
   onRemove?: () => void;
   statementPlaceholder: string;
+  /** Curseur posé d'office dans l'énoncé à l'ouverture — une question qu'on
+   *  vient de créer n'attend rien d'autre. Jamais sur une question existante :
+   *  le focus ferait défiler la page vers un champ qu'on n'a pas demandé. */
+  autoFocus?: boolean;
 };
 
 /** Retrait d'une question liée. L'action est destructive : la croix est rouge
@@ -138,8 +139,58 @@ function RemoveLinkedButton({ onClick, title }: { onClick: () => void; title: st
   );
 }
 
+/** Rang de tabulation d'une case : `groupe` d'abord (toutes les cases à
+ *  cocher, puis tous les champs, puis toutes les croix), `index` ensuite. Le
+ *  multiplicateur dépasse le plus grand nombre de lignes possible
+ *  (`MAX_LIST_ANSWERS`, 200), donc deux groupes ne peuvent jamais se croiser. */
+function vtab(group: number, index: number) {
+  return group * 1000 + index;
+}
+
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
+/** Tabulation VERTICALE dans les blocs en lignes (QCM, liste, tableau, paires).
+ *
+ *  Par défaut, Tab suit le DOM, donc l'ordre visuel : case à cocher → réponse →
+ *  croix, puis ligne suivante. Or on saisit une colonne à la fois — les cinq
+ *  réponses, pas la première réponse et sa croix. Chaque case porte donc un rang
+ *  (`data-vtab`, voir `vtab`) et ce gestionnaire déplace le focus dans CET
+ *  ordre-là, à poser sur le conteneur des lignes.
+ *
+ *  Le rang est relu à chaque frappe de Tab, jamais mémorisé : ajouter ou retirer
+ *  une ligne pendant la saisie ne dérègle donc rien.
+ *
+ *  ⚠️ Pas de `tabIndex` positif pour obtenir le même résultat : une valeur
+ *  positive ne réordonne pas le bloc, elle sort ses cases de l'ordre du document
+ *  pour les placer AVANT tout le reste de la page — Tab depuis l'énoncé sauterait
+ *  alors dans les réponses d'un autre bloc.
+ *
+ *  ⚠️ Le conteneur ne doit contenir QUE les lignes : au bord du groupe, la sortie
+ *  se calcule en cherchant le premier élément focusable HORS du conteneur. Une
+ *  rangée de commandes laissée à l'intérieur serait sautée. */
+function verticalTabOrder(e: React.KeyboardEvent<HTMLDivElement>) {
+  if (e.key !== 'Tab') return;
+  const root = e.currentTarget;
+  const items = Array.from(root.querySelectorAll<HTMLElement>('[data-vtab]'))
+    .filter(el => !(el as HTMLInputElement).disabled)
+    .sort((a, b) => Number(a.dataset.vtab) - Number(b.dataset.vtab));
+  const i = items.indexOf(document.activeElement as HTMLElement);
+  if (i === -1) return;
+  e.preventDefault();
+  const next = items[i + (e.shiftKey ? -1 : 1)];
+  if (next) return next.focus();
+  // Bord du groupe : on rend la main au voisin le plus proche hors du bloc.
+  const outside = Array.from(document.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(el => !root.contains(el));
+  const follows = (el: Element) => !!(root.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const target = e.shiftKey
+    ? [...outside].reverse().find(el => !follows(el))
+    : outside.find(follows);
+  target?.focus();
+}
+
 export function QuestionFields({
-  values, onChange, number, advancedOpen, notions, weight, onWeightChange, media, hasImage = false, onRemove, statementPlaceholder,
+  values, onChange, number, advancedOpen, notions, media, hasImage = false, onRemove, statementPlaceholder,
+  autoFocus = false,
 }: Props) {
   const t = useTranslations('examen');
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
@@ -286,10 +337,6 @@ export function QuestionFields({
     borderRadius: 8, padding: '6px 8px', background: palette.surfaceRaised, outline: 'none',
     fontFamily: 'inherit', textAlign: 'center',
   };
-  const groupLabel: React.CSSProperties = {
-    width: 56, flex: 'none', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
-    color: palette.inkMuted, lineHeight: 1.3,
-  };
   const cardField: React.CSSProperties = {
     border: `1px solid ${palette.lineStrong}`, borderRadius: 8, background: palette.surfaceRaised,
     fontFamily: 'inherit', color: palette.ink, outline: 'none', boxSizing: 'border-box',
@@ -341,9 +388,11 @@ export function QuestionFields({
               hideAddButton
             />
             <ControlRow trailing={attendusButton}>
-              <button type="button" onClick={() => patch({ choices: [...values.choices, ''] })} style={addLink}>
-                {t('choices.addOption')}
-              </button>
+              {values.choices.length < MAX_CHOICES && (
+                <button type="button" onClick={() => patch({ choices: [...values.choices, ''] })} style={addLink}>
+                  {t('choices.addOption')}
+                </button>
+              )}
               <PillToggle
                 on={rt === 'qcs'}
                 onClick={() => patch({ responseType: rt === 'qcs' ? 'qcm' : 'qcs', correctChoices: [] })}
@@ -384,8 +433,9 @@ export function QuestionFields({
                 <input
                   type="number"
                   min={1}
+                  max={MAX_TEXT_LINES}
                   value={values.textLines ?? 3}
-                  onChange={e => patch({ textLines: Math.max(1, Number(e.target.value) || 1) })}
+                  onChange={e => patch({ textLines: clampTextLines(Number(e.target.value) || 1) })}
                   style={{ ...numInput, width: 54 }}
                 />
               </div>
@@ -398,23 +448,38 @@ export function QuestionFields({
       // saisies ici sont les réponses de référence, pas ce qui s'imprime.
       case 'liste': {
         const items = values.choices.length ? values.choices : ['', '', ''];
-        const numbered = opts.listNumbered ?? true;
-        const expected = opts.listExpected ?? items.length;
+        // La pastille s'appelle « classer » depuis le 06/09/2026 — elle demande
+        // un ordre, les numéros ne sont que la façon de le montrer. Le réglage
+        // stocké garde son nom (`listNumbered`) : le renommer voudrait dire
+        // réécrire les réglages de toutes les questions déjà enregistrées, pour
+        // un mot que personne ne lit.
+        const numbered = opts.listNumbered ?? false;
+        // Deux valeurs, et il ne faut pas les confondre : celle que l'auteur a
+        // ENREGISTRÉE, qu'une liste numérotée met en sommeil sans l'effacer, et
+        // celle qui S'APPLIQUE — c'est la seconde qui s'affiche, et c'est elle
+        // que l'élève verra (`listAnswerCount`, partagée avec la copie A4,
+        // l'exercice et la correction).
+        const stored = opts.listExpected ?? items.length;
+        const expected = listAnswerCount({ choices: items, typeOptions: opts }) ?? items.length;
         // Le nombre de réponses attendues suit l'ajout/retrait de lignes, borné
         // par [1, nombre de lignes] : on ne peut pas en attendre plus qu'il n'y
-        // a de références saisies.
+        // a de références saisies. Tant que la liste est numérotée, le réglage
+        // dort — on se contente de le garder valide.
         const commit = (arr: string[], expectedDelta: number) => {
-          const next = Math.min(Math.max(expected + expectedDelta, 1), arr.length);
+          const next = Math.min(Math.max(stored + (numbered ? 0 : expectedDelta), 1), arr.length);
           patch({ choices: arr, typeOptions: { ...(values.typeOptions ?? {}), listExpected: next } });
         };
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {/* Tabulation verticale : toutes les réponses, puis toutes les croix. */}
+            <div onKeyDown={verticalTabOrder} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
             {items.map((val, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 {numbered && (
                   <span style={{ width: 22, flex: 'none', textAlign: 'center', fontSize: 12, fontWeight: 700, color: palette.green }}>{i + 1}</span>
                 )}
                 <input
+                  data-vtab={vtab(0, i)}
                   value={val}
                   onChange={e => commit(items.map((x, j) => (j === i ? e.target.value : x)), 0)}
                   placeholder={t('editor.answerPlaceholder')}
@@ -422,33 +487,43 @@ export function QuestionFields({
                 />
                 {items.length > 1 ? (
                   <Tooltip content={t('inline.removeRow')}>
-                    <button type="button" onClick={() => commit(items.filter((_, j) => j !== i), -1)} aria-label={t('inline.removeRow')} style={rowRemove}>
+                    <button type="button" data-vtab={vtab(1, i)} onClick={() => commit(items.filter((_, j) => j !== i), -1)} aria-label={t('inline.removeRow')} style={rowRemove}>
                       <X size={13} strokeWidth={2.2} />
                     </button>
                   </Tooltip>
                 ) : <span style={{ flex: 'none', width: 19 }} />}
               </div>
             ))}
+            </div>
             {/* Ordre de la rangée : d'abord ce qui n'est pas une pastille (le
                 lien d'ajout, le champ chiffré), puis TOUTES les pastilles à la
                 suite. Les mêler laissait « numéros » isolé entre deux commandes
                 d'un autre genre. */}
             <ControlRow trailing={attendusButton}>
-              <button type="button" onClick={() => commit([...items, ''], 1)} style={addLink}>{t('inline.addRow')}</button>
-              {advancedOpen && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 11.5, color: palette.inkMuted }}>{t('inline.expectedAnswers')}</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={items.length}
-                    value={expected}
-                    onChange={e => patchOptions({ listExpected: Math.min(Math.max(Number(e.target.value) || 1, 1), items.length) })}
-                    style={{ ...numInput, width: 54 }}
-                  />
-                </div>
+              {items.length < MAX_LIST_ANSWERS && (
+                <button type="button" onClick={() => commit([...items, ''], 1)} style={addLink}>{t('inline.addRow')}</button>
               )}
-              <PillToggle on={numbered} onClick={() => patchOptions({ listNumbered: !numbered })} label={t('inline.numbers')} title={t('inline.numbersHint')} />
+              {advancedOpen && (
+                // Liste numérotée = liste entière : le champ montre alors le
+                // nombre réel de réponses et se verrouille, plutôt que d'afficher
+                // un chiffre qui ne s'appliquerait pas. L'infobulle est sur le
+                // groupe, un champ désactivé n'émettant aucun événement de souris.
+                <Tooltip content={numbered ? t('inline.expectedAnswersLocked') : ''}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 11.5, color: numbered ? palette.inkFaint : palette.inkMuted }}>{t('inline.expectedAnswers')}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={items.length}
+                      value={expected}
+                      disabled={numbered}
+                      onChange={e => patchOptions({ listExpected: Math.min(Math.max(Number(e.target.value) || 1, 1), items.length) })}
+                      style={{ ...numInput, width: 54, opacity: numbered ? 0.5 : 1, cursor: numbered ? 'not-allowed' : undefined }}
+                    />
+                  </div>
+                </Tooltip>
+              )}
+              <PillToggle on={numbered} onClick={() => patchOptions({ listNumbered: !numbered })} label={t('inline.rank')} title={t('inline.rankHint')} />
               {answerOnImageToggle}
               {oralAnswerToggle}
             </ControlRow>
@@ -481,8 +556,9 @@ export function QuestionFields({
           });
           patchOptions({ tableUnique: true, tableChecked: kept });
         };
-        const labelCell = (val: string, ph: string, onCh: (v: string) => void, center?: boolean) => (
+        const labelCell = (val: string, ph: string, onCh: (v: string) => void, rank: number, center?: boolean) => (
           <input
+            data-vtab={rank}
             value={val}
             placeholder={ph}
             onChange={e => onCh(e.target.value)}
@@ -491,12 +567,16 @@ export function QuestionFields({
         );
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {/* Tabulation verticale : toutes les lignes, puis toutes les colonnes,
+                puis les cases à cocher (celles-ci ligne par ligne, comme on les
+                lit), puis les croix de retrait. */}
+            <div onKeyDown={verticalTabOrder} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
             {/* en-tête : libellés de colonnes */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               <div style={{ flex: '0 0 110px' }} />
               {cols.map((c, ci) => (
                 <div key={ci} style={{ flex: '1 1 0', minWidth: 0 }}>
-                  {labelCell(c, t('inline.tableColPlaceholder'), v => patchOptions({ tableCols: cols.map((x, j) => (j === ci ? v : x)) }), true)}
+                  {labelCell(c, t('inline.tableColPlaceholder'), v => patchOptions({ tableCols: cols.map((x, j) => (j === ci ? v : x)) }), vtab(1, ci), true)}
                 </div>
               ))}
               <div style={{ flex: '0 0 24px' }} />
@@ -505,7 +585,7 @@ export function QuestionFields({
             {rows.map((r, ri) => (
               <div key={ri} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ flex: '0 0 110px' }}>
-                  {labelCell(r, t('inline.tableRowPlaceholder'), v => patchOptions({ tableRows: rows.map((x, j) => (j === ri ? v : x)) }))}
+                  {labelCell(r, t('inline.tableRowPlaceholder'), v => patchOptions({ tableRows: rows.map((x, j) => (j === ri ? v : x)) }), vtab(0, ri))}
                 </div>
                 {cols.map((_c, ci) => {
                   const on = checked.includes(cellKey(ri, ci));
@@ -514,6 +594,7 @@ export function QuestionFields({
                       <Tooltip content={t('inline.tableCheckHint')}>
                         <button
                           type="button"
+                          data-vtab={vtab(2, ri * cols.length + ci)}
                           onClick={() => toggleCell(ri, ci)}
                           aria-label={t('inline.tableCheckHint')}
                           style={{
@@ -529,7 +610,7 @@ export function QuestionFields({
                 })}
                 {rows.length > 1 ? (
                   <Tooltip content={t('inline.removeRow')}>
-                    <button type="button" onClick={() => patchOptions({ tableRows: rows.filter((_, j) => j !== ri) })} aria-label={t('inline.removeRow')} style={{ ...rowRemove, width: 24 }}>
+                    <button type="button" data-vtab={vtab(3, ri)} onClick={() => patchOptions({ tableRows: rows.filter((_, j) => j !== ri) })} aria-label={t('inline.removeRow')} style={{ ...rowRemove, width: 24 }}>
                       <X size={13} strokeWidth={2.2} />
                     </button>
                   </Tooltip>
@@ -543,7 +624,7 @@ export function QuestionFields({
                 {cols.map((_c, ci) => (
                   <div key={ci} style={{ flex: '1 1 0', minWidth: 0, display: 'flex', justifyContent: 'center' }}>
                     <Tooltip content={t('inline.removeColumn')}>
-                      <button type="button" onClick={() => patchOptions({ tableCols: cols.filter((_, j) => j !== ci) })} aria-label={t('inline.removeColumn')} style={{ ...rowRemove, width: 'auto' }}>
+                      <button type="button" data-vtab={vtab(4, ci)} onClick={() => patchOptions({ tableCols: cols.filter((_, j) => j !== ci) })} aria-label={t('inline.removeColumn')} style={{ ...rowRemove, width: 'auto' }}>
                         <X size={13} strokeWidth={2.2} />
                       </button>
                     </Tooltip>
@@ -552,8 +633,11 @@ export function QuestionFields({
                 <div style={{ flex: '0 0 24px' }} />
               </div>
             )}
+            </div>
             <ControlRow trailing={attendusButton}>
-              <button type="button" onClick={() => patchOptions({ tableRows: [...rows, ''] })} style={addLink}>{t('inline.addTableRow')}</button>
+              {rows.length < MAX_TABLE_ROWS && (
+                <button type="button" onClick={() => patchOptions({ tableRows: [...rows, ''] })} style={addLink}>{t('inline.addTableRow')}</button>
+              )}
               {cols.length < MAX_TABLE_COLS && (
                 <button type="button" onClick={() => patchOptions({ tableCols: [...cols, ''] })} style={addLink}>{t('inline.addTableCol')}</button>
               )}
@@ -604,13 +688,18 @@ export function QuestionFields({
         };
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            <div ref={matchRowsRef} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {/* Tabulation verticale : tous les éléments, puis toutes les
+                correspondances, puis les croix. */}
+            <div ref={matchRowsRef} onKeyDown={verticalTabOrder} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {pairs.map((p, i) => (
                 <MatchPairRow
                   key={i}
                   left={p.l}
                   right={p.r}
                   split={split}
+                  vtabLeft={vtab(0, i)}
+                  vtabRight={vtab(1, i)}
+                  vtabRemove={vtab(2, i)}
                   leftPlaceholder={t('inline.matchLeft')}
                   rightPlaceholder={t('inline.matchRight')}
                   fieldStyle={cardField}
@@ -624,7 +713,9 @@ export function QuestionFields({
               ))}
             </div>
             <ControlRow trailing={attendusButton}>
-              <button type="button" onClick={() => commit([...pairs, { l: '', r: '' }])} style={addLink}>{t('inline.addRow')}</button>
+              {pairs.length < MAX_PAIRS && (
+                <button type="button" onClick={() => commit([...pairs, { l: '', r: '' }])} style={addLink}>{t('inline.addRow')}</button>
+              )}
               {oralAnswerToggle}
             </ControlRow>
           </div>
@@ -716,7 +807,7 @@ export function QuestionFields({
           <span style={{ flex: 'none', fontSize: 14, fontWeight: 600, color: palette.ink, paddingTop: 10 }}>{number}.</span>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <AutoTextarea value={values.content} onChange={v => patch({ content: v })} placeholder={statementPlaceholder} />
+          <AutoTextarea value={values.content} onChange={v => patch({ content: v })} placeholder={statementPlaceholder} autoFocus={autoFocus} />
         </div>
         {media}
         {onRemove && <RemoveLinkedButton onClick={onRemove} title={t('inline.removeLinked')} />}
@@ -732,7 +823,10 @@ export function QuestionFields({
               onClick={() => setTypeMenuOpen(v => !v)}
               style={{ ...selectStyle, display: 'inline-flex', alignItems: 'center', gap: 9 }}
             >
-              <span style={{ display: 'flex', color: palette.green }}><CurrentIcon size={16} strokeWidth={1.75} /></span>
+              {/* Pictogramme NEUTRE : la couleur est réservée aux libellés,
+                  seuls objets que l'utilisateur teinte lui-même (voir
+                  `TypeIcon` et les pastilles du panneau de filtres). */}
+              <span style={{ display: 'flex', color: palette.inkSoft }}><CurrentIcon size={16} strokeWidth={1.75} /></span>
               {t(`responseType.${rt}`)}
               <ChevronDown size={16} strokeWidth={1.75} style={{ color: palette.inkMuted, marginLeft: 2 }} />
             </button>
@@ -755,13 +849,13 @@ export function QuestionFields({
                       style={{
                         display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
                         fontSize: 13, fontWeight: active ? 600 : 500, fontFamily: 'inherit',
-                        color: soon ? palette.inkFaint : palette.ink, background: active ? withAlpha(palette.green, 0.10) : 'transparent',
+                        color: soon ? palette.inkFaint : palette.ink, background: active ? ink(0.06) : 'transparent',
                         border: 'none', borderRadius: 8, padding: '8px 10px', cursor: soon ? 'not-allowed' : 'pointer',
                       }}
                     >
-                      <span style={{ display: 'flex', color: palette.green, flex: 'none' }}><Icon size={16} strokeWidth={1.75} /></span>
+                      <span style={{ display: 'flex', color: palette.inkSoft, flex: 'none' }}><Icon size={16} strokeWidth={1.75} /></span>
                       <span style={{ flex: 1 }}>{t(`responseType.${k}`)}{soon ? ' · V2' : ''}</span>
-                      {active && <span style={{ color: palette.green, fontSize: 12, flex: 'none' }}>✓</span>}
+                      {active && <span style={{ color: palette.ink, fontSize: 12, flex: 'none' }}>✓</span>}
                     </button>
                   );
                 })}
@@ -771,78 +865,13 @@ export function QuestionFields({
         </div>
         </div>
 
-        {/* Barème : « / n pts » discret par défaut, deux lignes étiquetées
-            (gain puis pénalité) une fois les paramètres avancés ouverts. */}
-        {weight && onWeightChange && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              {advancedOpen && <span style={groupLabel}>{t('inline.scoreLabel').toUpperCase()}</span>}
-              {!advancedOpen && <span style={{ fontSize: 14, fontWeight: 600, color: palette.inkMuted }}>/</span>}
-              <Tooltip content={t('inline.pointsTitle')}>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  value={weight.points}
-                  onChange={e => onWeightChange({ points: Math.max(0, Number(e.target.value) || 0) })}
-                  aria-label={t('inline.pointsTitle')}
-                  style={numInput}
-                />
-              </Tooltip>
-              <span style={{ fontSize: 10.5, color: palette.inkFaint }}>{t('inline.points')}</span>
-              {advancedOpen && (
-                <IconToggle
-                  active={weight.timed ?? false}
-                  title={t('inline.timedScore')}
-                  onClick={() => onWeightChange({ timed: !weight.timed })}
-                >
-                  <Clock size={16} strokeWidth={1.75} />
-                </IconToggle>
-              )}
-            </div>
-
-            {advancedOpen && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={groupLabel}>{t('inline.penaltyLabel').toUpperCase()}</span>
-                {!weight.eliminatory && (
-                  <>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: palette.danger }}>−</span>
-                    <Tooltip content={t('inline.penaltyTitle')}>
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.5}
-                        value={weight.negative.value}
-                        onChange={e => {
-                          const v = Math.max(0, Number(e.target.value) || 0);
-                          onWeightChange({ negative: { enabled: v > 0, value: v } });
-                        }}
-                        aria-label={t('inline.penaltyTitle')}
-                        style={{ ...numInput, color: weight.negative.value > 0 ? palette.danger : palette.ink }}
-                      />
-                    </Tooltip>
-                    <span style={{ fontSize: 10.5, color: palette.inkFaint }}>{t('inline.points')}</span>
-                  </>
-                )}
-                <IconToggle
-                  active={weight.eliminatory}
-                  activeTone="danger"
-                  title={t('inline.eliminatory')}
-                  onClick={() => onWeightChange({ eliminatory: !weight.eliminatory, negative: weight.eliminatory ? weight.negative : { enabled: false, value: 0 } })}
-                >
-                  <Ban size={16} strokeWidth={1.75} />
-                </IconToggle>
-                <IconToggle
-                  active={weight.penalizeUnanswered ?? false}
-                  title={t('inline.penaltyScope')}
-                  onClick={() => onWeightChange({ penalizeUnanswered: !weight.penalizeUnanswered })}
-                >
-                  <CircleMinus size={16} strokeWidth={1.75} />
-                </IconToggle>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Le BARÈME n'est plus ici (06/09/2026). Il appartient à l'examen et non
+            à la question — la même question vaut deux points ici et un demi-point
+            là —, et la base le rangeait déjà ainsi. Il se règle désormais sur la
+            copie elle-même, en marge de chaque ligne, dès que « personnaliser »
+            est ouvert (`sheetPoints`, GeneratorContent). Ne pas le réintroduire
+            ici : l'éditeur redeviendrait une seconde source pour une donnée qui
+            n'est pas la sienne. */}
       </div>
 
       {renderTypeBlock()}
@@ -939,16 +968,19 @@ export function QuestionFields({
 
 // ─── Briques de formulaire partagées ─────────────────────────────────────────
 
-export function TextField({ value, onChange, placeholder, multiline, rows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; multiline?: boolean; rows?: number }) {
+export function TextField({ value, onChange, placeholder, multiline, rows = 3, vtabRank }: { value: string; onChange: (v: string) => void; placeholder?: string; multiline?: boolean; rows?: number;
+  /** Rang de tabulation verticale, quand le champ est une ligne d'un bloc de
+   *  réponses (voir `verticalTabOrder`). Absent ailleurs : Tab suit le DOM. */
+  vtabRank?: number }) {
   const style: React.CSSProperties = {
     width: '100%', fontSize: 13, color: palette.ink, border: `1px solid ${ink(0.12)}`,
     borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none',
     fontFamily: 'inherit', boxSizing: 'border-box', resize: 'vertical' as const,
   };
   if (multiline) {
-    return <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows} style={style} />;
+    return <textarea data-vtab={vtabRank} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows} style={style} />;
   }
-  return <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={style} />;
+  return <input type="text" data-vtab={vtabRank} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={style} />;
 }
 
 // ─── Choice list editor (QCM, variante « réponse unique » comprise, et matching) ─
@@ -1010,7 +1042,9 @@ export function ChoiceListEditor({
           {t('choices.prompt', { what: showPairs ? t('choices.promptPairs') : t('choices.promptOptions') })}
         </div>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {/* Tabulation verticale : toutes les cases à cocher, puis toutes les
+          réponses, puis toutes les croix (voir `verticalTabOrder`). */}
+      <div onKeyDown={verticalTabOrder} style={{ display: 'flex', flexDirection: 'column' }}>
         {choices.map((c, i) => (
           <div key={i} style={{ marginBottom: 7 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1019,6 +1053,7 @@ export function ChoiceListEditor({
                  par ombre interne, ronde quand une seule réponse est permise. */
               <Tooltip content={responseType === 'qcs' ? t('choices.correctUnique') : t('choices.correct')}>
                 <button
+                  data-vtab={vtab(0, i)}
                   onClick={() => toggleCorrect(i)}
                   aria-label={responseType === 'qcs' ? t('choices.correctUnique') : t('choices.correct')}
                   style={{
@@ -1033,16 +1068,16 @@ export function ChoiceListEditor({
             )}
             {showPairs ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
-                <TextField value={c.split(MATCH_SEPARATOR)[0] ?? ''} onChange={(v) => updateChoice(i, toMatchChoice(v, c.split(MATCH_SEPARATOR)[1] ?? ''))} placeholder={t('choices.pairLeft', { n: i + 1 })} />
+                <TextField vtabRank={vtab(1, i)} value={c.split(MATCH_SEPARATOR)[0] ?? ''} onChange={(v) => updateChoice(i, toMatchChoice(v, c.split(MATCH_SEPARATOR)[1] ?? ''))} placeholder={t('choices.pairLeft', { n: i + 1 })} />
                 <span style={{ fontSize: 12, color: palette.inkFaint }}>→</span>
-                <TextField value={c.split(MATCH_SEPARATOR)[1] ?? ''} onChange={(v) => updateChoice(i, toMatchChoice(c.split(MATCH_SEPARATOR)[0] ?? '', v))} placeholder={t('choices.pairRight')} />
+                <TextField vtabRank={vtab(2, i)} value={c.split(MATCH_SEPARATOR)[1] ?? ''} onChange={(v) => updateChoice(i, toMatchChoice(c.split(MATCH_SEPARATOR)[0] ?? '', v))} placeholder={t('choices.pairRight')} />
               </div>
             ) : (
               <div style={{ flex: 1 }}>
-                <TextField value={c} onChange={(v) => updateChoice(i, v)} placeholder={t('choices.option', { n: i + 1 })} />
+                <TextField vtabRank={vtab(1, i)} value={c} onChange={(v) => updateChoice(i, v)} placeholder={t('choices.option', { n: i + 1 })} />
               </div>
             )}
-            <button onClick={() => removeChoice(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: palette.danger, fontSize: 16, padding: '0 2px', lineHeight: 1 }}>×</button>
+            <button data-vtab={vtab(showPairs ? 3 : 2, i)} onClick={() => removeChoice(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: palette.danger, fontSize: 16, padding: '0 2px', lineHeight: 1 }}>×</button>
           </div>
           </div>
         ))}
@@ -1060,10 +1095,12 @@ export function ChoiceListEditor({
  *  (`resize: none`), la hauteur suit le nombre de lignes réellement saisies.
  *  `field-sizing: content` ne couvre pas encore tous les navigateurs, d'où la
  *  mesure explicite sur `scrollHeight`. */
-export function AutoTextarea({ value, onChange, placeholder, minHeight, fontSize = 14, bold = true }: {
+export function AutoTextarea({ value, onChange, placeholder, minHeight, fontSize = 14, bold = true, autoFocus = false }: {
   value: string; onChange: (v: string) => void; placeholder?: string;
   /** Hauteur plancher, en px — sert à garantir un nombre de lignes minimum. */
   minHeight?: number; fontSize?: number; bold?: boolean;
+  /** Curseur posé dans la case dès qu'elle apparaît (voir `QuestionFields`). */
+  autoFocus?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
@@ -1078,9 +1115,13 @@ export function AutoTextarea({ value, onChange, placeholder, minHeight, fontSize
     <textarea
       ref={ref}
       rows={1}
+      autoFocus={autoFocus}
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
+      // Le texte d'exemple ne grandit pas la case : seul le texte saisi le peut
+      // (voir `.placeholder-one-line` dans globals.css).
+      className="placeholder-one-line"
       style={{
         width: '100%', boxSizing: 'border-box', fontFamily: 'inherit', fontSize, fontWeight: bold ? 600 : 400,
         lineHeight: bold ? 1.4 : 1.7, color: palette.ink, background: palette.surfaceRaised,
@@ -1134,8 +1175,11 @@ export function PillToggle({ on, onClick, label, title }: { on: boolean; onClick
 function MatchPairRow({
   left, right, split, leftPlaceholder, rightPlaceholder, fieldStyle,
   onLeftChange, onRightChange, onSplitDrag, onRemove, removeTitle, splitTitle,
+  vtabLeft, vtabRight, vtabRemove,
 }: {
   left: string; right: string; split: number;
+  /** Rangs de tabulation verticale (voir `verticalTabOrder`). */
+  vtabLeft: number; vtabRight: number; vtabRemove: number;
   leftPlaceholder: string; rightPlaceholder: string; fieldStyle: React.CSSProperties;
   onLeftChange: (v: string) => void; onRightChange: (v: string) => void;
   onSplitDrag: (e: React.MouseEvent) => void;
@@ -1146,6 +1190,12 @@ function MatchPairRow({
   // Sans tableau de dépendances : la hauteur dépend aussi de la LARGEUR, donc
   // du curseur de partage, pas seulement du texte saisi. On n'écrit que du
   // style (jamais de setState) — aucun risque de boucle de rendu.
+  //
+  // ⚠️ `scrollHeight` d'un champ VIDE tient compte de son texte d'exemple : une
+  // colonne rétrécie au curseur de partage écrivait « correspondance… » à la
+  // verticale et étirait la rangée sur 400 px. D'où `placeholder-one-line` sur
+  // les deux cellules — le texte d'exemple tient sur une ligne, la case vide
+  // garde donc sa hauteur d'une ligne.
   useLayoutEffect(() => {
     for (const el of [leftRef.current, rightRef.current]) {
       if (!el) continue;
@@ -1160,7 +1210,7 @@ function MatchPairRow({
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
       <div style={{ flex: `${split} 1 0`, minWidth: 0 }}>
-        <textarea ref={leftRef} rows={1} value={left} onChange={e => onLeftChange(e.target.value)} placeholder={leftPlaceholder} style={cell} />
+        <textarea ref={leftRef} data-vtab={vtabLeft} rows={1} value={left} onChange={e => onLeftChange(e.target.value)} placeholder={leftPlaceholder} className="placeholder-one-line" style={cell} />
       </div>
       <Tooltip content={splitTitle}>
         <span
@@ -1172,11 +1222,11 @@ function MatchPairRow({
         </span>
       </Tooltip>
       <div style={{ flex: `${1 - split} 1 0`, minWidth: 0 }}>
-        <textarea ref={rightRef} rows={1} value={right} onChange={e => onRightChange(e.target.value)} placeholder={rightPlaceholder} style={{ ...cell, textAlign: 'right' }} />
+        <textarea ref={rightRef} data-vtab={vtabRight} rows={1} value={right} onChange={e => onRightChange(e.target.value)} placeholder={rightPlaceholder} className="placeholder-one-line" style={{ ...cell, textAlign: 'right' }} />
       </div>
       {onRemove ? (
         <Tooltip content={removeTitle}>
-          <button type="button" onClick={onRemove} aria-label={removeTitle} style={{ flex: 'none', width: 19, marginLeft: 6, border: 'none', background: 'transparent', color: palette.inkFaint, cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button type="button" data-vtab={vtabRemove} onClick={onRemove} aria-label={removeTitle} style={{ flex: 'none', width: 19, marginLeft: 6, border: 'none', background: 'transparent', color: palette.inkFaint, cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <X size={13} strokeWidth={2.2} />
           </button>
         </Tooltip>
@@ -1185,29 +1235,3 @@ function MatchPairRow({
   );
 }
 
-/** Petit bouton carré à bascule du barème avancé (gain dégressif, éliminatoire,
- *  pénalité sur absence de réponse). */
-function IconToggle({ active = false, activeTone = 'green', title, onClick, children }: {
-  active?: boolean; activeTone?: 'green' | 'danger';
-  title: string; onClick: () => void; children: React.ReactNode;
-}) {
-  const accent = activeTone === 'danger' ? palette.danger : palette.green;
-  return (
-    <Tooltip content={title}>
-      <button
-        type="button"
-        aria-label={title}
-        onClick={onClick}
-        style={{
-          width: 30, height: 30, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          borderRadius: 8, cursor: 'pointer',
-          background: active ? accent : palette.surfaceRaised,
-          border: `1px solid ${active ? accent : palette.lineStrong}`,
-          color: active ? palette.parchment : palette.inkMuted,
-        }}
-      >
-        {children}
-      </button>
-    </Tooltip>
-  );
-}

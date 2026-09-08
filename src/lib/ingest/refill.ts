@@ -32,6 +32,7 @@
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { chapterShortages } from '@/lib/workshops/parcoursRadar';
 import { createImport } from './ingest';
+import { markOutcome } from './journal';
 import { ingestParcoursQuestions } from './run';
 import { MAX_REFILL_QUESTIONS, capDemand, demandFromShortages, demandTotal } from './demand';
 
@@ -118,6 +119,10 @@ export async function refillChapter(
     // garde, donc il doit exister même si la génération échoue ensuite.
     const importId = await createImport(workshopId, userId, {
       scope: { refillChapter: chapterId, demand: demandTotal(demand) },
+      // Une recharge n'est pas une génération demandée : elle tourne en fond,
+      // sur un autre fournisseur et un autre volume. Les confondre dans les
+      // comptes n'aurait aucun sens (voir @/lib/ingest/journal).
+      origin: 'refill',
     });
 
     const deadline = Date.now() + REFILL_DEADLINE_MS;
@@ -134,6 +139,9 @@ export async function refillChapter(
       batchIndex += 1;
     }
 
+    // La recharge va au bout dans le même appel : contrairement à l'écran de
+    // génération, elle sait ici même comment elle se termine.
+    await markOutcome(importId, 'finished');
     console.info('[parcours] recharge', { workshopId, chapterId, userId, importId, written });
     return { triggered: true, written, importId };
   } catch (err) {

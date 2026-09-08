@@ -31,11 +31,11 @@
 // que la feuille se lise comme la suite d'énoncés qu'elle est. Modèle :
 // `QuestionPart` dans @/lib/workshops/examTypes.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { AudioLines, ImageIcon, Link2, SlidersHorizontal } from 'lucide-react';
 import { palette, ink, withAlpha } from '@/lib/theme';
-import type { Question, QuestionPart, QuestionWeight } from '@/lib/workshops/examTypes';
+import type { Question, QuestionPart } from '@/lib/workshops/examTypes';
 import { QuestionFields, emptyPart } from './questionFields';
 import { MediaAttachment, useQuestionMediaDrop } from './questionMedia';
 import { type Pool, LabelPill, LabelEditor, LabelPicker } from './examShared';
@@ -56,22 +56,18 @@ type Props = {
   pools?: { id: string; name: string; color: string }[];
   showLabels?: boolean;
   notions: { id: string; title: string }[];
-  /** Pondération de la question — elle appartient à l'examen, pas à la question. */
-  /** Barème — il appartient à l'EXAMEN, pas à la question. Absent côté parcours,
-   *  qui n'a pas de copie : `QuestionFields` n'affiche alors aucun barème (le
-   *  socle partagé le prévoit déjà). */
-  weight?: QuestionWeight;
-  onWeightChange?: (patch: Partial<QuestionWeight>) => void;
   /** Cadre du bloc. `sheet` : posé sur la feuille A4, teinté et cerné de vert
    *  pour se détacher du rendu figé des autres questions. `plain` : hors feuille
-   *  (parcours), où il n'y a rien dont se détacher — un simple cadre neutre. */
-  frame?: 'sheet' | 'plain';
-  /** Pondération d'une question liée. Lue par index et non passée en tableau :
-   *  l'éditeur peut en ajouter au brouillon avant enregistrement, donc réclamer
-   *  un index que l'examen ne connaît pas encore (l'appelant retombe alors sur
-   *  le barème par défaut). */
-  partWeight?: (idx: number) => QuestionWeight;
-  onPartWeightChange?: (idx: number, patch: Partial<QuestionWeight>) => void;
+   *  (parcours), où il n'y a rien dont se détacher — un simple cadre neutre.
+   *  `bare` : **aucun cadre du tout**, parce que le formulaire est déjà DANS un
+   *  encadré (celui de la création, avec sa bascule) — un cadre de plus ferait
+   *  un cadre dans le cadre. */
+  frame?: 'sheet' | 'plain' | 'bare';
+  /** L'encadré qui accueille le formulaire écrit lui-même sa ligne de titre —
+   *  « NOUVELLE QUESTION » et la bascule « manuel / par IA ». Le formulaire ne
+   *  la répète donc pas : elle doit être la MÊME des deux côtés de la bascule,
+   *  donc elle appartient à l'encadré, pas à l'un des deux contenus. */
+  hideTitle?: boolean;
   /** Retrait d'une question liée : l'appelant décale les pondérations suivantes
    *  (elles sont indexées par position, voir `partWeightKey`). */
   onRemovePart?: (idx: number) => void;
@@ -86,15 +82,21 @@ type Props = {
   /** Nombre de questions portant un libellé, pour la confirmation de suppression
    *  (seul l'appelant connaît la banque complète). */
   poolUsageCount?: (poolId: string) => number;
+  /** Brouillon en cours, à chaque frappe — pour que la copie d'examen montre en
+   *  DIRECT ce qui s'écrit dans le formulaire, alors qu'il vit ailleurs (dans la
+   *  liste). Rien n'est enregistré pour autant : `onSave` reste le seul moment
+   *  où la question change vraiment. Absent côté parcours, qui n'a pas de copie
+   *  à tenir à jour. */
+  onDraftChange?: (draft: Question) => void;
   onSave: (q: Question) => void;
   onCancel: () => void;
 };
 
 export default function InlineQuestionEditor({
-  workshopId, question, number, isNew, notions, weight, onWeightChange,
-  partWeight, onPartWeightChange, onRemovePart, onCreatePool, onUpdatePool,
+  workshopId, question, number, isNew, notions, onDraftChange,
+  onRemovePart, onCreatePool, onUpdatePool,
   onDeletePool, poolUsageCount, onSave, onCancel, frame = 'sheet',
-  pools = [], showLabels = true,
+  pools = [], showLabels = true, hideTitle = false,
 }: Props) {
   const t = useTranslations('examen');
   const [draft, setDraft] = useState<Question>({
@@ -103,7 +105,23 @@ export default function InlineQuestionEditor({
     expectations: question.expectations ?? '',
     typeOptions: question.typeOptions ?? {},
   });
+  // L'aperçu de la copie suit le brouillon, à chaque frappe.
+  //
+  // Par un effet, et non depuis les fonctions de modification : celles-ci
+  // passent par un updater (`setDraft(d => …)`), qui s'exécute PENDANT le rendu
+  // — y appeler le `setState` du parent lèverait « Cannot update a component
+  // while rendering a different component ». Le rappel est gardé en référence
+  // pour que l'effet ne dépende que du brouillon : l'appelant le redéfinit à
+  // chaque rendu (fonction fléchée), et le mettre en dépendance rejouerait
+  // l'effet en boucle.
+  const draftChangeRef = useRef(onDraftChange);
+  useEffect(() => { draftChangeRef.current = onDraftChange; });
+  useEffect(() => { draftChangeRef.current?.(draft); }, [draft]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  /** Question liée qui vient d'être ajoutée : son intitulé prend le curseur, au
+   *  même titre que celui d'une question neuve. `null` le reste du temps —
+   *  l'ouverture d'un formulaire existant ne doit voler le focus à personne. */
+  const [newPartIdx, setNewPartIdx] = useState<number | null>(null);
   const [editingPool, setEditingPool] = useState<string | null>(null);
 
   // Glisser-déposer un fichier n'importe où sur la carte : reconnu comme
@@ -127,6 +145,9 @@ export default function InlineQuestionEditor({
   }
   function removePart(idx: number) {
     setDraft(d => ({ ...d, parts: d.parts.filter((_, i) => i !== idx) }));
+    // Les questions liées sont repérées par leur rang : après un retrait, celui
+    // qu'on avait mémorisé ne désigne plus la même.
+    setNewPartIdx(null);
     // Côté examen, l'appelant décale les pondérations suivantes. Côté parcours
     // il n'y a pas de barème, donc rien à décaler.
     onRemovePart?.(idx);
@@ -155,20 +176,31 @@ export default function InlineQuestionEditor({
     <div
       {...dropHandlers}
       style={{
-        margin: frame === 'sheet' ? '10px 26px' : 0, padding: '14px 16px', borderRadius: 14,
+        margin: frame === 'sheet' ? '10px 26px' : 0,
+        // `bare` : ni cadre, ni fond, ni retrait — l'encadré qui l'accueille les
+        // porte déjà. Le liseré du glisser-déposer d'un média, lui, reste : il
+        // ne décore pas, il désigne la cible du fichier qu'on tient.
+        padding: frame === 'bare' ? 0 : '14px 16px',
+        borderRadius: 14,
         border: dragOver
           ? `1.5px dashed ${palette.green}`
-          : `1px solid ${frame === 'sheet' ? palette.greenSoft : palette.line}`,
+          : frame === 'bare' ? 'none' : `1px solid ${frame === 'sheet' ? palette.greenSoft : palette.line}`,
         background: dragOver
           ? withAlpha(palette.green, 0.12)
-          : frame === 'sheet' ? withAlpha(palette.green, 0.06) : palette.surfaceRaised,
+          : frame === 'sheet' ? withAlpha(palette.green, 0.06) : frame === 'bare' ? 'transparent' : palette.surfaceRaised,
         display: 'flex', flexDirection: 'column', gap: 12, boxSizing: 'border-box', minWidth: 0,
         transition: 'background 0.1s, border-color 0.1s',
       }}
     >
-      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: palette.green }}>
-        {(isNew ? t('inline.newQuestion') : t('inline.editQuestion')).toUpperCase()} · {t(`responseType.${draft.responseType}`).toUpperCase()}
-      </div>
+      {/* Le TYPE de réponse ne figure plus ici (07/09/2026) : le sélecteur juste
+          en dessous le dit déjà, en toutes lettres et avec son pictogramme, et
+          il se règle là — le répéter en titre donnait deux sources pour une même
+          information, dont une seule qu'on peut changer. */}
+      {!hideTitle && (
+        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: palette.green }}>
+          {(isNew ? t('inline.newQuestion') : t('inline.editQuestion')).toUpperCase()}
+        </div>
+      )}
       {dropError && <div style={{ fontSize: 12, color: palette.danger }}>{dropError}</div>}
 
       <QuestionFields
@@ -177,10 +209,11 @@ export default function InlineQuestionEditor({
         number={number}
         advancedOpen={advancedOpen}
         notions={notions}
-        weight={weight}
-        onWeightChange={onWeightChange}
         hasImage={!!draft.image}
         statementPlaceholder={t('inline.statementPlaceholder')}
+        // Une question qu'on vient de créer n'attend rien d'autre que son
+        // intitulé : le curseur y est posé d'office, sans avoir à cliquer.
+        autoFocus={isNew}
         media={
           <>
             <MediaAttachment
@@ -226,14 +259,12 @@ export default function InlineQuestionEditor({
             advancedOpen={advancedOpen}
             notions={notions}
             // Sans barème (parcours), les questions liées n'en affichent pas
-            // non plus : `QuestionFields` masque le bloc quand `weight` manque.
-            weight={partWeight?.(idx)}
-            onWeightChange={onPartWeightChange ? (p) => onPartWeightChange(idx, p) : undefined}
             // L'image appartient à la grappe : une question liée peut donc, elle
             // aussi, demander une réponse posée dessus.
             hasImage={!!draft.image}
             onRemove={() => removePart(idx)}
             statementPlaceholder={t('inline.linkedStatementPlaceholder')}
+            autoFocus={newPartIdx === idx}
           />
         </div>
       ))}
@@ -316,7 +347,7 @@ export default function InlineQuestionEditor({
         </button>
         <button
           type="button"
-          onClick={() => patch({ parts: [...draft.parts, emptyPart()] })}
+          onClick={() => { setNewPartIdx(draft.parts.length); patch({ parts: [...draft.parts, emptyPart()] }); }}
           style={{ ...footerBtn, border: `1.5px dashed ${palette.lineStrong}`, background: 'transparent', color: palette.tanStrong }}
         >
           <Link2 size={15} strokeWidth={1.75} />

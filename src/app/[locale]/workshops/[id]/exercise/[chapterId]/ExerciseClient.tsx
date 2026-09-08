@@ -81,6 +81,18 @@ type ExtraAnswer = {
 
 const emptyExtra = (): ExtraAnswer => ({ list: [], table: [], match: {}, strokes: [], fileName: '' });
 
+/** Colonnes de propositions d'un QCM. **Une seule ici**, et deux sur la copie
+ *  d'examen (`QCM_COLUMNS`, examShared) — arbitrage d'Alexis du 06/09/2026,
+ *  après avoir vu les deux à l'écran. Les deux surfaces n'ont pas la même
+ *  contrainte : sur une feuille, la place est comptée et chaque ligne gagnée est
+ *  une ligne de moins à imprimer ; à l'écran, on défile, et une proposition par
+ *  ligne se lit et se vise mieux — surtout le jour du portage mobile, où deux
+ *  colonnes serreraient les cibles de doigt.
+ *
+ *  Passer à 2 rend la mise en page à deux colonnes sans autre changement : la
+ *  grille est déjà en place, elle n'attend que ce nombre. */
+const QCM_ANSWER_COLUMNS = 1;
+
 /** Nombre de lignes attendues d'une liste — au moins une, sinon la zone de
  *  réponse serait vide et l'énoncé invalidable. */
 function listRowCount(statement: ExercisePart): number {
@@ -638,29 +650,24 @@ export default function ExerciseClient({ locale, workshopId, workshopName, chapt
                 {/* ─── La grappe se dévoile un énoncé à la fois ─────────────
                     Seuls les énoncés déjà découverts sont rendus (`shown`) :
                     le suivant n'apparaît qu'au clic sur « suivant », SOUS le
-                    précédent, qui reste lisible avec sa correction. Un énoncé
-                    corrigé prend une carte, l'énoncé actif est posé
-                    directement sur le fond — c'est le repère « ce qui est
-                    fait / ce qui reste ». */}
+                    précédent, qui reste lisible avec sa correction.
+
+                    ⚠️ **Un énoncé corrigé ne prend plus de carte** (07/09/2026,
+                    demandé par Alexis) : tous les énoncés sont posés directement
+                    sur le fond, corrigés comme actif. L'encadré blanc doublait
+                    une information déjà portée — et bien mieux — par le bloc de
+                    verdict de la correction, qui est coloré selon la réponse ;
+                    il ne faisait qu'ajouter un cadre dans le cadre à un écran
+                    qui n'en a aucun autre. Seul l'écart vertical sépare
+                    désormais deux énoncés. */}
                 {statements.slice(0, shown).map((statement, i) => {
                   const outcome = outcomes[i] ?? null;
                   const isMain = i === 0;
-                  const settled = outcome !== null;
                   return (
                     <div
                       key={i}
                       ref={i === shown - 1 ? activeRef : null}
-                      style={{
-                        marginTop: isMain ? 0 : 18,
-                        ...(settled
-                          ? {
-                              background: palette.surfaceRaised,
-                              border: `1px solid ${palette.line}`,
-                              borderRadius: 14,
-                              padding: '18px 20px',
-                            }
-                          : {}),
-                      }}
+                      style={{ marginTop: isMain ? 0 : 18 }}
                     >
                       {/* Le repère « où en est-on » compte TOUTES les questions
                           du groupe, la première comprise : elle n'a rien de
@@ -822,7 +829,7 @@ function AnswerZone({ statement, selected, freeText, extra, result, onChoices, o
       display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%',
       textAlign: 'left' as const, padding: '15px 17px', borderRadius: 12, border: `1.5px solid ${border}`,
       background, color: palette.ink, fontSize: 15, fontWeight: 600, fontFamily: 'inherit',
-      cursor: result ? 'default' : 'pointer', marginBottom: 9, boxShadow: shadow.sm,
+      cursor: result ? 'default' : 'pointer', boxShadow: shadow.sm,
       transition: 'border-color 120ms ease, background 120ms ease',
     };
   }
@@ -843,13 +850,24 @@ function AnswerZone({ statement, selected, freeText, extra, result, onChoices, o
 
   return (
     <>
-      {isChoice && statement.choices.map((choice) => (
-        <button key={choice.index} onClick={() => toggleChoice(choice.index)} style={choiceStyle(choice.index)} disabled={!!result}>
-          <span style={{ flex: 1 }}>{choice.text}</span>
-          {result?.correctChoices.includes(choice.index) && <Check size={18} color={palette.green} />}
-          {result && selected.includes(choice.index) && !result.correctChoices.includes(choice.index) && <X size={18} color={palette.danger} />}
-        </button>
-      ))}
+      {/* Propositions sur deux colonnes (`QCM_ANSWER_COLUMNS`) : une grille, et
+          non deux colonnes indépendantes. Les cartes d'une même rangée
+          s'étirent à la hauteur de la plus haute, donc une proposition longue
+          creuse SA rangée sans désaligner les suivantes — c'est ce qui rattrape
+          le déséquilibre, comme la grille des paires. La marge basse qui
+          séparait les cartes est passée dans l'écart de la grille : cumulée avec
+          lui, elle aurait doublé l'espace entre rangées. */}
+      {isChoice && (
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${QCM_ANSWER_COLUMNS}, minmax(0, 1fr))`, gap: 9 }}>
+          {statement.choices.map((choice) => (
+            <button key={choice.index} onClick={() => toggleChoice(choice.index)} style={choiceStyle(choice.index)} disabled={!!result}>
+              <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{choice.text}</span>
+              {result?.correctChoices.includes(choice.index) && <Check size={18} color={palette.green} style={{ flexShrink: 0 }} />}
+              {result && selected.includes(choice.index) && !result.correctChoices.includes(choice.index) && <X size={18} color={palette.danger} style={{ flexShrink: 0 }} />}
+            </button>
+          ))}
+        </div>
+      )}
 
       {isFreeText && (
         <textarea
@@ -930,11 +948,17 @@ function ListAnswer({ statement, extra, result, onExtra }: {
   const t = useTranslations('exercise');
   const readOnly = !!result;
   const rows = listRowCount(statement);
-  // Quelles saisies ont trouvé preneur, dans l'ordre des champs. Appariement UN
-  // POUR UN : la même réponse écrite deux fois ne vaut qu'une fois.
+  // Une liste numérotée demande l'ordre : la ligne N doit porter la Nᵉ réponse
+  // attendue, et la couleur des champs doit dire exactement ça — sinon un champ
+  // vert sous un verdict « faux » laisserait le candidat sans explication.
+  const ordered = statement.typeOptions.listNumbered === true;
+  // Quelles saisies ont trouvé preneur, dans l'ordre des champs. Sans ordre
+  // imposé, appariement UN POUR UN : la même réponse écrite deux fois ne vaut
+  // qu'une fois.
   const hits = result?.correctList ? matchListEntries(
     Array.from({ length: rows }, (_, i) => extra.list[i] ?? ''),
     result.correctList,
+    { ordered },
   ) : [];
 
   /** Couleur d'un champ après validation : vert s'il a trouvé sa réponse,
@@ -946,15 +970,12 @@ function ListAnswer({ statement, extra, result, onExtra }: {
     if (hits[row] !== null && hits[row] !== undefined) return palette.green;
     return (extra.list[row] ?? '').trim() ? palette.danger : null;
   }
-  // Numérotation activée par défaut : sans réglage explicite, une liste se lit
-  // numérotée (c'est le cas de la maquette).
-  const numbered = statement.typeOptions.listNumbered ?? true;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {Array.from({ length: rows }, (_, row) => (
         <div key={row} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {numbered && (
+          {ordered && (
             <span style={{ flex: 'none', width: 20, fontSize: 14, fontWeight: 700, color: palette.inkFaint }}>
               {row + 1}
             </span>

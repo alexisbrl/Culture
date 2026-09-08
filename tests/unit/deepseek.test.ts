@@ -28,7 +28,7 @@ describe('createDeepSeekProvider — passe questions uniquement', () => {
   });
 
   it('REFUSE la passe chapitres au lieu de la servir dégradée', async () => {
-    await expect(provider().documentToPlan([], empty, { pass: 'chapters', notions: [] })).rejects.toThrow(/passe chapters/);
+    await expect(provider().documentToPlan([], empty, { pass: 'chapters' })).rejects.toThrow(/passe chapters/);
   });
 
   it('REFUSE la passe notions', async () => {

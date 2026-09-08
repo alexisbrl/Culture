@@ -1,6 +1,7 @@
 'use server';
 
 import { requireManager } from '@/lib/authz';
+import * as journal from '@/lib/ingest/journal';
 import * as lock from '@/lib/ingest/lock';
 import { BUSY_ERROR, CLOSED_ERROR } from '@/lib/ingest/lock';
 import * as run from '@/lib/ingest/run';
@@ -33,6 +34,21 @@ export type PlanIssue = {
   ref?: string;
   reason: string;
 };
+
+export type ResourcePassResult =
+  | {
+      ok: true;
+      /** L'IA a-t-elle écrit ou réécrit son document ? */
+      written: boolean;
+      /** Documents du lot après son passage — le sien compris. */
+      documents: number;
+      /** Le nombre de questions d'examen que l'étape a fixé, s'il y en a un —
+       *  `null` en dehors d'un examen, ou si rien n'a été précisé. Le dialogue
+       *  DOIT s'en servir pour tout calcul de rattrapage fait après cette étape
+       *  (voir `ResourcePassResult` dans `@/lib/ingest/run.ts`). */
+      examQuestionCount: number | null;
+    }
+  | { ok: false; error: string };
 
 export type ChapterStructureResult =
   | {
@@ -153,10 +169,21 @@ export async function beatWorkshopImport(workshopId: string, importId: string): 
 }
 
 /** Referme un lot piloté : terminé, arrêté ou en erreur. Relâche le verrou tout
- *  de suite, au lieu d'attendre son expiration. */
-export async function closeWorkshopImport(workshopId: string, importId: string): Promise<void> {
+ *  de suite, au lieu d'attendre son expiration.
+ *
+ *  `outcome` est ce que l'écran SAIT et que le serveur ne peut pas deviner : la
+ *  génération a-t-elle abouti, ou s'est-elle arrêtée sur une panne ? Une
+ *  génération qui ne repasse jamais par ici n'a pas d'issue du tout — et c'est
+ *  très bien ainsi : ce silence, c'est l'interruption (onglet fermé, machine
+ *  éteinte), qu'aucun code ne pourrait écrire puisque plus personne n'est là. */
+export async function closeWorkshopImport(
+  workshopId: string,
+  importId: string,
+  outcome?: 'finished' | 'failed',
+): Promise<void> {
   if (!(await requireManager(workshopId))) return;
   await lock.closeImport(importId);
+  if (outcome) await journal.markOutcome(importId, outcome);
 }
 
 /** Passe 1 — les notions d'UN document.
@@ -177,6 +204,32 @@ export async function ingestDocumentNotions(
     return { ok: true, ...result };
   } catch (error) {
     return { ok: false, error: failed('notions', error, { workshopId, importId, documentIndex }) };
+  }
+}
+
+/** Étape 0 — lit la consigne de l'utilisateur, et écrit la matière qui manque.
+ *
+ *  Ne part que s'il y a une consigne : sans elle, il n'y a rien à interpréter.
+ *  L'écran le sait avant d'appeler, le serveur le revérifie — une garde ne se
+ *  délègue pas au client.
+ *
+ *  Rend le nombre de documents du lot APRÈS son passage : si l'IA a écrit, il y
+ *  en a un de plus, et c'est celui-là que la passe notions devra parcourir. */
+export async function ingestWorkshopResource(
+  workshopId: string,
+  importId: string,
+): Promise<ResourcePassResult> {
+  const ctx = await requireManager(workshopId);
+  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
+
+  try {
+    const result = await run.ingestResource(workshopId, ctx.userId, importId);
+    // Le document apparaît dans les ressources de l'atelier : la page doit le
+    // montrer sans attendre un rechargement manuel.
+    if (result.written) revalidateWorkshop();
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: failed('ressource', error, { workshopId, importId }) };
   }
 }
 
@@ -257,12 +310,15 @@ export async function ingestParcoursQuestions(
    *  le client lance plusieurs lots en parallèle : sans elle, chacun croirait
    *  disposer du plafond entier (voir `run.ingestParcoursQuestions`). */
   budgetShare?: number,
+  /** Le budget de démarrage de CE chapitre, calculé par le client sur
+   *  l'atelier entier (`chapterStartBudgets`, `@/lib/ingest/demand`). */
+  startBudget?: number,
 ): Promise<QuestionPassResult> {
   const ctx = await requireManager(workshopId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
-    const result = await run.ingestParcoursQuestions(workshopId, ctx.userId, importId, chapter, batchIndex, { budgetShare });
+    const result = await run.ingestParcoursQuestions(workshopId, ctx.userId, importId, chapter, batchIndex, { budgetShare, startBudget });
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
@@ -274,27 +330,27 @@ export async function ingestParcoursQuestions(
  *
  *  Rien de commun avec la précédente sinon le format de sortie : elle ne compte
  *  pas par notion mais rend un nombre total de questions pour tout le programme,
- *  chacune croisant plusieurs notions (§ examen, 24/08/2026). Le nombre de
- *  tranches se lit dans la réponse du premier appel, comme partout ailleurs. */
+ *  chacune croisant plusieurs notions (§ examen, 24/08/2026).
+ *
+ *  ⚠️ **L'appel arrive tout composé** (06/09/2026) : le lancement a décidé
+ *  combien d'appels au total, le budget de chacun et sa nature — que des groupes,
+ *  ou que des questions isolées. Le serveur n'en décide plus rien : la
+ *  répartition se calcule sur l'examen entier, ce qu'un appel ne peut pas voir.
+ *  Les tailles des groupes, elles, restent au modèle. */
 export async function ingestWorkshopExamQuestions(
   workshopId: string,
   importId: string,
-  sliceIndex = 0,
-  budgetShare?: number,
-  /** Remplace le nombre de questions demandé au lancement. Sert au RATTRAPAGE :
-   *  quand des questions ont été écartées, on redemande le manque et rien de
-   *  plus — sans quoi un examen de 40 en rendrait 34 sans le dire. */
-  target?: number,
+  slice: { index: number; count: number; budget: number; grouped: boolean },
 ): Promise<QuestionPassResult> {
   const ctx = await requireManager(workshopId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
-    const result = await run.ingestExamQuestions(workshopId, ctx.userId, importId, sliceIndex, { budgetShare, target });
+    const result = await run.ingestExamQuestions(workshopId, ctx.userId, importId, slice);
     revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
-    return { ok: false, error: failed("questions d'examen", error, { workshopId, importId, sliceIndex }) };
+    return { ok: false, error: failed("questions d'examen", error, { workshopId, importId, sliceIndex: slice.index }) };
   }
 }
 
@@ -363,6 +419,9 @@ export async function cancelWorkshopImport(
     // son expiration. Posé AVANT le reste — une annulation refusée (lot déjà
     // annulé, délai dépassé) ne laisse pas pour autant une génération en cours.
     await lock.closeImport(importId);
+    // Une génération arrêtée par quelqu'un n'est pas une génération en panne :
+    // les mélanger fausserait le taux d'échec dans les deux sens.
+    await journal.markOutcome(importId, 'stopped');
 
     const result = await imports.cancelImport(workshopId, importId);
     if (!result.cancelled) {

@@ -33,6 +33,7 @@ import {
   notionsInstruction,
   examInstruction,
   questionsInstruction,
+  resourceInstruction,
   systemPrompt,
   type ExistingContent,
   type ExistingScope,
@@ -44,7 +45,10 @@ import {
   wireExamGroupsOutput,
   wireGroupsOutput,
   wireNotionsOutput,
+  wireResourceOutput,
+  wireResourceOutputExam,
 } from '@/lib/ingest/wireSchema';
+import { MAX_GENERATED_LENGTH } from '@/lib/ingest/resource';
 
 import type {
   IngestScope,
@@ -176,6 +180,10 @@ export const MAX_CORPUS_TOKENS = 1_000_000 - MAX_TOKENS_THINKING - WORKSHOP_CONT
 /** Le modèle voulu pour chaque passe : Sonnet 5 sur le programme, Haiku 4.5 sur
  *  les questions (voir le bloc ci-dessus pour le pourquoi et les coûts). */
 export const PASS_MODELS: Record<IngestScope['pass'], ModelId> = {
+  // L'étape 0 écrit du COURS, et ce qu'elle écrit fait ensuite foi pour tout
+  // l'atelier — notions, chapitres et questions en sortiront. C'est le dernier
+  // endroit du pipeline où économiser, et elle ne coûte qu'un appel, rare.
+  resource: MODELS.sonnet,
   chapters: MODELS.sonnet,
   notions: MODELS.sonnet,
   // Le rangement passait pour la tâche la plus mécanique du pipeline — croiser
@@ -188,7 +196,25 @@ export const PASS_MODELS: Record<IngestScope['pass'], ModelId> = {
 };
 
 /** Le repli quand la fenêtre du modèle voulu ne suffit pas. Sonnet 5 et non
- *  Opus 5 : même fenêtre d'un million, trois fois moins cher en entrée. */
+ *  Opus 5 : même fenêtre d'un million, trois fois moins cher en entrée.
+ *
+ *  ⚠️ **DORMANT au 04/09/2026, et ce n'est pas un oubli.** Avec la table
+ *  ci-dessus, le repli ne peut rien changer : les trois passes qui portent des
+ *  documents demandent déjà Sonnet — c'est-à-dire le repli lui-même — et les
+ *  deux autres n'en reçoivent aucun, donc `modelForCall` leur rend le modèle
+ *  voulu sans condition. Aucun appel ne bascule aujourd'hui.
+ *
+ *  On le garde pour une raison précise : `PASS_MODELS` est un **réglage de
+ *  coût**, et il a déjà bougé deux fois. Le jour où une passe à documents
+ *  repasse sur Haiku — la première économie qu'on regardera —, le repli
+ *  redevient actif dans la seconde, et son absence se paierait par un import qui
+ *  meurt sur un gros cours au lieu de coûter un peu plus cher.
+ *
+ *  Ce qui a changé le 04/09/2026, c'est qu'il n'est plus silencieux : le modèle
+ *  qui a RÉELLEMENT répondu est enregistré à chaque appel (journal de bord,
+ *  @/lib/ingest/journal). Une bascule se verra donc dans les chiffres au lieu de
+ *  se deviner. S'il est encore dormant dans quelques mois, il se supprime — la
+ *  question est au backlog. */
 export const OVERSIZE_FALLBACK: ModelId = MODELS.sonnet;
 
 /** (modèle souhaité, taille du corpus) → modèle retenu. **Fonction pure.**
@@ -276,11 +302,26 @@ function tuningFor(model: ModelId): {
 
 function instructionFor(scope: IngestScope, fileNames: string[]): string {
   switch (scope.pass) {
+    case 'resource':
+      return resourceInstruction({
+        hint: scope.hint,
+        workshop: scope.workshop,
+        chapters: scope.chapters,
+        // Le CATALOGUE (tous les documents, par leur numéro) et ce qui est
+        // réellement joint (`granted`) sont deux choses distinctes, et la
+        // consigne le dit : c'est ce qui permet au modèle de demander ce qu'il
+        // n'a pas plutôt que de faire semblant de l'avoir lu.
+        catalogue: scope.catalogue,
+        granted: scope.granted,
+        current: scope.current,
+        maxLength: MAX_GENERATED_LENGTH,
+        context: scope.context,
+      });
     case 'chapters':
       // Les noms de fichiers sont dans la consigne, pas seulement dans les blocs
       // `document` : c'est là que le modèle peut apprendre qu'ils forment un
       // seul cours (§16.15).
-      return chaptersInstruction(fileNames, scope.notions, scope.retry);
+      return chaptersInstruction(fileNames, scope.retry);
     case 'notions':
       return notionsInstruction(scope.document);
     case 'assign':
@@ -302,6 +343,7 @@ function instructionFor(scope: IngestScope, fileNames: string[]): string {
         workshop: scope.workshop,
         chapters: scope.chapters,
         budget: scope.budget,
+        grouped: scope.grouped,
       });
   }
 }
@@ -311,6 +353,8 @@ function instructionFor(scope: IngestScope, fileNames: string[]): string {
  *  documents, la passe ignore le rendu. */
 function existingScopeFor(scope: IngestScope): ExistingScope {
   switch (scope.pass) {
+    case 'resource':
+      return { pass: 'resource' };
     case 'chapters':
       return { pass: 'chapters' };
     case 'notions':
@@ -336,6 +380,11 @@ function existingScopeFor(scope: IngestScope): ExistingScope {
  *  marqueur posé sur un petit corpus peut donc n'avoir aucun effet. */
 function documentUsesOf(scope: IngestScope): number {
   switch (scope.pass) {
+    case 'resource':
+      // Un seul appel, et c'est le premier de tous : personne n'a écrit ce
+      // préfixe avant elle, personne ne le relira dans cette position. Rien à
+      // marquer.
+      return 1;
     case 'chapters':
       // Un seul appel sur ce préfixe (deux si relance, mais on ne le sait pas
       // d'avance et une relance reste l'exception).
@@ -343,6 +392,21 @@ function documentUsesOf(scope: IngestScope): number {
     case 'notions':
       // Un appel par DOCUMENT, et chacun ne porte que le sien : aucun préfixe
       // commun, donc rien à relire. Le corpus part une fois en tout.
+      //
+      // ⚠️ **Le premier document est en théorie relu par la passe chapitres**
+      // (même contenu, même position — juste après le système) mais **pas
+      // marqué pour autant** (01/09/2026, retour arrière sur un essai du même
+      // jour). Aucune des deux durées ne convient tant qu'on n'a pas mesuré :
+      // l'heure coûte 2× l'écriture pour une seule lecture garantie (sans
+      // relance) — 2 + 0,1 = 2,1 contre 2 sans rien poser, donc PLUS cher que
+      // ne rien faire ; les 5 minutes ne coûtent que 1,25× et seraient
+      // rentables (1,35 contre 2), mais rien ne dit que la passe chapitres
+      // démarre avant que ce délai n'expire sur un import à plusieurs
+      // documents, où les autres extractions tournent encore. Le dialogue
+      // d'import affiche désormais l'instant où la passe chapitres part,
+      // chronomètre à la main sur l'écran ; si la mesure montre que c'est
+      // systématiquement en dessous de 5 minutes, remettre le marqueur ici. Voir
+      // `docs/backlog.md`.
       return 1;
     case 'assign':
     case 'questions':
@@ -354,6 +418,11 @@ function documentUsesOf(scope: IngestScope): number {
 
 function outputSchemaFor(scope: IngestScope) {
   switch (scope.pass) {
+    case 'resource':
+      // Deux formes pour la même étape : partie de l'examen, elle n'a pas de
+      // champ `document` — elle ne PEUT donc pas en écrire un, plutôt que d'en
+      // avoir le droit et l'interdiction (voir `wireResourceOutputExam`).
+      return scope.context === 'exam' ? wireResourceOutputExam : wireResourceOutput;
     case 'chapters':
       return wireChaptersOutput;
     case 'notions':
@@ -399,6 +468,26 @@ export type ClaudeProviderOptions = {
   onOversize?: (model: ModelId) => void | Promise<void>;
 };
 
+/** Le type déclaré au téléversement — celui du fichier, sauf quand le modèle ne
+ *  sait pas le lire. **Fonction pure.**
+ *
+ *  ⚠️ **Le modèle n'accepte que deux formats de document : le PDF et le texte
+ *  BRUT.** Un fichier texte annoncé sous un type plus précis — `text/markdown`,
+ *  `text/csv` — est accepté au téléversement puis refusé à l'APPEL, avec une
+ *  erreur qui remonte jusqu'à l'écran (« Unsupported document file format ») et
+ *  fait échouer la génération entière. Le contenu, lui, était parfaitement
+ *  lisible : c'est l'étiquette qui gênait, pas le fichier.
+ *
+ *  Constaté le 05/09/2026 sur le premier cours réellement écrit par l'IA — son
+ *  document est du Markdown — mais le même piège attend n'importe quel fichier
+ *  texte déposé par un utilisateur, le dépôt les acceptant tous (`categoryFor`).
+ *  On normalise donc ici, au plus près de la contrainte : c'est une limite de CE
+ *  fournisseur, elle n'a pas à remonter dans le reste du code, et le type réel
+ *  du fichier reste celui qu'on affiche et qu'on sert au téléchargement. */
+function uploadTypeFor(mimeType: string): string {
+  return mimeType.startsWith('text/') ? 'text/plain' : mimeType;
+}
+
 export function createClaudeProvider(options: ClaudeProviderOptions | string = {}): PlanProvider {
   const opts = typeof options === 'string' ? { apiKey: options } : options;
   const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
@@ -418,7 +507,7 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
       return Promise.all(
         documents.map(async (doc) => {
           const uploaded = await client.beta.files.upload({
-            file: await toFile(Buffer.from(doc.bytes), doc.fileName, { type: doc.mimeType }),
+            file: await toFile(Buffer.from(doc.bytes), doc.fileName, { type: uploadTypeFor(doc.mimeType) }),
             betas: [FILES_BETA],
           });
           return { fileId: doc.fileId, key: doc.key, fileName: doc.fileName, mimeType: doc.mimeType, ref: uploaded.id };
@@ -470,7 +559,12 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
       // Dernière barrière avant la facture : la passe questions ne reçoit aucun
       // document, quoi qu'on lui passe (§16.3). Sans documents, aucun bloc
       // `document` n'est posé — donc aucun marqueur de cache non plus.
-      const sent = documentsForPass(scope.pass, documents, scope.pass === 'notions' ? scope.document.index : undefined);
+      const sent = documentsForPass(
+        scope.pass,
+        documents,
+        scope.pass === 'notions' ? scope.document.index : undefined,
+        scope.pass === 'resource' ? scope.granted : undefined,
+      );
 
       // Poser un marqueur sur un contenu jamais relu coûte 25 % de plus que ne
       // rien poser (§16.17). On ne le pose donc que si les mêmes documents
@@ -485,11 +579,21 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
         type: 'document',
         source: { type: 'file', file_id: doc.ref },
         title: doc.fileName,
-        // Le marqueur ne va que sur le DERNIER document : il met en cache tout
-        // ce qui le précède, système compris. TTL par défaut (5 minutes) : le
-        // TTL d'une heure se justifiait quand une ingestion s'étalait sur des
-        // dizaines d'appels sur le même cours, et son écriture coûte 2× l'entrée
-        // au lieu de 1,25× (§16.16).
+        // Le marqueur ne va que sur le DERNIER document envoyé dans cet appel :
+        // il met en cache tout ce qui le précède, système compris.
+        //
+        // ⚠️ **TTL par défaut (5 minutes), pas l'heure** (01/09/2026). L'heure a
+        // été envisagée pour l'unique cas cacheable aujourd'hui — le premier
+        // document de la passe notions, relu par la passe chapitres après que
+        // tous les autres documents ont fini leur propre extraction — pour
+        // couvrir les imports à beaucoup de documents, où l'attente peut
+        // dépasser 5 minutes. Mais l'heure double le prix de l'écriture (2× au
+        // lieu de 1,25×), et il n'y a qu'UNE lecture garantie (la passe
+        // chapitres, sans relance) : 2 + 0,1 = 2,1 contre 2 sans aucun marqueur
+        // — plus cher que de ne rien poser. Le défaut reste rentable dans le cas
+        // courant (1,25 + 0,1 = 1,35) ; le pire qu'il risque sur un très gros
+        // import, c'est de manquer la fenêtre et de payer la même chose que sans
+        // marqueur — jamais plus.
         ...(cacheable && i === sent.length - 1 ? { cache_control: { type: 'ephemeral' as const } } : {}),
       }));
 
@@ -538,7 +642,10 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
           model: id,
           max_tokens: maxTokensFor(id),
           betas: [FILES_BETA],
-          system: [{ type: 'text', text: systemPrompt() }],
+          // L'étape 0 a son propre socle : le commun lui interdisait
+          // explicitement d'écrire ce qui n'est dans aucun document, ce qui est
+          // pourtant tout son travail (voir `resourceSystemPrompt`).
+          system: [{ type: 'text', text: systemPrompt(scope.pass === 'resource' && scope.context === 'exam' ? 'resource-exam' : scope.pass) }],
           thinking: tuning.thinking,
           output_config: {
             // `effort` est absent sur Haiku 4.5 : il y est refusé (voir `tuningFor`).
@@ -583,6 +690,9 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
         // Volontairement NON validé ici : `parsePlan` est le contrôle à la
         // réception, et il doit voir la sortie telle qu'elle est arrivée.
         plan: safeJson(text),
+        // Ce qui a répondu, tel qu'il se nomme — et non ce qu'on a demandé : la
+        // bascule de fenêtre change le modèle sans rien dire à l'appelant.
+        model: message.model,
         // Même mesure que chez DeepSeek : une réponse arrêtée par le plafond de
         // sortie rend un JSON incomplet, donc perdu. On le dit.
         truncated: message.stop_reason === 'max_tokens',

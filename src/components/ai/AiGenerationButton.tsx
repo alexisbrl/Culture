@@ -6,6 +6,8 @@ import { Sparkles } from 'lucide-react';
 
 import { ink, palette, radius } from '@/lib/theme';
 
+import type { GenerationOrigin } from '@/lib/ingest/journal';
+
 import AiGenerationDialog, { useWorkshopFiles } from './AiGenerationDialog';
 
 // Le bouton « générer par IA », prêt à poser sur n'importe quel écran.
@@ -24,12 +26,15 @@ type Props = {
   /** Contexte imposé quand on entre par une liste de questions. Depuis les
    *  Paramètres, il n'y en a pas : l'utilisateur choisit dans le dialogue. */
   forcedContext?: 'parcours' | 'exam' | null;
+  /** Laquelle des portes est celle-ci. Ne change rien au comportement : c'est le
+   *  journal de bord qui la relira (@/lib/ingest/journal). */
+  origin: GenerationOrigin;
   /** Rendu compact, pour se glisser dans une barre d'outils déjà chargée. */
   compact?: boolean;
   onDone?: () => void;
 };
 
-export default function AiGenerationButton({ workshopId, forcedContext = null, compact = false, onDone }: Props) {
+export default function AiGenerationButton({ workshopId, forcedContext = null, origin, compact = false, onDone }: Props) {
   const t = useTranslations('ai');
   const [open, setOpen] = useState(false);
   // `open` en second argument : la liste est relue à chaque ouverture, donc un
@@ -62,6 +67,7 @@ export default function AiGenerationButton({ workshopId, forcedContext = null, c
           workshopId={workshopId}
           files={files ?? []}
           forcedContext={forcedContext}
+          origin={origin}
           onClose={() => setOpen(false)}
           onDone={onDone}
         />

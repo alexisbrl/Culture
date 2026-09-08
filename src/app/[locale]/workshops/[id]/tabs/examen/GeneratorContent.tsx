@@ -1,16 +1,15 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Clock, Star, RefreshCw, SeparatorHorizontal, SlidersHorizontal, PenLine } from 'lucide-react';
+import { ArrowLeft, Clock, Star, RefreshCw, SeparatorHorizontal, SlidersHorizontal, PenLine } from 'lucide-react';
 import { palette, ink, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import InlineQuestionEditor from './InlineQuestionEditor';
 import { PillToggle } from './questionFields';
 import { type Question } from '../QuestionEditor';
 import {
   type Exam, type ExamConfig, type ExamPresentation, type ExamSection, type QuestionWeight,
-  type IdentitySide, type CandidateIdentity, type SheetFocus, type PageBlock, type Pool,
+  type IdentitySide, type CandidateIdentity, type SheetFocus, type PageBlock,
   IDENTITY_KEY_SET, BAREME_KEY,
   A4_TITLE_BLOCK_HEIGHT, A4_IDENTITY_ROW_HEIGHT, A4_MARGIN_PX, A4_PAGE_HEIGHT,
   A4_PAGE_BREAK_HEIGHT, A4_ROW_FALLBACK_HEIGHT, A4_SECTION_HEADER_HEIGHT, A4_EMPTY_SECTION_HEIGHT, A4_BLOCK_WIDTH,
@@ -19,6 +18,7 @@ import {
   computePagination, defaultPresentation, getFavoritePresentation, saveFavoritePresentation, isSamePresentation,
   moveSectionRow, clearWeightingFor,
   ShuffleNoticeIcon, renderAnswerSpace, partAsQuestion, QuestionImagePreview, QuestionAudioNote,
+  useDismissOnOutsideClick,
 } from './examShared';
 import { shufflesAnswerItems } from '@/lib/workshops/examTypes';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -58,10 +58,20 @@ function SheetAutoText({ value, onChange, placeholder, title, style }: {
       // d'en-tête de la copie est mesuré, pas estimé — la pagination suit.
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
+      // Le texte d'exemple ne grandit pas le champ : seul le titre saisi le peut
+      // (voir `.placeholder-one-line` dans globals.css).
+      className="placeholder-one-line"
       style={{
         width: '100%', textAlign: 'center' as const, fontFamily: 'inherit', background: 'transparent',
         border: 'none', borderRadius: 6, outline: 'none', padding: '2px 0', boxSizing: 'border-box' as const,
         resize: 'none' as const, overflow: 'hidden', display: 'block',
+        // ⚠️ Un MOT plus long qu'une ligne ne se coupe pas tout seul : le retour
+        // à la ligne normal ne cherche que les espaces, et le mot débordait donc
+        // du champ — invisible, puisque le champ masque ce qui dépasse
+        // (signalé par Alexis, 07/09/2026). `anywhere` autorise la coupure au
+        // milieu d'un mot, mais seulement quand il n'y a pas d'autre issue : un
+        // titre ordinaire continue de se couper aux espaces.
+        overflowWrap: 'anywhere' as const,
         ...style,
       }}
     />
@@ -86,6 +96,13 @@ const STATEMENT_LINE_H = 22.4;
 // écrire « 12,5 » à la main sans mordre sur l'énoncé.
 const MARK_SPACE = 44;
 const SECTION_TITLE_LINE_H = 20;
+/** Ce qui, sur la feuille, n'est PAS du blanc : les lignes de la copie et son
+ *  en-tête. Le double-clic sur le blanc ajoute une question ; sur ces zones-là,
+ *  il garde le sens qu'il a déjà (ouvrir la question, sélectionner un mot du
+ *  titre, renommer une partie). Marqueur plutôt qu'une comparaison à
+ *  `currentTarget` : le blanc d'une page n'est pas seulement le vide sous la
+ *  dernière ligne, c'est tout ce qui n'est pas une ligne. */
+const SHEET_SOLID = '[data-sheet-solid]';
 // Retrait haut du texte dans sa ligne, repris tel quel par la gouttière.
 const STATEMENT_PAD_TOP = 20;
 const SECTION_TITLE_PAD_TOP = 14;
@@ -116,6 +133,9 @@ type SheetRow =
   // la construction de `sheetRows`.
   | { kind: 'empty'; key: string; bi: number; sectionIdx: number }
   | { kind: 'pagebreak'; key: string; bi: number; gi: number; sectionIdx: number; id: string }
+  // Formulaire posé À LA PLACE de la ligne. **Téléphone uniquement** : sur
+  // grand écran il vit dans la liste, à gauche, et la copie montre l'aperçu du
+  // brouillon (voir `sheetEditor`).
   | { kind: 'editor'; key: string; bi: number; gi: number; sectionIdx: number; number: number; q: Question }
   | { kind: 'qhead'; key: string; bi: number; gi: number; sectionIdx: number; number: number; q: Question; last: boolean }
   | { kind: 'qpart'; key: string; bi: number; gi: number; sectionIdx: number; number: number; q: Question; partIdx: number; last: boolean };
@@ -173,7 +193,7 @@ const SHEET_ALIGNED: React.CSSProperties = {
 };
 
 // ---- GENERATOR / APERÇU EN DIRECT ----
-function GeneratorContent({ workshopId, questions, config, onConfigChange, editing, onCancelEdit, onGenerate, onOpenQuestion, onRemoveFromDraft, onClearEditor, editingQuestion, newQuestionId, focusRequest, onRequestFocus, pools, notions, onCreatePool, onUpdatePool, onDeletePool, onSaveQuestion, onCancelQuestion, onDragActiveChange }: {
+function GeneratorContent({ workshopId, questions, config, onConfigChange, editing, onCancelEdit, onGenerate, onOpenQuestion, onNewQuestionInSection, onRemoveFromDraft, onClearEditor, previewQuestion, sheetEditor, onBack, focusRequest, onRequestFocus, onDragActiveChange }: {
   workshopId: string;
   questions: Question[];
   config: ExamConfig;
@@ -181,24 +201,39 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   editing: Exam | null;
   onCancelEdit: () => void;
   onGenerate: () => void;
-  onOpenQuestion: (id: string) => void;
+  onOpenQuestion: (id: string, rowKey?: string) => void;
+  /** Double-clic dans le BLANC de la copie : une question neuve s'ajoute à la
+   *  fin de la partie où se trouve ce blanc. C'est le pendant exact du
+   *  double-clic sur une ligne, qui l'ouvre en modification — le même geste, sur
+   *  le vide, en crée une. La feuille ne sait pas fabriquer une question (elle
+   *  ne connaît ni les notions, ni l'enregistrement) : elle dit seulement OÙ. */
+  onNewQuestionInSection: (sectionIdx: number) => void;
   onRemoveFromDraft: (ids: string[]) => void;
   onClearEditor: () => void;
-  /** Question en cours d'édition sur la feuille, `null` si aucune. */
-  editingQuestion: Question | null;
-  /** Id de la question tout juste créée — l'annulation la retire de la feuille. */
-  newQuestionId: string | null;
+  /** Brouillon de la question en cours de modification — le formulaire, lui,
+   *  vit dans la liste de gauche (06/09/2026). La copie s'en sert pour montrer
+   *  en direct ce qui s'écrit, sans que rien ne soit enregistré. `null` quand
+   *  aucune question n'est ouverte. */
+  previewQuestion: Question | null;
+  /** Le formulaire de question, à poser SUR LA COPIE à la place de sa ligne.
+   *
+   *  **Téléphone uniquement** (06/09/2026) : là-bas, la liste et la copie ne
+   *  tiennent pas ensemble à l'écran — quand la copie est affichée, la liste
+   *  n'est pas montée, et le formulaire n'aurait nulle part où s'ouvrir. Sur
+   *  grand écran, ce prop est absent : le formulaire vit dans la liste et la
+   *  copie se contente d'afficher `previewQuestion` en direct.
+   *
+   *  L'appelant fournit le rendu — la feuille ne connaît ni les libellés, ni les
+   *  notions, ni l'enregistrement ; elle décide seulement OÙ le formulaire va. */
+  sheetEditor?: { questionId: string; render: (number: number) => ReactNode };
+  /** Retour à la liste — **téléphone uniquement**, où la copie occupe l'écran
+   *  entier et où la liste n'est donc plus atteignable autrement. Absent sur
+   *  grand écran : les deux colonnes y sont côte à côte, il n'y a rien à quitter. */
+  onBack?: () => void;
   /** Ligne sur laquelle recadrer la feuille (voir `SheetFocus`). */
   focusRequest: SheetFocus | null;
   /** Demande de recadrage émise par la feuille elle-même (+ partie, + saut de page). */
   onRequestFocus: (key: string) => void;
-  pools: { id: string; name: string; color: string }[];
-  notions: { id: string; title: string }[];
-  onCreatePool: (name: string) => string;
-  onUpdatePool: (pool: Pool) => void;
-  onDeletePool: (id: string) => void;
-  onSaveQuestion: (q: Question) => void;
-  onCancelQuestion: () => void;
   /** Un glisser est en cours sur la copie (ligne ou partie). La coquille s'en
    *  sert pour figer le défilement de la colonne des questions : le navigateur
    *  fait défiler tout seul, pendant un glisser, le conteneur défilant survolé —
@@ -246,6 +281,13 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   // ligne 939) — replié à l'arrivée sur la page : la personnalisation de
   // l'en-tête est un réglage ponctuel, pas l'état de travail normal.
   const [hdrOpen, setHdrOpen] = useState(false);
+  // Bulle de barème avancé ouverte, par clé de pondération. Une seule à la fois :
+  // deux bulles ouvertes sur deux lignes voisines se recouvriraient.
+  const [weightPanelKey, setWeightPanelKey] = useState<string | null>(null);
+  const weightPanelRef = useRef<HTMLSpanElement>(null);
+  // Clic ailleurs = la bulle se referme, comme tout panneau flottant du projet
+  // (le clic est avalé, il ne déclenche pas ce qu'il y avait dessous).
+  useDismissOnOutsideClick(weightPanelKey !== null, weightPanelRef, () => setWeightPanelKey(null));
 
   useEffect(() => {
     setFavoritePresentation(getFavoritePresentation());
@@ -325,10 +367,16 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
           pushedAny = true;
           return;
         }
-        const q = questions.find(p => p.id === id);
-        if (!q) return;
+        const saved = questions.find(p => p.id === id);
+        if (!saved) return;
+        // ⚠️ **La question en cours de modification s'affiche depuis son
+        // BROUILLON**, pas depuis ce qui est enregistré : le formulaire vit dans
+        // la liste, à gauche, et la copie montre en direct ce qui s'y écrit
+        // (06/09/2026). Rien n'est enregistré pour autant — tant que
+        // « enregistrer » n'est pas cliqué, seule cette prévisualisation change.
+        const q = previewQuestion && previewQuestion.id === saved.id ? previewQuestion : saved;
         const bi = addBlock(q.id, sIdx, A4_ROW_FALLBACK_HEIGHT);
-        if (editingQuestion && editingQuestion.id === q.id) {
+        if (sheetEditor && sheetEditor.questionId === q.id) {
           // Le formulaire ne décide pas de sa page : sa hauteur change à chaque
           // champ qui s'ouvre ou se ferme, et changer de page le démonterait
           // (voir `neverStartsPage`). Sa page s'étire de toute façon pour le
@@ -557,37 +605,91 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
     let steps = 0;
     let stable = 0;
     let lastTop = Number.NaN;
+    // ⚠️ **Un geste de l'utilisateur annule la passe de rattrapage.** Elle est là
+    // pour rattraper un défilement qui n'a pas pris, jamais pour reprendre la
+    // main : qui fait défiler la copie juste après avoir ouvert une question la
+    // voyait sinon se recadrer une seconde fois sous ses doigts (signalé par
+    // Alexis le 06/09/2026). On écoute le GESTE — molette, doigt, touche — et non
+    // la position : un défilement qu'on a demandé soi-même la change aussi, il ne
+    // se distinguerait pas.
+    let userMoved = false;
+    // ⚠️ Le drapeau, et RIEN d'autre : le même `timer` porte aussi la boucle qui
+    // attend que la mise en page se stabilise avant le PREMIER recadrage.
+    // L'annuler ici supprimerait ce premier recadrage — celui qu'on veut — au
+    // moindre coup de molette pendant l'ouverture.
+    const noteUserScroll = () => { userMoved = true; };
+    window.addEventListener('wheel', noteUserScroll, { passive: true });
+    window.addEventListener('touchmove', noteUserScroll, { passive: true });
+    window.addEventListener('keydown', noteUserScroll);
     // position de la ligne dans le contenu défilant, indépendante du défilement courant
     function contentTop(el: HTMLElement, panel: HTMLElement) {
       return panel.scrollTop + (el.getBoundingClientRect().top - panel.getBoundingClientRect().top);
     }
     // `last` : passe de rattrapage, une fois l'animation terminée — la mise en
-    // page peut encore avoir bougé entre le calcul et l'arrivée. On ne rejoue le
-    // défilement que si l'écart est visible, pour ne pas reprendre la main sur
-    // un utilisateur qui aurait fait défiler lui-même entre-temps.
+    // page peut encore avoir bougé entre le calcul et l'arrivée, et le
+    // défilement animé peut n'avoir rien fait du tout.
     function center(last: boolean) {
       const el = qRefs.current[focusKey];
       const panel = panelRef.current;
       if (!el) return;
+      if (last && userMoved) return;
       // sous 768px la coquille ne borne plus la hauteur : c'est la page qui
       // défile, pas le panneau — `scrollIntoView` vise alors le bon conteneur.
       if (!panel || panel.scrollHeight <= panel.clientHeight + 1) {
-        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         return;
       }
-      // Un formulaire plus haut que le panneau ne peut pas être centré : on
-      // aligne alors son haut juste sous la barre d'outils collante (STICKY_GAP),
-      // sinon son premier champ passerait dessous.
+      // La barre d'outils de la copie est collante : elle recouvre le haut du
+      // panneau, et une ligne amenée au ras du bord passerait dessous.
       const STICKY_GAP = 56;
+      // Un peu d'air, sinon la ligne vient toucher le bord.
+      const MARGIN = 12;
+      // ─── On défile du MINIMUM, on ne centre pas (06/09/2026) ──────────────
+      //
+      // Centrer déplaçait toute la copie pour une ligne qui n'en demandait pas
+      // tant : on cherche à VOIR la question cliquée, pas à la mettre au milieu.
+      // Trois cas, et un seul défilement dans chacun.
+      //
+      // C'est aussi ce qui rend inutile tout test « est-elle déjà visible ? » :
+      // pour une ligne entièrement visible, le calcul rend la position de
+      // défilement courante, et le recadrage ne bouge rien de lui-même. Un
+      // raccourci de ce genre a existé une heure, le temps de comprendre qu'il
+      // faisait doublon — et qu'un doublon peut se tromper là où le calcul, lui,
+      // ne se trompe pas.
+      //
       // Hauteur lue sur le rectangle et non sur `offsetHeight` : la feuille est
       // mise à l'échelle (`zoom`), or `offsetHeight` reste en unités locales
       // (non zoomées) alors que `clientHeight` et les rectangles sont dans le
-      // repère de la fenêtre — les mélanger décentrerait le recadrage à toute
-      // échelle autre que 100 %.
-      const top = Math.max(0, contentTop(el, panel) - Math.max(STICKY_GAP, (panel.clientHeight - el.getBoundingClientRect().height) / 2));
-      if (last && Math.abs(panel.scrollTop - top) <= 24) return;
+      // repère de la fenêtre — les mélanger fausserait le calcul à toute échelle
+      // autre que 100 %.
+      const rowTop = contentTop(el, panel);
+      const rowHeight = el.getBoundingClientRect().height;
+      const room = panel.clientHeight - STICKY_GAP;
+      let top = panel.scrollTop;
+      if (rowHeight > room || rowTop < panel.scrollTop + STICKY_GAP) {
+        // Trop haute pour tenir en entier, ou elle commence au-dessus : on
+        // aligne son HAUT. Une grappe qui déborde montre donc toujours son
+        // énoncé — la partie sans laquelle le reste ne se comprend pas.
+        top = rowTop - STICKY_GAP - MARGIN;
+      } else if (rowTop + rowHeight > panel.scrollTop + panel.clientHeight) {
+        // Elle dépasse par le bas : on descend juste de ce qui manque.
+        top = rowTop + rowHeight - panel.clientHeight + MARGIN;
+      }
+      top = Math.max(0, top);
+      // ⚠️ **Le défilement ANIMÉ de ce panneau ne prend pas toujours**, et il
+      // échoue en silence : `scrollTo({ behavior: 'smooth' })` rend la main sans
+      // rien déplacer, là où la même position posée d'un coup fonctionne
+      // (constaté le 06/09/2026 sur la copie, mesuré à l'écran). Même famille de
+      // pièges que le `scrollIntoView` inopérant sous un ancêtre `zoom`. La passe
+      // de rattrapage ne se contente donc plus de rejouer l'animation : elle
+      // POSE la position. C'est elle qui garantit le recadrage ; l'animation
+      // n'est qu'un confort quand elle veut bien se jouer.
+      if (last) {
+        if (Math.abs(panel.scrollTop - top) > 24) panel.scrollTop = top;
+        return;
+      }
       panel.scrollTo({ top, behavior: 'smooth' });
-      if (!last) timer = window.setTimeout(() => center(true), 700);
+      if (!userMoved) timer = window.setTimeout(() => center(true), 700);
     }
     function tick() {
       const el = qRefs.current[focusKey];
@@ -602,7 +704,12 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
       timer = window.setTimeout(tick, STEP_MS);
     }
     timer = window.setTimeout(tick, STEP_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('wheel', noteUserScroll);
+      window.removeEventListener('touchmove', noteUserScroll);
+      window.removeEventListener('keydown', noteUserScroll);
+    };
   }, [focusRequest]);
   // Le titre et le sous-titre s'écrivent directement sur la feuille, et leurs
   // champs y sont **toujours** présents, vides comme remplis, personnalisation
@@ -653,13 +760,160 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
       </span>
     );
   }
-  function sheetPoints(points: number, lineHeight: number, rowKey: string) {
+  /** Le barème d'une ligne : lu sur la copie, et MODIFIÉ sur la copie dès que
+   *  « personnaliser » est ouvert (06/09/2026).
+   *
+   *  Il se réglait jusque-là dans l'éditeur de question, ce qui le faisait
+   *  passer pour une propriété de la question. Il n'en est pas une — la même
+   *  question vaut deux points dans un examen et un demi-point dans un autre, et
+   *  la base le range depuis toujours dans l'examen (`ExamConfig.weighting`),
+   *  jamais dans la question. L'interface dit désormais la même chose que les
+   *  données : on note le barème là où on le lit, en voyant la copie entière.
+   *
+   *  `weightKey` est la clé de pondération (l'identifiant de la question, ou
+   *  celui dérivé d'une question liée) ; `rowKey` celle de la LIGNE, dont la
+   *  gouttière d'en face se sert pour aligner sa croix. Les deux coïncident pour
+   *  une question liée, pas pour une question principale — ne pas les fusionner.
+   *
+   *  ⚠️ La ligne garde sa hauteur en mode édition : le champ est calé sur
+   *  l'interligne de l'énoncé (`lineHeight`). Une ligne qui grandirait à
+   *  l'ouverture du bandeau déplacerait la pagination sous les yeux de
+   *  l'utilisateur, au moment précis où il vise un chiffre. */
+  /** Barème en lecture seule — hors mode « personnaliser », et toujours pour un
+   *  SOUS-TOTAL de partie : celui-ci est une somme, il se modifie en changeant
+   *  les lignes qui le composent, jamais directement. */
+  function sheetPointsStatic(points: number, lineHeight: number, rowKey: string) {
     return (
       <span
         ref={el => { markRefs.current[rowKey] = el; }}
         style={{ flexShrink: 0, paddingLeft: MARK_SPACE, fontSize: 12, fontWeight: 600, color: palette.inkMuted, whiteSpace: 'nowrap' as const, lineHeight: `${lineHeight}px` }}
       >
         {pointsLabel(points)}
+      </span>
+    );
+  }
+  function sheetPoints(weightKey: string, lineHeight: number, rowKey: string) {
+    const points = pointsOf(weightKey);
+    const anchor = {
+      flexShrink: 0, paddingLeft: MARK_SPACE, fontSize: 12, fontWeight: 600,
+      color: palette.inkMuted, whiteSpace: 'nowrap' as const, lineHeight: `${lineHeight}px`,
+    };
+    if (!hdrOpen) return sheetPointsStatic(points, lineHeight, rowKey);
+    const open = weightPanelKey === weightKey;
+    return (
+      <span
+        ref={el => { markRefs.current[rowKey] = el; }}
+        // ⚠️ **Le double-clic s'arrête ici** (07/09/2026) : il ouvre la question
+        // partout ailleurs sur la ligne, et régler un barème n'est pas la
+        // modifier. Deux clics rapides sur le nombre de points — pour le
+        // sélectionner avant de le retaper — ouvraient le formulaire de la
+        // question. Même geste que le chevron des questions liées dans la liste,
+        // qui arrête déjà le clic de la carte.
+        onDoubleClick={e => e.stopPropagation()}
+        style={{ ...anchor, position: 'relative' as const, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+      >
+        <span aria-hidden style={{ color: palette.inkFaint }}>/</span>
+        <Tooltip content={t('inline.pointsTitle')}>
+          <input
+            type="number"
+            min={0}
+            step={0.5}
+            value={points}
+            onChange={e => updateWeight(weightKey, { points: Math.max(0, Number(e.target.value) || 0) })}
+            aria-label={t('inline.pointsTitle')}
+            style={{ width: 44, fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: palette.ink, background: palette.surfaceInput, border: `1px solid ${palette.lineStrong}`, borderRadius: 6, padding: '1px 4px', textAlign: 'center' as const, outline: 'none' }}
+          />
+        </Tooltip>
+        <span style={{ fontSize: 10.5, color: palette.inkFaint }}>{t('inline.points')}</span>
+        <Tooltip content={t('generator.weightAdvanced')}>
+          <button
+            type="button"
+            onClick={() => setWeightPanelKey(open ? null : weightKey)}
+            aria-label={t('generator.weightAdvanced')}
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, flexShrink: 0, borderRadius: 6, border: `1px solid ${open ? palette.ink : palette.lineStrong}`, background: open ? withAlpha(palette.ink, 0.06) : palette.surfaceRaised, color: open ? palette.ink : palette.inkMuted, cursor: 'pointer', padding: 0 }}
+          >
+            <SlidersHorizontal size={12} strokeWidth={1.75} />
+          </button>
+        </Tooltip>
+        {open && weightPanel(weightKey)}
+      </span>
+    );
+  }
+  /** Réglages avancés d'UNE ligne : pénalité, éliminatoire, portée de la
+   *  pénalité, gain dégressif. Une bulle par ligne plutôt qu'un jeu commun à
+   *  l'examen — une pénalité se règle question par question, et un réglage
+   *  unique aurait écrasé ce qui est déjà saisi.
+   *
+   *  Posée à droite et sous le champ : la marge du barème est au bord de la
+   *  feuille, une bulle ouverte vers la gauche reste donc entièrement lisible. */
+  function weightPanel(weightKey: string) {
+    const w = config.weighting[weightKey] ?? defaultWeight();
+    return (
+      <span
+        ref={weightPanelRef}
+        onClick={e => e.stopPropagation()}
+        style={{ position: 'absolute' as const, top: 'calc(100% + 6px)', right: 0, zIndex: 40, display: 'flex', flexDirection: 'column' as const, gap: 8, width: 236, padding: '11px 12px', background: palette.surfaceRaised, border: `1px solid ${palette.lineStrong}`, borderRadius: 12, boxShadow: `0 10px 30px ${ink(0.12)}`, whiteSpace: 'normal' as const, lineHeight: 1.4, cursor: 'default' }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' as const, color: palette.inkFaint }}>{t('inline.penaltyLabel')}</span>
+          {!w.eliminatory && (
+            <>
+              <span style={{ fontSize: 12, fontWeight: 700, color: palette.danger }}>−</span>
+              <Tooltip content={t('inline.penaltyTitle')}>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={w.negative.value}
+                  onChange={e => {
+                    const v = Math.max(0, Number(e.target.value) || 0);
+                    updateWeight(weightKey, { negative: { enabled: v > 0, value: v } });
+                  }}
+                  aria-label={t('inline.penaltyTitle')}
+                  style={{ width: 44, fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: w.negative.value > 0 ? palette.danger : palette.ink, background: palette.surfaceInput, border: `1px solid ${palette.lineStrong}`, borderRadius: 6, padding: '1px 4px', textAlign: 'center' as const, outline: 'none' }}
+                />
+              </Tooltip>
+              <span style={{ fontSize: 10.5, color: palette.inkFaint }}>{t('inline.points')}</span>
+            </>
+          )}
+        </span>
+        <span style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 6 }}>
+          {/* « Éliminatoire » retire la pénalité chiffrée : les deux répondent à
+              la même faute, et les cumuler compterait deux fois. */}
+          <PillToggle
+            on={w.eliminatory}
+            onClick={() => updateWeight(weightKey, { eliminatory: !w.eliminatory, negative: w.eliminatory ? w.negative : { enabled: false, value: 0 } })}
+            label={t('inline.eliminatoryShort')}
+            title={t('inline.eliminatory')}
+          />
+          <PillToggle
+            on={w.penalizeUnanswered ?? false}
+            onClick={() => updateWeight(weightKey, { penalizeUnanswered: !w.penalizeUnanswered })}
+            label={t('inline.penaltyScopeShort')}
+            title={t('inline.penaltyScope')}
+          />
+        </span>
+        {/* Ce que vaut la VITESSE — deux réponses possibles à la même question,
+            donc deux réglages qui s'excluent : le gain décroît avec le temps, ou
+            le premier emporte tout. Cocher l'un décoche l'autre plutôt que de
+            les laisser se contredire (06/09/2026). */}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 2 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' as const, color: palette.inkFaint }}>{t('inline.gainLabel')}</span>
+        </span>
+        <span style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 6 }}>
+          <PillToggle
+            on={w.timed ?? false}
+            onClick={() => updateWeight(weightKey, { timed: !w.timed, fastestWins: false })}
+            label={t('inline.timedScoreShort')}
+            title={t('inline.timedScore')}
+          />
+          <PillToggle
+            on={w.fastestWins ?? false}
+            onClick={() => updateWeight(weightKey, { fastestWins: !w.fastestWins, timed: false })}
+            label={t('inline.fastestWinsShort')}
+            title={t('inline.fastestWins')}
+          />
+        </span>
       </span>
     );
   }
@@ -976,9 +1230,22 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
             de la page) est ce qui masque la feuille qui passe dessous. */}
         <div style={{ position: 'sticky' as const, top: 0, zIndex: 6, background: palette.cream, paddingBottom: 10 }}>
         <div style={{ ...SHEET_ALIGNED, display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Retour à la liste, en tête de barre — téléphone seulement. Le
+              libellé dit OÙ l'on va, pas seulement qu'on recule : c'est par là
+              qu'on ajoute des questions à l'examen. */}
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, fontSize: 12.5, fontWeight: 600, color: palette.ink, background: palette.surfaceRaised, border: `1px solid ${palette.lineStrong}`, borderRadius: 999, padding: '7px 13px', cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              <ArrowLeft size={14} strokeWidth={1.75} />
+              {t('tab.tabBank')}
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => setHdrOpen(v => !v)}
+            onClick={() => { setHdrOpen(v => !v); setWeightPanelKey(null); }}
             /* Bordure encrée épaisse : c'est ce qui le distingue des autres
                boutons de la barre dans la maquette — pas un aplat de couleur,
                qui le faisait ressortir bien trop fort. Même habillage ouvert
@@ -1179,7 +1446,11 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
             // ces deux gestes, au prix d'une colonne de boutons le long de la
             // copie. Même chose pour la bande « saut de page », déplaçable
             // directement (elle n'a pas de double-clic : rien à y modifier).
-            const questionRowProps = (gi: number, sectionIdx: number, qid: string, firstKey: string, lastKey: string) => ({
+            const questionRowProps = (gi: number, sectionIdx: number, qid: string, firstKey: string, lastKey: string, rowKey: string) => ({
+              // Une ligne de question n'est pas du blanc : le double-clic y
+              // ouvre le formulaire, il ne doit pas AUSSI créer une question.
+              // Voir SHEET_SOLID et `onSheetDoubleClick` plus bas.
+              'data-sheet-solid': '',
               draggable: true,
               onDragStart: (e: React.DragEvent) => {
                 e.dataTransfer.effectAllowed = 'move';
@@ -1188,7 +1459,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                 beginRowDrag(gi);
               },
               onDragEnd: endDrag,
-              onDoubleClick: () => onOpenQuestion(qid),
+              onDoubleClick: () => onOpenQuestion(qid, rowKey),
               onMouseEnter: () => setHoveredRowKey(qid),
               onMouseLeave: () => setHoveredRowKey(null),
               ...dragOverPropsFor(gi, sectionIdx, firstKey, lastKey),
@@ -1266,6 +1537,18 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
               // main dès que la modification est terminée : le formulaire rendu
               // à sa hauteur de question redevient une ligne comme une autre.
               const growsForEditor = chunk.some(r => r.kind === 'editor');
+              // Le blanc d'une page appartient à la dernière partie qui s'y
+              // trouve : c'est elle qui se poursuivrait si on continuait à
+              // écrire. Une page sans aucune ligne (feuille vierge) renvoie -1,
+              // que l'appelant lit comme « à la fin de l'examen ».
+              const blankSectionIdx = chunk.length > 0 ? chunk[chunk.length - 1].sectionIdx : -1;
+              const onSheetDoubleClick = (e: React.MouseEvent) => {
+                // Rien pendant un glisser : le double-clic qui termine un
+                // déplacement ne doit pas créer une question au passage.
+                if (dragFlatIdx !== null || dragSectionIdx !== null) return;
+                if ((e.target as HTMLElement).closest(SHEET_SOLID)) return;
+                onNewQuestionInSection(blankSectionIdx);
+              };
               return (
                 <div key={chunkIdx} style={{ marginBottom: 14 }}>
                   {/* centrage via margin:auto plutôt que justifyContent:center — quand le contenu dépasse,
@@ -1319,14 +1602,16 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                     </div>
 
                     {/* colonne centrale : la feuille A4 elle-même (fond blanc, bordure, ombre) */}
-                    <div style={{ width: A4_BLOCK_WIDTH, height: growsForEditor ? undefined : A4_PAGE_HEIGHT, minHeight: growsForEditor ? A4_PAGE_HEIGHT : undefined, flexShrink: 0, position: 'relative' as const, background: palette.paper, border: `1px solid ${ink(0.08)}`, borderRadius: 4, boxShadow: `0 2px 14px ${ink(0.06)}`, overflow: 'hidden' }}>
+                    <div
+                      onDoubleClick={onSheetDoubleClick}
+                      style={{ width: A4_BLOCK_WIDTH, height: growsForEditor ? undefined : A4_PAGE_HEIGHT, minHeight: growsForEditor ? A4_PAGE_HEIGHT : undefined, flexShrink: 0, position: 'relative' as const, background: palette.paper, border: `1px solid ${ink(0.08)}`, borderRadius: 4, boxShadow: `0 2px 14px ${ink(0.06)}`, overflow: 'hidden' }}>
                       <div style={{ height: A4_MARGIN_PX, flexShrink: 0 }} />
                       {/* En-tête de la copie. En mode « personnaliser », les deux
                           zones deviennent les cibles de dépôt des pilules et le
                           titre s'édite directement ici — il n'y a plus de panneau
                           de paramètres séparé. */}
                       {chunkIdx === 0 && (
-                        <div ref={el => { qRefs.current['__page1_header__'] = el; }}>
+                        <div data-sheet-solid="" ref={el => { qRefs.current['__page1_header__'] = el; }}>
                           {/* Le haut de l'en-tête ne garde que le retrait minimal
                               sous la marge non imprimable : la copie commençait
                               trop bas dans le vide. */}
@@ -1389,12 +1674,13 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                           const editingTitle = focusedSectionIdx === row.sectionIdx;
                           const titleStyle: React.CSSProperties = {
                             flex: 1, minWidth: 0, fontSize: 16, fontWeight: 600, color: palette.tanStrong,
-                            fontFamily: 'inherit', boxSizing: 'border-box' as const,
+                            fontFamily: 'inherit', boxSizing: 'border-box' as const, overflowWrap: 'anywhere' as const,
                             padding: `${SECTION_TITLE_PAD_TOP}px 0 10px 34px`, lineHeight: `${SECTION_TITLE_LINE_H}px`,
                           };
                           return (
                             <Tooltip key={row.key} content={editingTitle ? undefined : t('generator.dragSection')}>
                             <div
+                              data-sheet-solid=""
                               ref={el => { qRefs.current[row.key] = el; }}
                               // Toute la ligne de titre est la poignée de la
                               // partie — sauf pendant qu'on renomme : un champ de
@@ -1428,7 +1714,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                   sans condition cachée : avec une seule partie il
                                   répète le total de l'en-tête, c'est alors à
                                   l'auteur de l'éteindre. */}
-                              {showSectionPoints && sheetPoints(sectionPoints(row.sectionIdx), SECTION_TITLE_LINE_H, row.key)}
+                              {showSectionPoints && sheetPointsStatic(sectionPoints(row.sectionIdx), SECTION_TITLE_LINE_H, row.key)}
                             </div>
                             </Tooltip>
                           );
@@ -1442,6 +1728,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                `offsetHeight`. */
                             <div
                               key={row.key}
+                              data-sheet-solid=""
                               ref={el => { qRefs.current[row.key] = el; }}
                               {...emptyDropPropsFor(start, row.sectionIdx, row.key)}
                               style={{ padding: '0 34px 14px' }}
@@ -1469,6 +1756,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                question liée. */
                             <Tooltip key={row.key} content={t('generator.dragReorder')}>
                             <div
+                              data-sheet-solid=""
                               draggable
                               onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', row.key); beginRowDrag(gi); }}
                               onDragEnd={endDrag}
@@ -1486,40 +1774,21 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                           );
                         }
                         const { gi, q } = row;
+                        // Le formulaire prend la place exacte de la question sur
+                        // la copie, questions liées comprises (il les porte
+                        // toutes). Le `ref` reste posé : sa hauteur entre dans la
+                        // pagination comme n'importe quelle ligne.
+                        if (row.kind === 'editor') {
+                          return (
+                            <div key={row.key} data-sheet-solid="" ref={el => { qRefs.current[row.key] = el; }}>
+                              {sheetEditor?.render(row.number)}
+                            </div>
+                          );
+                        }
                         const { firstKey, lastKey } = clusterKeys(q);
                         // Survol : c'est la grappe entière qui s'éclaire, même
                         // coupée entre deux pages — la poignée déplace la grappe.
                         const hovered = hoveredRowKey === q.id;
-                        // La question en cours d'édition cède sa place au
-                        // formulaire, à l'endroit exact qu'elle occupe sur la
-                        // copie, questions liées comprises (le formulaire les
-                        // porte toutes). Le `ref` reste posé : la hauteur du
-                        // formulaire entre dans le calcul de pagination comme le reste.
-                        if (row.kind === 'editor') {
-                          return (
-                            <div key={row.key} ref={el => { qRefs.current[row.key] = el; }}>
-                              <InlineQuestionEditor
-                                workshopId={workshopId}
-                                question={editingQuestion!}
-                                number={row.number}
-                                isNew={newQuestionId === q.id}
-                                pools={pools}
-                                notions={notions}
-                                weight={config.weighting[q.id] ?? defaultWeight()}
-                                onWeightChange={patch => updateWeight(q.id, patch)}
-                                partWeight={idx => config.weighting[partWeightKey(q.id, idx)] ?? defaultWeight()}
-                                onPartWeightChange={(idx, patch) => updateWeight(partWeightKey(q.id, idx), patch)}
-                                onRemovePart={idx => shiftPartWeights(q.id, idx)}
-                                onCreatePool={onCreatePool}
-                                onUpdatePool={onUpdatePool}
-                                onDeletePool={onDeletePool}
-                                poolUsageCount={pid => questions.filter(qq => qq.pools.includes(pid)).length}
-                                onSave={onSaveQuestion}
-                                onCancel={onCancelQuestion}
-                              />
-                            </div>
-                          );
-                        }
                         // Question liée : une ligne comme une autre sur la copie.
                         // L'écart de 40px qui la sépare de la précédente est un
                         // `padding` et non une marge — il doit entrer dans la
@@ -1529,19 +1798,19 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                           const part = q.parts[row.partIdx];
                           if (!part) return null;
                           return (
-                            <div key={row.key} {...questionRowProps(gi, row.sectionIdx, q.id, firstKey, lastKey)} ref={el => { qRefs.current[row.key] = el; }} style={rowSurface(hovered, gi)}>
+                            <div key={row.key} {...questionRowProps(gi, row.sectionIdx, q.id, firstKey, lastKey, row.key)} ref={el => { qRefs.current[row.key] = el; }} style={rowSurface(hovered, gi)}>
                               {dropLineFor(row.key)}
                               <div style={{ padding: row.last ? '40px 34px 20px' : '40px 34px 0' }}>
                                 {/* Une question liée a son propre barème, à sa
                                     propre ligne : c'est bien la ligne de la copie
                                     qui porte des points, pas la grappe. */}
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap' as const }}>
+                                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap' as const, overflowWrap: 'anywhere' as const }}>
                                     <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{row.number}.</span>
                                     {part.content || t('noStatement')}
                                     {isEliminatory(row.key) && eliminatoryMark()}
                                   </div>
-                                  {showQuestionPoints && sheetPoints(pointsOf(row.key), STATEMENT_LINE_H, row.key)}
+                                  {showQuestionPoints && sheetPoints(row.key, STATEMENT_LINE_H, row.key)}
                                 </div>
                                 {/* `partAsQuestion` porte aussi les réglages
                                     du type (liste, tableau, paires, fichier) :
@@ -1553,7 +1822,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                           );
                         }
                         return (
-                          <div key={row.key} {...questionRowProps(gi, row.sectionIdx, q.id, firstKey, lastKey)} ref={el => { qRefs.current[row.key] = el; }} style={rowSurface(hovered, gi)}>
+                          <div key={row.key} {...questionRowProps(gi, row.sectionIdx, q.id, firstKey, lastKey, row.key)} ref={el => { qRefs.current[row.key] = el; }} style={rowSurface(hovered, gi)}>
                             {dropLineFor(row.key)}
                             <div style={{ padding: row.last ? '20px 34px' : '20px 34px 0' }}>
                               <QuestionImagePreview workshopId={workshopId} image={q.image} onLoaded={noteMediaLoaded} />
@@ -1573,12 +1842,12 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                   contiennent que des blancs et un saut de ligne
                                   sont supprimées à la compilation. */}
                               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                                <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap' as const }}>
+                                <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap' as const, overflowWrap: 'anywhere' as const }}>
                                   <span style={{ color: palette.amber, fontWeight: 600, marginRight: 8 }}>{row.number}.</span>
                                   {q.content || t('noStatement')}
                                   {isEliminatory(q.id) && eliminatoryMark()}
                                 </div>
-                                {showQuestionPoints && sheetPoints(pointsOf(q.id), STATEMENT_LINE_H, row.key)}
+                                {showQuestionPoints && sheetPoints(q.id, STATEMENT_LINE_H, row.key)}
                               </div>
                               {renderAnswerSpace(q)}
                             </div>
@@ -1639,10 +1908,10 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                         if (row.kind === 'qpart') {
                           return <div key={row.key} {...gutterDropProps(row)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT }} />;
                         }
-                        // Même chose en face du formulaire d'édition : la
-                        // question ouverte ne peut pas quitter la copie, ses
-                        // modifications en cours partiraient avec elle. On sort
-                        // de l'éditeur par « annuler » ou « enregistrer ».
+                        // Rien en face du formulaire : la question ouverte ne
+                        // peut pas quitter la copie, ses modifications en cours
+                        // partiraient avec elle. On en sort par « annuler » ou
+                        // « enregistrer ».
                         if (row.kind === 'editor') {
                           return <div key={row.key} {...gutterDropProps(row)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT }} />;
                         }

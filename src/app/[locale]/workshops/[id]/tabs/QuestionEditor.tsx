@@ -15,6 +15,7 @@ import { LabelPill, LabelPicker, SelectMenu } from './examen/examShared';
 // des types de domaine (persistés en base, consommés par les server actions),
 // pas des types d'UI. Ré-exportés ici pour ne pas casser les nombreux imports
 // existants (`from './QuestionEditor'`) dans le reste de l'onglet examen.
+import { MAX_TEXT_LINES, clampTextLines } from '@/lib/workshops/examTypes';
 import type { ResponseType, QuestionPart, Question, BloomLevel } from '@/lib/workshops/examTypes';
 export type { ResponseType, QuestionPart, Question, BloomLevel };
 
@@ -350,8 +351,9 @@ export default function QuestionEditor({
                     <input
                       type="number"
                       min={1}
+                      max={MAX_TEXT_LINES}
                       value={draft.textLines ?? 4}
-                      onChange={(e) => patch({ textLines: Math.max(1, Number(e.target.value) || 1) })}
+                      onChange={(e) => patch({ textLines: clampTextLines(Number(e.target.value) || 1) })}
                       style={{ width: 70, flexShrink: 0, fontSize: 13, color: palette.ink, border: `1px solid ${ink(0.12)}`, borderRadius: 9, padding: '9px 12px', background: palette.paper, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
                     />
                   </div>

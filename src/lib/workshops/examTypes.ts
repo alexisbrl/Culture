@@ -119,9 +119,33 @@ const RESPONSE_TYPES: ResponseType[] = [
 // nouveau type en apporte deux ou trois, et une colonne par réglage ferait
 // grossir la table sans que la majorité des questions les utilise.
 export type QuestionTypeOptions = {
-  /** liste — numéros affichés à gauche de chaque ligne de réponse. */
+  /** liste — l'ordre des réponses compte, et il est celui de `choices` ; des
+   *  numéros sont alors affichés à gauche de chaque ligne de réponse.
+   *
+   *  ⚠️ **Absent = FAUX**, et ce n'était pas le cas avant le 06/09/2026 : les
+   *  trois endroits qui l'affichent retombaient sur VRAI, si bien que toute
+   *  liste était numérotée — y compris une simple énumération, où l'ordre n'a
+   *  aucun sens. Le candidat pouvait en déduire qu'il devait répondre dans un
+   *  ordre précis. Vérifié dans les questions écrites par l'IA : elle ne demande
+   *  ce réglage que sur de vrais classements (« donne, dans l'ordre… ») et le
+   *  laisse de côté partout ailleurs — ce qu'on voyait n'était donc pas son
+   *  choix, c'était ce défaut. Ne pas le remettre à vrai « pour l'esthétique » :
+   *  ce drapeau porte une INTENTION, pas une décoration.
+   *
+   *  ⚠️ **Il rend la liste EXHAUSTIVE** (arbitrage d'Alexis du 06/09/2026) : un
+   *  classement ne se demande pas à moitié, donc `listExpected` cesse d'être lu
+   *  tant qu'il vaut vrai — voir `listAnswerCount`, par où passent les trois
+   *  écrans et la correction. La valeur enregistrée n'est pas effacée pour
+   *  autant : décocher le réglage la remet en vigueur telle quelle. */
   listNumbered?: boolean;
-  /** liste — nombre de réponses attendues de l'élève. */
+  /** liste — nombre de réponses attendues de l'élève, quand l'auteur n'attend
+   *  pas la liste complète (« cite trois fleuves » parmi huit acceptés).
+   *
+   *  ⚠️ **Ne jamais le lire directement : passer par `listAnswerCount`.** Il est
+   *  sans effet sur une liste numérotée, et il se borne au nombre de réponses
+   *  réellement saisies — le lire brut a laissé, du 01 au 06/09/2026, une
+   *  correction qui exigeait les huit réponses là où l'écran n'en demandait
+   *  trois, donc des questions impossibles à réussir. */
   listExpected?: number;
   /** tableau — libellés des lignes et des colonnes de la grille à cocher. */
   tableRows?: string[];
@@ -217,6 +241,41 @@ export function shufflesAnswerItems(source: {
   }
 }
 
+/** Combien de réponses une LISTE réclame au candidat : le nombre de lignes de
+ *  saisie qu'il voit, et le nombre de bonnes réponses qu'il doit donner.
+ *
+ *  Deux règles, dans cet ordre :
+ *
+ *  - **Une liste numérotée est exhaustive.** `listNumbered` dit que l'ordre
+ *    compte ; or l'ordre d'un extrait n'a pas de référence — « classe trois de
+ *    ces huit événements » ne dit pas lesquels trois, donc ne dit pas quel
+ *    ordre. On demande alors la liste entière (arbitrage d'Alexis du
+ *    06/09/2026). `listExpected` reste enregistré et reprend effet si le
+ *    réglage est décoché : décocher ne doit pas faire perdre un réglage.
+ *  - **Sinon, le nombre demandé par l'auteur**, borné par ce qui est
+ *    réellement saisi : on ne peut pas réclamer plus de réponses qu'il n'y en a
+ *    d'acceptées, ni moins d'une.
+ *
+ *  `undefined` quand aucune réponse n'est saisie : il n'y a rien à borner et
+ *  rien à corriger (certaines questions écrites à la main portent leurs
+ *  attendus dans le texte libre). L'appelant retombe alors sur son propre
+ *  défaut d'affichage.
+ *
+ *  Fonction PARTAGÉE, et c'est tout l'intérêt : l'éditeur, la feuille A4,
+ *  l'exercice et la correction doivent compter pareil. Une divergence d'un seul
+ *  d'entre eux produit une question qu'on ne peut pas réussir, sans erreur
+ *  visible nulle part. */
+export function listAnswerCount(source: {
+  choices?: string[];
+  typeOptions?: QuestionTypeOptions | null;
+}): number | undefined {
+  const accepted = (source.choices ?? []).filter((entry) => entry.trim().length > 0).length;
+  if (accepted === 0) return undefined;
+  if (source.typeOptions?.listNumbered === true) return accepted;
+  const asked = source.typeOptions?.listExpected ?? accepted;
+  return Math.min(Math.max(asked, 1), accepted);
+}
+
 // ─── Encodage des réponses structurées ──────────────────────────────────────
 //
 // Deux types portent leur réponse dans une forme encodée plutôt que dans
@@ -266,12 +325,78 @@ export function parseTableCellKey(key: unknown): { row: number; col: number } | 
 
 export const MATCH_SPLIT_MIN = 0.05;
 export const MATCH_SPLIT_MAX = 0.95;
+
+// ─── Lignes de réponse d'une question textuelle ──────────────────────────────
+//
+// Le nombre de lignes est DESSINÉ : l'éditeur A4 et la page d'exercice tracent
+// une ligne (ou un `rows` de zone de saisie) par unité. Sans plafond, une
+// valeur saisie à la main de quelques milliers fige la page — incident du
+// 01/09/2026. 200 lignes valent déjà plusieurs pages A4, bien au-delà de tout
+// usage réel. Toute valeur venue de l'extérieur (saisie, IA, import, ligne
+// déjà en base) passe par `clampTextLines`.
+export const DEFAULT_TEXT_LINES = 4;
+export const MAX_TEXT_LINES = 200;
+
+export function clampTextLines(value: number | null | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_TEXT_LINES;
+  return Math.min(MAX_TEXT_LINES, Math.max(1, Math.round(value)));
+}
 export const MATCH_SPLIT_DEFAULT = 0.5;
 
-// Taxonomie de Bloom — niveau cognitif VISÉ **par le couple question ↔ notion**
-// (1 mémoriser, 2 comprendre, 3 appliquer, 4 analyser, 5 évaluer, 6 créer). À ne
-// pas confondre avec `brick_mastery.bloom_level`, qui mesure le niveau ATTEINT
-// par un candidat sur une notion.
+// ─── Combien d'éléments une question peut porter ─────────────────────────────
+//
+// Des PLAFONDS, pas des cibles : une bonne question en compte presque toujours
+// beaucoup moins. Ils existent parce que rien n'en fixait jusqu'ici — une
+// réponse de modèle partie en boucle, ou un import mal formé, produisait une
+// grille de cent lignes que plus personne ne pouvait relire ni corriger.
+//
+// Vingt partout, délibérément : c'est déjà au-delà de tout usage réel, et un
+// seul nombre à retenir vaut mieux que des seuils qu'il faudrait justifier un
+// par un. Ils sont annoncés au modèle comme des limites, et tenus à l'écriture
+// (`resolveQuestion`) : ce qui dépasse est coupé, jamais accepté en silence.
+//
+// ⚠️ **Deux exceptions.**
+// - Les COLONNES, à 5 : pas un garde-fou anti-dérive mais une contrainte de
+//   largeur — au-delà, la grille ne tient plus sur une page A4. L'éditeur la
+//   tenait déjà de son côté (le bouton « ajouter une colonne » disparaît à 5) ;
+//   elle vit ici depuis le 01/09/2026, pour que l'IA ne puisse pas produire une
+//   grille qu'un humain n'aurait pas le droit de construire.
+// - La LISTE, à 200 : ses réponses ne sont pas des propositions qu'un candidat
+//   doit lire une par une comme un QCM, mais des réponses ACCEPTÉES — une liste
+//   qui en cite beaucoup (les régions de France, les éléments d'un tableau
+//   périodique) reste une seule question légitime. `MAX_TEXT_LINES` fixe le
+//   même ordre de grandeur pour la même raison : une longue énumération.
+export const MAX_CHOICES = 20;
+export const MAX_LIST_ANSWERS = 200;
+export const MAX_TABLE_ROWS = 20;
+export const MAX_TABLE_COLS = 5;
+export const MAX_PAIRS = 20;
+
+// Les quatre niveaux — ce que le couple question ↔ notion demande au candidat.
+// À ne pas confondre avec `brick_mastery.bloom_level`, qui mesure le niveau
+// ATTEINT par un candidat sur une notion.
+//
+// ─── Une PROGRESSION, et non la taxonomie de Bloom (01/09/2026) ─────────────
+//
+//   1 RECONNAÎTRE — identifier la bonne réponse parmi d'autres, dire si un
+//     énoncé est juste. On ne demande pas de produire la connaissance.
+//   2 RESTITUER   — produire la connaissance de mémoire : la définition, la
+//     date, la liste, et ce à quoi elle sert.
+//   3 APPLIQUER   — s'en servir dans une situation où son emploi est évident.
+//   4 ANALYSER    — reconnaître de soi-même qu'elle est utile dans un cas moins
+//     évident, souvent en la croisant avec d'autres, et s'en servir.
+//
+// Les deux premiers niveaux portaient les noms de Bloom — « mémoriser » puis
+// « comprendre » —, deux NATURES d'effort et non deux degrés : une définition à
+// écrire (mémoriser) est plus dure qu'un choix entre propositions (comprendre),
+// si bien que deux questions du même niveau n'avaient pas la même difficulté et
+// qu'un parcours pouvait redescendre en montant. L'échelle ci-dessus se lit
+// comme une progression du plus simple au plus exigeant, ce que le produit
+// mesure réellement. Elle s'écarte donc des noms de Bloom, et c'est délibéré :
+// le nom du champ (`bloom_level`) est conservé, lui, pour ne pas migrer la base.
+//
+// ⚠️ Les niveaux déjà en base gardent leur NUMÉRO ; c'est leur sens qui bouge.
+// Sans conséquence à ce jour (données de test), impensable après le lancement.
 //
 // ⚠️ Une question n'a PLUS de niveau à elle (28/08/2026). Elle en portait un,
 // dont les niveaux par notion n'étaient qu'un raffinement facultatif : deux
@@ -280,9 +405,9 @@ export const MATCH_SPLIT_DEFAULT = 0.5;
 // exact où il a un sens, puisqu'il dit ce que la question fait faire de CETTE
 // notion-là. La colonne `exam_question_items.bloom_level` a été supprimée le
 // 31/08/2026 : il n'y a plus de seconde source à tenir en accord.
-// Quatre niveaux dans toute l'application (09/08/2026) : mémoriser, comprendre,
-// appliquer, analyser. « Évaluer » et « Créer » ont été retirés — ils n'étaient
-// pas exploitables en correction et `mastery.ts` plafonnait déjà à 4 niveaux
+// Quatre niveaux dans toute l'application (09/08/2026). Les deux derniers de
+// Bloom, « évaluer » et « créer », n'ont jamais existé ici : ils n'étaient pas
+// exploitables en correction et `mastery.ts` plafonnait déjà à 4 niveaux
 // (`MAX_LEVEL`, score de maîtrise sur 40).
 export type BloomLevel = 1 | 2 | 3 | 4;
 
@@ -291,8 +416,7 @@ export const BLOOM_LEVELS: BloomLevel[] = [1, 2, 3, 4];
 export const DEFAULT_BLOOM_LEVEL: BloomLevel = 1;
 
 /** Ramène n'importe quelle entrée (null, undefined, valeur hors bornes) sur un
- *  niveau valide. Les anciens niveaux 5 et 6 sont ramenés à 4, le plus haut :
- *  une question « créer » reste la plus exigeante de l'échelle réduite. */
+ *  niveau valide. Tout ce qui dépasse 4 est ramené à 4, le plus haut. */
 export function toBloomLevel(value: unknown): BloomLevel {
   const n = Math.round(Number(value));
   if (!Number.isFinite(n)) return DEFAULT_BLOOM_LEVEL;
@@ -302,8 +426,8 @@ export function toBloomLevel(value: unknown): BloomLevel {
 
 // Ce que vaut UN exercice du parcours : 12 niveaux de Bloom, et non 12 questions
 // (règle produit du 29/08/2026). Un énoncé coûte le plus haut niveau qu'il
-// demande, une grappe la somme de ses énoncés : douze énoncés « mémoriser », ou
-// un « analyser » + deux « appliquer » + deux « mémoriser ». Ici plutôt que dans
+// demande, une grappe la somme de ses énoncés : douze énoncés « reconnaître », ou
+// un « analyser » + deux « appliquer » + deux « reconnaître ». Ici plutôt que dans
 // `parcoursDraw.ts` parce que l'écran d'exercice en a besoin pour sa barre
 // d'avancement, et qu'il ne doit rien importer qui touche à la base.
 export const EXERCISE_BLOOM_BUDGET = 12;
@@ -607,8 +731,20 @@ export type QuestionWeight = {
   points: number;
   negative: { enabled: boolean; value: number };
   eliminatory: boolean;
-  /** Le gain décroît avec le temps mis à répondre (au lieu d'être fixe). */
+  /** Le gain décroît avec le temps mis à répondre (au lieu d'être fixe).
+   *
+   *  ⚠️ Exclusif de `fastestWins` : les deux répondent à la même question — que
+   *  vaut la vitesse ? — et l'un dégrade le gain quand l'autre le donne en
+   *  entier au premier. Cocher l'un décoche l'autre côté interface ; un état où
+   *  les deux seraient vrais n'a pas de sens et ne doit pas être écrit. */
   timed?: boolean;
+  /** Le PREMIER à répondre emporte la totalité des points ; les suivants n'en
+   *  ont aucun. Exclusif de `timed` (voir ci-dessus).
+   *
+   *  Comme `timed`, le drapeau ne fait à ce jour qu'IDENTIFIER l'intention : il
+   *  décrit un examen passé en direct, et rien ne mesure encore qui a répondu le
+   *  premier (le passage en ligne reste à brancher, voir `docs/backlog.md`). */
+  fastestWins?: boolean;
   /** La pénalité (malus ou élimination) s'applique aussi à une absence de réponse,
    *  pas seulement à une mauvaise réponse. */
   penalizeUnanswered?: boolean;

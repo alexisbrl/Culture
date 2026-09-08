@@ -6,9 +6,10 @@
 // vérifiables sans clé API — et c'est le seul endroit où lire « qu'est-ce qui
 // part au modèle, et pourquoi ».
 
+import { EXAM_GROUP_SIZE, EXAM_QUESTIONS_PER_CALL, examGroupedCount } from './prompt';
 import type { PreparedDocument } from './providers/types';
 
-export type IngestPass = 'chapters' | 'notions' | 'assign' | 'questions' | 'exam';
+export type IngestPass = 'resource' | 'chapters' | 'notions' | 'assign' | 'questions' | 'exam';
 
 /** Les documents qu'une passe reçoit.
  *
@@ -28,7 +29,21 @@ export function documentsForPass(
   /** Index du document à traiter — **obligatoire pour la passe notions**, qui
    *  travaille document par document depuis l'inversion du 23/08/2026. */
   documentIndex?: number,
+  /** Les documents que l'étape 0 a **demandés**, par numéro. Elle est la seule
+   *  passe à recevoir ses documents sur demande plutôt que d'office : elle part
+   *  à l'aveugle, avec le seul catalogue des noms, et n'obtient le contenu que
+   *  si elle dit en avoir besoin (04/09/2026). */
+  granted?: readonly number[],
 ): PreparedDocument[] {
+  // L'étape 0 ne reçoit QUE ce qu'elle a demandé, et rien par défaut. Une
+  // demande vide — le cas le plus fréquent — ne coûte donc pas un token de
+  // corpus. Un numéro hors liste est ignoré : il vient du modèle.
+  if (pass === 'resource') {
+    return (granted ?? [])
+      .map((index) => prepared[index])
+      .filter((document): document is PreparedDocument => Boolean(document));
+  }
+
   // Ni le rangement ni les questions ne reçoivent de document : le premier
   // travaille sur des pages et des titres, les seconds sur des notions (§16.3).
   // La passe examen suit exactement la même règle — elle lit le programme, pas
@@ -153,10 +168,107 @@ export function splitBudget(total: number, slices: number): number[] {
   return Array.from({ length: safeSlices }, (_, i) => base + (i < remainder ? 1 : 0));
 }
 
-/** En combien d'appels un budget se découpe. */
-export function examSliceCount(budget: number, perCall: number): number {
-  if (perCall < 1) throw new Error(`Taille d'appel invalide : ${perCall}`);
-  return Math.max(1, Math.ceil(Math.max(0, budget) / perCall));
+// ─── La FORME de l'examen, décidée AVANT le premier appel (06/09/2026) ───────
+//
+// Jusqu'ici chaque appel recevait le même budget et la même consigne : « environ
+// 60 % de tes questions en groupes ». Sur un appel de cinq questions, ça faisait
+// trois questions à grouper — donc un groupe de trois, et rien d'autre, à chaque
+// appel et pour tout l'examen. La proportion était tenue à la question près, la
+// VARIÉTÉ était perdue : un examen de quarante questions n'était qu'une suite de
+// triplets, et aucun groupe ne pouvait dépasser la taille d'un appel.
+//
+// La répartition se calcule donc une fois pour l'examen ENTIER, et chaque appel
+// reçoit une forme HOMOGÈNE : ou bien il n'écrit que des groupes, ou bien il
+// n'écrit que des questions isolées. Le modèle n'a plus rien à répartir.
+//
+// ⚠️ **Ce qui est fixé, c'est la NATURE d'un appel et son budget — jamais les
+// tailles de ses groupes** (arbitrage d'Alexis, 06/09/2026). Dicter « 4+2 » ou
+// « 3+3 » interdirait un groupe de six là où l'utilisateur en demande un, et
+// c'est son examen. On conseille donc une taille usuelle et on laisse composer.
+// Un appel qui rendrait « 5+1 » laisse une question seule : ce n'est pas une
+// faute, c'est un enchaînement cohérent préféré à un compte juste.
+//
+// ⚠️ **Et le découpage ne sert pas non plus à fabriquer de la variété.** Faire
+// varier la taille des appels pour que le modèle compose autrement a été essayé
+// puis écarté le jour même : un appel ne réfléchit pas, il exécute — et une
+// place rognée casserait une demande de l'utilisateur (« un enchaînement de six
+// questions ») sans que rien ne le dise. La règle est donc la plus bête
+// possible : **des appels pleins, et le dernier s'ajuste** pour que le compte
+// tombe juste. La variété d'un examen est le travail du modèle.
+//
+// Conséquence directe, et c'est elle qui compte à l'écran : le plan étant connu
+// d'avance, plus aucun appel n'a besoin de partir seul pour révéler le nombre
+// des autres. Toute la passe part en une vague.
+
+/** Un appel de la passe examen : un budget, et la forme de ce budget. */
+export type ExamCall = {
+  /** Nombre de questions à écrire dans cet appel. */
+  budget: number;
+  /** `true` = toutes ses questions vont dans des groupes (à lui de les composer) ;
+   *  `false` = que des questions isolées, sans le moindre enchaînement. */
+  grouped: boolean;
+};
+
+/** Découpe un budget en appels : des appels PLEINS, et le dernier s'ajuste.
+ *
+ *  Rien de plus, et c'est délibéré (voir la note en tête de section) : le
+ *  découpage sert à ne pas tronquer une réponse, pas à souffler au modèle ce
+ *  qu'il doit composer.
+ *
+ *  `min` est la plus petite taille qu'un appel puisse avoir un sens : deux pour
+ *  un appel groupé — un « groupe » d'une question n'existe pas —, une pour un
+ *  appel de questions isolées. Un dernier appel trop court prend donc à son
+ *  prédécesseur au lieu d'abandonner une question en chemin. */
+export function callBudgets(total: number, perCall = EXAM_QUESTIONS_PER_CALL, min = 1): number[] {
+  const safe = Math.max(0, Math.floor(total));
+  if (safe < min) return [];
+  const out: number[] = [];
+  let left = safe;
+  while (left > perCall) { out.push(perCall); left -= perCall; }
+  if (left >= min) out.push(left);
+  else if (left > 0 && out.length > 0) {
+    // Le reste ne ferait pas un appel : on rogne le précédent pour que le
+    // dernier atteigne le minimum. Les deux restent sous le plafond.
+    const previous = out.pop() as number;
+    out.push(previous + left - min, min);
+  }
+  return out;
+}
+
+/** Le plan d'un examen : la liste ordonnée de ses appels.
+ *
+ *  L'ordre est celui du COURS — le premier appel couvre le début du programme —
+ *  et les appels isolés sont répartis entre les appels groupés plutôt que mis à
+ *  la suite : autrement, le début du cours n'aurait que des enchaînements et sa
+ *  fin que des questions seules. */
+export function planExamCalls(total: number, perCall = EXAM_QUESTIONS_PER_CALL): ExamCall[] {
+  const safeTotal = Math.max(0, Math.floor(total));
+  if (safeTotal === 0) return [];
+
+  // Un budget groupé trop court pour un seul groupe part en questions isolées :
+  // demander « un groupe d'une question » n'aurait aucun sens.
+  const wanted = examGroupedCount(safeTotal);
+  const grouped = wanted >= EXAM_GROUP_SIZE.min ? wanted : 0;
+  const solo = safeTotal - grouped;
+
+  const groupedCalls: ExamCall[] = callBudgets(grouped, perCall, EXAM_GROUP_SIZE.min)
+    .map((budget) => ({ budget, grouped: true }));
+
+  const soloCalls: ExamCall[] = callBudgets(solo, perCall)
+    .map((budget) => ({ budget, grouped: false }));
+
+  if (groupedCalls.length === 0) return soloCalls;
+  if (soloCalls.length === 0) return groupedCalls;
+
+  const plan: ExamCall[] = [];
+  let next = 0;
+  for (let i = 0; i < groupedCalls.length; i += 1) {
+    plan.push(groupedCalls[i]);
+    const upTo = Math.round(((i + 1) * soloCalls.length) / groupedCalls.length);
+    while (next < upTo) { plan.push(soloCalls[next]); next += 1; }
+  }
+  while (next < soloCalls.length) { plan.push(soloCalls[next]); next += 1; }
+  return plan;
 }
 
 export type ProgramChapter<T> = { id: string; name: string; notions: T[] };
@@ -247,8 +359,24 @@ export function shouldCacheDocuments(documentUses: number): boolean {
  *  chapitres peut tenir dans un seul PDF (§16.18). */
 export const MAX_PLAUSIBLE_CHAPTERS = 16;
 
+/** En deçà, on soupçonne l'inverse : un découpage pris sur les grands
+ *  regroupements du cours là où les unités qu'ils contiennent portaient le
+ *  contenu. Un cours entier en deux chapitres entasse tout dans deux boîtes,
+ *  et le rangement n'a plus rien à distinguer (31/08/2026). */
+export const MIN_PLAUSIBLE_CHAPTERS = 3;
+
+/** ⚠️ **`chapterCount` est la taille du PROGRAMME qui résulte de la réponse**,
+ *  et non le nombre de chapitres nouveaux (01/09/2026). Les deux coïncident au
+ *  premier import ; sur une mise à jour, non : « 1 chapitre nouveau » à côté de
+ *  12 conservés n'est pas un découpage en une partie, alors qu'un cours
+ *  entièrement redécoupé met les anciens à 0 et retombe bien sous le seuil.
+ *
+ *  C'est ce qui permet au seuil bas de valoir **à chaque import** sans se
+ *  déclencher à tort : on ne sait jamais d'avance si un cours a été changé de
+ *  fond en comble, et un programme entier réduit à deux boîtes doit être
+ *  vérifié, que ce soit sa première version ou sa dixième. */
 export function needsChapterRetry(chapterCount: number): boolean {
-  return chapterCount > MAX_PLAUSIBLE_CHAPTERS;
+  return chapterCount > MAX_PLAUSIBLE_CHAPTERS || chapterCount < MIN_PLAUSIBLE_CHAPTERS;
 }
 
 /** Enchaîne **au plus deux** appels de la passe chapitres.

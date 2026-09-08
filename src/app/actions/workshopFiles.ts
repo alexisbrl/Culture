@@ -18,6 +18,9 @@ export type WorkshopFile = {
   mimeType: string;
   category: FileCategory;
   createdAt: string;
+  /** Écrit par l'IA à partir d'une consigne, jamais téléversé. Se télécharge et
+   *  se supprime comme les autres, mais ne se renomme pas. */
+  generated: boolean;
 };
 
 // Gestion des fichiers : propriétaire OU gestionnaire — contrôle d'accès factorisé

@@ -5,17 +5,17 @@ import { useTranslations } from 'next-intl';
 import { Link2, Pencil, Sparkles, Trash2 } from 'lucide-react';
 import { palette, withAlpha, ink } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import Modal from '@/components/Modal';
 import AiGenerationDialog, { useWorkshopFiles } from '@/components/ai/AiGenerationDialog';
 import ImportBanner from '@/components/ai/ImportBanner';
-import { type Question, type ResponseType } from '../QuestionEditor';
+import { type Question, type ResponseType, type BloomLevel } from '../QuestionEditor';
+import { BLOOM_LEVELS } from '@/lib/workshops/examTypes';
 import { RESPONSE_TYPE_ORDER } from './questionFields';
 import {
   type Pool, type Exam, type SortBy, type SortDir,
   DEFAULT_SORT_DIR, NEVER_EXAM_ID, CARD_LINE, CARD_ACTION_BTN, LIST_INSET_X,
-  RESPONSE_TYPE_ICONS, RESPONSE_TYPE_COLORS,
-  TypeIcon, IconBtn, ListToolbar, FilterButton, ListCard, LabelPill, LabelEditor,
-  useDismissOnOutsideClick,
+  RESPONSE_TYPE_ICONS,
+  TypeIcon, IconBtn, ListToolbar, FilterButton, ListCard, ListCardSkeleton, LabelPill, LabelEditor, SegmentedToggle,
+  useDismissOnOutsideClick, useRememberedCount,
 } from './examShared';
 import { Tooltip } from '@/components/ui/tooltip';
 
@@ -33,6 +33,37 @@ const typeMatches = (filter: ResponseType, actual: ResponseType) =>
 // le filtre « tableau ».
 const typesOfQuestion = (q: Question): ResponseType[] =>
   [q.responseType, ...q.parts.map(p => p.responseType)];
+
+// Niveau d'une grappe : le PLUS ÉLEVÉ de ceux portés par ses notions, questions
+// liées comprises — décision d'Alexis du 06/09/2026. Une question n'a plus de
+// niveau à elle depuis le 28/08/2026 : il vit sur le lien vers chaque notion, et
+// une même question peut donc en porter plusieurs (reconnaître une notion tout
+// en en faisant analyser une autre). Retenir le plus haut, c'est ranger la
+// question à ce qu'elle demande de plus exigeant — le reste, elle le demande
+// aussi.
+//
+// `null` quand la grappe n'a aucune notion : il n'y a alors pas de niveau à
+// afficher, et elle ne peut être retenue par aucun filtre de niveau.
+//
+// ⚠️ **Ce que ce choix coûte, et pourquoi on l'accepte.** Une grappe qui mêle
+// une question « reconnaître » et une question « analyser » ne remonte que sous
+// « analyser » : cherchez les questions faciles, celle-là vous échappe alors
+// qu'elle en contient une. C'est assumé, parce qu'**une grappe ne se coupe pas**
+// — ses questions se posent ensemble et dans l'ordre, la première posant le
+// décor des suivantes. La faire apparaître sous « reconnaître » promettrait donc
+// une question qu'on ne peut pas prendre seule ; annoncer le niveau le plus
+// exigeant décrit au contraire ce qu'il faudra réellement savoir faire pour
+// venir à bout du bloc.
+//
+// L'autre lecture possible — la grappe apparaît sous CHACUN des niveaux de ses
+// questions — n'est pas absurde pour autant : elle sert la recherche plutôt que
+// la description. Si on y passe un jour, ce sera ici, en renvoyant l'ensemble
+// des niveaux plutôt que leur maximum ; le filtre, lui, teste déjà une
+// appartenance et n'aurait presque rien à changer.
+const levelOfQuestion = (q: Question): BloomLevel | null => {
+  const levels = [q, ...(q.parts ?? [])].flatMap(part => Object.values(part.notionBloom ?? {}));
+  return levels.length > 0 ? (Math.max(...levels) as BloomLevel) : null;
+};
 
 // Filtre « sans chapitre » : les questions dont aucune notion associée n'est
 // rattachée à un chapitre (y compris celles sans notion du tout).
@@ -79,6 +110,18 @@ type FilterMode = 'pos' | 'neg';
 // voir `examShared` — la liste d'examens suit exactement la même trame.
 const CARD_DRAFT_TINT = withAlpha(palette.green, 0.08); // teinte de la carte déjà posée sur la feuille
 
+/** Ce que la liste demande à l'appelant quand elle rend son éditeur.
+ *
+ *  Elle ne connaît pas le formulaire — elle décide seulement OÙ il va et, dans
+ *  l'encadré de création, comment il doit s'y tenir. */
+export type EditorSlotOptions = {
+  /** Le formulaire est déjà dans un encadré : qu'il ne pose pas le sien. */
+  bare?: boolean;
+  /** L'encadré écrit lui-même la ligne de titre : le formulaire ne la répète
+   *  pas (elle doit être la même des deux côtés de la bascule). */
+  hideTitle?: boolean;
+};
+
 export type QuestionListLabels = {
   pools: Pool[];
   onCreate: (name: string) => string;
@@ -93,7 +136,7 @@ export type QuestionListExams = {
   onToggleInExam: (id: string) => void;
 };
 
-function QuestionListView({ questions, notions, chapters, labels, exams: examsProp, renderEditor, editOnDoubleClick = false, editingQuestionId, openId, setOpenId, onEditQuestion, onNewQuestion, onDeleteQuestion, workshopId, aiContext }: {
+function QuestionListView({ questions, notions, chapters, labels, exams: examsProp, renderEditor, editOnDoubleClick = false, editingQuestionId, editingIsNew = false, openId, setOpenId, onEditQuestion, onNewQuestion, onCancelNewQuestion, draftStatement, onDeleteQuestion, workshopId, aiContext, loading = false }: {
   questions: Question[];
   /** Requis pour la génération par IA ; absent, la liste se comporte comme avant. */
   workshopId?: string;
@@ -113,26 +156,101 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
    *  celle-ci est visible, tout en haut sinon (question nouvelle, ou question
    *  que les filtres actifs écartent). Absent = l'éditeur vit ailleurs, comme
    *  dans la feuille de la banque d'examen. */
-  renderEditor?: () => ReactNode;
+  renderEditor?: (options?: EditorSlotOptions) => ReactNode;
   /** Ouvre l'éditeur au double-clic sur une carte. Raccourci seulement : le
    *  crayon fait la même chose et reste le geste découvrable. */
   editOnDoubleClick?: boolean;
   editingQuestionId: string | null;
+  /** La question ouverte est une question NEUVE, pas une question qu'on modifie.
+   *  C'est ce qui distingue l'encadré de CRÉATION — le seul à porter la bascule
+   *  « manuel / par IA » — de l'ouverture d'une question déjà écrite, où
+   *  proposer l'IA n'aurait aucun sens. */
+  editingIsNew?: boolean;
   openId: string | null;
   setOpenId: (id: string | null) => void;
   onEditQuestion: (q: Question) => void;
-  onNewQuestion: () => void;
+  /** Ouvre une question neuve. L'énoncé passé en argument la pré-remplit : c'est
+   *  ce qui fait suivre le texte quand on revient de l'IA vers le formulaire. */
+  onNewQuestion: (initialStatement?: string) => void;
+  /** Referme la création en cours côté appelant (la question neuve n'existe
+   *  qu'en mémoire, et l'abandonner la retire partout). La bascule s'en sert
+   *  pour passer du formulaire manuel à l'IA : sans ça, le brouillon manuel
+   *  resterait ouvert dans le dos de l'application et bloquerait tout. */
+  onCancelNewQuestion?: () => void;
+  /** L'énoncé tel qu'il est écrit À L'INSTANT dans le formulaire manuel. C'est
+   *  ce que l'encadré emporte vers la consigne de l'IA quand on bascule. */
+  draftStatement?: string;
   onDeleteQuestion: (q: Question) => void;
+  /** Les questions ne sont pas encore arrivées du serveur.
+   *
+   *  Trois effets, et le premier n'est pas cosmétique : la création est hors de
+   *  portée (une question créée avant l'arrivée des données était écrasée par
+   *  elles, et le formulaire resté ouvert bloquait tout — voir `loading` dans
+   *  ExamenTab) ; la liste montre la silhouette de ses cartes ; et les deux
+   *  lectures qui n'ont rien à voir avec elle — bandeau d'import, documents de
+   *  l'atelier — attendent leur tour au lieu de lui passer devant dans la file
+   *  des appels au serveur. */
+  loading?: boolean;
 }) {
   const tr = useTranslations('examen');
   const tAi = useTranslations('ai');
-  // Génération par IA : le choix d'abord, le dialogue ensuite. Les documents sont
-  // chargés d'avance pour que le dialogue s'ouvre déjà rempli.
-  const [choosing, setChoosing] = useState(false);
+  // Génération par IA : les documents sont chargés d'avance pour que le
+  // dialogue s'ouvre déjà rempli.
   const [generating, setGenerating] = useState(false);
+  /** L'encadré de création est ouvert : soit l'appelant tient une question neuve
+   *  (côté manuel), soit on est passé à l'IA. Les deux occupent la MÊME boîte,
+   *  en tête de liste, sous la même bascule. */
+  const creating = generating || editingIsNew;
+  /** ⚠️ **La génération par IA n'existe que pour la banque d'examen**
+   *  (07/09/2026, décision d'Alexis). Le parcours retrouve donc exactement ce
+   *  qu'il avait : le bouton ouvre le formulaire, sans encadré ni bascule — il
+   *  n'y a pas de second côté vers lequel basculer. */
+  const aiAvailable = aiContext === 'exam' && !!workshopId;
+  /** Une génération est en cours : la bascule se verrouille. En partir
+   *  démonterait le dialogue en pleine passe, donc sans passer par la demande
+   *  d'arrêt — la seule qui défasse ce qui a déjà été écrit. La croix du
+   *  dialogue reste, elle, la sortie. */
+  const [aiRunning, setAiRunning] = useState(false);
+  /** ⚠️ **Le texte suit la bascule** (07/09/2026, demandé par Alexis) : ce qu'on
+   *  a commencé à écrire comme énoncé devient la consigne donnée à l'IA, et
+   *  réciproquement. On hésite entre écrire la question et la faire écrire — le
+   *  premier jet ne doit pas être perdu par ce choix. Tant que rien n'est ni
+   *  enregistré ni lancé, c'est le même texte des deux côtés. */
+  const [sharedText, setSharedText] = useState('');
+  /** La bascule de l'encadré. Elle n'est pas rendue ici : elle est posée sur la
+   *  LIGNE DE TITRE du côté affiché — « NOUVELLE QUESTION » à gauche et elle à
+   *  droite (demandé par Alexis) —, donc c'est le formulaire ou le dialogue qui
+   *  la reçoit et la place. */
+  const creationToggle = (
+    <SegmentedToggle
+      value={generating ? 'ai' : 'manual'}
+      disabled={aiRunning}
+      onChange={side => {
+        if (side === 'ai') {
+          // L'énoncé en cours part avec nous : il devient la consigne.
+          setSharedText(draftStatement ?? '');
+          onCancelNewQuestion?.();
+          setGenerating(true);
+          return;
+        }
+        setGenerating(false);
+        onNewQuestion(sharedText);
+      }}
+      options={[
+        { value: 'manual', label: tAi('chooseManual'), icon: <Pencil size={13} strokeWidth={1.9} /> },
+        { value: 'ai', label: tAi('chooseAi'), icon: <Sparkles size={13} strokeWidth={1.9} /> },
+      ]}
+    />
+  );
   // `generating` en second argument : la liste est relue à chaque ouverture du
   // dialogue (voir `useWorkshopFiles`), pas seulement au montage de la page.
-  const aiFiles = useWorkshopFiles(workshopId ?? '', generating);
+  // `loading` en troisième : elle ne part qu'une fois les questions arrivées,
+  // pour ne pas leur passer devant dans la file des appels au serveur.
+  const aiFiles = useWorkshopFiles(workshopId ?? '', generating, loading);
+  // Le nombre d'encadrés d'attente est celui de la dernière visite — aucun
+  // aller-retour n'est fait pour l'obtenir (voir `useRememberedCount`).
+  const [skeletonCount, rememberCount] = useRememberedCount(`culture.listCount.${aiContext ?? 'questions'}.${workshopId ?? ''}`, 4);
+  useEffect(() => { if (!loading) rememberCount(questions.length); }, [loading, questions.length, rememberCount]);
   // Les deux familles optionnelles ramenées à des valeurs neutres : le reste du
   // composant s'écrit alors sans condition, seuls l'affichage des sections
   // concernées et les rappels regardent leur présence.
@@ -146,6 +264,10 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   const [filterChapters, setFilterChapters] = useState<string[]>([]);
   const [filterExams, setFilterExams] = useState<string[]>([]);
   const [filterLinked, setFilterLinked] = useState<string[]>([]);
+  // Niveaux retenus, en TEXTE ('1'…'4') : le cycle inclus/exclu (`cycleFilter`)
+  // et le registre des côtés (`filterModes`) s'indexent par chaîne, comme les
+  // quatre autres familles. La conversion se fait au moment de comparer.
+  const [filterLevels, setFilterLevels] = useState<string[]>([]);
   // Côté de chaque filtre actif — inclusion par défaut, exclusion au clic
   // suivant (voir `cycleFilter`). Indexé par clé « catégorie:valeur », les
   // quatre familles de filtres se partageant le même registre.
@@ -163,8 +285,9 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
   const [pendingDeleteQuestion, setPendingDeleteQuestion] = useState<Question | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
 
-  const activeFilterCount = filterPools.length + filterTypes.length + filterChapters.length + filterExams.length + filterLinked.length;
+  const activeFilterCount = filterPools.length + filterTypes.length + filterChapters.length + filterExams.length + filterLinked.length + filterLevels.length;
   // Trier par libellé n'a de sens que là où il y en a.
   const sortOptions = showLabels ? BANK_SORTS : BANK_SORTS.filter(so => so !== 'label');
 
@@ -191,6 +314,140 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   // était ouvert — chaque couche se prononce sur le même geste — et il ne fait
   // rien d'autre. Voir `useDismissOnOutsideClick`.
   useDismissOnOutsideClick(filterOpen, filterRef, () => setFilterOpen(false));
+
+  // Ouvrir une question amène son formulaire SOUS LES YEUX (06/09/2026). Sans
+  // ça, la carte visée pouvait être n'importe où dans une liste de cent
+  // questions — voire nulle part, quand les filtres l'écartent et que le
+  // formulaire va tout en haut —, et le clic semblait ne rien faire. Le geste
+  // vient parfois d'un autre écran (double-clic sur la copie d'examen), ce qui
+  // rend le recadrage indispensable : la liste n'a alors même pas bougé.
+  //
+  // ⚠️ **Pas de `scrollIntoView`, et ce n'est pas un caprice** : la colonne des
+  // questions est mise à l'échelle (`--exam-list-zoom`), et le défilement
+  // demandé par le navigateur n'y arrivait tout simplement pas — le panneau
+  // restait où il était, le formulaire s'ouvrait hors de l'écran, et le clic
+  // paraissait sans effet. On vise donc le panneau défilant nous-mêmes.
+  //
+  // Les deux repères ne sont pas dans la même unité : un rectangle est dans le
+  // repère de la FENÊTRE (donc mis à l'échelle), `scrollTop` en unités LOCALES.
+  // D'où la calibration sur le panneau lui-même (hauteur mesurée / hauteur
+  // locale) avant de convertir l'écart. Un `rAF` laisse la mise en page se poser
+  // — le formulaire vient de remplacer une carte, les hauteurs bougent.
+  //
+  // ⚠️ **La barre de navigation est COLLANTE : elle recouvre le haut de ce qui
+  // défile sous elle.** Amener le formulaire au ras du bord haut revenait donc à
+  // le glisser sous la barre, et l'énoncé — la première ligne, celle qu'on vient
+  // ouvrir — était coupé (constaté le 06/09/2026). On vise donc le premier
+  // pixel réellement VISIBLE : sous la barre quand elle est là, le haut du
+  // panneau sinon. La barre se mesure (`data-app-header`) plutôt que de recopier
+  // sa hauteur ici — en mobile elle est absente, et mesure alors zéro.
+  //
+  // ─── Du MINIMUM, comme la copie d'examen ──────────────────────────────────
+  //
+  // Même règle des deux côtés (06/09/2026) : on défile juste de ce qu'il faut
+  // pour voir le formulaire en entier. Déjà entièrement visible, rien ne bouge —
+  // ouvrir une question qu'on a sous les yeux ne doit pas faire sauter la liste.
+  // Plus haut que la zone d'affichage (une grappe, une liste de quinze réponses),
+  // on aligne son HAUT : l'énoncé reste visible, c'est la partie sans laquelle
+  // le reste ne se comprend pas.
+  //
+  // ⚠️ **Le défilement animé n'aboutit pas toujours, et il échoue en silence**
+  // (voir `.claude/rules/frontend-patterns.md`, même famille que le
+  // `scrollIntoView` inopérant sous un ancêtre `zoom`). On anime, puis on
+  // REPASSE poser la position si elle n'a pas pris.
+  useEffect(() => {
+    if (editingQuestionId === null) return;
+    let retry = 0;
+
+    // ⚠️ **Un geste de l'utilisateur annule la seconde passe.** Elle est là pour
+    // rattraper un défilement qui n'a pas pris, jamais pour reprendre la main :
+    // qui fait défiler la liste juste après avoir ouvert une question voyait
+    // sinon l'écran se recadrer une seconde fois sous ses doigts (signalé par
+    // Alexis le 06/09/2026). On écoute le GESTE — molette, doigt, touche — et
+    // non la position : un défilement qu'on a demandé soi-même bouge lui aussi
+    // la position, il ne se distinguerait pas.
+    let userMoved = false;
+    const noteUserScroll = () => { userMoved = true; };
+    window.addEventListener('wheel', noteUserScroll, { passive: true });
+    window.addEventListener('touchmove', noteUserScroll, { passive: true });
+    window.addEventListener('keydown', noteUserScroll);
+
+    /** Amène le formulaire entièrement à l'écran, en défilant du MINIMUM.
+     *
+     *  ⚠️ **Rejoué une seconde fois, et RECALCULÉ**, pas seulement rejoué : le
+     *  formulaire grandit après son montage (les champs du type de réponse
+     *  arrivent, une image se charge). Au premier passage il tient parfois tout
+     *  entier à l'écran — donc rien à faire —, et c'est en grandissant qu'il
+     *  déborde. Un second passage qui se contenterait de reposer la position
+     *  calculée au premier ne verrait pas ce débordement (constaté le
+     *  06/09/2026). */
+    function settle(last: boolean) {
+      const el = editorRef.current;
+      if (!el) return;
+      const header = document.querySelector('[data-app-header]');
+      const covered = header ? header.getBoundingClientRect().bottom : 0;
+      // Une marge de respiration : collé au bord, le formulaire donne
+      // l'impression d'être coupé.
+      const GAP = 12;
+
+      let panel: HTMLElement | null = el.parentElement;
+      while (panel) {
+        const oy = getComputedStyle(panel).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && panel.scrollHeight > panel.clientHeight) break;
+        panel = panel.parentElement;
+      }
+
+      // Le cadre réellement visible, dans le repère de la FENÊTRE : le panneau
+      // défilant quand il y en a un, la fenêtre elle-même sinon (c'est alors la
+      // page qui défile, cas du parcours).
+      const panelRect = panel ? panel.getBoundingClientRect() : null;
+      const frameTop = Math.max(panelRect ? panelRect.top : 0, covered) + GAP;
+      const frameBottom = (panelRect ? panelRect.bottom : window.innerHeight) - GAP;
+
+      const rect = el.getBoundingClientRect();
+      // Déplacement à faire, en pixels de FENÊTRE. Positif = descendre.
+      let shift = 0;
+      if (rect.height > frameBottom - frameTop || rect.top < frameTop) {
+        // Plus haut que la place disponible, ou il commence au-dessus : on
+        // aligne son HAUT — l'énoncé, la seule partie qu'il faille voir.
+        shift = rect.top - frameTop;
+      } else if (rect.bottom > frameBottom) {
+        // Il dépasse par le bas : on descend juste de ce qui manque.
+        shift = rect.bottom - frameBottom;
+      }
+      if (Math.abs(shift) < 1) return;
+
+      if (!panel) {
+        // La PAGE défile : ses coordonnées sont celles de la fenêtre, rien à
+        // convertir. `scrollIntoView` la poserait sous la barre collante.
+        const top = Math.max(0, window.scrollY + shift);
+        // Le défilement animé n'aboutit pas toujours, et il échoue en silence :
+        // le second passage POSE la position (voir frontend-patterns.md).
+        window.scrollTo(last ? { top } : { top, behavior: 'smooth' });
+        return;
+      }
+      // `scrollTop` est en unités LOCALES, un rectangle dans le repère de la
+      // fenêtre : on ramène l'écart à l'échelle du panneau avant de le poser.
+      const scale = panel.clientHeight > 0 && panelRect ? panelRect.height / panel.clientHeight : 1;
+      const top = Math.max(0, panel.scrollTop + shift / (scale || 1));
+      if (last) panel.scrollTop = top;
+      else panel.scrollTo({ top, behavior: 'smooth' });
+    }
+
+    // Un `rAF` laisse la mise en page se poser — le formulaire vient de
+    // remplacer une carte, les hauteurs bougent.
+    const raf = requestAnimationFrame(() => {
+      settle(false);
+      if (!userMoved) retry = window.setTimeout(() => { if (!userMoved) settle(true); }, 700);
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(retry);
+      window.removeEventListener('wheel', noteUserScroll);
+      window.removeEventListener('touchmove', noteUserScroll);
+      window.removeEventListener('keydown', noteUserScroll);
+    };
+  }, [editingQuestionId]);
 
   useEffect(() => {
     if (!filterOpen) return;
@@ -270,12 +527,14 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   function toggleChapterFilter(id: string) { cycleFilter(id, `chapter:${id}`, filterChapters, setFilterChapters); }
   function toggleExamFilter(id: string) { cycleFilter(id, `exam:${id}`, filterExams, setFilterExams); }
   function toggleLinkedFilter() { cycleFilter(LINKED_ID, `linked:${LINKED_ID}`, filterLinked, setFilterLinked); }
+  function toggleLevelFilter(level: BloomLevel) { cycleFilter(String(level), `level:${level}`, filterLevels, setFilterLevels); }
   function resetFilters() {
     setFilterPools([]);
     setFilterTypes([]);
     setFilterChapters([]);
     setFilterExams([]);
     setFilterLinked([]);
+    setFilterLevels([]);
     setFilterModes({});
   }
   function addLabel() {
@@ -303,6 +562,8 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   const posExams = filterExams.filter(e => modeOf(`exam:${e}`) === 'pos');
   const negExams = filterExams.filter(e => modeOf(`exam:${e}`) === 'neg');
   const linkedMode = filterLinked.length > 0 ? modeOf(`linked:${LINKED_ID}`) : null;
+  const posLevels = filterLevels.filter(l => modeOf(`level:${l}`) === 'pos');
+  const negLevels = filterLevels.filter(l => modeOf(`level:${l}`) === 'neg');
 
   /** État d'une pastille de filtre, à étaler sur `LabelPill`. */
   const pillState = (key: string, selected: boolean) => ({
@@ -311,8 +572,8 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   });
   // La légende du panneau ne montre que les états réellement en jeu : tant que
   // rien n'est exclu, « exclu » n'a rien à expliquer et ne prend pas de place.
-  const hasIncluded = posPools.length + posTypes.length + posChapters.length + posExams.length > 0 || linkedMode === 'pos';
-  const hasExcluded = negPools.length + negTypes.length + negChapters.length + negExams.length > 0 || linkedMode === 'neg';
+  const hasIncluded = posPools.length + posTypes.length + posChapters.length + posExams.length + posLevels.length > 0 || linkedMode === 'pos';
+  const hasExcluded = negPools.length + negTypes.length + negChapters.length + negExams.length + negLevels.length > 0 || linkedMode === 'neg';
 
   let filtered = questions.filter(q => {
     const qPools = new Set(q.pools);
@@ -329,6 +590,12 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
     if (negChapters.length && negChapters.some(c => qChapters.has(c))) return false;
     if (posExams.length && !posExams.some(f => f === NEVER_EXAM_ID ? neverExam : qExamIds.has(f))) return false;
     if (negExams.length && negExams.some(f => f === NEVER_EXAM_ID ? neverExam : qExamIds.has(f))) return false;
+    // Un seul niveau par grappe, le plus haut : une question sans notion n'en a
+    // aucun, elle ne peut donc être RETENUE par aucun niveau — mais rien ne
+    // l'exclut non plus, elle ne porte pas celui qu'on écarte.
+    const qLevel = levelOfQuestion(q);
+    if (posLevels.length && (qLevel === null || !posLevels.includes(String(qLevel)))) return false;
+    if (negLevels.length && qLevel !== null && negLevels.includes(String(qLevel))) return false;
     // Inclus = seulement les grappes, exclu = seulement les questions seules.
     if (linkedMode === 'pos' && q.parts.length === 0) return false;
     if (linkedMode === 'neg' && q.parts.length > 0) return false;
@@ -453,42 +720,10 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
           workshopId={workshopId}
           scope={aiContext === 'exam' ? 'exam' : 'programme'}
           onCancelled={() => window.location.reload()}
+          waitFor={loading}
         />
       )}
 
-      {/* Le choix « par IA / manuellement ». Une modale plutôt qu'un menu ancré :
-          le bouton est rendu par `ListToolbar`, qui n'expose pas son nœud — et
-          deux options méritent d'être lisibles, pas tassées. */}
-      {choosing && (
-        <Modal onClose={() => setChoosing(false)} width={360} portal>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <button
-              type="button"
-              onClick={() => { setChoosing(false); setGenerating(true); }}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px 14px', borderRadius: 10, border: 'none', background: palette.green, color: palette.parchment, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
-            >
-              <Sparkles size={15} /> {tAi('chooseAi')}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setChoosing(false); onNewQuestion(); }}
-              style={{ padding: '11px 14px', borderRadius: 10, border: `1px solid ${palette.lineStrong}`, background: 'transparent', color: palette.inkMuted, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}
-            >
-              {tAi('chooseManual')}
-            </button>
-          </div>
-        </Modal>
-      )}
-
-      {generating && workshopId && (
-        <AiGenerationDialog
-          workshopId={workshopId}
-          files={aiFiles ?? []}
-          forcedContext={aiContext}
-          onClose={() => setGenerating(false)}
-          onDone={() => window.location.reload()}
-        />
-      )}
 
       {/* Barre d'outils commune aux deux listes (`ListToolbar`) : la banque n'y
           met que ce qui lui est propre — sa recherche, ses critères de tri, son
@@ -502,12 +737,17 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
         onSortByChange={changeSortBy}
         sortDir={sortDir}
         onToggleSortDir={() => setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')}
-        actionLabel={tr('bank.newShort')}
-        actionTitle={tr('bank.newQuestion')}
-        // « + nouvelle » ne crée plus directement : elle demande d'abord PAR QUOI
-        // (§8 du plan d'ingestion). Sans `aiContext` — donc partout où la
-        // génération n'a pas de sens — le comportement d'avant est conservé.
-        onAction={aiContext ? () => setChoosing(true) : onNewQuestion}
+        // Un bouton qui n'annonce aucune destination : il ouvre l'encadré de
+        // création, et c'est LÀ que se choisit « manuel » ou « par IA », sur une
+        // bascule. Ouvrir l'encadré part toujours du côté manuel — le plus
+        // fréquent, et le seul qui existe partout.
+        action={{
+          kind: 'button',
+          label: tr('bank.newShort'),
+          title: tr('bank.newQuestion'),
+          onClick: () => { setGenerating(false); setSharedText(''); onNewQuestion(); },
+          disabled: loading,
+        }}
         filter={
           <FilterButton
             title={tr('bank.filters')}
@@ -543,7 +783,13 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
                 )}
               </div>
               <div style={{ overflowY: 'auto', padding: '0 14px 14px', flex: 1, minHeight: 0 }}>
-                {/* Type de réponse */}
+                {/* Type de réponse — pastilles NEUTRES. La couleur est réservée
+                    aux libellés (06/09/2026) : eux seuls sont créés par
+                    l'utilisateur, qui leur choisit une teinte pour les
+                    reconnaître d'un coup d'œil. La donner aussi aux types en
+                    faisait un code couleur de plus à apprendre, et affaiblissait
+                    le seul qui veut dire quelque chose. Le pictogramme, lui,
+                    reste : il identifie le type sans prétendre le classer. */}
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.rTypeSection')}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
                   {RESPONSE_TYPE_ORDER.map(ty => {
@@ -552,13 +798,30 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
                       <LabelPill
                         key={ty}
                         name={tr(`responseType.${ty}`)}
-                        color={RESPONSE_TYPE_COLORS[ty]}
                         icon={<Icon size={11} strokeWidth={1.75} />}
                         {...pillState(`type:${ty}`, filterTypes.includes(ty))}
                         onClick={() => toggleTypeFilter(ty)}
                       />
                     );
                   })}
+                </div>
+                {/* Niveau — celui de la grappe, c'est-à-dire le plus élevé de
+                    ses notions (`levelOfQuestion`). Les quatre pastilles sont
+                    toujours proposées, même si aucune question ne porte encore
+                    le niveau : ce sont quatre valeurs fixes du produit, pas une
+                    liste qui dépend des données comme les libellés ou les
+                    chapitres. Rangées de la plus simple à la plus exigeante,
+                    dans l'ordre de la progression. */}
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.levelSection')}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                  {BLOOM_LEVELS.map(level => (
+                    <LabelPill
+                      key={level}
+                      name={tr(`bloom.${level}`)}
+                      {...pillState(`level:${level}`, filterLevels.includes(String(level)))}
+                      onClick={() => toggleLevelFilter(level)}
+                    />
+                  ))}
                 </div>
                 {/* Statut */}
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: palette.inkFaint, marginBottom: 8 }}>{tr('bank.statusSection')}</div>
@@ -662,13 +925,70 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
             par les filtres actifs, et la voir disparaître sous le formulaire
             qu'on vient d'ouvrir n'aurait aucun sens. Elle rejoint la liste — ou
             s'efface, si les filtres l'écartent — une fois l'édition terminée. */}
-        {renderEditor && editingQuestionId !== null && !filtered.some(q => q.id === editingQuestionId) && renderEditor()}
-        {filtered.map(q => (
-          renderEditor && q.id === editingQuestionId
-            ? <div key={q.id}>{renderEditor()}</div>
+        {/* `meta` suit la carte imitée : la banque a une 3ᵉ ligne (ses
+            libellés), le parcours n'en a pas. Sans ça l'encadré d'attente du
+            parcours ferait 79 px pour des cartes de 59, et la liste sauterait à
+            l'arrivée des questions — c'est précisément ce qu'il est là pour
+            éviter (`showLabels`, voir le `meta` de la carte plus haut). */}
+        {loading && Array.from({ length: skeletonCount }, (_, i) => <ListCardSkeleton key={i} index={i} meta={showLabels} />)}
+        {/* Sans IA (parcours), pas d'encadré ni de bascule : le formulaire garde
+            son propre cadre, exactement comme avant. */}
+        {!loading && creating && !aiAvailable && <div ref={editorRef}>{renderEditor?.()}</div>}
+        {!loading && creating && aiAvailable && (
+          /* ─── Encadré de CRÉATION (07/09/2026) ─────────────────────────────
+             Une seule boîte, tout en haut de la liste, avec une bascule en haut
+             à gauche : à gauche le formulaire habituel, à droite la génération
+             par IA — le même dialogue qu'avant, rendu sans sa fenêtre flottante
+             (`frame="inline"`).
+
+             ⚠️ **Changer de côté REFERME ce qu'on quitte.** Une question neuve
+             n'existe qu'en mémoire, mais elle est déjà posée sur la copie et
+             tient le formulaire ouvert : la laisser derrière soi bloquerait
+             toute autre création tant qu'on ne l'a pas retrouvée. Passer à l'IA
+             l'annule donc, et revenir au manuel en ouvre une fraîche. */
+          <div ref={editorRef} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 16px', borderRadius: 14, background: palette.surfaceRaised, border: `1px solid ${palette.line}` }}>
+            {/* ⚠️ **La ligne de titre appartient à l'encadré, pas à son contenu**
+                (07/09/2026). Elle doit être la MÊME des deux côtés de la bascule
+                — c'est la même chose qu'on crée, par deux chemins —, donc ni le
+                formulaire ni le dialogue ne l'écrivent : ils la laissent à
+                l'encadré (`hideTitle`, et `frame="inline"` côté IA). */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 30 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: palette.green }}>
+                {tr('inline.newQuestion').toUpperCase()}
+              </div>
+              {creationToggle}
+            </div>
+            {generating && workshopId
+              ? (
+                <AiGenerationDialog
+                  workshopId={workshopId}
+                  files={aiFiles ?? []}
+                  forcedContext={aiContext}
+                  origin={aiContext === 'exam' ? 'questions-exam' : 'questions-parcours'}
+                  onClose={() => setGenerating(false)}
+                  onDone={() => window.location.reload()}
+                  frame="inline"
+                  onRunningChange={setAiRunning}
+                  hint={sharedText}
+                  onHintChange={setSharedText}
+                />
+              )
+              // ⚠️ `bare` : le formulaire ne pose PAS son propre cadre — celui de
+              // l'encadré l'entoure déjà, et deux cadres imbriqués donnaient une
+              // boîte dans la boîte (signalé par Alexis, capture à l'appui).
+              : renderEditor?.({ bare: true, hideTitle: true })}
+          </div>
+        )}
+        {!loading && !creating && renderEditor && editingQuestionId !== null && !filtered.some(q => q.id === editingQuestionId) && <div ref={editorRef}>{renderEditor()}</div>}
+        {!loading && filtered.map(q => (
+          // `!creating` : l'encadré de création porte déjà le formulaire, en
+          // tête de liste. Sans ce garde, une question neuve qui se trouverait
+          // aussi dans la liste en afficherait un second.
+          renderEditor && !creating && q.id === editingQuestionId
+            ? <div key={q.id} ref={editorRef}>{renderEditor()}</div>
             : renderQuestionCard(q)
         ))}
-        {filtered.length === 0 && editingQuestionId === null && (
+        {!loading && filtered.length === 0 && editingQuestionId === null && (
           <div style={{ fontSize: 12.5, color: palette.inkFaint, padding: '20px 0', textAlign: 'center' as const }}>{tr('bank.noMatch')}</div>
         )}
       </div>

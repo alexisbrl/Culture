@@ -32,6 +32,7 @@
 
 import {
   DEFAULT_BLOOM_LEVEL,
+  clampTextLines,
   normalizeTypeOptions,
   toBloomLevel,
   toResponseType,
@@ -221,7 +222,7 @@ function normalizeItem(raw: unknown, groupId: string, index: number): QuestionIt
     choices: asStringArray(r.choices),
     correctChoices: asNumberArray(r.correctChoices),
     shuffleChoices: r.shuffleChoices === true,
-    textLines: typeof r.textLines === 'number' && r.textLines >= 1 ? Math.round(r.textLines) : 4,
+    textLines: typeof r.textLines === 'number' && r.textLines >= 1 ? clampTextLines(r.textLines) : 4,
     typeOptions: normalizeTypeOptions(r.typeOptions),
     expectations: asString(r.expectations),
     notionIds: asStringArray(r.notionIds),

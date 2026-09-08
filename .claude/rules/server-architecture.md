@@ -81,11 +81,49 @@ Une question doit avoir **au moins un caractère d'énoncé**, la principale com
 
 Le refus serveur porte sur **`saveQuestion` seulement** (création/modification), jamais sur `saveQuestions` : une ré-écriture de masse (suppression d'un libellé, d'une question) ne touche pas aux énoncés, et échouer sur le contenu d'une question sans rapport ferait avorter une opération qui n'a rien demandé. Un refus annule **tout** l'enregistrement, jamais seulement l'énoncé fautif : conserver l'ancien texte et enregistrer le reste serait une réparation silencieuse.
 
+## Journaliser pour compter — `src/lib/ingest/journal.ts`
+
+Le journal de bord des générations IA est le patron à reprendre pour toute
+observabilité qu'on ajouterait ailleurs (04/09/2026, `docs/ai-ingestion-plan.md`
+§20). Quatre règles, et elles ne sont pas négociables :
+
+- **La cause vient d'une liste fermée**, doublée du message brut. On compte les
+  codes, on lit les phrases. Une cause en texte libre ne se compte pas — et un
+  journal qui ne se compte pas ne répond à aucune question.
+- **Écrire dans le journal ne doit jamais faire échouer ce qu'il observe.**
+  `logStep`/`markOutcome` avalent leurs erreurs : au pire il manque une ligne.
+- **Des comptes et des motifs, jamais du contenu.** Ni titre, ni énoncé, ni
+  extrait de document, ni donnée personnelle. « Combien, à quelle fréquence,
+  combien de temps, pour quel prix » — pas « quoi ».
+- **Enregistrer aussi les réussites**, et l'heure de début. Sans le total, un
+  nombre d'échecs ne veut rien dire ; et une opération dont la fin n'est jamais
+  écrite se reconnaît alors d'elle-même (c'est ainsi qu'une génération
+  interrompue se distingue d'une génération en panne : personne n'était plus là
+  pour écrire son issue).
+
+Le classement des pannes (`classifyFailure`) et la décision de relancer
+(`isTransient`) sont **purs et testés** : ils décident de repayer un appel. On
+lit le **code HTTP** posé sur l'erreur avant son texte — les fournisseurs
+reformulent leurs messages, ils ne renumérotent pas leurs codes ; c'est pourquoi
+`deepseek.ts` pose lui-même `status` sur l'erreur qu'il lève, comme le fait le
+SDK d'Anthropic.
+
 ## Éviter les requêtes N+1
 
-Ne jamais boucler un appel réseau (Clerk `getUser`, envoi d'email…) dans une server action — utiliser un appel batch (`clerkClient().users.getUserList({ userId: [...] })`) ou `Promise.all`. Regrouper les requêtes Supabase indépendantes en `Promise.all` (voir `getExamBankData`, `getUserWorkshops`).
+Ne jamais boucler un appel réseau (Clerk `getUser`, envoi d'email…) dans une server action — utiliser un appel batch (`clerkClient().users.getUserList({ userId: [...] })`) ou `Promise.all`. Regrouper les requêtes Supabase indépendantes en `Promise.all` (voir `getExamPageData`, `getUserWorkshops`).
+
+## ⚠️ Les server actions s'exécutent EN FILE, une par une
+
+Next sérialise les server actions déclenchées depuis le client : deux appels lancés ensemble **ne se chevauchent pas**, le second attend que le premier ait fini. Conséquences, toutes vérifiées au chronomètre sur l'onglet examen (07/09/2026, journal du serveur de dev) :
+
+- **`Promise.all([actionA(), actionB()])` côté client ne parallélise RIEN** — il coûte au contraire un aller-retour complet de plus, et une seconde vérification de rôle. Deux lectures qui vont ensemble se fusionnent en **une seule action** dont le corps fait le `Promise.all` (là, côté serveur, il est réel) : c'est ce qu'est `getExamPageData`.
+- **Tout appel monté au chargement d'un écran passe devant ce que cet écran affiche.** La liste de questions arrivait en 3ᵉ position, derrière le bandeau d'import (~600 ms) et la liste des documents de l'atelier (~250-500 ms) — deux lectures accessoires, dont une qui ne sert qu'à garnir d'avance un dialogue qu'on n'ouvre presque jamais. Elles portent désormais un `waitFor` que l'hôte lève une fois ses propres données arrivées ; la liste est passée de ~1,2 s à ~220 ms.
+
+Règle : **avant d'ajouter une lecture au montage d'un écran, se demander ce qu'elle fait patienter.** Ce qui n'est pas le contenu principal de l'écran attend son tour.
 
 ## Storage — `src/lib/storage.ts`
+
+> **Piège : une clé d'objet n'accepte que de l'ASCII.** Un accent, une apostrophe typographique ou un idéogramme dans le nom du fichier fait rejeter l'écriture entière (« Invalid key »), sans qu'un seul octet parte. `buildWorkshopFileKey` translittère donc le nom avant d'en faire une clé — **le nom affiché, lui, vit en base et ne change pas** ; c'est lui qu'on propose au téléchargement (`createSignedDownloadUrl(key, downloadName)`). Ne jamais reconstruire une clé à la main à partir d'un nom de fichier. Précédent (04-05/09/2026) : le document que l'IA rédige s'appelle « Cours écrit par l'IA.md », donc il n'a jamais pu s'écrire — et comme l'étape qui l'écrit avale ses échecs par conception, rien ne le signalait ; la génération repartait simplement sans matière.
 
 Point d'entrée unique du stockage de fichiers, provider-agnostic. En base, on stocke uniquement des **clés/chemins d'objet** (`buildWorkshopFileKey`), jamais une URL de provider — les URLs sont générées à la demande (`UploadTicket`, `createSignedUploadUrl`/`createSignedDownloadUrl`). Le client fait lui-même le `PUT` direct vers le stockage (XHR pour la progression d'upload). Une migration future vers un autre provider (ex. S3) ne devrait toucher que ce fichier — jamais appeler un SDK de provider directement ailleurs dans le code.
 
@@ -132,7 +170,7 @@ Passe du 30/08/2026 sur les paramètres d'atelier, mesurée : « Général » s'
 Deux pièges à ne pas rouvrir :
 
 - **`ExerciseResult` ne porte plus de champ `parts`.** Renvoyer la correction de toute la grappe ferait descendre au navigateur les réponses de questions **pas encore posées** — exactement ce que le modèle du parcours interdit (`drawExercise` ne renvoie ni `answer` ni `correctChoices`).
-- **Le rythme se lit dans `parcours_asked.answers`**, une entrée `{ ms, correct, at }` par question répondue (migration `2026-08-30-rythme-par-question.sql`), et **nulle part ailleurs**. Les colonnes `answer_ms`/`correct` de la ligne, qui ne portaient qu'une valeur par grappe, ne sont plus ni lues ni écrites depuis le 31/08/2026 : une grappe antérieure à `answers` ne compte pour aucune réponse, plutôt que d'en fabriquer une. Leur suppression en base attend un déploiement (`docs/migrations/EN-ATTENTE-DEPLOIEMENT.md`).
+- **Le rythme se lit dans `parcours_asked.answers`**, une entrée `{ ms, correct, at }` par question répondue (migration `2026-08-30-rythme-par-question.sql`), et **nulle part ailleurs**. Les colonnes `answer_ms`/`correct` de la ligne, qui ne portaient qu'une valeur par grappe, ne sont plus ni lues ni écrites depuis le 31/08/2026 : une grappe antérieure à `answers` ne compte pour aucune réponse, plutôt que d'en fabriquer une. **Elles n'existent plus en base non plus** (supprimées le 31/08/2026, après déploiement).
 
   > **Le piège que cette ligne a elle-même tendu.** Elle a dit « relues en dernier recours » pendant vingt-quatre heures de trop, et c'est sur cette phrase que le prérequis de suppression a été écrit : on a cru qu'il fallait attendre que les vieilles lignes sortent de la fenêtre de lecture, alors que le vrai blocage était que le `select` **nommait** ces colonnes. Les supprimer aurait cassé la lecture du rythme quelle que soit l'ancienneté des lignes, en silence. Deux règles en sortent, et elles valent pour toute suppression : un prérequis se vérifie sur ce que le code **nomme**, jamais seulement sur ce que les lignes contiennent ; et **une note de référence périmée est plus dangereuse qu'une note absente**, parce qu'on la croit sur parole au lieu d'aller voir.
 

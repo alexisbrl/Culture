@@ -4,6 +4,7 @@ import {
   batchNotions,
   documentsForPass,
   MAX_PLAUSIBLE_CHAPTERS,
+  MIN_PLAUSIBLE_CHAPTERS,
   needsChapterRetry,
   shouldCacheDocuments,
   NOTIONS_PER_QUESTION_BATCH,
@@ -186,7 +187,7 @@ describe('withChapterRetry — une relance, jamais deux (§16.18)', () => {
   /** Ce que fait `ingestChapters`, sans la base : appeler, compter, relancer. */
   async function pass(provider: ReturnType<typeof chapterProvider>) {
     return withChapterRetry(
-      (retry) => provider.documentToPlan([], empty, { pass: 'chapters', notions: [], retry }),
+      (retry) => provider.documentToPlan([], empty, { pass: 'chapters', retry }),
       (result) => (result.plan as { chapters: unknown[] }).chapters.length,
       (result) => (result.plan as { chapters: { name: string }[] }).chapters.map((c) => c.name),
     );
@@ -243,6 +244,15 @@ describe('withChapterRetry — une relance, jamais deux (§16.18)', () => {
     expect(needsChapterRetry(MAX_PLAUSIBLE_CHAPTERS)).toBe(false);
     expect(needsChapterRetry(MAX_PLAUSIBLE_CHAPTERS + 1)).toBe(true);
   });
+
+  it('un découpage trop GROSSIER relance aussi, à chaque import', () => {
+    // Un cours entier en deux chapitres entasse tout dans deux boîtes : le
+    // rangement n'a plus rien à distinguer. Et on ne sait jamais d'avance si un
+    // cours a été changé de fond en comble (01/09/2026).
+    expect(needsChapterRetry(MIN_PLAUSIBLE_CHAPTERS)).toBe(false);
+    expect(needsChapterRetry(MIN_PLAUSIBLE_CHAPTERS - 1)).toBe(true);
+    expect(needsChapterRetry(0)).toBe(true);
+  });
 });
 
 function chapterCount(result: { plan: unknown }): number {
@@ -268,12 +278,10 @@ describe('shouldCacheDocuments — le marqueur n’est pas gratuit (§16.17)', (
 
 // ─── « Aucun chapitre » : une décision, ou un oubli ? ────────────────────────
 //
-// Deux raisons de tester ça ici plutôt que de le regarder dans l'app :
-//   • `setAside` borne la SEULE suppression du système (`planImportCleanup`) —
-//     y laisser entrer une notion que le modèle n'a jamais jugée efface du
-//     travail saisi à la main ;
-//   • `effective` décide d'un `update` par lot : une ligne de trop et une notion
-//     perd son chapitre sans que personne ne l'ait demandé.
+// La raison de tester ça ici plutôt que de le regarder dans l'app : `effective`
+// décide d'un `update` par lot, et une ligne de trop fait perdre son chapitre à
+// une notion ANCIENNE — donc sortir du programme un contenu que personne n'a
+// demandé à retirer.
 describe('splitUnplaced', () => {
   const nowhere = new Map<string, string | null>();
 
@@ -312,7 +320,8 @@ describe('splitUnplaced', () => {
 
   it('une redite sortie de nulle part reste une redite', () => {
     // Le cas de la notion NEUVE jugée redondante : elle n'a pas de chapitre à
-    // conserver, et le ménage de fin doit pouvoir l'effacer.
+    // conserver, et le ménage de fin l'effacera — comme toute notion de cet
+    // import restée sans chapitre, jugée ou simplement oubliée.
     const split = splitUnplaced([{ notionRef: 'n1' }], new Set(['n1']), nowhere);
     expect(split.setAside).toEqual(['n1']);
     expect(split.stranded).toEqual([]);
