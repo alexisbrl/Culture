@@ -10,6 +10,11 @@
 > ⚠️ **En cas de contradiction entre le §17 et ce qui précède, le §17 fait
 > foi** : lui seul est écrit après implémentation.
 >
+> ⚠️ **Sur ce que reçoit un appel — documents et existant de l'atelier —, c'est
+> le §24 (08/09/2026) qui fait foi**, et lui seul : il remplace la stratégie
+> d'entrée des §3, §5.2 et §16.3, et supprime le cache de prompt. Conception
+> uniquement, aucun code écrit à ce jour.
+>
 > **Les §1 à §14 décrivent un pipeline aujourd'hui écrit et branché dans l'app**
 > (PR #41, 21/08/2026) — la mention « aucun code écrit à ce jour » qui figurait
 > ici n'a plus cours, sauf pour §16, qui n'est encore que de la conception.
@@ -2485,3 +2490,480 @@ tranche, le nombre total de tranches du plan (c'est lui qui découpe le programm
 et deux appels du même plan doivent en voir la même découpe), son budget et sa
 forme. Le rattrapage se replanifie de la même façon, et retrouve ainsi sa part de
 groupes et son propre découpage du programme.
+
+---
+
+## 24. Révision du 08/09/2026 — l'architecture par tranches
+
+> Session de conception avec Alexis. Cette section **remplace la stratégie
+> d'entrée** décrite aux §3, §5.2 et §16.3 : on cesse d'envoyer le cours entier à
+> chaque appel, et le cache de prompt disparaît avec ce choix. Elle ne touche ni
+> au contrat de sortie (§7), ni aux règles de rangement (§18), ni au découpage de
+> l'examen (§23). **Aucun code écrit à ce jour pour cette section.**
+>
+> ⚠️ En cas de contradiction avec les §3, §5 et §16 sur **ce que reçoit un
+> appel**, c'est cette section qui fait foi.
+
+### 24.1 Le principe, en une phrase
+
+**Chaque appel ne reçoit que son voisinage immédiat.** Le cours entier n'entre
+qu'une fois, dans le premier appel ; ensuite, chaque appel reçoit la tranche de
+cours qui le concerne et rien d'autre.
+
+Ce que reçoit chaque appel, avant et après :
+
+| Passe | Aujourd'hui | Cible |
+|---|---|---|
+| Chapitres | tous les documents, tous les chapitres, toutes les notions | **le texte seul** des documents, tous les chapitres, toutes les notions |
+| Notions (× chapitre) | tous les documents, tout l'existant de l'atelier | **les pages de son chapitre**, les notions qui lui sont attribuées |
+| Questions (× notion) | tous les documents, tout l'existant de l'atelier | **la notion seule**, ses questions existantes, les intitulés voisins |
+
+Les trois gains sont solidaires et viennent du même geste : moins de bruit par
+appel (qualité), plus de tokens répétés (coût), appels indépendants et courts
+(parallélisme).
+
+### 24.2 Ce qui rend le reste possible : la passe CHAPITRES rend des bornes
+
+Aujourd'hui la passe chapitres rend une architecture — des titres, des rangs, un
+rangement. **Elle doit rendre en plus, pour chaque chapitre, les pages qui le
+composent** : nom du document et intervalle de pages, éventuellement plusieurs
+intervalles si un chapitre est éclaté ou couvert par deux documents.
+
+C'est le seul ajout au contrat de sortie, et c'est lui qui débloque tout : sans
+bornes, la passe suivante est obligée de recevoir le cours entier pour retrouver
+son chapitre. Avec elles, elle reçoit dix-sept pages.
+
+Le terrain est déjà prêt côté base : une notion porte déjà son document et sa
+page d'origine (`workshop_bricks.source_document`, `source_page`). On demande
+simplement la même chose un cran plus haut.
+
+### 24.3 La passe CHAPITRES reçoit tout, et c'est acceptable
+
+Elle est la seule à voir le cours, donc la seule à pouvoir juger ce qui est
+encore d'actualité — c'est l'argument déjà tranché au §18.10, et il vaut aussi
+pour les notions. Elle reçoit donc **tous les chapitres et toutes les notions**,
+sans restriction. Toute idée de lui restreindre l'existant (§16.3) est abandonnée
+pour cette passe : on lui retirerait précisément l'information qui fait sa
+valeur.
+
+C'est supportable parce que c'est **un seul appel**, et parce qu'une notion est
+une ligne de texte : même à mille notions, le bloc pèse de l'ordre de 25 000
+tokens. À comparer aux 70 000 du seul cours de test.
+
+**Le vrai poids du premier appel, ce sont les images de pages.** Un PDF natif
+part en texte *et* en image, soit 1 500 à 3 000 tokens par page contre ~500 pour
+le texte seul. Un cours de 150 pages pèse 225 000 à 450 000 tokens, dont les
+quatre cinquièmes sont des images.
+
+**Décision : la passe chapitres ne reçoit que le texte.** Trouver où commence un
+chapitre est un travail de structure — titres, sommaire, ruptures de sujet — pas
+un travail de lecture d'illustrations. Les images gardent toute leur valeur à la
+passe notions, où le contenu d'un tableau ou d'un schéma devient une notion ;
+elles n'en ont aucune ici. Le premier appel retombe ainsi de ~450 000 à ~90 000
+tokens.
+
+**Le repli se décide page par page, jamais document par document.** Une moyenne
+sur un document cache exactement le cas qui compte : un cours à moitié saisi et à
+moitié scanné passerait le seuil et perdrait la moitié de son contenu, sans que
+rien ne le signale.
+
+La règle : pour **chaque page**, on regarde le texte réellement extrait. Au-dessus
+d'un seuil (~200 caractères, à affiner), la page part en texte seul ; en dessous,
+elle part **aussi** en image. Un document devient donc un mélange, et c'est le
+cas normal, pas l'exception — un cours saisi comportant trois schémas pleine page
+est traité correctement sans qu'on ait rien prévu de spécial pour lui.
+
+Deux conséquences assumées :
+
+- Une page pauvre en texte n'est pas forcément un scan : ce peut être une page de
+  titre ou une photo, qui n'apporte rien au découpage. On l'envoie quand même en
+  image. On ne sait pas distinguer les deux à bas coût, et **rater une frontière
+  de chapitre coûte infiniment plus cher que quelques milliers de tokens**.
+- Un cours entièrement scanné ramène le premier appel à son poids d'origine.
+  Ce n'est pas un défaut, c'est le prix honnête d'un tel corpus — mais la part de
+  pages parties en image se journalise (§20), pour savoir à quelle fréquence le
+  cas se produit vraiment.
+
+**Et c'est ce dernier cas que la reconnaissance de texte doit régler — au dépôt,
+jamais à la génération** (piste ouverte par Alexis le 09/09/2026).
+
+Quatre choses dans l'ordre, de la moins chère à la plus chère :
+
+1. **Lire la structure du PDF, ce qui ne coûte rien du tout.** Un PDF n'est pas
+   une image : c'est une liste d'instructions de dessin. On sait donc, page par
+   page et sans aucune IA, combien de caractères de texte elle porte, combien
+   d'images elle contient et quelle surface elles couvrent, et si elle porte des
+   tracés vectoriels (schémas, traits de tableau). Quatre cas se distinguent tout
+   seuls :
+
+   | Ce que porte la page | Ce qu'on en fait |
+   |---|---|
+   | du texte, pas d'image | texte seul |
+   | du texte **et** des images | texte + image (l'image porte du contenu) |
+   | pas de texte, une grande image couvrant la page | c'est un scan → candidate à la reconnaissance |
+   | ni texte, ni image, ni tracé | **page vide : on la retire purement et simplement** |
+
+   Le dernier cas est un gain net et gratuit : les pages blanches de séparation et
+   les versos vides sont fréquents dans un cours imprimé, et rien ne justifie de
+   les payer dans les deux passes. Le choix précis de la bibliothèque de lecture
+   reste **à vérifier** — la capacité, elle, est celle du format lui-même.
+2. **Regarder si le texte est déjà là.** Beaucoup de « scans » ont déjà été
+   reconnus par le logiciel du scanner et portent une couche de texte
+   exploitable. Gratuit et instantané — c'est le test page par page décrit plus
+   haut, et il élimine sans doute la majorité des cas redoutés.
+3. **Reconnaissance de texte sur les seules pages qui en manquent vraiment.**
+   Technologie ancienne, banalisée et bon marché : de l'ordre de quelques dizaines
+   de centimes pour un cours de 150 pages entièrement scanné, chez les
+   fournisseurs de reconnaissance documentaire (Google, AWS, Azure, Mistral). Le
+   moteur libre `tesseract` existe aussi, mais sa version exécutable dans notre
+   environnement serveur est lente et gourmande — à évaluer, sans en faire le
+   choix par défaut. **Chiffres à vérifier avant de s'engager.**
+
+   > Sur « est-ce de l'IA ? » : la reconnaissance de caractères moderne contient
+   > un petit réseau de neurones, `tesseract` compris. Ça n'a rien à voir avec un
+   > grand modèle de langage — c'est spécialisé, local ou quasi, rapide et
+   > facturé à la page. Sur les deux axes qui nous intéressent, le coût et le
+   > délai, c'est exactement ce qu'on cherche. La seule extraction réellement
+   > sans IA est la lecture du texte déjà présent dans le PDF (points 1 et 2), et
+   > c'est bien pour ça qu'elle passe en premier.
+4. **Un modèle multimodal**, seulement si la reconnaissance échoue. C'est
+   précisément ce qu'on cherche à éviter : plus lent et plus cher.
+
+⚠️ **Tout ce mécanisme ne sert QUE la passe chapitres.** La passe notions reçoit
+ses pages entières, texte et images, sans se poser la question : elle a besoin du
+contenu des tableaux et des schémas, c'est même sa raison d'être. Le tri texte /
+image, la reconnaissance de caractères et le retrait des pages vides n'existent
+que pour alléger le premier appel — à la seule exception des pages vides, qu'on
+retire partout puisqu'elles ne portent rien nulle part.
+
+**Extraire les images pour les traduire en texte : seulement pour la page
+scannée** (question d'Alexis du 09/09/2026). La passe chapitres n'a de toute
+façon besoin d'aucune illustration — elle cherche des frontières, pas du contenu.
+Le seul cas où une image l'intéresse est celui où **l'image est la page**, parce
+qu'alors c'est le texte du cours qui s'y trouve. C'est exactement le point 3
+ci-dessus, et il n'y a rien à extraire : la page entière part à la
+reconnaissance.
+
+Sortir les illustrations une par une n'aurait donc aucun usage ici — et n'en
+aurait pas davantage ailleurs : les tableaux et diagrammes faits dans un
+traitement de texte sont des tracés vectoriels, pas des images incorporées, donc
+l'extraction ne les attraperait même pas.
+
+**Le point qui compte n'est pas lequel on choisit, c'est quand on le lance.** La
+reconnaissance se fait **au dépôt du document**, en tâche de fond, pendant que
+l'utilisateur fait autre chose — et son résultat est stocké à côté du fichier.
+Trois conséquences, toutes bonnes :
+
+- elle ne coûte **aucune seconde** au moment de la génération, qui est le seul
+  moment où l'attente se voit ;
+- elle est payée **une fois par document**, pas à chaque génération, donc elle
+  s'amortit sur toutes les relances et toutes les recharges ;
+- au lancement d'une génération, on sait **déjà** quelles pages sont pauvres en
+  texte : le tri page par page est déjà fait, il n'y a plus qu'à composer les
+  tranches.
+
+Un document dont la reconnaissance a échoué ou n'a pas encore tourné retombe
+simplement sur la règle par défaut : ses pages partent en image. Rien ne bloque,
+rien n'attend.
+
+**Document toujours hors-normes après ça :** on retombe sur la règle du §3 —
+découpage séquentiel dans l'ordre de lecture, ingestion de chaque tranche, fusion
+des architectures. Jamais par pertinence.
+
+### 24.4 La sortie exige un verdict sur chaque notion
+
+Comme pour le rang des chapitres (§18.10), on demande au modèle de **statuer sur
+chaque notion existante** plutôt que de rendre une liste de celles qu'il
+remarque : soit un chapitre, soit « hors programme ». Une liste se remplit au gré
+de l'attention ; un verdict par ligne oblige à regarder chacune.
+
+Les invariants du §18.10 restent valables sans changement : une référence
+inconnue est ignorée, l'omission ne déplace rien, et le garde-fou « jamais tous »
+s'applique.
+
+### 24.5 Le découpage physique, côté serveur
+
+Le modèle dit où couper ; **c'est notre serveur qui coupe**. Un modèle ne lit
+jamais « seulement les bonnes pages » d'un document qu'on lui a donné : tout ce
+qui est envoyé entre dans le contexte et est facturé.
+
+Trois règles, dans l'ordre d'importance :
+
+1. **Couper le PDF par pages, jamais le texte par caractères.** Découper le texte
+   ferait perdre les images de pages, donc les tableaux et les schémas —
+   c'est-à-dire ce que l'envoi en image sert précisément à préserver.
+2. **En cas de doute, élargir.** Bornes qui se chevauchent : on garde les deux
+   pages en double, un chevauchement ne coûte que des tokens. Bornes qui laissent
+   un trou : les pages orphelines sont rattachées au chapitre précédent. **Perdre
+   une page produit une notion manquante que rien ne signale** — le pire mode de
+   défaillance de tout ce document.
+3. **Ne jamais échouer sur des bornes absentes.** Chapitre sans bornes
+   exploitables : sa tranche est le document entier, comme aujourd'hui. C'est plus
+   cher, jamais faux, et c'est écrit dans le compte-rendu de génération (§20).
+
+### 24.6 La passe NOTIONS
+
+Un appel par chapitre, tous indépendants, lancés en parallèle.
+
+Il reçoit :
+
+- **la tranche de pages de son chapitre**, texte et images cette fois ;
+- **les notions que la passe chapitres a attribuées à ce chapitre**, et elles
+  seules ;
+- les notions non rangées, s'il y en a (§24.7).
+
+Il ne reçoit plus : le reste du cours, ni les notions des autres chapitres.
+
+Le découpage des anciennes notions n'est donc **pas une supposition de notre
+part** : c'est la sortie de la passe chapitres, produite par la seule étape qui
+voyait à la fois tout le cours et toutes les notions.
+
+Modèle fort : l'extraction fidèle du cours est le cœur du produit.
+
+### 24.7 Le rattrapage des notions non rangées
+
+**Le cas :** la passe chapitres doit statuer sur chaque notion, mais un oubli ou
+une réponse tronquée peut en laisser sans verdict — ni chapitre, ni « hors
+programme ».
+
+**Le mécanisme :** ces notions-là partent dans **chaque** appel de la passe
+notions, clairement étiquetées, avec une consigne distincte : *celle-ci n'a été
+rangée nulle part ; dis si elle relève de ton chapitre, sinon ignore-la.* Le cas
+est rare, donc le surcoût par appel est négligeable, et les appels partent de
+toute façon en parallèle — le rattrapage ne coûte aucun tour supplémentaire.
+
+C'est le bon endroit pour poser la question : la passe notions voit le cours de
+son chapitre, elle est le deuxième meilleur juge après la passe chapitres.
+
+**Départage quand plusieurs chapitres la réclament**, dans cet ordre :
+
+1. **Si son chapitre actuel est parmi les prétendants, elle ne bouge pas.** C'est
+   la règle la moins surprenante, et la seule qui ne déplace rien sur une
+   ambiguïté.
+2. Sinon, **le premier prétendant dans l'ordre du programme**. Déterministe,
+   explicable en une phrase, et indépendant de l'ordre d'arrivée des réponses —
+   ce que ne serait pas « le premier qui répond ».
+3. Personne ne la réclame : **elle reste où elle était** (§18.2, règle
+   inchangée).
+
+Chaque arbitrage est écrit dans le compte-rendu de génération. Une notion
+déplacée par départage n'est pas la même chose qu'une notion rangée franchement,
+et l'utilisateur doit pouvoir le voir.
+
+**Garde-fou, et il est essentiel :** au-delà d'un certain nombre de notions non
+rangées, **on n'applique pas le rattrapage**. Un tel volume n'est pas une
+distraction du modèle, c'est une passe chapitres ratée ou tronquée. Le rattrapage
+est un filet pour les oublis, jamais un pansement sur un échec : sans ce seuil,
+il masquerait exactement la panne qu'on veut voir.
+
+**Deux seuils, pas un** (décision d'Alexis du 08/09/2026). L'idée est que les
+notions non rangées ne sont pas le problème — le rattrapage les traite très
+bien — mais le **symptôme** d'une première passe qui s'est mal passée. Le seuil
+sert donc à détecter, pas à protéger, et il n'a pas la même valeur avant et après
+une relance.
+
+**Les seuils sont proportionnels** (décision d'Alexis du 09/09/2026), et pour une
+raison de fond : ce qu'on mesure est la part des notions sur lesquelles le modèle
+a renoncé à statuer. Cinq notions oubliées sur vingt est un signal fort ; cinq
+sur mille n'est rien. Un nombre fixe dirait la même chose des deux, donc ne
+dirait rien.
+
+Une seule borne absolue, et elle est **très basse** : **une** notion isolée ne
+déclenche jamais rien, quelle que soit la proportion. Une notion, c'est une
+distraction ; deux, c'est le début d'un motif.
+
+| Moment | Part non rangée | Ce qu'on fait |
+|---|---|---|
+| Premier essai | moins de **10 %** | on continue, le rattrapage joue |
+| Premier essai | **10 %** ou plus | appel de complément (§ ci-dessous) |
+| Après le complément | moins de **25 %** | on accepte, le rattrapage joue |
+| Après le complément | **25 %** ou plus | on s'arrête, rien n'est écrit, on le dit |
+
+Bornes **incluses** : 2 notions sur 20 relancent, 5 sur 20 annulent (arbitrage
+d'Alexis du 09/09/2026, retenu contre 5 %/20 % — les relances ont un coût, léger
+mais réel, et rien ne justifie d'être nerveux à ce point).
+
+Un atelier neuf n'a aucune notion existante : le mécanisme ne s'applique pas, et
+la proportion le dit d'elle-même sans cas particulier à écrire.
+
+**Un taux élevé se corrige dans la consigne, pas dans le seuil.** Ces trois
+chiffres sont un détecteur de fumée : si le seuil est franchi régulièrement, ce
+qu'il faut retravailler est le prompt et les réglages de la passe chapitres, pas
+la valeur du seuil. Le journal de génération enregistre la part réelle à chaque
+passe, ce qui rend la dérive visible — et ces valeurs vivent dans un réglage
+nommé, jamais en dur au milieu du code.
+
+Le second seuil est plus tolérant que le premier, et c'est voulu : à ce stade on
+a déjà tenté ce qu'il fallait tenter, et une génération imparfaite vaut mieux
+qu'une génération refusée.
+
+**La relance n'est pas identique — c'est un appel de complément.** Même texte du
+cours, même liste de chapitres, mais on ne redemande que **les notions restées
+sans verdict**. Deux raisons : si la première réponse a été tronquée par sa
+longueur, la redemander à l'identique la tronquerait encore ; et une réponse
+courte a une bien meilleure chance d'aboutir.
+
+Elle relève du plafond général du §20.3 — **une relance, et une seule**.
+
+**Au-delà du second seuil, on s'arrête et rien n'est écrit.** Une passe chapitres
+qui laisse trois cents notions sur quatre cents sans verdict a probablement aussi
+raté son architecture ; construire les notions et deux mille questions par-dessus
+coûterait cher pour produire un programme que l'utilisateur devra défaire. Même
+raisonnement, et même conduite, que le garde-fou « jamais tous » du §18.10.
+
+**Ce qu'on ne fait pas : poser un marqueur de cache pour rendre la relance moins
+chère.** Elle renvoie le même texte de cours à quelques secondes d'intervalle,
+donc ce serait le seul endroit du pipeline où le cache paierait encore. Mais un
+marqueur se pose au **premier** appel : il faudrait payer 1,25× à *chaque*
+génération pour économiser sur une relance qui doit rester rare. L'arbitrage est
+clair, et il confirme le §24.10.
+
+### 24.8 La passe QUESTIONS
+
+Un appel par notion — pas par chapitre. À la volumétrie cible (~18 questions par
+notion), un chapitre entier dépasserait le plafond de sortie (§16.2).
+
+Il reçoit :
+
+- **la notion traitée** ;
+- **les questions déjà écrites sur cette notion**, pour éviter la redite exacte ;
+- **les intitulés des autres notions du chapitre**, sans leurs questions — pour
+  que le modèle n'écrive pas une question qui relève en fait de la voisine.
+
+Il ne reçoit **plus le cours du tout** : la notion contient déjà ce qu'il faut
+pour en tirer des questions. C'est ce qui fait tomber le poste de coût dominant.
+
+Modèle économique : rédiger des questions de mémorisation sur une notion déjà
+extraite est la tâche la plus mécanique et la plus répétée du pipeline. Et dépôt
+**en lot** (Batch API, §9) : moitié prix, aucune connexion à tenir ouverte.
+
+**Le bloc des énoncés existants est plafonné** (question d'Alexis du 09/09/2026 :
+que se passe-t-il à 50 000 questions en banque ?).
+
+La bonne nouvelle d'abord : **le volume d'un appel ne dépend pas du total de la
+banque**. Un appel de la passe questions ne voit qu'une notion ; un appel de la
+passe examen ne voit qu'une tranche contiguë du programme (§17.3), et demander
+plus de questions produit plus de tranches, pas des tranches plus grosses. Les
+50 000 énoncés d'un atelier n'atterrissent jamais ensemble dans un appel.
+
+Reste **un seul axe qui grandit sans limite** : une notion qui accumule des
+centaines d'énoncés. Deux mesures, et elles suffisent :
+
+- **on n'envoie qu'un échantillon**, de l'ordre de 20 à 30 énoncés, **plus le
+  compte total** (« il en existe déjà N sur cette notion »). Pour l'usage réel du
+  bloc, dire le nombre vaut presque autant que les montrer tous ;
+- **on prend les plus récents**, jamais les plus anciens. Ce sont ceux que le
+  modèle vient d'écrire lui-même, donc ceux qu'il risque le plus de reproduire ;
+  les vieux énoncés saisis à la main sont les moins exposés.
+
+Ce plafond est légitime **parce que la ressemblance entre questions n'est pas un
+défaut** (§17.6) : ce bloc ne sert qu'à éviter la redite littérale, pas à garantir
+l'unicité. Il ne mérite donc pas le budget qu'on accorde à l'anti-doublon des
+notions, où l'enjeu est inverse.
+
+**Mesuré le 09/09/2026, et le cas est loin d'être pressant :** la notion la plus
+fournie de toute la base porte **25 questions d'examen** (deux notions de
+« Workshop 5 » ; puis 15 sur « Workshop 9 »). On est à un ordre de grandeur du
+seuil, et cohérent avec la cible de ~18 questions par notion du §16.1.
+
+Le cas pathologique ne devrait d'ailleurs pas se produire tout seul : la recharge
+automatique (§16.6) ne vise que les notions dont le stock est court, jamais une
+notion déjà pleine. Il n'apparaîtrait que si l'utilisateur relançait la génération
+à la main, encore et encore. **Le plafond est donc une précaution d'architecture,
+pas une réponse à un problème observé** — à écrire, mais sans urgence.
+
+### 24.9 L'enchaînement : par chapitre, plus par passe
+
+La règle « grouper tous les appels d'une même passe » (§5.2, §16.4) n'existait
+que pour protéger le cache de prompt. **Elle tombe avec lui.**
+
+L'enchaînement devient : dès que les notions du chapitre N sont écrites, les
+questions du chapitre N partent, sans attendre les chapitres suivants. Le
+programme se remplit chapitre par chapitre sous les yeux de l'utilisateur, au
+lieu d'apparaître d'un bloc à la fin.
+
+Séquence complète :
+
+1. passe chapitres — un appel, texte seul ;
+2. découpage des documents côté serveur ;
+3. pour chaque chapitre, en parallèle : notions, puis questions dès qu'elles sont
+   là ;
+4. nettoyage de fin (§18.2) inchangé.
+
+### 24.10 Le cache de prompt disparaît
+
+Conséquence directe et assumée : chaque contenu n'est plus lu **qu'une fois**. Il
+n'y a donc plus rien à mettre en cache, et poser un marqueur sur un contenu
+jamais relu coûte 1,25× au lieu de 1× — perte sèche (déjà pressenti au §16.17,
+désormais général).
+
+Le découpage et le cache ne sont pas complémentaires, **ce sont deux stratégies
+concurrentes**, et le découpage gagne. Sur le cours de test, pour la seule passe
+notions à 12 chapitres :
+
+| Stratégie | Entrée facturée | Coût |
+|---|---|---|
+| Tout envoyer, avec cache | 1 écriture de 70 k + 11 lectures de 70 k | ~0,82 $ |
+| **Découper, sans cache** | 12 tranches de ~6 k | **~0,36 $** |
+
+Deux fois moins cher, et meilleur en qualité. **Retirer tout marqueur de cache du
+pipeline** fait donc partie de ce chantier.
+
+### 24.11 Ce que ça coûte, en ordre de grandeur
+
+Cours de test (70 648 tokens de documents), 12 chapitres, ~120 notions, ~18
+questions par notion — soit environ 2 160 questions, la volumétrie cible du
+§16.1.
+
+| Poste | Entrée | Sortie | Coût |
+|---|---|---|---|
+| Chapitres (1 appel, texte seul + existant) | ~30 k | faible | ~0,15 $ |
+| Notions (12 appels) | ~78 k | modérée | ~0,45 $ |
+| Questions (120 appels, modèle économique, en lot) | ~120 k | ~430 k | ~1 à 2 $ |
+| **Total** | | | **~2 à 3 $** |
+
+À comparer au chiffrage de l'architecture actuelle à la même volumétrie, où le
+seul bloc « existant » renvoyé à chaque appel dépassait 20 $ (§16.3). **Tous ces
+chiffres sont à remesurer** sur un cours réel avant d'en faire un argument
+tarifaire — la méthode reste celle du §5.2 : journaliser l'usage de chaque appel,
+jamais estimer.
+
+### 24.12 Ordre de chantier
+
+1. **La passe chapitres rend des bornes de pages**, et statue sur chaque notion.
+   Contrat de sortie + prompt. Rien d'autre ne bouge : le pipeline continue de
+   tourner comme avant, les bornes sont produites et ignorées.
+2. **Le découpeur côté serveur** — couper un PDF par intervalles de pages, avec
+   les trois règles du §24.5. Testable seul, sans appel au modèle. À couvrir par
+   des tests unitaires : c'est une opération dont un défaut fait disparaître du
+   contenu sans bruit (critère du `CLAUDE.md` §7).
+3. **La passe notions bascule sur sa tranche** et sur ses seules notions
+   attribuées. Premier gain visible, et le plus gros sur la qualité.
+4. **Retrait des marqueurs de cache** partout.
+5. **La passe questions descend au niveau de la notion**, perd le cours, et passe
+   au modèle économique.
+6. **Le rattrapage** (§24.7) et son seuil de garde.
+7. **L'enchaînement par chapitre** et le parallélisme. Le préchauffage prévu au
+   §16.5 devient inutile : sans cache, il n'y a plus rien à préchauffer.
+8. **Le dépôt en lot** pour la passe questions.
+9. **La reconnaissance de texte au dépôt** (§24.3). Volontairement en dernier :
+   sans elle tout fonctionne, les pages concernées partent en image. C'est une
+   optimisation, pas un prérequis — et on saura à ce moment-là, chiffres en main,
+   combien de pages sont réellement concernées.
+
+### 24.13 Ce qui reste à mesurer
+
+1. **La qualité du découpage sur texte seul**, sur un cours réel et sur un
+   diaporama. C'est l'hypothèse la plus engageante de cette section : si le
+   découpage se dégrade, le repli du §24.3 devient la règle et le premier appel
+   redevient lourd.
+2. **La fréquence réelle des notions non rangées**, qui décide si les seuils du
+   §24.7 sont un garde-fou théorique ou un événement courant — et si 10 % et 25 %
+   sont les bonnes valeurs.
+3. **La part de pages sans texte exploitable**, sur de vrais dépôts. C'est elle
+   qui décide si la reconnaissance de texte (§24.3) vaut d'être écrite ou reste
+   un cas d'école.
+4. **Le délai de traitement d'un lot** (§9), qui décide si la passe questions
+   peut partir en lot sans que l'utilisateur le ressente.
+5. **La qualité des questions sur modèle économique**, à comparer à l'existant
+   avant de basculer pour de bon.
