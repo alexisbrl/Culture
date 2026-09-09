@@ -17,8 +17,7 @@ tout de suite : le code en ligne les ignore. Les migrations **restrictives**
 (supprimer, renommer, resserrer une contrainte, changer un type) doivent attendre
 que le code qui utilisait l'ancienne forme ne soit plus en ligne — sinon la
 production casse, souvent en silence (beaucoup de `select` ne lisent que
-`{ data }` et ignorent `{ error }`). Voir `CLAUDE.md` §1, règle expand/contract,
-et l'incident du 22/06/2026 dans `docs/changelog.md`.
+`{ data }` et ignorent `{ error }`). Voir `CLAUDE.md` §1, règle expand/contract.
 
 ## Mode d'emploi
 
@@ -26,8 +25,7 @@ et l'incident du 22/06/2026 dans `docs/changelog.md`.
    (Vercel, pas seulement la PR).
 2. Appliquer les fichiers SQL listés ci-dessous, dans l'ordre.
 3. Régénérer `src/lib/database.types.ts` si le schéma a changé.
-4. **Cocher/retirer l'entrée de ce fichier** et laisser une ligne dans
-   `docs/changelog.md`.
+4. **Cocher/retirer l'entrée de ce fichier.**
 
 ---
 
@@ -67,7 +65,7 @@ AUCUN
     pour ne jamais faire échouer une correction qu'un membre vient de demander.
   - **La règle à retenir : un prérequis de suppression se vérifie sur ce que le
     code NOMME, jamais seulement sur ce que les lignes contiennent.** L'origine
-    de l'erreur était une note de référence périmée (`.claude/rules/server-architecture.md`),
+    de l'erreur était une note de référence périmée (`docs/architecture.md`),
     corrigée dans la même PR — une note fausse est plus dangereuse qu'une note
     absente, on la croit sur parole au lieu d'aller voir.
   - Aucune ligne n'a été supprimée : la ligne qu'on croyait bloquante ne

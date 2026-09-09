@@ -26,7 +26,6 @@ export default function Navbar() {
 
   // Liens publics uniquement (sans "Créer un atelier")
   const publicLinks = [
-    { href: `/${locale}`, label: t('home') },
     { href: `/${locale}/pricing`, label: t('pricing') },
     { href: `/${locale}/about`, label: t('about') },
     { href: `/${locale}/contact`, label: t('contact') },
@@ -146,7 +145,7 @@ export default function Navbar() {
                   {t('login')}
                 </Link>
                 <LinkButton
-                  href={`/${locale}#waitlist`}
+                  href={`/${locale}/sign-up`}
                   className="gradient-primary text-white border-0 hover:opacity-90 shadow-sm h-8 px-3 text-sm rounded-lg font-medium"
                 >
                   {t('cta')}
@@ -222,7 +221,7 @@ export default function Navbar() {
                   {t('login')}
                 </Link>
                 <LinkButton
-                  href={`/${locale}#waitlist`}
+                  href={`/${locale}/sign-up`}
                   className="flex-1 gradient-primary text-white border-0 h-9 rounded-lg text-sm font-medium flex items-center justify-center"
                 >
                   {t('cta')}

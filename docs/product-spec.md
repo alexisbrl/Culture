@@ -1,8 +1,10 @@
 # Culture — Cahier des charges produit
 
-> Spécifications produit détaillées : périmètre MVP, lexique, modèle d'abonnement, pages & navigation, et les deux modules fonctionnels. Ce fichier n'est **pas** chargé automatiquement — lis-le quand la tâche touche au périmètre produit, au vocabulaire métier, ou au comportement attendu d'une page/fonctionnalité. Les règles de développement (comment coder) sont dans `CLAUDE.md` et `.claude/rules/`.
+> **Ce que fait le produit**, vu de l'utilisateur : lexique, abonnement, pages et navigation, les deux modules. Ce document décrit la **version finale** — ce que le produit doit être, pas ce qui est en ligne aujourd'hui. L'écart se lit dans `docs/backlog.md`, rangé par trimestre.
 >
-> Dernière synthèse : 11/07/2026
+> Comment il est construit : `docs/architecture.md`. Les règles de travail : `CLAUDE.md`.
+>
+> Dernière mise à jour : 09/09/2026
 
 ---
 
@@ -10,51 +12,15 @@
 
 **Nom de travail :** Culture (nom produit final à confirmer)
 **Type :** Application SaaS d'apprentissage — générateur pédagogique avec IA
-**Plateformes :** Web / iOS / Android — **Web développé en premier**, iOS et Android après validation web (hors MVP)
-**Architecture :** **API-first** obligatoire dès la V1 — chaque domaine fonctionnel expose une API interne propre (voir `.claude/rules/server-architecture.md` pour le pattern de code).
+**Plateformes :** Web / iOS / Android — **Web développé en premier**, iOS et Android ensuite
+**Architecture :** **API-first** — chaque domaine fonctionnel expose une API interne propre (voir `docs/architecture.md`).
 
 **Deux modules principaux :**
-1. **Générateur pédagogique** — upload de fichiers → notions → programme éducatif personnalisé + générateur d'examens
-2. **Examens standardisés** — certification officielle (développement prévu à partir de la V3, non prioritaire pour le MVP)
+1. **Générateur pédagogique** — dépôt de fichiers → notions → programme éducatif personnalisé + générateur d'examens
+2. **Examens standardisés** — certification officielle
 
 ---
 
-## Périmètre MVP (V1 — web uniquement)
-
-### Dans le MVP
-
-| Fonctionnalité | Notes |
-|---|---|
-| Création de compte et authentification | — |
-| Upload de fichiers PDF | Un ou plusieurs fichiers par atelier |
-| Décomposition en notions | Via IA. Notions modifiables manuellement. |
-| Génération de questions | Via IA. Types : les 9 types de réponse réels (`ResponseType`, `src/lib/workshops/examTypes.ts`) — QCS, QCM, textuelle, liste, tableau, matching, dessin, fichier, sans réponse. `sondage`, `trier dans l'ordre` et `fill in the blank` ont été **retirés** le 09/08/2026 : ne pas les faire générer. |
-| Parcours d'apprentissage séquencé | Enchaînement d'exercices sans gamification visuelle |
-| Gestion d'un atelier | Ateliers toujours privés (adhésion validée), rôles gestionnaire/candidat, paramètres de base |
-| Correction assistée | Suggestion IA + correction manuelle par le gestionnaire |
-| Architecture API-first | APIs internes propres par domaine dès la V1 |
-
-### Hors MVP (versions ultérieures)
-
-| Fonctionnalité | Version cible |
-|---|---|
-| Gamification (jardin, plantes, énergie, séries, jokers, personnages) | V2 |
-| Applications iOS & Android | V2 |
-| Activités ludiques | V2 |
-| Échange avec l'IA en cours d'apprentissage | V2 |
-| Génération de cours (slides animées) | V2 |
-| Scan et correction automatique de copies papier | V2+ |
-| Examens projetés (type Kahoot) | V2 |
-| Sécurité renforcée examens en ligne (caméra, micro, etc.) | V2 |
-| Système social (amis) | V2 |
-| Notifications intelligentes | V2 |
-| Export CSV analyse | V2 |
-| Taxonomie de Bloom appliquée à la génération | V2/V3 |
-| Validation manuelle de section par gestionnaire (ateliers Premium) | V2 |
-| API publique tierce | V3 |
-| Module Examens standardisés (intégralité) | V3+ |
-
----
 
 ## Lexique
 
@@ -69,18 +35,17 @@ Termes utilisés dans toute la codebase et dans ce document.
 | **Générateur d'examen** | Outil permettant de créer, gérer et corriger des examens à partir des notions d'un atelier. |
 | **Entraînement** | Terme générique pour une session d'apprentissage dans le programme éducatif. Englobe Exercices et Activités. |
 | **Exercice** | Entraînement au format question/réponse standard. |
-| **Activité** | Entraînement au format ludique (V2+). |
+| **Activité** | Entraînement au format ludique. |
 | **Utilisateur** | Personne physique ayant un compte sur l'application. |
 | **Membre** | Utilisateur appartenant à un atelier. |
 | **Candidat** | Membre d'un atelier sans droits de gestion (rôle apprenant). |
-| **Gestionnaire** | Membre d'un atelier avec droits de gestion étendus (rang entre candidat et propriétaire — voir `.claude/rules/server-architecture.md` pour le modèle `owner`/`manager`/`member`). |
+| **Gestionnaire** | Membre d'un atelier avec droits de gestion étendus (rang entre candidat et propriétaire — voir `docs/architecture.md` §2). |
 | **Propriétaire** | Gestionnaire créateur de l'atelier. Droits maximaux. Un seul par atelier. |
 | **Tag** | Identifiant unique d'un utilisateur. Format Crockford-like (alphabet sans caractères ambigus), 8 caractères aléatoires (ex : `A3K9P2M7`). Généré via `src/lib/tag.ts` (`generateTag`/`TAG_LENGTH`), partagé avec les tags d'atelier. |
-| **Goutte d'eau** | Unité d'énergie consommée à chaque nouvelle question dans le programme éducatif (V2). |
-| **Jardin** | Représentation visuelle de la progression globale d'un utilisateur (V2). |
-| **Plante** | Représentation visuelle de la progression d'un utilisateur dans un atelier spécifique (V2). |
+| **Goutte d'eau** | Unité d'énergie consommée à chaque nouvelle question dans le programme éducatif. |
+| **Jardin** | Représentation visuelle de la progression globale d'un utilisateur. |
+| **Plante** | Représentation visuelle de la progression d'un utilisateur dans un atelier spécifique. |
 | **Pool** | Groupe de questions dans le générateur d'examen (affiché à l'utilisateur sous le nom « libellé »), utilisé pour structurer la génération d'examens. |
-| **Atelier Premium** | Atelier dont l'accès Premium a été activé par le propriétaire (irréversible). Donne un accès Premium à vie à tous ses membres. |
 | **Page Examen officiel** | Page publique d'un utilisateur récapitulant ses scores aux examens standardisés (module 2 uniquement). |
 
 ---
@@ -101,20 +66,7 @@ Termes utilisés dans toute la codebase et dans ce document.
 - Premium : partageable avec 2 personnes supplémentaires (+7€/personne/mois)
 - Premium+ : partageable avec 3 personnes supplémentaires (+15€/personne/mois)
 
-### Atelier Premium (lié à l'atelier, pas au compte)
-
-Un propriétaire peut activer le statut Premium sur son atelier. C'est une opération **irréversible** — voir la règle absolue correspondante dans `CLAUDE.md` §1 et le détail d'implémentation (trigger DB, mécanisme de test temporaire à retirer avant Stripe) dans `.claude/rules/server-architecture.md`.
-
-**Effets :**
-- L'atelier devient définitivement **privé** (le bouton "public" est désactivé et retiré)
-- Tous les membres actuels et futurs ont un accès Premium à cet atelier **à vie**, qu'ils aient ou non un abonnement personnel
-- Un badge Premium est affiché sur la page de présentation de l'atelier
-
-**Facturation (cible — Stripe non encore intégré, voir `docs/backlog.md`) :**
-- Le propriétaire doit enregistrer un moyen de paiement avant d'activer
-- Facturation immédiate pour tous les membres présents au moment de l'activation (~3,5€/membre)
-- Facturation mensuelle pour chaque nouveau membre qui rejoint l'atelier (~3,5€/membre)
-- Si le moyen de paiement est invalide ou absent → l'entrée de nouveaux membres est bloquée jusqu'à régularisation
+> **L'abonnement se porte sur le COMPTE, jamais sur l'atelier** (décision du 09/09/2026). Un compte est Premium s'il a payé, un point c'est tout. Le modèle « atelier Premium » — un propriétaire activant irréversiblement le Premium pour tous ses membres, facturé par tête — est **abandonné**. Ce qui en subsiste dans le code et en base est à retirer : voir `docs/backlog.md`.
 
 ### Tableau des fonctionnalités par niveau
 
@@ -143,10 +95,15 @@ Un propriétaire peut activer le statut Premium sur son atelier. C'est une opér
 - Émotions fortes mettant en avant les bénéfices
 - Liens vers la page d'abonnement
 
+> ⚠️ **La vitrine est entièrement à refaire, et elle n'existe plus** (09/09/2026).
+> Celle qui était en ligne datait d'Evalia, promettait une beta et une liste
+> d'attente qui n'existent plus. Plutôt que de laisser une promesse fausse en
+> ligne, la racine du site mène à la **page de connexion** en attendant la
+> nouvelle. C'est l'écart le plus visible entre ce document et le produit réel.
+
 **Page abonnement**
 - Compare les trois niveaux d'abonnement
 - Chaque fonctionnalité listée est prévisualisable au clic (modal ou panneau)
-- Inclut également la comparaison avec le modèle Atelier Premium
 
 ### Utilisateur connecté
 
@@ -184,10 +141,10 @@ Un propriétaire peut activer le statut Premium sur son atelier. C'est une opér
 - **Barre du haut** : la page profil garde le sélecteur d'atelier et le groupe d'onglets, alimentés par le **dernier atelier visité** (`getLastVisitedWorkshop`) puisque son URL n'en porte aucun. Le Jardin et le tableau de bord gardent une barre nue.
 - Accès à la page Examen officiel (module 2)
 
-**Page sociale** *(V2)*
+**Page sociale**
 - Permet d'ajouter d'autres utilisateurs en amis via leur tag
 
-**Page Examen officiel** *(module 2 — V3+)*
+**Page Examen officiel** *(module 2)*
 - Esthétique très professionnelle
 - Récapitule tous les examens standardisés officiels passés par l'utilisateur
 - Partageable publiquement via lien et/ou QR code
@@ -203,7 +160,7 @@ Un propriétaire peut activer le statut Premium sur son atelier. C'est une opér
 
 **Création**
 1. L'utilisateur crée un atelier (nom, description, image de couverture)
-2. Il dépose des fichiers sources (PDF en V1 — autres formats en V2+)
+2. Il dépose des fichiers sources — PDF et texte aujourd’hui ; les autres formats (Word, PowerPoint, audio, vidéo) demandent une conversion préalable, voir `docs/backlog.md`
 3. L'IA décompose les fichiers en notions
 4. L'IA organise automatiquement les notions en sections et génère le programme éducatif
 5. Le gestionnaire peut modifier les notions et l'organisation manuellement
@@ -220,7 +177,7 @@ Un propriétaire peut activer le statut Premium sur son atelier. C'est une opér
 |---|---|
 | Demandes d'adhésion | Un gestionnaire/propriétaire accepte ou refuse chaque demande. |
 | Afficher / cacher le programme éducatif | Pour les candidats |
-| Inviter un utilisateur | Devient membre candidat directement (sans demande). **Réservé aux ateliers Premium.** |
+| Inviter un utilisateur | Devient membre candidat directement (sans demande). **Réservé aux comptes Premium.** |
 | Exclure un membre | Uniquement de rang inférieur au gestionnaire qui exclut (candidat < gestionnaire < propriétaire) |
 | Changer le rang d'un membre | Promouvoir : rang ≤ au sien / Rétrograder : rang < au sien |
 | QR code | Redirige vers l'atelier (Preview `?preview=`). Rejoindre passe toujours par une demande validée. |
@@ -378,12 +335,12 @@ C'est un **rattrapage exponentiel plafonné**. Le terme proportionnel fait qu'un
 - Une notion **sans chapitre ne compte dans aucune barre**, pas même celle de l'atelier (19/08/2026). Aucun exercice ne peut la faire progresser — le tirage se fait par chapitre et elle n'a pas de pot — donc la compter revenait à plafonner la barre de l'atelier sous 100 % sans que le membre puisse voir ce qui manque. « Sans chapitre » est un sas de gestion (notion créée à la volée, chapitre supprimé, ingestion IA), pas encore du programme.
 - Même règle, même raison, pour les notions d'un **chapitre caché** (29/08/2026) : le chapitre étant sorti du parcours, aucun exercice ne peut plus les faire progresser.
 - **Avancement affiché** — calculé sur le score exact, pas sur le niveau, et saturé à 30 (les 3 premiers niveaux valent 100 %, le 4e est du bonus) : notion = `min(score, 30) / 30`, chapitre = `Σ min(score, 30) / (30 × nombre de notions)`, atelier = même formule, mais **seulement sur les notions rangées dans un chapitre**.
-- Chaque **nouvelle question** (hors réitération) consomme **1 goutte d'eau** *(V2 — l'énergie n'existe pas encore, le compteur de la barre du haut affiche une valeur fixe)*
-- Les gouttes d'eau se regagnent : avec le temps / en quantité aléatoire après un nombre aléatoire de questions *(V2)*
+- Chaque **nouvelle question** (hors réitération) consomme **1 goutte d'eau**
+- Les gouttes d'eau se regagnent : avec le temps / en quantité aléatoire après un nombre aléatoire de questions 
 - Une question ratée est **réposée** jusqu'à être réussie *(non implémenté — le tirage est uniforme dans le chapitre)*
 - Affichage de la bonne réponse : utiliser la réponse de l'utilisateur corrigée et complétée des éléments manquants (pas une réponse modèle générique)
 - **Échange avec l'IA** disponible en cours d'apprentissage pour poser des questions ou obtenir des explications (Premium — V2)
-- Dans les ateliers Premium : un gestionnaire peut **valider manuellement** une section pour un candidat (V2)
+- Un gestionnaire peut **valider manuellement** une section pour un candidat
 
 **Taxonomie de Bloom** *(objectif — faisabilité technique à valider en V2)*
 
@@ -398,14 +355,14 @@ C'est un **rattrapage exponentiel plafonné**. Le terme proportionnel fait qu'un
 
 **Types d'entraînements**
 
-*Exercices (format standard — MVP) :*
+*Exercices (format standard) :*
 - Question / Réponse
 - Flashcard (réponse orale)
 - Fill in the blank
 - Matching
 - Trier dans l'ordre
 
-*Activités (format ludique — V2+) :*
+*Activités (format ludique) :*
 - Des personnages parlent et l'apprenant doit interrompre et corriger les erreurs
 - Un personnage fait une prestation à qui on doit souffler les réponses
 - Un animateur pose des questions et l'apprenant envoie un SMS pour participer
@@ -465,7 +422,7 @@ Une correction est automatiquement liée à chaque examen, construite à partir 
 
 **Examen papier :**
 - La correction sert d'aide à la correction manuelle
-- Scan des copies → correction automatique *(V2+)*
+- Scan des copies → correction automatique
 - Les résultats peuvent être retravaillés manuellement
 - Questions ouvertes / dessins : pondérés et justifiés par l'IA
 - Commentaire constructif annoté sur chaque copie
@@ -496,7 +453,7 @@ Les examens et corrections sont associés au membre qui les a passés (associati
 
 Questions affichées une par une sur un écran partagé. Options : afficher la réponse / afficher les statistiques de réponses / afficher un classement (points ; égalité → temps de réponse global).
 
-### Analyse *(V2)*
+### Analyse
 
 **Périmètre révisé le 05/08/2026** (chantier de refonte UI) : l'Analyse n'est plus un onglet par atelier réservé aux gestionnaires, mais une **vue de suivi personnelle rattachée au profil** (`/profile/analyse`), indépendante de tout atelier ou rôle — accessible à tout utilisateur via la carte « suivi » de `/profile`. Actuellement un état vide « V2 » (titre + badge, aucune donnée) ; le contenu ci-dessous reste la cible fonctionnelle à spécifier plus précisément le moment venu (portée multi-ateliers à définir) :
 
@@ -513,7 +470,7 @@ Questions affichées une par une sur un écran partagé. Options : afficher la r
 
 ---
 
-## Gamification *(V2+)*
+## Gamification
 
 > La gamification **n'a aucun impact sur le contenu pédagogique**. Elle améliore uniquement l'engagement et la rétention.
 
@@ -540,7 +497,7 @@ Ajout d'amis via le tag. Les abonnements partagés créent une dynamique sociale
 
 ---
 
-## Module 2 — Examens standardisés *(V3+ — idéation, non prioritaire)*
+## Module 2 — Examens standardisés
 
 > Les spécifications ci-dessous sont des orientations, pas des spécifications finales.
 

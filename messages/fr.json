@@ -1,6 +1,5 @@
 {
   "nav": {
-    "home": "Accueil",
     "pricing": "Tarifs",
     "create": "Créer un atelier",
     "about": "À propos",
@@ -31,85 +30,8 @@
     "ignore": "ignorer",
     "cancel": "annuler"
   },
-  "hero": {
-    "badge": "Bêta en cours · Rejoignez les pionniers",
-    "title": "Transformez vos formations en",
-    "titleHighlight": "aventures d'apprentissage",
-    "subtitle": "Culture convertit vos supports de cours en parcours adaptatifs et gamifiés. Vos apprenants progressent plus vite, restent motivés, et vous le mesurez en temps réel.",
-    "cta": "Rejoindre la beta gratuitement",
-    "ctaSecondary": "Voir comment ça marche",
-    "social": "Déjà {count} formateurs sur la liste d'attente"
-  },
   "stats": {
-    "completion": "taux de complétion moyen",
-    "engagement": "d'engagement en plus",
-    "time": "gain de temps / formateur",
-    "satisfaction": "satisfaction apprenant"
-  },
-  "howItWorks": {
-    "badge": "Simple comme bonjour",
-    "title": "De votre contenu à un atelier engageant",
-    "subtitle": "en 3 étapes",
-    "step1Title": "Uploadez votre contenu",
-    "step1Desc": "PDF, Word, vidéo, image... Culture accepte tous vos formats existants. Pas besoin de tout recommencer.",
-    "step2Title": "L'IA décompose et structure",
-    "step2Desc": "Notre IA identifie les notions clés et construit un parcours adaptatif, avec quiz, défis et révisions espacées.",
-    "step3Title": "Vos apprenants progressent",
-    "step3Desc": "Ils avancent à leur rythme sur web ou mobile, débloquent des badges, et vous suivez leurs progrès en temps réel."
-  },
-  "features": {
-    "badge": "Fonctionnalités",
-    "title": "Tout ce dont vous avez besoin,",
-    "titleHighlight": "rien de superflu",
-    "f1Title": "IA Adaptive",
-    "f1Desc": "Le parcours s'ajuste en temps réel selon le niveau et les erreurs de chaque apprenant. Plus personne n'est laissé derrière.",
-    "f2Title": "Gamification Intelligente",
-    "f2Desc": "Points, badges, classements, streaks. L'engagement ludique au service de vrais objectifs pédagogiques.",
-    "f3Title": "Multi-formats",
-    "f3Desc": "PDF, Word, PowerPoint, vidéo, images — importez ce que vous avez déjà. Culture fait le reste.",
-    "f4Title": "Suivi en temps réel",
-    "f4Desc": "Tableaux de bord clairs pour voir qui avance, qui bloque, et quels concepts posent problème.",
-    "f5Title": "Examens automatisés",
-    "f5Desc": "Générez et corrigez automatiquement des évaluations certifiantes. Gagnez des heures chaque semaine.",
-    "f6Title": "Déploiement immédiat",
-    "f6Desc": "Partagez un lien à vos apprenants. Aucune installation, aucune configuration côté utilisateur."
-  },
-  "testimonials": {
-    "badge": "Ils nous font confiance",
-    "title": "Ce que disent nos bêta-testeurs",
-    "marie": {
-      "role": "Formatrice RH indépendante",
-      "content": "J'ai uploadé mon cours Excel de 80 slides. En 10 minutes, j'avais un parcours complet avec quiz et badges. Mes apprenants sont 3x plus engagés."
-    },
-    "thomas": {
-      "role": "Responsable formation, PME 200p",
-      "content": "On a réduit le temps de formation onboarding de 3 jours à 1,5 jour. Les nouveaux arrivent mieux préparés, plus motivés. ROI évident."
-    },
-    "sophie": {
-      "role": "Formatrice sécurité industrielle",
-      "content": "La génération automatique des examens m'économise 4 heures par semaine. Et les résultats aux certifications ont progressé de 22%."
-    }
-  },
-  "cta": {
-    "title": "Prêt à révolutionner vos formations ?",
-    "subtitle": "Rejoignez les formateurs qui transforment déjà l'apprentissage avec Culture. Accès beta gratuit, places limitées.",
-    "button": "Rejoindre la liste d'attente",
-    "noCb": "Aucune carte bancaire requise · Accès prioritaire"
-  },
-  "waitlist": {
-    "title": "Rejoignez la liste d'attente",
-    "subtitle": "Accès beta gratuit · Places limitées · Aucune carte bancaire",
-    "namePlaceholder": "Votre prénom",
-    "emailPlaceholder": "votre@email.com",
-    "rolePlaceholder": "Votre rôle",
-    "roleFormateur": "Formateur indépendant",
-    "roleEntreprise": "Responsable formation",
-    "roleEcole": "École / Université",
-    "roleAutre": "Autre",
-    "button": "Rejoindre la beta",
-    "sending": "Inscription en cours...",
-    "success": "🎉 Vous êtes sur la liste ! On vous contacte très bientôt.",
-    "error": "Une erreur s'est produite. Réessayez ou contactez-nous."
+    "time": "gain de temps / formateur"
   },
   "pricing": {
     "badge": "Tarifs",
