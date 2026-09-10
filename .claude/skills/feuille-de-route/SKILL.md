@@ -28,9 +28,26 @@ un changement.
 
 ## 2. Republier
 
-Lis `docs/backlog.md` en entier, puis republie la page **à la même adresse**
-(`url` = celle ci-dessus, jamais un nouveau chemin de fichier — un chemin
-différent crée un second artefact et Alexis perd son lien).
+Lis `docs/backlog.md` **en entier, section par section, jusqu'à la dernière
+ligne** — pas seulement le trimestre que tu viens de modifier.
+
+> ⚠️ **Ne patche JAMAIS la page précédente.** Erreur commise le 09/09/2026 : les
+> quatre lignes ajoutées au T4 ont bien été insérées, et les sections T1 à T4
+> 2027 recopiées telles quelles de la version d'avant — sans les relire dans le
+> backlog. Quatre chantiers y avaient été ajoutés la veille, dont le
+> déménagement complet de l'infrastructure. **Ils ont disparu de la page sans
+> que rien ne le signale**, et Alexis aurait pris ses décisions sur une liste
+> amputée. Un item que le backlog porte et que la page tait est invisible : c'est
+> le seul mode de défaillance grave de cette page.
+>
+> **Le contrôle qui l'attrape, à faire à chaque fois** : compter les items de
+> chaque trimestre dans le backlog (`grep -c '^- \*\*'` entre deux titres) et
+> vérifier que la page en rend autant. Un écart n'est légitime **que** s'il vient
+> d'un regroupement éditorial que tu as décidé sciemment et que tu peux nommer.
+
+Puis republie la page **à la même adresse** (`url` = celle ci-dessus, jamais un
+nouveau chemin de fichier — un chemin différent crée un second artefact et Alexis
+perd son lien).
 
 Avant d'écrire quoi que ce soit, **relis la page publiée** (`action: "read"` avec
 cette `url`) : c'est elle qui porte la mise en forme retenue, et une republication
