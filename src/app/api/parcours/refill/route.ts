@@ -32,7 +32,7 @@ import { refillChapter } from '@/lib/ingest/refill';
 // n'importe qui pourrait faire dépenser des appels au modèle sur l'atelier de
 // n'importe qui d'autre.
 //
-// Les garde-fous de la dépense (plafond de 60 questions, délai de garde de 10
+// Les garde-fous de la dépense (plafond de 60 questions, délai de garde de 5
 // minutes par chapitre, lot tracé et annulable) restent dans
 // @/lib/ingest/refill : l'écran n'est qu'un déclencheur, pas une autorité.
 

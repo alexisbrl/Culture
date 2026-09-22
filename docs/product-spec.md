@@ -289,7 +289,7 @@ Une demande est **une liste de couples (notion × niveau) avec un nombre pour ch
 
 **Un chapitre neuf ne reçoit que 24 questions de niveau 1.** Les niveaux supérieurs et les notions restées vides ne sont pas produits d'avance : la recharge les pourvoit quand un membre les atteint réellement.
 
-**Garde-fous de la recharge** — c'est le seul appel payant que personne ne décide : un **plafond** de 60 questions par recharge (ce qui reste en manque sera repris au lancement suivant), un **délai de garde** de 10 minutes par chapitre (deux exercices coup sur coup ne rechargent qu'une fois), et une **trace** — chaque recharge ouvre un lot d'import comme n'importe quelle génération, donc son coût est compté et son contenu reste annulable. Elle part **après** que la question est partie à l'écran : le membre n'attend jamais après elle, et elle survit à la fermeture de l'onglet.
+**Garde-fous de la recharge** — c'est le seul appel payant que personne ne décide : un **plafond** de 60 questions par recharge (ce qui reste en manque sera repris au lancement suivant), un **délai de garde** de 5 minutes par chapitre (deux exercices coup sur coup ne rechargent qu'une fois), et une **trace** — chaque recharge ouvre un lot d'import comme n'importe quelle génération, donc son coût est compté et son contenu reste annulable. Elle part **après** que la question est partie à l'écran : le membre n'attend jamais après elle, et elle survit à la fermeture de l'onglet.
 
 **Répondre au hasard** *(29/08/2026)*
 

@@ -40,7 +40,7 @@ import { MAX_REFILL_QUESTIONS, capDemand, demandFromShortages, demandTotal } fro
 /** Deux exercices lancés dans la foulée ne rechargent qu'une fois. Assez long
  *  pour couvrir un exercice entier, assez court pour qu'un membre qui revient
  *  plus tard trouve un stock reconstitué. */
-export const REFILL_COOLDOWN_MS = 10 * 60 * 1000;
+export const REFILL_COOLDOWN_MS = 5 * 60 * 1000;
 
 export type RefillOutcome = {
   /** Une recharge a-t-elle été lancée ? `false` = rien ne manquait, ou une
