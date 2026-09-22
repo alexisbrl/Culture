@@ -144,6 +144,111 @@ export function batchNotions<T>(notions: T[], size = NOTIONS_PER_QUESTION_BATCH)
   return batches;
 }
 
+// ─── Ce qu'un appel de la passe questions voit du chapitre ───────────────────
+//
+// La passe ne reçoit aucun document : ce sont les autres notions du chapitre qui
+// remplacent le cours, et les questions déjà écrites qui l'empêchent de se
+// répéter. Deux plafonds, pour qu'un gros chapitre ne fasse pas grossir l'appel
+// sans limite.
+
+/** Notions du chapitre transmises en contexte, celles du lot comprises. Un
+ *  intitulé pèse ~40 tokens : 150 notions en font ~6 000. */
+export const QUESTION_CONTEXT_NOTIONS = 150;
+
+/** Questions existantes transmises contre la redite, toutes notions du lot
+ *  confondues — ~30 par notion pour un lot de dix. C'est le poste qui grandit avec
+ *  l'atelier : une notion peut accumuler des centaines d'énoncés. */
+export const QUESTION_CONTEXT_EXISTING = 300;
+
+/** Les autres notions du chapitre, en contexte seulement.
+ *
+ *  **TOUT le chapitre, et pas seulement les notions que la demande vise.** Une
+ *  recharge ou un démarrage ne visent souvent qu'une partie du chapitre (25
+ *  questions de démarrage sur un chapitre de 150 notions n'en visent que 25) ; ne
+ *  montrer que celles-là priverait le modèle du contexte qui situe ses questions,
+ *  et le laisserait écrire sur la notion voisine sans le savoir.
+ *
+ *  Au-delà du plafond, les notions visées passent d'abord, puis les autres ;
+ *  l'ordre du chapitre est conservé dans ce qui est gardé. */
+export function contextNotions<T extends { id: string }>(
+  chapter: readonly T[],
+  batch: ReadonlySet<string>,
+  targeted: ReadonlySet<string>,
+  cap = QUESTION_CONTEXT_NOTIONS,
+): T[] {
+  const others = chapter.filter((n) => !batch.has(n.id));
+  const room = Math.max(0, cap - batch.size);
+  const kept = new Set(
+    [...others.filter((n) => targeted.has(n.id)), ...others.filter((n) => !targeted.has(n.id))]
+      .slice(0, room)
+      .map((n) => n.id),
+  );
+  return others.filter((n) => kept.has(n.id));
+}
+
+/** Une question déjà écrite sur une ou plusieurs notions du lot. */
+export type ExistingQuestion = {
+  content: string;
+  notionIds: string[];
+  /** Le niveau de Bloom que la question vise, pour chacune de ses notions. */
+  levels: Record<string, number | null>;
+  /** Date d'écriture (ISO) — à niveau égal, les plus récentes passent d'abord :
+   *  ce sont celles que le modèle vient d'écrire, donc celles qu'il risque le
+   *  plus de reproduire. */
+  createdAt: string;
+};
+
+/** Écart entre le niveau d'une question et les niveaux demandés sur sa notion.
+ *  Aucun niveau demandé (consigne libre) : toutes se valent. Niveau inconnu : en
+ *  dernier. */
+function levelDistance(level: number | null, wanted: readonly number[]): number {
+  if (wanted.length === 0) return 0;
+  if (level === null) return Number.MAX_SAFE_INTEGER;
+  return Math.min(...wanted.map((w) => Math.abs(w - level)));
+}
+
+/** Les questions existantes à montrer au modèle, sous le plafond.
+ *
+ *  **Priorité au niveau demandé** : pour une question demandée au niveau 2, les
+ *  questions de niveau 2 d'abord, puis celles des niveaux voisins (1 et 3), puis
+ *  le 4 — c'est au niveau visé que la redite menace. À niveau égal, les plus
+ *  récentes.
+ *
+ *  **Réparti entre les notions du lot**, à tour de rôle : chacune reçoit sa part,
+ *  et la part d'une notion qui a peu de questions revient aux autres. Une question
+ *  reliée à deux notions du lot n'est comptée qu'une fois. */
+export function pickExistingQuestions(
+  questions: readonly ExistingQuestion[],
+  /** Les notions du lot, avec les niveaux demandés sur chacune (vide = aucun). */
+  targets: ReadonlyMap<string, readonly number[]>,
+  cap = QUESTION_CONTEXT_EXISTING,
+): ExistingQuestion[] {
+  if (cap <= 0) return [];
+
+  const queues = [...targets].map(([notionId, wanted]) =>
+    questions
+      .filter((q) => q.notionIds.includes(notionId))
+      .map((q) => ({ q, distance: levelDistance(q.levels[notionId] ?? null, wanted) }))
+      .sort((a, b) => a.distance - b.distance || b.q.createdAt.localeCompare(a.q.createdAt))
+      .map(({ q }) => q),
+  );
+
+  const picked = new Set<ExistingQuestion>();
+  const cursors = queues.map(() => 0);
+  let progressed = true;
+  while (picked.size < cap && progressed) {
+    progressed = false;
+    for (let i = 0; i < queues.length && picked.size < cap; i++) {
+      while (cursors[i] < queues[i].length && picked.has(queues[i][cursors[i]])) cursors[i]++;
+      if (cursors[i] < queues[i].length) {
+        picked.add(queues[i][cursors[i]++]);
+        progressed = true;
+      }
+    }
+  }
+  return [...picked];
+}
+
 // ─── Le découpage de la passe EXAMEN ─────────────────────────────────────────
 //
 // L'examen ne travaille pas notion par notion : il reçoit un budget de questions

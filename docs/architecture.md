@@ -222,7 +222,7 @@ Le cours entier n'entre qu'une fois, dans le premier appel.
 |---|---|
 | **Chapitres** — 1 appel | le **texte seul** des documents, tous les chapitres, toutes les notions |
 | **Notions** — 1 appel par chapitre | les **pages de son chapitre** (texte et images), les notions qui lui sont attribuées |
-| **Questions** — 1 appel par lot de dix notions d'un chapitre | **aucun document** : les notions du lot et ce qu'on demande sur chacune, leurs questions existantes, les intitulés des autres notions visées |
+| **Questions** — 1 appel par lot de dix notions d'un chapitre | **aucun document** : les notions du lot et ce qu'on demande sur chacune, les intitulés de **tout le chapitre** (150 au plus), et au plus 300 questions existantes des notions du lot |
 
 Trois gains du même geste : moins de bruit par appel (qualité), moins de jetons
 répétés (coût), appels courts et indépendants (parallélisme).
@@ -680,13 +680,25 @@ Si le modèle dépasse, la question est **conservée** — c'est du contenu vali
 compte simplement pas pour le couple visé, et le radar redemandera. Aucune pression à
 mentir, aucun rejet.
 
-**Le bloc des énoncés existants est plafonné.** Le volume d'un appel ne dépend pas du total
-de la banque : un appel ne voit que les notions de son lot, et demander plus de questions
-produit plus de lots, pas des lots plus gros. Reste un seul axe qui grandit sans limite —
-une notion qui accumule des centaines d'énoncés. Deux mesures suffisent : **un
-échantillon** plus **le compte total** (dire le nombre vaut presque autant que les montrer
-tous), et **les plus récents**, jamais les plus anciens — ce sont ceux que le modèle vient
-d'écrire, donc ceux qu'il risque le plus de reproduire.
+**Le contexte est tout le chapitre, jamais les seules notions visées.** Une recharge ou un
+démarrage ne visent souvent qu'une partie du chapitre — 25 questions de démarrage sur un
+chapitre de 150 notions n'en visent que 25. Ne montrer que celles-là laisserait le modèle
+écrire sur la notion voisine sans le savoir. Les intitulés de tout le chapitre partent donc
+en contexte, plafonnés à 150 : au-delà, les notions visées d'abord.
+
+**Le bloc des énoncés existants est plafonné** à 300 par appel. Le volume d'un appel ne
+dépend pas du total de la banque : un appel ne voit que les questions des notions de son
+lot, et demander plus de questions produit plus de lots, pas des lots plus gros. Reste un
+seul axe qui grandit sans limite — une notion qui accumule des centaines d'énoncés. D'où
+trois règles de choix :
+
+- **Au plus près du niveau demandé** : pour une question de niveau 2, les questions de
+  niveau 2 d'abord, puis celles des niveaux voisins (1 et 3), puis le 4. C'est au niveau
+  visé que la redite menace.
+- **À niveau égal, les plus récentes**, jamais les plus anciennes — ce sont celles que le
+  modèle vient d'écrire, donc celles qu'il risque le plus de reproduire.
+- **Réparti entre les notions du lot**, à tour de rôle : la part d'une notion qui a peu de
+  questions revient aux autres.
 
 ### 7.11 Une génération à la fois, par atelier
 

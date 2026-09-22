@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   batchNotions,
+  contextNotions,
   documentsForPass,
+  pickExistingQuestions,
+  type ExistingQuestion,
   MAX_PLAUSIBLE_CHAPTERS,
   MIN_PLAUSIBLE_CHAPTERS,
   needsChapterRetry,
@@ -325,5 +328,52 @@ describe('splitUnplaced', () => {
     const split = splitUnplaced([{ notionRef: 'n1' }], new Set(['n1']), nowhere);
     expect(split.setAside).toEqual(['n1']);
     expect(split.stranded).toEqual([]);
+  });
+});
+
+describe('contextNotions', () => {
+  const chapter = ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id }));
+
+  it('montre tout le chapitre hors du lot, pas seulement les notions visées', () => {
+    expect(contextNotions(chapter, new Set(['a']), new Set(['a', 'b'])).map((n) => n.id)).toEqual(['b', 'c', 'd', 'e']);
+  });
+
+  it("au-delà du plafond, garde les notions visées d'abord, dans l'ordre du chapitre", () => {
+    const kept = contextNotions(chapter, new Set(['a']), new Set(['e']), 3);
+    expect(kept.map((n) => n.id)).toEqual(['b', 'e']);
+  });
+});
+
+describe('pickExistingQuestions', () => {
+  const q = (content: string, levels: Record<string, number | null>, createdAt: string): ExistingQuestion => ({
+    content,
+    notionIds: Object.keys(levels),
+    levels,
+    createdAt,
+  });
+
+  it('prend le niveau demandé, puis les voisins, puis le plus éloigné', () => {
+    const stock = [q('n4', { a: 4 }, '1'), q('n1', { a: 1 }, '1'), q('n2', { a: 2 }, '1'), q('n3', { a: 3 }, '2')];
+    const picked = pickExistingQuestions(stock, new Map([['a', [2]]]), 3);
+    expect(picked.map((x) => x.content)).toEqual(['n2', 'n3', 'n1']);
+  });
+
+  it("à niveau égal, les plus récentes d'abord ; sans niveau demandé, la date seule décide", () => {
+    const stock = [q('vieille', { a: 1 }, '2026-01-01'), q('récente', { a: 1 }, '2026-09-01')];
+    expect(pickExistingQuestions(stock, new Map([['a', []]]), 1).map((x) => x.content)).toEqual(['récente']);
+  });
+
+  it("répartit le plafond entre les notions, et la part d'une notion pauvre revient aux autres", () => {
+    const stock = [
+      q('a1', { a: 1 }, '3'), q('a2', { a: 1 }, '2'), q('a3', { a: 1 }, '1'),
+      q('b1', { b: 1 }, '1'),
+    ];
+    const picked = pickExistingQuestions(stock, new Map([['a', [1]], ['b', [1]]]), 3);
+    expect(picked.map((x) => x.content).sort()).toEqual(['a1', 'a2', 'b1']);
+  });
+
+  it("ne compte qu'une fois une question reliée à deux notions du lot", () => {
+    const both = q('commune', { a: 1, b: 1 }, '1');
+    expect(pickExistingQuestions([both], new Map([['a', [1]], ['b', [1]]]))).toEqual([both]);
   });
 });

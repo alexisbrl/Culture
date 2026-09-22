@@ -71,7 +71,16 @@ import {
 import { reorderChapters } from '@/lib/workshops/chapters';
 import { MAX_NOTIONS_PER_WORKSHOP, countNotions } from '@/lib/workshops/notions';
 import { dropRepeatedQuestions, flagSimilar, findExistingMatch } from './duplicates';
-import { batchNotions, sliceProgram, splitBudget, splitUnplaced, withChapterRetry } from './passInput';
+import {
+  batchNotions,
+  contextNotions,
+  pickExistingQuestions,
+  sliceProgram,
+  splitBudget,
+  splitUnplaced,
+  withChapterRetry,
+  type ExistingQuestion,
+} from './passInput';
 import { classifyFailure, logStep, markOutcome, withRetry, type Attempted, type StepName } from './journal';
 import {
   GENERATED_FILE_NAME,
@@ -213,30 +222,44 @@ async function loadAllNotions(workshopId: string): Promise<ExistingContent> {
  *  Sans ce filtre, la passe recevait aussi les questions d'examen — deux listes
  *  qui n'ont ni la même volumétrie ni le même régime, et dont la ressemblance
  *  n'est pas un défaut. Pire, à la volumétrie cible, verser une liste dans
- *  l'autre était le retour exact du poste de coût de §16.3. */
-async function loadNotionQuestions(notionIds: string[]): Promise<ExistingContent> {
-  if (notionIds.length === 0) return EMPTY;
+ *  l'autre était le retour exact du poste de coût de §16.3.
+ *
+ *  Rend TOUT le stock des notions, avec niveau et date : c'est
+ *  `pickExistingQuestions` qui choisit ce qui part au modèle. Les plus récentes
+ *  d'abord, pour que la limite de lignes de la base, si une notion la franchit,
+ *  retranche les plus anciennes — celles que le tri aurait écartées en dernier. */
+async function loadNotionQuestions(notionIds: string[]): Promise<ExistingQuestion[]> {
+  if (notionIds.length === 0) return [];
 
   const supabase = getSupabaseServerClient();
+  // table encore nommée bricks en base (exam_question_item_bricks, brick_id)
   const { data, error } = await supabase
     .from('exam_question_item_bricks')
-    .select('item_id, brick_id, exam_question_items!inner(content, exam_questions!inner(context))')
+    .select('item_id, brick_id, bloom_level, exam_question_items!inner(content, created_at, exam_questions!inner(context))')
     .eq('exam_question_items.exam_questions.context', 'parcours')
-    .in('brick_id', notionIds);
+    .in('brick_id', notionIds)
+    .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
 
   // Une question reliée à deux des notions demandées ne doit apparaître qu'une
   // fois : on regroupe par question, pas par lien.
-  const byItem = new Map<string, { content: string; notionIds: string[] }>();
+  const byItem = new Map<string, ExistingQuestion>();
   for (const row of data ?? []) {
     const itemId = row.item_id as string;
-    const item = row.exam_question_items as unknown as { content: string } | null;
-    const entry = byItem.get(itemId) ?? { content: item?.content ?? '', notionIds: [] };
-    entry.notionIds.push(row.brick_id as string);
+    const item = row.exam_question_items as unknown as { content: string; created_at: string } | null;
+    const entry = byItem.get(itemId) ?? {
+      content: item?.content ?? '',
+      notionIds: [],
+      levels: {},
+      createdAt: item?.created_at ?? '',
+    };
+    const notionId = row.brick_id as string;
+    entry.notionIds.push(notionId);
+    entry.levels[notionId] = (row.bloom_level as number | null) ?? null;
     byItem.set(itemId, entry);
   }
 
-  return { ...EMPTY, questions: [...byItem.values()] };
+  return [...byItem.values()];
 }
 
 /** Passe EXAMEN — la liste d'examen **en entier**, et non les seules questions
@@ -2075,17 +2098,26 @@ export async function ingestParcoursQuestions(
   if (budget <= 0) return { written: 0, discarded: [], adjusted: [], batches: batches.length };
 
   // Les autres notions du chapitre, en contexte seulement (§16.21) : c'est ce
-  // qui remplace le cours pour les niveaux supérieurs de Bloom.
+  // qui remplace le cours pour les niveaux supérieurs de Bloom. TOUT le
+  // chapitre, pas seulement les notions que la demande vise — voir
+  // `contextNotions`.
   const inBatch = new Set(notions.map((n) => n.id));
-  const neighbours = all.filter((n) => !inBatch.has(n.id));
+  const neighbours = contextNotions(chapterNotions, inBatch, new Set(all.map((n) => n.id)));
 
   // Aucun document : la passe travaille sur les notions, pas sur le cours
   // (§16.3). C'est le poste d'économie principal de tout le chantier — on ne
   // téléverse rien, on ne relit rien, on ne paie donc rien pour le corpus.
-  const [existing, workshop] = await Promise.all([
+  const [stock, workshop] = await Promise.all([
     loadNotionQuestions(notions.map((n) => n.id)),
     loadWorkshopIdentity(workshopId),
   ]);
+  // Les questions existantes, plafonnées et choisies au plus près du niveau
+  // demandé — voir `pickExistingQuestions`.
+  const targets = new Map(notions.map((n) => [n.id, (wanted.get(n.id) ?? []).map((w) => w.bloomLevel)]));
+  const existing: ExistingContent = {
+    ...EMPTY,
+    questions: pickExistingQuestions(stock, targets).map(({ content, notionIds }) => ({ content, notionIds })),
+  };
   const meta: StepMeta = { importId, workshopId, step: 'questions', batch: batchIndex, provider };
   const call = await modelCall(meta, () => provider.documentToPlan([], existing, {
     pass: 'questions',
