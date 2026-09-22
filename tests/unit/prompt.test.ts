@@ -6,12 +6,13 @@ import {
   bloomInstruction,
   chaptersInstruction,
   chaptersRelaunchInstruction,
+  chapterNotionsInstruction,
   DEFAULT_BLOOM_DISTRIBUTION,
   EXAM_QUESTIONS_RANGE,
   existingContentBlock,
   MAX_QUESTIONS_PER_IMPORT,
-  notionsInstruction,
   PLAUSIBLE_CHAPTERS,
+  RECHECK_LABELS,
   questionsInstruction,
   questionsPerNotion,
   systemPrompt,
@@ -131,23 +132,44 @@ describe('existingContentBlock — la portée, poste de coût numéro un (§16.3
 });
 
 describe('instructions de passe', () => {
-  it('la passe notions cible UN document et ne range dans aucun chapitre', () => {
-    const instruction = notionsInstruction({ fileName: 'Chapitre 3.pdf' });
-    expect(instruction).toContain('Chapitre 3.pdf');
+  it('la passe notions d’un chapitre : ses extraits, les règles d’une notion', () => {
+    const instruction = chapterNotionsInstruction({
+      chapter: { name: 'Les fleuves' },
+      extracts: [{ name: 'cours.pdf — pages 3 à 4', pages: [3, 4] }, { name: 'notes.md', pages: null }],
+      recheck: [],
+    });
+    expect(instruction).toContain('« Les fleuves »');
+    expect(instruction).toContain('1 = page 3 du cours, 2 = page 4 du cours');
+    expect(instruction).toContain('« notes.md » : le document entier');
     expect(instruction).toContain('500');
     // Une notion est lue SEULE, des semaines plus tard : la consigne doit le
     // dire, sinon le modèle écrit « ces améliorations… » et la notion devient
-    // inutilisable (constaté le 30/08/2026).
+    // inutilisable.
     expect(instruction).toMatch(/SERA LUE SEULE/);
-    // Le rangement est le travail de la passe suivante, et la consigne le dit.
-    expect(instruction).toMatch(/Ne range rien/);
+    expect(instruction).not.toMatch(/SECONDE VÉRIFICATION/);
+  });
+
+  it('la seconde vérification : chaque notion avec son étiquette (§7.6)', () => {
+    const instruction = chapterNotionsInstruction({
+      chapter: { name: 'Les fleuves' },
+      extracts: [],
+      recheck: [
+        { id: 'n1', title: 'La Loire', label: 'forgotten' },
+        { id: 'n2', title: 'Le Rhône', label: 'check' },
+        { id: 'n3', title: 'La Seine', label: 'out' },
+      ],
+    });
+    expect(instruction).toContain(`- n1 — La Loire (celle-ci ${RECHECK_LABELS.forgotten})`);
+    expect(instruction).toContain(`- n2 — Le Rhône (celle-ci ${RECHECK_LABELS.check})`);
+    expect(instruction).toContain(`- n3 — La Seine (celle-ci ${RECHECK_LABELS.out})`);
+    expect(instruction).toMatch(/sinon, ignore-la/);
   });
 
   it('la passe notions donne le critère OBJECTIF de réutilisation', () => {
     // « Est-ce mieux formulé ? » ferait doubler l'atelier à chaque import : le
     // modèle répond oui presque à chaque fois. « Apporte-t-elle un fait
     // vérifiable de plus ? » se tranche.
-    const instruction = notionsInstruction({ fileName: 'cours.pdf' });
+    const instruction = chapterNotionsInstruction({ chapter: { name: 'X' }, extracts: [], recheck: [] });
     expect(instruction).toMatch(/FAIT VÉRIFIABLE DE PLUS/);
     expect(instruction).toMatch(/RÉUTILISE/);
     expect(instruction).not.toMatch(/mieux formulé/);

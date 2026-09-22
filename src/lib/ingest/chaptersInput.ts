@@ -10,7 +10,7 @@
 
 import { extractPdfPages, readPdfText } from './pdf';
 import type { PreparedDocument, SourceDocument } from './providers/types';
-import { imagePages } from './slicing';
+import { imagePages, sliceChapters, type ChapterBounds } from './slicing';
 
 export const PDF_MIME = 'application/pdf';
 
@@ -132,4 +132,109 @@ export function resolveDocumentName(name: string, fileNames: Readonly<Record<str
   const found = entries.find(([, fileName]) => fileName.trim().toLowerCase() === wanted);
   if (found) return found[0];
   return entries.length === 1 ? entries[0][0] : null;
+}
+
+// ─── Étape 2 : les pages d'UN chapitre ────────────────────────────────────────
+
+/** Un extrait joint à l'étape notions : son nom, et les pages du cours qu'il
+ *  contient dans l'ordre (`null` : le document entier). */
+export interface ChapterExtract {
+  documentId: string;
+  name: string;
+  pages: number[] | null;
+}
+
+export interface ChapterSlicesInput {
+  /** Ce qui part au modèle, dans l'ordre des documents. */
+  documents: PreparedDocument[];
+  /** Les extraits remis au fournisseur pour CET appel — à rendre ensuite. Les
+   *  documents entiers, déjà chez lui pour tout le lot, n'y sont pas. */
+  uploaded: PreparedDocument[];
+  extracts: ChapterExtract[];
+  /** Le chapitre n'avait aucune borne exploitable : il reçoit des documents
+   *  entiers, et c'est dit au compte-rendu. */
+  wholeDocumentFallback: boolean;
+}
+
+/** « 3 à 5, 9 » plutôt que « 3, 4, 5, 9 » : le nom d'un extrait reste lisible. */
+export function pageRanges(pages: readonly number[]): string {
+  const parts: string[] = [];
+  let start = pages[0];
+  for (let i = 1; i <= pages.length; i++) {
+    if (pages[i] === pages[i - 1] + 1) continue;
+    const end = pages[i - 1];
+    parts.push(start === end ? `${start}` : `${start} à ${end}`);
+    start = pages[i];
+  }
+  return parts.join(', ');
+}
+
+/**
+ * Les pages d'un chapitre, prêtes à partir (§7.3). Le découpage suit les
+ * bornes de TOUS les chapitres — une page orpheline revient au chapitre qui la
+ * précède —, puis seules les pages de celui-ci sont extraites et remises au
+ * fournisseur. Un document pris en entier réutilise la remise faite pour tout
+ * le lot, sans rien téléverser.
+ */
+export async function composeChapterSlices(
+  chapterId: string,
+  chapters: readonly ChapterBounds[],
+  pageCounts: Readonly<Record<string, number | null>>,
+  prepared: readonly PreparedDocument[],
+  readBytes: (doc: PreparedDocument) => Promise<Uint8Array>,
+  prepare: (documents: SourceDocument[]) => Promise<PreparedDocument[]>,
+): Promise<ChapterSlicesInput> {
+  const sliced = sliceChapters(
+    chapters,
+    prepared.map((d) => ({ id: d.fileId, pageCount: pageCounts[d.fileId] ?? null })),
+  );
+  const mine = sliced.chapters.find((c) => c.key === chapterId);
+  if (!mine) return { documents: [], uploaded: [], extracts: [], wholeDocumentFallback: false };
+
+  const byId = new Map(prepared.map((d) => [d.fileId, d]));
+  const documents: (PreparedDocument | SourceDocument)[] = [];
+  const extracts: ChapterExtract[] = [];
+  const toUpload: SourceDocument[] = [];
+
+  for (const slice of mine.slices) {
+    const doc = byId.get(slice.documentId);
+    if (!doc) continue;
+    const count = pageCounts[doc.fileId] ?? null;
+    const whole = slice.pages === null || (count !== null && slice.pages.length === count);
+    if (whole) {
+      documents.push(doc);
+      extracts.push({ documentId: doc.fileId, name: doc.fileName, pages: null });
+      continue;
+    }
+    const bytes = await extractPdfPages(await readBytes(doc), slice.pages as number[]);
+    if (!bytes) continue;
+    const name = `${doc.fileName} — pages ${pageRanges(slice.pages as number[])}`;
+    const source: SourceDocument = { fileId: doc.fileId, key: doc.key, fileName: name, mimeType: PDF_MIME, bytes };
+    toUpload.push(source);
+    documents.push(source);
+    extracts.push({ documentId: doc.fileId, name, pages: slice.pages as number[] });
+  }
+
+  const uploaded = toUpload.length > 0 ? await prepare(toUpload) : [];
+  const handed = new Map(toUpload.map((s, i) => [s, uploaded[i]]));
+  return {
+    documents: documents.map((d) => ('ref' in d ? d : (handed.get(d) as PreparedDocument))),
+    uploaded,
+    extracts,
+    wholeDocumentFallback: mine.wholeDocumentFallback,
+  };
+}
+
+/** Une page lue dans un extrait, rendue à sa page du cours. Ne se résout que
+ *  s'il n'y a qu'un extrait : avec plusieurs, on ne sait pas duquel elle vient,
+ *  et une provenance fausse est pire qu'une provenance absente. */
+export function sourcePageOf(
+  extracts: readonly ChapterExtract[],
+  page: number | undefined,
+): { documentId: string; page: number | undefined } | null {
+  if (extracts.length !== 1) return null;
+  const [extract] = extracts;
+  if (!page || page < 1) return { documentId: extract.documentId, page: undefined };
+  if (extract.pages === null) return { documentId: extract.documentId, page };
+  return { documentId: extract.documentId, page: extract.pages[page - 1] };
 }

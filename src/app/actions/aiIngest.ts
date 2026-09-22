@@ -255,6 +255,38 @@ export async function ingestWorkshopChapters(
   }
 }
 
+export type ChapterNotionsResult =
+  | {
+      ok: true;
+      written: number;
+      discarded: PlanIssue[];
+      adjusted: PlanIssue[];
+      /** Les notions de la seconde vérification réclamées par ce chapitre —
+       *  à renvoyer telles quelles à la finalisation. */
+      claimed: string[];
+      wholeDocumentFallback: boolean;
+    }
+  | { ok: false; error: string };
+
+/** Étape 2 — les notions d'UN chapitre, sur ses seules pages. L'écran lance
+ *  tous les chapitres en parallèle. */
+export async function ingestWorkshopChapterNotions(
+  workshopId: string,
+  importId: string,
+  chapterId: string,
+): Promise<ChapterNotionsResult> {
+  const ctx = await requireManager(workshopId);
+  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
+
+  try {
+    const result = await run.ingestChapterNotions(workshopId, ctx.userId, importId, chapterId);
+    revalidateWorkshop();
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: failed('notions', error, { workshopId, importId, chapterId }) };
+  }
+}
+
 /** Étape 1, relance — quand trop de notions sont restées sans verdict. Une
  *  action à part : un appel au modèle par action, pour tenir dans la durée
  *  d'une fonction serveur. */

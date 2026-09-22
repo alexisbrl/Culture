@@ -70,7 +70,7 @@ import {
 } from './ingest';
 import { reorderChapters } from '@/lib/workshops/chapters';
 import { MAX_NOTIONS_PER_WORKSHOP, countNotions } from '@/lib/workshops/notions';
-import { dropRepeatedQuestions, flagSimilar, findExistingMatch } from './duplicates';
+import { dropNearDuplicates, dropRepeatedQuestions, flagSimilar, findExistingMatch } from './duplicates';
 import {
   batchNotions,
   contextNotions,
@@ -106,13 +106,14 @@ import {
   forgottenShare,
   guardDrops,
   mergeRelaunch,
+  recheckList,
   thresholdDecision,
   type ChapterLayout,
   type NotionStanding,
   type NotionVerdict,
   type ThresholdDecision,
 } from './verdicts';
-import { composeChaptersInput, resolveDocumentName } from './chaptersInput';
+import { composeChapterSlices, composeChaptersInput, resolveDocumentName, sourcePageOf } from './chaptersInput';
 import type { PageSpan } from './slicing';
 import { releaseDocuments } from './release';
 import {
@@ -2206,6 +2207,149 @@ export async function ingestDocumentNotions(
     adjusted: plan.adjusted,
     documents: prepared.length,
   };
+}
+
+export type ChapterNotionsResult = ChapterPassResult & {
+  /** Les notions de la seconde vérification que ce chapitre réclame. Rendues à
+   *  l'écran, qui les renvoie à la finalisation : aucune écriture concurrente
+   *  entre chapitres qui tournent en parallèle. */
+  claimed: string[];
+  /** Le chapitre n'avait pas de bornes exploitables et a lu des documents entiers. */
+  wholeDocumentFallback: boolean;
+};
+
+/** Étape 2 — les NOTIONS d'un chapitre, sur ses seules pages (§7.2, §7.3).
+ *
+ *  Reçoit les pages de son chapitre (texte et images), les notions qui y sont
+ *  déjà rangées, et la seconde vérification (§7.6). Crée ses notions neuves
+ *  directement dans le chapitre, et rend celles de la seconde vérification
+ *  qu'il réclame. Les extraits remis au fournisseur sont rendus en fin d'appel. */
+export async function ingestChapterNotions(
+  workshopId: string,
+  actorId: string,
+  importId: string,
+  chapterId: string,
+  options: { provider?: PlanProvider } = {},
+): Promise<ChapterNotionsResult> {
+  const [stage1, prepared, userHint, all] = await Promise.all([
+    stage1Of(importId), preparedOf(importId), userHintOf(importId), loadAllNotions(workshopId),
+  ]);
+  const index = stage1.chapters.findIndex((c) => c.id === chapterId);
+  const chapter = stage1.chapters[index];
+  if (!chapter) throw new Error('chapitre hors du programme de ce lot');
+
+  // Une tranche de cours, pas le corpus : ni la taille ni les refus mesurés sur
+  // l'ensemble ne s'appliquent à cet appel.
+  const provider = options.provider ?? createClaudeProvider({ userHint });
+
+  const standings = new Map(Object.entries(stage1.standings));
+  const titles = new Map(all.notions.map((n) => [n.id, n.title]));
+  const recheck = recheckList(standings)
+    .filter((n) => titles.has(n.notionId))
+    .map((n) => ({ id: n.notionId, title: titles.get(n.notionId) as string, label: n.label }));
+  const rechecked = new Set(recheck.map((n) => n.id));
+  const attributed = all.notions.filter((n) => n.chapterId === chapterId && !rechecked.has(n.id));
+
+  const input = await composeChapterSlices(
+    chapterId,
+    stage1.chapters.map((c) => ({ key: c.id, spans: c.spans })),
+    stage1.pageCounts,
+    prepared,
+    async (doc) => {
+      const bytes = await readObject(doc.key);
+      if (!bytes) throw new Error(`Fichier illisible : ${doc.fileName}`);
+      return bytes;
+    },
+    (docs) => provider.prepare(docs),
+  );
+
+  try {
+    const meta: StepMeta = { importId, workshopId, step: 'notions', batch: index, provider };
+    const call = await modelCall(meta, () => provider.documentToPlan(
+      input.documents,
+      { ...EMPTY, notions: attributed },
+      {
+        pass: 'notions',
+        chapter: { id: chapter.id, name: chapter.name },
+        extracts: input.extracts.map((e) => ({ name: e.name, pages: e.pages })),
+        recheck,
+      },
+    ));
+    await addImportUsage(importId, call.result.usage);
+
+    const plan = parsePlanLogged('notions', call.result.plan, {}, call.result.truncated);
+    const rawClaims = (call.result.plan as { claimed?: unknown } | null)?.claimed;
+    const claimed = new Set(
+      (Array.isArray(rawClaims) ? rawClaims : []).filter((id): id is string => typeof id === 'string' && rechecked.has(id)),
+    );
+
+    // Le filtre mécanique : une notion neuve qui redit une notion de ce
+    // chapitre n'est pas écrite. Si elle redit une notion de la seconde
+    // vérification, c'est que le chapitre la réclame sans l'avoir dit.
+    const recheckByTitle = new Map(recheck.map((n) => [n.title, n.id]));
+    const { kept, dropped } = dropNearDuplicates(
+      plan.notions,
+      [...attributed.map((n) => n.title), ...recheck.map((n) => n.title)],
+      (n) => n.title,
+    );
+    for (const d of dropped) {
+      const reclaimed = recheckByTitle.get(d.matched);
+      if (reclaimed) claimed.add(reclaimed);
+      plan.adjusted.push({ kind: 'notion', ref: d.candidate.ref, reason: `redit une notion existante (« ${d.matched} ») — non écrite` });
+    }
+
+    // Le plafond de l'atelier (§7.13) : ce qui dépasse est écarté, et dit.
+    const room = MAX_NOTIONS_PER_WORKSHOP - (await countNotions(workshopId));
+    const admitted = room > 0 ? kept.slice(0, room) : [];
+    for (const refused of kept.slice(admitted.length)) {
+      plan.discarded.push({
+        kind: 'notion',
+        ref: refused.ref,
+        reason: `l'atelier a atteint sa limite de ${MAX_NOTIONS_PER_WORKSHOP} notions`,
+      });
+    }
+
+    const created = await insertNotions(
+      workshopId,
+      actorId,
+      importId,
+      admitted.map((n) => {
+        const source = sourcePageOf(input.extracts, n.page);
+        return { ...n, chapterRef: chapterId, sourceDocument: source?.documentId, page: source?.page };
+      }),
+      new Map(),
+    );
+
+    if (input.wholeDocumentFallback) {
+      plan.adjusted.push({
+        kind: 'chapter',
+        ref: chapterId,
+        reason: `« ${chapter.name} » : aucune borne de pages exploitable — le chapitre a lu les documents entiers`,
+      });
+    }
+
+    await stepDone(meta, call, {
+      ecrites: created.size,
+      proposees: plan.notions.length,
+      reclamees: claimed.size,
+      secondeVerification: recheck.length,
+      extraits: input.extracts.length,
+      pages: input.extracts.reduce((sum, e) => sum + (e.pages?.length ?? 0), 0),
+      documentsEntiers: input.extracts.filter((e) => e.pages === null).length,
+      ecartes: plan.discarded.length,
+      corriges: plan.adjusted.length,
+    });
+
+    return {
+      written: created.size,
+      discarded: plan.discarded,
+      adjusted: plan.adjusted,
+      claimed: [...claimed],
+      wholeDocumentFallback: input.wholeDocumentFallback,
+    };
+  } finally {
+    await releaseDocuments(provider, input.uploaded);
+  }
 }
 
 /** Un appel de la passe parcours : ses notions, ce qu'on lui demande sur

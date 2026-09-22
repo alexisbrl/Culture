@@ -852,15 +852,59 @@ Dans \`notionVerdicts\`, trois réponses possibles :
 export function notionsInstruction(document: { fileName: string }): string {
   return `Extrais les NOTIONS du document « ${document.fileName} ». Traite-le en entier ; ne t'occupe d'aucun autre document.
 
-Une notion est l'unité minimale de connaissance : UNE idée, en UNE phrase de 500 caractères maximum, autoportante et vérifiable. « La Loire est le plus long fleuve de France » est une notion ; « Les fleuves » n'en est pas une, c'est un thème.
+${NOTION_RULES}`;
+}
+
+/** Les étiquettes de la seconde vérification (§7.6) : chaque notion dit
+ *  pourquoi elle repasse. */
+export const RECHECK_LABELS = {
+  forgotten: "n'a été rangée nulle part",
+  check: "est introuvable dans le texte du cours — elle vient peut-être d'une image",
+  out: 'a été jugée hors programme',
+} as const;
+
+/** Étape 2 — les notions d'UN chapitre, sur ses seules pages (§7.2).
+ *
+ *  Elle reçoit les pages de son chapitre, texte et images, les notions qui lui
+ *  sont déjà attribuées — listées plus haut comme l'existant — et la seconde
+ *  vérification : les notions que l'étape chapitres n'a rangées dans aucun
+ *  chapitre visible, chacune avec la raison de son retour (§7.6). */
+export function chapterNotionsInstruction(input: {
+  chapter: { name: string };
+  /** Les extraits joints, avec les pages du cours qu'ils contiennent
+   *  (`null` : le document entier). */
+  extracts: { name: string; pages: number[] | null }[];
+  recheck: { id: string; title: string; label: keyof typeof RECHECK_LABELS }[];
+}): string {
+  const extracts = input.extracts
+    .map((e) => (e.pages ? `- « ${e.name} » : ses pages ${e.pages.map((p, i) => `${i + 1} = page ${p} du cours`).join(', ')}` : `- « ${e.name} » : le document entier`))
+    .join('\n');
+
+  const recheck = input.recheck.length === 0
+    ? ''
+    : `
+
+SECONDE VÉRIFICATION. L'étape qui a découpé le cours n'a lu que son texte, sans les images, et n'a rangé les notions suivantes dans aucun chapitre. Pour chacune, dis si elle relève de TON chapitre — d'après les pages que tu as sous les yeux, images comprises : si oui, mets son identifiant dans \`claimed\` ; sinon, ignore-la. Ne la réécris jamais dans \`notions\`, elle existe déjà.
+
+${input.recheck.map((n) => `- ${n.id} — ${n.title} (celle-ci ${RECHECK_LABELS[n.label]})`).join('\n')}`;
+
+  return `Extrais les NOTIONS du chapitre « ${input.chapter.name} ». Tu as sous les yeux les seules pages de ce chapitre :
+${extracts}
+
+Traite-les en entier, texte ET images : un tableau, un schéma ou une légende portent des notions comme le texte. Ne t'occupe d'aucun autre chapitre. Pour chaque notion, \`page\` est le numéro de page DANS L'EXTRAIT où tu l'as lue.
+
+Les notions déjà rangées dans ce chapitre sont listées plus haut : tu ne les réécris pas.
+
+${NOTION_RULES}${recheck}`;
+}
+
+const NOTION_RULES = `Une notion est l'unité minimale de connaissance : UNE idée, en UNE phrase de 500 caractères maximum, autoportante et vérifiable. « La Loire est le plus long fleuve de France » est une notion ; « Les fleuves » n'en est pas une, c'est un thème.
 
 Découpe assez fin pour qu'on puisse interroger chaque notion séparément, mais pas au point de séparer une idée en deux moitiés qui ne veulent plus rien dire seules.
 
 **CHAQUE NOTION SERA LUE SEULE, sans le cours et sans les autres notions.** C'est la règle la plus importante de cette consigne : une notion est posée telle quelle à un élève, des semaines plus tard, sans rien autour. Écris donc chacune comme si c'était la première phrase qu'on lit sur le sujet.
 
 Concrètement, aucune notion ne commence ni ne continue par un renvoi vers l'extérieur : pas de « ce », « cette », « ces », « cet », « il », « elle », « y », « en » qui désignent quelque chose d'absent de la phrase, pas de « comme vu plus haut », pas de « cette période », pas de « ces améliorations ». Nomme ce dont tu parles à chaque fois, quitte à répéter.
-
-**Ne range rien dans un chapitre** : à ce stade il n'y en a pas, et ce n'est pas ton travail ici.
 
 RÉUTILISE plutôt que de recréer. Avant d'écrire une notion, cherche dans la liste ci-dessus si le fait y est déjà.
 
@@ -872,7 +916,6 @@ Ne produis une notion voisine d'une existante QUE si elle apporte un FAIT VÉRIF
 À ne pas produire : « Le solstice d'hiver est le jour le plus court de l'année » existe déjà, et tu écris « La nuit du solstice d'hiver est la plus longue de l'année » → même fait, autres mots. Tu ne produis rien.
 
 Dans le doute, ne produis pas : une notion manquante se rattrape au prochain import, un doublon reste et encombre l'atelier.`;
-}
 
 /** Passe 3 — le RANGEMENT d'un lot de notions.
  *

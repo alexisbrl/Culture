@@ -378,6 +378,14 @@ export const wireChaptersRelaunchOutput = z.object({
 });
 export const wireAssignmentsOutput = z.object({ assignments: z.array(wireAssignmentSchema) });
 export const wireNotionsOutput = z.object({ notions: z.array(wireNotionSchema) });
+/** L'étape notions d'UN chapitre (§7.2) : ses notions nouvelles, et les notions
+ *  de la seconde vérification qu'il réclame (§7.6). */
+export const wireChapterNotionsOutput = z.object({
+  notions: z.array(wireNotionSchema),
+  claimed: z
+    .array(z.string())
+    .describe("Identifiants, recopiés tels quels, des notions « à vérifier » qui relèvent de TON chapitre. Liste vide si aucune."),
+});
 export const wireGroupsOutput = z.object({ groups: z.array(wireGroupSchema) });
 /** Même sortie, jeu de types de l’examen — voir EXAM_RESPONSE_TYPES. */
 export const wireExamGroupsOutput = z.object({ groups: z.array(wireExamGroupSchema) });

@@ -60,10 +60,10 @@ export function documentsForPass(
   // Effet de bord heureux : le corpus n'est plus envoyé qu'UNE fois au total sur
   // cette passe, au lieu d'une fois par chapitre. C'est moins cher qu'une
   // lecture de cache — voir `shouldCacheDocuments`.
+  // L'étape notions d'un chapitre reçoit ce qu'on lui a préparé : les seules
+  // pages de SON chapitre (docs/architecture.md §7.2). Sans index, c'est ce cas.
   if (pass === 'notions') {
-    if (documentIndex === undefined) {
-      throw new Error('documentsForPass: la passe notions exige un index de document');
-    }
+    if (documentIndex === undefined) return prepared;
     const document = prepared[documentIndex];
     return document ? [document] : [];
   }

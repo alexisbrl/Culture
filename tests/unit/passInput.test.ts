@@ -124,10 +124,10 @@ describe('passe questions — l’appel capturé ne porte aucun document', () =>
     expect(documentsForPass('notions', [doc('a')], 7)).toEqual([]);
   });
 
-  it('la passe notions SANS index est une erreur de programmation, pas un défaut', () => {
-    // Retomber silencieusement sur « tous les documents » rouvrirait le poste
-    // de coût que l'inversion vient de fermer.
-    expect(() => documentsForPass('notions', [doc('a')])).toThrow(/index/);
+  it('l’étape notions d’un chapitre reçoit ses extraits, et rien d’autre', () => {
+    // Les extraits sont composés en amont (`composeChapterSlices`) : ils ne
+    // contiennent déjà que les pages du chapitre.
+    expect(documentsForPass('notions', [doc('a'), doc('b')])).toEqual([doc('a'), doc('b')]);
   });
 });
 

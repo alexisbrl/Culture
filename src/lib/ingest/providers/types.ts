@@ -122,6 +122,17 @@ export type IngestScope =
       document: { index: number; fileName: string };
     }
   | {
+      /** Étape 2 — les notions d'UN chapitre, sur ses seules pages (§7.2). Les
+       *  documents passés à l'appel sont les extraits de ce chapitre ; les
+       *  notions qui lui sont déjà attribuées voyagent dans l'existant. */
+      pass: 'notions';
+      chapter: { id: string; name: string };
+      /** Les extraits joints, avec les pages du cours qu'ils contiennent. */
+      extracts: { name: string; pages: number[] | null }[];
+      /** La seconde vérification (§7.6), étiquetée. */
+      recheck: { id: string; title: string; label: 'forgotten' | 'check' | 'out' }[];
+    }
+  | {
       /** Le RANGEMENT : où va chaque notion. Passe séparée de « chapitres »
        *  depuis le 24/08/2026 — voir `wireSchema.ts` pour le pourquoi.
        *

@@ -28,6 +28,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import {
   chaptersInstruction,
   chaptersRelaunchInstruction,
+  chapterNotionsInstruction,
   userHintBlock,
   existingContentBlock,
   assignInstruction,
@@ -44,6 +45,7 @@ import {
   wireAssignmentsOutput,
   wireChaptersOutput,
   wireChaptersRelaunchOutput,
+  wireChapterNotionsOutput,
   wireExamGroupsOutput,
   wireGroupsOutput,
   wireNotionsOutput,
@@ -340,7 +342,9 @@ function instructionFor(scope: IngestScope): string {
         ? chaptersRelaunchInstruction(scope.relaunch)
         : chaptersInstruction(scope.fileNames, scope.retry);
     case 'notions':
-      return notionsInstruction(scope.document);
+      return 'chapter' in scope
+        ? chapterNotionsInstruction({ chapter: scope.chapter, extracts: scope.extracts, recheck: scope.recheck })
+        : notionsInstruction(scope.document);
     case 'assign':
       return assignInstruction({
         notions: scope.notions,
@@ -443,7 +447,7 @@ function outputSchemaFor(scope: IngestScope) {
     case 'chapters':
       return scope.relaunch ? wireChaptersRelaunchOutput : wireChaptersOutput;
     case 'notions':
-      return wireNotionsOutput;
+      return 'chapter' in scope ? wireChapterNotionsOutput : wireNotionsOutput;
     case 'assign':
       return wireAssignmentsOutput;
     case 'questions':
@@ -579,7 +583,7 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
       const sent = documentsForPass(
         scope.pass,
         documents,
-        scope.pass === 'notions' ? scope.document.index : undefined,
+        scope.pass === 'notions' && 'document' in scope ? scope.document.index : undefined,
         scope.pass === 'resource' ? scope.granted : undefined,
       );
 
