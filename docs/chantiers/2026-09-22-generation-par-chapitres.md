@@ -129,7 +129,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
   - Fichiers : `src/components/ai/AiGenerationDialog.tsx`, `messages/fr.json`, `messages/en.json`
   - Dépend de : T6, T7, T8, T9, T10
 
-- [ ] **T12 — Suppression de l'ancien enchaînement**
+- [x] **T12 — Suppression de l'ancien enchaînement**
   - Retirer : la passe notions document par document (`ingestDocumentNotions` et son action), la passe de rangement (`ingestAssignments`, `assign` dans `IngestPass`, `PASS_MODELS`, consigne `assignInstruction`, schémas, `NOTIONS_PER_ASSIGN_BATCH`), le cache de prompt (`shouldCacheDocuments` et marqueurs), et leurs tests devenus sans objet. Tout ce qui reste utile (ex. `splitUnplaced`) est soit réutilisé par T4/T8, soit supprimé.
   - Critère d'acceptation : `grep -rn "ingestAssignments\|assignInstruction\|shouldCacheDocuments\|NOTIONS_PER_ASSIGN_BATCH" src tests` ne rend rien ; lint, tests et build passent.
   - Fichiers : `src/lib/ingest/*`, `src/app/actions/aiIngest.ts`, `tests/unit/*`
@@ -166,6 +166,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 - 2026-09-22 — T9 — c5e5037 — `rediteCandidates` / `judgeRedites` / `rediteRemovals` (duplicates.ts), passe et étape journal `redites` (Sonnet), `ingestRedites` + action `checkWorkshopRedites` ; une notion effacée voit d'abord ses questions rattachées (les liens partent ensuite en cascade avec elle).
 - 2026-09-22 — T10 — f7ef8e8 — `createBudgetLedger(parts = chapterStartBudgets)` dans passInput (pur, importable par l'écran) ; le serveur calculait déjà le plan d'un chapitre sur SES notions et l'existant figé à l'ouverture du lot — rien à y changer. Le branchement à l'écran est pour T11.
 - 2026-09-22 — T11 — 1b35783 — `generate()` réécrit : étape 0 → chapitres (relance / annulation `cancelledForgotten`) → notions de tous les chapitres (`INGEST_CONCURRENCY`), chacun lançant ses questions (registre de parts) → redites en parallèle des questions restantes → `finishWorkshopIngestion(claims)`. L'examen attend la fin des étapes notions, inchangé sinon. Clés `progress.notionsDocuments` et `progress.assign` retirées. Rendu non vérifié à l'écran ici — l'essai réel est T14.
+- 2026-09-22 — T12 — 54096fe — retirés : passe notions par document (+ action), passe `assign` (fonction, action, consigne, schéma de sortie, modèle, étape journal), cache de prompt, `splitUnplaced`/`batchNotions`, index de document de `documentsForPass`. Le grep du critère ne rend rien. Gardé : `assignments` dans `parsePlan` (contrat générique d'un plan, hors étapes du modèle).
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
