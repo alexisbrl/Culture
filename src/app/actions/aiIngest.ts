@@ -56,6 +56,10 @@ export type ChapterStructureResult =
       chapters: { id: string; name: string }[];
       discarded: PlanIssue[];
       adjusted: PlanIssue[];
+      /** `relaunch` : rien n'est écrit, appeler `relaunchWorkshopChapters`.
+       *  `cancel` : rien n'est écrit, la mise à jour est annulée. */
+      decision: 'continue' | 'relaunch' | 'cancel';
+      forgottenShare: number;
     }
   | { ok: false; error: string };
 
@@ -233,10 +237,8 @@ export async function ingestWorkshopResource(
   }
 }
 
-/** Passe 2 — écrit les chapitres, et les SITUE dans le cours.
- *
- *  Elle ne range rien : ranger 500 notions dans une seule réponse dépasserait le
- *  plafond de sortie. Le rangement est une passe à part, découpée en lots. */
+/** Étape 1 — les chapitres, sur le texte du cours : bornes de pages, et un
+ *  verdict sur chaque notion existante. Rend la décision du seuil d'oubli. */
 export async function ingestWorkshopChapters(
   workshopId: string,
   importId: string,
@@ -250,6 +252,25 @@ export async function ingestWorkshopChapters(
     return { ok: true, ...result };
   } catch (error) {
     return { ok: false, error: failed('chapitres', error, { workshopId, importId }) };
+  }
+}
+
+/** Étape 1, relance — quand trop de notions sont restées sans verdict. Une
+ *  action à part : un appel au modèle par action, pour tenir dans la durée
+ *  d'une fonction serveur. */
+export async function relaunchWorkshopChapters(
+  workshopId: string,
+  importId: string,
+): Promise<ChapterStructureResult> {
+  const ctx = await requireManager(workshopId);
+  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
+
+  try {
+    const result = await run.ingestChaptersRelaunch(workshopId, ctx.userId, importId);
+    if (result.decision === 'continue') revalidateWorkshop();
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: failed('chapitres (relance)', error, { workshopId, importId }) };
   }
 }
 

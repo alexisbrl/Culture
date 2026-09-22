@@ -68,9 +68,9 @@ export function documentsForPass(
     return document ? [document] : [];
   }
 
-  // La passe chapitres, elle, les reçoit TOUS : sans le cours, le modèle invente
-  // des intitulés au lieu de reprendre ceux du document, et ne sait pas d'où
-  // viennent les notions qu'on lui demande de répartir.
+  // La passe chapitres reçoit ce qu'on lui a préparé, et seulement ça : ses
+  // seules pages pauvres en texte, en image (`composeChaptersInput`). Le texte
+  // du cours, lui, voyage dans la consigne (docs/architecture.md §7.2).
   return prepared;
 }
 

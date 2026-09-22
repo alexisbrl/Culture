@@ -27,6 +27,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 
 import {
   chaptersInstruction,
+  chaptersRelaunchInstruction,
   userHintBlock,
   existingContentBlock,
   assignInstruction,
@@ -42,6 +43,7 @@ import { documentsForPass, shouldCacheDocuments } from '@/lib/ingest/passInput';
 import {
   wireAssignmentsOutput,
   wireChaptersOutput,
+  wireChaptersRelaunchOutput,
   wireExamGroupsOutput,
   wireGroupsOutput,
   wireNotionsOutput,
@@ -313,7 +315,7 @@ function tuningFor(model: ModelId): {
   return { thinking: { type: 'adaptive' }, effort: 'high' };
 }
 
-function instructionFor(scope: IngestScope, fileNames: string[]): string {
+function instructionFor(scope: IngestScope): string {
   switch (scope.pass) {
     case 'resource':
       return resourceInstruction({
@@ -331,10 +333,12 @@ function instructionFor(scope: IngestScope, fileNames: string[]): string {
         context: scope.context,
       });
     case 'chapters':
-      // Les noms de fichiers sont dans la consigne, pas seulement dans les blocs
-      // `document` : c'est là que le modèle peut apprendre qu'ils forment un
-      // seul cours (§16.15).
-      return chaptersInstruction(fileNames, scope.retry);
+      // Les noms de fichiers sont dans la consigne : c'est là que le modèle
+      // apprend qu'ils forment un seul cours. Ce sont ceux du COURS, pas des
+      // pages jointes en image.
+      return scope.relaunch
+        ? chaptersRelaunchInstruction(scope.relaunch)
+        : chaptersInstruction(scope.fileNames, scope.retry);
     case 'notions':
       return notionsInstruction(scope.document);
     case 'assign':
@@ -437,7 +441,7 @@ function outputSchemaFor(scope: IngestScope) {
       // avoir le droit et l'interdiction (voir `wireResourceOutputExam`).
       return scope.context === 'exam' ? wireResourceOutputExam : wireResourceOutput;
     case 'chapters':
-      return wireChaptersOutput;
+      return scope.relaunch ? wireChaptersRelaunchOutput : wireChaptersOutput;
     case 'notions':
       return wireNotionsOutput;
     case 'assign':
@@ -621,12 +625,21 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
       // Le filtre est posé ici, à l'endroit où les blocs sont assemblés, et non
       // dans `existingContentBlock` : c'est la liste envoyée qui doit être
       // valide, quelle que soit la raison pour laquelle un bloc est vide.
-      const existingBlock = existingContentBlock(existing, existingScopeFor(scope));
+      // L'étape chapitres lit le cours en TEXTE : il vient après les pages
+      // jointes en image, avant l'existant et la consigne.
+      if (scope.pass === 'chapters' && scope.corpusText.trim()) {
+        content.push({ type: 'text', text: scope.corpusText });
+      }
+      // La relance porte ses notions et ses chapitres dans sa consigne : le bloc
+      // « existant » ferait double emploi.
+      const existingBlock = scope.pass === 'chapters' && scope.relaunch
+        ? ''
+        : existingContentBlock(existing, existingScopeFor(scope));
       if (existingBlock.trim()) content.push({ type: 'text', text: existingBlock });
       // ⚠️ La consigne de l'utilisateur est collée en tête de l'instruction, donc
       // APRÈS le marqueur de cache : elle varie d'un import à l'autre et n'a
       // rien à faire dans le préfixe stable (voir l'en-tête de `prompt.ts`).
-      const instructionBlock = userHintBlock(opts.userHint) + instructionFor(scope, sent.map((doc) => doc.fileName));
+      const instructionBlock = userHintBlock(opts.userHint) + instructionFor(scope);
       if (instructionBlock.trim()) content.push({ type: 'text', text: instructionBlock });
 
       const wanted = wantedFor(scope.pass);

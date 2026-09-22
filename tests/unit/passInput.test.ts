@@ -235,7 +235,7 @@ describe('withChapterRetry — une relance, jamais deux (§16.18)', () => {
   /** Ce que fait `ingestChapters`, sans la base : appeler, compter, relancer. */
   async function pass(provider: ReturnType<typeof chapterProvider>) {
     return withChapterRetry(
-      (retry) => provider.documentToPlan([], empty, { pass: 'chapters', retry }),
+      (retry) => provider.documentToPlan([], empty, { pass: 'chapters', corpusText: '', fileNames: [], retry }),
       (result) => (result.plan as { chapters: unknown[] }).chapters.length,
       (result) => (result.plan as { chapters: { name: string }[] }).chapters.map((c) => c.name),
     );

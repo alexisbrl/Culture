@@ -100,7 +100,20 @@ import {
 } from './demand';
 import { BUSY_ERROR, assertImportOpen, closeImport, liveImportOf } from './lock';
 import { parsePlan, type PlanIssue } from './planSchema';
-import { guardDrops } from './verdicts';
+import {
+  classifyNotions,
+  forgottenIds,
+  forgottenShare,
+  guardDrops,
+  mergeRelaunch,
+  thresholdDecision,
+  type ChapterLayout,
+  type NotionStanding,
+  type NotionVerdict,
+  type ThresholdDecision,
+} from './verdicts';
+import { composeChaptersInput, resolveDocumentName } from './chaptersInput';
+import type { PageSpan } from './slicing';
 import { releaseDocuments } from './release';
 import {
   EXAM_GROUP_SIZE,
@@ -110,7 +123,7 @@ import {
 } from './prompt';
 import { MAX_CORPUS_TOKENS, createClaudeProvider, type ModelId } from './providers/claude';
 import { createDeepSeekProvider } from './providers/deepseek';
-import type { PlanProvider, PreparedDocument, ProviderResult } from './providers/types';
+import type { PlanProvider, PreparedDocument, ProviderResult, SourceDocument } from './providers/types';
 
 export type IngestContext = 'parcours' | 'exam';
 
@@ -127,6 +140,12 @@ export type ChapterStructureResult = {
   chapters: { id: string; name: string }[];
   discarded: PlanIssue[];
   adjusted: PlanIssue[];
+  /** Ce que dit le seuil d'oubli (§7.6) : `continue` — l'étape a écrit, on
+   *  passe aux notions ; `relaunch` — rien n'est écrit, l'écran appelle la
+   *  relance ; `cancel` — rien n'est écrit, la mise à jour est annulée. */
+  decision: ThresholdDecision;
+  /** Part des notions existantes restées sans verdict. */
+  forgottenShare: number;
 };
 
 export type AssignPassResult = {
@@ -170,19 +189,6 @@ export type QuestionPassResult = ChapterPassResult & {
 
 const EMPTY: ExistingContent = { chapters: [], notions: [], questions: [] };
 
-/** Passe 1 — les chapitres existants. Seul chargeur sans filtre plus étroit que
- *  l'atelier : la passe raisonne justement sur l'ensemble du programme. */
-async function loadExistingChapters(workshopId: string): Promise<ExistingContent> {
-  const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('workshop_chapters')
-    .select('id, name')
-    .eq('workshop_id', workshopId)
-    .order('position');
-  if (error) throw new Error(error.message);
-
-  return { ...EMPTY, chapters: (data ?? []).map((c) => ({ id: c.id as string, name: c.name as string })) };
-}
 
 /** TOUTES les notions de l'atelier — servent à deux passes, pour deux raisons.
  *
@@ -1223,24 +1229,118 @@ async function recordExamTarget(importId: string, examQuestions: number): Promis
   }
 }
 
-/** Passe 2 — écrit les CHAPITRES **et y range les notions**.
- *
- *  Anciennement `startIngestion`, et anciennement première : depuis le
- *  23/08/2026 elle passe après l'extraction des notions (feuille de route
- *  « notions d'abord », §3). Ce n'est pas un détail d'ordonnancement — c'est ce
- *  qui rend une mise à jour possible. Au niveau du chapitre, le modèle ne peut
- *  pas reconnaître qu'un « athlétisme 1950-2000 » et un « athlétisme 1940-1990 »
- *  sont la même boîte redécoupée, et il en créerait quatre.
- *
- *  Un seul appel, et il porte les documents : sans le cours, le modèle invente
- *  des intitulés au lieu de reprendre ceux du document, et ne sait pas d'où
- *  viennent les notions qu'on lui demande de répartir.
- *
- *  C'est aussi le seul moment du pipeline qui voit **toutes** les notions d'un
- *  coup — donc le seul où les redites entre deux documents peuvent se repérer.
- *  La réponse reste dans le contrat : on en range une, l'autre reste sans
- *  chapitre, et le ménage de fin d'import s'en occupe si personne ne l'a créée
- *  avant cet import. */
+// ─── Étape 1 : les chapitres (docs/architecture.md §7.2, §7.6) ───────────────
+//
+// Un seul appel, sur le TEXTE du cours, avec tous les chapitres visibles et
+// toutes les notions qui y vivent. Il rend trois choses : l'architecture du
+// programme (rangs, 0 pour ce qui sort), les bornes de pages de chaque
+// chapitre, et un verdict sur chaque notion existante.
+//
+// Rien n'est écrit avant que le seuil d'oubli ait parlé : au-delà de 10 %, on
+// relance ; après la relance, au-delà de 25 %, la mise à jour est annulée sans
+// avoir touché à l'atelier. D'où la réponse gardée « en attente » dans le lot
+// entre les deux appels — la relance est une action serveur à part, pour tenir
+// dans la durée d'une fonction serveur.
+
+/** Ce que l'étape chapitres laisse aux étapes suivantes (`ai_imports.scope.stage1`).
+ *  Écrit une fois, par l'étape elle-même : aucune écriture concurrente. */
+export type Stage1State = {
+  /** Les chapitres au programme, dans l'ordre, avec leurs bornes résolues. */
+  chapters: { id: string; name: string; spans: PageSpan[] }[];
+  /** Les chapitres que cette génération a écartés. */
+  dropped: string[];
+  /** Le cas de chaque notion existante à l'issue de l'étape. */
+  standings: Record<string, NotionStanding>;
+  /** Le chapitre de chaque notion existante AVANT la génération. */
+  before: Record<string, string | null>;
+  /** Le nombre de pages de chaque document (`null` : document sans pages). */
+  pageCounts: Record<string, number | null>;
+  /** Part des notions oubliées, mesurée au terme de l'étape. */
+  forgottenShare: number;
+};
+
+/** La réponse de l'étape, gardée sans rien écrire le temps de la relance. */
+type Stage1Pending = {
+  fresh: { ref: string; name: string }[];
+  reused: [string, string][];
+  chapterOrder: { ref: string; rank: number; reason: string }[];
+  chapterBounds: { ref: string; spans: { document: string; from: number; to: number }[] }[];
+  dropped: string[];
+  blocked: boolean;
+  visibleExisting: { id: string; name: string }[];
+  notions: { id: string; title: string; chapterId: string | null }[];
+  standings: Record<string, NotionStanding>;
+  pageCounts: Record<string, number | null>;
+  fileNames: Record<string, string>;
+  discarded: PlanIssue[];
+  adjusted: PlanIssue[];
+};
+
+async function readScope(importId: string): Promise<Record<string, unknown>> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
+  if (error || !data) throw new Error(error?.message ?? 'import introuvable');
+  return (data.scope as Record<string, unknown> | null) ?? {};
+}
+
+async function writeScope(importId: string, patch: Record<string, unknown>): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const scope = await readScope(importId);
+  const { error } = await supabase.from('ai_imports').update({ scope: { ...scope, ...patch } }).eq('id', importId);
+  if (error) throw new Error(error.message);
+}
+
+/** L'état laissé par l'étape chapitres. Lève s'il manque : les étapes suivantes
+ *  n'ont pas de sens sans lui. */
+export async function stage1Of(importId: string): Promise<Stage1State> {
+  const stage1 = (await readScope(importId)).stage1 as Stage1State | undefined;
+  if (!stage1) throw new Error('étape chapitres introuvable pour ce lot');
+  return stage1;
+}
+
+/** Les documents du lot, relus depuis le stockage de l'atelier. */
+async function sourcesOf(prepared: readonly PreparedDocument[]): Promise<SourceDocument[]> {
+  return Promise.all(
+    prepared.map(async (doc) => {
+      const bytes = await readObject(doc.key);
+      if (!bytes) throw new Error(`Fichier illisible : ${doc.fileName}`);
+      return { fileId: doc.fileId, key: doc.key, fileName: doc.fileName, mimeType: doc.mimeType, bytes };
+    }),
+  );
+}
+
+/** Le programme tel que l'étape chapitres le voit : les chapitres VISIBLES, dans
+ *  l'ordre, et les notions qui ne sont pas rangées dans un chapitre caché — une
+ *  notion d'un chapitre déjà écarté est déjà hors programme, rien ne la juge. */
+async function loadProgramForChapters(workshopId: string): Promise<{
+  chapters: { id: string; name: string }[];
+  notions: { id: string; title: string; chapterId: string | null }[];
+}> {
+  const supabase = getSupabaseServerClient();
+  const [{ data: chapterRows, error }, all] = await Promise.all([
+    supabase.from('workshop_chapters').select('id, name, hidden').eq('workshop_id', workshopId).order('position').order('id'),
+    loadAllNotions(workshopId),
+  ]);
+  if (error) throw new Error(error.message);
+  const hidden = new Set((chapterRows ?? []).filter((c) => c.hidden === true).map((c) => c.id as string));
+  return {
+    chapters: (chapterRows ?? [])
+      .filter((c) => c.hidden !== true)
+      .map((c) => ({ id: c.id as string, name: c.name as string })),
+    notions: all.notions.filter((n) => !n.chapterId || !hidden.has(n.chapterId)),
+  };
+}
+
+function toVerdicts(
+  verdicts: ReturnType<typeof parsePlan>['notionVerdicts'],
+  idOf: (ref: string) => string,
+): NotionVerdict[] {
+  return verdicts.map((v) => (v.verdict === 'chapter' ? { ...v, chapterRef: idOf(v.chapterRef) } : v));
+}
+
+/** Étape 1 — les CHAPITRES, sur le texte du cours. Un seul appel (deux si
+ *  l'échelle du découpage est à vérifier). Rend la décision de seuil : sur
+ *  `relaunch`, rien n'est écrit et l'écran appelle `ingestChaptersRelaunch`. */
 export async function ingestChapters(
   workshopId: string,
   actorId: string,
@@ -1256,157 +1356,291 @@ export async function ingestChapters(
     userHint,
     onOversize: (model) => recordOversizeModel(importId, model),
   });
-  const prepared = await preparedOf(importId);
 
-  const [chaptersOnly, refs] = await Promise.all([
-    loadExistingChapters(workshopId),
-    loadExistingRefs(workshopId),
-  ]);
-  // Aucune notion (31/08/2026) : cette passe nomme des chapitres et dit lesquels
-  // le cours ne couvre plus — les deux se décident sur les DOCUMENTS. La liste
-  // des notions y pesait jusqu'à ~20 000 tokens par appel pour rien.
-  const existing: ExistingContent = { ...chaptersOnly, notions: [] };
+  const [prepared, program] = await Promise.all([preparedOf(importId), loadProgramForChapters(workshopId)]);
+  const input = await composeChaptersInput(await sourcesOf(prepared), (docs) => provider.prepare(docs));
 
-  // Un découpage trop fin est le multiplicateur de tout ce qui suit (§16.15) :
-  // au-delà du seuil, on relance UNE fois — une VÉRIFICATION, pas une
-  // correction imposée. Si la seconde réponse dépasse encore, on écrit ce
-  // qu'elle donne : jamais de blocage, jamais de troisième appel, et surtout
-  // aucune validation humaine (§16.18).
-  // Les chapitres existants que la réponse GARDE au programme, par leur nom :
-  // ceux qu'elle ne nomme pas gardent leur place, ceux qu'elle met au rang 0
-  // sortent. Sert à mesurer le découpage résultant, et à le montrer au modèle
-  // si on le lui fait vérifier.
-  const keptChapters = (order: { ref: string; rank: number }[]): string[] => {
-    const retired = new Set(order.filter((o) => o.rank === 0).map((o) => o.ref));
-    return chaptersOnly.chapters.filter((c) => !retired.has(c.id)).map((c) => c.name);
-  };
+  try {
+    const existing: ExistingContent = { chapters: program.chapters, notions: program.notions, questions: [] };
+    const refs = { chapterIds: program.chapters.map((c) => c.id), notionIds: program.notions.map((n) => n.id) };
 
-  const meta: StepMeta = { importId, workshopId, step: 'chapters', provider };
+    // Les chapitres existants que la réponse GARDE au programme, par leur nom :
+    // sert à mesurer le découpage résultant, et à le montrer au modèle si on le
+    // lui fait vérifier.
+    const keptChapters = (order: { ref: string; rank: number }[]): string[] => {
+      const retired = new Set(order.filter((o) => o.rank === 0).map((o) => o.ref));
+      return program.chapters.filter((c) => !retired.has(c.id)).map((c) => c.name);
+    };
 
-  const { result: plan } = await withChapterRetry(
-    async (retry) => {
-      const attempt = await modelCall(meta, () => provider.documentToPlan(prepared, existing, {
-        pass: 'chapters',
-        retry,
-      }));
-      // Les deux essais sont facturés : les deux sont comptés.
-      await addImportUsage(importId, attempt.result.usage);
-      const parsed = parsePlanLogged('chapitres', attempt.result.plan, refs, attempt.result.truncated);
-      // ⚠️ Une ligne de journal par APPEL, y compris la vérification du
-      // découpage : ce que porte cette étape, c'est une PROPOSITION — les
-      // chapitres réellement créés se comptent une fois pour toute la passe,
-      // après la fusion des doublons, et se lisent au niveau de la génération.
-      await stepDone(meta, attempt, {
-        proposes: parsed.chapters.length,
-        ecartes: parsed.discarded.length,
-        corriges: parsed.adjusted.length,
-        verification: retry !== undefined,
+    const meta: StepMeta = { importId, workshopId, step: 'chapters', provider };
+
+    // Un découpage trop fin multiplie tout ce qui suit ; trop grossier, il noie
+    // les notions. On le fait VÉRIFIER une fois — reconduire est une réponse
+    // valide — et on écrit ce que rend la seconde réponse (§7.12).
+    const { result: plan } = await withChapterRetry(
+      async (retry) => {
+        const attempt = await modelCall(meta, () => provider.documentToPlan(input.images, existing, {
+          pass: 'chapters',
+          corpusText: input.text,
+          fileNames: Object.values(input.fileNames),
+          retry,
+        }));
+        await addImportUsage(importId, attempt.result.usage);
+        const parsed = parsePlanLogged('chapitres', attempt.result.plan, refs, attempt.result.truncated);
+        await stepDone(meta, attempt, {
+          proposes: parsed.chapters.length,
+          verdicts: parsed.notionVerdicts.length,
+          notions: program.notions.length,
+          pagesEnImage: input.images.length,
+          ecartes: parsed.discarded.length,
+          corriges: parsed.adjusted.length,
+          verification: retry !== undefined,
+        });
+        return parsed;
+      },
+      (parsed) => parsed.chapters.length + keptChapters(parsed.chapterOrder).length,
+      (parsed) => [...keptChapters(parsed.chapterOrder), ...parsed.chapters.map((c) => c.name)],
+    );
+
+    // ⚠️ **Un chapitre proposé en double est REDIRIGÉ, jamais écarté.** Écarter
+    // un chapitre orphelinerait tout ce qu'on vient de lui attribuer : on ne le
+    // crée pas, et sa référence pointe vers le chapitre existant.
+    const reused = new Map<string, string>();
+    const fresh = plan.chapters.filter((c) => {
+      const found = findExistingMatch(c.name, program.chapters, (ch) => ch.name);
+      if (!found) return true;
+      reused.set(c.ref, found.match.id);
+      plan.adjusted.push({
+        kind: 'chapter',
+        ref: c.ref,
+        reason: `chapitre déjà présent (« ${found.match.name} ») — notions rangées dedans plutôt que dans un doublon`,
       });
-      return parsed;
-    },
-    // ⚠️ On mesure le PROGRAMME qui résulte de la réponse : les chapitres
-    // nouveaux, plus les existants que le modèle n'a pas mis au rang 0. Compter
-    // les seuls nouveaux relancerait à chaque mise à jour qui n'ajoute qu'un
-    // chapitre, et laisserait passer un cours entièrement réduit à deux boîtes.
-    (parsed) => parsed.chapters.length + keptChapters(parsed.chapterOrder).length,
-    (parsed) => [...keptChapters(parsed.chapterOrder), ...parsed.chapters.map((c) => c.name)],
-  );
-
-  // ⚠️ **Un chapitre proposé en double est REDIRIGÉ, jamais écarté.**
-  //
-  // `insertChapters` écrivait tout ce que le modèle rendait, sans rien comparer
-  // à l'existant : la consigne était le seul rempart (fragilité repérée le
-  // 22/08/2026). Le même outil de ressemblance que pour les notions ferme le
-  // trou — mais la conduite à tenir n'est pas la même. Écarter une notion en
-  // double ne coûte rien, rien n'en dépend encore ; écarter un CHAPITRE
-  // orphelinerait toutes les notions qu'on venait de lui affecter. On ne le crée
-  // donc pas, et sa référence pointe vers le chapitre existant : les
-  // affectations atterrissent au bon endroit sans le savoir.
-  const reused = new Map<string, string>();
-  const fresh = plan.chapters.filter((c) => {
-    const found = findExistingMatch(c.name, chaptersOnly.chapters, (ch) => ch.name);
-    if (!found) return true;
-    reused.set(c.ref, found.match.id);
-    // Jamais silencieux : l'utilisateur doit pouvoir constater la fusion.
-    plan.adjusted.push({
-      kind: 'chapter',
-      ref: c.ref,
-      reason: `chapitre déjà présent (« ${found.match.name} ») — notions rangées dedans plutôt que dans un doublon`,
+      return false;
     });
-    return false;
+
+    // Garde-fou « jamais tous » : écarter chaque chapitre au programme en un
+    // import n'est presque jamais une décision (§7.6).
+    const guard = guardDrops(
+      program.chapters.map((c) => c.id),
+      plan.chapterOrder.filter((c) => c.rank === 0).map((c) => c.ref),
+    );
+    if (guard.blocked) {
+      plan.adjusted.push({
+        kind: 'chapter',
+        reason: `l'IA proposait d'écarter les ${program.chapters.length} chapitres de l'atelier — rien n'a été écarté, un programme ne se vide pas d'un seul import`,
+      });
+    }
+
+    const idOf = (ref: string) => reused.get(ref) ?? ref;
+    const dropped = new Set(guard.dropped);
+    const layout: ChapterLayout = {
+      visible: new Set([
+        ...program.chapters.map((c) => c.id).filter((id) => !dropped.has(id)),
+        ...fresh.map((c) => c.ref),
+      ]),
+      dropped,
+    };
+    const standings = classifyNotions(program.notions, toVerdicts(plan.notionVerdicts, idOf), layout);
+
+    const pending: Stage1Pending = {
+      fresh: fresh.map((c) => ({ ref: c.ref, name: c.name })),
+      reused: [...reused],
+      chapterOrder: plan.chapterOrder,
+      chapterBounds: plan.chapterBounds,
+      dropped: guard.dropped,
+      blocked: guard.blocked,
+      visibleExisting: program.chapters,
+      notions: program.notions,
+      standings: Object.fromEntries(standings),
+      pageCounts: input.pageCounts,
+      fileNames: input.fileNames,
+      discarded: plan.discarded,
+      adjusted: plan.adjusted,
+    };
+
+    const decision = thresholdDecision(standings, 'first');
+    if (decision === 'relaunch') {
+      await writeScope(importId, { stage1Pending: pending });
+      return {
+        chapters: [],
+        discarded: plan.discarded,
+        adjusted: plan.adjusted,
+        decision,
+        forgottenShare: forgottenShare(standings),
+      };
+    }
+    return await applyStage1(workshopId, actorId, importId, pending, standings);
+  } finally {
+    await releaseDocuments(provider, input.images);
+  }
+}
+
+/** Relance de l'étape chapitres, quand au moins 10 % des notions n'ont reçu
+ *  aucun verdict (§7.6). Ne redemande QUE celles-là, les chapitres étant figés.
+ *  Après elle, 25 % d'oubliées ou plus annulent la mise à jour : rien n'est
+ *  écrit, et l'écran prévient l'utilisateur. */
+export async function ingestChaptersRelaunch(
+  workshopId: string,
+  actorId: string,
+  importId: string,
+  options: { provider?: PlanProvider } = {},
+): Promise<ChapterStructureResult> {
+  const scope = await readScope(importId);
+  const pending = scope.stage1Pending as Stage1Pending | undefined;
+  if (!pending) throw new Error('aucune étape chapitres en attente de relance pour ce lot');
+
+  const [oversizeModels, userHint] = await Promise.all([oversizeModelsOf(importId), userHintOf(importId)]);
+  const provider = options.provider ?? createClaudeProvider({
+    corpusTokens: typeof scope.corpusTokens === 'number' ? scope.corpusTokens : undefined,
+    oversizeModels,
+    userHint,
+    onOversize: (model) => recordOversizeModel(importId, model),
   });
 
-  // ─── Ce que le cours ne couvre plus ───────────────────────────────────────
-  //
-  // Décidé ICI et nulle part ailleurs (25/08/2026) : cette passe est la SEULE à
-  // recevoir les documents. L'étape de rangement, elle, ne voit que des noms de
-  // chapitres — elle n'a aucun moyen de savoir laquelle est la bonne version du
-  // cours, et trouverait légitimes deux chapitres qui se recouvrent.
-  //
-  // C'est une déclaration POSITIVE : ce que le modèle ne nomme pas reste au
-  // programme. L'omission — sa panne la plus banale sur une longue liste — est
-  // donc sans effet, là où « voici l'architecture complète, le reste dégage »
-  // aurait fait d'un oubli une amputation.
-  //
-  // Appliqué AVANT le rangement, donc les notions ne seront jamais proposées à
-  // un chapitre qu'on vient d'écarter ; celles qui n'ont plus leur place
-  // ailleurs y resteront, hors programme, ce qui rend le changement lisible.
-  const byId = new Map(chaptersOnly.chapters.map((c) => [c.id, c.name]));
-  const outOfProgram = plan.chapterOrder.filter((c) => c.rank === 0).map((c) => c.ref);
+  const first = new Map(Object.entries(pending.standings));
+  const forgotten = new Set(forgottenIds(first));
+  const notions = pending.notions.filter((n) => forgotten.has(n.id));
+  const dropped = new Set(pending.dropped);
+  const chapters = [
+    ...pending.visibleExisting.filter((c) => !dropped.has(c.id)),
+    ...pending.fresh.map((c) => ({ id: c.ref, name: c.name })),
+  ];
 
-  // ⚠️ **Le garde-fou du tout-ou-rien.** Écarter CHAQUE chapitre existant en un
-  // import n'est presque jamais une décision : c'est un modèle qui a mal lu sa
-  // consigne, ou un document sans rapport déposé par erreur. Le cas légitime —
-  // remplacer intégralement le cours d'un atelier — existe, mais il se fait en
-  // deux fois, et il vaut mieux le demander deux fois que vider un programme
-  // sur un malentendu. On n'applique rien, et on le DIT.
-  const guard = guardDrops(chaptersOnly.chapters.map((c) => c.id), outOfProgram);
-  if (guard.blocked) {
-    plan.adjusted.push({
-      kind: 'chapter',
-      reason: `l'IA proposait d'écarter les ${outOfProgram.length} chapitres de l'atelier — rien n'a été écarté, un programme ne se vide pas d'un seul import`,
+  const input = await composeChaptersInput(await sourcesOf(await preparedOf(importId)), (docs) => provider.prepare(docs));
+  try {
+    const meta: StepMeta = { importId, workshopId, step: 'chapters-relaunch', provider };
+    const attempt = await modelCall(meta, () => provider.documentToPlan(input.images, EMPTY, {
+      pass: 'chapters',
+      corpusText: input.text,
+      fileNames: Object.values(input.fileNames),
+      relaunch: { notions: notions.map((n) => ({ id: n.id, title: n.title })), chapters },
+    }));
+    await addImportUsage(importId, attempt.result.usage);
+    const parsed = parsePlanLogged('chapitres (relance)', attempt.result.plan, {
+      chapterIds: [...chapters.map((c) => c.id), ...pending.dropped],
+      notionIds: notions.map((n) => n.id),
+    }, attempt.result.truncated);
+
+    const reused = new Map(pending.reused);
+    const layout: ChapterLayout = { visible: new Set(chapters.map((c) => c.id)), dropped };
+    const again = classifyNotions(notions, toVerdicts(parsed.notionVerdicts, (ref) => reused.get(ref) ?? ref), layout);
+    const standings = mergeRelaunch(first, again);
+    const decision = thresholdDecision(standings, 'relaunch');
+
+    await stepDone(meta, attempt, {
+      demandees: notions.length,
+      verdicts: parsed.notionVerdicts.length,
+      ecartes: parsed.discarded.length,
+      partOubliees: Math.round(forgottenShare(standings) * 1000) / 1000,
+      annule: decision === 'cancel',
     });
-  }
 
-  const discardedChapters = await hideChapters(workshopId, guard.dropped);
+    const discarded = [...pending.discarded, ...parsed.discarded];
+    const adjusted = [...pending.adjusted, ...parsed.adjusted];
+    if (decision === 'cancel') {
+      await writeScope(importId, { stage1Pending: null });
+      return { chapters: [], discarded, adjusted, decision, forgottenShare: forgottenShare(standings) };
+    }
+    return await applyStage1(workshopId, actorId, importId, { ...pending, discarded, adjusted }, standings);
+  } finally {
+    await releaseDocuments(provider, input.images);
+  }
+}
+
+/** Écrit ce que l'étape chapitres a décidé — une fois le seuil franchi dans le
+ *  bon sens : chapitres écartés, chapitres créés, ordre du programme, notions
+ *  rangées franchement. Tout le reste (seconde vérification, sort final) attend
+ *  la fin de l'étape notions. */
+async function applyStage1(
+  workshopId: string,
+  actorId: string,
+  importId: string,
+  pending: Stage1Pending,
+  standings: Map<string, NotionStanding>,
+): Promise<ChapterStructureResult> {
+  const adjusted = [...pending.adjusted];
+  const names = new Map(pending.visibleExisting.map((c) => [c.id, c.name]));
+
+  const discardedChapters = await hideChapters(workshopId, pending.dropped);
   for (const id of discardedChapters) {
-    const reason = plan.chapterOrder.find((c) => c.ref === id)?.reason?.trim();
-    plan.adjusted.push({
+    const reason = pending.chapterOrder.find((c) => c.ref === id)?.reason?.trim();
+    adjusted.push({
       kind: 'chapter',
       ref: id,
-      reason: `« ${byId.get(id) ?? id} » écarté du programme${reason ? ` : ${reason}` : ' — plus couvert par les documents'}`,
+      reason: `« ${names.get(id) ?? id} » écarté du programme${reason ? ` : ${reason}` : ' — plus couvert par les documents'}`,
     });
   }
 
-  const created = new Map([...(await insertChapters(workshopId, actorId, importId, fresh)), ...reused]);
+  const created = new Map([...(await insertChapters(workshopId, actorId, importId, pending.fresh)), ...pending.reused]);
+  const idOf = (ref: string) => created.get(ref) ?? ref;
 
-  // ─── L'ordre du programme ─────────────────────────────────────────────────
-  //
-  // Les rangs sont RELATIFS : on ne lit que leur ordre, jamais leur valeur — un
-  // modèle qui numérote 10, 20, 30 dit la même chose que 1, 2, 3. Les chapitres
-  // que le modèle n'a pas rangés suivent, dans l'ordre où ils étaient : ne rien
-  // dire d'un chapitre, c'est le laisser où il est.
-  //
-  // `reorderChapters` exige la liste COMPLÈTE — chapitres écartés compris, ils
-  // ont eux aussi une position — et réécrit toutes les places d'un coup, ce qui
-  // interdit les trous et les doublons. Un classement incomplet ne réordonne
-  // rien du tout, et on le dit : sans ça, l'ordre resterait mystérieusement le
-  // même alors que l'IA a bien répondu quelque chose.
-  const reordering = await applyChapterOrder(workshopId, plan.chapterOrder, created);
+  const reordering = await applyChapterOrder(workshopId, pending.chapterOrder, created);
   if (reordering.missing > 0) {
-    plan.adjusted.push({
+    adjusted.push({
       kind: 'chapter',
-      reason: `ordre du programme inchangé : l'IA n'a pas classé ${reordering.missing} chapitre${reordering.missing > 1 ? 's' : ''} sur les ${reordering.missing + plan.chapterOrder.filter((c) => c.rank > 0).length}`,
+      reason: `ordre du programme inchangé : l'IA n'a pas classé ${reordering.missing} chapitre${reordering.missing > 1 ? 's' : ''} sur les ${reordering.missing + pending.chapterOrder.filter((c) => c.rank > 0).length}`,
     });
   }
+
+  // Les références des chapitres neufs deviennent leurs identifiants réels.
+  const resolved = new Map<string, NotionStanding>();
+  for (const [id, s] of standings) {
+    resolved.set(id, s.kind === 'placed' ? { kind: 'placed', chapterRef: idOf(s.chapterRef) } : s);
+  }
+
+  // Les notions rangées franchement rejoignent leur chapitre tout de suite :
+  // l'étape notions de ce chapitre et ses questions doivent les voir.
+  const before = new Map(pending.notions.map((n) => [n.id, n.chapterId]));
+  await applyAssignments(
+    workshopId,
+    [...resolved]
+      .filter(([, s]) => s.kind === 'placed')
+      .map(([notionRef, s]) => ({ notionRef, chapterRef: (s as { chapterRef: string }).chapterRef })),
+    new Map(),
+    before,
+  );
+
+  // Le programme tel qu'il est désormais, dans l'ordre, avec les bornes de
+  // chaque chapitre résolues en documents du lot.
+  const supabase = getSupabaseServerClient();
+  const { data: rows, error } = await supabase
+    .from('workshop_chapters')
+    .select('id, name, hidden')
+    .eq('workshop_id', workshopId)
+    .order('position')
+    .order('id');
+  if (error) throw new Error(error.message);
+
+  const boundsById = new Map(pending.chapterBounds.map((b) => [idOf(b.ref), b.spans]));
+  const chapters = (rows ?? [])
+    .filter((c) => c.hidden !== true)
+    .map((c) => ({
+      id: c.id as string,
+      name: c.name as string,
+      spans: (boundsById.get(c.id as string) ?? []).flatMap((s) => {
+        const documentId = resolveDocumentName(s.document, pending.fileNames);
+        return documentId ? [{ documentId, from: s.from, to: s.to }] : [];
+      }),
+    }));
+
+  const stage1: Stage1State = {
+    chapters,
+    dropped: discardedChapters,
+    standings: Object.fromEntries(resolved),
+    before: Object.fromEntries(before),
+    pageCounts: pending.pageCounts,
+    forgottenShare: forgottenShare(resolved),
+  };
+  await writeScope(importId, { stage1, stage1Pending: null });
 
   return {
     // Seuls les chapitres RÉELLEMENT créés sont comptés : un doublon redirigé
-    // vers un chapitre existant n'est pas une création, et l'annoncer comme
-    // telle ferait croire à un programme qui a doublé de taille.
-    chapters: fresh.map((c) => ({ id: created.get(c.ref) ?? c.ref, name: c.name })),
-    discarded: plan.discarded,
-    adjusted: plan.adjusted,
+    // vers un chapitre existant n'est pas une création.
+    chapters: pending.fresh.map((c) => ({ id: created.get(c.ref) ?? c.ref, name: c.name })),
+    discarded: pending.discarded,
+    adjusted,
+    decision: 'continue',
+    forgottenShare: stage1.forgottenShare,
   };
 }
 

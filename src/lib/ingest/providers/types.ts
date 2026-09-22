@@ -98,14 +98,18 @@ export type IngestScope =
     }
   | {
       pass: 'chapters';
-      /** ⚠️ **Aucune notion ici** (31/08/2026). La passe a longtemps reçu toutes
-       *  celles de l'atelier ; elles ne servaient à rien — elle ne range pas, et
-       *  ce qui décide qu'un chapitre n'est plus couvert, c'est le COURS. Voir
-       *  `inScope` dans `prompt.ts`.
-       *
-       *  Présent au SECOND essai seulement : le nombre de chapitres rendu au
-       *  premier, que la consigne rappelle au modèle (§16.18). */
+      /** Le TEXTE du cours, page par page (`composeChaptersInput`). L'étape ne
+       *  reçoit en document que les pages pauvres en texte, en image : c'est
+       *  ce qu'on lui passe en `documents`. */
+      corpusText: string;
+      /** Les noms des documents du cours, pour la consigne. */
+      fileNames: string[];
+      /** Présent au SECOND essai seulement : le découpage rendu au premier, que
+       *  la consigne rappelle au modèle (vérification de l'échelle). */
       retry?: { previous: string[] };
+      /** La relance du seuil d'oubli (§7.6) : on ne redemande que les verdicts
+       *  de ces notions, chapitres figés. */
+      relaunch?: { notions: { id: string; title: string }[]; chapters: { id: string; name: string }[] };
     }
   | {
       pass: 'notions';
