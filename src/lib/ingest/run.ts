@@ -86,7 +86,7 @@ import {
   demandTotal,
   type QuestionDemand,
 } from './demand';
-import { BUSY_ERROR, closeImport, liveImportOf } from './lock';
+import { BUSY_ERROR, CLOSED_ERROR, closeImport, liveImportOf } from './lock';
 import { parsePlan, type PlanIssue } from './planSchema';
 import {
   classifyNotions,
@@ -934,6 +934,28 @@ export async function ingestResource(
   const hint = await rawHintOf(importId);
   if (!hint) return { written: false, documents: prepared.length, examQuestionCount: null };
 
+  // ⚠️ **L'étape 0 ne fait jamais échouer une génération** (§7.4) : un appel
+  // raté — fournisseur saturé deux fois de suite, réponse refusée — laisse la
+  // génération continuer sans document et sans consigne réécrite. L'échec est
+  // déjà au journal (`modelCall`). Seule une annulation remonte : elle doit
+  // rester une annulation.
+  try {
+    return await resourceStep(workshopId, actorId, importId, prepared, hint, options);
+  } catch (error) {
+    if (error instanceof Error && error.message === CLOSED_ERROR) throw error;
+    console.warn('[ingest] étape 0 sans effet :', error instanceof Error ? error.message : error);
+    return { written: false, documents: prepared.length, examQuestionCount: null };
+  }
+}
+
+async function resourceStep(
+  workshopId: string,
+  actorId: string,
+  importId: string,
+  prepared: PreparedDocument[],
+  hint: string,
+  options: { provider?: PlanProvider },
+): Promise<ResourcePassResult> {
   const [corpusTokens, oversizeModels, context] = await Promise.all([
     corpusTokensOf(importId),
     oversizeModelsOf(importId),
