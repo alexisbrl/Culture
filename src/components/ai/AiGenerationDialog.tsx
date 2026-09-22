@@ -24,6 +24,7 @@ import {
   closeWorkshopImport,
   finishWorkshopIngestion,
   ingestDocumentNotions,
+  countParcoursQuestionCalls,
   ingestParcoursQuestions,
   ingestWorkshopAssignments,
   ingestWorkshopResource,
@@ -706,15 +707,24 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     if (chapters.length > 0) {
       let error: string | null = null;
 
-      // Le nombre de lots d'un chapitre n'est connu qu'à la réponse du premier
-      // appel (`result.batches`) : on ne peut donc pas tout lancer d'emblée. On
-      // fait donc **le premier lot de chaque chapitre en parallèle** — ce qui
-      // révèle les nombres de lots — puis **tous les lots restants en parallèle**,
-      // sans distinction de chapitre. Deux vagues au lieu d'une file : sur ton
-      // import (4 chapitres, ~8 lots), c'est 2 attentes au lieu de 8.
-      const firstBatch = chapters.map((chapter) => ({ chapter, batchIndex: 0 }));
+      // ─── Une seule vague, parce que le plan est connu d'avance ────────────
+      //
+      // Le serveur calcule d'abord, sans appeler le modèle, combien d'appels
+      // chaque chapitre demande (22/09/2026) ; tous partent ensuite en même
+      // temps, tous chapitres confondus. Jusque-là, le premier appel de chaque
+      // chapitre partait seul pour révéler ce nombre : une attente entière de
+      // plus, pour un chiffre qu'on savait calculer.
+      const plan = await countParcoursQuestionCalls(
+        workshopId,
+        importId,
+        chapters.map((c) => ({ id: c.id, startBudget: startBudgets.get(c.id) })),
+      );
+      if (!plan.ok) return setPhase({ step: 'error', message: plan.error });
+      const jobs = chapters.flatMap((chapter) =>
+        Array.from({ length: plan.counts[chapter.id] ?? 0 }, (_, batchIndex) => ({ chapter, batchIndex })),
+      );
       let doneCalls = 0;
-      let totalCalls = firstBatch.length;
+      const totalCalls = jobs.length;
 
       const showQuestions = () => setPhase({
         step: 'running',
@@ -750,20 +760,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       };
 
       showQuestions();
-      const firstResults = await mapWithConcurrency(firstBatch, QUESTIONS_CONCURRENCY, runBatch);
-
-      // Deuxième vague : tous les lots au-delà du premier, tous chapitres
-      // confondus. Rien ne les distingue — ils ne partagent aucun contexte, la
-      // passe questions ne portant pas les documents.
-      const rest = firstResults.flatMap((result, i) => {
-        const count = result?.batches ?? 1;
-        return Array.from({ length: Math.max(0, count - 1) }, (_, k) => ({ chapter: chapters[i], batchIndex: k + 1 }));
-      });
-      if (!error && rest.length > 0) {
-        totalCalls += rest.length;
-        showQuestions();
-        await mapWithConcurrency(rest, QUESTIONS_CONCURRENCY, runBatch);
-      }
+      await mapWithConcurrency(jobs, QUESTIONS_CONCURRENCY, runBatch);
       if (error) return setPhase({ step: 'error', message: error });
     }
 

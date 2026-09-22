@@ -1974,39 +1974,37 @@ export async function ingestDocumentNotions(
   };
 }
 
-/** Passe 3, pour UN APPEL de la demande d'un chapitre (voir `packDemand`). Ses notions lui sont
- *  fournies avec leurs identifiants réels : chaque question naît donc reliée,
- *  sans qu'on ait à l'imposer par une règle. */
-export async function ingestParcoursQuestions(
-  workshopId: string,
-  actorId: string,
-  importId: string,
-  chapter: { id: string; name: string },
-  batchIndex = 0,
-  options: {
-    provider?: PlanProvider;
-    budgetShare?: number;
-    demand?: QuestionDemand[];
-    /** Le budget de démarrage propre à CE chapitre, calculé par l'appelant sur
-     *  l'atelier entier (voir `chapterStartBudgets`). Absent, on retombe sur le
-     *  défaut de `demandForChapterStart` — utile aux appels qui n'ont pas ce
-     *  contexte (tests, recharge). */
-    startBudget?: number;
-  } = {},
-): Promise<QuestionPassResult> {
-  const context: IngestContext = 'parcours';
-  const [userHint, choice] = await Promise.all([userHintOf(importId), questionsProviderOf(importId)]);
-  const provider = options.provider
-    ?? (choice === 'deepseek' ? createDeepSeekProvider({ userHint }) : createClaudeProvider({ userHint }));
-  const supabase = getSupabaseServerClient();
+/** Un appel de la passe parcours : ses notions, ce qu'on lui demande sur
+ *  chacune, et combien de questions en tout. */
+type ParcoursCall = {
+  notions: { id: string; title: string }[];
+  wanted: Map<string, { bloomLevel: BloomLevel; count: number }[]>;
+  asked: number;
+};
 
-  // L'ordre doit être **stable d'un appel à l'autre** : le client rappelle cette
-  // action une fois par lot, et un ordre flottant ferait se recouvrir deux lots.
-  const { data: notionRows, error } = await supabase
+/** Le plan de la passe parcours pour UN chapitre : ses notions, et la liste de
+ *  ses appels. **Aucun appel au modèle** — c'est ce qui permet au client de
+ *  connaître d'avance le nombre d'appels de chaque chapitre et de tout lancer
+ *  en une seule vague (`countParcoursCalls`, 22/09/2026).
+ *
+ *  ⚠️ Doit rendre **la même découpe à chaque appel** du même lot : chaque appel
+ *  la recalcule et y prend sa part par son indice. D'où le compte de l'existant
+ *  arrêté à l'ouverture du lot (`parcoursQuestionCountsByLevel`). */
+async function parcoursPlan(
+  workshopId: string,
+  importId: string,
+  chapterId: string,
+  userHint: string | null | undefined,
+  options: { demand?: QuestionDemand[]; startBudget?: number },
+): Promise<{ chapterNotions: { id: string; title: string }[]; calls: ParcoursCall[] }> {
+  // L'ordre doit être **stable d'un appel à l'autre** : le client rappelle
+  // l'action une fois par appel, et un ordre flottant ferait se recouvrir deux
+  // appels.
+  const { data: notionRows, error } = await getSupabaseServerClient()
     .from('workshop_bricks')
     .select('id, title')
     .eq('workshop_id', workshopId)
-    .eq('chapter_id', chapter.id)
+    .eq('chapter_id', chapterId)
     .order('created_at')
     .order('id');
   if (error) throw new Error(error.message);
@@ -2014,7 +2012,7 @@ export async function ingestParcoursQuestions(
   const chapterNotions = (notionRows ?? []).map((n) => ({ id: n.id as string, title: n.title as string }));
   // Un chapitre sans notion ne produit rien : une question sans notion ne serait
   // tirée par aucun exercice (§11).
-  if (chapterNotions.length === 0) return { written: 0, discarded: [], adjusted: [], batches: 0 };
+  if (chapterNotions.length === 0) return { chapterNotions, calls: [] };
 
   // ─── Ce qu'on cible : une DEMANDE, en couples (notion × niveau) ──────────
   //
@@ -2056,11 +2054,6 @@ export async function ingestParcoursQuestions(
   //
   // Chaque appel porte SA part de la demande : une notion coupée entre deux
   // appels n'annonce à chacun que les niveaux qui lui reviennent.
-  type ParcoursCall = {
-    notions: { id: string; title: string }[];
-    wanted: Map<string, { bloomLevel: BloomLevel; count: number }[]>;
-    asked: number;
-  };
   const byId = new Map(chapterNotions.map((n) => [n.id, n]));
   const calls: ParcoursCall[] = demand
     ? packDemand(demand, chapterNotions.map((n) => n.id)).map((items) => {
@@ -2076,6 +2069,52 @@ export async function ingestParcoursQuestions(
         wanted: new Map(),
         asked: c.budget,
       }));
+
+  return { chapterNotions, calls };
+}
+
+/** Combien d'appels la passe parcours fera sur chaque chapitre, **sans appeler
+ *  le modèle**. C'est ce qui permet au client de lancer tous les appels de tous
+ *  les chapitres en une seule vague, au lieu d'attendre la réponse d'un premier
+ *  appel par chapitre pour l'apprendre (22/09/2026). */
+export async function countParcoursCalls(
+  workshopId: string,
+  importId: string,
+  chapters: { id: string; startBudget?: number; demand?: QuestionDemand[] }[],
+): Promise<Record<string, number>> {
+  const userHint = await userHintOf(importId);
+  const plans = await Promise.all(
+    chapters.map((c) => parcoursPlan(workshopId, importId, c.id, userHint, { startBudget: c.startBudget, demand: c.demand })),
+  );
+  return Object.fromEntries(chapters.map((c, i) => [c.id, plans[i].calls.length]));
+}
+
+/** Passe 3, pour UN APPEL de la demande d'un chapitre (voir `packDemand`). Ses notions lui sont
+ *  fournies avec leurs identifiants réels : chaque question naît donc reliée,
+ *  sans qu'on ait à l'imposer par une règle. */
+export async function ingestParcoursQuestions(
+  workshopId: string,
+  actorId: string,
+  importId: string,
+  chapter: { id: string; name: string },
+  batchIndex = 0,
+  options: {
+    provider?: PlanProvider;
+    budgetShare?: number;
+    demand?: QuestionDemand[];
+    /** Le budget de démarrage propre à CE chapitre, calculé par l'appelant sur
+     *  l'atelier entier (voir `chapterStartBudgets`). Absent, on retombe sur le
+     *  défaut de `demandForChapterStart` — utile aux appels qui n'ont pas ce
+     *  contexte (tests, recharge). */
+    startBudget?: number;
+  } = {},
+): Promise<QuestionPassResult> {
+  const context: IngestContext = 'parcours';
+  const [userHint, choice] = await Promise.all([userHintOf(importId), questionsProviderOf(importId)]);
+  const provider = options.provider
+    ?? (choice === 'deepseek' ? createDeepSeekProvider({ userHint }) : createClaudeProvider({ userHint }));
+
+  const { chapterNotions, calls } = await parcoursPlan(workshopId, importId, chapter.id, userHint, options);
 
   // Rien à produire : surtout pas d'appel au modèle à payer pour s'entendre
   // répondre qu'il n'y a rien à ajouter.

@@ -243,6 +243,12 @@ différente, qui les empêchent de se répéter. Deux morceaux au même niveau r
 met pas d'appels en série pour ce cas. Une consigne libre, sans demande par notion, découpe
 son budget de la même taille et répartit les notions en tranches contiguës.
 
+**Le plan se calcule sans le modèle, et tout part en une vague.** Le nombre d'appels de
+chaque chapitre se déduit de la demande et de l'existant, arrêté à l'ouverture du lot :
+l'écran le demande d'abord au serveur, puis lance tous les appels de tous les chapitres
+ensemble. La recharge fait de même. Chaque appel recalcule la même découpe et y prend sa
+part par son indice.
+
 **Ce qui rend le reste possible : l'étape chapitres rend des bornes de pages.** Pour
 chaque chapitre, le document et l'intervalle de pages — plusieurs intervalles si le
 chapitre est éclaté. Sans elles, l'étape suivante devrait recevoir le cours entier
