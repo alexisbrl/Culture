@@ -423,10 +423,10 @@ prochain import, un doublon reste et encombre l'atelier.
 
 ### 7.6 Le rangement, l'ordre, et ce qui sort du programme
 
-**C'est l'étape CHAPITRES qui écarte, parce qu'elle seule voit le cours.** L'argument
-n'est pas l'élégance, c'est **où vit l'information** : l'étape de rangement ne reçoit
-aucun document, elle ne voit que des noms de chapitres — elle trouve donc légitimes
-deux chapitres qui se recouvrent.
+**C'est l'étape CHAPITRES qui écarte, parce qu'elle seule voit tout le cours.**
+L'argument n'est pas l'élégance, c'est **où vit l'information** : chaque appel de
+l'étape notions ne voit que les pages de son chapitre — il ne peut pas juger que deux
+chapitres se recouvrent.
 
 **La forme : le rang de chaque chapitre, 0 pour ceux qui sortent.** Le modèle rend
 l'architecture entière, chapitres neufs et anciens mêlés, avec un rang par chapitre.
@@ -1233,3 +1233,10 @@ Une liste d'identifiants passée en filtre part **dans l'URL** de la couche d'ac
 au-delà de quelques centaines d'éléments, la requête est refusée, et l'erreur peut se
 journaliser vide. Une jointure interne pour une lecture, un découpage par paquets pour une
 écriture, une fonction en base quand la règle elle-même y vit.
+
+### I. Génération par chapitres
+
+**La lecture du texte d'un PDF peut détacher le tampon qu'on lui donne** : on lui passe une
+copie, sinon le même document ne se découpe plus ensuite. **Rien n'est écrit avant la décision
+de seuil** : la réponse de l'étape chapitres attend la relance dans le lot d'import, pour
+qu'une annulation à 25 % ne laisse aucun chapitre créé.
