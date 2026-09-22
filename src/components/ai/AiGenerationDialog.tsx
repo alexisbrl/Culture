@@ -698,7 +698,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       .filter((c) => !c.hidden)
       .map((c) => ({ id: c.id, name: c.name, position: c.position }));
 
-    // Le chapitre n°1 du programme reçoit 25 questions d'office, le reste du
+    // Le chapitre n°1 du programme reçoit 24 questions d'office, le reste du
     // budget se répartit également entre tous les autres — calculé une fois ici
     // sur l'atelier ENTIER, jamais chapitre par chapitre (voir `chapterStartBudgets`).
     const startBudgets = chapterStartBudgets(chapters);

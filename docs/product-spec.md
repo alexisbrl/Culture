@@ -283,11 +283,11 @@ Une demande est **une liste de couples (notion × niveau) avec un nombre pour ch
 
 | Qui remplit | Quand | Ce qui est demandé |
 |---|---|---|
-| Le programme | Chapitre neuf ou mis à jour | **25 questions de niveau 1**, réparties sur les notions du chapitre — de quoi tenir deux exercices. L'existant est retranché : un second passage n'en rajoute pas 25. |
+| Le programme | Chapitre neuf ou mis à jour | **24 questions de niveau 1**, réparties sur les notions du chapitre — de quoi tenir deux exercices. L'existant est retranché : un second passage n'en rajoute pas 24. |
 | Le radar | Lancement d'un exercice | Les couples sous le seuil, remontés à 4. |
 | Un gestionnaire | Bouton « générer des questions » | Rien de calculé : une consigne libre ne dit rien du stock de chaque notion, donc on envoie toutes les notions du chapitre et **c'est le modèle qui choisit**. |
 
-**Un chapitre neuf ne reçoit que 25 questions de niveau 1.** Les niveaux supérieurs et les notions restées vides ne sont pas produits d'avance : la recharge les pourvoit quand un membre les atteint réellement.
+**Un chapitre neuf ne reçoit que 24 questions de niveau 1.** Les niveaux supérieurs et les notions restées vides ne sont pas produits d'avance : la recharge les pourvoit quand un membre les atteint réellement.
 
 **Garde-fous de la recharge** — c'est le seul appel payant que personne ne décide : un **plafond** de 60 questions par recharge (ce qui reste en manque sera repris au lancement suivant), un **délai de garde** de 10 minutes par chapitre (deux exercices coup sur coup ne rechargent qu'une fois), et une **trace** — chaque recharge ouvre un lot d'import comme n'importe quelle génération, donc son coût est compté et son contenu reste annulable. Elle part **après** que la question est partie à l'écran : le membre n'attend jamais après elle, et elle survit à la fermeture de l'onglet.
 

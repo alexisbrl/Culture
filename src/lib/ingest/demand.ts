@@ -2,13 +2,13 @@
 //
 // ── Il n'y a qu'UNE façon de demander des questions ─────────────────────────
 //
-// On en distinguait trois — les 25 d'un chapitre neuf, la recharge d'un stock
+// On en distinguait trois — les 24 d'un chapitre neuf, la recharge d'un stock
 // épuisé, la demande libre d'un gestionnaire. Elles ont la même forme : une
 // liste de couples avec un nombre pour chacun. Ce qui change, c'est qui remplit
 // le formulaire (arbitrage du 29/08/2026) :
 //
 //   • chapitre neuf  → `demandForChapterStart` : un budget de niveau 1 réparti
-//     sur les notions du chapitre — 25 par défaut, ou le chiffre que
+//     sur les notions du chapitre — 24 par défaut, ou le chiffre que
 //     `chapterStartBudgets` calcule à l'échelle de l'atelier (04/09/2026) ;
 //   • recharge       → `demandFromShortages` : ce que le radar déclare en manque ;
 //   • demande libre  → pas de demande du tout. Une consigne écrite à la main ne
@@ -37,11 +37,13 @@ import { BLOOM_LEVELS, type BloomLevel } from '@/lib/workshops/examTypes';
 import { MAX_QUESTIONS_PER_IMPORT } from './prompt';
 
 /** Combien de questions un chapitre reçoit à sa création : de quoi tenir deux
- *  exercices (12 niveaux chacun) au niveau 1. Sert aussi de PLAFOND par
+ *  exercices (12 questions chacun) au niveau 1. **24 et non 25** depuis le
+ *  22/09/2026 : la passe parcours écrit huit questions par appel, 24 en font
+ *  trois pleins là où 25 laissait un appel d'une question. Sert aussi de PLAFOND par
  *  chapitre dans `chapterStartBudgets` ci-dessous — au-delà, ce n'est plus le
  *  démarrage d'un chapitre, c'est une génération massive qui doit passer par
  *  une demande explicite. */
-export const CHAPTER_START_QUESTIONS = 25;
+export const CHAPTER_START_QUESTIONS = 24;
 
 /** Plafond d'une recharge automatique, en questions. Garde-fou de dépense : la
  *  recharge n'est déclenchée par personne, donc rien d'autre ne l'arrête. Ce qui
@@ -60,8 +62,8 @@ export type QuestionDemand = {
  *  ⚠️ **Un seul chapitre est privilégié : celui classé n°1 du programme**, pas
  *  « le premier chapitre créé » ni « le premier de la liste reçue » — sa
  *  POSITION actuelle, recalculée à chaque import (arbitrage du 04/09/2026). Il
- *  reçoit 25 questions d'office ; le reste du budget total se répartit
- *  également entre tous les autres chapitres, chacun plafonné à 25 lui aussi.
+ *  reçoit 24 questions d'office ; le reste du budget total se répartit
+ *  également entre tous les autres chapitres, chacun plafonné à 24 lui aussi.
  *
  *  Un chapitre déjà bien pourvu ne les recevra pas pour autant : c'est
  *  `demandForChapterStart`, appelé ensuite avec ce budget en `total`, qui
@@ -70,7 +72,7 @@ export type QuestionDemand = {
  *  coûte que coûte, même règle que partout ailleurs dans ce pipeline.
  *
  *  Le budget total vaut par défaut `MAX_QUESTIONS_PER_IMPORT` : jusqu'à une
- *  vingtaine de chapitres, chacun obtient donc ses 25 pleins, comme avant
+ *  vingtaine de chapitres, chacun obtient donc ses 24 pleins, comme avant
  *  cette fonction — le plafond ne mord qu'au-delà, sur un cours anormalement
  *  découpé, plutôt que de laisser un import isolé consommer le fusible entier
  *  d'un coup. */
@@ -97,10 +99,10 @@ export function chapterStartBudgets(
   return budgets;
 }
 
-/** Les 25 questions de niveau 1 d'un chapitre neuf, réparties au plus juste sur
+/** Les 24 questions de niveau 1 d'un chapitre neuf, réparties au plus juste sur
  *  ses notions. Avec plus de notions que de questions, les dernières n'en
  *  reçoivent aucune : c'est assumé — la recharge les pourvoira dès qu'un membre
- *  les atteindra, et payer 25 questions par notion d'un chapitre que personne
+ *  les atteindra, et payer 24 questions par notion d'un chapitre que personne
  *  n'a encore ouvert serait le gaspillage que tout ce mécanisme évite. */
 export function demandForChapterStart(
   notionIds: string[],

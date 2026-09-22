@@ -31,6 +31,7 @@
 
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { chapterShortages } from '@/lib/workshops/parcoursRadar';
+import { QUESTIONS_CONCURRENCY, mapWithConcurrency } from './concurrency';
 import { createImport } from './ingest';
 import { markOutcome } from './journal';
 import { ingestParcoursQuestions } from './run';
@@ -125,18 +126,21 @@ export async function refillChapter(
       origin: 'refill',
     });
 
+    // Deux vagues, comme l'écran de génération : le premier appel révèle le
+    // nombre d'appels, tous les autres partent ensemble. En série, les appels de
+    // huit questions (22/09/2026) ne tiendraient plus dans le délai : une
+    // recharge de 60 en fait huit, soit quatre minutes bout à bout contre une
+    // seule en parallèle.
     const deadline = Date.now() + REFILL_DEADLINE_MS;
-    let written = 0;
-    let batchIndex = 0;
-    let batches = 1;
+    const run = (batchIndex: number) =>
+      ingestParcoursQuestions(workshopId, userId, importId, chapter, batchIndex, { demand });
 
-    while (batchIndex < batches && Date.now() < deadline) {
-      const result = await ingestParcoursQuestions(workshopId, userId, importId, chapter, batchIndex, {
-        demand,
-      });
-      batches = result.batches;
-      written += result.written;
-      batchIndex += 1;
+    const first = await run(0);
+    let written = first.written;
+    if (first.batches > 1 && Date.now() < deadline) {
+      const rest = Array.from({ length: first.batches - 1 }, (_, k) => k + 1);
+      const results = await mapWithConcurrency(rest, QUESTIONS_CONCURRENCY, run);
+      written += results.reduce((sum, r) => sum + r.written, 0);
     }
 
     // La recharge va au bout dans le même appel : contrairement à l'écran de

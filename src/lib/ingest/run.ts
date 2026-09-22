@@ -74,9 +74,10 @@ import { dropRepeatedQuestions, flagSimilar, findExistingMatch } from './duplica
 import {
   batchNotions,
   contextNotions,
+  packDemand,
   pickExistingQuestions,
+  planFreeParcoursCalls,
   sliceProgram,
-  splitBudget,
   splitUnplaced,
   withChapterRetry,
   type ExistingQuestion,
@@ -94,6 +95,7 @@ import {
   CHAPTER_START_QUESTIONS,
   demandByNotion,
   demandForChapterStart,
+  demandTotal,
   type QuestionDemand,
 } from './demand';
 import { BUSY_ERROR, assertImportOpen, closeImport, liveImportOf } from './lock';
@@ -336,7 +338,7 @@ const NOTIONS_PER_COUNT_QUERY = 100;
  *  **à l'ouverture du lot**.
  *
  *  `parcoursQuestionCounts` compte toutes notions confondues ; la demande d'un
- *  chapitre neuf, elle, se formule niveau par niveau — 25 de niveau 1 et rien
+ *  chapitre neuf, elle, se formule niveau par niveau — 24 de niveau 1 et rien
  *  d'autre. Sans ce détail, un chapitre déjà pourvu au niveau 2 passerait pour
  *  pourvu au niveau 1.
  *
@@ -1972,7 +1974,7 @@ export async function ingestDocumentNotions(
   };
 }
 
-/** Passe 3, pour UN LOT de notions d'un chapitre. Les notions du lot lui sont
+/** Passe 3, pour UN APPEL de la demande d'un chapitre (voir `packDemand`). Ses notions lui sont
  *  fournies avec leurs identifiants réels : chaque question naît donc reliée,
  *  sans qu'on ait à l'imposer par une règle. */
 export async function ingestParcoursQuestions(
@@ -2023,7 +2025,7 @@ export async function ingestParcoursQuestions(
   //     du radar les couples en manque et leur compte ;
   //   • ce module, pour un chapitre neuf : un budget de niveau 1 réparti sur
   //     ses notions — `options.startBudget` si l'appelant l'a calculé sur
-  //     l'atelier entier, 25 par défaut sinon. On retranche l'existant, pour
+  //     l'atelier entier, 24 par défaut sinon. On retranche l'existant, pour
   //     qu'un second passage ne rajoute pas le budget entier par-dessus ;
   //   • personne, quand une CONSIGNE LIBRE est donnée : « fais des questions sur
   //     la Révolution » ne dit rien du stock de chaque notion, et un ciblage
@@ -2045,22 +2047,43 @@ export async function ingestParcoursQuestions(
       .filter((item) => item.count > 0);
   }
 
-  // Le prompt reçoit la demande notion par notion ; `missing` ne sert plus que
-  // le cas de la consigne libre, où il n'y a pas de demande à formuler.
-  const wanted: Map<string, { bloomLevel: BloomLevel; count: number }[]> = demand
-    ? demandByNotion(demand)
-    : new Map();
-  const all = demand
-    ? chapterNotions.filter((n) => (wanted.get(n.id)?.length ?? 0) > 0)
-    : chapterNotions;
+  // ─── Le découpage : des appels de huit questions (22/09/2026) ────────────
+  //
+  // Une demande chiffrée se découpe en appels pleins, les questions d'une
+  // notion restant ensemble autant que possible (`packDemand`). Une consigne
+  // libre n'a pas de demande par notion : son budget se découpe de la même
+  // taille, et les notions suivent en tranches contiguës.
+  //
+  // Chaque appel porte SA part de la demande : une notion coupée entre deux
+  // appels n'annonce à chacun que les niveaux qui lui reviennent.
+  type ParcoursCall = {
+    notions: { id: string; title: string }[];
+    wanted: Map<string, { bloomLevel: BloomLevel; count: number }[]>;
+    asked: number;
+  };
+  const byId = new Map(chapterNotions.map((n) => [n.id, n]));
+  const calls: ParcoursCall[] = demand
+    ? packDemand(demand, chapterNotions.map((n) => n.id)).map((items) => {
+        const wanted = demandByNotion(items);
+        return {
+          notions: [...wanted.keys()].map((id) => byId.get(id) as { id: string; title: string }),
+          wanted,
+          asked: demandTotal(items),
+        };
+      })
+    : planFreeParcoursCalls(chapterNotions, options.startBudget ?? CHAPTER_START_QUESTIONS).map((c) => ({
+        notions: c.notions,
+        wanted: new Map(),
+        asked: c.budget,
+      }));
 
   // Rien à produire : surtout pas d'appel au modèle à payer pour s'entendre
   // répondre qu'il n'y a rien à ajouter.
-  if (all.length === 0) return { written: 0, discarded: [], adjusted: [], batches: 0 };
+  if (calls.length === 0) return { written: 0, discarded: [], adjusted: [], batches: 0 };
 
-  const batches = batchNotions(all);
-  const notions = batches[batchIndex];
-  if (!notions) return { written: 0, discarded: [], adjusted: [], batches: batches.length };
+  const current = calls[batchIndex];
+  if (!current) return { written: 0, discarded: [], adjusted: [], batches: calls.length };
+  const { notions, wanted, asked } = current;
 
   // ⚠️ **Le plafond ne tient plus tout seul dès que les appels sont parallèles.**
   // Il se calcule à partir de ce qui est DÉJÀ écrit : quatre appels lancés
@@ -2071,7 +2094,7 @@ export async function ingestParcoursQuestions(
   // la part n'est qu'une restriction supplémentaire.
   const alreadyWritten = await questionsWritten(importId);
   // Une demande explicite est aussi un plafond : on ne paie jamais pour plus
-  // que ce qui a été demandé sur les notions de CE lot.
+  // que ce qui a été demandé à CET appel.
   //
   // ⚠️ **Une CONSIGNE LIBRE ne lève pas le plafond du chapitre** (05/09/2026).
   // Elle décide seulement qu'on ne CIBLE pas les couples notion × niveau — « fais
@@ -2083,26 +2106,21 @@ export async function ingestParcoursQuestions(
   // fusible de l'import. Constaté sur un atelier de 11 chapitres : 330 questions
   // écrites et toujours en cours, là où le budget de démarrage en prévoyait 275.
   // Le budget du chapitre s'applique donc dans les deux régimes, réparti entre
-  // ses lots.
-  const asked = demand
-    ? notions.reduce(
-        (sum, n) => sum + (wanted.get(n.id) ?? []).reduce((s, w) => s + w.count, 0),
-        0,
-      )
-    : splitBudget(options.startBudget ?? CHAPTER_START_QUESTIONS, batches.length)[batchIndex] ?? 0;
+  // ses appels (`asked`, ci-dessus).
   const budget = Math.min(
     MAX_QUESTIONS_PER_IMPORT - alreadyWritten,
     options.budgetShare ?? Number.POSITIVE_INFINITY,
     asked,
   );
-  if (budget <= 0) return { written: 0, discarded: [], adjusted: [], batches: batches.length };
+  if (budget <= 0) return { written: 0, discarded: [], adjusted: [], batches: calls.length };
 
   // Les autres notions du chapitre, en contexte seulement (§16.21) : c'est ce
   // qui remplace le cours pour les niveaux supérieurs de Bloom. TOUT le
   // chapitre, pas seulement les notions que la demande vise — voir
   // `contextNotions`.
   const inBatch = new Set(notions.map((n) => n.id));
-  const neighbours = contextNotions(chapterNotions, inBatch, new Set(all.map((n) => n.id)));
+  const targeted = new Set(calls.flatMap((c) => c.notions.map((n) => n.id)));
+  const neighbours = contextNotions(chapterNotions, inBatch, targeted);
 
   // Aucun document : la passe travaille sur les notions, pas sur le cours
   // (§16.3). C'est le poste d'économie principal de tout le chantier — on ne
@@ -2180,7 +2198,7 @@ export async function ingestParcoursQuestions(
     corriges: plan.adjusted.length,
   });
 
-  return { written, discarded: plan.discarded, adjusted: plan.adjusted, batches: batches.length };
+  return { written, discarded: plan.discarded, adjusted: plan.adjusted, batches: calls.length };
 }
 
 

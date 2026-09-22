@@ -51,10 +51,17 @@ const API_URL = 'https://api.deepseek.com/chat/completions';
  *  production, pas de raisonnement long. */
 export const DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
-/** Le plafond de sortie qu'on s'impose, très en deçà de celui du modèle.
+/** Le plafond de sortie : **celui du modèle**, 384 000 tokens (22/09/2026), même
+ *  règle que chez Claude (`MAX_OUTPUT_TOKENS` dans `providers/claude.ts`).
  *
- *  Il ne sert pas à tenir dans la limite technique (384 000 tokens chez v4)
- *  mais à borner une réponse qui partirait en vrille.
+ *  Il a longtemps été un garde-fou à nous, très en deçà (32 000 puis 64 000),
+ *  pour borner une réponse qui partirait en boucle. Le risque ne justifie pas la
+ *  perte : une boucle poussée jusqu'au bout coûte ~0,45 $ au tarif de pointe,
+ *  alors qu'une réponse coupée est perdue ENTIÈRE — et un appel d'examen de six
+ *  questions est déjà monté à 48 600 tokens. Rien n'est facturé qui ne soit
+ *  produit. Source : page des tarifs DeepSeek, relue le 22/09/2026.
+ *
+ *  L'historique qui a appris la leçon :
  *
  *  ⚠️ **Un plafond réglé au plus juste n'est pas une économie, c'est une perte
  *  sèche** — et le journal de bord l'a chiffré le 05/09/2026 : sur les 30 appels
@@ -68,11 +75,8 @@ export const DEEPSEEK_MODEL = 'deepseek-v4-flash';
  *  même lot en coûte désormais 32 000 : la marge a été mangée sans que rien ne
  *  le signale. Le plafond est donc porté à un niveau qu'un lot NORMAL ne peut
  *  pas atteindre, et le nombre de questions par appel a été divisé par deux
- *  (voir `EXAM_QUESTIONS_PER_CALL`) — les deux corrections vont ensemble.
- *
- *  Il reste très en deçà de la limite du modèle : ce qu'il arrête, c'est une
- *  boucle, pas un lot de questions. */
-const MAX_TOKENS = 64_000;
+ *  (voir `EXAM_QUESTIONS_PER_CALL`) — les deux corrections vont ensemble. */
+const MAX_TOKENS = 384_000;
 
 /** La forme attendue, **dérivée du schéma Zod** et non recopiée à la main.
  *

@@ -222,16 +222,26 @@ Le cours entier n'entre qu'une fois, dans le premier appel.
 |---|---|
 | **Chapitres** — 1 appel | le **texte seul** des documents, tous les chapitres, toutes les notions |
 | **Notions** — 1 appel par chapitre | les **pages de son chapitre** (texte et images), les notions qui lui sont attribuées |
-| **Questions** — 1 appel par lot de dix notions d'un chapitre | **aucun document** : les notions du lot et ce qu'on demande sur chacune, les intitulés de **tout le chapitre** (150 au plus), et au plus 300 questions existantes des notions du lot |
+| **Questions** — 1 appel par tranche de huit questions de la demande d'un chapitre | **aucun document** : les notions de l'appel et ce qu'on lui demande sur chacune, les intitulés de **tout le chapitre** (150 au plus), et au plus 300 questions existantes des notions de l'appel |
 
 Trois gains du même geste : moins de bruit par appel (qualité), moins de jetons
 répétés (coût), appels courts et indépendants (parallélisme).
 
 **L'étape des questions est la même que la recharge** (§7.10) : une demande de questions
-sur des notions, qu'elle vienne d'un chapitre neuf — ses 25 premières questions — ou d'un
-membre qui manque de questions. Le lot de dix notions est le compromis entre renvoyer le
-contexte du chapitre à chaque notion et tronquer une réponse trop longue ; un chapitre
-neuf de dix notions au plus ne coûte donc qu'un appel.
+sur des notions, qu'elle vienne d'un chapitre neuf — ses 24 premières questions — ou d'un
+membre qui manque de questions.
+
+**On découpe la demande, pas les notions : huit questions par appel.** Les appels partent
+en parallèle, donc on attend le plus long — un appel qui écrit huit questions répond en une
+demi-minute, là où un lot de dix notions pouvait en écrire quarante et durer quatre minutes.
+Trois règles : **des appels pleins**, le dernier s'ajuste ; **les questions d'une notion
+restent ensemble** autant que la place le permet, en remplissant dans l'ordre du chapitre ;
+**une notion qui déborde est coupée entre ses niveaux**, rangés dans l'ordre. Deux appels
+parallèles ne se voient pas : ce sont des niveaux différents, donc des questions de nature
+différente, qui les empêchent de se répéter. Deux morceaux au même niveau restent possibles
+(une notion qui demande plus de huit questions de niveau 1) ; c'est rare et accepté, on ne
+met pas d'appels en série pour ce cas. Une consigne libre, sans demande par notion, découpe
+son budget de la même taille et répartit les notions en tranches contiguës.
 
 **Ce qui rend le reste possible : l'étape chapitres rend des bornes de pages.** Pour
 chaque chapitre, le document et l'intervalle de pages — plusieurs intervalles si le
@@ -488,8 +498,8 @@ vivent dans un réglage nommé, jamais en dur au milieu du code.
 |---|---|---|
 | Unité de compte | **la notion** | **le programme** |
 | Portée d'une question | une seule notion | **plusieurs** notions croisées |
-| Volumétrie | automatique : **25 de niveau 1 par chapitre neuf**, puis la recharge | **total réglable au lancement** (1 à 200, défaut 40) |
-| Découpage des appels | par lot de dix notions | par tranche de budget — **six questions par appel** |
+| Volumétrie | automatique : **24 de niveau 1 par chapitre neuf**, puis la recharge | **total réglable au lancement** (1 à 200, défaut 40) |
+| Découpage des appels | par tranche de la demande — **huit questions par appel** | par tranche de budget — **six questions par appel** |
 | Groupes | rares | une part importante |
 
 Le total de l'examen se règle **au moment de lancer**, pas dans un écran de réglages :
@@ -666,7 +676,7 @@ cran au-dessus**, pour qu'un élève qui progresse ne trouve pas le niveau suiva
 
 **Il n'y a qu'une façon de demander des questions** — une liste de couples avec un nombre
 pour chacun. Ce qui change est **qui remplit le formulaire** : un chapitre neuf reçoit un
-budget de démarrage — 25 questions de niveau 1 — réparti sur ses notions ; une recharge reçoit ce que le radar déclare
+budget de démarrage — 24 questions de niveau 1, soit trois appels pleins — réparti sur ses notions ; une recharge reçoit ce que le radar déclare
 en manque ; une **consigne écrite à la main ne dit rien du stock**, donc on envoie large
 et c'est le modèle qui choisit.
 
@@ -681,14 +691,14 @@ compte simplement pas pour le couple visé, et le radar redemandera. Aucune pres
 mentir, aucun rejet.
 
 **Le contexte est tout le chapitre, jamais les seules notions visées.** Une recharge ou un
-démarrage ne visent souvent qu'une partie du chapitre — 25 questions de démarrage sur un
-chapitre de 150 notions n'en visent que 25. Ne montrer que celles-là laisserait le modèle
+démarrage ne visent souvent qu'une partie du chapitre — 24 questions de démarrage sur un
+chapitre de 150 notions n'en visent que 24. Ne montrer que celles-là laisserait le modèle
 écrire sur la notion voisine sans le savoir. Les intitulés de tout le chapitre partent donc
 en contexte, plafonnés à 150 : au-delà, les notions visées d'abord.
 
 **Le bloc des énoncés existants est plafonné** à 300 par appel. Le volume d'un appel ne
-dépend pas du total de la banque : un appel ne voit que les questions des notions de son
-lot, et demander plus de questions produit plus de lots, pas des lots plus gros. Reste un
+dépend pas du total de la banque : un appel ne voit que les questions des notions qu'il
+couvre, et demander plus de questions produit plus d'appels, pas des appels plus gros. Reste un
 seul axe qui grandit sans limite — une notion qui accumule des centaines d'énoncés. D'où
 trois règles de choix :
 
@@ -775,6 +785,10 @@ Elles forment une chaîne, et chacune borne un débordement que la précédente 
 - **1 à 200 énoncés d'examen par lancement**, 500 questions par import — ce dernier est un
   **fusible** contre une boucle emballée, pas un quota, et il doit rester au-dessus de
   l'usage nominal.
+- **Le plafond de réponse d'un appel est celui du modèle, jamais un réglage à nous** — chez
+  chaque fournisseur. Une réponse coupée est perdue entière mais facturée, alors qu'un
+  plafond haut ne coûte rien : on ne paie que ce qui est produit. La taille des réponses se
+  règle par le nombre de questions demandées par appel, pas par une coupe.
 - **Le mur de lecture** — la plus grande fenêtre, moins la réserve de sortie
   (**raisonnement compris** : les jetons de réflexion se prélèvent sur le budget de
   réponse, ils ne s'ajoutent pas à côté), moins une réserve pour ce que la mesure ne voit

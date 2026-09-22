@@ -19,7 +19,7 @@ import {
 } from '@/lib/ingest/demand';
 
 describe('les questions d’un chapitre neuf', () => {
-  it('en produit 25 en tout, pas 25 par notion', () => {
+  it('en produit 24 en tout, pas 24 par notion', () => {
     const demand = demandForChapterStart(['a', 'b', 'c', 'd', 'e']);
     expect(demandTotal(demand)).toBe(CHAPTER_START_QUESTIONS);
     expect(demand.every((d) => d.bloomLevel === 1)).toBe(true);
@@ -44,15 +44,15 @@ describe('les questions d’un chapitre neuf', () => {
 });
 
 describe('le budget de démarrage réparti sur l’atelier entier', () => {
-  it('donne 25 au chapitre n°1, réparti également ensuite', () => {
+  it('donne 24 au chapitre n°1, réparti également ensuite', () => {
     // Cas de l'énoncé : 3 chapitres, aucun n'a besoin du plafond.
     const budgets = chapterStartBudgets(
       [{ id: 'c1', position: 1 }, { id: 'c2', position: 2 }, { id: 'c3', position: 3 }],
       250,
     );
-    expect(budgets.get('c1')).toBe(25);
-    expect(budgets.get('c2')).toBe(25);
-    expect(budgets.get('c3')).toBe(25);
+    expect(budgets.get('c1')).toBe(24);
+    expect(budgets.get('c2')).toBe(24);
+    expect(budgets.get('c3')).toBe(24);
   });
 
   it('se fie à la POSITION, jamais à l’ordre du tableau reçu', () => {
@@ -60,23 +60,23 @@ describe('le budget de démarrage réparti sur l’atelier entier', () => {
       [{ id: 'c3', position: 3 }, { id: 'c1', position: 1 }, { id: 'c2', position: 2 }],
       250,
     );
-    expect(budgets.get('c1')).toBe(25);
+    expect(budgets.get('c1')).toBe(24);
   });
 
-  it('répartit le reste avec un plafond de 25, sans redistribuer ce qui déborde', () => {
-    // 19 chapitres, budget 250 : 25 pour le n°1, 225 pour les 18 autres —
-    // 12 ou 13 chacun, jamais 25 (aucun ne l'atteint, le plafond ne joue pas ici).
+  it('répartit le reste avec un plafond de 24, sans redistribuer ce qui déborde', () => {
+    // 19 chapitres, budget 250 : 24 pour le n°1, 226 pour les 18 autres —
+    // 12 ou 13 chacun, jamais 24 (aucun ne l'atteint, le plafond ne joue pas ici).
     const chapters = Array.from({ length: 19 }, (_, i) => ({ id: `c${i + 1}`, position: i + 1 }));
     const budgets = chapterStartBudgets(chapters, 250);
-    expect(budgets.get('c1')).toBe(25);
+    expect(budgets.get('c1')).toBe(24);
     const others = chapters.slice(1).map((c) => budgets.get(c.id));
     expect(others.every((n) => n === 12 || n === 13)).toBe(true);
-    expect(others.reduce((sum: number, n) => sum + (n ?? 0), 0)).toBe(225);
+    expect(others.reduce((sum: number, n) => sum + (n ?? 0), 0)).toBe(226);
   });
 
-  it('plafonne chaque chapitre à 25, même si le budget permettrait plus', () => {
+  it('plafonne chaque chapitre à 24, même si le budget permettrait plus', () => {
     // Avec le vrai fusible (500) et peu de chapitres, le plafond par chapitre
-    // mord avant le partage — jusqu'à une vingtaine, chacun garde ses 25 pleins.
+    // mord avant le partage — jusqu'à une vingtaine, chacun garde ses 24 pleins.
     const chapters = Array.from({ length: 5 }, (_, i) => ({ id: `c${i + 1}`, position: i + 1 }));
     const budgets = chapterStartBudgets(chapters, 500);
     for (const c of chapters) expect(budgets.get(c.id)).toBe(CHAPTER_START_QUESTIONS);
@@ -84,7 +84,7 @@ describe('le budget de démarrage réparti sur l’atelier entier', () => {
 
   it('un seul chapitre reçoit tout, plafonné', () => {
     const budgets = chapterStartBudgets([{ id: 'c1', position: 1 }], 500);
-    expect(budgets.get('c1')).toBe(25);
+    expect(budgets.get('c1')).toBe(24);
   });
 
   it('ne rend rien sans chapitre', () => {

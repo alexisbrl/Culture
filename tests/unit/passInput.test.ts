@@ -9,11 +9,14 @@ import {
   MAX_PLAUSIBLE_CHAPTERS,
   MIN_PLAUSIBLE_CHAPTERS,
   needsChapterRetry,
+  packDemand,
+  planFreeParcoursCalls,
+  QUESTIONS_PER_PARCOURS_CALL,
   shouldCacheDocuments,
-  NOTIONS_PER_QUESTION_BATCH,
   splitUnplaced,
   withChapterRetry,
 } from '@/lib/ingest/passInput';
+import type { QuestionDemand } from '@/lib/ingest/demand';
 import type { ExistingContent } from '@/lib/ingest/prompt';
 import type { IngestScope, PlanProvider, PreparedDocument, ProviderResult } from '@/lib/ingest/providers/types';
 
@@ -128,47 +131,89 @@ describe('passe questions — l’appel capturé ne porte aucun document', () =>
   });
 });
 
-describe('batchNotions — l’unité de travail de la passe questions', () => {
+describe('batchNotions — les lots de la passe de rangement', () => {
   const notions = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `n${i + 1}`, title: `Notion ${i + 1}` }));
 
-  it('un chapitre de 25 notions donne exactement 3 lots (10, 10, 5)', () => {
-    const batches = batchNotions(notions(25));
-    expect(batches.map((b) => b.length)).toEqual([10, 10, 5]);
-  });
-
-  it('un chapitre de 25 notions produit exactement 3 appels au fournisseur', async () => {
-    // Le critère de T4, vérifié bout en bout sur la boucle que fait le client.
-    const provider = recordingProvider();
-    const all = notions(25);
-
-    for (const batch of batchNotions(all)) {
-      const inBatch = new Set(batch.map((n) => n.id));
-      await provider.documentToPlan([], empty, {
-        pass: 'questions',
-        chapter: { id: 'ch1', name: 'Les fleuves' },
-        notions: batch,
-        neighbours: all.filter((n) => !inBatch.has(n.id)),
-        budget: 300,
-      });
-    }
-
-    expect(provider.calls).toHaveLength(3);
-    expect(provider.calls.map((c) => (c.scope.pass === 'questions' ? c.scope.notions.length : -1))).toEqual([10, 10, 5]);
-    // Chaque appel voit le reste du chapitre en contexte, jamais deux fois la
-    // même notion en cible.
-    expect(provider.calls.map((c) => (c.scope.pass === 'questions' ? c.scope.neighbours.length : -1))).toEqual([15, 15, 20]);
-    const cibles = provider.calls.flatMap((c) => (c.scope.pass === 'questions' ? c.scope.notions.map((n) => n.id) : []));
-    expect(new Set(cibles).size).toBe(25);
-  });
-
-  it('aucun lot vide, et le dernier n’est pas complété artificiellement', () => {
-    expect(batchNotions(notions(0))).toEqual([]);
-    expect(batchNotions(notions(1)).map((b) => b.length)).toEqual([1]);
-    expect(batchNotions(notions(NOTIONS_PER_QUESTION_BATCH)).map((b) => b.length)).toEqual([NOTIONS_PER_QUESTION_BATCH]);
+  it('des lots pleins, le dernier n’est pas complété artificiellement', () => {
+    expect(batchNotions(notions(25), 10).map((b) => b.length)).toEqual([10, 10, 5]);
+    expect(batchNotions(notions(0), 10)).toEqual([]);
+    expect(batchNotions(notions(1), 10).map((b) => b.length)).toEqual([1]);
   });
 
   it('refuse une taille de lot qui ferait une boucle infinie', () => {
     expect(() => batchNotions(notions(3), 0)).toThrow();
+  });
+});
+
+describe('packDemand — des appels de huit questions pour le parcours', () => {
+  const d = (notionId: string, bloomLevel: 1 | 2 | 3 | 4, count: number): QuestionDemand => ({ notionId, bloomLevel, count });
+  const total = (call: QuestionDemand[]) => call.reduce((sum, item) => sum + item.count, 0);
+
+  it('des appels pleins, et le dernier s’ajuste', () => {
+    const calls = packDemand([d('a', 1, 13), d('b', 1, 11)], ['a', 'b']);
+    expect(calls.map(total)).toEqual([8, 8, 8]);
+  });
+
+  it('les questions d’une notion restent ensemble quand la place le permet', () => {
+    const calls = packDemand([d('a', 1, 3), d('b', 1, 3), d('c', 1, 2)], ['a', 'b', 'c']);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].map((i) => i.notionId)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('une notion qui déborde est coupée ENTRE ses niveaux, rangés dans l’ordre', () => {
+    // L'exemple d'Alexis (22/09/2026) : N1 demande 10 questions sur trois niveaux.
+    const calls = packDemand(
+      [d('n1', 3, 2), d('n1', 1, 4), d('n1', 2, 4), d('n2', 1, 4), d('n3', 1, 3)],
+      ['n1', 'n2', 'n3'],
+    );
+    expect(calls.map(total)).toEqual([8, 8, 1]);
+    // Premier appel : les niveaux 1 et 2 de N1 ; le niveau 3 part avec N2.
+    expect(calls[0]).toEqual([d('n1', 1, 4), d('n1', 2, 4)]);
+    expect(calls[1]).toEqual([d('n1', 3, 2), d('n2', 1, 4), d('n3', 1, 2)]);
+  });
+
+  it('suit l’ordre du chapitre, jamais celui de la demande', () => {
+    const calls = packDemand([d('b', 1, 2), d('a', 1, 2)], ['a', 'b']);
+    expect(calls[0].map((i) => i.notionId)).toEqual(['a', 'b']);
+  });
+
+  it('additionne deux entrées du même couple, ignore le vide et l’inconnu', () => {
+    const calls = packDemand([d('a', 1, 2), d('a', 1, 3), d('b', 1, 0), d('x', 1, 4)], ['a', 'b']);
+    expect(calls).toEqual([[d('a', 1, 5)]]);
+  });
+
+  it('ne perd ni n’invente aucune question', () => {
+    const demand = [d('a', 1, 17), d('a', 2, 5), d('b', 3, 9), d('c', 1, 1), d('d', 4, 30)];
+    const calls = packDemand(demand, ['a', 'b', 'c', 'd']);
+    expect(calls.reduce((sum, c) => sum + total(c), 0)).toBe(62);
+    expect(calls.every((c) => total(c) <= QUESTIONS_PER_PARCOURS_CALL)).toBe(true);
+    expect(calls.slice(0, -1).every((c) => total(c) === QUESTIONS_PER_PARCOURS_CALL)).toBe(true);
+  });
+
+  it('une demande vide ne coûte aucun appel, une taille nulle est refusée', () => {
+    expect(packDemand([], ['a'])).toEqual([]);
+    expect(() => packDemand([d('a', 1, 2)], ['a'], 0)).toThrow();
+  });
+});
+
+describe('planFreeParcoursCalls — la consigne libre, même taille d’appel', () => {
+  const notions = (n: number) => Array.from({ length: n }, (_, i) => `n${i + 1}`);
+
+  it('24 questions sur 30 notions : trois appels de 8, notions en tranches contiguës', () => {
+    const calls = planFreeParcoursCalls(notions(30), 24);
+    expect(calls.map((c) => c.budget)).toEqual([8, 8, 8]);
+    expect(calls.map((c) => c.notions.length)).toEqual([10, 10, 10]);
+    expect(calls.flatMap((c) => c.notions)).toEqual(notions(30));
+  });
+
+  it('jamais plus d’appels que de notions', () => {
+    const calls = planFreeParcoursCalls(notions(2), 24);
+    expect(calls.map((c) => c.budget)).toEqual([12, 12]);
+  });
+
+  it('rien à faire sans budget ou sans notion', () => {
+    expect(planFreeParcoursCalls(notions(3), 0)).toEqual([]);
+    expect(planFreeParcoursCalls([], 24)).toEqual([]);
   });
 });
 
