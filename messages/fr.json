@@ -1181,8 +1181,8 @@
     "progress": {
       "resource": "Lecture de ta consigne…",
       "chapters": "Découpage du cours en chapitres…",
-      "notionsDocuments": "Notions — {done}/{n} documents lus",
-      "assign": "Rangement des notions — {done}/{n} lots",
+      "chaptersRelaunch": "Vérification des notions restées sans chapitre…",
+      "notionsChapters": "Notions — {done}/{n} chapitres lus",
       "questionsCount": "Questions — {done}/{n} lots traités",
       "questionsBatch": "Questions — {chapter} ({i}/{n}) · lot {b}/{nb}"
     },
@@ -1234,6 +1234,7 @@
       "confirm": "arrêter et défaire"
     },
     "nothingWritten": "L’IA n’a rien écrit à partir de ta consigne, et cet atelier n’a ni document ni notion : il n’y avait donc rien à construire. Reformule en disant ce que le cours doit contenir, ou ajoute un document.",
-    "writtenNotRead": "Le cours a bien été écrit et il apparaît dans Ressources, mais cette génération n’a pas pu le relire pour en tirer le programme. Relance la génération : elle repartira de ce cours."
+    "writtenNotRead": "Le cours a bien été écrit et il apparaît dans Ressources, mais cette génération n’a pas pu le relire pour en tirer le programme. Relance la génération : elle repartira de ce cours.",
+    "cancelledForgotten": "La mise à jour de l’atelier a été annulée : l’IA n’a pas su situer dans le cours une trop grande part des notions déjà présentes. Rien n’a été modifié. Relance la génération ; si ça se reproduit, c’est un problème de notre côté."
   }
 }

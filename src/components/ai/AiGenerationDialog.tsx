@@ -13,7 +13,7 @@ import {
   DEFAULT_EXAM_QUESTIONS,
   MAX_QUESTIONS_PER_IMPORT as MAX_QUESTIONS,
 } from '@/lib/ingest/prompt';
-import { planExamCalls } from '@/lib/ingest/passInput';
+import { createBudgetLedger, planExamCalls } from '@/lib/ingest/passInput';
 import { chapterStartBudgets } from '@/lib/ingest/demand';
 import { questionCountFromHint } from '@/lib/ingest/resource';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
@@ -23,12 +23,13 @@ import {
   cancelWorkshopImport,
   closeWorkshopImport,
   finishWorkshopIngestion,
-  ingestDocumentNotions,
   countParcoursQuestionCalls,
   ingestParcoursQuestions,
-  ingestWorkshopAssignments,
   ingestWorkshopResource,
   ingestWorkshopChapters,
+  ingestWorkshopChapterNotions,
+  relaunchWorkshopChapters,
+  checkWorkshopRedites,
   ingestWorkshopExamQuestions,
   prepareWorkshopIngestion,
   releaseWorkshopImportFiles,
@@ -50,15 +51,11 @@ import type { GenerationOrigin } from '@/lib/ingest/journal';
 //     reste annulable ; c'est le prix assumé de l'approche, à revoir le jour où
 //     une vraie tâche de fond existera.
 //
-// **L'ordre des étages a été inversé le 23/08/2026** : les NOTIONS d'abord
-// (document par document), les CHAPITRES ensuite (qui les rangent), les
-// questions enfin. Les notions sont le cœur d'un atelier, les chapitres ne
-// sont que des boîtes — décider les boîtes en premier rendait toute mise à
-// jour impossible (docs/chantiers/2026-08-23-notions-dabord.md).
-//
-// **Grouper par étage reste impératif** : le cache de prompt est propre à
-// chaque schéma de sortie, donc alterner les étages le ferait manquer à chaque
-// fois — sur douze chapitres, ~3 $ contre ~11 $ (mesuré, §5.2).
+// L'ordre des étages est celui de docs/architecture.md §7 : les CHAPITRES sur
+// le texte du cours, qui statuent aussi sur chaque notion existante ; puis les
+// NOTIONS de chaque chapitre sur ses seules pages, en parallèle, chacun
+// enchaînant ses questions dès qu'il a fini ; puis les redites entre chapitres,
+// en même temps que les dernières questions ; puis la finalisation.
 
 /** Rythme du signe de vie envoyé pendant une génération.
  *
@@ -381,36 +378,27 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     // ─── Les étages, et ce qui décide de leur présence ──────────────────────
     //
     // Plus aucun choix d'étage : le point d'entrée décide (voir `needsProgram`).
-    // Ce qui existe déjà n'est jamais refait — chaque étage COMPLÈTE : les
-    // chapitres en place sont réutilisés, les notions déjà rangées le restent,
-    // et les notions déjà pourvues de questions ne sont pas repassées au modèle.
+    // Ce qui existe déjà n'est jamais refait — chaque étage COMPLÈTE.
     //
-    // ⚠️ **L'ordre a été inversé le 23/08/2026** : les notions d'abord, les
-    // chapitres ensuite. Les notions sont le cœur d'un atelier, les chapitres
-    // ne sont que des boîtes — décider les boîtes en premier rendait toute mise
-    // à jour impossible (feuille de route « notions d'abord »).
-    // Le RANGEMENT est un étage à part entière, pas une conséquence : il tourne
-    // dès qu'il y a quelque chose à placer — des notions neuves, ou une
-    // structure qui vient de changer.
+    // L'ordre suit docs/architecture.md §7 : l'étape 0 si une consigne l'appelle,
+    // puis les CHAPITRES sur le texte du cours, puis les NOTIONS de chaque
+    // chapitre sur ses seules pages — tous en parallèle, chacun enchaînant ses
+    // questions dès qu'il a fini —, puis, une fois tous les chapitres passés, la
+    // vérification des redites en même temps que les questions restantes, et
+    // la finalisation.
     //
     // ⚠️ **L'étage 0 ne dépend pas du point d'entrée, mais de la CONSIGNE**
     // (04/09/2026) : c'est la seule étape qui parte d'une demande écrite plutôt
     // que d'un document. Sans consigne, elle n'a rien à interpréter et ne part
     // pas — ce qui est le cas de la plupart des générations.
     const withResource = hint.trim().length > 0 && askedCount === null;
-    const withNotions = needsProgram;
-    const withChapters = needsProgram;
-    const withAssign = needsProgram;
     const steps = [
       ...(withResource ? ['resource' as const] : []),
-      ...(withNotions ? ['notions' as const] : []),
-      ...(withChapters ? ['chapters' as const] : []),
-      ...(withAssign ? ['assign' as const] : []),
+      ...(needsProgram ? ['chapters' as const, 'notions' as const] : []),
       'questions' as const,
     ];
     const totalSteps = steps.length;
-    // Le rang d'un étage dans la barre dépend de ce qui est coché : sans les
-    // chapitres, les notions occupent le premier cran, pas le deuxième.
+    // Le rang d'un étage dans la barre dépend de ceux qui ont lieu.
     const stepAt = (name: (typeof steps)[number]) => Math.max(0, steps.indexOf(name));
 
     // ── Étage 0 : la consigne, et la matière qui manque ──
@@ -438,140 +426,179 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       }
     }
 
-    // ── Étage 1 : les notions, document par document ──
-    //
-    // Elles naissent SANS chapitre — à ce stade il n'en existe pas. Le document
-    // est l'unité de travail : elle ne demande aucun jugement au modèle, elle
-    // est stable d'un import à l'autre, et chaque appel ne porte que son propre
-    // document.
-    //
-    // ⚠️ **Plus d'appel d'amorçage, et ce n'est pas un oubli.** L'ancienne passe
-    // envoyait TOUS les documents à CHAQUE appel : il fallait qu'un premier
-    // appel parte seul pour écrire le cache que les suivants liraient. Ici deux
-    // appels ne partagent aucun préfixe — le corpus part une seule fois au
-    // total, ce qui est moins cher que l'écriture de cache qu'on remplace. Tout
-    // peut donc partir ensemble.
-    // Chaque étage se demande d'abord s'il a encore lieu d'être : l'arrêt ne
-    // coupe pas un appel en vol, il empêche le suivant de partir.
-    if (stopped.current) return;
-    if (withNotions && documents > 0) {
-      let error: string | null = null;
-      const showNotions = (done: number) => setPhase({
-        step: 'running',
-        label: t('progress.notionsDocuments', { done, n: documents }),
-        done: stepAt('notions') + done / documents,
-        total: totalSteps,
-      });
-
-      showNotions(0);
-      await mapWithConcurrency(
-        Array.from({ length: documents }, (_, i) => i),
-        INGEST_CONCURRENCY,
-        async (index) => {
-          if (stopped.current) return;
-          const result = await ingestDocumentNotions(workshopId, importId, index);
-          if (!result.ok) { error ??= result.error; return; }
-          discarded.push(...result.discarded);
-          adjusted.push(...result.adjusted);
-          tally.notions += result.written;
-          setCounts({ ...tally });
-        },
-        (done) => showNotions(done),
-      );
-      if (error) return setPhase({ step: 'error', message: error });
-    }
-
-    // ── Étage 2 : les chapitres, ET le rangement des notions ──
-    //
-    // Un seul appel pour les deux : le modèle ne peut pas ranger dans des
-    // chapitres qu'il n'a pas encore nommés. C'est aussi le seul moment du
-    // pipeline qui voit toutes les notions d'un coup, donc le seul où une redite
-    // entre deux documents peut se repérer.
-    //
-    // Décoché, on garde le programme tel quel : les notions qui viennent d'être
-    // créées restent sans chapitre, consultables, et un import ultérieur pourra
-    // les ranger.
     // ⚠️ **Pas de document, pas de découpage.** Sans fichier déposé, le seul
     // document possible est celui que l'étape 0 vient d'écrire — et elle a pu
     // n'avoir rien à écrire. Demander un découpage sans cours produirait des
     // chapitres inventés, ce que tout le reste du pipeline interdit.
+    const buildProgram = needsProgram && documents > 0;
+
+    // ── Étage 1 : les chapitres, sur le texte du cours ──
+    //
+    // Un seul appel, qui statue aussi sur chaque notion existante. Trop de
+    // notions sans verdict : on relance une fois ; encore trop après la relance :
+    // la mise à jour est annulée, et rien n'a été écrit (§7.6).
     if (stopped.current) return;
-    if (withChapters && documents > 0) {
+    if (buildProgram) {
       setPhase({ step: 'running', label: t('progress.chapters'), done: stepAt('chapters'), total: totalSteps });
-      const structure = await ingestWorkshopChapters(workshopId, importId);
+      let structure = await ingestWorkshopChapters(workshopId, importId);
       if (!structure.ok) return setPhase({ step: 'error', message: structure.error });
       discarded.push(...structure.discarded);
+      if (structure.decision === 'relaunch') {
+        if (stopped.current) return;
+        setPhase({ step: 'running', label: t('progress.chaptersRelaunch'), done: stepAt('chapters'), total: totalSteps });
+        structure = await relaunchWorkshopChapters(workshopId, importId);
+        if (!structure.ok) return setPhase({ step: 'error', message: structure.error });
+        // La relance rend les écarts des deux appels : on les remplace.
+        discarded.length = 0;
+        discarded.push(...structure.discarded);
+      }
+      if (structure.decision === 'cancel') {
+        return setPhase({ step: 'error', message: t('cancelledForgotten') });
+      }
       adjusted.push(...structure.adjusted);
       // Le compteur affiche ce que CET import a créé, pas le total de l'atelier.
       tally.chapters = structure.chapters.length;
       setCounts({ ...tally });
     }
 
-    // ── Étage 3 : le rangement, par lots ──
+    // Le programme tel qu'il est désormais : chapitres nouveaux et anciens dans
+    // la même liste, dans l'ordre. Un import complète les DEUX — le nouveau part
+    // de zéro, l'ancien se voit proposer ce qui lui manque. Les chapitres écartés
+    // sont hors programme : on ne leur écrit ni notions ni questions.
+    const chapters = (await getWorkshopChapters(workshopId))
+      .filter((c) => !c.hidden)
+      .map((c) => ({ id: c.id, name: c.name, position: c.position }));
+
+    // ─── Les questions d'entraînement d'UN chapitre ─────────────────────────
     //
-    // Il ne reçoit aucun document : ce qui remplace le cours, c'est la page d'où
-    // vient chaque notion et les pages que couvre chaque chapitre. C'est aussi
-    // ici que les ressemblances repérées mécaniquement sont soumises au
-    // jugement du modèle — le calcul signale, le modèle tranche.
+    // Le chapitre n°1 du programme reçoit 24 questions d'office, le reste du
+    // plafond se répartit également entre les autres — calculé une fois ici sur
+    // l'atelier ENTIER (`chapterStartBudgets`). Chaque chapitre puise dans SA
+    // part : les premiers à finir leur étape notions ne peuvent pas consommer
+    // celle des derniers (§7.2).
+    const startBudgets = chapterStartBudgets(chapters);
+    const ledger = createBudgetLedger(startBudgets, MAX_QUESTIONS);
+    let questionError: string | null = null;
+    let doneCalls = 0;
+    let totalCalls = 0;
+    const showQuestions = () => setPhase({
+      step: 'running',
+      // Avec des appels concurrents, « le lot en cours » n'existe plus : le
+      // nombre de lots terminés est la seule chose qu'on puisse afficher
+      // honnêtement.
+      label: t('progress.questionsCount', { done: doneCalls, n: totalCalls }),
+      done: stepAt('questions') + (totalCalls === 0 ? 0 : doneCalls / totalCalls),
+      total: totalSteps,
+    });
+
+    const runChapterQuestions = async (chapter: (typeof chapters)[number]) => {
+      if (context === 'exam' || stopped.current) return;
+      // Le plan du chapitre se calcule sans le modèle, sur l'existant arrêté à
+      // l'ouverture du lot : tous ses appels partent ensemble.
+      const plan = await countParcoursQuestionCalls(
+        workshopId,
+        importId,
+        [{ id: chapter.id, startBudget: startBudgets.get(chapter.id) }],
+      );
+      if (!plan.ok) { questionError ??= plan.error; return; }
+      const jobs = (plan.calls[chapter.id] ?? []).map((asked, batchIndex) => ({ asked, batchIndex }));
+      totalCalls += jobs.length;
+      showQuestions();
+      await mapWithConcurrency(jobs, QUESTIONS_CONCURRENCY, async (job) => {
+        if (stopped.current) return;
+        const share = ledger.reserve(chapter.id, job.asked);
+        if (share <= 0) { doneCalls += 1; showQuestions(); return; }
+        const result = await ingestParcoursQuestions(
+          workshopId, importId, chapter, job.batchIndex, share, startBudgets.get(chapter.id),
+        );
+        doneCalls += 1;
+        if (!result.ok) {
+          ledger.release(chapter.id, share);
+          questionError ??= result.error;
+          showQuestions();
+          return;
+        }
+        // Ce qui n'a pas été écrit revient à la part du chapitre.
+        ledger.release(chapter.id, share - result.written);
+        discarded.push(...result.discarded);
+        adjusted.push(...result.adjusted);
+        tally.questions += result.written;
+        setCounts({ ...tally });
+        showQuestions();
+      });
+    };
+
+    // ── Étage 2 : les notions, chapitre par chapitre, en parallèle ──
+    //
+    // Chaque chapitre ne lit que ses pages, et reçoit la seconde vérification.
+    // Ses questions partent dès qu'il a fini, sans attendre les autres.
     if (stopped.current) return;
-    if (withAssign && documents > 0) {
-      let error: string | null = null;
-      const showAssign = (done: number, total: number) => setPhase({
+    if (buildProgram) {
+      let notionError: string | null = null;
+      let notionsDone = 0;
+      const claims: { chapterId: string; notionIds: string[] }[] = [];
+      const questionRuns: Promise<void>[] = [];
+      const showNotions = () => setPhase({
         step: 'running',
-        label: t('progress.assign', { done, n: total }),
-        done: stepAt('assign') + (total > 0 ? done / total : 0),
+        label: t('progress.notionsChapters', { done: notionsDone, n: chapters.length }),
+        done: stepAt('notions') + (chapters.length === 0 ? 1 : notionsDone / chapters.length),
         total: totalSteps,
       });
 
-      showAssign(0, 1);
-      // Le nombre de lots n'est connu qu'à la réponse du premier : on le fait
-      // seul, puis on lance tout le reste en parallèle.
-      const first = await ingestWorkshopAssignments(workshopId, importId, 0);
-      if (!first.ok) return setPhase({ step: 'error', message: first.error });
-      discarded.push(...first.discarded);
-      adjusted.push(...first.adjusted);
-      showAssign(1, first.batches || 1);
-
-      if (first.batches > 1) {
-        const rest = Array.from({ length: first.batches - 1 }, (_, i) => i + 1);
-        let done = 1;
-        await mapWithConcurrency(rest, INGEST_CONCURRENCY, async (index) => {
-          if (stopped.current) return;
-          const result = await ingestWorkshopAssignments(workshopId, importId, index);
-          if (!result.ok) { error ??= result.error; return; }
-          discarded.push(...result.discarded);
-          adjusted.push(...result.adjusted);
-          showAssign(++done, first.batches);
-        });
+      showNotions();
+      await mapWithConcurrency(chapters, INGEST_CONCURRENCY, async (chapter) => {
+        if (stopped.current) return;
+        const result = await ingestWorkshopChapterNotions(workshopId, importId, chapter.id);
+        notionsDone += 1;
+        if (!result.ok) { notionError ??= result.error; showNotions(); return; }
+        discarded.push(...result.discarded);
+        adjusted.push(...result.adjusted);
+        tally.notions += result.written;
+        setCounts({ ...tally });
+        if (result.claimed.length > 0) claims.push({ chapterId: chapter.id, notionIds: result.claimed });
+        showNotions();
+        questionRuns.push(runChapterQuestions(chapter));
+      });
+      if (notionError) {
+        await Promise.allSettled(questionRuns);
+        return setPhase({ step: 'error', message: notionError });
       }
-      if (error) return setPhase({ step: 'error', message: error });
 
-      // ⚠️ **Ici et pas avant.** Cacher les chapitres que l'import a vidés et
-      // effacer ce qu'il a créé sans jamais le ranger n'a de sens qu'une fois
-      // TOUT rangé : à mi-parcours, chaque notion est encore sans chapitre.
-      await finishWorkshopIngestion(workshopId, importId);
+      // Tous les chapitres ont fini leur étape notions : les redites entre
+      // chapitres se jugent maintenant, en même temps que les questions encore
+      // en vol, qui ne les attendent pas (§7.6).
+      if (stopped.current) return;
+      const redites = checkWorkshopRedites(workshopId, importId).then((result) => {
+        if (!result.ok) {
+          adjusted.push({ kind: 'notion', reason: result.error });
+          return;
+        }
+        adjusted.push(...result.adjusted);
+        tally.notions -= result.removed;
+        setCounts({ ...tally });
+      });
+      await Promise.all([...questionRuns, redites]);
+      if (questionError) return setPhase({ step: 'error', message: questionError });
+
+      // ⚠️ **Ici et pas avant.** Le départage des notions réclamées, la sortie
+      // du programme de ce que personne ne réclame, et le ménage n'ont de sens
+      // qu'une fois TOUS les chapitres passés.
+      if (stopped.current) return;
+      const finish = await finishWorkshopIngestion(workshopId, importId, claims);
+      adjusted.push(...finish.adjusted);
+    } else if (context !== 'exam') {
+      // Pas de programme à construire : on écrit les questions qui manquent à
+      // chaque chapitre existant.
+      await mapWithConcurrency(chapters, INGEST_CONCURRENCY, (chapter) => runChapterQuestions(chapter));
+      if (questionError) return setPhase({ step: 'error', message: questionError });
     }
 
-    // Les documents ont fini de servir : les deux premiers étages les portaient,
-    // la passe questions ne les reçoit plus (§16.3), et rien ne s'efface tout
-    // seul chez le fournisseur (§16.8). On les rend ici plutôt qu'à la toute
-    // fin, pour que ça arrive même si les questions échouent. Volontairement non
-    // attendu — c'est du ménage.
+    // Les documents ont fini de servir : seules les étapes chapitres et notions
+    // les portent, et rien ne s'efface tout seul chez le fournisseur. On les
+    // rend ici plutôt qu'à la toute fin, pour que ça arrive même si les
+    // questions d'examen échouent. Volontairement non attendu — c'est du ménage.
     void releaseWorkshopImportFiles(workshopId, importId);
 
-    // ─── Étage 4 : les questions, et deux régimes qui n'ont rien en commun ───
-    //
-    // • EXAMEN   — un nombre TOTAL de questions pour tout le programme (40 par
-    //              défaut, réglable ci-dessus), chacune croisant plusieurs
-    //              notions, un tiers en groupes qui s'enchaînent. Le découpage
-    //              porte sur le budget, et la matière suit : chaque appel reçoit
-    //              une tranche contiguë du cours.
-    // • PARCOURS — douze questions PAR NOTION, une notion par question. Le
-    //              découpage porte sur la matière, chapitre par chapitre.
-    //
-    // Deux régimes, deux passes serveur (24/08/2026). Les fondre reviendrait à
-    // fabriquer deux listes qui se ressemblent, alors que leur intérêt est
-    // justement d'être complémentaires.
     if (context === 'exam') {
       let error: string | null = null;
       let doneCalls = 0;
@@ -680,94 +707,6 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       setIssues({ discarded, adjusted });
       setPhase({ step: 'done' });
       return;
-    }
-
-    // ⚠️ **Le socle de la passe parcours est l'atelier ENTIER**, pas ce que
-    // l'exécution vient de créer — et il est relu en base APRÈS le rangement,
-    // pour que les chapitres nouveaux et anciens se retrouvent dans la même
-    // liste. C'est ce qui fait qu'un import complète les DEUX : le nouveau part
-    // de zéro, l'ancien se voit proposer ce qui lui manque.
-    //
-    // Le coût en découle et il est assumé : un atelier de douze chapitres
-    // déclenche douze séries d'appels, même si un seul chapitre est nouveau
-    // (arbitrage du 22/08/2026). Le serveur y répond en n'envoyant au modèle que
-    // les notions dont le stock n'est pas au complet.
-    // Les chapitres écartés sont hors programme : on ne leur écrit pas de
-    // questions. Ils n'ont de toute façon plus de notions, mais la règle doit
-    // être explicite — un chapitre restauré plus tard les recevra.
-    const chapters = (await getWorkshopChapters(workshopId))
-      .filter((c) => !c.hidden)
-      .map((c) => ({ id: c.id, name: c.name, position: c.position }));
-
-    // Le chapitre n°1 du programme reçoit 24 questions d'office, le reste du
-    // budget se répartit également entre tous les autres — calculé une fois ici
-    // sur l'atelier ENTIER, jamais chapitre par chapitre (voir `chapterStartBudgets`).
-    const startBudgets = chapterStartBudgets(chapters);
-
-    if (chapters.length > 0) {
-      let error: string | null = null;
-
-      // ─── Une seule vague, parce que le plan est connu d'avance ────────────
-      //
-      // Le serveur calcule d'abord, sans appeler le modèle, combien d'appels
-      // chaque chapitre demande (22/09/2026) ; tous partent ensuite en même
-      // temps, tous chapitres confondus. Jusque-là, le premier appel de chaque
-      // chapitre partait seul pour révéler ce nombre : une attente entière de
-      // plus, pour un chiffre qu'on savait calculer.
-      const plan = await countParcoursQuestionCalls(
-        workshopId,
-        importId,
-        chapters.map((c) => ({ id: c.id, startBudget: startBudgets.get(c.id) })),
-      );
-      if (!plan.ok) return setPhase({ step: 'error', message: plan.error });
-      const jobs = chapters.flatMap((chapter) =>
-        (plan.calls[chapter.id] ?? []).map((asked, batchIndex) => ({ chapter, batchIndex, asked })),
-      );
-      let doneCalls = 0;
-      const totalCalls = jobs.length;
-
-      const showQuestions = () => setPhase({
-        step: 'running',
-        // Avec des appels concurrents, « le lot en cours » n'existe plus : le
-        // nombre de lots terminés est la seule chose qu'on puisse afficher
-        // honnêtement.
-        label: t('progress.questionsCount', { done: doneCalls, n: totalCalls }),
-        done: stepAt('questions') + (totalCalls === 0 ? 1 : doneCalls / totalCalls),
-        total: totalSteps,
-      });
-
-      // Ce que les appels en vol ont RÉSERVÉ sur le plafond de l'import.
-      let reserved = 0;
-
-      const runBatch = async (job: { chapter: (typeof chapters)[number]; batchIndex: number; asked: number }) => {
-        if (stopped.current) return null;
-        // ⚠️ **La part du plafond est calculée ici, pas côté serveur.** Le serveur
-        // ne voit qu'un appel à la fois : des appels concurrents liraient tous
-        // le même compteur de questions écrites et se croiraient chacun seuls,
-        // donc écriraient chacun jusqu'au plafond entier. Le client, lui, sait
-        // ce qu'il a en vol : chaque appel RÉSERVE exactement ce qu'il demande sur
-        // ce qui reste, et le rend à son retour. Diviser le reste par le nombre
-        // d'appels possibles (l'ancienne règle) rognait les appels dès que la
-        // concurrence est passée à 50 (22/09/2026).
-        const share = Math.min(job.asked, MAX_QUESTIONS - tally.questions - reserved);
-        if (share <= 0) return null;
-        reserved += share;
-        const result = await ingestParcoursQuestions(
-          workshopId, importId, job.chapter, job.batchIndex, share, startBudgets.get(job.chapter.id),
-        ).finally(() => { reserved -= share; });
-        doneCalls += 1;
-        if (!result.ok) { error ??= result.error; showQuestions(); return null; }
-        discarded.push(...result.discarded);
-        adjusted.push(...result.adjusted);
-        tally.questions += result.written;
-        setCounts({ ...tally });
-        showQuestions();
-        return result;
-      };
-
-      showQuestions();
-      await mapWithConcurrency(jobs, QUESTIONS_CONCURRENCY, runBatch);
-      if (error) return setPhase({ step: 'error', message: error });
     }
 
     // Un arrêt n'est pas une fin : le compte-rendu décrirait un travail que

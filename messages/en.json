@@ -1181,8 +1181,8 @@
     "progress": {
       "resource": "Reading your instructions…",
       "chapters": "Splitting the course into chapters…",
-      "notionsDocuments": "Notions — {done}/{n} documents read",
-      "assign": "Filing the notions — {done}/{n} batches",
+      "chaptersRelaunch": "Checking the notions left without a chapter…",
+      "notionsChapters": "Notions — {done}/{n} chapters read",
       "questionsCount": "Questions — {done}/{n} batches done",
       "questionsBatch": "Questions — {chapter} ({i}/{n}) · batch {b}/{nb}"
     },
@@ -1234,6 +1234,7 @@
       "confirm": "stop and undo"
     },
     "nothingWritten": "The AI wrote nothing from your instructions, and this workshop has no document and no notion: there was nothing to build. Say what the course should contain, or add a document.",
-    "writtenNotRead": "The course was written and now appears under Resources, but this generation could not read it back to build the programme. Run it again: it will start from that course."
+    "writtenNotRead": "The course was written and now appears under Resources, but this generation could not read it back to build the programme. Run it again: it will start from that course.",
+    "cancelledForgotten": "The workshop update was cancelled: the AI could not place too large a share of the existing notions in the course. Nothing was changed. Run the generation again; if it happens again, the problem is on our side."
   }
 }
