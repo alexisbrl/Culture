@@ -99,7 +99,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
   - Fichiers : `src/lib/ingest/run.ts`, `src/lib/ingest/providers/claude.ts`, `src/lib/ingest/passInput.ts`, `src/app/actions/aiIngest.ts`, tests
   - Dépend de : T1, T2, T5
 
-- [ ] **T7 — Étape 2 par chapitre, avec seconde vérification**
+- [x] **T7 — Étape 2 par chapitre, avec seconde vérification**
   - Nouvelle fonction (dans `run.ts`) + action serveur : pour UN chapitre, découpe ses pages (`slicing.ts` + `pdf.ts`), remet la tranche au fournisseur, envoie la tranche (texte et images), les notions qui lui sont attribuées et la liste de seconde vérification étiquetée ; crée les nouvelles notions directement dans ce chapitre (le filtre mécanique `findExistingMatch`/`dropNearDuplicates` de `duplicates.ts` reste) ; rend à l'écran les notions de seconde vérification qu'il réclame. Libère la tranche remise au fournisseur en fin d'appel. `documentsForPass` reflète la nouvelle règle.
   - Critère d'acceptation : tests unitaires de la composition de l'entrée (un fournisseur factice reçoit les seules pages du chapitre et la liste étiquetée) ; lint, tests et build passent.
   - Fichiers : `src/lib/ingest/run.ts`, `src/lib/ingest/passInput.ts`, `src/lib/ingest/prompt.ts`, `src/app/actions/aiIngest.ts`, tests
@@ -161,6 +161,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 - 2026-09-22 — T4 — d5315fe — `verdicts.ts` : `guardDrops` (garde « jamais tous », déjà branchée dans `ingestChapters`) et `finalFates` (départage + sort des non réclamées, rend aussi les arbitrages).
 - 2026-09-22 — T5 — da476d2 — bornes dans `chapterOrder[].spans` (document par NOM, pages d'après des marqueurs « [page N] » que T6 doit insérer dans le texte), `notionVerdicts` ; `ParsedPlan.chapterBounds`/`notionVerdicts` ; `chaptersRelaunchInstruction` + `wireChaptersRelaunchOutput` ; le bloc « existant » de l'étape chapitres porte désormais toutes les notions. Transitoire : l'ancien rangement ne reçoit plus de pages de chapitre jusqu'à T12.
 - 2026-09-22 — T6 — 7cebd45 — `chaptersInput.ts` (texte + mini-PDF des pages pauvres, remis via `provider.prepare`, rendus en fin d'appel) ; `ingestChapters` n'écrit rien sur `relaunch` (réponse gardée dans `scope.stage1Pending`), `ingestChaptersRelaunch` + action `relaunchWorkshopChapters` ; à l'écriture, `scope.stage1` = chapitres visibles en ordre avec bornes résolues en `documentId`, `standings`, `before`, `pageCounts`. Les notions rangées franchement sont déplacées dès l'étape 1. Étape journal `chapters-relaunch`.
+- 2026-09-22 — T7 — 6bde3b8 — `ingestChapterNotions` + action `ingestWorkshopChapterNotions(chapterId)` ; `composeChapterSlices` (extraits téléversés puis rendus, document entier réutilisé tel quel) ; sortie `{ notions, claimed }` ; variante `'chapter' in scope` de la passe notions (l'ancienne par document reste jusqu'à T12).
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
@@ -171,6 +172,8 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 - **« Rien n'est écrit » avant la décision de seuil** : l'étape 1 n'écrit chapitres, rangs et déplacements qu'une fois la décision `continue` acquise (au premier passage ou après relance). Sinon l'annulation à 25 % aurait laissé des chapitres créés.
 - **Notions d'un chapitre déjà caché avant la génération** : ni montrées à l'étape 1, ni jugées — elles sont déjà hors programme, et §7.6 dit que l'étape ne voit que les chapitres visibles.
 - **Notions rangées franchement à l'étape 1** : déplacées tout de suite (et non à la finalisation), pour que l'étape notions et les questions de leur chapitre les voient.
+- **Filtre mécanique de l'étape 2** : une notion neuve trop proche d'une notion du chapitre ou de la seconde vérification n'est pas écrite ; si elle redit une notion de la seconde vérification, celle-ci est comptée comme réclamée par le chapitre.
+- **Provenance d'une notion neuve** (document, page) : posée seulement quand le chapitre n'a qu'un extrait ; avec plusieurs, on ne sait pas lequel, et elle reste vide plutôt que fausse.
 
 ## Tâches bloquées
 <!-- Tâches abandonnées après 2 échecs, avec le motif et ce qui a été tenté. -->
