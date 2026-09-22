@@ -111,7 +111,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
   - Fichiers : `src/lib/ingest/run.ts`, `src/lib/ingest/ingest.ts`, `src/app/actions/aiIngest.ts`, tests
   - Dépend de : T4, T7
 
-- [ ] **T9 — Vérification finale des redites**
+- [x] **T9 — Vérification finale des redites**
   - Une fois toutes les étapes 2 finies : `flagSimilar` (`duplicates.ts`) entre les notions neuves de ce lot et les notions des AUTRES chapitres ; s'il y a des paires, UN appel (nouvelle étape `redites` : schéma, consigne « redite ou pas », `PASS_MODELS`) ; pour chaque redite confirmée, seule la notion NEUVE s'efface — la règle est une fonction pure testée qui ne peut rendre que la candidate —, ses questions déjà écrites sont rattachées à l'autre (`reattachQuestions`). Pas d'appel si aucune paire. Nouvelle action serveur, appelée par l'écran en parallèle des questions.
   - Critère d'acceptation : test unitaire garantissant qu'une notion préexistante n'est jamais rendue comme « à effacer », même si le modèle la désigne ; test « aucune paire ⇒ aucun appel » ; lint, tests et build passent. Ferme l'item de backlog « Une ancienne notion peut sortir du programme ».
   - Fichiers : `src/lib/ingest/duplicates.ts`, `src/lib/ingest/run.ts`, `src/lib/ingest/prompt.ts`, `src/lib/ingest/wireSchema.ts`, `src/lib/ingest/providers/claude.ts`, `src/app/actions/aiIngest.ts`, tests
@@ -163,6 +163,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 - 2026-09-22 — T6 — 7cebd45 — `chaptersInput.ts` (texte + mini-PDF des pages pauvres, remis via `provider.prepare`, rendus en fin d'appel) ; `ingestChapters` n'écrit rien sur `relaunch` (réponse gardée dans `scope.stage1Pending`), `ingestChaptersRelaunch` + action `relaunchWorkshopChapters` ; à l'écriture, `scope.stage1` = chapitres visibles en ordre avec bornes résolues en `documentId`, `standings`, `before`, `pageCounts`. Les notions rangées franchement sont déplacées dès l'étape 1. Étape journal `chapters-relaunch`.
 - 2026-09-22 — T7 — 6bde3b8 — `ingestChapterNotions` + action `ingestWorkshopChapterNotions(chapterId)` ; `composeChapterSlices` (extraits téléversés puis rendus, document entier réutilisé tel quel) ; sortie `{ notions, claimed }` ; variante `'chapter' in scope` de la passe notions (l'ancienne par document reste jusqu'à T12).
 - 2026-09-22 — T8 — babbe6f — `finishIngestion(workshopId, importId, claims)` : `revalidateClaims` (chapitre du lot ET visible, notion de la seconde vérification du lot) → `finalFates` → `applyAssignments` des seuls sorts décidés après l'étape 1 → `hideEmptyChapters(strandedNotions)` → ménage existant. L'action `finishWorkshopIngestion` prend `claims` et rend `adjusted`.
+- 2026-09-22 — T9 — c5e5037 — `rediteCandidates` / `judgeRedites` / `rediteRemovals` (duplicates.ts), passe et étape journal `redites` (Sonnet), `ingestRedites` + action `checkWorkshopRedites` ; une notion effacée voit d'abord ses questions rattachées (les liens partent ensuite en cascade avec elle).
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
@@ -175,6 +176,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 - **Notions rangées franchement à l'étape 1** : déplacées tout de suite (et non à la finalisation), pour que l'étape notions et les questions de leur chapitre les voient.
 - **Filtre mécanique de l'étape 2** : une notion neuve trop proche d'une notion du chapitre ou de la seconde vérification n'est pas écrite ; si elle redit une notion de la seconde vérification, celle-ci est comptée comme réclamée par le chapitre.
 - **Provenance d'une notion neuve** (document, page) : posée seulement quand le chapitre n'a qu'un extrait ; avec plusieurs, on ne sait pas lequel, et elle reste vide plutôt que fausse.
+- **Redites : au plus 300 paires soumises** (`MAX_REDITE_PAIRS`), les plus proches d'abord — l'appel ne doit pas devenir un second import. Une paire de deux notions neuves n'est soumise qu'une fois.
 
 ## Tâches bloquées
 <!-- Tâches abandonnées après 2 échecs, avec le motif et ce qui a été tenté. -->
