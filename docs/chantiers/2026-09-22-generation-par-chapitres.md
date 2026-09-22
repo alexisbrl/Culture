@@ -117,7 +117,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
   - Fichiers : `src/lib/ingest/duplicates.ts`, `src/lib/ingest/run.ts`, `src/lib/ingest/prompt.ts`, `src/lib/ingest/wireSchema.ts`, `src/lib/ingest/providers/claude.ts`, `src/app/actions/aiIngest.ts`, tests
   - Dépend de : T7
 
-- [ ] **T10 — Questions dès qu'un chapitre est prêt**
+- [x] **T10 — Questions dès qu'un chapitre est prêt**
   - Le plan d'appels de questions se calcule par chapitre (`countParcoursCalls`) dès la fin de SON étape 2, sur l'existant arrêté à l'ouverture du lot (`parcoursQuestionCountsByLevel`, `importOpenedAt`) ; la part du plafond d'import (`budgetShare`) est réservée chapitre par chapitre pour que la somme ne dépasse jamais `MAX_QUESTIONS_PER_IMPORT`. Côté examen, ne rien changer d'autre que ce qui casserait.
   - Critère d'acceptation : test unitaire de la réservation : des chapitres qui démarrent dans un ordre quelconque ne dépassent jamais le plafond, et chacun reçoit sa part ; lint, tests et build passent.
   - Fichiers : `src/lib/ingest/passInput.ts`, `src/lib/ingest/run.ts`, `src/app/actions/aiIngest.ts`, tests
@@ -164,6 +164,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 - 2026-09-22 — T7 — 6bde3b8 — `ingestChapterNotions` + action `ingestWorkshopChapterNotions(chapterId)` ; `composeChapterSlices` (extraits téléversés puis rendus, document entier réutilisé tel quel) ; sortie `{ notions, claimed }` ; variante `'chapter' in scope` de la passe notions (l'ancienne par document reste jusqu'à T12).
 - 2026-09-22 — T8 — babbe6f — `finishIngestion(workshopId, importId, claims)` : `revalidateClaims` (chapitre du lot ET visible, notion de la seconde vérification du lot) → `finalFates` → `applyAssignments` des seuls sorts décidés après l'étape 1 → `hideEmptyChapters(strandedNotions)` → ménage existant. L'action `finishWorkshopIngestion` prend `claims` et rend `adjusted`.
 - 2026-09-22 — T9 — c5e5037 — `rediteCandidates` / `judgeRedites` / `rediteRemovals` (duplicates.ts), passe et étape journal `redites` (Sonnet), `ingestRedites` + action `checkWorkshopRedites` ; une notion effacée voit d'abord ses questions rattachées (les liens partent ensuite en cascade avec elle).
+- 2026-09-22 — T10 — f7ef8e8 — `createBudgetLedger(parts = chapterStartBudgets)` dans passInput (pur, importable par l'écran) ; le serveur calculait déjà le plan d'un chapitre sur SES notions et l'existant figé à l'ouverture du lot — rien à y changer. Le branchement à l'écran est pour T11.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
