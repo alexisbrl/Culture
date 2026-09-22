@@ -123,7 +123,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
   - Fichiers : `src/lib/ingest/passInput.ts`, `src/lib/ingest/run.ts`, `src/app/actions/aiIngest.ts`, tests
   - Dépend de : T7
 
-- [ ] **T11 — L'écran de génération suit le nouvel ordre**
+- [x] **T11 — L'écran de génération suit le nouvel ordre**
   - `src/components/ai/AiGenerationDialog.tsx` : étape 0 (si consigne) → étape 1 → relance si demandée → annulation avec message si demandée → étape 2 de tous les chapitres en parallèle (`mapWithConcurrency`, `INGEST_CONCURRENCY`), chacun enchaînant ses questions dès qu'il a fini → quand toutes les étapes 2 sont finies : vérification des redites en parallèle des questions restantes → finalisation. Nouvelles chaînes (relance, annulation, redites) dans `messages/fr.json` ET `messages/en.json`, espace `ai`. Le battement du verrou (`beatWorkshopImport`) et l'annulation existante sont préservés.
   - Critère d'acceptation : lint, tests et build passent ; aucune chaîne en dur ; l'écran n'appelle plus aucune action de l'ancien enchaînement.
   - Fichiers : `src/components/ai/AiGenerationDialog.tsx`, `messages/fr.json`, `messages/en.json`
@@ -165,6 +165,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 - 2026-09-22 — T8 — babbe6f — `finishIngestion(workshopId, importId, claims)` : `revalidateClaims` (chapitre du lot ET visible, notion de la seconde vérification du lot) → `finalFates` → `applyAssignments` des seuls sorts décidés après l'étape 1 → `hideEmptyChapters(strandedNotions)` → ménage existant. L'action `finishWorkshopIngestion` prend `claims` et rend `adjusted`.
 - 2026-09-22 — T9 — c5e5037 — `rediteCandidates` / `judgeRedites` / `rediteRemovals` (duplicates.ts), passe et étape journal `redites` (Sonnet), `ingestRedites` + action `checkWorkshopRedites` ; une notion effacée voit d'abord ses questions rattachées (les liens partent ensuite en cascade avec elle).
 - 2026-09-22 — T10 — f7ef8e8 — `createBudgetLedger(parts = chapterStartBudgets)` dans passInput (pur, importable par l'écran) ; le serveur calculait déjà le plan d'un chapitre sur SES notions et l'existant figé à l'ouverture du lot — rien à y changer. Le branchement à l'écran est pour T11.
+- 2026-09-22 — T11 — 1b35783 — `generate()` réécrit : étape 0 → chapitres (relance / annulation `cancelledForgotten`) → notions de tous les chapitres (`INGEST_CONCURRENCY`), chacun lançant ses questions (registre de parts) → redites en parallèle des questions restantes → `finishWorkshopIngestion(claims)`. L'examen attend la fin des étapes notions, inchangé sinon. Clés `progress.notionsDocuments` et `progress.assign` retirées. Rendu non vérifié à l'écran ici — l'essai réel est T14.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
@@ -178,6 +179,8 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 - **Filtre mécanique de l'étape 2** : une notion neuve trop proche d'une notion du chapitre ou de la seconde vérification n'est pas écrite ; si elle redit une notion de la seconde vérification, celle-ci est comptée comme réclamée par le chapitre.
 - **Provenance d'une notion neuve** (document, page) : posée seulement quand le chapitre n'a qu'un extrait ; avec plusieurs, on ne sait pas lequel, et elle reste vide plutôt que fausse.
 - **Redites : au plus 300 paires soumises** (`MAX_REDITE_PAIRS`), les plus proches d'abord — l'appel ne doit pas devenir un second import. Une paire de deux notions neuves n'est soumise qu'une fois.
+- **Échec de la vérification des redites** : ne fait pas échouer la génération (l'erreur est ajoutée au compte-rendu) — c'est un nettoyage, le programme est déjà écrit.
+- **Risque accepté, à surveiller en T14** : la vérification des redites tourne en même temps que les questions ; si une question en vol vise une notion que la vérification vient d'effacer, son écriture peut échouer. Le cas suppose une notion neuve à la fois redite et en cours de questionnement ; si le journal le montre, faire attendre la finalisation plutôt que les questions.
 
 ## Tâches bloquées
 <!-- Tâches abandonnées après 2 échecs, avec le motif et ce qui a été tenté. -->
