@@ -105,7 +105,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
   - Fichiers : `src/lib/ingest/run.ts`, `src/lib/ingest/passInput.ts`, `src/lib/ingest/prompt.ts`, `src/app/actions/aiIngest.ts`, tests
   - Dépend de : T6
 
-- [ ] **T8 — Finalisation : départage, sans chapitre, ménage**
+- [x] **T8 — Finalisation : départage, sans chapitre, ménage**
   - L'action de finalisation reçoit de l'écran les réclamations de tous les chapitres, **revalide chaque référence** (notion et chapitre de cet atelier, chapitre visible), applique départage et sort final (T4), efface les notions NEUVES restées sans chapitre (ménage existant, `planImportCleanup`), cache les chapitres qui ne gardent que des notions non placées (`hideEmptyChapters` avec `stranded`), et écrit les arbitrages au compte-rendu.
   - Critère d'acceptation : test unitaire de la revalidation (une référence d'un autre atelier ou d'un chapitre caché est ignorée et comptée) ; lint, tests et build passent.
   - Fichiers : `src/lib/ingest/run.ts`, `src/lib/ingest/ingest.ts`, `src/app/actions/aiIngest.ts`, tests
@@ -162,6 +162,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 - 2026-09-22 — T5 — da476d2 — bornes dans `chapterOrder[].spans` (document par NOM, pages d'après des marqueurs « [page N] » que T6 doit insérer dans le texte), `notionVerdicts` ; `ParsedPlan.chapterBounds`/`notionVerdicts` ; `chaptersRelaunchInstruction` + `wireChaptersRelaunchOutput` ; le bloc « existant » de l'étape chapitres porte désormais toutes les notions. Transitoire : l'ancien rangement ne reçoit plus de pages de chapitre jusqu'à T12.
 - 2026-09-22 — T6 — 7cebd45 — `chaptersInput.ts` (texte + mini-PDF des pages pauvres, remis via `provider.prepare`, rendus en fin d'appel) ; `ingestChapters` n'écrit rien sur `relaunch` (réponse gardée dans `scope.stage1Pending`), `ingestChaptersRelaunch` + action `relaunchWorkshopChapters` ; à l'écriture, `scope.stage1` = chapitres visibles en ordre avec bornes résolues en `documentId`, `standings`, `before`, `pageCounts`. Les notions rangées franchement sont déplacées dès l'étape 1. Étape journal `chapters-relaunch`.
 - 2026-09-22 — T7 — 6bde3b8 — `ingestChapterNotions` + action `ingestWorkshopChapterNotions(chapterId)` ; `composeChapterSlices` (extraits téléversés puis rendus, document entier réutilisé tel quel) ; sortie `{ notions, claimed }` ; variante `'chapter' in scope` de la passe notions (l'ancienne par document reste jusqu'à T12).
+- 2026-09-22 — T8 — babbe6f — `finishIngestion(workshopId, importId, claims)` : `revalidateClaims` (chapitre du lot ET visible, notion de la seconde vérification du lot) → `finalFates` → `applyAssignments` des seuls sorts décidés après l'étape 1 → `hideEmptyChapters(strandedNotions)` → ménage existant. L'action `finishWorkshopIngestion` prend `claims` et rend `adjusted`.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
