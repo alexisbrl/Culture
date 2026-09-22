@@ -1,7 +1,7 @@
 # Chantier : génération par chapitres
 
 **Branche :** feat/generation-par-chapitres
-**PR :** (renseignée à l'ouverture)
+**PR :** https://github.com/alexisbrl/Culture/pull/58
 **Cadré le :** 2026-09-22
 
 ## Objectif
