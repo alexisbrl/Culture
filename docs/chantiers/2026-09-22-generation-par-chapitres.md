@@ -87,7 +87,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
   - Fichiers : `src/lib/ingest/verdicts.ts`, `tests/unit/verdicts.test.ts`
   - Dépend de : T3
 
-- [ ] **T5 — Nouvelle forme de réponse et consigne de l'étape 1**
+- [x] **T5 — Nouvelle forme de réponse et consigne de l'étape 1**
   - `src/lib/ingest/wireSchema.ts` et `src/lib/ingest/planSchema.ts` : la réponse de l'étape chapitres porte, par chapitre, son rang (0 = écarté) et ses bornes (document + un ou plusieurs intervalles) ; et un verdict par notion existante (chapitre / hors programme / à vérifier). `src/lib/ingest/prompt.ts` : la consigne de l'étape chapitres dit qu'elle lit le texte seul, qu'elle statue sur CHAQUE notion existante avec ces trois réponses, que ne pas retrouver une notion dans le texte impose « à vérifier » et jamais « hors programme », qu'une partie qui se resserre se règle en créant un chapitre et en écartant l'ancien (§7.6). La relance (seuil 10 %) a sa propre variante, qui ne porte que sur les notions oubliées.
   - Critère d'acceptation : `tests/unit/planSchema.test.ts` et `tests/unit/prompt.test.ts` mis à jour : une réponse valide est lue avec bornes multiples et verdicts ; une valeur de verdict inconnue est écartée et comptée ; la consigne contient la règle « introuvable dans le texte ⇒ à vérifier ». Lint, tests et build passent.
   - Fichiers : `src/lib/ingest/wireSchema.ts`, `src/lib/ingest/planSchema.ts`, `src/lib/ingest/prompt.ts`, tests associés
@@ -159,6 +159,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 - 2026-09-22 — T2 — 4e5175d — `slicing.ts` : `sliceChapters` (bornes → pages par chapitre, `pages: null` = document entier) et `imagePages` (`MIN_PAGE_TEXT_CHARS = 200`, espaces exclus).
 - 2026-09-22 — T3 — 38ea356 — `verdicts.ts` : `classifyNotions`, `mergeRelaunch`, `thresholdDecision` (`MIN_FORGOTTEN_TO_ACT = 2`), `recheckList`.
 - 2026-09-22 — T4 — d5315fe — `verdicts.ts` : `guardDrops` (garde « jamais tous », déjà branchée dans `ingestChapters`) et `finalFates` (départage + sort des non réclamées, rend aussi les arbitrages).
+- 2026-09-22 — T5 — da476d2 — bornes dans `chapterOrder[].spans` (document par NOM, pages d'après des marqueurs « [page N] » que T6 doit insérer dans le texte), `notionVerdicts` ; `ParsedPlan.chapterBounds`/`notionVerdicts` ; `chaptersRelaunchInstruction` + `wireChaptersRelaunchOutput` ; le bloc « existant » de l'étape chapitres porte désormais toutes les notions. Transitoire : l'ancien rangement ne reçoit plus de pages de chapitre jusqu'à T12.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
