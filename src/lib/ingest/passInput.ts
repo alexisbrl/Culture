@@ -9,7 +9,7 @@
 import type { BloomLevel } from '@/lib/workshops/examTypes';
 
 import type { QuestionDemand } from './demand';
-import { EXAM_GROUP_SIZE, EXAM_QUESTIONS_PER_CALL, examGroupedCount } from './prompt';
+import { EXAM_GROUP_SIZE, EXAM_QUESTIONS_PER_CALL, MAX_QUESTIONS_PER_IMPORT, examGroupedCount } from './prompt';
 import type { PreparedDocument } from './providers/types';
 
 export type IngestPass = 'resource' | 'chapters' | 'notions' | 'assign' | 'questions' | 'exam' | 'redites';
@@ -597,4 +597,49 @@ export async function withChapterRetry<R>(
   // réellement distincts — il ne saurait qu'obéir.
   const second = await attempt({ previous: namesOf(first) });
   return { result: second, attempts: 2 };
+}
+
+// ─── La part du plafond d'import, chapitre par chapitre (§7.2) ──────────────
+//
+// Les questions d'un chapitre partent dès que SON étape notions est finie, sans
+// attendre les autres. Sans réservation, les premiers chapitres arrivés
+// consommeraient le fusible entier et les derniers n'auraient rien. Chaque
+// chapitre a donc sa part, fixée à l'avance (`chapterStartBudgets`), et ne
+// puise que dans elle ; la somme des parts ne dépasse jamais le plafond.
+
+export type BudgetLedger = {
+  /** Réserve jusqu'à `asked` questions pour un appel de ce chapitre, et rend
+   *  ce qui a été accordé — 0 si sa part est épuisée. */
+  reserve(chapterId: string, asked: number): number;
+  /** Rend au chapitre ce qu'un appel avait réservé sans l'écrire. */
+  release(chapterId: string, unused: number): void;
+  /** Ce qui est réservé ou écrit, tous chapitres confondus. */
+  readonly total: number;
+};
+
+export function createBudgetLedger(
+  shares: ReadonlyMap<string, number>,
+  pool: number = MAX_QUESTIONS_PER_IMPORT,
+): BudgetLedger {
+  const used = new Map<string, number>();
+  let total = 0;
+  return {
+    reserve(chapterId, asked) {
+      const left = Math.min((shares.get(chapterId) ?? 0) - (used.get(chapterId) ?? 0), pool - total);
+      const granted = Math.max(0, Math.min(Math.floor(asked), left));
+      if (granted > 0) {
+        used.set(chapterId, (used.get(chapterId) ?? 0) + granted);
+        total += granted;
+      }
+      return granted;
+    },
+    release(chapterId, unused) {
+      const back = Math.max(0, Math.min(Math.floor(unused), used.get(chapterId) ?? 0));
+      used.set(chapterId, (used.get(chapterId) ?? 0) - back);
+      total -= back;
+    },
+    get total() {
+      return total;
+    },
+  };
 }

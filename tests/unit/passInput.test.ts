@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   batchNotions,
   contextNotions,
+  createBudgetLedger,
   documentsForPass,
   pickExistingQuestions,
   type ExistingQuestion,
@@ -16,7 +17,8 @@ import {
   splitUnplaced,
   withChapterRetry,
 } from '@/lib/ingest/passInput';
-import type { QuestionDemand } from '@/lib/ingest/demand';
+import { chapterStartBudgets, type QuestionDemand } from '@/lib/ingest/demand';
+import { MAX_QUESTIONS_PER_IMPORT } from '@/lib/ingest/prompt';
 import type { ExistingContent } from '@/lib/ingest/prompt';
 import type { IngestScope, PlanProvider, PreparedDocument, ProviderResult } from '@/lib/ingest/providers/types';
 
@@ -420,5 +422,62 @@ describe('pickExistingQuestions', () => {
   it("ne compte qu'une fois une question reliée à deux notions du lot", () => {
     const both = q('commune', { a: 1, b: 1 }, '1');
     expect(pickExistingQuestions([both], new Map([['a', [1]], ['b', [1]]]))).toEqual([both]);
+  });
+});
+
+describe('createBudgetLedger — la part du plafond, chapitre par chapitre (§7.2)', () => {
+  // Les chapitres démarrent leurs questions dans l'ordre où leur étape notions
+  // finit : aucun ordre ne doit permettre de dépasser le plafond, ni priver un
+  // chapitre de sa part.
+  const chapters = Array.from({ length: 30 }, (_, i) => ({ id: `c${i}`, position: i }));
+  const shares = chapterStartBudgets(chapters);
+
+  function shuffled<T>(items: T[], seed: number): T[] {
+    const out = [...items];
+    let s = seed;
+    for (let i = out.length - 1; i > 0; i--) {
+      s = (s * 9301 + 49297) % 233280;
+      const j = Math.floor((s / 233280) * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  }
+
+  it.each([1, 2, 3, 4, 5])('ordre de départ quelconque (%i) : jamais au-delà du plafond, chacun sa part', (seed) => {
+    const ledger = createBudgetLedger(shares);
+    const granted = new Map<string, number>();
+    // Chaque chapitre demande par appels de 8, et en redemande trop.
+    for (const chapter of shuffled(chapters, seed)) {
+      for (let call = 0; call < 5; call++) {
+        const got = ledger.reserve(chapter.id, QUESTIONS_PER_PARCOURS_CALL);
+        granted.set(chapter.id, (granted.get(chapter.id) ?? 0) + got);
+      }
+    }
+    expect(ledger.total).toBeLessThanOrEqual(MAX_QUESTIONS_PER_IMPORT);
+    for (const chapter of chapters) expect(granted.get(chapter.id)).toBe(shares.get(chapter.id));
+  });
+
+  it('un chapitre ne puise jamais dans la part d’un autre', () => {
+    const ledger = createBudgetLedger(new Map([['a', 10], ['b', 10]]));
+    expect(ledger.reserve('a', 25)).toBe(10);
+    expect(ledger.reserve('a', 1)).toBe(0);
+    expect(ledger.reserve('b', 8)).toBe(8);
+    expect(ledger.reserve('inconnu', 8)).toBe(0);
+  });
+
+  it('ce qui n’a pas été écrit revient au chapitre', () => {
+    const ledger = createBudgetLedger(new Map([['a', 10]]));
+    ledger.reserve('a', 8);
+    ledger.release('a', 3);
+    expect(ledger.total).toBe(5);
+    expect(ledger.reserve('a', 8)).toBe(5);
+    ledger.release('a', 999);
+    expect(ledger.total).toBe(0);
+  });
+
+  it('le plafond global tient même si les parts le dépassent', () => {
+    const ledger = createBudgetLedger(new Map([['a', 400], ['b', 400]]), 500);
+    expect(ledger.reserve('a', 400)).toBe(400);
+    expect(ledger.reserve('b', 400)).toBe(100);
   });
 });
