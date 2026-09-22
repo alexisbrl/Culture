@@ -75,7 +75,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
   - Fichiers : `src/lib/ingest/slicing.ts`, `tests/unit/slicing.test.ts`
   - Dépend de : rien
 
-- [ ] **T3 — Verdicts de l'étape 1 et seuils (§7.6)**
+- [x] **T3 — Verdicts de l'étape 1 et seuils (§7.6)**
   - Module pur `src/lib/ingest/verdicts.ts` : (a) à partir de la réponse de l'étape 1 et de la liste des notions existantes, classer chaque notion en « rangée dans un chapitre visible », « hors programme », « à vérifier », « oubliée » (absente de la réponse ; une notion laissée dans un chapitre mis au rang 0 = hors programme ; référence inconnue ignorée) ; (b) calculer la part des oubliées et rendre la décision `continuer` / `relancer` / `annuler`, avec les constantes nommées `RELAUNCH_THRESHOLD = 0.10`, `CANCEL_THRESHOLD = 0.25` (inclusifs) et la borne « une notion isolée ne déclenche jamais rien » ; la décision après relance n'offre plus que `continuer` / `annuler` ; (c) construire la liste de seconde vérification avec l'étiquette de chaque notion.
   - Critère d'acceptation : `tests/unit/verdicts.test.ts` couvre chaque classement, les seuils exactement à 10 % et 25 %, la notion isolée, le fait que « à vérifier » et « hors programme » ne comptent pas, et l'inclusion de toutes les notions d'un chapitre écarté dans la seconde vérification. Lint, tests et build passent.
   - Fichiers : `src/lib/ingest/verdicts.ts`, `tests/unit/verdicts.test.ts`
@@ -157,11 +157,14 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 <!-- Append-only. Une ligne par tâche terminée : date, tâche, commit, note. -->
 - 2026-09-22 — T1 — df07b7d — `pdf.ts` : `readPdfText` (via `extractText` d'unpdf sur une copie du tampon), `countPdfPages`, `extractPdfPages` (pages 1-based, hors bornes ignorées, `null` si rien).
 - 2026-09-22 — T2 — 4e5175d — `slicing.ts` : `sliceChapters` (bornes → pages par chapitre, `pages: null` = document entier) et `imagePages` (`MIN_PAGE_TEXT_CHARS = 200`, espaces exclus).
+- 2026-09-22 — T3 — 38ea356 — `verdicts.ts` : `classifyNotions`, `mergeRelaunch`, `thresholdDecision` (`MIN_FORGOTTEN_TO_ACT = 2`), `recheckList`.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
 - **Document que rien ne couvre** (aucune borne de l'étape 1 ne le désigne) : il part en entier dans CHAQUE chapitre, et c'est signalé au compte-rendu. Retenu parce que l'architecture dit « en cas de doute, élargir » et qu'une page perdue est le pire défaut ; plus cher, mais rare.
 - **Seuil de page pauvre en texte : 200 caractères hors espaces** (`MIN_PAGE_TEXT_CHARS`), soit deux ou trois lignes — une page de titre part donc aussi en image, ce qui est voulu (§7.2).
+- **Verdict « chapitre » vers un chapitre inconnu** : ignoré, la notion compte donc comme oubliée (et pèse dans les seuils). Même règle que partout ailleurs — une référence inconnue ne décide rien.
+- **Silence sur une notion d'un chapitre écarté** : vaut « hors programme », pas « oubliée » (elle y est laissée, §7.6) — elle ne pèse donc pas dans les seuils, et repasse quand même en seconde vérification.
 
 ## Tâches bloquées
 <!-- Tâches abandonnées après 2 échecs, avec le motif et ce qui a été tenté. -->
