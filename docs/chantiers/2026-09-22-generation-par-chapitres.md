@@ -81,7 +81,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
   - Fichiers : `src/lib/ingest/verdicts.ts`, `tests/unit/verdicts.test.ts`
   - Dépend de : rien
 
-- [ ] **T4 — Sort final des notions (§7.6)**
+- [x] **T4 — Sort final des notions (§7.6)**
   - Dans `src/lib/ingest/verdicts.ts` (ou un voisin pur) : (a) départage d'une notion réclamée par plusieurs chapitres — son chapitre actuel s'il est parmi eux, sinon le premier dans l'ordre du programme, sinon elle ne bouge pas ; chaque arbitrage produit une entrée de compte-rendu ; (b) sort d'une notion non réclamée — oubliée/à vérifier : ne bouge pas ; hors programme : reste si son chapitre est écarté, `chapter_id = null` s'il reste visible ; (c) aucune de ces règles ne peut effacer une notion existante ; (d) garde « jamais tous » : si la réponse écarte tous les chapitres existants, rien n'est appliqué (réutiliser la garde existante si elle existe dans `run.ts`/`ingest.ts`, en la déplaçant dans le module pur).
   - Critère d'acceptation : tests unitaires de chaque cas, dont un test qui vérifie qu'aucun chemin ne rend une suppression de notion existante. Lint, tests et build passent.
   - Fichiers : `src/lib/ingest/verdicts.ts`, `tests/unit/verdicts.test.ts`
@@ -158,6 +158,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 - 2026-09-22 — T1 — df07b7d — `pdf.ts` : `readPdfText` (via `extractText` d'unpdf sur une copie du tampon), `countPdfPages`, `extractPdfPages` (pages 1-based, hors bornes ignorées, `null` si rien).
 - 2026-09-22 — T2 — 4e5175d — `slicing.ts` : `sliceChapters` (bornes → pages par chapitre, `pages: null` = document entier) et `imagePages` (`MIN_PAGE_TEXT_CHARS = 200`, espaces exclus).
 - 2026-09-22 — T3 — 38ea356 — `verdicts.ts` : `classifyNotions`, `mergeRelaunch`, `thresholdDecision` (`MIN_FORGOTTEN_TO_ACT = 2`), `recheckList`.
+- 2026-09-22 — T4 — d5315fe — `verdicts.ts` : `guardDrops` (garde « jamais tous », déjà branchée dans `ingestChapters`) et `finalFates` (départage + sort des non réclamées, rend aussi les arbitrages).
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
