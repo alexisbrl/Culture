@@ -122,5 +122,5 @@ Présente-lui le découpage **avant** d'écrire le fichier. C'est son dernier po
 ## Règles absolues du cadrage
 
 - **Aucune supposition** sur l'API d'une lib, la structure d'un fichier ou le comportement du code : va vérifier dans le code ou la doc (`CLAUDE.md` §1).
-- Le chantier doit respecter le périmètre MVP (`docs/product-spec.md`). Si Alexis demande du hors-MVP, signale-le-lui avant de cadrer.
+- Le chantier doit respecter l'ordre de la feuille de route (les trimestres de `docs/backlog.md`, `CLAUDE.md` §1). Si Alexis demande quelque chose dont le tour n'est pas venu, signale-le-lui avant de cadrer.
 - Une feuille de route qui contient « voir la discussion » ou « comme convenu » est **ratée** : l'agent d'exécution n'a pas accès à cette discussion.

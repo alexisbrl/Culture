@@ -222,10 +222,16 @@ Le cours entier n'entre qu'une fois, dans le premier appel.
 |---|---|
 | **Chapitres** — 1 appel | le **texte seul** des documents, tous les chapitres, toutes les notions |
 | **Notions** — 1 appel par chapitre | les **pages de son chapitre** (texte et images), les notions qui lui sont attribuées |
-| **Questions** — 1 appel par notion | la **notion seule**, ses questions existantes, les intitulés des notions voisines |
+| **Questions** — 1 appel par lot de dix notions d'un chapitre | **aucun document** : les notions du lot et ce qu'on demande sur chacune, leurs questions existantes, les intitulés des autres notions visées |
 
 Trois gains du même geste : moins de bruit par appel (qualité), moins de jetons
 répétés (coût), appels courts et indépendants (parallélisme).
+
+**L'étape des questions est la même que la recharge** (§7.10) : une demande de questions
+sur des notions, qu'elle vienne d'un chapitre neuf — ses 25 premières questions — ou d'un
+membre qui manque de questions. Le lot de dix notions est le compromis entre renvoyer le
+contexte du chapitre à chaque notion et tronquer une réponse trop longue ; un chapitre
+neuf de dix notions au plus ne coûte donc qu'un appel.
 
 **Ce qui rend le reste possible : l'étape chapitres rend des bornes de pages.** Pour
 chaque chapitre, le document et l'intervalle de pages — plusieurs intervalles si le
@@ -462,10 +468,13 @@ rangée franchement.
 Les seuils sont **proportionnels** — ce qu'on mesure est la part des notions sur
 lesquelles le modèle a renoncé à statuer ; cinq oubliées sur vingt est un signal fort,
 cinq sur mille n'est rien. Une seule borne absolue, très basse : **une** notion isolée ne
-déclenche jamais rien. Sous 10 % on continue ; au-delà, un **appel de complément qui ne
-redemande que ce qui manque** (redemander à l'identique retronquerait une réponse trop
-longue) ; après ce complément, sous 25 % on accepte, au-delà **on s'arrête et rien n'est
-écrit**. Le second seuil est plus tolérant, et c'est voulu : à ce stade on a déjà tenté
+déclenche jamais rien. **Sous 10 %** on passe à l'étape des notions, qui fait le
+rattrapage ci-dessus. **À partir de 10 % (inclus)**, on ne passe pas à l'étape suivante :
+on **relance l'étape chapitres**, en ne lui redemandant que les notions restées sans
+verdict (redemander à l'identique retronquerait une réponse trop longue). Après cette
+relance, sous 25 % on continue — les oubliées restantes partent au rattrapage ; **à partir
+de 25 % (inclus), la mise à jour de l'atelier est annulée**, rien n'est écrit, et
+l'utilisateur est prévenu qu'un problème est survenu. Le second seuil est plus tolérant, et c'est voulu : à ce stade on a déjà tenté
 ce qu'il fallait tenter, et une génération imparfaite vaut mieux qu'une génération
 refusée.
 
@@ -479,8 +488,8 @@ vivent dans un réglage nommé, jamais en dur au milieu du code.
 |---|---|---|
 | Unité de compte | **la notion** | **le programme** |
 | Portée d'une question | une seule notion | **plusieurs** notions croisées |
-| Volumétrie | automatique, par notion | **total réglable au lancement** (1 à 200, défaut 40) |
-| Découpage des appels | par lot de notions | par tranche de budget |
+| Volumétrie | automatique : **25 de niveau 1 par chapitre neuf**, puis la recharge | **total réglable au lancement** (1 à 200, défaut 40) |
+| Découpage des appels | par lot de dix notions | par tranche de budget — **six questions par appel** |
 | Groupes | rares | une part importante |
 
 Le total de l'examen se règle **au moment de lancer**, pas dans un écran de réglages :
@@ -657,7 +666,7 @@ cran au-dessus**, pour qu'un élève qui progresse ne trouve pas le niveau suiva
 
 **Il n'y a qu'une façon de demander des questions** — une liste de couples avec un nombre
 pour chacun. Ce qui change est **qui remplit le formulaire** : un chapitre neuf reçoit un
-budget de démarrage réparti sur ses notions ; une recharge reçoit ce que le radar déclare
+budget de démarrage — 25 questions de niveau 1 — réparti sur ses notions ; une recharge reçoit ce que le radar déclare
 en manque ; une **consigne écrite à la main ne dit rien du stock**, donc on envoie large
 et c'est le modèle qui choisit.
 
@@ -672,8 +681,8 @@ compte simplement pas pour le couple visé, et le radar redemandera. Aucune pres
 mentir, aucun rejet.
 
 **Le bloc des énoncés existants est plafonné.** Le volume d'un appel ne dépend pas du total
-de la banque : un appel ne voit qu'une notion, et demander plus de questions produit plus
-de tranches, pas des tranches plus grosses. Reste un seul axe qui grandit sans limite —
+de la banque : un appel ne voit que les notions de son lot, et demander plus de questions
+produit plus de lots, pas des lots plus gros. Reste un seul axe qui grandit sans limite —
 une notion qui accumule des centaines d'énoncés. Deux mesures suffisent : **un
 échantillon** plus **le compte total** (dire le nombre vaut presque autant que les montrer
 tous), et **les plus récents**, jamais les plus anciens — ce sont ceux que le modèle vient
@@ -725,7 +734,7 @@ découpage à l'identique est une réponse valide.
 **Le modèle est un réglage par étape, jamais une constante.** Le gradient : modèle fort là
 où c'est structurant et rare, modèle économique là où c'est mécanique et massif. Le
 découpage en chapitres est le jugement le plus structurant du pipeline et ne coûte qu'un
-appel ; rédiger quinze questions de mémorisation sur une notion déjà extraite est la tâche
+appel ; rédiger des questions de mémorisation sur des notions déjà extraites est la tâche
 la plus répétée. ⚠️ **Contrainte dure : un modèle à petite fenêtre ne peut pas recevoir un
 gros corpus** — l'appel est *refusé*, pas mauvais, et aucun réglage ne le contourne.
 

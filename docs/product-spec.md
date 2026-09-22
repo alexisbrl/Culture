@@ -134,10 +134,10 @@ Termes utilisés dans toute la codebase et dans ce document.
 **Profil utilisateur** *(mise en page arrêtée le 06/08/2026)*
 - Avatar personnalisable (personnage en jardinier), composé de PNG via `AvatarComposer` (`src/components/avatar/avatarConfig.ts` + `/profile/avatar`) — source de vérité : `publicMetadata.avatarParts` du compte Clerk (synchronisé sur tous les appareils, pas seulement en local).
 - **Bannière rayée** en tête : avatar centré (sans contour), nom en bas à gauche suivi du tag en plus petit (Crockford-like, 8 caractères), bouton « éditer » en haut à droite. « éditer » est le **seul** accès au composeur d'avatar — il n'y a plus de ligne « modifier l'avatar » dans les paramètres. Pas de date d'inscription.
-- **Carrousel de 5 statistiques** (série, XP, temps passé, succès, notions maîtrisées) : rangée à défilement horizontal, barre de défilement masquée — les dernières tuiles se découvrent en faisant glisser. ⚠️ **Non fonctionnel** : aucune de ces données n'existe côté serveur, les valeurs sont celles de la maquette, figées (`PLACEHOLDER_STATS`). Même statut que le compteur de gouttes et la cloche de notifications.
+- **Carrousel de 5 statistiques** (série, XP, temps passé, succès, notions maîtrisées) : rangée à défilement horizontal, barre de défilement masquée — les dernières tuiles se découvrent en faisant glisser.
 - **Encart d'abonnement** : pour un compte gratuit, un encart doré d'upsell (« passe à Smart / débloque tout ton jardin », bouton vers `/pricing`, mention « ton forfait actuel · basique ») ; pour un compte déjà payant, une carte sobre rappelant le forfait réel. ⚠️ Le vocabulaire « Smart »/« basique » vient de la maquette et **ne correspond pas** aux offres Gratuit / Premium / Premium+ de `/pricing` — arbitrage à faire, voir `docs/backlog.md`.
 - **Carte « suivi »** → `/profile/analyse` (vue de suivi personnelle, voir plus bas).
-- **Paramètres** : notifications *(non fonctionnel)*, langue, aide & contact, se déconnecter. La ligne « langue » ouvre un menu court (français / english) qui navigue vers la même page dans l'autre locale ; la préférence est ensuite persistée sur le compte par `DashboardHeader` (`publicMetadata.locale`, source de vérité pour la langue des emails).
+- **Paramètres** : notifications, langue, aide & contact, se déconnecter. La ligne « langue » ouvre un menu court (français / english) qui navigue vers la même page dans l'autre locale ; la préférence est ensuite persistée sur le compte par `DashboardHeader` (`publicMetadata.locale`, source de vérité pour la langue des emails).
 - **Barre du haut** : la page profil garde le sélecteur d'atelier et le groupe d'onglets, alimentés par le **dernier atelier visité** (`getLastVisitedWorkshop`) puisque son URL n'en porte aucun. Le Jardin et le tableau de bord gardent une barre nue.
 - Accès à la page Examen officiel (module 2)
 
@@ -166,7 +166,7 @@ Termes utilisés dans toute la codebase et dans ce document.
 5. Le gestionnaire peut modifier les notions et l'organisation manuellement
 
 **Rejoindre un atelier**
-- Tous les ateliers sont **toujours privés** : on les rejoint via une **demande d'adhésion** validée par un gestionnaire/propriétaire (accepter/refuser), ou sur invitation directe (réservée aux ateliers Premium — voir plus bas). Il n'existe plus de notion public/privé ni de limites de candidats (total/mensuel) — ces quotas seront gérés par les structures via l'API (V3).
+- Tous les ateliers sont **toujours privés** : on les rejoint via une **demande d'adhésion** validée par un gestionnaire/propriétaire (accepter/refuser), ou sur invitation directe (réservée aux comptes Premium — voir plus bas). Il n'existe plus de notion public/privé ni de limites de candidats (total/mensuel) — ces quotas seront gérés par les structures via l'API (V3).
 - Via l'outil de recherche en entrant le tag de l'atelier
 - QR code disponible, pointe vers la Preview (`/dashboard?preview=`)
 - À l'entrée dans l'atelier : le candidat choisit la plante qu'il va cultiver (étape ignorable)
@@ -181,8 +181,7 @@ Termes utilisés dans toute la codebase et dans ce document.
 | Exclure un membre | Uniquement de rang inférieur au gestionnaire qui exclut (candidat < gestionnaire < propriétaire) |
 | Changer le rang d'un membre | Promouvoir : rang ≤ au sien / Rétrograder : rang < au sien |
 | QR code | Redirige vers l'atelier (Preview `?preview=`). Rejoindre passe toujours par une demande validée. |
-| Passer Premium | **Irréversible.** |
-| Donner la propriété | Uniquement le propriétaire. Il perd son statut de propriétaire. *(non implémenté à ce jour)* |
+| Donner la propriété | Uniquement le propriétaire. Il perd son statut de propriétaire. |
 | Supprimer l'atelier | Uniquement le propriétaire. |
 
 ### Notions
@@ -257,7 +256,7 @@ L'énoncé en cours est posé à même le fond, les énoncés déjà corrigés p
 
 Deux choses restent à l'échelle de la grappe, et pour la même raison — ses questions sont inséparables : la **trace « déjà posée »** (elle s'écrit dès la première question validée, la grappe est alors consommée, même si le membre s'arrête là) et le **tirage de la question suivante**, déclenché à la fin de la grappe et non à chacune de ses questions.
 
-**Ce que vaut un exercice : 12 niveaux de Bloom, pas 12 questions** *(règles arrêtées le 29/08/2026, implémentées dans `src/lib/workshops/parcoursDraw.ts`)*
+**Ce que vaut un exercice : 12 niveaux de Bloom, pas 12 questions**
 
 - Un **énoncé coûte le plus haut niveau qu'il demande** (le maximum sur ses notions) ; une **grappe coûte la somme de ses énoncés**, puisque tous sont posés (un à la fois depuis le 30/08/2026, mais toujours d'une seule traite). Un exercice, c'est donc douze énoncés « mémoriser », ou un « analyser » + deux « appliquer » + deux « mémoriser », ou cinq questions difficiles. La barre du haut avance en pourcentage du budget consommé, jamais en nombre de questions : personne ne sait d'avance combien il y en aura.
 - **Portée : jamais plus de deux niveaux au-dessus de ce qui est atteint.** Un membre qui a atteint le niveau N sur une notion travaille le N+1 ; on accepte donc jusqu'à N+2. La règle vaut pour **chaque notion de chaque énoncé** de la grappe — une seule notion hors de portée l'écarte entière. Exemple : sur une notion jamais travaillée (niveau 0), seules les questions « mémoriser » et « comprendre » sont tirables.
@@ -265,10 +264,10 @@ Deux choses restent à l'échelle de la grappe, et pour la même raison — ses 
 - **Une question répondue ne revient jamais** (table `parcours_asked`). Une question **vue puis abandonnée reste disponible** : ne pas y répondre ne mesure rien, la brûler pour autant serait du gâchis (règle révisée le 29/08/2026 — l'enregistrement se fait à la correction, pas au tirage).
 - **La question suivante est tirée pendant la lecture de la correction**, jamais toutes au lancement : le choix tient compte de la progression qui vient d'avoir lieu, et le clic sur « question suivante » n'attend rien.
 - **Plus rien à poser → l'exercice s'arrête.** En cours d'exercice, l'écran de fin s'affiche normalement. Au lancement, deux impasses bien distinctes : un chapitre **sans aucune question** dit qu'un gestionnaire doit en créer ; un chapitre dont **rien n'est encore à portée** (ou dont tout a déjà été répondu) répond « rien à te proposer ici pour l'instant » — le membre n'y est pour rien et personne n'est mis en cause. Le second cas est une anomalie que la recharge automatique doit empêcher : elle est signalée côté serveur (voir `docs/backlog.md`), jamais à l'écran.
-- **XP** *(règle arrêtée le 29/08/2026, pas encore implémentée — aucun XP n'existe côté serveur)* : une question rapporte un XP proportionnel à son niveau de Bloom. Un « appliquer » (3) rapporte trois fois un « mémoriser » (1).
+- **XP** : une question rapporte un XP proportionnel à son niveau de Bloom. Un « appliquer » (3) rapporte trois fois un « mémoriser » (1).
 - **Deux questions d'avance.** Au lancement, deux questions sont tirées : la première s'affiche, la seconde attend. À chaque validation, une de plus est tirée — le temps de lire la correction *puis* de traiter la question suivante suffit largement à la préparer. Un membre qui ne lit aucune correction n'attend donc jamais. Le budget est réservé au tirage et non à la réponse : deux questions d'avance ne peuvent pas faire dépasser les 12 niveaux.
 
-**Le radar et la recharge automatique** *(règles arrêtées le 29/08/2026 ; la mesure est implémentée — `parcours_radar` en base et `src/lib/workshops/parcoursRadar.ts` —, la génération reste à faire)*
+**Le radar et la recharge automatique**
 
 - **Un « couple » = une notion et un niveau de Bloom** (« la photosynthèse au niveau appliquer »). C'est l'unité de stock, parce que c'est l'unité de ce qu'on sait demander à l'IA.
 - **Le stock se compte membre par membre**, jamais pour l'atelier : « disponible » veut dire *jamais posée à CE membre* et *entièrement à sa portée*. Deux membres du même atelier n'ont donc pas le même stock devant eux.
@@ -288,7 +287,7 @@ Une demande est **une liste de couples (notion × niveau) avec un nombre pour ch
 | Le radar | Lancement d'un exercice | Les couples sous le seuil, remontés à 4. |
 | Un gestionnaire | Bouton « générer des questions » | Rien de calculé : une consigne libre ne dit rien du stock de chaque notion, donc on envoie toutes les notions du chapitre et **c'est le modèle qui choisit**. |
 
-⚠️ **Changement de volumétrie** : jusqu'au 29/08/2026, un import visait **12 questions par notion** (8 de niveau 1, 4 de niveau 2), soit 240 pour un chapitre de 20 notions. C'est désormais **25 par chapitre**. Les niveaux supérieurs et les notions restées vides ne sont plus produits d'avance : la recharge les pourvoit quand un membre les atteint réellement.
+**Un chapitre neuf ne reçoit que 25 questions de niveau 1.** Les niveaux supérieurs et les notions restées vides ne sont pas produits d'avance : la recharge les pourvoit quand un membre les atteint réellement.
 
 **Garde-fous de la recharge** — c'est le seul appel payant que personne ne décide : un **plafond** de 60 questions par recharge (ce qui reste en manque sera repris au lancement suivant), un **délai de garde** de 10 minutes par chapitre (deux exercices coup sur coup ne rechargent qu'une fois), et une **trace** — chaque recharge ouvre un lot d'import comme n'importe quelle génération, donc son coût est compté et son contenu reste annulable. Elle part **après** que la question est partie à l'écran : le membre n'attend jamais après elle, et elle survit à la fermeture de l'onglet.
 
@@ -335,9 +334,8 @@ C'est un **rattrapage exponentiel plafonné**. Le terme proportionnel fait qu'un
 - Une notion **sans chapitre ne compte dans aucune barre**, pas même celle de l'atelier (19/08/2026). Aucun exercice ne peut la faire progresser — le tirage se fait par chapitre et elle n'a pas de pot — donc la compter revenait à plafonner la barre de l'atelier sous 100 % sans que le membre puisse voir ce qui manque. « Sans chapitre » est un sas de gestion (notion créée à la volée, chapitre supprimé, ingestion IA), pas encore du programme.
 - Même règle, même raison, pour les notions d'un **chapitre caché** (29/08/2026) : le chapitre étant sorti du parcours, aucun exercice ne peut plus les faire progresser.
 - **Avancement affiché** — calculé sur le score exact, pas sur le niveau, et saturé à 30 (les 3 premiers niveaux valent 100 %, le 4e est du bonus) : notion = `min(score, 30) / 30`, chapitre = `Σ min(score, 30) / (30 × nombre de notions)`, atelier = même formule, mais **seulement sur les notions rangées dans un chapitre**.
-- Chaque **nouvelle question** (hors réitération) consomme **1 goutte d'eau**
+- Chaque **nouvelle question** consomme **1 goutte d'eau**
 - Les gouttes d'eau se regagnent : avec le temps / en quantité aléatoire après un nombre aléatoire de questions 
-- Une question ratée est **réposée** jusqu'à être réussie *(non implémenté — le tirage est uniforme dans le chapitre)*
 - Affichage de la bonne réponse : utiliser la réponse de l'utilisateur corrigée et complétée des éléments manquants (pas une réponse modèle générique)
 - **Échange avec l'IA** disponible en cours d'apprentissage pour poser des questions ou obtenir des explications (Premium — V2)
 - Un gestionnaire peut **valider manuellement** une section pour un candidat
@@ -405,16 +403,16 @@ Un gestionnaire génère autant d'examens que souhaité, organisés en sections,
 
 | Option | Valeur par défaut |
 |---|---|
-| Titre | Saisi manuellement (pas de génération IA à ce jour) |
+| Titre | Saisi manuellement |
 | Identité candidat demandée | Nom, Prénom, Tag, Classe + champs personnalisés |
 | Nombre de sections | Libre, réorganisables par glisser-déposer |
 | Pondération des questions | Points, points négatifs (configurable), question éliminatoire (configurable) — par examen, pas par question (un même pool de questions peut être pondéré différemment selon l'examen) |
 | Durée de l'examen | Calculée à partir de la durée par question |
 | Créneau horaire | N/A |
 | Sections de connaissance à valider | N/A (Premium) |
-| QR code + lien | Disponible pour les examens en ligne et projetés *(non implémenté à ce jour)* |
+| QR code + lien | Disponible pour les examens en ligne et projetés |
 
-**Modes de passage :** Export PDF / impression / Examen en ligne / Examen projeté / Intégré au programme éducatif *(seul l'aperçu A4 existe à ce jour — export/passage réel non implémenté)*
+**Modes de passage :** Export PDF / impression / Examen en ligne / Examen projeté / Intégré au programme éducatif
 
 ### Correction
 

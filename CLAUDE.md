@@ -134,12 +134,13 @@ culture/
 │   │   │   ├── create/ · profile/ · pricing/ · sign-in/ · sign-up/ · legal/ · about/ · contact/
 │   │   │   └── layout.tsx
 │   │   ├── actions/             # Server actions — wrappers fins (voir docs/architecture.md)
-│   │   ├── api/                 # API routes (contact, waitlist, webhooks Clerk/Stripe)
+│   │   ├── api/                 # API routes (contact, recharge du parcours, webhooks Clerk/Stripe)
 │   │   ├── globals.css
 │   │   └── layout.tsx
 │   ├── components/              # Composants React réutilisables (ui/ = shadcn, sections/ = sections de page)
 │   ├── lib/
 │   │   ├── workshops/           # Logique métier par domaine (members, core, lifecycle, files, exam, examTypes)
+│   │   ├── ingest/              # Génération par IA : étapes, consignes, recharge, journal (voir docs/architecture.md §7)
 │   │   ├── authz.ts             # Contrôle d'accès centralisé
 │   │   ├── revalidate.ts        # Revalidation de cache à scope étroit
 │   │   ├── theme.ts             # Tokens de couleur/design
