@@ -12,131 +12,40 @@ import type { QuestionDemand } from './demand';
 import { EXAM_GROUP_SIZE, EXAM_QUESTIONS_PER_CALL, MAX_QUESTIONS_PER_IMPORT, examGroupedCount } from './prompt';
 import type { PreparedDocument } from './providers/types';
 
-export type IngestPass = 'resource' | 'chapters' | 'notions' | 'assign' | 'questions' | 'exam' | 'redites';
+export type IngestPass = 'resource' | 'chapters' | 'notions' | 'questions' | 'exam' | 'redites';
 
 /** Les documents qu'une passe reçoit.
  *
- *  **La passe questions n'en reçoit aucun** (§16.3, §16.21). Une notion est
- *  autoportante par construction — c'est la définition qu'en donne la passe 2 —
- *  et ce qui manque pour les niveaux supérieurs de Bloom n'est pas le cours mais
- *  les notions voisines du même chapitre. Renvoyer le corpus pour rédiger une
- *  question sur une notion d’une phrase, c'est ce qui a coûté ~20 $ pour
- *  zéro question le 22/08/2026 : à l'échelle du corpus de test, ~287 $ de
- *  lectures de cache contre ~8,50 $ sans les documents.
+ *  **Les passes de questions n'en reçoivent aucun** (docs/architecture.md §7.2) :
+ *  une notion est autoportante par construction, et ce qui manque pour les
+ *  niveaux supérieurs n'est pas le cours mais les notions voisines du chapitre.
+ *  Les chapitres et les notions reçoivent ce qu'on leur a préparé — les pages
+ *  pauvres en texte pour l'une, les pages du chapitre pour l'autre.
  *
  *  Posée en garde côté fournisseur, et pas seulement à l'appel : un appelant
  *  distrait ne doit pas pouvoir rouvrir le robinet. */
 export function documentsForPass(
   pass: IngestPass,
   prepared: PreparedDocument[],
-  /** Index du document à traiter — **obligatoire pour la passe notions**, qui
-   *  travaille document par document depuis l'inversion du 23/08/2026. */
-  documentIndex?: number,
   /** Les documents que l'étape 0 a **demandés**, par numéro. Elle est la seule
    *  passe à recevoir ses documents sur demande plutôt que d'office : elle part
    *  à l'aveugle, avec le seul catalogue des noms, et n'obtient le contenu que
    *  si elle dit en avoir besoin (04/09/2026). */
   granted?: readonly number[],
 ): PreparedDocument[] {
-  // L'étape 0 ne reçoit QUE ce qu'elle a demandé, et rien par défaut. Une
-  // demande vide — le cas le plus fréquent — ne coûte donc pas un token de
-  // corpus. Un numéro hors liste est ignoré : il vient du modèle.
+  // L'étape 0 ne reçoit QUE ce qu'elle a demandé, et rien par défaut. Un numéro
+  // hors liste est ignoré : il vient du modèle.
   if (pass === 'resource') {
     return (granted ?? [])
       .map((index) => prepared[index])
       .filter((document): document is PreparedDocument => Boolean(document));
   }
 
-  // Ni le rangement ni les questions ne reçoivent de document : le premier
-  // travaille sur des pages et des titres, les seconds sur des notions (§16.3).
-  // La passe examen suit exactement la même règle — elle lit le programme, pas
-  // le cours.
-  if (pass === 'questions' || pass === 'exam' || pass === 'assign' || pass === 'redites') return [];
+  // Les questions, l'examen et les redites travaillent sur des notions, pas
+  // sur le cours.
+  if (pass === 'questions' || pass === 'exam' || pass === 'redites') return [];
 
-  // La passe notions ne reçoit QUE son document. C'est l'unité de travail qui
-  // remplace le chapitre : elle ne demande aucun jugement au modèle, elle est
-  // stable d'un import à l'autre, et elle parallélise sans amorçage.
-  //
-  // Effet de bord heureux : le corpus n'est plus envoyé qu'UNE fois au total sur
-  // cette passe, au lieu d'une fois par chapitre. C'est moins cher qu'une
-  // lecture de cache — voir `shouldCacheDocuments`.
-  // L'étape notions d'un chapitre reçoit ce qu'on lui a préparé : les seules
-  // pages de SON chapitre (docs/architecture.md §7.2). Sans index, c'est ce cas.
-  if (pass === 'notions') {
-    if (documentIndex === undefined) return prepared;
-    const document = prepared[documentIndex];
-    return document ? [document] : [];
-  }
-
-  // La passe chapitres reçoit ce qu'on lui a préparé, et seulement ça : ses
-  // seules pages pauvres en texte, en image (`composeChaptersInput`). Le texte
-  // du cours, lui, voyage dans la consigne (docs/architecture.md §7.2).
   return prepared;
-}
-
-// ─── Ce que « aucun chapitre » veut dire, et pour qui ────────────────────────
-//
-// Le modèle n'a qu'une façon de dire « nulle part » : un chapitre vide. Cette
-// réponse recouvre deux situations qui n'ont rien à voir, et c'est NOUS qui les
-// distinguons — jamais lui. Règle arrêtée le 25/08/2026, ici parce qu'elle
-// décide d'écritures en base et qu'une règle qui décide d'écritures se teste.
-
-export type UnplacedSplit = {
-  /** Les redites — le modèle a tranché une ressemblance en faveur de l'autre.
-   *  Elles sortent du programme, sans chapitre : c'est le seul état d'où le
-   *  bouton « restaurer » ne peut pas les ramener par surprise. */
-  setAside: string[];
-  /** Les notions restées faute de mieux : le modèle n'a rien trouvé, elles
-   *  GARDENT leur chapitre. Il sera écarté avec elles dedans s'il ne reste que
-   *  ça — ce qui rend l'import lisible au lieu de disperser son contenu. */
-  stranded: string[];
-  /** Les rangements à réellement écrire : ceux qui nomment un chapitre, plus
-   *  ceux qui vident une notion qui n'avait déjà rien. Les « restées » en sont
-   *  absentes — on ne réécrit pas ce qu'on veut laisser tel quel. */
-  effective: { notionRef: string; chapterRef?: string }[];
-};
-
-/** Répartit les notions que le modèle n'a rangées nulle part.
- *
- *  ⚠️ `redites` ne contient QUE des notions dont la ressemblance lui a été
- *  soumise. Une notion qu'il n'a jamais eu à juger ne peut pas être écartée par
- *  accident : dans le doute, elle reste où elle est. C'est ce qui distingue une
- *  décision d'un oubli, et c'est ce qui borne la seule suppression du système
- *  (`planImportCleanup`). */
-export function splitUnplaced(
-  assignments: readonly { notionRef: string; chapterRef?: string }[],
-  redites: ReadonlySet<string>,
-  /** Où chaque notion se trouve aujourd'hui. Absente ou `null` = nulle part,
-   *  donc rien à préserver. */
-  currentChapters: ReadonlyMap<string, string | null>,
-): UnplacedSplit {
-  const setAside: string[] = [];
-  const stranded: string[] = [];
-
-  for (const a of assignments) {
-    if (a.chapterRef) continue;
-    if (redites.has(a.notionRef)) setAside.push(a.notionRef);
-    else if (currentChapters.get(a.notionRef)) stranded.push(a.notionRef);
-  }
-
-  const left = new Set(stranded);
-  return {
-    setAside,
-    stranded,
-    effective: assignments.filter((a) => a.chapterRef || !left.has(a.notionRef)),
-  };
-}
-
-/** Découpe une liste de notions en lots de travail (passe de rangement).
- *
- *  L'ordre reçu est conservé et fait foi : l'appelant doit le rendre stable
- *  d'un appel à l'autre, sinon deux lots successifs se recouvriraient — le
- *  client rappelle la même action une fois par lot. */
-export function batchNotions<T>(notions: T[], size: number): T[][] {
-  if (size < 1) throw new Error(`Taille de lot invalide : ${size}`);
-  const batches: T[][] = [];
-  for (let i = 0; i < notions.length; i += size) batches.push(notions.slice(i, i + size));
-  return batches;
 }
 
 // ─── Le découpage de la passe PARCOURS : des appels de huit questions ───────
@@ -506,33 +415,6 @@ export function sliceProgram<T>(chapters: ProgramChapter<T>[], slices: number): 
     result.push(grouped);
   }
   return result;
-}
-
-// ─── Le marqueur de cache ────────────────────────────────────────────────────
-//
-// Le cache existait pour répondre à « on renvoie le même cours 25 fois ». Une
-// fois qu'on cesse de le faire (T3), il ne reste presque rien à mettre en
-// cache — et **un marqueur posé sur un contenu jamais relu coûte 1,25× au lieu
-// de 1×**, soit une perte sèche de 25 % sur cet appel (§16.17).
-//
-// **Depuis l'inversion des passes (23/08/2026), il ne reste PLUS AUCUN cas où le
-// marqueur paie sur les documents**, et c'est une bonne nouvelle :
-//
-//   • passe notions  — un appel par document, chacun ne portant que le sien :
-//     aucun préfixe commun, donc rien à relire. Le corpus part une fois en tout,
-//     ce qui est moins cher qu'une écriture suivie de lectures ;
-//   • passe chapitres — un seul appel, donc aucune relecture par définition ;
-//   • passe questions — aucun document du tout (§16.3).
-//
-// La fonction reste : elle est le garde qui évite qu'on repose un marqueur par
-// réflexe le jour où une passe redeviendra multi-appels sur le même contenu.
-
-/** Le marqueur ne se pose que si le contenu sert à **plus d'un appel**.
- *
- *  Seuil de rentabilité en TTL 5 minutes : 2 lectures (1,25× + 0,1× contre 2×).
- *  En dessous, on paie l'écriture pour rien. */
-export function shouldCacheDocuments(documentUses: number): boolean {
-  return documentUses > 1;
 }
 
 // ─── La relance de la passe chapitres ────────────────────────────────────────

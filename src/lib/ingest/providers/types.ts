@@ -112,16 +112,6 @@ export type IngestScope =
       relaunch?: { notions: { id: string; title: string }[]; chapters: { id: string; name: string }[] };
     }
   | {
-      pass: 'notions';
-      /** Le document traité par CET appel — l'unité de travail de la passe.
-       *
-       *  Un appel par document, et chacun ne reçoit que le sien : le corpus ne
-       *  part donc qu'une fois au total, au lieu d'une fois par chapitre. Il
-       *  n'y a plus rien à mettre en cache, et c'est moins cher que le cache
-       *  qu'on remplace. */
-      document: { index: number; fileName: string };
-    }
-  | {
       /** Étape 2 — les notions d'UN chapitre, sur ses seules pages (§7.2). Les
        *  documents passés à l'appel sont les extraits de ce chapitre ; les
        *  notions qui lui sont déjà attribuées voyagent dans l'existant. */
@@ -131,44 +121,6 @@ export type IngestScope =
       extracts: { name: string; pages: number[] | null }[];
       /** La seconde vérification (§7.6), étiquetée. */
       recheck: { id: string; title: string; label: 'forgotten' | 'check' | 'out' }[];
-    }
-  | {
-      /** Le RANGEMENT : où va chaque notion. Passe séparée de « chapitres »
-       *  depuis le 24/08/2026 — voir `wireSchema.ts` pour le pourquoi.
-       *
-       *  Elle ne reçoit **aucun document** : nommer les chapitres demande le
-       *  cours, les ranger non. Ce qui remplace le cours, ce sont deux nombres —
-       *  la page d'où vient la notion, et les pages que couvre le chapitre. */
-      pass: 'assign';
-      /** Les notions de CE lot, avec leur provenance quand on l'a. */
-      notions: {
-        id: string;
-        title: string;
-        sourceDocument?: string | null;
-        page?: number | null;
-        /** Le chapitre où elle se trouve AUJOURD'HUI, s'il y en a un.
-         *
-         *  ⚠️ Sans lui, le modèle range chaque notion de zéro à chaque import —
-         *  y compris celles que l'utilisateur a placées à la main, qu'il
-         *  défaisait donc en silence. Limite connue et assumée : on sait dire où
-         *  une notion est, pas QUI l'y a mise. Une notion rangée par l'IA puis
-         *  déplacée à la main est indiscernable d'une notion jamais touchée. */
-        currentChapterId?: string | null;
-      }[];
-      /** TOUS les chapitres du programme — le lot doit pouvoir ranger n'importe où. */
-      chapters: {
-        id: string;
-        name: string;
-        sourceDocument?: string | null;
-        pageStart?: number | null;
-        pageEnd?: number | null;
-      }[];
-      /** Les ressemblances repérées **mécaniquement** entre une notion de ce lot
-       *  et une notion déjà présente. Le calcul ne décide rien : il signale, et
-       *  c'est le modèle qui tranche si la ressemblance est justifiée (une
-       *  notion voisine mais distincte) ou non (une redite, à laisser sans
-       *  chapitre). */
-      similar: { notionId: string; other: string; proximity: number }[];
     }
   | {
       pass: 'questions';

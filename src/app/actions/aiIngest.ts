@@ -24,10 +24,9 @@ import * as imports from '@/lib/workshops/imports';
 //
 // Chaque fonction ci-dessous fait UN appel au modèle. C'est le client qui les
 // enchaîne, ce qui évite d'avoir à tenir une fonction serveur ouverte pendant
-// plusieurs minutes (§5.4 du plan). **Appeler dans l'ordre, et grouper par
-// passe** : toutes les notions, puis toutes les questions — le cache de prompt
-// est propre à chaque schéma de sortie, alterner le ferait manquer à chaque
-// fois (§5.2).
+// plusieurs minutes — la fonction serveur est limitée à 300 s. L'ordre d'appel
+// est celui de docs/architecture.md §7 : chapitres, notions par chapitre (et
+// leurs questions dès qu'un chapitre est prêt), redites, finalisation.
 
 export type PlanIssue = {
   kind: 'chapter' | 'notion' | 'assignment' | 'question' | 'verdict';
@@ -63,28 +62,12 @@ export type ChapterStructureResult =
     }
   | { ok: false; error: string };
 
-export type AssignPassResult =
-  | {
-      ok: true;
-      assigned: number;
-      /** Questions en sommeil récupérées plutôt que réécrites. */
-      recycled: number;
-      batches: number;
-      discarded: PlanIssue[];
-      adjusted: PlanIssue[];
-    }
-  | { ok: false; error: string };
-
 export type PrepareIngestionResult =
   | { ok: true; importId: string; documents: number }
   /** `reason: 'busy'` = une génération tourne déjà sur cet atelier (voir
    *  @/lib/ingest/lock). L'écran a sa propre phrase pour ce cas-là : le message
    *  brut ne serait pas traduit. */
   | { ok: false; error: string; reason?: 'busy' };
-
-export type NotionPassResult =
-  | { ok: true; written: number; discarded: PlanIssue[]; adjusted: PlanIssue[]; documents: number }
-  | { ok: false; error: string };
 
 export type QuestionPassResult =
   | { ok: true; written: number; discarded: PlanIssue[]; adjusted: PlanIssue[]; batches: number }
@@ -188,27 +171,6 @@ export async function closeWorkshopImport(
   if (!(await requireManager(workshopId))) return;
   await lock.closeImport(importId);
   if (outcome) await journal.markOutcome(importId, outcome);
-}
-
-/** Passe 1 — les notions d'UN document.
- *
- *  Les notions naissent sans chapitre : à ce stade il n'en existe aucun. C'est
- *  la passe suivante qui les range (feuille de route « notions d'abord »). */
-export async function ingestDocumentNotions(
-  workshopId: string,
-  importId: string,
-  documentIndex: number,
-): Promise<NotionPassResult> {
-  const ctx = await requireManager(workshopId);
-  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
-
-  try {
-    const result = await run.ingestDocumentNotions(workshopId, ctx.userId, importId, documentIndex);
-    revalidateWorkshop();
-    return { ok: true, ...result };
-  } catch (error) {
-    return { ok: false, error: failed('notions', error, { workshopId, importId, documentIndex }) };
-  }
 }
 
 /** Étape 0 — lit la consigne de l'utilisateur, et écrit la matière qui manque.
@@ -328,34 +290,12 @@ export async function relaunchWorkshopChapters(
   }
 }
 
-/** Passe 3 — le rangement d'UN LOT de notions.
+/** La finalisation : départage des notions réclamées, sort final de celles
+ *  que personne ne réclame, puis le ménage — chapitres qui ne gardent que des
+ *  notions non placées, notions neuves restées sans chapitre.
  *
- *  Le nombre de lots n'est connu qu'ici : le client appelle l'indice 0, le lit
- *  dans la réponse, et rappelle pour les suivants. */
-export async function ingestWorkshopAssignments(
-  workshopId: string,
-  importId: string,
-  batchIndex = 0,
-): Promise<AssignPassResult> {
-  const ctx = await requireManager(workshopId);
-  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
-
-  try {
-    const result = await run.ingestAssignments(workshopId, ctx.userId, importId, batchIndex);
-    revalidateWorkshop();
-    return { ok: true, ...result };
-  } catch (error) {
-    return { ok: false, error: failed('rangement', error, { workshopId, importId, batchIndex }) };
-  }
-}
-
-/** La fin de l'import : cacher les chapitres que l'import a vidés, effacer ce
- *  qu'il a créé et jamais rangé.
- *
- *  ⚠️ **Après le dernier lot de rangement, jamais avant** : à mi-parcours,
- *  toutes les notions sont encore sans chapitre et le ménage les emporterait
- *  toutes. Ne renvoie pas d'erreur — c'est du ménage, il ne doit pas faire
- *  échouer un import réussi. */
+ *  ⚠️ **Après la dernière étape notions, jamais avant.** Ne renvoie pas
+ *  d'erreur : un import réussi ne doit pas être annoncé en échec pour ça. */
 export async function finishWorkshopIngestion(
   workshopId: string,
   importId: string,

@@ -6,15 +6,11 @@
 //
 // ─── Les quatre choix d'appel, et pourquoi ───────────────────────────────────
 //
-// • **Files API** — le document est téléversé une fois puis référencé par son
-//   identifiant. Sans elle, chaque passe renverrait le cours entier : le cache
-//   de prompt évite de le *repayer* en tokens, jamais de le *renvoyer* en
-//   octets.
-// • **Cache de prompt** — posé sur le dernier bloc stable (les documents), donc
-//   sur tout ce qui précède : système + documents. Ce qui varie d'un appel à
-//   l'autre (l'existant de l'atelier, la consigne de la passe) vient APRÈS, et
-//   ne casse donc pas le préfixe. TTL 1 h : une ingestion s'étale sur plusieurs
-//   minutes, les 5 minutes par défaut ne suffiraient pas.
+// • **Files API** — un document est téléversé une fois puis référencé par son
+//   identifiant ; les extraits d'un chapitre (§7.3) le sont le temps d'un appel.
+// • **Pas de cache de prompt** — le cours est découpé, chaque contenu n'est lu
+//   qu'une fois : un marqueur posé sur un contenu jamais relu coûte plus cher
+//   que ne rien poser (docs/architecture.md §7.12).
 // • **Sortie structurée** — le modèle ne peut produire que du conforme au
 //   schéma. `parsePlan` reste le contrôle à la réception : la contrainte porte
 //   sur la génération, pas sur ce qu'on accepte d'écrire en base.
@@ -32,8 +28,6 @@ import {
   reditesInstruction,
   userHintBlock,
   existingContentBlock,
-  assignInstruction,
-  notionsInstruction,
   examInstruction,
   questionsInstruction,
   resourceInstruction,
@@ -41,16 +35,14 @@ import {
   type ExistingContent,
   type ExistingScope,
 } from '@/lib/ingest/prompt';
-import { documentsForPass, shouldCacheDocuments } from '@/lib/ingest/passInput';
+import { documentsForPass } from '@/lib/ingest/passInput';
 import {
-  wireAssignmentsOutput,
   wireChaptersOutput,
   wireChaptersRelaunchOutput,
   wireChapterNotionsOutput,
   wireReditesOutput,
   wireExamGroupsOutput,
   wireGroupsOutput,
-  wireNotionsOutput,
   wireResourceOutput,
   wireResourceOutputExam,
 } from '@/lib/ingest/wireSchema';
@@ -205,11 +197,6 @@ export const PASS_MODELS: Record<IngestScope['pass'], ModelId> = {
   resource: MODELS.sonnet,
   chapters: MODELS.sonnet,
   notions: MODELS.sonnet,
-  // Le rangement passait pour la tâche la plus mécanique du pipeline — croiser
-  // une page et une liste de chapitres. À l'usage, c'en est une de jugement :
-  // une notion que le modèle ne sait pas placer reste sans chapitre pour
-  // toujours, personne ne la réexamine, et rien ne le signale. D'où Sonnet.
-  assign: MODELS.sonnet,
   questions: MODELS.haiku,
   exam: MODELS.haiku,
   // Juger si deux phrases disent le même fait : un jugement, et une notion
@@ -347,15 +334,7 @@ function instructionFor(scope: IngestScope): string {
         ? chaptersRelaunchInstruction(scope.relaunch)
         : chaptersInstruction(scope.fileNames, scope.retry);
     case 'notions':
-      return 'chapter' in scope
-        ? chapterNotionsInstruction({ chapter: scope.chapter, extracts: scope.extracts, recheck: scope.recheck })
-        : notionsInstruction(scope.document);
-    case 'assign':
-      return assignInstruction({
-        notions: scope.notions,
-        chapters: scope.chapters,
-        similar: scope.similar,
-      });
+      return chapterNotionsInstruction({ chapter: scope.chapter, extracts: scope.extracts, recheck: scope.recheck });
     case 'questions':
       return questionsInstruction({
         chapter: scope.chapter,
@@ -387,8 +366,6 @@ function existingScopeFor(scope: IngestScope): ExistingScope {
       return { pass: 'chapters' };
     case 'notions':
       return { pass: 'notions' };
-    case 'assign':
-      return { pass: 'assign' };
     case 'questions':
       return { pass: 'questions', notionIds: scope.notions.map((n) => n.id) };
     case 'exam':
@@ -403,50 +380,6 @@ function existingScopeFor(scope: IngestScope): ExistingScope {
   }
 }
 
-/** Combien d'appels partagent les mêmes documents, pour cette passe.
- *
- *  ⚠️ Rappel de §16.22 : un préfixe trop court ne se met **pas** en cache, et
- *  sans erreur — 4 096 tokens minimum sur Haiku 4.5, 1 024 sur Sonnet 5. Un
- *  marqueur posé sur un petit corpus peut donc n'avoir aucun effet. */
-function documentUsesOf(scope: IngestScope): number {
-  switch (scope.pass) {
-    case 'resource':
-      // Un seul appel, et c'est le premier de tous : personne n'a écrit ce
-      // préfixe avant elle, personne ne le relira dans cette position. Rien à
-      // marquer.
-      return 1;
-    case 'chapters':
-      // Un seul appel sur ce préfixe (deux si relance, mais on ne le sait pas
-      // d'avance et une relance reste l'exception).
-      return 1;
-    case 'notions':
-      // Un appel par DOCUMENT, et chacun ne porte que le sien : aucun préfixe
-      // commun, donc rien à relire. Le corpus part une fois en tout.
-      //
-      // ⚠️ **Le premier document est en théorie relu par la passe chapitres**
-      // (même contenu, même position — juste après le système) mais **pas
-      // marqué pour autant** (01/09/2026, retour arrière sur un essai du même
-      // jour). Aucune des deux durées ne convient tant qu'on n'a pas mesuré :
-      // l'heure coûte 2× l'écriture pour une seule lecture garantie (sans
-      // relance) — 2 + 0,1 = 2,1 contre 2 sans rien poser, donc PLUS cher que
-      // ne rien faire ; les 5 minutes ne coûtent que 1,25× et seraient
-      // rentables (1,35 contre 2), mais rien ne dit que la passe chapitres
-      // démarre avant que ce délai n'expire sur un import à plusieurs
-      // documents, où les autres extractions tournent encore. Le dialogue
-      // d'import affiche désormais l'instant où la passe chapitres part,
-      // chronomètre à la main sur l'écran ; si la mesure montre que c'est
-      // systématiquement en dessous de 5 minutes, remettre le marqueur ici. Voir
-      // `docs/backlog.md`.
-      return 1;
-    case 'assign':
-    case 'questions':
-    case 'exam':
-    case 'redites':
-      // Aucun document : rien à mettre en cache.
-      return 0;
-  }
-}
-
 function outputSchemaFor(scope: IngestScope) {
   switch (scope.pass) {
     case 'resource':
@@ -457,9 +390,7 @@ function outputSchemaFor(scope: IngestScope) {
     case 'chapters':
       return scope.relaunch ? wireChaptersRelaunchOutput : wireChaptersOutput;
     case 'notions':
-      return 'chapter' in scope ? wireChapterNotionsOutput : wireNotionsOutput;
-    case 'assign':
-      return wireAssignmentsOutput;
+      return wireChapterNotionsOutput;
     case 'questions':
       return wireGroupsOutput;
     // Deux types de plus à l'examen — le dépôt de fichier et l'énoncé sans
@@ -589,45 +520,20 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
       existing: ExistingContent,
       scope: IngestScope,
     ): Promise<ProviderResult> {
-      // Dernière barrière avant la facture : la passe questions ne reçoit aucun
-      // document, quoi qu'on lui passe (§16.3). Sans documents, aucun bloc
-      // `document` n'est posé — donc aucun marqueur de cache non plus.
+      // Dernière barrière avant la facture : les passes de questions ne
+      // reçoivent aucun document, quoi qu'on leur passe (§7.2).
       const sent = documentsForPass(
         scope.pass,
         documents,
-        scope.pass === 'notions' && 'document' in scope ? scope.document.index : undefined,
         scope.pass === 'resource' ? scope.granted : undefined,
       );
 
-      // Poser un marqueur sur un contenu jamais relu coûte 25 % de plus que ne
-      // rien poser (§16.17). On ne le pose donc que si les mêmes documents
-      // servent à plus d'un appel — en pratique, la passe notions d'un import à
-      // plusieurs chapitres.
-      const cacheable = shouldCacheDocuments(documentUsesOf(scope));
-
-      // ⚠️ ORDRE CRITIQUE. Le cache est un préfixe : les documents d'abord (le
-      // même à chaque appel), l'existant et la consigne ensuite. Inverser
-      // reviendrait à ne jamais toucher le cache.
-      const content: Anthropic.Beta.BetaContentBlockParam[] = sent.map((doc, i) => ({
+      // Les documents d'abord, puis le texte du cours (étape chapitres),
+      // l'existant et la consigne.
+      const content: Anthropic.Beta.BetaContentBlockParam[] = sent.map((doc) => ({
         type: 'document',
         source: { type: 'file', file_id: doc.ref },
         title: doc.fileName,
-        // Le marqueur ne va que sur le DERNIER document envoyé dans cet appel :
-        // il met en cache tout ce qui le précède, système compris.
-        //
-        // ⚠️ **TTL par défaut (5 minutes), pas l'heure** (01/09/2026). L'heure a
-        // été envisagée pour l'unique cas cacheable aujourd'hui — le premier
-        // document de la passe notions, relu par la passe chapitres après que
-        // tous les autres documents ont fini leur propre extraction — pour
-        // couvrir les imports à beaucoup de documents, où l'attente peut
-        // dépasser 5 minutes. Mais l'heure double le prix de l'écriture (2× au
-        // lieu de 1,25×), et il n'y a qu'UNE lecture garantie (la passe
-        // chapitres, sans relance) : 2 + 0,1 = 2,1 contre 2 sans aucun marqueur
-        // — plus cher que de ne rien poser. Le défaut reste rentable dans le cas
-        // courant (1,25 + 0,1 = 1,35) ; le pire qu'il risque sur un très gros
-        // import, c'est de manquer la fenêtre et de payer la même chose que sans
-        // marqueur — jamais plus.
-        ...(cacheable && i === sent.length - 1 ? { cache_control: { type: 'ephemeral' as const } } : {}),
       }));
 
       // ⚠️ **Un bloc de texte VIDE fait échouer l'appel entier**, avec un 400
@@ -652,9 +558,7 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
         ? ''
         : existingContentBlock(existing, existingScopeFor(scope));
       if (existingBlock.trim()) content.push({ type: 'text', text: existingBlock });
-      // ⚠️ La consigne de l'utilisateur est collée en tête de l'instruction, donc
-      // APRÈS le marqueur de cache : elle varie d'un import à l'autre et n'a
-      // rien à faire dans le préfixe stable (voir l'en-tête de `prompt.ts`).
+      // La consigne de l'utilisateur est collée en tête de l'instruction.
       const instructionBlock = userHintBlock(opts.userHint) + instructionFor(scope);
       if (instructionBlock.trim()) content.push({ type: 'text', text: instructionBlock });
 

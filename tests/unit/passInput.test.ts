@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  batchNotions,
   contextNotions,
   createBudgetLedger,
   documentsForPass,
@@ -13,8 +12,6 @@ import {
   packDemand,
   planFreeParcoursCalls,
   QUESTIONS_PER_PARCOURS_CALL,
-  shouldCacheDocuments,
-  splitUnplaced,
   withChapterRetry,
 } from '@/lib/ingest/passInput';
 import { chapterStartBudgets, type QuestionDemand } from '@/lib/ingest/demand';
@@ -67,13 +64,9 @@ function recordingProvider(): PlanProvider & { calls: { documents: PreparedDocum
 describe('documentsForPass — ce qui part au modèle', () => {
   const prepared = [doc('a'), doc('b')];
 
-  it('la passe chapitres reçoit tout le corpus', () => {
-    // C'est la seule passe qui doit voir l'ensemble : elle découpe le cours.
+  it('la passe chapitres reçoit ce qu’on lui a préparé', () => {
+    // Ses seules pages pauvres en texte (`composeChaptersInput`).
     expect(documentsForPass('chapters', prepared)).toEqual(prepared);
-  });
-
-  it('la passe notions ne reçoit que le document de son index', () => {
-    expect(documentsForPass('notions', prepared, 0)).toEqual([prepared[0]]);
   });
 
   it('la passe questions n’en reçoit AUCUN', () => {
@@ -100,50 +93,15 @@ describe('passe questions — l’appel capturé ne porte aucun document', () =>
     expect(provider.calls[0].documents).toHaveLength(0);
   });
 
-  it('la passe notions ne reçoit QUE son document, pas le corpus', async () => {
-    // C'est ce qui remplace le cache : le corpus part une seule fois au total,
-    // au lieu d'une fois par chapitre dont on relisait les 90 %.
-    const provider = recordingProvider();
-    const prepared = [doc('a'), doc('b'), doc('c')];
-
-    await provider.documentToPlan(documentsForPass('notions', prepared, 1), empty, {
-      pass: 'notions',
-      document: { index: 1, fileName: 'b' },
-    });
-
-    expect(provider.calls[0].documents).toHaveLength(1);
-    expect(provider.calls[0].documents[0].fileName).toBe('b.pdf');
-  });
-
-  it('la passe chapitres, elle, les reçoit TOUS', () => {
-    // Sans le cours, le modèle invente des intitulés au lieu de reprendre ceux
-    // du document, et ne sait pas d'où viennent les notions à répartir.
+  it('les redites n’en reçoivent aucun', () => {
     const prepared = [doc('a'), doc('b')];
-    expect(documentsForPass('chapters', prepared)).toHaveLength(2);
-  });
-
-  it('un index de document hors bornes ne rend rien, il ne lève pas', () => {
-    expect(documentsForPass('notions', [doc('a')], 7)).toEqual([]);
+    expect(documentsForPass('redites', prepared)).toHaveLength(0);
   });
 
   it('l’étape notions d’un chapitre reçoit ses extraits, et rien d’autre', () => {
     // Les extraits sont composés en amont (`composeChapterSlices`) : ils ne
     // contiennent déjà que les pages du chapitre.
     expect(documentsForPass('notions', [doc('a'), doc('b')])).toEqual([doc('a'), doc('b')]);
-  });
-});
-
-describe('batchNotions — les lots de la passe de rangement', () => {
-  const notions = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `n${i + 1}`, title: `Notion ${i + 1}` }));
-
-  it('des lots pleins, le dernier n’est pas complété artificiellement', () => {
-    expect(batchNotions(notions(25), 10).map((b) => b.length)).toEqual([10, 10, 5]);
-    expect(batchNotions(notions(0), 10)).toEqual([]);
-    expect(batchNotions(notions(1), 10).map((b) => b.length)).toEqual([1]);
-  });
-
-  it('refuse une taille de lot qui ferait une boucle infinie', () => {
-    expect(() => batchNotions(notions(3), 0)).toThrow();
   });
 });
 
@@ -308,75 +266,6 @@ describe('withChapterRetry — une relance, jamais deux (§16.18)', () => {
 function chapterCount(result: { plan: unknown }): number {
   return (result.plan as { chapters: unknown[] }).chapters.length;
 }
-
-describe('shouldCacheDocuments — le marqueur n’est pas gratuit (§16.17)', () => {
-  it('un document utilisé une seule fois ne reçoit pas de marqueur', () => {
-    // Le poser coûterait 1,25× au lieu de 1× : une perte sèche de 25 %.
-    expect(shouldCacheDocuments(1)).toBe(false);
-  });
-
-  it('aucun document du tout : rien à mettre en cache', () => {
-    expect(shouldCacheDocuments(0)).toBe(false);
-  });
-
-  it('deux lectures ou plus : le cache paie', () => {
-    // Seuil de rentabilité en TTL 5 minutes : 1,25× + 0,1× contre 2×.
-    expect(shouldCacheDocuments(2)).toBe(true);
-    expect(shouldCacheDocuments(12)).toBe(true);
-  });
-});
-
-// ─── « Aucun chapitre » : une décision, ou un oubli ? ────────────────────────
-//
-// La raison de tester ça ici plutôt que de le regarder dans l'app : `effective`
-// décide d'un `update` par lot, et une ligne de trop fait perdre son chapitre à
-// une notion ANCIENNE — donc sortir du programme un contenu que personne n'a
-// demandé à retirer.
-describe('splitUnplaced', () => {
-  const nowhere = new Map<string, string | null>();
-
-  it('écarte une redite, et elle seule', () => {
-    const split = splitUnplaced(
-      [{ notionRef: 'n1' }, { notionRef: 'n2' }],
-      new Set(['n1']),
-      new Map([['n1', 'c1'], ['n2', 'c1']]),
-    );
-    expect(split.setAside).toEqual(['n1']);
-    expect(split.stranded).toEqual(['n2']);
-  });
-
-  it('laisse en place une notion que le modèle n’a pas su ranger', () => {
-    const split = splitUnplaced([{ notionRef: 'n1' }], new Set(), new Map([['n1', 'c1']]));
-    // Ni écartée ni réécrite : sa ligne ne part pas en base du tout.
-    expect(split.setAside).toEqual([]);
-    expect(split.stranded).toEqual(['n1']);
-    expect(split.effective).toEqual([]);
-  });
-
-  it('ne préserve rien pour une notion qui n’était nulle part', () => {
-    const split = splitUnplaced([{ notionRef: 'n1' }], new Set(), nowhere);
-    expect(split.stranded).toEqual([]);
-    // Elle reste dans les écritures : sans chapitre avant, sans chapitre après.
-    expect(split.effective).toEqual([{ notionRef: 'n1' }]);
-  });
-
-  it('ne touche jamais à un rangement qui nomme un chapitre', () => {
-    const assignments = [{ notionRef: 'n1', chapterRef: 'c2' }];
-    const split = splitUnplaced(assignments, new Set(['n1']), new Map([['n1', 'c1']]));
-    expect(split.setAside).toEqual([]);
-    expect(split.stranded).toEqual([]);
-    expect(split.effective).toEqual(assignments);
-  });
-
-  it('une redite sortie de nulle part reste une redite', () => {
-    // Le cas de la notion NEUVE jugée redondante : elle n'a pas de chapitre à
-    // conserver, et le ménage de fin l'effacera — comme toute notion de cet
-    // import restée sans chapitre, jugée ou simplement oubliée.
-    const split = splitUnplaced([{ notionRef: 'n1' }], new Set(['n1']), nowhere);
-    expect(split.setAside).toEqual(['n1']);
-    expect(split.stranded).toEqual([]);
-  });
-});
 
 describe('contextNotions', () => {
   const chapter = ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id }));

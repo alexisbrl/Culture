@@ -33,7 +33,7 @@ describe('createDeepSeekProvider — passe questions uniquement', () => {
 
   it('REFUSE la passe notions', async () => {
     await expect(
-      provider().documentToPlan([], empty, { pass: 'notions', document: { index: 0, fileName: 'cours.pdf' } }),
+      provider().documentToPlan([], empty, { pass: 'notions', chapter: { id: 'c1', name: 'C' }, extracts: [], recheck: [] }),
     ).rejects.toThrow(/passe notions/);
   });
 

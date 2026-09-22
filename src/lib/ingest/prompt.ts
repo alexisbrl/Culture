@@ -231,7 +231,6 @@ export type ExistingScope =
   | { pass: 'resource' }
   | { pass: 'chapters' }
   | { pass: 'notions' }
-  | { pass: 'assign' }
   | { pass: 'questions'; notionIds: string[] }
   /** L'examen ne filtre pas par notion : ce qu'il ne faut pas reposer, c'est ce
    *  qui est déjà DANS CETTE LISTE, quelle que soit la notion. Le chargeur
@@ -359,20 +358,9 @@ function inScope(existing: ExistingContent, scope: ExistingScope): {
       // existante. C'est un seul appel, et une notion est une ligne de texte —
       // même à mille notions, le bloc reste modeste.
       return { chapters: existing.chapters, notions: existing.notions, questions: [] };
-    case 'assign':
-      // Rien. La passe rangement reçoit ses notions et ses chapitres par sa
-      // consigne, avec leur provenance : le bloc « existant » ferait double
-      // emploi et doublerait la facture.
-      return { chapters: [], notions: [], questions: [] };
     case 'notions':
-      // TOUTES les notions de l'atelier, et non plus celles d'un chapitre : la
-      // passe travaille document par document, elle n'a aucun chapitre de
-      // référence. C'est ce qui lui permet de RÉUTILISER une notion existante
-      // au lieu de la recréer sous d'autres mots.
-      //
-      // Poids réel à surveiller sans s'en alarmer : un titre pèse ~40 tokens,
-      // 500 notions ~20 000 — sans commune mesure avec les énoncés de questions
-      // qui avaient fait exploser le coût (§16.3).
+      // Les notions déjà rangées dans le chapitre traité : l'appelant ne passe
+      // qu'elles (§7.2). C'est ce qui permet de RÉUTILISER plutôt que recréer.
       return { chapters: [], notions: existing.notions, questions: [] };
     case 'questions': {
       // Conséquence assumée (§16.3) : une question **sans notion** n'est jamais
@@ -406,7 +394,6 @@ export function existingContentBlock(existing: ExistingContent, scope: ExistingS
         return "L'atelier est vide : rien n'existe encore.";
       case 'notions':
         return "L'atelier ne contient encore aucune notion.";
-      case 'assign':
       case 'redites':
         return '';
       case 'questions':
@@ -840,27 +827,6 @@ Dans \`notionVerdicts\`, trois réponses possibles :
 ⚠️ **Ne pas retrouver une notion dans le texte n'est JAMAIS un motif de « out » : c'est « check ».** Tu ne lis que le texte du cours, pas ses images ; une autre étape, qui les voit, tranchera.`;
 }
 
-/** Passe 1 — les notions d'UN document.
- *
- *  ⚠️ **Cette passe est passée première le 23/08/2026.** Elle ne connaît plus
- *  aucun chapitre : les notions naissent sans rangement, et c'est la passe
- *  chapitres qui les répartit ensuite. C'est ce qui rend la mise à jour d'un
- *  atelier possible — au niveau du chapitre, le modèle ne peut pas savoir que
- *  « 1950-2000 » et « 1940-1990 » sont la même boîte redécoupée ; au niveau de
- *  la notion, la question ne se pose pas.
- *
- *  ⚠️ **La réutilisation est le point critique de tout le dispositif.** Si le
- *  modèle recrée sous d'autres mots ce qui existe déjà, l'atelier gonfle à
- *  chaque import et le système perd toute confiance. Le critère donné ici est
- *  volontairement OBJECTIF — « apporte-t-elle un fait vérifiable de plus ? » —
- *  et surtout pas « est-ce mieux formulé », question à laquelle un modèle
- *  répond oui presque à chaque fois. */
-export function notionsInstruction(document: { fileName: string }): string {
-  return `Extrais les NOTIONS du document « ${document.fileName} ». Traite-le en entier ; ne t'occupe d'aucun autre document.
-
-${NOTION_RULES}`;
-}
-
 /** Les étiquettes de la seconde vérification (§7.6) : chaque notion dit
  *  pourquoi elle repasse. */
 export const RECHECK_LABELS = {
@@ -922,96 +888,6 @@ Ne produis une notion voisine d'une existante QUE si elle apporte un FAIT VÉRIF
 À ne pas produire : « Le solstice d'hiver est le jour le plus court de l'année » existe déjà, et tu écris « La nuit du solstice d'hiver est la plus longue de l'année » → même fait, autres mots. Tu ne produis rien.
 
 Dans le doute, ne produis pas : une notion manquante se rattrape au prochain import, un doublon reste et encombre l'atelier.`;
-
-/** Passe 3 — le RANGEMENT d'un lot de notions.
- *
- *  ⚠️ **Elle ne reçoit aucun document**, et c'est tout son intérêt. Ce qui
- *  remplace le cours, ce sont deux nombres : la page d'où vient la notion, et
- *  les pages que couvre le chapitre. Renvoyer le corpus pour décider où va une
- *  notion d’une phrase serait refaire l'erreur de coût du 22/08/2026.
- *
- *  ⚠️ **La page indique, le contenu décide.** Un chapitre ne s'arrête pas au bas
- *  d'une page : une notion du haut de la page 40 appartient souvent encore au
- *  chapitre précédent. Si l'indication était donnée comme une règle, le modèle
- *  rangerait mécaniquement au numéro et cesserait de lire la notion — on
- *  obtiendrait des rangements plausibles mais faux, c'est-à-dire invisibles à
- *  l'œil. La consigne dit donc explicitement qu'on peut s'en écarter.
- *
- *  ⚠️ **Les ressemblances sont SIGNALÉES, pas appliquées.** Le calcul (voir
- *  `duplicates.ts`) est bon pour repérer que deux phrases se ressemblent,
- *  mauvais pour juger si c'est une redite ou un fait de plus. C'est ici que ça
- *  se tranche, et le perdant n'est pas détruit : il reste sans chapitre. */
-export function assignInstruction(input: {
-  notions: {
-    id: string;
-    title: string;
-    sourceDocument?: string | null;
-    page?: number | null;
-    currentChapterId?: string | null;
-  }[];
-  chapters: {
-    id: string;
-    name: string;
-    sourceDocument?: string | null;
-    pageStart?: number | null;
-    pageEnd?: number | null;
-  }[];
-  similar: { notionId: string; other: string; proximity: number }[];
-}): string {
-  const chapters = input.chapters.length === 0
-    ? "Aucun chapitre n'existe : laisse toutes les notions sans chapitre."
-    : input.chapters
-        .map((c) => {
-          // Même forme que la provenance d'une notion — ` [document, page N] ` —
-          // pour que les deux listes se lisent de la même façon (31/08/2026).
-          const span = c.pageStart && c.pageEnd
-            ? ` [${c.sourceDocument ? `${c.sourceDocument}, ` : ''}pages ~${c.pageStart} à ~${c.pageEnd}]`
-            : '';
-          return `- ${c.id} — ${c.name}${span}`;
-        })
-        .join('\n');
-
-  const notions = input.notions
-    .map((n) => {
-      const from = n.page ? ` [${n.sourceDocument ?? 'document'}, page ${n.page}]` : '';
-      const now = n.currentChapterId ? ` (actuellement dans ${n.currentChapterId})` : '';
-      return `- ${n.id} — ${n.title}${from}${now}`;
-    })
-    .join('\n');
-
-  const doubts = input.similar.length === 0
-    ? ''
-    : `
-
-RESSEMBLANCES REPÉRÉES. Un calcul automatique a trouvé que ces notions ressemblent à une notion déjà présente dans l'atelier. **Ce calcul ne juge rien** : il compare des mots, il ne sait pas si c'est le même fait. C'est à toi de trancher, notion par notion.
-
-${input.similar.map((s) => `- ${s.notionId} ressemble à : « ${s.other} »`).join('\n')}
-
-Pour chacune :
-- si elle SE DÉMARQUE VRAIMENT malgré la ressemblance — elle porte un fait qu'on pourrait demander à part, et dont la réponse est absente de l'autre —, les deux ont leur place : range-la normalement ;
-- si elle dit la même chose autrement, c'est une redite : donne-lui un chapitre VIDE. Elle ne sera pas perdue, elle sortira simplement du programme.
-
-**Quand c'est une redite, c'est toujours celle de cette liste qui s'efface**, jamais l'autre : la notion déjà présente peut porter des questions et un historique de révision, et rien ici ne permet d'en juger.
-
-⚠️ **La page ne prouve JAMAIS que deux notions sont différentes.** Un cours énonce souvent le même fait à deux endroits — une fois en introduction, une fois en conclusion — et les deux extractions n'en font qu'une seule notion. Ne te sers de la page que pour RANGER, jamais pour juger si deux notions se distinguent : ça se décide sur le contenu, et sur lui seul.`;
-
-  return `Range chaque notion de cette liste dans le chapitre qui lui convient.
-
-LES CHAPITRES DISPONIBLES :
-${chapters}
-
-LES NOTIONS À RANGER :
-${notions}
-
-La mention « actuellement dans » dit où la notion se trouve aujourd'hui. **C'est une information, pas une consigne** : tu peux parfaitement la déplacer si un autre chapitre lui convient mieux, et reconduire son rangement est tout aussi valide. Elle est surtout utile quand la notion n'a **aucune provenance** — sans page ni document, c'est parfois le seul indice disponible. Ne la laisse jamais l'emporter sur le contenu.
-
-Les pages sont **une indication, pas une règle**. Un chapitre ne s'arrête pas proprement au bas d'une page : une notion du haut d'une page peut très bien appartenir au chapitre précédent, et une notion isolée peut relever d'un chapitre situé ailleurs dans le cours. **En cas de désaccord entre la page et le contenu, c'est le contenu qui décide.** Une notion sans page se range sur son seul contenu.
-
-Trois règles :
-- **Tu ne peux ni créer ni modifier une notion, ni créer un chapitre.** Tu ranges ce qui existe. N'invente aucune référence, recopie-les à l'identique.
-- **Réponds pour CHAQUE notion de la liste, sans exception.**
-- **Une notion qui n'a sa place dans aucun chapitre reçoit un chapitre vide.** Elle reste consultable, hors du programme.${doubts}`;
-}
 
 /** La règle de volumétrie, en une phrase pour le modèle. Un niveau à zéro n'y
  *  figure pas du tout : le mentionner pour dire « aucune » attire l'attention

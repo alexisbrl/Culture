@@ -291,23 +291,6 @@ export const wireNotionSchema = z.object({
     .describe("Page du document d'où vient cette notion. 0 si tu ne peux pas la déterminer."),
 });
 
-/** Ranger une notion dans un chapitre.
- *
- *  `notionRef` désigne une notion qui EXISTE DÉJÀ — celles qu'on vient
- *  d'extraire des documents comme celles que l'atelier portait avant. C'est ce
- *  qui rend la mise à jour possible : réorganiser un atelier, c'est n'émettre
- *  que des affectations. */
-export const wireAssignmentSchema = z.object({
-  notionRef: z
-    .string()
-    .describe("Identifiant de la notion à ranger, recopié tel quel depuis la liste des notions fournie."),
-  chapterRef: z
-    .string()
-    .describe(
-      "Référence du chapitre où la ranger, parmi ceux de cette réponse. Chaîne vide pour laisser la notion hors du programme (elle reste consultable, sans chapitre).",
-    ),
-});
-
 // Une sortie par passe : on ne demande jamais au modèle de produire le programme
 // entier d'un coup (docs/ai-ingestion-plan.md §5.1).
 //
@@ -376,8 +359,6 @@ export const wireChaptersOutput = z.object({
 export const wireChaptersRelaunchOutput = z.object({
   notionVerdicts: z.array(wireNotionVerdictSchema),
 });
-export const wireAssignmentsOutput = z.object({ assignments: z.array(wireAssignmentSchema) });
-export const wireNotionsOutput = z.object({ notions: z.array(wireNotionSchema) });
 /** L'étape notions d'UN chapitre (§7.2) : ses notions nouvelles, et les notions
  *  de la seconde vérification qu'il réclame (§7.6). */
 export const wireChapterNotionsOutput = z.object({
@@ -391,8 +372,6 @@ export const wireGroupsOutput = z.object({ groups: z.array(wireGroupSchema) });
 export const wireExamGroupsOutput = z.object({ groups: z.array(wireExamGroupSchema) });
 
 export type WireChaptersOutput = z.infer<typeof wireChaptersOutput>;
-export type WireAssignmentsOutput = z.infer<typeof wireAssignmentsOutput>;
-export type WireNotionsOutput = z.infer<typeof wireNotionsOutput>;
 export type WireGroupsOutput = z.infer<typeof wireGroupsOutput>;
 
 /** ÉTAPE 0 — le document de l'IA, et la consigne réécrite.

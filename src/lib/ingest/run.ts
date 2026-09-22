@@ -1,54 +1,37 @@
-// L'orchestration : enchaîner les passes, une **unité bornée** à la fois.
+// L'orchestration : enchaîner les étapes, une **unité bornée** à la fois.
 //
-// ─── Pourquoi trois fonctions et non une ─────────────────────────────────────
+// ─── Un appel au modèle par fonction ─────────────────────────────────────────
 //
-// Une ingestion complète, c'est 1 + N + N appels au modèle, soit plusieurs
-// minutes. Aucune fonction serveur ne tient ça. Plutôt que de rallonger le
-// délai, on rend la question sans objet (§5.4) : chaque fonction ci-dessous
-// fait **un seul appel au modèle et écrit sa part**, et c'est le client qui
+// Une génération complète, c'est une série d'appels au modèle, soit plusieurs
+// minutes ; une fonction serveur est limitée à 300 s. Chaque fonction ci-dessous
+// fait donc **un seul appel au modèle et écrit sa part**, et c'est l'écran qui
 // enchaîne. La barre de progression est gratuite, et un chapitre en échec se
 // rejoue seul.
 //
-// ─── L'ordre d'appel n'est pas libre ─────────────────────────────────────────
+// ─── L'ordre d'appel (docs/architecture.md §7) ───────────────────────────────
 //
-//   ingestDocumentNotions(×D)  → pour chaque DOCUMENT, écrit ses NOTIONS
-//   ingestChapters             → écrit les CHAPITRES
-//   ingestAssignments(×L)      → RANGE les notions dans les chapitres
-//   ingestParcoursQuestions(×M)→ pour chaque LOT DE NOTIONS, ses questions d'entraînement
+//   ingestResource              → étape 0, s'il y a une consigne
+//   ingestChapters              → étape 1 : chapitres, bornes, verdicts ; la
+//     (ingestChaptersRelaunch)     relance seulement si le seuil d'oubli l'exige
+//   ingestChapterNotions(×C)    → étape 2 : les notions de CHAQUE chapitre, en
+//                                 parallèle, sur ses seules pages
+//   ingestParcoursQuestions(×M) → les questions d'un chapitre, dès que SON
+//                                 étape 2 est finie
+//   ingestRedites               → une fois toutes les étapes 2 finies, en même
+//                                 temps que les questions restantes
+//   finishIngestion             → départage, sort final, ménage
 //
-// …et, sur une voie séparée qui ne s'enchaîne à rien :
-//
-//   ingestExamQuestions(×T)    → pour chaque TRANCHE du programme, ses questions d'examen
-//
-// Les deux dernières produisent le même objet — des questions — et n'ont rien
-// d'autre en commun (24/08/2026). Le parcours compte par NOTION (douze chacune,
-// une notion par question) ; l'examen compte par PROGRAMME (un total fixe pour
-// tout l'atelier, chaque question croisant plusieurs notions, un tiers en
-// groupes qui s'enchaînent). Deux régimes, deux passes.
-//
-// ⚠️ **Les deux premières ont été inversées le 23/08/2026** (feuille de route
-// docs/chantiers/2026-08-23-notions-dabord.md). Les notions sont le cœur d'un
-// atelier, les chapitres ne sont que des boîtes : décider les boîtes en premier
-// rendait toute mise à jour impossible, le modèle ne pouvant pas reconnaître un
-// chapitre existant sous un découpage redécoupé.
-//
-// L'unité de la passe 3 est le **lot de ~10 notions**, pas le chapitre : à la
-// volumétrie cible, un chapitre entier dépasserait `MAX_TOKENS` et la réponse
-// serait tronquée, donc perdue (§16.2). Le nombre de lots n'étant connu qu'une
-// fois les notions écrites, chaque appel le renvoie (`batches`) et le client
-// boucle jusque-là.
-//
-// **Grouper les appels par passe**, comme ci-dessus, et non chapitre par
-// chapitre : le cache de prompt est propre à chaque schéma de sortie (mesuré le
-// 20/08/2026, §5.2), donc alterner notions/questions le ferait manquer à chaque
-// fois. Sur douze chapitres, c'est la différence entre ~3 $ et ~11 $.
+// …et, sur une voie séparée : ingestExamQuestions(×T), pour chaque TRANCHE du
+// programme. Le parcours compte par NOTION, l'examen par PROGRAMME (§7.7) :
+// deux régimes, deux passes.
 //
 // ─── Ce qui circule entre les appels ─────────────────────────────────────────
 //
-// Rien, ou presque : l'état vit en base. `ai_imports.file_ids` porte les
-// poignées de documents déjà remises au fournisseur — sans quoi chaque appel
-// re-téléverserait le cours entier —, et les chapitres écrits portent déjà leur
-// identifiant réel, qui sert de référence aux passes suivantes.
+// L'état vit en base. `ai_imports.file_ids` porte les poignées de documents déjà
+// remises au fournisseur ; `ai_imports.scope.stage1` porte ce que l'étape 1 a
+// décidé — chapitres et bornes, verdicts, chapitre de chaque notion avant la
+// génération. Les réclamations de la seconde vérification, elles, reviennent
+// par l'écran à la finalisation, qui les revalide.
 
 import { buildWorkshopFileKey, deleteObject, readObject, writeObject } from '@/lib/storage';
 import { getSupabaseServerClient } from '@/lib/supabase';
@@ -74,19 +57,16 @@ import {
   dropNearDuplicates,
   dropRepeatedQuestions,
   findExistingMatch,
-  flagSimilar,
   judgeRedites,
   rediteCandidates,
   rediteRemovals,
 } from './duplicates';
 import {
-  batchNotions,
   contextNotions,
   packDemand,
   pickExistingQuestions,
   planFreeParcoursCalls,
   sliceProgram,
-  splitUnplaced,
   withChapterRetry,
   type ExistingQuestion,
 } from './passInput';
@@ -106,7 +86,7 @@ import {
   demandTotal,
   type QuestionDemand,
 } from './demand';
-import { BUSY_ERROR, assertImportOpen, closeImport, liveImportOf } from './lock';
+import { BUSY_ERROR, closeImport, liveImportOf } from './lock';
 import { parsePlan, type PlanIssue } from './planSchema';
 import {
   classifyNotions,
@@ -1740,35 +1720,18 @@ export async function releaseImportDocuments(
   }
 }
 
-/** Combien de notions par appel de rangement.
- *
- *  Bien plus que pour les questions (10), parce que la sortie est minuscule :
- *  une affectation, c'est deux identifiants, là où une question porte un énoncé,
- *  ses propositions et ses critères de correction. Cinquante affectations
- *  tiennent très largement sous le plafond de sortie. */
-export const NOTIONS_PER_ASSIGN_BATCH = 50;
-
-/** Les chapitres VISIBLES du programme, avec leur plage de pages.
- *
- *  Les chapitres cachés sont exclus : on ne range pas dans une boîte qu'on a
- *  mise de côté. Un chapitre caché qui redevient pertinent se restaure d'abord. */
-async function loadVisibleChapters(workshopId: string) {
+/** Les chapitres VISIBLES du programme, dans l'ordre : ce que l'étape 0 peut
+ *  désigner (« complète le chapitre sur X »). */
+async function loadVisibleChapters(workshopId: string): Promise<{ id: string; name: string }[]> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from('workshop_chapters')
-    .select('id, name, source_document, page_start, page_end')
+    .select('id, name')
     .eq('workshop_id', workshopId)
     .eq('hidden', false)
     .order('position');
   if (error) throw new Error(error.message);
-
-  return (data ?? []).map((c) => ({
-    id: c.id as string,
-    name: c.name as string,
-    sourceDocument: c.source_document as string | null,
-    pageStart: c.page_start as number | null,
-    pageEnd: c.page_end as number | null,
-  }));
+  return (data ?? []).map((c) => ({ id: c.id as string, name: c.name as string }));
 }
 
 /** Toutes les notions de l'atelier avec leur provenance, dans un ordre STABLE.
@@ -1861,204 +1824,6 @@ async function recordProgress(
     .eq('id', importId);
 }
 
-
-/** Passe 3 — le RANGEMENT d'UN LOT de notions.
- *
- *  Séparée de la passe chapitres le 24/08/2026, pour une raison de volume :
- *  ranger 500 notions, c'est produire 500 lignes dans une seule réponse, bien
- *  au-delà du plafond de sortie — la réponse serait tronquée, donc perdue. On ne
- *  peut pas découper en lots un appel qui doit AUSSI décider de la structure,
- *  puisque la structure ne se décide qu'une fois : la séparation n'est donc pas
- *  une alternative aux appels multiples, c'est ce qui les autorise.
- *
- *  Elle ne reçoit **aucun document**, et c'est là que la provenance paie : deux
- *  nombres par élément remplacent 680 000 tokens de corpus. */
-export async function ingestAssignments(
-  workshopId: string,
-  actorId: string,
-  importId: string,
-  batchIndex = 0,
-  options: { provider?: PlanProvider } = {},
-): Promise<AssignPassResult> {
-  const userHint = await userHintOf(importId);
-  const provider = options.provider ?? createClaudeProvider({ userHint });
-
-  const [all, chapters] = await Promise.all([
-    loadNotionsToArrange(workshopId),
-    loadVisibleChapters(workshopId),
-  ]);
-  const batches = batchNotions(all, NOTIONS_PER_ASSIGN_BATCH);
-  const batch = batches[batchIndex];
-  if (!batch || chapters.length === 0) {
-    return { assigned: 0, recycled: 0, batches: batches.length, discarded: [], adjusted: [] };
-  }
-
-  // ⚠️ Les ressemblances sont calculées sur l'atelier ENTIER, pas sur le lot :
-  // deux notions proches peuvent tomber dans deux lots différents, et le lot qui
-  // porte la candidate doit voir la paire. Ne sont soumises au jugement que les
-  // notions **créées par cet import** — deux anciennes qui se ressemblent sont
-  // une décision déjà prise, pas notre affaire.
-  const fresh = batch.filter((n) => n.importId === importId);
-  const freshIds = new Set(fresh.map((n) => n.id));
-  const others = all.filter((n) => !freshIds.has(n.id));
-  const pairs = flagSimilar(fresh, others, (n) => n.title, (n) => n.title);
-  const similar = pairs.map((f) => ({
-    notionId: f.candidate.id,
-    other: f.other.title,
-    proximity: f.proximity,
-  }));
-
-  // « Actuellement dans » ne nomme que des chapitres que le modèle a sous les
-  // yeux. Une notion logée dans un chapitre écarté verrait sinon citer une
-  // référence absente de sa liste — au mieux du bruit, au pire une invitation à
-  // la recopier et à ranger dans une boîte mise de côté.
-  const visibleIds = new Set(chapters.map((c) => c.id));
-  const meta: StepMeta = { importId, workshopId, step: 'assign', batch: batchIndex, provider };
-  const call = await modelCall(meta, () => provider.documentToPlan([], EMPTY, {
-    pass: 'assign',
-    notions: batch.map((n) => ({
-      id: n.id,
-      title: n.title,
-      sourceDocument: n.sourceDocument,
-      page: n.page,
-      currentChapterId: n.chapterId && visibleIds.has(n.chapterId) ? n.chapterId : null,
-    })),
-    chapters,
-    similar,
-  }));
-  const result = call.result;
-  await addImportUsage(importId, result.usage);
-
-  // ⚠️ Les références de chapitre acceptables sont les VISIBLES, pas toutes
-  // celles de l'atelier. `loadExistingRefs` rend aussi les chapitres cachés :
-  // un modèle qui en nommerait un — il ne les a pas vus, mais rien ne
-  // l'empêche de recopier un identifiant croisé ailleurs — y rangerait des
-  // notions, qui disparaîtraient du programme sans que personne ne l'ait voulu.
-  const plan = parsePlanLogged('rangement', result.plan, {
-    chapterIds: chapters.map((c) => c.id),
-    notionIds: all.map((n) => n.id),
-  }, result.truncated);
-
-  // Les chapitres sont déjà en base : leurs références SONT leurs identifiants,
-  // il n'y a rien à traduire. En revanche on passe l'état AVANT : une notion
-  // reconduite dans son propre chapitre n'est pas un déplacement, et ne doit ni
-  // être réécrite ni apparaître comme un changement.
-  const before = new Map(all.map((n) => [n.id, n.chapterId]));
-
-  // ─── « Aucun chapitre » ne veut pas dire la même chose pour tout le monde ──
-  //
-  // Décision du 25/08/2026. Le modèle n'a qu'une façon de dire « nulle part » :
-  // un chapitre vide. Mais cette réponse recouvre deux situations qui n'ont rien
-  // à voir, et c'est NOUS qui les distinguons — jamais lui :
-  //
-  //   • une REDITE — on lui a soumis la paire, il a tranché en faveur de l'autre.
-  //     Elle sort du programme, sans chapitre. Il le faut : c'est le seul état
-  //     d'où le bouton « restaurer » ne peut pas la ramener par surprise.
-  //   • tout le reste — il n'a rien trouvé de mieux. Elle RESTE où elle était.
-  //     Une notion neuve n'était nulle part, elle n'y bouge pas ; une ancienne
-  //     garde son chapitre, qui sera écarté avec elle s'il ne reste que ça.
-  //
-  // ⚠️ La distinction ne décide plus de ce qui SURVIT (03/09/2026), seulement de
-  // ce qu'on écrit maintenant : le ménage de fin efface toute notion née de cet
-  // import et qu'il n'a pas rangée, redite ou oubli. Elle continue en revanche
-  // de commander le sort des ANCIENNES — une redite perd son chapitre et sort du
-  // programme, un oubli garde le sien.
-  //
-  // Ce que ça évite : offrir les chapitres écartés au modèle comme troisième
-  // choix. Ce serait la réponse confortable pour tout ce qu'il ne veut pas
-  // trancher, et le hors-programme grossirait tout seul sous une étiquette qui a
-  // l'air propre. Il ne voit toujours que les chapitres visibles.
-  //
-  // Les redites sont connues sans rien lui redemander : ce sont exactement les
-  // notions dont on lui a soumis la ressemblance quelques lignes plus haut.
-  const redites = new Set(pairs.flatMap((p) => [p.candidate.id, p.other.id]));
-  // Le partage lui-même vit dans `passInput` : il décide d'écritures en base,
-  // donc il se teste sans base (`setAside` borne la seule suppression du
-  // système, une erreur ici efface du travail saisi à la main).
-  const { setAside, stranded, effective } = splitUnplaced(plan.assignments, redites, before);
-
-  // Le garde est POSÉ ICI et non dans `applyAssignments`, qui ne reçoit pas de
-  // lot : elle déplace des notions existantes, elle n'en étiquette aucune. Un
-  // rangement arrivé après une annulation serait pourtant le pire des
-  // retardataires — il modifie des lignes que l'annulation ne peut plus retirer,
-  // et le seul fait de les toucher rend l'import non annulable.
-  await assertImportOpen(importId);
-  const movedIds = await applyAssignments(workshopId, effective, new Map(), before);
-  await recordProgress(importId, { movedNotions: movedIds, strandedNotions: stranded });
-
-  // ⚠️ **Soumis vs répondu — la seule façon de distinguer un oubli d'un refus.**
-  // La consigne dit « réponds pour CHAQUE notion » ; quand une notion ressort
-  // pourtant sans chapitre, rien ne permet de savoir si le modèle l'a jugée sans
-  // place ou s'il l'a simplement sautée. La différence compte : la première est
-  // une décision, la seconde une panne silencieuse qui se répète à chaque
-  // génération (constaté le 29/08/2026 sur une notion restée « sans chapitre »
-  // deux imports d'affilée).
-  const answered = new Set(plan.assignments.map((a) => a.notionRef));
-  const omitted = batch.filter((n) => !answered.has(n.id));
-  // Le journal retient l'écart entre ce qu'on a soumis et ce qui est revenu :
-  // c'est ce qui distingue, sur la durée, un modèle qui juge d'un modèle qui
-  // saute des lignes.
-  await stepDone(meta, call, {
-    soumises: batch.length,
-    repondues: answered.size,
-    omises: omitted.length,
-    deplacees: movedIds.length,
-    sansPlace: setAside.length,
-    laisseesSurPlace: stranded.length,
-    ecartes: plan.discarded.length,
-    corriges: plan.adjusted.length,
-  });
-  console.info('[ingest] rangement', {
-    lot: batchIndex,
-    soumises: batch.length,
-    repondues: answered.size,
-    omisesParLeModele: omitted.length,
-    // Les oubliées qui n'ont AUCUN chapitre sont les seules qui se voient : les
-    // autres restent simplement là où elles étaient.
-    omisesEtSansChapitre: omitted.filter((n) => !n.chapterId).length,
-    deplacees: movedIds.length,
-    sansPlaceSelonLeModele: setAside.length,
-    laisseesSurPlace: stranded.length,
-  });
-
-  // ─── Récupérer les questions en sommeil ───────────────────────────────────
-  //
-  // Quand le modèle tranche une ressemblance en faveur de la NOUVELLE notion,
-  // l'ancienne sort du programme — et ses questions avec elle. Elles dorment :
-  // elles existent encore, mais plus rien ne les tire. Or elles portent
-  // exactement le fait que la nouvelle notion énonce.
-  //
-  // On les rattache donc à celle qui reste, AVANT que la passe questions ne se
-  // mette à rédiger. Récupérer coûte une écriture ; faire réécrire coûte un
-  // appel au modèle et produit un doublon de plus.
-  //
-  // ⚠️ La paire est connue sans rien redemander au modèle : c'est celle qu'on
-  // lui a soumise. Sa décision se lit dans l'état final des deux notions —
-  // celle qui a un chapitre a gagné.
-  const touched = [...new Set(pairs.flatMap((f) => [f.candidate.id, f.other.id]))];
-  const settled = touched.length > 0 ? await loadNotionsToArrange(workshopId) : [];
-  const chapterOf = new Map(settled.map((n) => [n.id, n.chapterId]));
-
-  let recycled = 0;
-  for (const pair of pairs) {
-    const winner = chapterOf.get(pair.candidate.id);
-    const loser = chapterOf.get(pair.other.id);
-    // La nouvelle est rangée, l'ancienne ne l'est plus : les questions de
-    // l'ancienne suivent. L'inverse (l'ancienne garde sa place) n'appelle rien —
-    // ses questions n'ont jamais cessé de servir.
-    if (winner && loser === null) {
-      recycled += await reattachQuestions(pair.other.id, pair.candidate.id);
-    }
-  }
-
-  return {
-    assigned: movedIds.length,
-    recycled,
-    batches: batches.length,
-    discarded: plan.discarded,
-    adjusted: plan.adjusted,
-  };
-}
 
 export type FinishResult = {
   hidden: string[];
@@ -2182,114 +1947,6 @@ export async function finishIngestion(
     console.warn('[ingest] menage de fin incomplet :', detail);
     return { hidden: [], removedChapters: 0, removedNotions: 0, adjusted };
   }
-}
-
-/** Passe 1, pour UN document. Les notions naissent **sans chapitre** : à ce
- *  stade il n'en existe aucun, et c'est la passe suivante qui les range.
- *
- *  Le document est l'unité de travail parce qu'elle ne demande aucun jugement au
- *  modèle, qu'elle est stable d'un import à l'autre, et qu'elle parallélise sans
- *  amorçage — il n'y a plus de cache à amorcer, chaque appel ne portant que son
- *  propre document.
- *
- *  ⚠️ Limite connue et acceptée : un document unique et énorme retombe sur un
- *  seul appel. À traiter le jour où le cas se présente, pas avant. */
-export async function ingestDocumentNotions(
-  workshopId: string,
-  actorId: string,
-  importId: string,
-  documentIndex: number,
-  options: { provider?: PlanProvider } = {},
-): Promise<NotionPassResult> {
-  // Ni `corpusTokens` ni `oversizeModels` ici, et c'est délibéré : cet appel ne
-  // porte qu'UN document, pas le corpus. Hériter du refus mesuré sur l'ensemble
-  // ferait basculer sur un modèle plus cher une charge qui tient largement dans
-  // la fenêtre du modèle économique. Un document réellement trop gros sera
-  // refusé pour ce qu'il est, à son propre appel.
-  const userHint = await userHintOf(importId);
-  const provider = options.provider ?? createClaudeProvider({ userHint });
-
-  const prepared = await preparedOf(importId);
-  const document = prepared[documentIndex];
-  if (!document) {
-    return { written: 0, discarded: [], adjusted: [], documents: prepared.length };
-  }
-
-  // TOUTES les notions de l'atelier, pas celles d'un chapitre : c'est le
-  // mécanisme anti-doublon, et c'est le point critique du dispositif. Un modèle
-  // qui recrée sous d'autres mots ce qui existe déjà fait gonfler l'atelier à
-  // chaque import.
-  const existing = await loadAllNotions(workshopId);
-  const meta: StepMeta = { importId, workshopId, step: 'notions', batch: documentIndex, provider };
-  const call = await modelCall(meta, () => provider.documentToPlan(prepared, existing, {
-    pass: 'notions',
-    document: { index: documentIndex, fileName: document.fileName },
-  }));
-  const result = call.result;
-  await addImportUsage(importId, result.usage);
-
-  const refs = await loadExistingRefs(workshopId);
-  const plan = parsePlanLogged('notions', result.plan, refs, result.truncated);
-
-  // ⚠️ **On écrit TOUT ce que le modèle rend, y compris les redites** — décision
-  // du 24/08/2026. La version précédente écartait ici les notions trop proches
-  // d'une existante : c'était le seul endroit du dispositif où du contenu
-  // disparaissait sans que personne n'ait jugé, et ça obligeait à régler un
-  // seuil au millimètre puisqu'un faux positif y coûtait du contenu réel.
-  //
-  // Le doute est désormais reporté sur la passe RANGEMENT, qui le soumet au
-  // modèle : lui seul sait dire si deux phrases proches portent le même fait ou
-  // un fait de plus. Le perdant n'est pas détruit, il reste sans chapitre — et
-  // s'il vient de cet import, le ménage de fin le ramassera.
-  //
-  // ─── Le plafond de l'atelier ──────────────────────────────────────────────
-  //
-  // Limite PHYSIQUE (25/08/2026) : c'est le nombre de notions qui commande tout
-  // le volume en aval — douze questions de parcours chacune —, donc c'est là
-  // qu'une boucle emballée se paie. Ce qui dépasse est écarté et DIT : une
-  // notion qui disparaîtrait en silence passerait pour une notion que le modèle
-  // n'a pas su lire.
-  //
-  // Les appels sont parallèles (un par document) et lisent donc chacun un
-  // compte qui peut vieillir d'une fraction de seconde : le plafond peut être
-  // franchi de quelques unités. C'est un garde-fou, pas un invariant — le
-  // dépassement possible est de l'ordre du lot, jamais de l'emballement.
-  const room = MAX_NOTIONS_PER_WORKSHOP - (await countNotions(workshopId));
-  const admitted = room > 0 ? plan.notions.slice(0, room) : [];
-  for (const refused of plan.notions.slice(admitted.length)) {
-    plan.discarded.push({
-      kind: 'notion',
-      ref: refused.ref,
-      reason: `l'atelier a atteint sa limite de ${MAX_NOTIONS_PER_WORKSHOP} notions`,
-    });
-  }
-
-  // `new Map()` : aucun chapitre à résoudre, et le schéma n'en propose plus.
-  const created = await insertNotions(
-    workshopId,
-    actorId,
-    importId,
-    // La provenance est posée ICI et non par le modèle : c'est l'appelant qui
-    // sait quel document il traite, lui ne fait que rendre la page.
-    // L'IDENTIFIANT, pas le nom : un « cours.pdf » remis à jour porte le même
-    // nom et n'est plus le même document. Le nom est relu à l'affichage.
-    admitted.map((n) => ({ ...n, sourceDocument: document.fileId })),
-    new Map(),
-  );
-
-  await stepDone(meta, call, {
-    ecrites: created.size,
-    proposees: plan.notions.length,
-    ecartes: plan.discarded.length,
-    corriges: plan.adjusted.length,
-  });
-
-  return {
-    written: created.size,
-    discarded: plan.discarded,
-    adjusted: plan.adjusted,
-    documents: prepared.length,
-  };
 }
 
 export type ChapterNotionsResult = ChapterPassResult & {
