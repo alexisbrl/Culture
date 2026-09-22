@@ -100,6 +100,7 @@ import {
 } from './demand';
 import { BUSY_ERROR, assertImportOpen, closeImport, liveImportOf } from './lock';
 import { parsePlan, type PlanIssue } from './planSchema';
+import { guardDrops } from './verdicts';
 import { releaseDocuments } from './release';
 import {
   EXAM_GROUP_SIZE,
@@ -1359,16 +1360,15 @@ export async function ingestChapters(
   // remplacer intégralement le cours d'un atelier — existe, mais il se fait en
   // deux fois, et il vaut mieux le demander deux fois que vider un programme
   // sur un malentendu. On n'applique rien, et on le DIT.
-  const wipesEverything =
-    chaptersOnly.chapters.length > 0 && outOfProgram.length >= chaptersOnly.chapters.length;
-  if (wipesEverything) {
+  const guard = guardDrops(chaptersOnly.chapters.map((c) => c.id), outOfProgram);
+  if (guard.blocked) {
     plan.adjusted.push({
       kind: 'chapter',
       reason: `l'IA proposait d'écarter les ${outOfProgram.length} chapitres de l'atelier — rien n'a été écarté, un programme ne se vide pas d'un seul import`,
     });
   }
 
-  const discardedChapters = wipesEverything ? [] : await hideChapters(workshopId, outOfProgram);
+  const discardedChapters = await hideChapters(workshopId, guard.dropped);
   for (const id of discardedChapters) {
     const reason = plan.chapterOrder.find((c) => c.ref === id)?.reason?.trim();
     plan.adjusted.push({

@@ -4,6 +4,8 @@ import {
   CANCEL_THRESHOLD,
   RELAUNCH_THRESHOLD,
   classifyNotions,
+  finalFates,
+  guardDrops,
   mergeRelaunch,
   recheckList,
   thresholdDecision,
@@ -187,5 +189,134 @@ describe('recheckList', () => {
     ];
     const r = classifyNotions(notions, [{ notionId: 'x', verdict: 'check' }], layout);
     expect(recheckList(r).map((n) => n.notionId).sort()).toEqual(['x', 'y', 'z']);
+  });
+});
+
+describe('guardDrops — jamais tous', () => {
+  it('écarter tous les chapitres visibles : rien n’est appliqué', () => {
+    expect(guardDrops(['a', 'b'], ['a', 'b'])).toEqual({ dropped: [], blocked: true });
+    expect(guardDrops(['a', 'b'], ['b', 'a', 'a'])).toEqual({ dropped: [], blocked: true });
+  });
+
+  it('en écarter une partie : appliqué', () => {
+    expect(guardDrops(['a', 'b', 'c'], ['a', 'c'])).toEqual({ dropped: ['a', 'c'], blocked: false });
+  });
+
+  it('une référence inconnue ne compte pas', () => {
+    expect(guardDrops(['a', 'b'], ['a', 'zzz'])).toEqual({ dropped: ['a'], blocked: false });
+  });
+
+  it('atelier sans chapitre : rien à garder', () => {
+    expect(guardDrops([], [])).toEqual({ dropped: [], blocked: false });
+  });
+});
+
+describe('finalFates', () => {
+  const fateLayout: ChapterLayout = { visible: new Set(['c1', 'c2', 'c3']), dropped: new Set(['old']) };
+  const programOrder = ['c1', 'c2', 'c3'];
+
+  function run(
+    notions: ExistingNotion[],
+    standingsList: [string, NotionStanding][],
+    claims: [string, string[]][] = [],
+  ) {
+    return finalFates({
+      notions,
+      standings: new Map(standingsList),
+      layout: fateLayout,
+      programOrder,
+      claims: new Map(claims),
+    });
+  }
+
+  it('rangée à l’étape chapitres : dans son chapitre', () => {
+    const { fates } = run([{ id: 'a', chapterId: 'c1' }], [['a', { kind: 'placed', chapterRef: 'c2' }]]);
+    expect(fates).toEqual([{ notionId: 'a', chapterId: 'c2', moved: true, reason: 'placed' }]);
+  });
+
+  it('réclamée par un seul chapitre : elle y va', () => {
+    const { fates, arbitrations } = run(
+      [{ id: 'a', chapterId: 'old' }],
+      [['a', { kind: 'out' }]],
+      [['a', ['c3']]],
+    );
+    expect(fates[0]).toMatchObject({ chapterId: 'c3', moved: true, reason: 'claimed' });
+    expect(arbitrations).toEqual([]);
+  });
+
+  it('départage : son chapitre actuel s’il est parmi les demandeurs', () => {
+    const { fates, arbitrations } = run(
+      [{ id: 'a', chapterId: 'c3' }],
+      [['a', { kind: 'forgotten' }]],
+      [['a', ['c1', 'c3']]],
+    );
+    expect(fates[0]).toMatchObject({ chapterId: 'c3', moved: false, reason: 'arbitrated' });
+    expect(arbitrations).toEqual([{ notionId: 'a', claimants: ['c1', 'c3'], chosen: 'c3', rule: 'current' }]);
+  });
+
+  it('départage : sinon le premier dans l’ordre du programme, quel que soit l’ordre d’arrivée', () => {
+    const a = run([{ id: 'a', chapterId: 'old' }], [['a', { kind: 'check' }]], [['a', ['c3', 'c2']]]);
+    const b = run([{ id: 'a', chapterId: 'old' }], [['a', { kind: 'check' }]], [['a', ['c2', 'c3']]]);
+    expect(a.fates[0].chapterId).toBe('c2');
+    expect(b).toEqual(a);
+    expect(a.arbitrations[0].rule).toBe('firstInProgram');
+  });
+
+  it('réclamée seulement par des chapitres irrecevables : ne bouge pas, et c’est dit', () => {
+    const { fates, arbitrations } = run(
+      [{ id: 'a', chapterId: 'c1' }],
+      [['a', { kind: 'check' }]],
+      [['a', ['old', 'zzz']]],
+    );
+    expect(fates[0]).toMatchObject({ chapterId: 'c1', moved: false, reason: 'stays' });
+    expect(arbitrations[0]).toMatchObject({ chosen: null, rule: 'none' });
+  });
+
+  it('non réclamée, oubliée ou à vérifier : ne bouge pas', () => {
+    const { fates } = run(
+      [{ id: 'a', chapterId: 'c1' }, { id: 'b', chapterId: 'old' }],
+      [['a', { kind: 'forgotten' }], ['b', { kind: 'check' }]],
+    );
+    expect(fates.map((f) => [f.chapterId, f.moved])).toEqual([['c1', false], ['old', false]]);
+  });
+
+  it('non réclamée, hors programme : reste dans un chapitre écarté, sans chapitre sinon', () => {
+    const { fates } = run(
+      [{ id: 'a', chapterId: 'old' }, { id: 'b', chapterId: 'c1' }, { id: 'c', chapterId: null }],
+      [['a', { kind: 'out' }], ['b', { kind: 'out' }], ['c', { kind: 'out' }]],
+    );
+    expect(fates[0]).toMatchObject({ chapterId: 'old', moved: false });
+    expect(fates[1]).toMatchObject({ chapterId: null, moved: true, reason: 'unplaced' });
+    expect(fates[2]).toMatchObject({ chapterId: null, moved: false });
+  });
+
+  it('aucun chemin n’efface une notion existante', () => {
+    // Toutes les combinaisons de cas, de chapitre actuel et de réclamations :
+    // chaque notion en entrée ressort une fois, avec un chapitre ou sans, jamais
+    // autre chose.
+    const kinds: NotionStanding[] = [
+      { kind: 'placed', chapterRef: 'c2' },
+      { kind: 'out' },
+      { kind: 'check' },
+      { kind: 'forgotten' },
+    ];
+    const currents = ['c1', 'old', null, 'zzz'];
+    const claimSets = [[], ['c1'], ['c2', 'c3'], ['old'], ['zzz', 'c3']];
+    const notions: ExistingNotion[] = [];
+    const standingsList: [string, NotionStanding][] = [];
+    const claims: [string, string[]][] = [];
+    let i = 0;
+    for (const kind of kinds) for (const current of currents) for (const set of claimSets) {
+      const id = `n${i++}`;
+      notions.push({ id, chapterId: current });
+      standingsList.push([id, kind]);
+      claims.push([id, set]);
+    }
+    const { fates } = run(notions, standingsList, claims);
+    expect(fates.map((f) => f.notionId)).toEqual(notions.map((n) => n.id));
+    for (const f of fates) {
+      expect(Object.keys(f).sort()).toEqual(['chapterId', 'moved', 'notionId', 'reason']);
+      expect(f.chapterId === null || typeof f.chapterId === 'string').toBe(true);
+    }
   });
 });

@@ -145,3 +145,122 @@ export function recheckList(standings: ReadonlyMap<string, NotionStanding>): Rec
   }
   return out;
 }
+
+// ─── Le garde-fou « jamais tous » ────────────────────────────────────────────
+
+/**
+ * Les chapitres réellement écartés. Écarter CHAQUE chapitre encore au programme
+ * en un seul import n'est presque jamais une décision — une consigne mal lue,
+ * un document déposé par erreur (§7.6). On n'applique alors rien, et
+ * `blocked` permet de le dire au compte-rendu. Le cas légitime se fait en deux
+ * fois. Une référence qui n'est pas un chapitre visible existant est ignorée.
+ */
+export function guardDrops(
+  visibleExistingIds: readonly string[],
+  droppedRefs: readonly string[],
+): { dropped: string[]; blocked: boolean } {
+  const visible = new Set(visibleExistingIds);
+  const dropped = [...new Set(droppedRefs)].filter((ref) => visible.has(ref));
+  if (visible.size > 0 && dropped.length >= visible.size) return { dropped: [], blocked: true };
+  return { dropped, blocked: false };
+}
+
+// ─── Le sort final, après l'étape notions ────────────────────────────────────
+
+export interface Arbitration {
+  notionId: string;
+  /** Les chapitres qui la réclamaient, dans l'ordre du programme. */
+  claimants: string[];
+  /** Le chapitre retenu, `null` si elle ne bouge pas. */
+  chosen: string | null;
+  rule: 'current' | 'firstInProgram' | 'none';
+}
+
+/** Où une notion existante finit. Il n'existe pas d'autre sort : aucune de ces
+ *  règles ne sait effacer une notion. `chapterId = null` : sans chapitre, hors
+ *  programme mais intacte — un gestionnaire peut la replacer. */
+export interface NotionFate {
+  notionId: string;
+  chapterId: string | null;
+  /** Vrai si le chapitre change. */
+  moved: boolean;
+  reason: 'placed' | 'claimed' | 'arbitrated' | 'stays' | 'unplaced';
+}
+
+export interface FateInput {
+  notions: readonly ExistingNotion[];
+  standings: ReadonlyMap<string, NotionStanding>;
+  layout: ChapterLayout;
+  /** Les chapitres visibles, dans l'ordre du programme. */
+  programOrder: readonly string[];
+  /** Pour chaque notion de la seconde vérification, les chapitres qui l'ont
+   *  réclamée à l'étape notions (références déjà revalidées). */
+  claims: ReadonlyMap<string, readonly string[]>;
+}
+
+/**
+ * Le sort de chaque notion existante, une fois toutes les étapes notions finies.
+ *
+ * - Rangée à l'étape chapitres : dans son chapitre.
+ * - Réclamée par un seul chapitre visible : elle y va.
+ * - Réclamée par plusieurs : son chapitre actuel s'il en est, sinon le premier
+ *   dans l'ordre du programme — indépendant de l'ordre d'arrivée des réponses.
+ *   Chaque départage est rendu pour le compte-rendu.
+ * - Non réclamée : oubliée ou à vérifier, elle ne bouge pas ; hors programme,
+ *   elle reste dans un chapitre écarté et passe sans chapitre si le sien est
+ *   resté visible.
+ */
+export function finalFates(input: FateInput): { fates: NotionFate[]; arbitrations: Arbitration[] } {
+  const { notions, standings, layout, programOrder, claims } = input;
+  const rank = new Map(programOrder.map((id, i) => [id, i]));
+  const fates: NotionFate[] = [];
+  const arbitrations: Arbitration[] = [];
+
+  const fate = (n: ExistingNotion, chapterId: string | null, reason: NotionFate['reason']): NotionFate => ({
+    notionId: n.id,
+    chapterId,
+    moved: chapterId !== n.chapterId,
+    reason,
+  });
+
+  for (const notion of notions) {
+    const standing = standings.get(notion.id) ?? { kind: 'forgotten' as const };
+    if (standing.kind === 'placed') {
+      fates.push(fate(notion, standing.chapterRef, 'placed'));
+      continue;
+    }
+
+    const claimants = [...new Set(claims.get(notion.id) ?? [])]
+      .filter((c) => layout.visible.has(c) && rank.has(c))
+      .sort((a, b) => (rank.get(a) as number) - (rank.get(b) as number));
+
+    if (claimants.length === 1) {
+      fates.push(fate(notion, claimants[0], 'claimed'));
+      continue;
+    }
+    if (claimants.length > 1) {
+      const current = notion.chapterId && claimants.includes(notion.chapterId) ? notion.chapterId : null;
+      const chosen = current ?? claimants[0];
+      arbitrations.push({
+        notionId: notion.id,
+        claimants,
+        chosen,
+        rule: current ? 'current' : 'firstInProgram',
+      });
+      fates.push(fate(notion, chosen, 'arbitrated'));
+      continue;
+    }
+    if ((claims.get(notion.id) ?? []).length > 0) {
+      // Réclamée, mais par aucun chapitre recevable : elle ne bouge pas.
+      arbitrations.push({ notionId: notion.id, claimants: [], chosen: null, rule: 'none' });
+    }
+
+    if (standing.kind === 'out' && notion.chapterId && layout.visible.has(notion.chapterId)) {
+      fates.push(fate(notion, null, 'unplaced'));
+    } else {
+      fates.push(fate(notion, notion.chapterId, 'stays'));
+    }
+  }
+
+  return { fates, arbitrations };
+}
