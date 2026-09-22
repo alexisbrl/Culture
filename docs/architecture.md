@@ -698,9 +698,15 @@ mentir, aucun rejet.
 
 **Le contexte est tout le chapitre, jamais les seules notions visées.** Une recharge ou un
 démarrage ne visent souvent qu'une partie du chapitre — 24 questions de démarrage sur un
-chapitre de 150 notions n'en visent que 24. Ne montrer que celles-là laisserait le modèle
-écrire sur la notion voisine sans le savoir. Les intitulés de tout le chapitre partent donc
-en contexte, plafonnés à 150 : au-delà, les notions visées d'abord.
+chapitre de 150 notions n'en visent que 24. Les intitulés de tout le chapitre partent donc
+en contexte, plafonnés à 150 : au-delà, les notions visées d'abord. Deux raisons :
+
+1. **Ils tiennent lieu de cours.** Cette étape ne reçoit aucun document : sans les notions
+   voisines, le modèle n'a rien pour situer ses questions. Et une question peut mobiliser
+   plusieurs notions, même au plus bas niveau — encore faut-il qu'il sache lesquelles
+   existent pour les déclarer honnêtement.
+2. **Ils évitent la redite involontaire** : ne montrer que les notions visées laisserait le
+   modèle écrire sur la notion voisine sans le savoir.
 
 **Le bloc des énoncés existants est plafonné** à 300 par appel. Le volume d'un appel ne
 dépend pas du total de la banque : un appel ne voit que les questions des notions qu'il
