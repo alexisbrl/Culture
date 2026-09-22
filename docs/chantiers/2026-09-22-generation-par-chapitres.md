@@ -93,7 +93,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
   - Fichiers : `src/lib/ingest/wireSchema.ts`, `src/lib/ingest/planSchema.ts`, `src/lib/ingest/prompt.ts`, tests associés
   - Dépend de : T3
 
-- [ ] **T6 — Étape 1 branchée : texte seul, bornes, verdicts, seuils**
+- [x] **T6 — Étape 1 branchée : texte seul, bornes, verdicts, seuils**
   - `ingestChapters` (`src/lib/ingest/run.ts`) : lit le texte de chaque PDF avec `pdf.ts`, envoie le texte seul (plus un mini-PDF des seules pages pauvres en texte, selon `slicing.ts`), avec tous les chapitres et **toutes les notions existantes** ; applique création de chapitres, rangs, ordre tout-ou-rien et garde « jamais tous » ; enregistre bornes et verdicts dans le lot d'import (écriture unique, pas de concurrence à cette étape) ; rend à l'écran la décision de seuil. Nouvelle action de relance (`src/app/actions/aiIngest.ts`, wrapper fin avec `requireManager`) qui ne redemande que les oubliées ; à 25 % après relance, la mise à jour est annulée sans rien écrire et l'écran reçoit une cause pour prévenir l'utilisateur. La vérification de l'échelle du découpage (`withChapterRetry`, trop fin et trop grossier) est conservée.
   - Critère d'acceptation : le journal enregistre l'étape et ses jetons ; aucune image de page à texte suffisant ne part (vérifiable par un test unitaire de la fonction qui compose l'entrée de l'étape, avec un fournisseur factice) ; lint, tests et build passent.
   - Fichiers : `src/lib/ingest/run.ts`, `src/lib/ingest/providers/claude.ts`, `src/lib/ingest/passInput.ts`, `src/app/actions/aiIngest.ts`, tests
@@ -160,6 +160,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 - 2026-09-22 — T3 — 38ea356 — `verdicts.ts` : `classifyNotions`, `mergeRelaunch`, `thresholdDecision` (`MIN_FORGOTTEN_TO_ACT = 2`), `recheckList`.
 - 2026-09-22 — T4 — d5315fe — `verdicts.ts` : `guardDrops` (garde « jamais tous », déjà branchée dans `ingestChapters`) et `finalFates` (départage + sort des non réclamées, rend aussi les arbitrages).
 - 2026-09-22 — T5 — da476d2 — bornes dans `chapterOrder[].spans` (document par NOM, pages d'après des marqueurs « [page N] » que T6 doit insérer dans le texte), `notionVerdicts` ; `ParsedPlan.chapterBounds`/`notionVerdicts` ; `chaptersRelaunchInstruction` + `wireChaptersRelaunchOutput` ; le bloc « existant » de l'étape chapitres porte désormais toutes les notions. Transitoire : l'ancien rangement ne reçoit plus de pages de chapitre jusqu'à T12.
+- 2026-09-22 — T6 — 7cebd45 — `chaptersInput.ts` (texte + mini-PDF des pages pauvres, remis via `provider.prepare`, rendus en fin d'appel) ; `ingestChapters` n'écrit rien sur `relaunch` (réponse gardée dans `scope.stage1Pending`), `ingestChaptersRelaunch` + action `relaunchWorkshopChapters` ; à l'écriture, `scope.stage1` = chapitres visibles en ordre avec bornes résolues en `documentId`, `standings`, `before`, `pageCounts`. Les notions rangées franchement sont déplacées dès l'étape 1. Étape journal `chapters-relaunch`.
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
@@ -167,6 +168,9 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 - **Seuil de page pauvre en texte : 200 caractères hors espaces** (`MIN_PAGE_TEXT_CHARS`), soit deux ou trois lignes — une page de titre part donc aussi en image, ce qui est voulu (§7.2).
 - **Verdict « chapitre » vers un chapitre inconnu** : ignoré, la notion compte donc comme oubliée (et pèse dans les seuils). Même règle que partout ailleurs — une référence inconnue ne décide rien.
 - **Silence sur une notion d'un chapitre écarté** : vaut « hors programme », pas « oubliée » (elle y est laissée, §7.6) — elle ne pèse donc pas dans les seuils, et repasse quand même en seconde vérification.
+- **« Rien n'est écrit » avant la décision de seuil** : l'étape 1 n'écrit chapitres, rangs et déplacements qu'une fois la décision `continue` acquise (au premier passage ou après relance). Sinon l'annulation à 25 % aurait laissé des chapitres créés.
+- **Notions d'un chapitre déjà caché avant la génération** : ni montrées à l'étape 1, ni jugées — elles sont déjà hors programme, et §7.6 dit que l'étape ne voit que les chapitres visibles.
+- **Notions rangées franchement à l'étape 1** : déplacées tout de suite (et non à la finalisation), pour que l'étape notions et les questions de leur chapitre les voient.
 
 ## Tâches bloquées
 <!-- Tâches abandonnées après 2 échecs, avec le motif et ce qui a été tenté. -->
