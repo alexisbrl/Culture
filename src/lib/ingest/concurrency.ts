@@ -13,28 +13,35 @@
  *  il divise l'attente par ~4 tout en restant loin des seuils. */
 export const INGEST_CONCURRENCY = 4;
 
-/** Concurrence de la passe QUESTIONS, plus large — et ce n'est pas un réglage
- *  timide faute d'avoir osé.
+/** Concurrence de la passe QUESTIONS — **50 depuis le 22/09/2026** (12 avant).
  *
- *  Ces appels ne partagent rien : la passe ne porte aucun document, donc aucun
- *  cache de prompt à amorcer, et chaque lot écrit ses propres questions. Rien
- *  n'empêcherait, en théorie, de tous les lancer d'un coup. Trois plafonds réels
- *  s'y opposent, et aucun n'est le modèle :
+ *  Ces appels ne partagent rien : la passe ne porte aucun document, et chaque
+ *  appel écrit ses propres questions. 50 couvre les plus gros cas en une seule
+ *  vague (un atelier de seize chapitres à trois appels, un examen de 200
+ *  questions à six par appel). On garde un plafond pour une seule raison :
+ *  borner une boucle emballée, qui dépenserait seule.
  *
- *  1. **Le navigateur.** Chaque lot est une server action, donc une requête HTTP
- *     vers notre propre serveur. En HTTP/1.1 — ce qu'est `next dev` en local —
- *     un navigateur ouvre ~6 connexions par origine : au-delà, les appels font
- *     la queue **chez nous**, sans que rien ne le signale. En HTTP/2 (Vercel),
- *     la limite monte à ~100 flux.
- *  2. **Le quota du fournisseur**, en requêtes ET en tokens par minute. Un
- *     dépassement n'échoue pas franchement : le SDK réessaie tout seul (429 et
- *     5xx, deux fois, avec attente). Une rafale trop large se paie donc en
- *     attente invisible, pas en erreur — le pire des deux mondes pour diagnostiquer.
- *  3. **Les fonctions serveur.** Chaque appel occupe une invocation le temps de
- *     la réponse du modèle, soit des dizaines de secondes.
+ *  Les plafonds réels, vérifiés le 22/09/2026, sont tous loin au-dessus :
  *
- *  Douze tient sous les trois. Au-delà, on n'accélère plus : on empile. */
-export const QUESTIONS_CONCURRENCY = 12;
+ *  1. **Le navigateur.** Chaque appel est une server action, donc une requête
+ *     HTTP vers notre serveur. En ligne (HTTP/2), ~100 flux par origine. En
+ *     local (`next dev`, HTTP/1.1), ~6 connexions : au-delà, les appels y font la
+ *     queue **chez nous**, sans que rien ne le signale — c'est normal en
+ *     développement, pas en production.
+ *  2. **Le fournisseur.** DeepSeek : 2 500 requêtes simultanées **par compte**,
+ *     donc partagées entre tous les utilisateurs, relevables gratuitement sur
+ *     demande ; au-delà, une erreur 429. Anthropic plafonne en requêtes et en
+ *     tokens par minute selon le palier du compte.
+ *  3. **L'hébergeur.** Jusqu'à 30 000 exécutions simultanées sur l'offre
+ *     actuelle : un appel qui attend le modèle n'en bloque aucun autre.
+ *
+ *  ⚠️ La documentation de Next.js dit que le client « dispatche et attend les
+ *  server actions une par une ». Le journal de bord montre pourtant des appels
+ *  qui se chevauchent : le parallélisme fonctionne aujourd'hui. Si ce détail
+ *  d'implémentation change, les appels repasseront en série sans erreur — le
+ *  journal le montrerait (durées qui s'additionnent), et la réponse serait de
+ *  lancer la vague côté serveur. */
+export const QUESTIONS_CONCURRENCY = 50;
 
 /** `Promise.all` avec un plafond d'appels simultanés, **et l'ordre préservé**.
  *

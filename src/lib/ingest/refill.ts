@@ -128,7 +128,7 @@ export async function refillChapter(
     // vie de la fonction : une recharge de 60 en fait huit, soit quatre minutes
     // bout à bout contre une demi-minute en parallèle.
     const counts = await countParcoursCalls(workshopId, importId, [{ id: chapter.id, demand }]);
-    const calls = Array.from({ length: counts[chapter.id] ?? 0 }, (_, batchIndex) => batchIndex);
+    const calls = (counts[chapter.id] ?? []).map((_, batchIndex) => batchIndex);
     const results = await mapWithConcurrency(calls, QUESTIONS_CONCURRENCY, (batchIndex) =>
       ingestParcoursQuestions(workshopId, userId, importId, chapter, batchIndex, { demand }),
     );

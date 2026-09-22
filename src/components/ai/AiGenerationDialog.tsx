@@ -721,7 +721,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       );
       if (!plan.ok) return setPhase({ step: 'error', message: plan.error });
       const jobs = chapters.flatMap((chapter) =>
-        Array.from({ length: plan.counts[chapter.id] ?? 0 }, (_, batchIndex) => ({ chapter, batchIndex })),
+        (plan.calls[chapter.id] ?? []).map((asked, batchIndex) => ({ chapter, batchIndex, asked })),
       );
       let doneCalls = 0;
       const totalCalls = jobs.length;
@@ -736,19 +736,25 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         total: totalSteps,
       });
 
-      const runBatch = async (job: { chapter: (typeof chapters)[number]; batchIndex: number }) => {
+      // Ce que les appels en vol ont RÉSERVÉ sur le plafond de l'import.
+      let reserved = 0;
+
+      const runBatch = async (job: { chapter: (typeof chapters)[number]; batchIndex: number; asked: number }) => {
         if (stopped.current) return null;
         // ⚠️ **La part du plafond est calculée ici, pas côté serveur.** Le serveur
-        // ne voit qu'un appel à la fois : quatre appels concurrents liraient tous
+        // ne voit qu'un appel à la fois : des appels concurrents liraient tous
         // le même compteur de questions écrites et se croiraient chacun seuls,
         // donc écriraient chacun jusqu'au plafond entier. Le client, lui, sait
-        // combien il en a en vol — il répartit.
-        const remaining = MAX_QUESTIONS - tally.questions;
-        if (remaining <= 0) return null;
-        const share = Math.max(1, Math.floor(remaining / QUESTIONS_CONCURRENCY));
+        // ce qu'il a en vol : chaque appel RÉSERVE exactement ce qu'il demande sur
+        // ce qui reste, et le rend à son retour. Diviser le reste par le nombre
+        // d'appels possibles (l'ancienne règle) rognait les appels dès que la
+        // concurrence est passée à 50 (22/09/2026).
+        const share = Math.min(job.asked, MAX_QUESTIONS - tally.questions - reserved);
+        if (share <= 0) return null;
+        reserved += share;
         const result = await ingestParcoursQuestions(
           workshopId, importId, job.chapter, job.batchIndex, share, startBudgets.get(job.chapter.id),
-        );
+        ).finally(() => { reserved -= share; });
         doneCalls += 1;
         if (!result.ok) { error ??= result.error; showQuestions(); return null; }
         discarded.push(...result.discarded);

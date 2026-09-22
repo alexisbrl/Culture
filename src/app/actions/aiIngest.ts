@@ -295,19 +295,20 @@ export async function finishWorkshopIngestion(
   };
 }
 
-/** Le nombre d'appels de la passe 4a, chapitre par chapitre — **sans appeler
- *  le modèle**. Le client s'en sert pour lancer tous les appels en une seule
- *  vague (22/09/2026). `0` veut dire qu'il n'y a rien à écrire sur ce chapitre :
- *  aucune notion, ou un stock déjà au complet. */
+/** Les appels de la passe 4a, chapitre par chapitre — pour chacun, le nombre
+ *  de questions qu'il demande —, **sans appeler le modèle**. Le client s'en sert
+ *  pour lancer tous les appels en une seule vague et réserver à chacun sa part
+ *  du plafond (22/09/2026). Une liste vide veut dire qu'il n'y a rien à écrire
+ *  sur ce chapitre : aucune notion, ou un stock déjà au complet. */
 export async function countParcoursQuestionCalls(
   workshopId: string,
   importId: string,
   chapters: { id: string; startBudget?: number }[],
-): Promise<{ ok: true; counts: Record<string, number> } | { ok: false; error: string }> {
+): Promise<{ ok: true; calls: Record<string, number[]> } | { ok: false; error: string }> {
   if (!(await requireManager(workshopId))) return { ok: false, error: 'Droits insuffisants' };
 
   try {
-    return { ok: true, counts: await run.countParcoursCalls(workshopId, importId, chapters) };
+    return { ok: true, calls: await run.countParcoursCalls(workshopId, importId, chapters) };
   } catch (error) {
     return { ok: false, error: failed('plan des questions du parcours', error, { workshopId, importId }) };
   }

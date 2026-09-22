@@ -2073,20 +2073,21 @@ async function parcoursPlan(
   return { chapterNotions, calls };
 }
 
-/** Combien d'appels la passe parcours fera sur chaque chapitre, **sans appeler
- *  le modèle**. C'est ce qui permet au client de lancer tous les appels de tous
- *  les chapitres en une seule vague, au lieu d'attendre la réponse d'un premier
- *  appel par chapitre pour l'apprendre (22/09/2026). */
+/** Les appels que la passe parcours fera sur chaque chapitre — pour chacun, le
+ *  nombre de questions qu'il demande —, **sans appeler le modèle**. C'est ce qui
+ *  permet au client de lancer tous les appels de tous les chapitres en une
+ *  seule vague, et de réserver à chacun sa part exacte du plafond de l'import
+ *  (22/09/2026). Une liste vide = rien à écrire sur ce chapitre. */
 export async function countParcoursCalls(
   workshopId: string,
   importId: string,
   chapters: { id: string; startBudget?: number; demand?: QuestionDemand[] }[],
-): Promise<Record<string, number>> {
+): Promise<Record<string, number[]>> {
   const userHint = await userHintOf(importId);
   const plans = await Promise.all(
     chapters.map((c) => parcoursPlan(workshopId, importId, c.id, userHint, { startBudget: c.startBudget, demand: c.demand })),
   );
-  return Object.fromEntries(chapters.map((c, i) => [c.id, plans[i].calls.length]));
+  return Object.fromEntries(chapters.map((c, i) => [c.id, plans[i].calls.map((call) => call.asked)]));
 }
 
 /** Passe 3, pour UN APPEL de la demande d'un chapitre (voir `packDemand`). Ses notions lui sont
