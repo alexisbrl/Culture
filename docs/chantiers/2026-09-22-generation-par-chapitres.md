@@ -69,7 +69,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
   - Fichiers : `package.json`, `src/lib/ingest/pdf.ts`, `tests/unit/pdf.test.ts`
   - Dépend de : rien
 
-- [ ] **T2 — Règles de découpage des chapitres (§7.2, §7.3)**
+- [x] **T2 — Règles de découpage des chapitres (§7.2, §7.3)**
   - Module pur `src/lib/ingest/slicing.ts` : (a) à partir des bornes rendues par l'étape 1 (par chapitre : document + un ou plusieurs intervalles de pages) et du nombre de pages de chaque document, calculer les pages de chaque chapitre — chevauchement : les deux gardent la page ; page orpheline : rattachée au chapitre précédent dans l'ordre du document (au premier chapitre si elle précède tout) ; chapitre sans borne exploitable (absente, 0, inversée, hors document) : le document entier, avec un drapeau pour le compte-rendu ; (b) décider page par page « texte seul » ou « texte + image » selon une constante `MIN_PAGE_TEXT_CHARS`.
   - Critère d'acceptation : `tests/unit/slicing.test.ts` couvre chevauchement, trou, page avant le premier chapitre, chapitre éclaté en deux intervalles, bornes absentes/inversées/hors document, et le choix texte/image d'un document mi-saisi mi-scanné (la décision est bien par page). Lint, tests et build passent.
   - Fichiers : `src/lib/ingest/slicing.ts`, `tests/unit/slicing.test.ts`
@@ -156,9 +156,12 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 ## Journal
 <!-- Append-only. Une ligne par tâche terminée : date, tâche, commit, note. -->
 - 2026-09-22 — T1 — df07b7d — `pdf.ts` : `readPdfText` (via `extractText` d'unpdf sur une copie du tampon), `countPdfPages`, `extractPdfPages` (pages 1-based, hors bornes ignorées, `null` si rien).
+- 2026-09-22 — T2 — 4e5175d — `slicing.ts` : `sliceChapters` (bornes → pages par chapitre, `pages: null` = document entier) et `imagePages` (`MIN_PAGE_TEXT_CHARS = 200`, espaces exclus).
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
+- **Document que rien ne couvre** (aucune borne de l'étape 1 ne le désigne) : il part en entier dans CHAQUE chapitre, et c'est signalé au compte-rendu. Retenu parce que l'architecture dit « en cas de doute, élargir » et qu'une page perdue est le pire défaut ; plus cher, mais rare.
+- **Seuil de page pauvre en texte : 200 caractères hors espaces** (`MIN_PAGE_TEXT_CHARS`), soit deux ou trois lignes — une page de titre part donc aussi en image, ce qui est voulu (§7.2).
 
 ## Tâches bloquées
 <!-- Tâches abandonnées après 2 échecs, avec le motif et ce qui a été tenté. -->
