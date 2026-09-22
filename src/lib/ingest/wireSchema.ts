@@ -255,20 +255,20 @@ function groupSchemaFor<Q extends z.ZodTypeAny>(questionSchema: Q) {
 export const wireGroupSchema = groupSchemaFor(wireQuestionSchema);
 export const wireExamGroupSchema = groupSchemaFor(wireExamQuestionSchema);
 
+/** Un chapitre NOUVEAU : son nom seulement. Où il se trouve dans le cours se dit
+ *  dans `chapterOrder`, comme pour les chapitres existants — une seule forme de
+ *  bornes pour tous. */
 export const wireChapterSchema = z.object({
   ref: z.string().describe('Clé locale unique de ce chapitre dans ce plan.'),
   name: z.string().describe('Nom du chapitre, 120 caractères maximum.'),
-  sourceDocument: z
-    .string()
-    .describe("Nom du document où ce chapitre commence. Chaîne vide si tu ne peux pas le dire."),
-  pageStart: z
-    .number()
-    .int()
-    .describe('Première page approximative du chapitre dans ce document. 0 si tu ne peux pas le dire.'),
-  pageEnd: z
-    .number()
-    .int()
-    .describe('Dernière page approximative du chapitre. 0 si tu ne peux pas le dire.'),
+});
+
+/** Un intervalle de pages d'un document. C'est ce qui permet à l'étape suivante
+ *  de ne recevoir que les pages de son chapitre (docs/architecture.md §7.2). */
+export const wireChapterSpanSchema = z.object({
+  document: z.string().describe('Nom du document, recopié tel qu’il apparaît dans les en-têtes « Document ».'),
+  pageStart: z.number().int().describe('Première page du chapitre dans ce document, d’après les marqueurs « [page N] ».'),
+  pageEnd: z.number().int().describe('Dernière page du chapitre dans ce document (incluse).'),
 });
 
 /** ⚠️ Une notion naît SANS chapitre (feuille de route « notions d'abord », §3).
@@ -348,11 +348,33 @@ export const wireChapterRankSchema = z.object({
   reason: z
     .string()
     .describe("Uniquement pour un rang 0 : en quelques mots, pourquoi le cours ne le couvre plus. S'affiche à l'utilisateur. Chaîne vide sinon."),
+  spans: z
+    .array(wireChapterSpanSchema)
+    .describe('Où le chapitre se trouve dans le cours : un intervalle de pages, plusieurs si le chapitre est éclaté. Liste vide pour un rang 0.'),
+});
+
+/** Le verdict sur UNE notion existante (§7.6). Trois réponses, et le silence
+ *  n'en est pas une : une notion absente de la liste est tenue pour oubliée. */
+export const wireNotionVerdictSchema = z.object({
+  notion: z.string().describe("Identifiant de la notion existante, recopié tel quel."),
+  verdict: z
+    .enum(['chapter', 'out', 'check'])
+    .describe("« chapter » : elle va dans le chapitre donné. « out » : le cours ne la couvre plus. « check » : tu ne la retrouves pas dans le texte — elle vient peut-être d'une image."),
+  chapter: z
+    .string()
+    .describe("Pour « chapter » seulement : la référence d'un chapitre au programme, existant ou de cette réponse. Chaîne vide sinon."),
 });
 
 export const wireChaptersOutput = z.object({
   chapters: z.array(wireChapterSchema),
   chapterOrder: z.array(wireChapterRankSchema),
+  notionVerdicts: z.array(wireNotionVerdictSchema),
+});
+
+/** La relance de l'étape chapitres : les chapitres sont déjà écrits, on ne
+ *  redemande que les verdicts des notions oubliées. */
+export const wireChaptersRelaunchOutput = z.object({
+  notionVerdicts: z.array(wireNotionVerdictSchema),
 });
 export const wireAssignmentsOutput = z.object({ assignments: z.array(wireAssignmentSchema) });
 export const wireNotionsOutput = z.object({ notions: z.array(wireNotionSchema) });

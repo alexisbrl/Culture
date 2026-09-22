@@ -30,7 +30,7 @@ import * as imports from '@/lib/workshops/imports';
 // fois (§5.2).
 
 export type PlanIssue = {
-  kind: 'chapter' | 'notion' | 'assignment' | 'question';
+  kind: 'chapter' | 'notion' | 'assignment' | 'question' | 'verdict';
   ref?: string;
   reason: string;
 };

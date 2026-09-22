@@ -5,6 +5,7 @@ import {
   bloomDefinitions,
   bloomInstruction,
   chaptersInstruction,
+  chaptersRelaunchInstruction,
   DEFAULT_BLOOM_DISTRIBUTION,
   EXAM_QUESTIONS_RANGE,
   existingContentBlock,
@@ -86,15 +87,14 @@ describe('existingContentBlock — la portée, poste de coût numéro un (§16.3
     ],
   };
 
-  it('passe chapitres : les chapitres SEULS — ni notions, ni énoncés', () => {
-    // 31/08/2026 : la liste des notions y pesait jusqu'à ~20 000 tokens pour
-    // rien. Cette passe ne range pas, et ce qui décide qu'un chapitre n'est plus
-    // couvert, c'est le COURS — pas une liste dont une partie peut dater d'une
-    // version périmée.
+  it('passe chapitres : tous les chapitres et toutes les notions, rangées sous leur chapitre — aucun énoncé', () => {
+    // §7.2 : la seule étape qui voit le cours statue sur chaque notion existante.
     const block = existingContentBlock(atelier, { pass: 'chapters' });
     expect(block).toContain('Les fleuves');
     expect(block).toContain('Les montagnes');
-    expect(block).not.toContain('La Loire');
+    for (const id of ['n1', 'n2', 'n3', 'n4']) expect(block).toContain(`- ${id} — `);
+    expect(block.indexOf('Dans ch1')).toBeLessThan(block.indexOf('n1 —'));
+    expect(block.indexOf('Sans chapitre')).toBeLessThan(block.indexOf('n4 —'));
     expect(block).not.toContain('Énoncé');
   });
 
@@ -233,13 +233,37 @@ describe('instructions de passe', () => {
     expect(instruction).toMatch(/jamais posée/);
   });
 
-  it('la passe chapitres SITUE les chapitres et ne range rien', () => {
-    // Le rangement est une passe à part depuis le 24/08/2026 : ranger 500
-    // notions dans une seule réponse dépasserait le plafond de sortie.
+  it('la passe chapitres situe les chapitres par pages et statue sur chaque notion', () => {
     const instruction = chaptersInstruction([]);
-    expect(instruction).toMatch(/Situe chaque chapitre/);
-    expect(instruction).toMatch(/Tu ne ranges aucune notion ici/);
+    expect(instruction).toMatch(/SITUE CHAQUE CHAPITRE/);
+    expect(instruction).toMatch(/\[page N\]/);
+    expect(instruction).toMatch(/UN VERDICT SUR CHAQUE NOTION EXISTANTE/);
     expect(instruction).not.toMatch(/question/i);
+  });
+
+  it('introuvable dans le texte ⇒ « check », jamais « out » (§7.6)', () => {
+    const rule = /Ne pas retrouver une notion dans le texte n'est JAMAIS un motif de « out » : c'est « check »/;
+    expect(chaptersInstruction([])).toMatch(rule);
+    expect(chaptersRelaunchInstruction({ notions: [{ id: 'n1', title: 'T' }], chapters: [{ id: 'c1', name: 'C' }] }))
+      .toMatch(rule);
+  });
+
+  it('elle dit qu’elle ne lit que le texte', () => {
+    expect(chaptersInstruction([])).toMatch(/Tu reçois le TEXTE du cours/);
+  });
+
+  it('une partie qui se resserre : créer le nouveau chapitre ET écarter l’ancien', () => {
+    expect(chaptersInstruction([])).toMatch(/créer le nouveau chapitre ET de mettre l'ancien à 0/);
+  });
+
+  it('la relance ne porte que sur les notions données, chapitres figés', () => {
+    const instruction = chaptersRelaunchInstruction({
+      notions: [{ id: 'n7', title: 'La Loire' }],
+      chapters: [{ id: 'c1', name: 'Les fleuves' }],
+    });
+    expect(instruction).toContain('- n7 — La Loire');
+    expect(instruction).toContain('- c1 — Les fleuves');
+    expect(instruction).toMatch(/tu ne crées, ne renommes et n'écartes aucun chapitre/);
   });
 });
 

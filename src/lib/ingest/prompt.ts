@@ -352,15 +352,11 @@ function inScope(existing: ExistingContent, scope: ExistingScope): {
       // Rien : tout ce dont l'étape 0 a besoin voyage dans sa consigne.
       return { chapters: [], notions: [], questions: [] };
     case 'chapters':
-      // Les chapitres existants, et RIEN D'AUTRE (31/08/2026).
-      //
-      // Cette passe a longtemps reçu toutes les notions de l'atelier — jusqu'à
-      // ~20 000 tokens par appel, et deux fois plutôt qu'une puisque la consigne
-      // les répétait ensuite. Elles ne servaient à rien : la passe ne range pas,
-      // et ce qui décide qu'un chapitre n'est plus couvert, c'est le COURS — pas
-      // une liste de notions dont une partie peut justement dater d'une version
-      // périmée. Au mieux du poids mort, au pire une ambiguïté.
-      return { chapters: existing.chapters, notions: [], questions: [] };
+      // Tous les chapitres et TOUTES les notions (§7.2) : cette étape est la
+      // seule à voir le cours, donc la seule à pouvoir statuer sur chaque notion
+      // existante. C'est un seul appel, et une notion est une ligne de texte —
+      // même à mille notions, le bloc reste modeste.
+      return { chapters: existing.chapters, notions: existing.notions, questions: [] };
     case 'assign':
       // Rien. La passe rangement reçoit ses notions et ses chapitres par sa
       // consigne, avec leur provenance : le bloc « existant » ferait double
@@ -421,7 +417,30 @@ export function existingContentBlock(existing: ExistingContent, scope: ExistingS
     for (const c of kept.chapters) lines.push(`- ${c.id} — ${c.name}`);
   }
 
-  if (kept.notions.length > 0) {
+  if (kept.notions.length > 0 && scope.pass === 'chapters') {
+    // Rangées sous leur chapitre actuel : c'est ce qui permet de voir ce qu'une
+    // partie qui se resserre laisse derrière elle.
+    lines.push('', 'Notions (référence — texte), par chapitre actuel :');
+    const chapterIds = new Set(kept.chapters.map((c) => c.id));
+    const byChapter = new Map<string | null, typeof kept.notions>();
+    for (const n of kept.notions) {
+      const key = n.chapterId && chapterIds.has(n.chapterId) ? n.chapterId : null;
+      const list = byChapter.get(key) ?? [];
+      list.push(n);
+      byChapter.set(key, list);
+    }
+    for (const c of kept.chapters) {
+      const notions = byChapter.get(c.id);
+      if (!notions) continue;
+      lines.push(`Dans ${c.id} :`);
+      for (const n of notions) lines.push(`- ${n.id} — ${n.title}`);
+    }
+    const loose = byChapter.get(null);
+    if (loose) {
+      lines.push('Sans chapitre :');
+      for (const n of loose) lines.push(`- ${n.id} — ${n.title}`);
+    }
+  } else if (kept.notions.length > 0) {
     lines.push('', 'Notions (référence — texte) :');
     for (const n of kept.notions) lines.push(`- ${n.id} — ${n.title}`);
   }
@@ -751,7 +770,9 @@ ${retry.previous.length < PLAUSIBLE_CHAPTERS.min ? RETRY_TOO_FEW : RETRY_TOO_MAN
 `
     : '';
 
-  return `${again}${corpus}Découpe ce cours en CHAPITRES : ses grandes parties, dans l'ordre où elles se lisent.
+  return `${again}${corpus}Tu reçois le TEXTE du cours, page par page — chaque page est précédée d'un marqueur « [page N] ». Certaines pages pauvres en texte te sont aussi montrées en image ; les autres images du cours ne te sont pas montrées.
+
+Découpe ce cours en CHAPITRES : ses grandes parties, dans l'ordre où elles se lisent.
 
 Un chapitre est une unité d'enseignement, pas une section de mise en page : deux sous-parties qui traitent du même sujet forment un seul chapitre. Vise le découpage qu'un enseignant ferait pour organiser sa progression.
 
@@ -769,17 +790,48 @@ Donne à chacun une référence courte et unique (ch1, ch2…), et un nom de 120
 
 **Dans \`chapters\`, ne liste que les chapitres NOUVEAUX.** Ceux qui existent déjà sont listés plus haut avec leur référence : tu ne donnes que leur rang, dans \`chapterOrder\`. Un cours qu'on repasse à l'identique se répond donc avec un \`chapters\` VIDE, et c'est la bonne réponse.
 
-**Situe chaque chapitre dans le cours** : le document où il commence, sa première et sa dernière page approximatives. Une autre étape s'en servira pour ranger les notions sans avoir à relire le cours. Approximatif suffit largement ; mets 0 quand tu ne peux vraiment pas dire.
-
 **L'ORDRE DU PROGRAMME, ET CE QUE LE COURS NE COUVRE PLUS.** Dans \`chapterOrder\`, donne son rang à chaque chapitre — ceux que tu viens de créer comme ceux qui existaient déjà —, à partir de 1 et dans l'ordre où le cours se lit. Seul l'ordre des rangs compte, pas leur valeur.
 
 **Le rang 0 veut dire : le cours ne couvre plus ce chapitre.** Il sort du programme avec ce qu'il contient. Deux points :
 - **Réservé aux chapitres qui existaient déjà** — jamais un chapitre de ta propre réponse.
 - **N'y mets que ceux dont tu es sûr** : un chapitre que tu ne nommes pas ici garde sa place et reste au programme, et c'est la bonne réponse quand tu hésites.
 
-Quand le cours traite toujours la même matière sous un autre découpage — une partie qui s'élargit ou se resserre —, la bonne réponse est de **créer le nouveau chapitre ET de mettre l'ancien à 0**. Les notions encore d'actualité seront rangées dans le nouveau, et celles qui n'y ont plus leur place resteront dans l'ancien, hors programme. C'est ce qui évite de porter deux fois la même partie sous deux noms.
+Quand le cours traite toujours la même matière sous un autre découpage — une partie qui s'élargit ou se resserre —, la bonne réponse est de **créer le nouveau chapitre ET de mettre l'ancien à 0**, jamais de garder l'ancien sous un autre nom. Les notions encore d'actualité vont dans le nouveau ; celles que tu laisses dans l'ancien sortent du programme avec lui. C'est ce qui évite de porter deux fois la même partie sous deux noms.
 
-**Tu ne ranges aucune notion ici** : une autre étape s'en charge. C'est en revanche ici, et nulle part ailleurs, que se décide ce que le cours ne couvre plus — l'étape de rangement, elle, n'aura plus les documents sous les yeux, donc aucun moyen de savoir quelle est la bonne version du cours.`;
+**SITUE CHAQUE CHAPITRE DANS LE COURS.** Pour chaque chapitre de rang 1 ou plus, donne dans \`spans\` le document et l'intervalle de pages qu'il occupe, d'après les marqueurs « [page N] » du texte, bornes incluses — plusieurs intervalles si le chapitre est éclaté, ou s'il s'étend sur plusieurs documents. L'étape suivante ne recevra QUE ces pages-là : une page que tu n'attribues à aucun chapitre ne sera lue par personne. Dans le doute, prends large ; deux chapitres peuvent partager une page de transition.
+
+**UN VERDICT SUR CHAQUE NOTION EXISTANTE.** Les notions de l'atelier sont listées plus haut. Dans \`notionVerdicts\`, tu statues sur CHACUNE, sans exception — une notion que tu ne mentionnes pas est tenue pour oubliée. Trois réponses possibles :
+- **« chapter »**, avec la référence d'un chapitre au programme — existant ou de ta réponse : la notion y va. C'est la réponse attendue pour toute notion que le cours traite encore.
+- **« out »** : le cours la contredit, ou ne traite plus du tout son sujet. Elle sort du programme.
+- **« check »** : tu ne la retrouves pas dans le texte.
+
+⚠️ **Ne pas retrouver une notion dans le texte n'est JAMAIS un motif de « out » : c'est « check ».** Tu ne lis que le TEXTE du cours ; ses schémas, ses tableaux en image et ses pages scannées ne te sont pas montrés, et une notion peut venir de là. Une autre étape, qui voit les images, tranchera. « out » est réservé à ce que le texte permet d'affirmer : le cours ne couvre plus ce sujet.`;
+}
+
+/** Relance de l'étape chapitres (§7.6) : trop de notions sont restées sans
+ *  verdict. On ne redemande QUE celles-là — redemander à l'identique
+ *  retronquerait une réponse trop longue —, et les chapitres sont désormais
+ *  fixés : ceux qu'elle a créés existent. */
+export function chaptersRelaunchInstruction(input: {
+  notions: { id: string; title: string }[];
+  chapters: { id: string; name: string }[];
+}): string {
+  const chapters = input.chapters.map((c) => `- ${c.id} — ${c.name}`).join('\n');
+  const notions = input.notions.map((n) => `- ${n.id} — ${n.title}`).join('\n');
+  return `Ta réponse précédente sur ce cours n'a statué sur aucune des notions ci-dessous. Statue maintenant sur CHACUNE d'elles, sans exception. Le découpage en chapitres est fait : tu ne crées, ne renommes et n'écartes aucun chapitre.
+
+LES CHAPITRES AU PROGRAMME :
+${chapters}
+
+LES NOTIONS À JUGER :
+${notions}
+
+Dans \`notionVerdicts\`, trois réponses possibles :
+- **« chapter »**, avec la référence d'un chapitre ci-dessus : la notion y va.
+- **« out »** : le cours la contredit, ou ne traite plus du tout son sujet.
+- **« check »** : tu ne la retrouves pas dans le texte.
+
+⚠️ **Ne pas retrouver une notion dans le texte n'est JAMAIS un motif de « out » : c'est « check ».** Tu ne lis que le texte du cours, pas ses images ; une autre étape, qui les voit, tranchera.`;
 }
 
 /** Passe 1 — les notions d'UN document.
