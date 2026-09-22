@@ -1,9 +1,6 @@
 # Chantier en cours
 
-**Feuille de route :** docs/chantiers/2026-09-22-generation-par-chapitres.md
-**Branche :** feat/generation-par-chapitres
-**PR :** https://github.com/alexisbrl/Culture/pull/58
-**Démarré le :** 2026-09-22
+AUCUN
 
 ---
 
