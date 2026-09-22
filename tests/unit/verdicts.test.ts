@@ -8,6 +8,8 @@ import {
   guardDrops,
   mergeRelaunch,
   recheckList,
+  revalidateClaims,
+  strandedNotions,
   thresholdDecision,
   type ChapterLayout,
   type ExistingNotion,
@@ -318,5 +320,61 @@ describe('finalFates', () => {
       expect(Object.keys(f).sort()).toEqual(['chapterId', 'moved', 'notionId', 'reason']);
       expect(f.chapterId === null || typeof f.chapterId === 'string').toBe(true);
     }
+  });
+});
+
+describe('revalidateClaims — ce qui revient de l’écran n’est pas fiable', () => {
+  const allowed = { chapters: new Set(['c1', 'c2']), notions: new Set(['n1', 'n2']) };
+
+  it('garde les réclamations recevables, fusionnées par notion', () => {
+    const r = revalidateClaims(
+      [
+        { chapterId: 'c1', notionIds: ['n1', 'n2'] },
+        { chapterId: 'c2', notionIds: ['n1', 'n1'] },
+      ],
+      allowed,
+    );
+    expect(r.claims).toEqual(new Map([['n1', ['c1', 'c2']], ['n2', ['c1']]]));
+    expect(r.ignored).toBe(0);
+  });
+
+  it('une notion d’un autre atelier, ou hors seconde vérification, est ignorée et comptée', () => {
+    const r = revalidateClaims([{ chapterId: 'c1', notionIds: ['autre-atelier', 'n1'] }], allowed);
+    expect(r.claims).toEqual(new Map([['n1', ['c1']]]));
+    expect(r.ignored).toBe(1);
+  });
+
+  it('un chapitre caché ou hors de ce lot est ignoré et compté', () => {
+    const r = revalidateClaims(
+      [
+        { chapterId: 'cache', notionIds: ['n1'] },
+        { chapterId: 'autre-lot', notionIds: ['n2'] },
+      ],
+      allowed,
+    );
+    expect(r.claims.size).toBe(0);
+    expect(r.ignored).toBe(2);
+  });
+
+  it('une entrée mal formée ne fait rien tomber', () => {
+    const r = revalidateClaims(
+      [{ chapterId: 'c1', notionIds: [42 as unknown as string, 'n2'] }],
+      allowed,
+    );
+    expect(r.claims).toEqual(new Map([['n2', ['c1']]]));
+    expect(r.ignored).toBe(1);
+  });
+});
+
+describe('strandedNotions', () => {
+  it('ne retient que les notions restées faute de mieux dans un chapitre', () => {
+    expect(
+      strandedNotions([
+        { notionId: 'a', chapterId: 'c1', moved: false, reason: 'stays' },
+        { notionId: 'b', chapterId: null, moved: false, reason: 'stays' },
+        { notionId: 'c', chapterId: 'c2', moved: true, reason: 'claimed' },
+        { notionId: 'd', chapterId: null, moved: true, reason: 'unplaced' },
+      ]),
+    ).toEqual(['a']);
   });
 });

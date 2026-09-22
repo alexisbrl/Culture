@@ -264,3 +264,46 @@ export function finalFates(input: FateInput): { fates: NotionFate[]; arbitration
 
   return { fates, arbitrations };
 }
+
+// ─── Les réclamations, revalidées ────────────────────────────────────────────
+
+export interface ChapterClaims {
+  chapterId: string;
+  notionIds: readonly string[];
+}
+
+/**
+ * Les réclamations de l'étape notions, telles que l'écran les renvoie à la
+ * finalisation. Elles transitent par le navigateur : ce sont des données non
+ * fiables, qu'on revalide une à une avant d'écrire quoi que ce soit (§7.9).
+ * Une réclamation n'est retenue que si le chapitre est au programme de CE lot
+ * et encore visible, et si la notion est une notion de la seconde
+ * vérification de CE lot — donc de cet atelier. Le reste est ignoré et compté.
+ */
+export function revalidateClaims(
+  claims: readonly ChapterClaims[],
+  allowed: { chapters: ReadonlySet<string>; notions: ReadonlySet<string> },
+): { claims: Map<string, string[]>; ignored: number } {
+  const out = new Map<string, string[]>();
+  let ignored = 0;
+  for (const claim of claims) {
+    for (const notionId of claim.notionIds) {
+      if (typeof notionId !== 'string' || typeof claim.chapterId !== 'string'
+        || !allowed.chapters.has(claim.chapterId) || !allowed.notions.has(notionId)) {
+        ignored += 1;
+        continue;
+      }
+      const list = out.get(notionId) ?? [];
+      if (!list.includes(claim.chapterId)) list.push(claim.chapterId);
+      out.set(notionId, list);
+    }
+  }
+  return { claims: out, ignored };
+}
+
+/** Les notions que personne n'a su placer et qui restent où elles étaient :
+ *  elles ne font plus vivre leur chapitre (§7.6, « le chapitre suit ses
+ *  notions »). */
+export function strandedNotions(fates: readonly NotionFate[]): string[] {
+  return fates.filter((f) => f.reason === 'stays' && f.chapterId !== null).map((f) => f.notionId);
+}

@@ -337,14 +337,18 @@ export async function ingestWorkshopAssignments(
 export async function finishWorkshopIngestion(
   workshopId: string,
   importId: string,
-): Promise<{ hidden: number; removed: number }> {
-  if (!(await requireManager(workshopId))) return { hidden: 0, removed: 0 };
+  /** Les réclamations de la seconde vérification, chapitre par chapitre, telles
+   *  que les ont rendues les étapes notions. Revalidées côté serveur. */
+  claims: { chapterId: string; notionIds: string[] }[] = [],
+): Promise<{ hidden: number; removed: number; adjusted: PlanIssue[] }> {
+  if (!(await requireManager(workshopId))) return { hidden: 0, removed: 0, adjusted: [] };
 
-  const result = await run.finishIngestion(workshopId, importId);
+  const result = await run.finishIngestion(workshopId, importId, Array.isArray(claims) ? claims : []);
   revalidateWorkshop();
   return {
     hidden: result.hidden.length,
     removed: result.removedChapters + result.removedNotions,
+    adjusted: result.adjusted,
   };
 }
 

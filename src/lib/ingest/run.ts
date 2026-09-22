@@ -107,6 +107,10 @@ import {
   guardDrops,
   mergeRelaunch,
   recheckList,
+  revalidateClaims,
+  strandedNotions,
+  finalFates,
+  type ChapterClaims,
   thresholdDecision,
   type ChapterLayout,
   type NotionStanding,
@@ -1592,7 +1596,7 @@ async function applyStage1(
   // Les notions rangées franchement rejoignent leur chapitre tout de suite :
   // l'étape notions de ce chapitre et ses questions doivent les voir.
   const before = new Map(pending.notions.map((n) => [n.id, n.chapterId]));
-  await applyAssignments(
+  const moved = await applyAssignments(
     workshopId,
     [...resolved]
       .filter(([, s]) => s.kind === 'placed')
@@ -1600,6 +1604,7 @@ async function applyStage1(
     new Map(),
     before,
   );
+  await recordProgress(importId, { movedNotions: moved, strandedNotions: [] });
 
   // Le programme tel qu'il est désormais, dans l'ordre, avec les bornes de
   // chaque chapitre résolues en documents du lot.
@@ -1848,12 +1853,6 @@ async function recordProgress(
     .eq('id', importId);
 }
 
-async function strandedOf(importId: string): Promise<string[]> {
-  const supabase = getSupabaseServerClient();
-  const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
-  const scope = (data?.scope as Record<string, unknown> | null) ?? {};
-  return Array.isArray(scope.strandedNotions) ? (scope.strandedNotions as string[]) : [];
-}
 
 /** Passe 3 — le RANGEMENT d'UN LOT de notions.
  *
@@ -2053,30 +2052,105 @@ export async function ingestAssignments(
   };
 }
 
-/** La fin de l'import : ce qui se déduit sans modèle, une fois tout rangé.
+export type FinishResult = {
+  hidden: string[];
+  removedChapters: number;
+  removedNotions: number;
+  /** Notions existantes déplacées par la seconde vérification ou sorties du
+   *  programme, et départages — pour le compte-rendu. */
+  adjusted: PlanIssue[];
+};
+
+/** La fin de l'import : ce qui se décide une fois TOUTES les étapes notions
+ *  finies (§7.6).
  *
- *  À n'appeler qu'une seule fois, **après le dernier lot de rangement**. Les
- *  deux gestes qu'elle porte seraient destructeurs plus tôt : à mi-parcours,
- *  toutes les notions sont encore sans chapitre.
+ *  1. Les réclamations de la seconde vérification, revalidées une à une — elles
+ *     reviennent du navigateur.
+ *  2. Le sort final de chaque notion existante : départage, sortie du programme
+ *     d'une notion jugée hors programme que personne ne réclame. Rien n'efface
+ *     une notion existante.
+ *  3. Le ménage : les chapitres qui ne gardent que des notions non placées sont
+ *     écartés avec elles, les notions NEUVES restées sans chapitre sont effacées.
  *
- *  ⚠️ Ne lève jamais. C'est du ménage : un import réussi ne doit pas être
- *  annoncé en échec parce qu'un chapitre n'a pas pu être caché. */
+ *  ⚠️ Ne lève jamais. C'est la dernière étape : un import réussi ne doit pas
+ *  être annoncé en échec parce qu'un chapitre n'a pas pu être caché. */
 export async function finishIngestion(
   workshopId: string,
   importId: string,
-): Promise<{ hidden: string[]; removedChapters: number; removedNotions: number }> {
+  claims: readonly ChapterClaims[] = [],
+): Promise<FinishResult> {
+  const adjusted: PlanIssue[] = [];
   try {
-    // Les notions restées faute de mieux ne font plus vivre leur chapitre : il
-    // est écarté avec elles dedans, ce qui rend le changement lisible d'un
-    // coup d'œil au lieu de les disperser dans « sans chapitre ».
-    const hidden = await hideEmptyChapters(workshopId, await strandedOf(importId));
-
     const supabase = getSupabaseServerClient();
+    const scope = await readScope(importId);
+    const stage1 = scope.stage1 as Stage1State | undefined;
+
+    let stranded: string[] = [];
+    if (stage1) {
+      const { data: chapterRows, error } = await supabase
+        .from('workshop_chapters')
+        .select('id, name, hidden')
+        .eq('workshop_id', workshopId);
+      if (error) throw new Error(error.message);
+      const visibleNow = new Set((chapterRows ?? []).filter((c) => c.hidden !== true).map((c) => c.id as string));
+      const names = new Map((chapterRows ?? []).map((c) => [c.id as string, c.name as string]));
+      const programOrder = stage1.chapters.map((c) => c.id).filter((id) => visibleNow.has(id));
+
+      const standings = new Map(Object.entries(stage1.standings));
+      const rechecked = new Set(recheckList(standings).map((n) => n.notionId));
+      const valid = revalidateClaims(claims, { chapters: new Set(programOrder), notions: rechecked });
+      if (valid.ignored > 0) {
+        adjusted.push({ kind: 'notion', reason: `${valid.ignored} réclamation(s) de notion irrecevable(s) — ignorée(s)` });
+      }
+
+      const { fates, arbitrations } = finalFates({
+        notions: Object.entries(stage1.before).map(([id, chapterId]) => ({ id, chapterId })),
+        standings,
+        layout: { visible: new Set(programOrder), dropped: new Set(stage1.dropped) },
+        programOrder,
+        claims: valid.claims,
+      });
+
+      // Les notions rangées franchement ont déjà rejoint leur chapitre à
+      // l'étape 1 : seul ce qui s'est décidé depuis s'écrit ici.
+      const all = await loadAllNotions(workshopId);
+      const current = new Map(all.notions.map((n) => [n.id, n.chapterId]));
+      const titles = new Map(all.notions.map((n) => [n.id, n.title]));
+      const late = fates.filter((f) => f.reason !== 'placed' && current.has(f.notionId) && current.get(f.notionId) !== f.chapterId);
+      const moved = await applyAssignments(
+        workshopId,
+        late.map((f) => ({ notionRef: f.notionId, chapterRef: f.chapterId ?? undefined })),
+        new Map(),
+        current,
+      );
+
+      for (const a of arbitrations) {
+        const title = titles.get(a.notionId) ?? a.notionId;
+        adjusted.push({
+          kind: 'notion',
+          ref: a.notionId,
+          reason: a.chosen
+            ? `« ${title} » réclamée par ${a.claimants.length} chapitres — rangée dans « ${names.get(a.chosen) ?? a.chosen} »${a.rule === 'current' ? ', son chapitre actuel' : ', le premier du programme'}`
+            : `« ${title} » réclamée par des chapitres hors programme — laissée où elle était`,
+        });
+      }
+      const unplaced = late.filter((f) => f.reason === 'unplaced').length;
+      if (unplaced > 0) {
+        adjusted.push({ kind: 'notion', reason: `${unplaced} notion(s) jugée(s) hors programme et réclamée(s) par aucun chapitre — sorties du programme, sans chapitre` });
+      }
+
+      stranded = strandedNotions(fates);
+      await recordProgress(importId, { movedNotions: moved, strandedNotions: stranded });
+    }
+
+    // Le chapitre suit ses notions : celui qui ne garde que ce que personne n'a
+    // su placer est écarté avec elles dedans.
+    const hidden = await hideEmptyChapters(workshopId, stranded);
+
     const [notions, chapterRows] = await Promise.all([
       loadNotionsToArrange(workshopId),
       supabase.from('workshop_chapters').select('id, import_id').eq('workshop_id', workshopId),
     ]);
-
     const cleanup = planImportCleanup(
       {
         chapters: (chapterRows.data ?? []).map((c) => ({
@@ -2093,11 +2167,12 @@ export async function finishIngestion(
       hidden,
       removedChapters: cleanup.chapterIds.length,
       removedNotions: cleanup.notionIds.length,
+      adjusted,
     };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     console.warn('[ingest] menage de fin incomplet :', detail);
-    return { hidden: [], removedChapters: 0, removedNotions: 0 };
+    return { hidden: [], removedChapters: 0, removedNotions: 0, adjusted };
   }
 }
 
