@@ -71,7 +71,17 @@ import {
 import { reorderChapters } from '@/lib/workshops/chapters';
 import { MAX_NOTIONS_PER_WORKSHOP, countNotions } from '@/lib/workshops/notions';
 import { dropRepeatedQuestions, flagSimilar, findExistingMatch } from './duplicates';
-import { batchNotions, sliceProgram, splitBudget, splitUnplaced, withChapterRetry } from './passInput';
+import {
+  batchNotions,
+  contextNotions,
+  packDemand,
+  pickExistingQuestions,
+  planFreeParcoursCalls,
+  sliceProgram,
+  splitUnplaced,
+  withChapterRetry,
+  type ExistingQuestion,
+} from './passInput';
 import { classifyFailure, logStep, markOutcome, withRetry, type Attempted, type StepName } from './journal';
 import {
   GENERATED_FILE_NAME,
@@ -85,6 +95,7 @@ import {
   CHAPTER_START_QUESTIONS,
   demandByNotion,
   demandForChapterStart,
+  demandTotal,
   type QuestionDemand,
 } from './demand';
 import { BUSY_ERROR, assertImportOpen, closeImport, liveImportOf } from './lock';
@@ -213,30 +224,44 @@ async function loadAllNotions(workshopId: string): Promise<ExistingContent> {
  *  Sans ce filtre, la passe recevait aussi les questions d'examen — deux listes
  *  qui n'ont ni la même volumétrie ni le même régime, et dont la ressemblance
  *  n'est pas un défaut. Pire, à la volumétrie cible, verser une liste dans
- *  l'autre était le retour exact du poste de coût de §16.3. */
-async function loadNotionQuestions(notionIds: string[]): Promise<ExistingContent> {
-  if (notionIds.length === 0) return EMPTY;
+ *  l'autre était le retour exact du poste de coût de §16.3.
+ *
+ *  Rend TOUT le stock des notions, avec niveau et date : c'est
+ *  `pickExistingQuestions` qui choisit ce qui part au modèle. Les plus récentes
+ *  d'abord, pour que la limite de lignes de la base, si une notion la franchit,
+ *  retranche les plus anciennes — celles que le tri aurait écartées en dernier. */
+async function loadNotionQuestions(notionIds: string[]): Promise<ExistingQuestion[]> {
+  if (notionIds.length === 0) return [];
 
   const supabase = getSupabaseServerClient();
+  // table encore nommée bricks en base (exam_question_item_bricks, brick_id)
   const { data, error } = await supabase
     .from('exam_question_item_bricks')
-    .select('item_id, brick_id, exam_question_items!inner(content, exam_questions!inner(context))')
+    .select('item_id, brick_id, bloom_level, exam_question_items!inner(content, created_at, exam_questions!inner(context))')
     .eq('exam_question_items.exam_questions.context', 'parcours')
-    .in('brick_id', notionIds);
+    .in('brick_id', notionIds)
+    .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
 
   // Une question reliée à deux des notions demandées ne doit apparaître qu'une
   // fois : on regroupe par question, pas par lien.
-  const byItem = new Map<string, { content: string; notionIds: string[] }>();
+  const byItem = new Map<string, ExistingQuestion>();
   for (const row of data ?? []) {
     const itemId = row.item_id as string;
-    const item = row.exam_question_items as unknown as { content: string } | null;
-    const entry = byItem.get(itemId) ?? { content: item?.content ?? '', notionIds: [] };
-    entry.notionIds.push(row.brick_id as string);
+    const item = row.exam_question_items as unknown as { content: string; created_at: string } | null;
+    const entry = byItem.get(itemId) ?? {
+      content: item?.content ?? '',
+      notionIds: [],
+      levels: {},
+      createdAt: item?.created_at ?? '',
+    };
+    const notionId = row.brick_id as string;
+    entry.notionIds.push(notionId);
+    entry.levels[notionId] = (row.bloom_level as number | null) ?? null;
     byItem.set(itemId, entry);
   }
 
-  return { ...EMPTY, questions: [...byItem.values()] };
+  return [...byItem.values()];
 }
 
 /** Passe EXAMEN — la liste d'examen **en entier**, et non les seules questions
@@ -313,7 +338,7 @@ const NOTIONS_PER_COUNT_QUERY = 100;
  *  **à l'ouverture du lot**.
  *
  *  `parcoursQuestionCounts` compte toutes notions confondues ; la demande d'un
- *  chapitre neuf, elle, se formule niveau par niveau — 25 de niveau 1 et rien
+ *  chapitre neuf, elle, se formule niveau par niveau — 24 de niveau 1 et rien
  *  d'autre. Sans ce détail, un chapitre déjà pourvu au niveau 2 passerait pour
  *  pourvu au niveau 1.
  *
@@ -1949,7 +1974,123 @@ export async function ingestDocumentNotions(
   };
 }
 
-/** Passe 3, pour UN LOT de notions d'un chapitre. Les notions du lot lui sont
+/** Un appel de la passe parcours : ses notions, ce qu'on lui demande sur
+ *  chacune, et combien de questions en tout. */
+type ParcoursCall = {
+  notions: { id: string; title: string }[];
+  wanted: Map<string, { bloomLevel: BloomLevel; count: number }[]>;
+  asked: number;
+};
+
+/** Le plan de la passe parcours pour UN chapitre : ses notions, et la liste de
+ *  ses appels. **Aucun appel au modèle** — c'est ce qui permet au client de
+ *  connaître d'avance le nombre d'appels de chaque chapitre et de tout lancer
+ *  en une seule vague (`countParcoursCalls`, 22/09/2026).
+ *
+ *  ⚠️ Doit rendre **la même découpe à chaque appel** du même lot : chaque appel
+ *  la recalcule et y prend sa part par son indice. D'où le compte de l'existant
+ *  arrêté à l'ouverture du lot (`parcoursQuestionCountsByLevel`). */
+async function parcoursPlan(
+  workshopId: string,
+  importId: string,
+  chapterId: string,
+  userHint: string | null | undefined,
+  options: { demand?: QuestionDemand[]; startBudget?: number },
+): Promise<{ chapterNotions: { id: string; title: string }[]; calls: ParcoursCall[] }> {
+  // L'ordre doit être **stable d'un appel à l'autre** : le client rappelle
+  // l'action une fois par appel, et un ordre flottant ferait se recouvrir deux
+  // appels.
+  const { data: notionRows, error } = await getSupabaseServerClient()
+    .from('workshop_bricks')
+    .select('id, title')
+    .eq('workshop_id', workshopId)
+    .eq('chapter_id', chapterId)
+    .order('created_at')
+    .order('id');
+  if (error) throw new Error(error.message);
+
+  const chapterNotions = (notionRows ?? []).map((n) => ({ id: n.id as string, title: n.title as string }));
+  // Un chapitre sans notion ne produit rien : une question sans notion ne serait
+  // tirée par aucun exercice (§11).
+  if (chapterNotions.length === 0) return { chapterNotions, calls: [] };
+
+  // ─── Ce qu'on cible : une DEMANDE, en couples (notion × niveau) ──────────
+  //
+  // Il n'y a qu'une façon de demander des questions — une liste de couples avec
+  // un nombre pour chacun (29/08/2026). Ce qui change, c'est qui la remplit :
+  //
+  //   • l'appelant, quand il sait — c'est la RECHARGE automatique, qui reçoit
+  //     du radar les couples en manque et leur compte ;
+  //   • ce module, pour un chapitre neuf : un budget de niveau 1 réparti sur
+  //     ses notions — `options.startBudget` si l'appelant l'a calculé sur
+  //     l'atelier entier, 24 par défaut sinon. On retranche l'existant, pour
+  //     qu'un second passage ne rajoute pas le budget entier par-dessus ;
+  //   • personne, quand une CONSIGNE LIBRE est donnée : « fais des questions sur
+  //     la Révolution » ne dit rien du stock de chaque notion, et un ciblage
+  //     écarterait silencieusement ce que l'utilisateur demande. On envoie large
+  //     et le modèle choisit (arbitrage du 24/08/2026).
+  const hint = (userHint ?? '').trim();
+
+  let demand = options.demand ?? null;
+  if (!demand && !hint) {
+    const perLevel = await parcoursQuestionCountsByLevel(
+      chapterNotions.map((n) => n.id),
+      await importOpenedAt(importId),
+    );
+    demand = demandForChapterStart(chapterNotions.map((n) => n.id), options.startBudget)
+      .map((item) => ({
+        ...item,
+        count: Math.max(0, item.count - (perLevel.get(item.notionId)?.get(item.bloomLevel) ?? 0)),
+      }))
+      .filter((item) => item.count > 0);
+  }
+
+  // ─── Le découpage : des appels de huit questions (22/09/2026) ────────────
+  //
+  // Une demande chiffrée se découpe en appels pleins, les questions d'une
+  // notion restant ensemble autant que possible (`packDemand`). Une consigne
+  // libre n'a pas de demande par notion : son budget se découpe de la même
+  // taille, et les notions suivent en tranches contiguës.
+  //
+  // Chaque appel porte SA part de la demande : une notion coupée entre deux
+  // appels n'annonce à chacun que les niveaux qui lui reviennent.
+  const byId = new Map(chapterNotions.map((n) => [n.id, n]));
+  const calls: ParcoursCall[] = demand
+    ? packDemand(demand, chapterNotions.map((n) => n.id)).map((items) => {
+        const wanted = demandByNotion(items);
+        return {
+          notions: [...wanted.keys()].map((id) => byId.get(id) as { id: string; title: string }),
+          wanted,
+          asked: demandTotal(items),
+        };
+      })
+    : planFreeParcoursCalls(chapterNotions, options.startBudget ?? CHAPTER_START_QUESTIONS).map((c) => ({
+        notions: c.notions,
+        wanted: new Map(),
+        asked: c.budget,
+      }));
+
+  return { chapterNotions, calls };
+}
+
+/** Les appels que la passe parcours fera sur chaque chapitre — pour chacun, le
+ *  nombre de questions qu'il demande —, **sans appeler le modèle**. C'est ce qui
+ *  permet au client de lancer tous les appels de tous les chapitres en une
+ *  seule vague, et de réserver à chacun sa part exacte du plafond de l'import
+ *  (22/09/2026). Une liste vide = rien à écrire sur ce chapitre. */
+export async function countParcoursCalls(
+  workshopId: string,
+  importId: string,
+  chapters: { id: string; startBudget?: number; demand?: QuestionDemand[] }[],
+): Promise<Record<string, number[]>> {
+  const userHint = await userHintOf(importId);
+  const plans = await Promise.all(
+    chapters.map((c) => parcoursPlan(workshopId, importId, c.id, userHint, { startBudget: c.startBudget, demand: c.demand })),
+  );
+  return Object.fromEntries(chapters.map((c, i) => [c.id, plans[i].calls.map((call) => call.asked)]));
+}
+
+/** Passe 3, pour UN APPEL de la demande d'un chapitre (voir `packDemand`). Ses notions lui sont
  *  fournies avec leurs identifiants réels : chaque question naît donc reliée,
  *  sans qu'on ait à l'imposer par une règle. */
 export async function ingestParcoursQuestions(
@@ -1973,71 +2114,16 @@ export async function ingestParcoursQuestions(
   const [userHint, choice] = await Promise.all([userHintOf(importId), questionsProviderOf(importId)]);
   const provider = options.provider
     ?? (choice === 'deepseek' ? createDeepSeekProvider({ userHint }) : createClaudeProvider({ userHint }));
-  const supabase = getSupabaseServerClient();
 
-  // L'ordre doit être **stable d'un appel à l'autre** : le client rappelle cette
-  // action une fois par lot, et un ordre flottant ferait se recouvrir deux lots.
-  const { data: notionRows, error } = await supabase
-    .from('workshop_bricks')
-    .select('id, title')
-    .eq('workshop_id', workshopId)
-    .eq('chapter_id', chapter.id)
-    .order('created_at')
-    .order('id');
-  if (error) throw new Error(error.message);
-
-  const chapterNotions = (notionRows ?? []).map((n) => ({ id: n.id as string, title: n.title as string }));
-  // Un chapitre sans notion ne produit rien : une question sans notion ne serait
-  // tirée par aucun exercice (§11).
-  if (chapterNotions.length === 0) return { written: 0, discarded: [], adjusted: [], batches: 0 };
-
-  // ─── Ce qu'on cible : une DEMANDE, en couples (notion × niveau) ──────────
-  //
-  // Il n'y a qu'une façon de demander des questions — une liste de couples avec
-  // un nombre pour chacun (29/08/2026). Ce qui change, c'est qui la remplit :
-  //
-  //   • l'appelant, quand il sait — c'est la RECHARGE automatique, qui reçoit
-  //     du radar les couples en manque et leur compte ;
-  //   • ce module, pour un chapitre neuf : un budget de niveau 1 réparti sur
-  //     ses notions — `options.startBudget` si l'appelant l'a calculé sur
-  //     l'atelier entier, 25 par défaut sinon. On retranche l'existant, pour
-  //     qu'un second passage ne rajoute pas le budget entier par-dessus ;
-  //   • personne, quand une CONSIGNE LIBRE est donnée : « fais des questions sur
-  //     la Révolution » ne dit rien du stock de chaque notion, et un ciblage
-  //     écarterait silencieusement ce que l'utilisateur demande. On envoie large
-  //     et le modèle choisit (arbitrage du 24/08/2026).
-  const hint = (userHint ?? '').trim();
-
-  let demand = options.demand ?? null;
-  if (!demand && !hint) {
-    const perLevel = await parcoursQuestionCountsByLevel(
-      chapterNotions.map((n) => n.id),
-      await importOpenedAt(importId),
-    );
-    demand = demandForChapterStart(chapterNotions.map((n) => n.id), options.startBudget)
-      .map((item) => ({
-        ...item,
-        count: Math.max(0, item.count - (perLevel.get(item.notionId)?.get(item.bloomLevel) ?? 0)),
-      }))
-      .filter((item) => item.count > 0);
-  }
-
-  // Le prompt reçoit la demande notion par notion ; `missing` ne sert plus que
-  // le cas de la consigne libre, où il n'y a pas de demande à formuler.
-  const wanted: Map<string, { bloomLevel: BloomLevel; count: number }[]> = demand
-    ? demandByNotion(demand)
-    : new Map();
-  const all = demand
-    ? chapterNotions.filter((n) => (wanted.get(n.id)?.length ?? 0) > 0)
-    : chapterNotions;
+  const { chapterNotions, calls } = await parcoursPlan(workshopId, importId, chapter.id, userHint, options);
 
   // Rien à produire : surtout pas d'appel au modèle à payer pour s'entendre
   // répondre qu'il n'y a rien à ajouter.
-  if (all.length === 0) return { written: 0, discarded: [], adjusted: [], batches: 0 };
+  if (calls.length === 0) return { written: 0, discarded: [], adjusted: [], batches: 0 };
 
-  const batches = batchNotions(all);
-  const notions = batches[batchIndex];
-  if (!notions) return { written: 0, discarded: [], adjusted: [], batches: batches.length };
+  const current = calls[batchIndex];
+  if (!current) return { written: 0, discarded: [], adjusted: [], batches: calls.length };
+  const { notions, wanted, asked } = current;
 
   // ⚠️ **Le plafond ne tient plus tout seul dès que les appels sont parallèles.**
   // Il se calcule à partir de ce qui est DÉJÀ écrit : quatre appels lancés
@@ -2048,7 +2134,7 @@ export async function ingestParcoursQuestions(
   // la part n'est qu'une restriction supplémentaire.
   const alreadyWritten = await questionsWritten(importId);
   // Une demande explicite est aussi un plafond : on ne paie jamais pour plus
-  // que ce qui a été demandé sur les notions de CE lot.
+  // que ce qui a été demandé à CET appel.
   //
   // ⚠️ **Une CONSIGNE LIBRE ne lève pas le plafond du chapitre** (05/09/2026).
   // Elle décide seulement qu'on ne CIBLE pas les couples notion × niveau — « fais
@@ -2060,32 +2146,36 @@ export async function ingestParcoursQuestions(
   // fusible de l'import. Constaté sur un atelier de 11 chapitres : 330 questions
   // écrites et toujours en cours, là où le budget de démarrage en prévoyait 275.
   // Le budget du chapitre s'applique donc dans les deux régimes, réparti entre
-  // ses lots.
-  const asked = demand
-    ? notions.reduce(
-        (sum, n) => sum + (wanted.get(n.id) ?? []).reduce((s, w) => s + w.count, 0),
-        0,
-      )
-    : splitBudget(options.startBudget ?? CHAPTER_START_QUESTIONS, batches.length)[batchIndex] ?? 0;
+  // ses appels (`asked`, ci-dessus).
   const budget = Math.min(
     MAX_QUESTIONS_PER_IMPORT - alreadyWritten,
     options.budgetShare ?? Number.POSITIVE_INFINITY,
     asked,
   );
-  if (budget <= 0) return { written: 0, discarded: [], adjusted: [], batches: batches.length };
+  if (budget <= 0) return { written: 0, discarded: [], adjusted: [], batches: calls.length };
 
   // Les autres notions du chapitre, en contexte seulement (§16.21) : c'est ce
-  // qui remplace le cours pour les niveaux supérieurs de Bloom.
+  // qui remplace le cours pour les niveaux supérieurs de Bloom. TOUT le
+  // chapitre, pas seulement les notions que la demande vise — voir
+  // `contextNotions`.
   const inBatch = new Set(notions.map((n) => n.id));
-  const neighbours = all.filter((n) => !inBatch.has(n.id));
+  const targeted = new Set(calls.flatMap((c) => c.notions.map((n) => n.id)));
+  const neighbours = contextNotions(chapterNotions, inBatch, targeted);
 
   // Aucun document : la passe travaille sur les notions, pas sur le cours
   // (§16.3). C'est le poste d'économie principal de tout le chantier — on ne
   // téléverse rien, on ne relit rien, on ne paie donc rien pour le corpus.
-  const [existing, workshop] = await Promise.all([
+  const [stock, workshop] = await Promise.all([
     loadNotionQuestions(notions.map((n) => n.id)),
     loadWorkshopIdentity(workshopId),
   ]);
+  // Les questions existantes, plafonnées et choisies au plus près du niveau
+  // demandé — voir `pickExistingQuestions`.
+  const targets = new Map(notions.map((n) => [n.id, (wanted.get(n.id) ?? []).map((w) => w.bloomLevel)]));
+  const existing: ExistingContent = {
+    ...EMPTY,
+    questions: pickExistingQuestions(stock, targets).map(({ content, notionIds }) => ({ content, notionIds })),
+  };
   const meta: StepMeta = { importId, workshopId, step: 'questions', batch: batchIndex, provider };
   const call = await modelCall(meta, () => provider.documentToPlan([], existing, {
     pass: 'questions',
@@ -2148,7 +2238,7 @@ export async function ingestParcoursQuestions(
     corriges: plan.adjusted.length,
   });
 
-  return { written, discarded: plan.discarded, adjusted: plan.adjusted, batches: batches.length };
+  return { written, discarded: plan.discarded, adjusted: plan.adjusted, batches: calls.length };
 }
 
 

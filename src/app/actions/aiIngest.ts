@@ -295,12 +295,27 @@ export async function finishWorkshopIngestion(
   };
 }
 
-/** Passe 4a — les questions d'ENTRAÎNEMENT d'un lot de notions d'un chapitre.
- *
- *  Le nombre de lots (`batches`) n'est connu qu'ici : le client appelle l'indice
- *  0, le lit dans la réponse, et rappelle pour les suivants. `batches: 0` veut
- *  dire qu'il n'y avait rien à écrire — chapitre sans notion, ou notions déjà
- *  pourvues de leur stock. */
+/** Les appels de la passe 4a, chapitre par chapitre — pour chacun, le nombre
+ *  de questions qu'il demande —, **sans appeler le modèle**. Le client s'en sert
+ *  pour lancer tous les appels en une seule vague et réserver à chacun sa part
+ *  du plafond (22/09/2026). Une liste vide veut dire qu'il n'y a rien à écrire
+ *  sur ce chapitre : aucune notion, ou un stock déjà au complet. */
+export async function countParcoursQuestionCalls(
+  workshopId: string,
+  importId: string,
+  chapters: { id: string; startBudget?: number }[],
+): Promise<{ ok: true; calls: Record<string, number[]> } | { ok: false; error: string }> {
+  if (!(await requireManager(workshopId))) return { ok: false, error: 'Droits insuffisants' };
+
+  try {
+    return { ok: true, calls: await run.countParcoursCalls(workshopId, importId, chapters) };
+  } catch (error) {
+    return { ok: false, error: failed('plan des questions du parcours', error, { workshopId, importId }) };
+  }
+}
+
+/** Passe 4a — les questions d'ENTRAÎNEMENT, pour UN appel d'un chapitre
+ *  (`batchIndex`, de 0 au nombre rendu par `countParcoursQuestionCalls`). */
 export async function ingestParcoursQuestions(
   workshopId: string,
   importId: string,

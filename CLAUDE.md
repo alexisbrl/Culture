@@ -1,8 +1,10 @@
 # Culture — Guide Claude Code
 
-> Source de vérité pour le workflow et les conventions de développement. Toujours chargé en entier — reste volontairement court. Le cahier des charges produit, l'historique et la dette technique sont dans `docs/` (à lire à la demande, pas chargés automatiquement). Les patterns de code détaillés (i18n, architecture serveur, UI/CSS) sont dans `.claude/rules/` (chargés automatiquement uniquement quand tu touches un fichier concerné).
+> Source de vérité pour le workflow et les conventions de développement. Toujours chargé en entier — reste volontairement court.
 >
-> Dernière mise à jour : 11/07/2026
+> **Le projet tient en quatre documents, et rien d'autre :** ce fichier (les règles de travail), `docs/product-spec.md` (ce que fait le produit), `docs/architecture.md` (comment il est construit), `docs/backlog.md` (l'écart entre la cible et le réel). Les trois autres sont dans `docs/`, à lire à la demande — voir §9.
+>
+> Dernière mise à jour : 09/09/2026
 
 ---
 
@@ -23,31 +25,28 @@ Les réponses sont **courtes** : la recommandation, sa raison en une phrase, et 
 Toujours utiliser exclusivement les icônes de `lucide-react`. Ne jamais créer d'icônes SVG inline custom, ne jamais utiliser d'autres librairies d'icônes. Si une icône Lucide ne correspond pas exactement au besoin, prendre la plus proche ou un emoji texte — jamais du SVG personnalisé.
 
 ### Infobulles : composant `Tooltip` uniquement
-Toute infobulle passe par `<Tooltip content={…}>` (`src/components/ui/tooltip.tsx`). L'attribut `title` du HTML est interdit sur toute balise DOM — il est dessiné par le système d'exploitation, hors du DOM, donc impossible à mettre à l'esthétique du site. La règle est tenue par ESLint (`no-restricted-syntax`, en `error`, donc bloquante en CI), et c'est elle qui fait foi pour recenser les infobulles existantes. Détail et pièges (nom accessible, bouton désactivé, infobulles imbriquées) : `.claude/rules/frontend-patterns.md`.
+Toute infobulle passe par `<Tooltip content={…}>` (`src/components/ui/tooltip.tsx`). L'attribut `title` du HTML est interdit sur toute balise DOM — il est dessiné par le système d'exploitation, hors du DOM, donc impossible à mettre à l'esthétique du site. La règle est tenue par ESLint (`no-restricted-syntax`, en `error`, donc bloquante en CI), et c'est elle qui fait foi pour recenser les infobulles existantes. Détail et pièges (nom accessible, bouton désactivé, infobulles imbriquées) : `docs/architecture.md`.
 
 ### Lexique : notion (produit, code) = brick (base)
-Ce que l'utilisateur voit et ce que le code nomme est **« notion »** (renommé depuis « brique de connaissance » lors du chantier de refonte UI, 08/2026, voir `docs/changelog.md`). Les tables Supabase, elles, restent nommées `workshop_bricks`, `brick_mastery`, `exam_question_bricks` et leurs colonnes `brick_id` — un renommage en base est une migration destructive, différée (voir `docs/backlog.md`). Ne jamais introduire de nouveau code ou de nouvelle chaîne visible utilisant « brique »/« brick » ; les rares points de contact avec les noms de table Supabase portent un commentaire `// table encore nommée bricks en base…`.
+Ce que l'utilisateur voit et ce que le code nomme est **« notion »** (renommé depuis « brique de connaissance » en 08/2026). Les tables Supabase, elles, restent nommées `workshop_bricks`, `brick_mastery`, `exam_question_bricks` et leurs colonnes `brick_id` — un renommage en base est une migration destructive, différée (voir `docs/backlog.md`). Ne jamais introduire de nouveau code ou de nouvelle chaîne visible utilisant « brique »/« brick » ; les rares points de contact avec les noms de table Supabase portent un commentaire `// table encore nommée bricks en base…`.
 
-### MVP uniquement
-Ne pas développer de fonctionnalités hors-MVP avant que le MVP soit stable et validé. Périmètre MVP détaillé : `docs/product-spec.md`.
+### Ne pas devancer la feuille de route
+Ne pas développer une fonctionnalité avant son tour. **L'ordre de travail est celui des trimestres de `docs/backlog.md`** — les sections sont l'ordre, et c'est le seul endroit qui porte le « quand ». `docs/product-spec.md` décrit le produit fini : y voir une fonctionnalité ne veut pas dire qu'elle est à faire maintenant.
 
 ### API-first — checklist par défaut pour tout nouveau développement
-Chaque domaine fonctionnel doit pouvoir un jour exposer une API interne propre, sans logique couplée à l'UI. Ces pratiques (mises en place rétroactivement lors de l'audit de juin-juillet 2026, voir `docs/changelog.md`) s'appliquent **dès l'écriture** de tout nouveau code, jamais migrées plus tard en bloc :
-- **i18n** : toute chaîne visible passe par next-intl dès l'écriture, dans `fr.json` **et** `en.json`. Détail : `.claude/rules/i18n.md`.
-- **Logique métier dans `src/lib/<domaine>/…`** (module pur, sans `'use server'`) ; le fichier `'use server'` dans `app/actions/` reste un wrapper fin (authz → appel `lib/` → revalidation). Détail : `.claude/rules/server-architecture.md`.
+Chaque domaine fonctionnel doit pouvoir un jour exposer une API interne propre, sans logique couplée à l'UI. Ces pratiques s'appliquent **dès l'écriture** de tout nouveau code, jamais migrées plus tard en bloc :
+- **i18n** : toute chaîne visible passe par next-intl dès l'écriture, dans `fr.json` **et** `en.json`. Détail : `docs/architecture.md`.
+- **Logique métier dans `src/lib/<domaine>/…`** (module pur, sans `'use server'`) ; le fichier `'use server'` dans `app/actions/` reste un wrapper fin (authz → appel `lib/` → revalidation). Détail : `docs/architecture.md`.
 - **Contrôle d'accès** : toute server action sur un atelier appelle `requireMember`/`requireManager`/`requireOwner` (`src/lib/authz.ts`) en tête.
 - **Revalidation** : jamais `revalidatePath('/', 'layout')` — toujours `revalidateWorkshop()`/`revalidateDashboard()` (`src/lib/revalidate.ts`).
 - **Couleurs de marque** : toujours via `src/lib/theme.ts` (`palette`, `ink()`), jamais de hex en dur.
-- **Validation avant de considérer une tâche terminée** : `npm run build`, pas seulement `tsc --noEmit` (Turbopack peut casser des re-exports de type sans que `tsc`/`eslint` le détectent — détail : `.claude/rules/server-architecture.md`).
+- **Validation avant de considérer une tâche terminée** : `npm run build`, pas seulement `tsc --noEmit` (Turbopack peut casser des re-exports de type sans que `tsc`/`eslint` le détectent — détail : `docs/architecture.md`).
 
 ### Web-first
 Toute fonctionnalité est développée et validée sur web avant d'être portée sur iOS/Android.
 
 ### Formats de fichiers
-PDF en priorité pour la V1. Les autres formats (Word, PowerPoint, audio, vidéo…) sont prévus en V2+.
-
-### Irréversibilité du passage Premium d'un atelier
-Cette opération ne doit jamais pouvoir être annulée, quelle que soit la situation. Implémentation (trigger DB, mécanisme de test à retirer avant Stripe) : `.claude/rules/server-architecture.md`.
+PDF et texte sont les seuls formats acceptés nativement par le modèle, donc les seuls qu'on lise aujourd'hui. Word, PowerPoint, audio, vidéo demandent une conversion préalable — chantier à part entière, voir `docs/backlog.md`.
 
 ### Migrations de base de données : jamais de destruction avant déploiement du code
 La base Supabase (`hhkmrejjksjpfetwefju`) est **partagée par le code local ET le code déployé en production** (get-culture.com). Une migration prend effet **immédiatement**, alors qu'un changement de code n'est en ligne qu'après `push → PR → merge dans main → déploiement Vercel`.
@@ -57,17 +56,25 @@ La base Supabase (`hhkmrejjksjpfetwefju`) est **partagée par le code local ET l
 - **Supprimer ou renommer** une colonne/table, ou changer un type (contract) : **interdit tant que le code déployé en production lit encore cet objet**. Beaucoup de `select` ne lisent que `{ data }` en ignorant `{ error }` → l'échec est **silencieux** (`data = null`) et casse la fonctionnalité sans alerte.
 - Ordre correct pour retirer un champ : (1) déployer le code qui ne l'utilise plus → (2) seulement ensuite, appliquer la migration de suppression.
 - **Toute migration en attente de déploiement se note dans `docs/migrations/EN-ATTENTE-DEPLOIEMENT.md`** — point d'entrée unique, à lire dès que l'utilisateur demande ce qu'il reste à faire « une fois en ligne ». Le SQL lui-même va dans `docs/migrations/<date>-<sujet>.sql`. Si la section « À appliquer » du fichier dit `AUCUN`, il n'y a rien à faire.
-- Incident de référence (22/06/2026, ateliers cassés en ligne pour avoir inversé cet ordre) : `docs/changelog.md`.
+- Cette règle vient d'un incident réel : le 22/06/2026, une migration de suppression appliquée avant que le code cesse de lire les colonnes visées a cassé les ateliers en ligne, en silence.
 
 **Garde-fous conditionnels au mode chantier.** Les migrations Supabase (`apply_migration`, `execute_sql`), l'écriture de `src/lib/database.types.ts` et les modifications du Jardin sont **bloquées tant qu'un chantier est ouvert** — c'est-à-dire tant que `docs/chantiers/EN-COURS.md` ne contient pas `AUCUN` : en autonomie, personne ne relit avant que la base ne change. En session interactive (hors chantier), elles sont autorisées normalement. Mécanisme : hook `PreToolUse` → `.claude/hooks/chantier-guard.mjs`, branché dans `.claude/settings.local.json`. En chantier, la conduite à tenir est celle du fichier : écrire le SQL dans `docs/migrations/`, le documenter dans la feuille de route, laisser l'humain l'appliquer. Les interdictions inconditionnelles (`git push --force`, écriture de `.env*`, `rm -rf`) restent dans `permissions.deny`, hors de portée de toute condition.
 
+### Toujours décrire la version finale, jamais l'état d'avancement
+Les quatre documents décrivent **le produit tel qu'il doit être**, pas ce qui est en ligne. Aucun marqueur « fait / à faire » dans le corps d'un document : un statut posé à quatre endroits devient faux à la première mise en ligne, et personne ne le corrige.
+
+L'écart entre la cible et le réel se lit **en comparant le produit au document** — c'est cette comparaison qui fait foi, pas une liste. `docs/backlog.md` n'en est que le raccourci, tenu à jour pour ne pas avoir à refaire la comparaison à chaque fois : il doit donc être entretenu consciencieusement, et **renvoyer aux pages et aux parties d'architecture qu'il appelle**.
+
+**Décisions et cas pratiques :** un arbitrage tranché ou un piège rencontré peut être consigné **en annexe, en fin de document**, et **très concis** — une à trois lignes. Jamais dans le corps, qui ne décrit que la cible. Et **ça se supprime dès que c'est trop éloigné du produit actuel** : une annexe qui parle d'un état révolu n'informe plus, elle induit en erreur. `git log` garde tout, il n'y a rien à préserver.
+
+Corollaire : **pas de journal, pas d'historique, pas de feuille de route de chantier terminé** dans `docs/`. Ces fichiers ont existé jusqu'au 09/09/2026 et représentaient les deux tiers du volume documentaire — supprimés pour cette raison.
+
 ### Mettre à jour la documentation
-À la fin de chaque grosse tâche (nouvelle feature déployée, PR mergée, refactor structurant), mets à jour le fichier concerné plutôt que d'entasser dans `CLAUDE.md` :
+À la fin de chaque grosse tâche (feature livrée, PR mergée, refactor structurant), mets à jour le document concerné :
 - Règle de workflow, convention, stack, structure → **ce fichier**.
-- Spécification produit (page, fonctionnalité, périmètre) → `docs/product-spec.md`.
-- Pattern de code réutilisable ou piège technique → `.claude/rules/i18n.md`, `server-architecture.md`, ou `frontend-patterns.md` selon le sujet.
-- Décision/épisode marquant à conserver pour contexte historique (une entrée courte, pas un journal détaillé — `git log` fait foi pour le détail) → `docs/changelog.md`.
-- Dette technique / TODO connu → `docs/backlog.md`.
+- Ce que fait le produit (page, fonctionnalité, périmètre) → `docs/product-spec.md`.
+- Comment il est construit (architecture serveur, i18n, patterns UI, génération par IA) → `docs/architecture.md`.
+- Écart entre la cible et le réel, dette technique, TODO → `docs/backlog.md`.
 - Migration de base qui attend un déploiement → `docs/migrations/EN-ATTENTE-DEPLOIEMENT.md` (voir §1).
 
 ---
@@ -76,7 +83,7 @@ La base Supabase (`hhkmrejjksjpfetwefju`) est **partagée par le code local ET l
 
 **Nom :** Culture (nom de travail — nom produit final à confirmer)
 **Type :** Application SaaS d'apprentissage — générateur pédagogique avec IA
-**Plateforme :** Web en premier (iOS/Android hors MVP)
+**Plateforme :** Web en premier, iOS et Android ensuite
 **Repo GitHub :** https://github.com/alexisbrl/Culture
 **Lancer le dev :** `npm run dev` depuis ce dossier
 
@@ -126,13 +133,14 @@ culture/
 │   │   │   ├── garden/          # Jardin « Terra Nil »
 │   │   │   ├── create/ · profile/ · pricing/ · sign-in/ · sign-up/ · legal/ · about/ · contact/
 │   │   │   └── layout.tsx
-│   │   ├── actions/             # Server actions — wrappers fins (voir .claude/rules/server-architecture.md)
-│   │   ├── api/                 # API routes (contact, waitlist, webhooks Clerk/Stripe)
+│   │   ├── actions/             # Server actions — wrappers fins (voir docs/architecture.md)
+│   │   ├── api/                 # API routes (contact, recharge du parcours, webhooks Clerk/Stripe)
 │   │   ├── globals.css
 │   │   └── layout.tsx
 │   ├── components/              # Composants React réutilisables (ui/ = shadcn, sections/ = sections de page)
 │   ├── lib/
 │   │   ├── workshops/           # Logique métier par domaine (members, core, lifecycle, files, exam, examTypes)
+│   │   ├── ingest/              # Génération par IA : étapes, consignes, recharge, journal (voir docs/architecture.md §7)
 │   │   ├── authz.ts             # Contrôle d'accès centralisé
 │   │   ├── revalidate.ts        # Revalidation de cache à scope étroit
 │   │   ├── theme.ts             # Tokens de couleur/design
@@ -142,15 +150,35 @@ culture/
 │   ├── i18n/                    # Config next-intl
 │   └── proxy.ts                  # Auth + i18n proxy (anciennement middleware.ts, renommé pour Next.js 16)
 ├── messages/{fr,en}.json         # Traductions
-├── docs/                         # Cahier des charges, historique, backlog (lus à la demande)
-├── .claude/rules/                # Patterns de code (chargés à la demande selon les fichiers touchés)
+├── docs/                         # product-spec · architecture · backlog (lus à la demande)
+│                                 # + migrations/ · chantiers/ · design/ (outils, pas des documents)
 ├── tests/{e2e,unit}/
 └── public/
 ```
 
 ---
 
-## 5. CONVENTIONS DE NOMMAGE
+## 5. CONVENTIONS DE CODE
+
+> Les règles à appliquer sans réfléchir, chargées d'office. Le **fonctionnement**
+> qu'elles servent est décrit dans `docs/architecture.md`, à lire avant d'écrire.
+
+### Les huit règles qui ne se discutent pas
+
+1. **Toute chaîne visible passe par next-intl dès l'écriture**, dans `fr.json` **et** `en.json`. Jamais de littéral dans le JSX, jamais de migration différée à un futur audit.
+2. **La logique métier va dans `src/lib/<domaine>/…`** — module pur, sans `'use server'`, sans `auth()`, sans `revalidatePath`. Le fichier `'use server'` d'`app/actions/` reste un wrapper fin : authz → appel `lib/` → revalidation.
+3. **Toute server action ou route d'API sur un atelier appelle `requireMember`/`requireManager`/`requireOwner` (`src/lib/authz.ts`) en tête.** C'est une URL POST publique ; le garde de la page ne protège rien.
+4. **Ne jamais lire `workshop_members.role` directement** pour vérifier un droit — la lecture échapperait à la mémorisation par requête.
+5. **Revalidation à scope étroit** : `revalidateWorkshop()` / `revalidateDashboard()` (`src/lib/revalidate.ts`). **Jamais `revalidatePath('/', 'layout')`.**
+6. **Couleurs de marque via `src/lib/theme.ts`** (`palette`, `ink()`), jamais de hex ou de rgba en dur. Dans un `className`, référencer la variable CSS (`bg-[var(--surface-raised)]`) plutôt qu'une couleur Tailwind générique : la palette n'a **jamais** de blanc pur ni de gris neutre.
+7. **Icônes exclusivement `lucide-react`**, infobulles exclusivement `<Tooltip>` — voir §1, les deux sont des règles absolues.
+8. **Valider par `npm run build`**, jamais par `tsc --noEmit` seul. Turbopack casse des choses que le contrôle de types ne voit pas (détail : `docs/architecture.md`, annexe A).
+
+### Avant d'écrire du code, dans l'ordre
+
+1. Lire `docs/architecture.md` — c'est lui qui porte le fonctionnement et les pièges.
+2. Vérifier dans `docs/backlog.md` si la zone a un item ouvert.
+3. Pour Next.js 16, lire `node_modules/next/dist/docs/` : cette version a des ruptures par rapport aux connaissances d'entraînement.
 
 ### Fichiers et dossiers
 - **Composants React :** PascalCase → `WorkshopCard.tsx`
@@ -165,7 +193,7 @@ culture/
 - **Composants :** PascalCase → `WorkshopCard`
 
 ### Traductions (next-intl)
-Tout texte affiché à l'utilisateur passe par next-intl — jamais de string hardcodée. Clés en camelCase imbriqué : `workshop.create.title`. Détail complet : `.claude/rules/i18n.md`.
+Tout texte affiché à l'utilisateur passe par next-intl — jamais de string hardcodée. Clés en camelCase imbriqué : `workshop.create.title`. Détail complet : `docs/architecture.md`.
 
 ---
 
@@ -204,15 +232,8 @@ git push origin feat/nom-feature
 
 ## 7. TESTS
 
-### En cours de développement (chaque feature)
-Utiliser **Playwright E2E** pour valider le comportement UI de chaque feature. Lancer les tests et vérifier que ça passe avant de considérer une tâche terminée.
-```bash
-npx playwright test
-npx playwright test --headed   # avec navigateur visible
-```
-
 ### Tests unitaires (Vitest) — portée volontairement étroite
-Installé le 19/08/2026. `npm run test:unit` (ou `test:unit:watch`), config `vitest.config.mts`, fichiers dans `tests/unit/`.
+`npm run test:unit` (ou `test:unit:watch`), config `vitest.config.mts`, fichiers dans `tests/unit/`. C'est **la seule suite qui existe aujourd'hui**.
 
 **On ne teste pas tout, et c'est délibéré.** Deux critères, un seul suffit :
 - l'opération peut **détruire des données saisies à la main** (suppression par lot, `upsert` sur un identifiant fourni par le client, ré-écriture de masse) ;
@@ -222,15 +243,16 @@ Ce qui relève du rendu, de l'ergonomie ou de la qualité d'un contenu généré
 
 **Aucun test ne doit toucher au réseau ni à Supabase.** Un module qui a besoin d'un client lui reçoit un double ; on ne laisse jamais `getSupabaseServerClient()` s'exécuter dans un test.
 
-### Avant une Pull Request (grosses modifications)
-Lancer **Vitest (unit) + Playwright (E2E)** — les deux suites doivent passer avant de créer la PR.
+### Tests de bout en bout (Playwright) — cible, pas encore en place
+Le produit fini a des tests de bout en bout sur les parcours critiques : connexion, création d'atelier, génération, passage d'un exercice. **Playwright n'est pas installé à ce jour** — item ouvert dans `docs/backlog.md`. Ne pas prescrire `npm run test:e2e` tant que le script n'existe pas.
+
+### Avant une Pull Request
 ```bash
-npm run test:unit    # Vitest
-npm run test:e2e     # Playwright (à installer)
+npm run test:unit
 ```
 
 ### Claude in Chrome
-Activée — à utiliser systématiquement pour ouvrir l'app, tester l'UI et valider le rendu visuel avant de considérer une feature terminée.
+Activée — à utiliser systématiquement pour ouvrir l'app, tester l'UI et valider le rendu visuel avant de considérer une feature terminée. **C'est ce qui tient lieu de test de bout en bout en attendant Playwright.**
 
 ### Lint & CI
 - `npm run lint` (= `eslint .`) doit passer **sans erreur** avant tout commit/PR. Les règles « React Compiler readiness » (`react-hooks/set-state-in-effect`, `refs`, `immutability`, `purity`) sont volontairement en `warn` (patterns hydration-safe légitimes) — ne pas les repasser en `error` sans raison, et ne pas « corriger » un warning hydration en retirant l'effet (réintroduit un hydration mismatch).
@@ -249,19 +271,15 @@ Variables clés : `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY` (Auth
 
 ## 9. RESSOURCES COMPLÉMENTAIRES
 
-Ces fichiers ne sont **pas** chargés automatiquement à chaque session — vas-y quand la tâche le justifie :
+Les trois autres documents ne sont **pas** chargés automatiquement — vas-y quand la tâche le justifie :
 
 | Fichier | Contenu | Quand le lire |
 |---|---|---|
-| `docs/product-spec.md` | Cahier des charges complet : périmètre MVP, lexique, abonnements, pages & navigation, modules 1 & 2, gamification | Question de périmètre produit, comportement attendu d'une page/fonctionnalité |
-| `docs/changelog.md` | Repères chronologiques des décisions structurantes | Comprendre le contexte historique avant de modifier une zone en profondeur |
-| `docs/backlog.md` | Dette technique et TODO connus | Planification, avant de toucher une zone qui a un item ouvert |
-| `docs/ai-ingestion-plan.md` | Conception arrêtée de la génération du programme par IA (contrat, fournisseurs, annulation, ordre de chantier) | Avant tout travail sur l'ingestion IA — le document fixe les décisions et les prérequis |
+| `docs/product-spec.md` | Ce que fait le produit : lexique, abonnements, pages & navigation, les deux modules, gamification | Question de périmètre, comportement attendu d'une page ou d'une fonctionnalité |
+| `docs/architecture.md` | Comment il est construit : architecture serveur, i18n, patterns UI, génération du programme par IA | **Avant d'écrire du code**, quelle que soit la zone — c'est lui qui porte les conventions |
+| `docs/backlog.md` | L'écart entre la cible et le réel : ce qui manque, la dette, les TODO | Planification, ou avant de toucher une zone qui a un item ouvert |
 
-Ces fichiers se chargent automatiquement, seulement quand tu touches un fichier dont le chemin matche leur `paths:` — pas besoin de les lire à la main dans ce cas :
+⚠️ `docs/architecture.md` remplace depuis le 09/09/2026 les trois fichiers de `.claude/rules/` (i18n, architecture serveur, patterns frontend) et le plan de génération par IA. Ces fichiers se chargeaient automatiquement selon le chemin touché ; ce n'est plus le cas, **c'est donc à toi d'aller le lire avant d'écrire du code**.
 
-| Fichier | Portée (`paths:`) | Contenu |
-|---|---|---|
-| `.claude/rules/i18n.md` | `messages/**`, `src/app/**`, `src/components/**` | Routine next-intl, patterns de clés dynamiques |
-| `.claude/rules/server-architecture.md` | `src/app/actions/**`, `src/lib/**`, `src/app/api/**` | Pattern lib/+wrapper, authz, revalidation, RLS, storage, pièges Turbopack |
-| `.claude/rules/frontend-patterns.md` | `src/**/*.tsx`, `src/**/*.css` | Design tokens, patterns UI réutilisables, pièges React/CSS récurrents |
+### Ce qui n'est pas de la documentation
+Trois fichiers vivent dans `docs/` sans être des documents — ce sont des outils, à laisser tels quels : `docs/migrations/` (le SQL et la liste de ce qui attend un déploiement), `docs/chantiers/EN-COURS.md` (fichier sentinelle du système de chantiers autonomes), et `docs/design/` (le design system généré, ses tokens et ses maquettes).

@@ -31,19 +31,16 @@
 
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { chapterShortages } from '@/lib/workshops/parcoursRadar';
+import { QUESTIONS_CONCURRENCY, mapWithConcurrency } from './concurrency';
 import { createImport } from './ingest';
 import { markOutcome } from './journal';
-import { ingestParcoursQuestions } from './run';
+import { countParcoursCalls, ingestParcoursQuestions } from './run';
 import { MAX_REFILL_QUESTIONS, capDemand, demandFromShortages, demandTotal } from './demand';
 
 /** Deux exercices lancés dans la foulée ne rechargent qu'une fois. Assez long
  *  pour couvrir un exercice entier, assez court pour qu'un membre qui revient
  *  plus tard trouve un stock reconstitué. */
 export const REFILL_COOLDOWN_MS = 10 * 60 * 1000;
-
-/** Au-delà, on rend la main : la fonction serveur a une durée de vie bornée, et
- *  ce qui reste en manque sera repris au prochain lancement d'exercice. */
-const REFILL_DEADLINE_MS = 200_000;
 
 export type RefillOutcome = {
   /** Une recharge a-t-elle été lancée ? `false` = rien ne manquait, ou une
@@ -125,19 +122,17 @@ export async function refillChapter(
       origin: 'refill',
     });
 
-    const deadline = Date.now() + REFILL_DEADLINE_MS;
-    let written = 0;
-    let batchIndex = 0;
-    let batches = 1;
-
-    while (batchIndex < batches && Date.now() < deadline) {
-      const result = await ingestParcoursQuestions(workshopId, userId, importId, chapter, batchIndex, {
-        demand,
-      });
-      batches = result.batches;
-      written += result.written;
-      batchIndex += 1;
-    }
+    // Une seule vague, comme l'écran de génération : le nombre d'appels se
+    // calcule sans appeler le modèle, et tous partent ensemble. En série, les
+    // appels de huit questions (22/09/2026) ne tiendraient pas dans la durée de
+    // vie de la fonction : une recharge de 60 en fait huit, soit quatre minutes
+    // bout à bout contre une demi-minute en parallèle.
+    const counts = await countParcoursCalls(workshopId, importId, [{ id: chapter.id, demand }]);
+    const calls = (counts[chapter.id] ?? []).map((_, batchIndex) => batchIndex);
+    const results = await mapWithConcurrency(calls, QUESTIONS_CONCURRENCY, (batchIndex) =>
+      ingestParcoursQuestions(workshopId, userId, importId, chapter, batchIndex, { demand }),
+    );
+    const written = results.reduce((sum, r) => sum + r.written, 0);
 
     // La recharge va au bout dans le même appel : contrairement à l'écran de
     // génération, elle sait ici même comment elle se termine.

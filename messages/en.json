@@ -1,6 +1,5 @@
 {
   "nav": {
-    "home": "Home",
     "pricing": "Pricing",
     "create": "Create a Workshop",
     "about": "About",
@@ -31,85 +30,8 @@
     "ignore": "ignore",
     "cancel": "undo"
   },
-  "hero": {
-    "badge": "Beta launching · Join the pioneers",
-    "title": "Transform your training into",
-    "titleHighlight": "learning adventures",
-    "subtitle": "Culture converts your course materials into adaptive, gamified learning journeys. Your learners progress faster, stay motivated, and you measure it all in real time.",
-    "cta": "Join the beta for free",
-    "ctaSecondary": "See how it works",
-    "social": "Already {count} trainers on the waitlist"
-  },
   "stats": {
-    "completion": "average completion rate",
-    "engagement": "more engagement",
-    "time": "saved per trainer",
-    "satisfaction": "learner satisfaction"
-  },
-  "howItWorks": {
-    "badge": "Simple as 1-2-3",
-    "title": "From your content to an engaging workshop",
-    "subtitle": "in 3 steps",
-    "step1Title": "Upload your content",
-    "step1Desc": "PDF, Word, video, images... Culture accepts all your existing formats. No need to start from scratch.",
-    "step2Title": "AI structures it for you",
-    "step2Desc": "Our AI identifies key notions and builds an adaptive learning path with quizzes, challenges, and spaced repetition.",
-    "step3Title": "Your learners progress",
-    "step3Desc": "They advance at their own pace on web or mobile, unlock badges, and you track their progress in real time."
-  },
-  "features": {
-    "badge": "Features",
-    "title": "Everything you need,",
-    "titleHighlight": "nothing you don't",
-    "f1Title": "Adaptive AI",
-    "f1Desc": "The learning path adjusts in real time based on each learner's level and mistakes. No one gets left behind.",
-    "f2Title": "Smart Gamification",
-    "f2Desc": "Points, badges, leaderboards, streaks. Playful engagement serving real learning objectives.",
-    "f3Title": "Multi-format",
-    "f3Desc": "PDF, Word, PowerPoint, video, images — import what you already have. Culture does the rest.",
-    "f4Title": "Real-time tracking",
-    "f4Desc": "Clear dashboards to see who's progressing, who's stuck, and which concepts are causing issues.",
-    "f5Title": "Automated assessments",
-    "f5Desc": "Auto-generate and auto-grade certification exams. Save hours every week.",
-    "f6Title": "Instant deployment",
-    "f6Desc": "Share a link with your learners. No installation, no configuration on their end."
-  },
-  "testimonials": {
-    "badge": "Trusted by",
-    "title": "What our beta testers say",
-    "marie": {
-      "role": "Independent HR Trainer",
-      "content": "I uploaded my 80-slide Excel course. In 10 minutes, I had a complete path with quizzes and badges. My learners are 3x more engaged."
-    },
-    "thomas": {
-      "role": "L&D Manager, 200-person SME",
-      "content": "We cut onboarding training time from 3 days to 1.5 days. New hires arrive better prepared and more motivated. Clear ROI."
-    },
-    "sophie": {
-      "role": "Industrial Safety Trainer",
-      "content": "Auto-generating exams saves me 4 hours a week. And certification pass rates improved by 22%."
-    }
-  },
-  "cta": {
-    "title": "Ready to reinvent your training?",
-    "subtitle": "Join the trainers already transforming learning with Culture. Free beta access, limited spots.",
-    "button": "Join the waitlist",
-    "noCb": "No credit card required · Priority access"
-  },
-  "waitlist": {
-    "title": "Join the waitlist",
-    "subtitle": "Free beta access · Limited spots · No credit card",
-    "namePlaceholder": "Your first name",
-    "emailPlaceholder": "your@email.com",
-    "rolePlaceholder": "Your role",
-    "roleFormateur": "Independent trainer",
-    "roleEntreprise": "L&D Manager",
-    "roleEcole": "School / University",
-    "roleAutre": "Other",
-    "button": "Join the beta",
-    "sending": "Signing up...",
-    "success": "🎉 You're on the list! We'll be in touch very soon.",
-    "error": "Something went wrong. Try again or contact us."
+    "time": "saved per trainer"
   },
   "pricing": {
     "badge": "Pricing",

@@ -24,6 +24,7 @@ import {
   closeWorkshopImport,
   finishWorkshopIngestion,
   ingestDocumentNotions,
+  countParcoursQuestionCalls,
   ingestParcoursQuestions,
   ingestWorkshopAssignments,
   ingestWorkshopResource,
@@ -698,7 +699,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       .filter((c) => !c.hidden)
       .map((c) => ({ id: c.id, name: c.name, position: c.position }));
 
-    // Le chapitre n°1 du programme reçoit 25 questions d'office, le reste du
+    // Le chapitre n°1 du programme reçoit 24 questions d'office, le reste du
     // budget se répartit également entre tous les autres — calculé une fois ici
     // sur l'atelier ENTIER, jamais chapitre par chapitre (voir `chapterStartBudgets`).
     const startBudgets = chapterStartBudgets(chapters);
@@ -706,15 +707,24 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     if (chapters.length > 0) {
       let error: string | null = null;
 
-      // Le nombre de lots d'un chapitre n'est connu qu'à la réponse du premier
-      // appel (`result.batches`) : on ne peut donc pas tout lancer d'emblée. On
-      // fait donc **le premier lot de chaque chapitre en parallèle** — ce qui
-      // révèle les nombres de lots — puis **tous les lots restants en parallèle**,
-      // sans distinction de chapitre. Deux vagues au lieu d'une file : sur ton
-      // import (4 chapitres, ~8 lots), c'est 2 attentes au lieu de 8.
-      const firstBatch = chapters.map((chapter) => ({ chapter, batchIndex: 0 }));
+      // ─── Une seule vague, parce que le plan est connu d'avance ────────────
+      //
+      // Le serveur calcule d'abord, sans appeler le modèle, combien d'appels
+      // chaque chapitre demande (22/09/2026) ; tous partent ensuite en même
+      // temps, tous chapitres confondus. Jusque-là, le premier appel de chaque
+      // chapitre partait seul pour révéler ce nombre : une attente entière de
+      // plus, pour un chiffre qu'on savait calculer.
+      const plan = await countParcoursQuestionCalls(
+        workshopId,
+        importId,
+        chapters.map((c) => ({ id: c.id, startBudget: startBudgets.get(c.id) })),
+      );
+      if (!plan.ok) return setPhase({ step: 'error', message: plan.error });
+      const jobs = chapters.flatMap((chapter) =>
+        (plan.calls[chapter.id] ?? []).map((asked, batchIndex) => ({ chapter, batchIndex, asked })),
+      );
       let doneCalls = 0;
-      let totalCalls = firstBatch.length;
+      const totalCalls = jobs.length;
 
       const showQuestions = () => setPhase({
         step: 'running',
@@ -726,19 +736,25 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         total: totalSteps,
       });
 
-      const runBatch = async (job: { chapter: (typeof chapters)[number]; batchIndex: number }) => {
+      // Ce que les appels en vol ont RÉSERVÉ sur le plafond de l'import.
+      let reserved = 0;
+
+      const runBatch = async (job: { chapter: (typeof chapters)[number]; batchIndex: number; asked: number }) => {
         if (stopped.current) return null;
         // ⚠️ **La part du plafond est calculée ici, pas côté serveur.** Le serveur
-        // ne voit qu'un appel à la fois : quatre appels concurrents liraient tous
+        // ne voit qu'un appel à la fois : des appels concurrents liraient tous
         // le même compteur de questions écrites et se croiraient chacun seuls,
         // donc écriraient chacun jusqu'au plafond entier. Le client, lui, sait
-        // combien il en a en vol — il répartit.
-        const remaining = MAX_QUESTIONS - tally.questions;
-        if (remaining <= 0) return null;
-        const share = Math.max(1, Math.floor(remaining / QUESTIONS_CONCURRENCY));
+        // ce qu'il a en vol : chaque appel RÉSERVE exactement ce qu'il demande sur
+        // ce qui reste, et le rend à son retour. Diviser le reste par le nombre
+        // d'appels possibles (l'ancienne règle) rognait les appels dès que la
+        // concurrence est passée à 50 (22/09/2026).
+        const share = Math.min(job.asked, MAX_QUESTIONS - tally.questions - reserved);
+        if (share <= 0) return null;
+        reserved += share;
         const result = await ingestParcoursQuestions(
           workshopId, importId, job.chapter, job.batchIndex, share, startBudgets.get(job.chapter.id),
-        );
+        ).finally(() => { reserved -= share; });
         doneCalls += 1;
         if (!result.ok) { error ??= result.error; showQuestions(); return null; }
         discarded.push(...result.discarded);
@@ -750,20 +766,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       };
 
       showQuestions();
-      const firstResults = await mapWithConcurrency(firstBatch, QUESTIONS_CONCURRENCY, runBatch);
-
-      // Deuxième vague : tous les lots au-delà du premier, tous chapitres
-      // confondus. Rien ne les distingue — ils ne partagent aucun contexte, la
-      // passe questions ne portant pas les documents.
-      const rest = firstResults.flatMap((result, i) => {
-        const count = result?.batches ?? 1;
-        return Array.from({ length: Math.max(0, count - 1) }, (_, k) => ({ chapter: chapters[i], batchIndex: k + 1 }));
-      });
-      if (!error && rest.length > 0) {
-        totalCalls += rest.length;
-        showQuestions();
-        await mapWithConcurrency(rest, QUESTIONS_CONCURRENCY, runBatch);
-      }
+      await mapWithConcurrency(jobs, QUESTIONS_CONCURRENCY, runBatch);
       if (error) return setPhase({ step: 'error', message: error });
     }
 

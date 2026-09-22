@@ -60,30 +60,6 @@ import type {
 
 const FILES_BETA = 'files-api-2025-04-14';
 
-/** Généreux : une passe « questions » sur un gros chapitre produit un JSON long,
- *  et une réponse tronquée est une réponse perdue. Le streaming évite que ce
- *  plafond ne se paie en délai d'attente HTTP. */
-const MAX_TOKENS = 32_000;
-
-/** ⚠️ **La réflexion se prélève sur ce budget, elle ne s'ajoute pas à côté.**
- *
- *  Un modèle à réflexion adaptative peut donc consommer l'essentiel du plafond
- *  avant d'écrire la première accolade, et ce qui reste ne suffit plus au JSON :
- *  la réponse s'arrête **au milieu d'une chaîne**. Ce n'est pas théorique, c'est
- *  arrivé au premier import lancé sur Sonnet (30/08/2026, « Unterminated string
- *  in JSON at position 14563 ») — 14 500 caractères de sortie utile pour 32 000
- *  jetons de budget, le reste était parti en réflexion.
- *
- *  Le doublement est sans risque : l'appel est déjà en flux, donc un plafond
- *  élevé ne se paie pas en délai d'attente HTTP, et rien n'est facturé qui ne
- *  soit produit. Haiku 4.5 garde le sien : sa réflexion est bornée séparément
- *  (`budget_tokens`, voir `tuningFor`), donc le problème ne s'y pose pas. */
-const MAX_TOKENS_THINKING = 64_000;
-
-function maxTokensFor(model: ModelId): number {
-  return model === MODELS.haiku ? MAX_TOKENS : MAX_TOKENS_THINKING;
-}
-
 // ─── Le modèle, par passe ────────────────────────────────────────────────────
 //
 // Il était en dur (`claude-opus-5`) sur les trois passes. Deux raisons de le
@@ -147,6 +123,43 @@ const CONTEXT_WINDOW: Record<ModelId, number> = {
   [MODELS.opus]: 1_000_000,
 };
 
+/** Le plafond de réponse, par modèle — **celui du modèle, pas un réglage à nous**.
+ *
+ *  ⚠️ **Une réponse tronquée est une réponse perdue**, et elle ne se voit pas :
+ *  le JSON s'arrête au milieu d'une chaîne, l'appel a coûté plein tarif, et il
+ *  faut tout refaire. Incident de référence, 30/08/2026 : « Unterminated string
+ *  in JSON at position 14563 » sur le premier import lancé sur Sonnet — 14 500
+ *  caractères utiles pour 32 000 jetons de budget, le reste était parti en
+ *  réflexion.
+ *
+ *  Les valeurs précédentes (32 000, doublées à 64 000 après l'incident) étaient
+ *  **les nôtres**, posées quand la passe questions dimensionnait tout, et elles
+ *  valaient exactement la moitié de ce que les modèles acceptent. Corrigé le
+ *  08/09/2026 : on prend le plafond du modèle, point. Rien n'est facturé qui ne
+ *  soit produit, et l'appel est déjà en flux — un plafond haut ne se paie donc
+ *  ni en jetons ni en délai HTTP. Il ne reste aucune raison de descendre.
+ *
+ *  ⚠️ **La réflexion se prélève sur ce budget, elle ne s'ajoute pas à côté.**
+ *  Un modèle à réflexion adaptative peut consommer l’essentiel du plafond avant
+ *  d'écrire la première accolade : c'est précisément ce qui a causé l'incident.
+ *
+ *  Source : plafonds publiés par Anthropic, vérifiés le 08/09/2026 — 128 000 pour
+ *  Sonnet 5 et Opus 5, 64 000 pour Haiku 4.5. À relire si un modèle change. */
+const MAX_OUTPUT_TOKENS: Record<ModelId, number> = {
+  [MODELS.haiku]: 64_000,
+  [MODELS.sonnet]: 128_000,
+  [MODELS.opus]: 128_000,
+};
+
+/** Le plus gros plafond de réponse en jeu, à réserver sur la fenêtre de contexte.
+ *  Pris sur le maximum et non sur le modèle du moment : la réserve doit tenir
+ *  quel que soit le modèle choisi pour la passe qui porte le corpus. */
+const MAX_OUTPUT_RESERVE = Math.max(...Object.values(MAX_OUTPUT_TOKENS));
+
+function maxTokensFor(model: ModelId): number {
+  return MAX_OUTPUT_TOKENS[model];
+}
+
 /** Ce que la mesure du corpus NE COMPTE PAS, et qu'il faut donc lui réserver.
  *
  *  `countCorpus` mesure le socle système et les documents. L'appel réel de la
@@ -166,7 +179,7 @@ const WORKSHOP_CONTEXT_RESERVE = 100_000;
  *  on dispose est d'un million de tokens, elle porte l'entrée ET la sortie.
  *  Deux réserves s'y taillent avant qu'on parle de corpus :
  *
- *    • `MAX_TOKENS` pour la réponse — **le raisonnement compris** : les tokens
+ *    • `MAX_OUTPUT_RESERVE` pour la réponse — **le raisonnement compris** : les tokens
  *      de réflexion sont prélevés sur ce budget, pas ajoutés à côté (voir
  *      `tuningFor`, dont le budget de réflexion reste inférieur à `max_tokens`) ;
  *    • `WORKSHOP_CONTEXT_RESERVE` pour ce que la mesure ne voit pas.
@@ -175,7 +188,7 @@ const WORKSHOP_CONTEXT_RESERVE = 100_000;
  *  d'un coup. La passe notions travaille document par document, la fenêtre s'y
  *  applique par document ; les passes suivantes ne reçoivent aucun document. Le
  *  jour où le découpage séquentiel du cours existera, ce plafond tombera. */
-export const MAX_CORPUS_TOKENS = 1_000_000 - MAX_TOKENS_THINKING - WORKSHOP_CONTEXT_RESERVE;
+export const MAX_CORPUS_TOKENS = 1_000_000 - MAX_OUTPUT_RESERVE - WORKSHOP_CONTEXT_RESERVE;
 
 /** Le modèle voulu pour chaque passe : Sonnet 5 sur le programme, Haiku 4.5 sur
  *  les questions (voir le bloc ci-dessus pour le pourquoi et les coûts). */
@@ -219,14 +232,14 @@ export const OVERSIZE_FALLBACK: ModelId = MODELS.sonnet;
 
 /** (modèle souhaité, taille du corpus) → modèle retenu. **Fonction pure.**
  *
- *  On réserve `MAX_TOKENS` sur la fenêtre : elle porte l'entrée ET la sortie,
- *  et une réponse tronquée est une réponse perdue.
+ *  On réserve le plafond de réponse DU MODÈLE VOULU sur sa fenêtre : elle porte
+ *  l'entrée ET la sortie, et une réponse tronquée est une réponse perdue.
  *
  *  N'est appelée que lorsque la taille est **connue**. Une taille inconnue ne
  *  passe plus par ici : on essaie le modèle voulu et on reprend sur
  *  `OVERSIZE_FALLBACK` si l'appel est refusé (voir `isContextWindowOverflow`). */
 export function selectModel(wanted: ModelId, corpusTokens: number): ModelId {
-  const usable = CONTEXT_WINDOW[wanted] - MAX_TOKENS;
+  const usable = CONTEXT_WINDOW[wanted] - MAX_OUTPUT_TOKENS[wanted];
   if (corpusTokens <= usable) return wanted;
   // Jamais d'escalade au-delà du repli : s'il ne suffit pas non plus, c'est le
   // corpus qui est hors normes, et le découpage séquentiel est un autre sujet.

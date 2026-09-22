@@ -20,10 +20,9 @@ S'il en contient déjà un, arrête-toi et demande à Alexis ce qu'il veut faire
 Avant la moindre question, lis :
 
 - `CLAUDE.md` en entier (règles absolues, conventions, workflow Git)
-- `docs/product-spec.md` — périmètre MVP, ce qui est hors-scope
+- `docs/product-spec.md` — ce que fait le produit, écran par écran
 - `docs/backlog.md` — dette connue, un item ouvert peut recouper le chantier
-- `docs/changelog.md` — si le chantier touche une zone sensible, comprends son historique
-- Les `.claude/rules/*.md` pertinents pour la zone visée
+- `docs/architecture.md` — le fonctionnement et les pièges de la zone visée
 - **Le code réel de la zone concernée** — pas une supposition sur sa structure
 
 Si le chantier repose sur une source externe (une maquette, un document de conception, un export Claude Design), **exige le fichier et lis-le**. Ne cadre jamais un chantier sur une source que tu n'as pas ouverte.
@@ -123,5 +122,5 @@ Présente-lui le découpage **avant** d'écrire le fichier. C'est son dernier po
 ## Règles absolues du cadrage
 
 - **Aucune supposition** sur l'API d'une lib, la structure d'un fichier ou le comportement du code : va vérifier dans le code ou la doc (`CLAUDE.md` §1).
-- Le chantier doit respecter le périmètre MVP (`docs/product-spec.md`). Si Alexis demande du hors-MVP, signale-le-lui avant de cadrer.
+- Le chantier doit respecter l'ordre de la feuille de route (les trimestres de `docs/backlog.md`, `CLAUDE.md` §1). Si Alexis demande quelque chose dont le tour n'est pas venu, signale-le-lui avant de cadrer.
 - Une feuille de route qui contient « voir la discussion » ou « comme convenu » est **ratée** : l'agent d'exécution n'a pas accès à cette discussion.

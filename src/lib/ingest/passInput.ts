@@ -6,6 +6,9 @@
 // vérifiables sans clé API — et c'est le seul endroit où lire « qu'est-ce qui
 // part au modèle, et pourquoi ».
 
+import type { BloomLevel } from '@/lib/workshops/examTypes';
+
+import type { QuestionDemand } from './demand';
 import { EXAM_GROUP_SIZE, EXAM_QUESTIONS_PER_CALL, examGroupedCount } from './prompt';
 import type { PreparedDocument } from './providers/types';
 
@@ -71,12 +74,6 @@ export function documentsForPass(
   return prepared;
 }
 
-/** Combien de notions par appel de la passe questions.
- *
- *  Ni une (le contexte du chapitre serait renvoyé autant de fois qu'il y a de
- *  notions), ni tout le chapitre (`MAX_TOKENS` est à 32 000 et une notion à la
- *  volumétrie cible pèse ~2 400 tokens de sortie : un chapitre de 25 notions
- *  tronquerait la réponse, donc la perdrait, §16.2). Dix est le compromis. */
 // ─── Ce que « aucun chapitre » veut dire, et pour qui ────────────────────────
 //
 // Le modèle n'a qu'une façon de dire « nulle part » : un chapitre vide. Cette
@@ -130,18 +127,218 @@ export function splitUnplaced(
   };
 }
 
-export const NOTIONS_PER_QUESTION_BATCH = 10;
-
-/** Découpe les notions d'un chapitre en lots de travail.
+/** Découpe une liste de notions en lots de travail (passe de rangement).
  *
  *  L'ordre reçu est conservé et fait foi : l'appelant doit le rendre stable
  *  d'un appel à l'autre, sinon deux lots successifs se recouvriraient — le
  *  client rappelle la même action une fois par lot. */
-export function batchNotions<T>(notions: T[], size = NOTIONS_PER_QUESTION_BATCH): T[][] {
+export function batchNotions<T>(notions: T[], size: number): T[][] {
   if (size < 1) throw new Error(`Taille de lot invalide : ${size}`);
   const batches: T[][] = [];
   for (let i = 0; i < notions.length; i += size) batches.push(notions.slice(i, i + size));
   return batches;
+}
+
+// ─── Le découpage de la passe PARCOURS : des appels de huit questions ───────
+//
+// Jusqu'au 22/09/2026, on découpait par lots de DIX NOTIONS, quel que soit le
+// nombre de questions qu'elles demandaient : un appel en écrivait de 2 à 48, et
+// l'attente suivait — jusqu'à quatre minutes et demie pour le plus gros, alors
+// que les appels partent en parallèle et que c'est le plus long qu'on attend.
+//
+// On découpe désormais la DEMANDE, en appels de huit questions, comme l'examen
+// découpe son budget (arbitrage d'Alexis du 22/09/2026). Trois règles :
+//
+//   1. **Des appels pleins, le dernier s'ajuste** — le nombre d'appels est le
+//      plus petit possible ;
+//   2. **Les questions d'une notion restent ensemble** autant que la place le
+//      permet : on remplit dans l'ordre du chapitre, notion après notion ;
+//   3. **Une notion qui déborde est coupée entre ses niveaux**, ceux-ci étant
+//      rangés dans l'ordre : chaque morceau porte des niveaux différents, donc
+//      des questions de nature différente. Deux appels parallèles ne se voient
+//      pas ; c'est ce qui les empêche de se répéter.
+//
+// ⚠️ Un morceau au MÊME niveau reste possible (une notion qui demande plus de
+// huit questions de niveau 1). C'est rare — un chapitre neuf de deux notions —,
+// et accepté : on ne met pas en série pour ce cas (arbitrage du 22/09/2026).
+
+/** Nombre de questions par appel de la passe parcours. Environ 600 tokens de
+ *  sortie par question, réflexion comprise : un appel plein répond en une
+ *  demi-minute (mesuré au journal de bord, 09/2026). */
+export const QUESTIONS_PER_PARCOURS_CALL = 8;
+
+/** Découpe une demande en appels de `perCall` questions au plus.
+ *
+ *  `order` est l'ordre des notions du chapitre : il fait foi, et il doit être
+ *  **stable d'un appel à l'autre** — le client rappelle l'action une fois par
+ *  appel, et chacun doit retrouver la même découpe. Une notion de la demande
+ *  absente de `order` est ignorée (elle n'est pas dans ce chapitre). */
+export function packDemand(
+  demand: readonly QuestionDemand[],
+  order: readonly string[],
+  perCall = QUESTIONS_PER_PARCOURS_CALL,
+): QuestionDemand[][] {
+  if (perCall < 1) throw new Error(`Taille d'appel invalide : ${perCall}`);
+
+  // Deux entrées du même couple (notion × niveau) s'additionnent.
+  const counts = new Map<string, Map<BloomLevel, number>>();
+  for (const item of demand) {
+    if (item.count <= 0) continue;
+    const levels = counts.get(item.notionId) ?? new Map<BloomLevel, number>();
+    levels.set(item.bloomLevel, (levels.get(item.bloomLevel) ?? 0) + item.count);
+    counts.set(item.notionId, levels);
+  }
+
+  const calls: QuestionDemand[][] = [];
+  let current: QuestionDemand[] = [];
+  let room = perCall;
+  for (const notionId of order) {
+    const levels = counts.get(notionId);
+    if (!levels) continue;
+    for (const bloomLevel of [...levels.keys()].sort((a, b) => a - b)) {
+      let left = levels.get(bloomLevel) as number;
+      while (left > 0) {
+        const take = Math.min(left, room);
+        current.push({ notionId, bloomLevel, count: take });
+        left -= take;
+        room -= take;
+        if (room === 0) { calls.push(current); current = []; room = perCall; }
+      }
+    }
+  }
+  if (current.length > 0) calls.push(current);
+  return calls;
+}
+
+/** Un appel parcours sans demande chiffrée — une consigne libre : des notions
+ *  à couvrir et un budget, le modèle choisit où frapper. */
+export type FreeParcoursCall<T> = { notions: T[]; budget: number };
+
+/** Le cas de la consigne libre : aucune demande par notion, un budget pour le
+ *  chapitre. Même taille d'appel que la demande chiffrée ; les notions se
+ *  répartissent en tranches contiguës, comme le programme d'un examen. Jamais
+ *  plus d'appels que de notions : un appel sans notion n'aurait rien à couvrir. */
+export function planFreeParcoursCalls<T>(
+  notions: readonly T[],
+  total: number,
+  perCall = QUESTIONS_PER_PARCOURS_CALL,
+): FreeParcoursCall<T>[] {
+  const safe = Math.max(0, Math.floor(total));
+  if (safe === 0 || notions.length === 0) return [];
+  const count = Math.min(Math.ceil(safe / perCall), notions.length);
+  const budgets = splitBudget(safe, count);
+  const sizes = splitBudget(notions.length, count);
+  let cursor = 0;
+  return sizes.map((size, i) => {
+    const slice = notions.slice(cursor, cursor + size);
+    cursor += size;
+    return { notions: slice, budget: budgets[i] };
+  });
+}
+
+// ─── Ce qu'un appel de la passe questions voit du chapitre ───────────────────
+//
+// La passe ne reçoit aucun document : ce sont les autres notions du chapitre qui
+// remplacent le cours, et les questions déjà écrites qui l'empêchent de se
+// répéter. Deux plafonds, pour qu'un gros chapitre ne fasse pas grossir l'appel
+// sans limite.
+
+/** Notions du chapitre transmises en contexte, celles du lot comprises. Un
+ *  intitulé pèse ~40 tokens : 150 notions en font ~6 000. */
+export const QUESTION_CONTEXT_NOTIONS = 150;
+
+/** Questions existantes transmises contre la redite, toutes notions de l'appel
+ *  confondues (~30 tokens chacune, ~9 000 au plafond). C'est le poste qui grandit
+ *  avec l'atelier : une notion peut accumuler des centaines d'énoncés. */
+export const QUESTION_CONTEXT_EXISTING = 300;
+
+/** Les autres notions du chapitre, en contexte seulement.
+ *
+ *  **TOUT le chapitre, et pas seulement les notions que la demande vise.** Une
+ *  recharge ou un démarrage ne visent souvent qu'une partie du chapitre (24
+ *  questions de démarrage sur un chapitre de 150 notions n'en visent que 24) ; ne
+ *  montrer que celles-là priverait le modèle du contexte qui situe ses questions,
+ *  et le laisserait écrire sur la notion voisine sans le savoir.
+ *
+ *  Au-delà du plafond, les notions visées passent d'abord, puis les autres ;
+ *  l'ordre du chapitre est conservé dans ce qui est gardé. */
+export function contextNotions<T extends { id: string }>(
+  chapter: readonly T[],
+  batch: ReadonlySet<string>,
+  targeted: ReadonlySet<string>,
+  cap = QUESTION_CONTEXT_NOTIONS,
+): T[] {
+  const others = chapter.filter((n) => !batch.has(n.id));
+  const room = Math.max(0, cap - batch.size);
+  const kept = new Set(
+    [...others.filter((n) => targeted.has(n.id)), ...others.filter((n) => !targeted.has(n.id))]
+      .slice(0, room)
+      .map((n) => n.id),
+  );
+  return others.filter((n) => kept.has(n.id));
+}
+
+/** Une question déjà écrite sur une ou plusieurs notions du lot. */
+export type ExistingQuestion = {
+  content: string;
+  notionIds: string[];
+  /** Le niveau de Bloom que la question vise, pour chacune de ses notions. */
+  levels: Record<string, number | null>;
+  /** Date d'écriture (ISO) — à niveau égal, les plus récentes passent d'abord :
+   *  ce sont celles que le modèle vient d'écrire, donc celles qu'il risque le
+   *  plus de reproduire. */
+  createdAt: string;
+};
+
+/** Écart entre le niveau d'une question et les niveaux demandés sur sa notion.
+ *  Aucun niveau demandé (consigne libre) : toutes se valent. Niveau inconnu : en
+ *  dernier. */
+function levelDistance(level: number | null, wanted: readonly number[]): number {
+  if (wanted.length === 0) return 0;
+  if (level === null) return Number.MAX_SAFE_INTEGER;
+  return Math.min(...wanted.map((w) => Math.abs(w - level)));
+}
+
+/** Les questions existantes à montrer au modèle, sous le plafond.
+ *
+ *  **Priorité au niveau demandé** : pour une question demandée au niveau 2, les
+ *  questions de niveau 2 d'abord, puis celles des niveaux voisins (1 et 3), puis
+ *  le 4 — c'est au niveau visé que la redite menace. À niveau égal, les plus
+ *  récentes.
+ *
+ *  **Réparti entre les notions du lot**, à tour de rôle : chacune reçoit sa part,
+ *  et la part d'une notion qui a peu de questions revient aux autres. Une question
+ *  reliée à deux notions du lot n'est comptée qu'une fois. */
+export function pickExistingQuestions(
+  questions: readonly ExistingQuestion[],
+  /** Les notions du lot, avec les niveaux demandés sur chacune (vide = aucun). */
+  targets: ReadonlyMap<string, readonly number[]>,
+  cap = QUESTION_CONTEXT_EXISTING,
+): ExistingQuestion[] {
+  if (cap <= 0) return [];
+
+  const queues = [...targets].map(([notionId, wanted]) =>
+    questions
+      .filter((q) => q.notionIds.includes(notionId))
+      .map((q) => ({ q, distance: levelDistance(q.levels[notionId] ?? null, wanted) }))
+      .sort((a, b) => a.distance - b.distance || b.q.createdAt.localeCompare(a.q.createdAt))
+      .map(({ q }) => q),
+  );
+
+  const picked = new Set<ExistingQuestion>();
+  const cursors = queues.map(() => 0);
+  let progressed = true;
+  while (picked.size < cap && progressed) {
+    progressed = false;
+    for (let i = 0; i < queues.length && picked.size < cap; i++) {
+      while (cursors[i] < queues[i].length && picked.has(queues[i][cursors[i]])) cursors[i]++;
+      if (cursors[i] < queues[i].length) {
+        picked.add(queues[i][cursors[i]++]);
+        progressed = true;
+      }
+    }
+  }
+  return [...picked];
 }
 
 // ─── Le découpage de la passe EXAMEN ─────────────────────────────────────────
