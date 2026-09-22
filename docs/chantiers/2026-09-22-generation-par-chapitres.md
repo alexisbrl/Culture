@@ -63,7 +63,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 
 ## Tâches
 
-- [ ] **T1 — Lire et découper un PDF**
+- [x] **T1 — Lire et découper un PDF**
   - Ajouter `unpdf` et `pdf-lib`. Nouveau module pur `src/lib/ingest/pdf.ts` : (a) texte de chaque page d'un PDF (tableau indexé par page, à partir de 1) ; (b) nombre de pages ; (c) nouveau PDF ne contenant que les pages demandées, dans l'ordre, sans doublon.
   - Critère d'acceptation : `tests/unit/pdf.test.ts` fabrique en mémoire, avec `pdf-lib`, un PDF de 3 pages portant un texte distinct par page, et vérifie : le texte de chaque page est rendu à son index ; la découpe des pages 2–3 rend un PDF de 2 pages dont le texte est celui des pages 2 et 3 ; une page demandée hors bornes est ignorée. Lint, tests et build passent.
   - Fichiers : `package.json`, `src/lib/ingest/pdf.ts`, `tests/unit/pdf.test.ts`
@@ -155,6 +155,7 @@ Toutes sont déjà écrites dans `docs/architecture.md` — **c'est lui la sourc
 
 ## Journal
 <!-- Append-only. Une ligne par tâche terminée : date, tâche, commit, note. -->
+- 2026-09-22 — T1 — df07b7d — `pdf.ts` : `readPdfText` (via `extractText` d'unpdf sur une copie du tampon), `countPdfPages`, `extractPdfPages` (pages 1-based, hors bornes ignorées, `null` si rien).
 
 ## Décisions prises en autonomie
 <!-- L'agent y consigne ses arbitrages de nuit. Alexis les relit au réveil. -->
