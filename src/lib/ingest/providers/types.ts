@@ -210,6 +210,12 @@ export type IngestScope =
        *  des groupes, elles, restent au modèle. */
       grouped: boolean;
       workshop?: { name: string; description?: string | null } | null;
+    }
+  | {
+      /** Les REDITES entre chapitres (§7.6) : un seul appel, sans document,
+       *  qui ne répond que « redite ou pas » sur chaque paire. */
+      pass: 'redites';
+      pairs: { candidate: string; other: string }[];
     };
 
 /** Ce que rend un fournisseur : la sortie brute — **non validée**, c'est le rôle

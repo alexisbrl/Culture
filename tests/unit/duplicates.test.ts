@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   NEAR_DUPLICATE,
@@ -6,6 +6,9 @@ import {
   dropRepeatedQuestions,
   findExistingMatch,
   flagSimilar,
+  judgeRedites,
+  rediteCandidates,
+  rediteRemovals,
   SIMILAR_ENOUGH_TO_ASK,
   proximity,
   significantWords,
@@ -322,5 +325,76 @@ describe('dropRepeatedQuestions', () => {
   it('écarte le mot à mot, y compris sous une ponctuation différente', () => {
     const groups = [{ questions: [q('Quelle est la capitale du Pérou ?')] }];
     expect(dropRepeatedQuestions(groups, ['Quelle est la capitale du Pérou.']).kept).toHaveLength(0);
+  });
+});
+
+describe('redites entre chapitres (§7.6)', () => {
+  const loire = { id: 'old1', title: 'La Loire est le plus long fleuve de France avec 1 012 km', chapterId: 'c1' };
+  const loireBis = { id: 'new1', title: 'Avec 1 012 km, la Loire est le plus long fleuve de France', chapterId: 'c2' };
+  const seine = { id: 'new2', title: 'La Seine se jette dans la Manche au Havre', chapterId: 'c2' };
+  const loireTer = { id: 'new3', title: 'La Loire est le plus long fleuve de France, avec 1 012 km', chapterId: 'c3' };
+
+  it('ne soumet que les paires neuve ↔ autre chapitre, chacune une fois', () => {
+    const pairs = rediteCandidates([loireBis, seine, loireTer], [loire, loireBis, seine, loireTer]);
+    const keys = pairs.map((p) => [p.candidate.id, p.other.id].sort().join('|'));
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys).toContain('new1|old1');
+    expect(keys).toContain('new1|new3');
+    expect(pairs.every((p) => p.candidate.chapterId !== p.other.chapterId)).toBe(true);
+    expect(keys.some((k) => k.includes('new2'))).toBe(false);
+  });
+
+  it('respecte le plafond, les plus proches d’abord', () => {
+    const pairs = rediteCandidates([loireBis, loireTer], [loire, loireBis, loireTer], 1);
+    expect(pairs).toHaveLength(1);
+  });
+
+  it('aucune paire ⇒ aucun appel', async () => {
+    const ask = vi.fn(async () => [{ pair: 0, duplicate: true }]);
+    expect(await judgeRedites([], ask)).toEqual([]);
+    expect(ask).not.toHaveBeenCalled();
+  });
+
+  it('des paires ⇒ un seul appel', async () => {
+    const ask = vi.fn(async () => [{ pair: 0, duplicate: true }]);
+    const pairs = rediteCandidates([loireBis], [loire, loireBis]);
+    await judgeRedites(pairs, ask);
+    expect(ask).toHaveBeenCalledTimes(1);
+  });
+
+  it('seule la neuve s’efface ; l’ancienne reste', () => {
+    const pairs = [{ candidate: loireBis, other: loire, proximity: 0.9 }];
+    expect(rediteRemovals(pairs, [{ pair: 0, duplicate: true }], new Set(['new1']))).toEqual([
+      { remove: 'new1', keep: 'old1' },
+    ]);
+  });
+
+  it('une notion préexistante n’est JAMAIS rendue à effacer, même désignée', () => {
+    // Paire mal formée où l'ancienne occupe la place de la candidate : le
+    // modèle a beau répondre « redite », rien ne sort.
+    const pairs = [{ candidate: loire, other: loireBis, proximity: 0.9 }];
+    expect(rediteRemovals(pairs, [{ pair: 0, duplicate: true }], new Set(['new1']))).toEqual([]);
+    // Et quelle que soit la réponse, aucune notion hors du lot n'est rendue.
+    const all = [
+      { candidate: loireBis, other: loire, proximity: 0.9 },
+      { candidate: loire, other: loireTer, proximity: 0.9 },
+    ];
+    const removals = rediteRemovals(all, [0, 1, 2, -1, 1.5].map((pair) => ({ pair, duplicate: true })), new Set(['new1', 'new3']));
+    expect(removals.map((r) => r.remove)).toEqual(['new1']);
+  });
+
+  it('« pas une redite », paire inconnue, réponse en double : rien', () => {
+    const pairs = [{ candidate: loireBis, other: loire, proximity: 0.9 }];
+    expect(rediteRemovals(pairs, [{ pair: 0, duplicate: false }, { pair: 7, duplicate: true }], new Set(['new1']))).toEqual([]);
+  });
+
+  it('une notion déjà effacée ne sert pas de notion gardée', () => {
+    const pairs = [
+      { candidate: loireBis, other: loireTer, proximity: 0.9 },
+      { candidate: loireTer, other: loireBis, proximity: 0.9 },
+    ];
+    expect(rediteRemovals(pairs, [{ pair: 0, duplicate: true }, { pair: 1, duplicate: true }], new Set(['new1', 'new3']))).toEqual([
+      { remove: 'new1', keep: 'new3' },
+    ]);
   });
 });

@@ -237,7 +237,9 @@ export type ExistingScope =
    *  qui est déjà DANS CETTE LISTE, quelle que soit la notion. Le chargeur
    *  borne déjà la liste ; filtrer une seconde fois ici ne ferait que perdre des
    *  énoncés en route. */
-  | { pass: 'exam' };
+  | { pass: 'exam' }
+  /** Les redites : les paires voyagent dans la consigne, rien d'autre. */
+  | { pass: 'redites' };
 
 const SYSTEM = `Tu construis le programme pédagogique d'un atelier à partir de ses documents sources.
 
@@ -385,6 +387,9 @@ function inScope(existing: ExistingContent, scope: ExistingScope): {
     }
     case 'exam':
       return { chapters: [], notions: [], questions: existing.questions.map((q) => q.content) };
+    case 'redites':
+      // Rien : les paires voyagent dans la consigne.
+      return { chapters: [], notions: [], questions: [] };
   }
 }
 
@@ -402,6 +407,7 @@ export function existingContentBlock(existing: ExistingContent, scope: ExistingS
       case 'notions':
         return "L'atelier ne contient encore aucune notion.";
       case 'assign':
+      case 'redites':
         return '';
       case 'questions':
         return "Aucune question ne porte encore sur ces notions : la liste est vide.";
@@ -1344,4 +1350,17 @@ Ce que chaque question doit porter en plus de son énoncé :
 Tu n'inventes aucun fait : tout ce qu'une question demande doit se déduire des notions ci-dessus.
 
 ⚠️ **UNE exception, et une seule : ce que la consigne de l'utilisateur te demande NOMMÉMENT d'écrire.** Si elle réclame une question sur un point précis que les notions ci-dessus ne portent pas, tu l'écris quand même — à partir de ce que tu sais établi, et sans jamais dire qu'elle sort du cours. **Et si aucune notion ne traite vraiment son sujet, laisse sa liste de notions VIDE** : c'est permis pour ce cas-là, et c'est ce qu'il faut faire. Ne lui accroche jamais une notion approchante pour remplir le champ — tu ferais dire à cette notion qu'elle est évaluée par une question qui ne la travaille pas, et c'est bien plus dommageable qu'une question sans notion. C'est lui l'auteur de cet examen : une demande qu'il a formulée explicitement ne se refuse pas au nom d'un cours qu'il a lui-même écrit, et il relira ce que tu produis. **Cette exception ne couvre QUE ce qu'il a nommé** — tout le reste de ce que tu écris reste strictement tiré des notions ci-dessus. En cas de doute sur ce qui est demandé, tu écris la question : rendre zéro question est la seule issue qui ne sert à personne.`;
+}
+
+/** Les REDITES entre chapitres (§7.6). Un seul appel, sans document : il ne
+ *  répond que « redite ou pas », paire par paire. Qui s'efface ne se demande
+ *  pas au modèle — c'est toujours la nouvelle, et le code le garantit. */
+export function reditesInstruction(pairs: readonly { candidate: string; other: string }[]): string {
+  return `Des notions ont été extraites chapitre par chapitre, sans que chaque chapitre voie les autres. Un calcul automatique a repéré les paires ci-dessous : deux notions de chapitres différents qui se ressemblent. **Ce calcul ne juge rien** : il compare des mots. C'est à toi de dire, pour chaque paire, si c'est une REDITE.
+
+${pairs.map((p, i) => `${i}. « ${p.candidate} » ↔ « ${p.other} »`).join('\n')}
+
+Une paire est une redite si les deux notions énoncent le MÊME fait — mêmes chiffres, mêmes noms, mêmes dates, mêmes termes —, même tourné autrement ou dans un autre ordre. Ce n'est PAS une redite si l'une apporte un fait vérifiable de plus : quelque chose qu'on pourrait demander à un élève et dont la réponse est absente de l'autre.
+
+Réponds pour CHAQUE paire, par son numéro. Dans le doute, ce n'est pas une redite.`;
 }

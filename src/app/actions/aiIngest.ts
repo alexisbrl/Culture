@@ -287,6 +287,28 @@ export async function ingestWorkshopChapterNotions(
   }
 }
 
+export type RedundancyResult =
+  | { ok: true; pairs: number; removed: number; reattached: number; adjusted: PlanIssue[] }
+  | { ok: false; error: string };
+
+/** La vérification finale des redites entre chapitres — une fois toutes les
+ *  étapes notions finies, en même temps que les questions. */
+export async function checkWorkshopRedites(
+  workshopId: string,
+  importId: string,
+): Promise<RedundancyResult> {
+  const ctx = await requireManager(workshopId);
+  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
+
+  try {
+    const result = await run.ingestRedites(workshopId, importId);
+    if (result.removed > 0) revalidateWorkshop();
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: failed('redites', error, { workshopId, importId }) };
+  }
+}
+
 /** Étape 1, relance — quand trop de notions sont restées sans verdict. Une
  *  action à part : un appel au modèle par action, pour tenir dans la durée
  *  d'une fonction serveur. */

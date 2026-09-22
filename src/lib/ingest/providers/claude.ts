@@ -29,6 +29,7 @@ import {
   chaptersInstruction,
   chaptersRelaunchInstruction,
   chapterNotionsInstruction,
+  reditesInstruction,
   userHintBlock,
   existingContentBlock,
   assignInstruction,
@@ -46,6 +47,7 @@ import {
   wireChaptersOutput,
   wireChaptersRelaunchOutput,
   wireChapterNotionsOutput,
+  wireReditesOutput,
   wireExamGroupsOutput,
   wireGroupsOutput,
   wireNotionsOutput,
@@ -210,6 +212,9 @@ export const PASS_MODELS: Record<IngestScope['pass'], ModelId> = {
   assign: MODELS.sonnet,
   questions: MODELS.haiku,
   exam: MODELS.haiku,
+  // Juger si deux phrases disent le même fait : un jugement, et une notion
+  // effacée à tort ne revient pas. Un seul appel par génération.
+  redites: MODELS.sonnet,
 };
 
 /** Le repli quand la fenêtre du modèle voulu ne suffit pas. Sonnet 5 et non
@@ -366,6 +371,8 @@ function instructionFor(scope: IngestScope): string {
         budget: scope.budget,
         grouped: scope.grouped,
       });
+    case 'redites':
+      return reditesInstruction(scope.pairs);
   }
 }
 
@@ -391,6 +398,8 @@ function existingScopeFor(scope: IngestScope): ExistingScope {
       // (`loadExamQuestions`) rend déjà exactement ce qu'il faut — la portée ne
       // doit donc rien retirer de plus.
       return { pass: 'exam' };
+    case 'redites':
+      return { pass: 'redites' };
   }
 }
 
@@ -432,6 +441,7 @@ function documentUsesOf(scope: IngestScope): number {
     case 'assign':
     case 'questions':
     case 'exam':
+    case 'redites':
       // Aucun document : rien à mettre en cache.
       return 0;
   }
@@ -457,6 +467,8 @@ function outputSchemaFor(scope: IngestScope) {
     // (EXAM_RESPONSE_TYPES).
     case 'exam':
       return wireExamGroupsOutput;
+    case 'redites':
+      return wireReditesOutput;
   }
 }
 

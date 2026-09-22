@@ -12,7 +12,7 @@ import type { QuestionDemand } from './demand';
 import { EXAM_GROUP_SIZE, EXAM_QUESTIONS_PER_CALL, examGroupedCount } from './prompt';
 import type { PreparedDocument } from './providers/types';
 
-export type IngestPass = 'resource' | 'chapters' | 'notions' | 'assign' | 'questions' | 'exam';
+export type IngestPass = 'resource' | 'chapters' | 'notions' | 'assign' | 'questions' | 'exam' | 'redites';
 
 /** Les documents qu'une passe reçoit.
  *
@@ -51,7 +51,7 @@ export function documentsForPass(
   // travaille sur des pages et des titres, les seconds sur des notions (§16.3).
   // La passe examen suit exactement la même règle — elle lit le programme, pas
   // le cours.
-  if (pass === 'questions' || pass === 'exam' || pass === 'assign') return [];
+  if (pass === 'questions' || pass === 'exam' || pass === 'assign' || pass === 'redites') return [];
 
   // La passe notions ne reçoit QUE son document. C'est l'unité de travail qui
   // remplace le chapitre : elle ne demande aucun jugement au modèle, elle est

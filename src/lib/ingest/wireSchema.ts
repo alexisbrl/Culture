@@ -479,3 +479,14 @@ export const wireResourceOutputExam = z.object({
 });
 
 export type WireResourceOutput = z.infer<typeof wireResourceOutput>;
+
+/** Les REDITES entre chapitres (§7.6) : pour chaque paire soumise, redite ou
+ *  pas — rien d'autre. Qui s'efface est décidé par le code, jamais ici. */
+export const wireReditesOutput = z.object({
+  verdicts: z.array(
+    z.object({
+      pair: z.number().int().describe('Le numéro de la paire, tel qu’il est donné dans la liste.'),
+      duplicate: z.boolean().describe('true si les deux notions disent le même fait, false si l’une apporte un fait vérifiable de plus.'),
+    }),
+  ),
+});

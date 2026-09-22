@@ -70,7 +70,15 @@ import {
 } from './ingest';
 import { reorderChapters } from '@/lib/workshops/chapters';
 import { MAX_NOTIONS_PER_WORKSHOP, countNotions } from '@/lib/workshops/notions';
-import { dropNearDuplicates, dropRepeatedQuestions, flagSimilar, findExistingMatch } from './duplicates';
+import {
+  dropNearDuplicates,
+  dropRepeatedQuestions,
+  findExistingMatch,
+  flagSimilar,
+  judgeRedites,
+  rediteCandidates,
+  rediteRemovals,
+} from './duplicates';
 import {
   batchNotions,
   contextNotions,
@@ -2425,6 +2433,82 @@ export async function ingestChapterNotions(
   } finally {
     await releaseDocuments(provider, input.uploaded);
   }
+}
+
+export type RedundancyResult = {
+  /** Paires soumises au modèle — 0 : aucun appel n'est parti. */
+  pairs: number;
+  /** Notions neuves effacées comme redites. */
+  removed: number;
+  /** Questions déjà écrites sur ces notions, rattachées à la notion qui reste. */
+  reattached: number;
+  adjusted: PlanIssue[];
+};
+
+/** La vérification finale des REDITES entre chapitres (§7.6).
+ *
+ *  Une fois toutes les étapes notions finies, le site repère les paires
+ *  suspectes — une notion neuve de ce lot trop proche d'une notion d'un AUTRE
+ *  chapitre — et un seul appel les tranche. Pas d'appel s'il n'y a aucune paire.
+ *  Tourne en même temps que les questions, qui ne l'attendent pas.
+ *
+ *  Pour chaque redite confirmée, seule la notion NEUVE s'efface — garanti par
+ *  `rediteRemovals`, pas seulement demandé —, et ses questions déjà écrites sont
+ *  d'abord rattachées à la notion qui reste : elles portent sur le même fait. */
+export async function ingestRedites(
+  workshopId: string,
+  importId: string,
+  options: { provider?: PlanProvider } = {},
+): Promise<RedundancyResult> {
+  const [stage1, rows] = await Promise.all([stage1Of(importId), loadNotionsToArrange(workshopId)]);
+  const inProgram = new Set(stage1.chapters.map((c) => c.id));
+  const placed = rows
+    .filter((n) => n.chapterId && inProgram.has(n.chapterId))
+    .map((n) => ({ id: n.id, title: n.title, chapterId: n.chapterId, importId: n.importId }));
+  const fresh = placed.filter((n) => n.importId === importId);
+  const freshIds = new Set(fresh.map((n) => n.id));
+
+  const pairs = rediteCandidates(fresh, placed);
+  const answers = await judgeRedites(pairs, async (submitted) => {
+    // Créé seulement s'il y a des paires : sans elles, aucun appel, aucune clé.
+    const used = options.provider ?? createClaudeProvider({ userHint: await userHintOf(importId) });
+    const meta: StepMeta = { importId, workshopId, step: 'redites', provider: used };
+    const call = await modelCall(meta, () => used.documentToPlan([], EMPTY, {
+      pass: 'redites',
+      pairs: submitted.map((p) => ({ candidate: p.candidate.title, other: p.other.title })),
+    }));
+    await addImportUsage(importId, call.result.usage);
+    const raw = (call.result.plan as { verdicts?: unknown } | null)?.verdicts;
+    const verdicts = (Array.isArray(raw) ? raw : []).flatMap((v) => {
+      const r = v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
+      return typeof r.pair === 'number' && typeof r.duplicate === 'boolean' ? [{ pair: r.pair, duplicate: r.duplicate }] : [];
+    });
+    await stepDone(meta, call, {
+      paires: submitted.length,
+      redites: verdicts.filter((v) => v.duplicate).length,
+      illisibles: (Array.isArray(raw) ? raw.length : 0) - verdicts.length,
+    });
+    return verdicts;
+  });
+
+  const removals = rediteRemovals(pairs, answers, freshIds);
+  if (removals.length === 0) return { pairs: pairs.length, removed: 0, reattached: 0, adjusted: [] };
+
+  let reattached = 0;
+  for (const { remove, keep } of removals) reattached += await reattachQuestions(remove, keep);
+  await removeOrphans(workshopId, { chapterIds: [], notionIds: removals.map((r) => r.remove) });
+
+  const titles = new Map(placed.map((n) => [n.id, n.title]));
+  return {
+    pairs: pairs.length,
+    removed: removals.length,
+    reattached,
+    adjusted: removals.map(({ remove, keep }) => ({
+      kind: 'notion' as const,
+      ref: remove,
+      reason: `« ${titles.get(remove) ?? remove} » redisait « ${titles.get(keep) ?? keep} » d'un autre chapitre — effacée, ses questions rattachées à l'autre`,
+    })),
+  };
 }
 
 /** Un appel de la passe parcours : ses notions, ce qu'on lui demande sur
