@@ -65,6 +65,8 @@ Les quatre documents décrivent **le produit tel qu'il doit être**, pas ce qui 
 
 L'écart entre la cible et le réel se lit **en comparant le produit au document** — c'est cette comparaison qui fait foi, pas une liste. `docs/backlog.md` n'en est que le raccourci, tenu à jour pour ne pas avoir à refaire la comparaison à chaque fois : il doit donc être entretenu consciencieusement, et **renvoyer aux pages et aux parties d'architecture qu'il appelle**.
 
+**Le backlog ne redit jamais ce que décrivent les autres documents** (règle du 22/09/2026). Un item nomme l'écart et renvoie à la partie qui porte la cible — « réaliser `docs/architecture.md` §7.6 (rangement et seuils) » —, sans recopier les règles, chiffres ou raisons qui y sont déjà : une règle écrite deux fois finit par se contredire. Il ne garde que ce qui n'a pas sa place ailleurs : ce qui manque dans le code actuel, l'ordre des étapes, les pièges propres au passage de l'existant à la cible, et les décisions encore ouvertes. Une règle cible trouvée seulement dans le backlog se **déplace** dans le document qui lui revient, et l'item y renvoie.
+
 **Décisions et cas pratiques :** un arbitrage tranché ou un piège rencontré peut être consigné **en annexe, en fin de document**, et **très concis** — une à trois lignes. Jamais dans le corps, qui ne décrit que la cible. Et **ça se supprime dès que c'est trop éloigné du produit actuel** : une annexe qui parle d'un état révolu n'informe plus, elle induit en erreur. `git log` garde tout, il n'y a rien à préserver.
 
 Corollaire : **pas de journal, pas d'historique, pas de feuille de route de chantier terminé** dans `docs/`. Ces fichiers ont existé jusqu'au 09/09/2026 et représentaient les deux tiers du volume documentaire — supprimés pour cette raison.

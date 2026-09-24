@@ -1168,12 +1168,6 @@
       "info": "AI writes exam questions from the workshop’s notions.",
       "infoIdeas": "You can steer it: the number of questions, which notions or chapters to cover, the answer types you want, the students’ level, the wording to use."
     },
-    "provider": {
-      "label": "MODEL FOR QUESTIONS",
-      "claude": "Claude (Haiku)",
-      "deepseek": "DeepSeek",
-      "help": "DeepSeek writes the questions everywhere else — the choice only exists here. Only affects question writing, which does not read the documents: chapters and notions stay on Claude, the only one that reads PDFs without losing their diagrams."
-    },
     "generate": "generate",
     "cancel": "cancel",
     "close": "close",
@@ -1181,14 +1175,11 @@
     "progress": {
       "resource": "Reading your instructions…",
       "chapters": "Splitting the course into chapters…",
-      "notionsDocuments": "Notions — {done}/{n} documents read",
-      "assign": "Filing the notions — {done}/{n} batches",
-      "questionsCount": "Questions — {done}/{n} batches done",
-      "questionsBatch": "Questions — {chapter} ({i}/{n}) · batch {b}/{nb}"
+      "chaptersRelaunch": "Checking the notions left without a chapter…",
+      "notionsChapters": "Notions — {done}/{n} chapters read",
+      "questionsCount": "Questions — {done}/{n} batches done"
     },
-    "keepOpen": "Keep this tab open: generation stops if you close it. Whatever was written stays, and stays undoable. No need to wait here: open a second tab and carry on elsewhere.",
-    "newTab": "open Culture in a second tab",
-    "busy": "A generation is already running on this workshop, in another tab. Wait for it to finish, or stop it before starting another.",
+    "busy": "A generation is already running on this workshop. Wait for it to finish, or stop it from the workshop banner before starting another.",
     "runningCounts": "{chapters} chapters · {notions} notions · {questions} questions",
     "doneCounts": "{chapters} chapters, {notions} notions and {questions} questions added",
     "discarded": "Discarded",
@@ -1208,7 +1199,11 @@
       "error": "Cannot undo: {reason}",
       "previous": "{count, plural, one {# earlier import} other {# earlier imports}}",
       "interruptedText": "Generation interrupted: AI had time to add {items}.",
-      "interruptedHint": "This generation stopped before finishing — tab closed, page reloaded or server lost. Whatever it had already written stayed: you can remove it here, then start a new generation."
+      "interruptedHint": "This generation stopped before finishing: the server lost it along the way. Whatever it had already written stayed: you can remove it here, then start a new generation.",
+      "runningText": "Generation in progress: AI has already added {items}.",
+      "runningEmpty": "Generation in progress…",
+      "stop": "stop",
+      "stopHint": "Stops the generation and removes what it has already written."
     },
     "button": "generate with AI",
     "chooseAi": "with AI",
@@ -1229,11 +1224,16 @@
     "stop": {
       "aria": "stop generating",
       "title": "Stop generating?",
-      "body": "Whatever was written will be removed: the workshop goes back to how it was. This closes right away, the cleanup finishes on its own.",
+      "body": "Whatever was written will be removed: the workshop goes back to how it was. This closes right away, the cleanup finishes on its own on the server.",
       "keep": "keep generating",
       "confirm": "stop and undo"
     },
     "nothingWritten": "The AI wrote nothing from your instructions, and this workshop has no document and no notion: there was nothing to build. Say what the course should contain, or add a document.",
-    "writtenNotRead": "The course was written and now appears under Resources, but this generation could not read it back to build the programme. Run it again: it will start from that course."
+    "writtenNotRead": "The course was written and now appears under Resources, but this generation could not read it back to build the programme. Run it again: it will start from that course.",
+    "cancelledForgotten": "The workshop update was cancelled: the AI could not place too large a share of the existing notions in the course. Nothing was changed. Run the generation again; if it happens again, the problem is on our side.",
+    "canClose": "You can close this window, or even leave the site: generation carries on on the server. A banner on the workshop shows how far it has got, then what it added.",
+    "partialQuestions": "{count, plural, one {# question could not be written} other {# questions could not be written}}: start a new generation to fill the gap.",
+    "timeout": "A generation step ran over the server time limit twice and was abandoned. Start the generation again.",
+    "stopped": "The generation was stopped."
   }
 }

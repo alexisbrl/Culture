@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   NEAR_DUPLICATE,
@@ -6,6 +6,10 @@ import {
   dropRepeatedQuestions,
   findExistingMatch,
   flagSimilar,
+  judgeRedites,
+  rediteCandidates,
+  rediteRemovals,
+  revalidateRedites,
   SIMILAR_ENOUGH_TO_ASK,
   proximity,
   significantWords,
@@ -322,5 +326,111 @@ describe('dropRepeatedQuestions', () => {
   it('écarte le mot à mot, y compris sous une ponctuation différente', () => {
     const groups = [{ questions: [q('Quelle est la capitale du Pérou ?')] }];
     expect(dropRepeatedQuestions(groups, ['Quelle est la capitale du Pérou.']).kept).toHaveLength(0);
+  });
+});
+
+describe('redites entre chapitres (§7.6)', () => {
+  const loire = { id: 'old1', title: 'La Loire est le plus long fleuve de France avec 1 012 km', chapterId: 'c1' };
+  const loireBis = { id: 'new1', title: 'Avec 1 012 km, la Loire est le plus long fleuve de France', chapterId: 'c2' };
+  const seine = { id: 'new2', title: 'La Seine se jette dans la Manche au Havre', chapterId: 'c2' };
+  const loireTer = { id: 'new3', title: 'La Loire est le plus long fleuve de France, avec 1 012 km', chapterId: 'c3' };
+
+  it('ne soumet que les paires neuve ↔ autre chapitre, chacune une fois', () => {
+    const pairs = rediteCandidates([loireBis, seine, loireTer], [loire, loireBis, seine, loireTer]);
+    const keys = pairs.map((p) => [p.candidate.id, p.other.id].sort().join('|'));
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys).toContain('new1|old1');
+    expect(keys).toContain('new1|new3');
+    expect(pairs.every((p) => p.candidate.chapterId !== p.other.chapterId)).toBe(true);
+    expect(keys.some((k) => k.includes('new2'))).toBe(false);
+  });
+
+  it('respecte le plafond, les plus proches d’abord', () => {
+    const pairs = rediteCandidates([loireBis, loireTer], [loire, loireBis, loireTer], 1);
+    expect(pairs).toHaveLength(1);
+  });
+
+  it('aucune paire ⇒ aucun appel', async () => {
+    const ask = vi.fn(async () => [{ pair: 0, duplicate: true }]);
+    expect(await judgeRedites([], ask)).toEqual([]);
+    expect(ask).not.toHaveBeenCalled();
+  });
+
+  it('des paires ⇒ un seul appel', async () => {
+    const ask = vi.fn(async () => [{ pair: 0, duplicate: true }]);
+    const pairs = rediteCandidates([loireBis], [loire, loireBis]);
+    await judgeRedites(pairs, ask);
+    expect(ask).toHaveBeenCalledTimes(1);
+  });
+
+  it('seule la neuve s’efface ; l’ancienne reste', () => {
+    const pairs = [{ candidate: loireBis, other: loire, proximity: 0.9 }];
+    expect(rediteRemovals(pairs, [{ pair: 0, duplicate: true }], new Set(['new1']))).toEqual([
+      { remove: 'new1', keep: 'old1' },
+    ]);
+  });
+
+  it('une notion préexistante n’est JAMAIS rendue à effacer, même désignée', () => {
+    // Paire mal formée où l'ancienne occupe la place de la candidate : le
+    // modèle a beau répondre « redite », rien ne sort.
+    const pairs = [{ candidate: loire, other: loireBis, proximity: 0.9 }];
+    expect(rediteRemovals(pairs, [{ pair: 0, duplicate: true }], new Set(['new1']))).toEqual([]);
+    // Et quelle que soit la réponse, aucune notion hors du lot n'est rendue.
+    const all = [
+      { candidate: loireBis, other: loire, proximity: 0.9 },
+      { candidate: loire, other: loireTer, proximity: 0.9 },
+    ];
+    const removals = rediteRemovals(all, [0, 1, 2, -1, 1.5].map((pair) => ({ pair, duplicate: true })), new Set(['new1', 'new3']));
+    expect(removals.map((r) => r.remove)).toEqual(['new1']);
+  });
+
+  it('« pas une redite », paire inconnue, réponse en double : rien', () => {
+    const pairs = [{ candidate: loireBis, other: loire, proximity: 0.9 }];
+    expect(rediteRemovals(pairs, [{ pair: 0, duplicate: false }, { pair: 7, duplicate: true }], new Set(['new1']))).toEqual([]);
+  });
+
+  it('une notion déjà effacée ne sert pas de notion gardée', () => {
+    const pairs = [
+      { candidate: loireBis, other: loireTer, proximity: 0.9 },
+      { candidate: loireTer, other: loireBis, proximity: 0.9 },
+    ];
+    expect(rediteRemovals(pairs, [{ pair: 0, duplicate: true }, { pair: 1, duplicate: true }], new Set(['new1', 'new3']))).toEqual([
+      { remove: 'new1', keep: 'new3' },
+    ]);
+  });
+});
+
+// Les redites reviennent du navigateur à la finalisation, qui les efface : ce
+// sont des effacements pilotés par une donnée qui a fait l'aller-retour.
+describe('revalidateRedites', () => {
+  const allowed = { fresh: new Set(['new1', 'new2']), existing: new Set(['new1', 'new2', 'old1', 'old2']) };
+
+  it('garde un effacement valide', () => {
+    expect(revalidateRedites([{ remove: 'new1', keep: 'old1' }], allowed)).toEqual({
+      removals: [{ remove: 'new1', keep: 'old1' }],
+      ignored: 0,
+    });
+  });
+
+  it("n'efface jamais une notion antérieure au lot, quoi qu'on lui envoie", () => {
+    expect(revalidateRedites([{ remove: 'old1', keep: 'new1' }], allowed)).toEqual({ removals: [], ignored: 1 });
+  });
+
+  it('refuse une notion gardée absente de l’atelier, et une notion gardée qui est elle-même', () => {
+    const out = revalidateRedites([{ remove: 'new1', keep: 'ailleurs' }, { remove: 'new2', keep: 'new2' }], allowed);
+    expect(out).toEqual({ removals: [], ignored: 2 });
+  });
+
+  it("n'utilise jamais comme notion gardée une notion effacée, dans un sens comme dans l'autre", () => {
+    expect(revalidateRedites([{ remove: 'new1', keep: 'old1' }, { remove: 'new2', keep: 'new1' }], allowed).removals)
+      .toEqual([{ remove: 'new1', keep: 'old1' }]);
+    expect(revalidateRedites([{ remove: 'new2', keep: 'new1' }, { remove: 'new1', keep: 'old1' }], allowed).removals)
+      .toEqual([{ remove: 'new2', keep: 'new1' }]);
+  });
+
+  it('ignore une entrée mal formée sans faire échouer le reste', () => {
+    expect(revalidateRedites([null, 'x', { remove: 3, keep: 'old1' }, { remove: 'new1', keep: 'old2' }], allowed))
+      .toEqual({ removals: [{ remove: 'new1', keep: 'old2' }], ignored: 3 });
+    expect(revalidateRedites('pas une liste', allowed)).toEqual({ removals: [], ignored: 0 });
   });
 });

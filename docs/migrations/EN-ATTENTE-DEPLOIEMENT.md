@@ -31,11 +31,24 @@ production casse, souvent en silence (beaucoup de `select` ne lisent que
 
 ## À appliquer
 
-AUCUN
+- **24/09/2026 — la veille des générations**
+  (`docs/migrations/2026-09-24-veille-des-generations.sql`) : une tâche planifiée
+  de la base qui appelle chaque minute `https://get-culture.com/api/ingest/watchdog`.
+  **Prérequis : la branche `feat/generation-par-chapitres` (PR #58) mergée et
+  déployée** — la route n'existe pas avant. Ce n'est pas une suppression : l'appliquer
+  trop tôt ne casse rien, mais n'a aucun effet. Après application, vérifier dans
+  `cron.job_run_details` que les appels partent, et côté Vercel que la route répond
+  `200`.
 
 ---
 
 ## Appliqué / sans objet
+
+- **24/09/2026 — les tâches de génération**
+  (`docs/migrations/2026-09-24-taches-de-generation.sql`) : table `ai_import_tasks`.
+  **Appliquée tout de suite, rien à attendre** : purement additive, le code en ligne
+  l'ignore. `src/lib/database.types.ts` non régénéré — le client Supabase n'est pas
+  typé (voir le backlog).
 
 - **04/09/2026 — le document écrit par l'IA**
   (`docs/migrations/2026-09-04-document-ecrit-par-l-ia.sql`) : colonne

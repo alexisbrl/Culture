@@ -1,4 +1,5 @@
 import { auth } from '@clerk/nextjs/server';
+import { importBelongsTo } from '@/lib/workshops/imports';
 import { getWorkshopRole } from '@/lib/workshops/membership';
 
 // ─── Contrôle d'accès aux ateliers ───────────────────────────────────────────
@@ -68,4 +69,17 @@ export async function assertManager(workshopId: string): Promise<AuthorizedConte
   const ctx = await requireManager(workshopId);
   if (!ctx) throw new Error('Droits insuffisants');
   return ctx;
+}
+
+/** Autorise les gestionnaires et le propriétaire, **sur un lot de génération de
+ *  cet atelier**. À utiliser en tête de toute action ou route qui reçoit un
+ *  identifiant de lot : le rôle se vérifie sur l'atelier, mais le lot arrive du
+ *  navigateur et pourrait être celui d'un autre atelier. */
+export async function requireImportManager(
+  workshopId: string,
+  importId: string,
+): Promise<AuthorizedContext | null> {
+  const ctx = await requireManager(workshopId);
+  if (!ctx) return null;
+  return (await importBelongsTo(importId, workshopId)) ? ctx : null;
 }

@@ -6,9 +6,9 @@
 // Le lancement d'un exercice, et rien d'autre (29/08/2026). C'est le seul moment
 // où l'on sait à la fois QUI travaille et SUR QUOI — les deux dont le radar a
 // besoin. Elle part APRÈS que la question est partie à l'écran : le membre
-// n'attend jamais après elle, et elle survit à la fermeture de l'onglet (une
-// fonction serveur vit jusqu'à 300 s sur le plan gratuit de l'hébergeur, une
-// recharge tient largement dedans).
+// n'attend jamais après elle. Ses appels sont des tâches de génération comme les
+// autres (@/lib/ingest/orchestrator) : ils tournent sur le serveur, chacun dans sa
+// fonction, et survivent à la fermeture de l'onglet.
 //
 // ── Ce qu'elle fait produire ────────────────────────────────────────────────
 //
@@ -31,23 +31,24 @@
 
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { chapterShortages } from '@/lib/workshops/parcoursRadar';
-import { QUESTIONS_CONCURRENCY, mapWithConcurrency } from './concurrency';
+import { dispatchTasks } from './dispatch';
 import { createImport } from './ingest';
-import { markOutcome } from './journal';
-import { countParcoursCalls, ingestParcoursQuestions } from './run';
+import { startRefill } from './orchestrator';
+import { countParcoursCalls } from './run';
 import { MAX_REFILL_QUESTIONS, capDemand, demandFromShortages, demandTotal } from './demand';
 
 /** Deux exercices lancés dans la foulée ne rechargent qu'une fois. Assez long
  *  pour couvrir un exercice entier, assez court pour qu'un membre qui revient
  *  plus tard trouve un stock reconstitué. */
-export const REFILL_COOLDOWN_MS = 10 * 60 * 1000;
+export const REFILL_COOLDOWN_MS = 5 * 60 * 1000;
 
 export type RefillOutcome = {
   /** Une recharge a-t-elle été lancée ? `false` = rien ne manquait, ou une
    *  recharge trop récente tient déjà le terrain. */
   triggered: boolean;
-  /** Questions réellement écrites. */
-  written: number;
+  /** Appels au modèle lancés. Ils s'exécutent ensuite sur le serveur : ce qu'ils
+   *  écrivent se lit au journal, pas ici. */
+  calls: number;
   /** Le lot d'import ouvert, pour la trace et l'annulation. */
   importId?: string;
 };
@@ -84,16 +85,18 @@ async function rechargedRecently(workshopId: string, chapterId: string): Promise
 export async function refillChapter(
   workshopId: string,
   chapterId: string,
-  userId: string
+  userId: string,
+  /** Où joindre ce serveur : c'est à lui que les tâches se relaient. */
+  baseUrl: string,
 ): Promise<RefillOutcome> {
   try {
     const shortages = await chapterShortages(workshopId, chapterId, userId);
-    if (shortages.length === 0) return { triggered: false, written: 0 };
+    if (shortages.length === 0) return { triggered: false, calls: 0 };
 
-    if (await rechargedRecently(workshopId, chapterId)) return { triggered: false, written: 0 };
+    if (await rechargedRecently(workshopId, chapterId)) return { triggered: false, calls: 0 };
 
     const demand = capDemand(demandFromShortages(shortages), MAX_REFILL_QUESTIONS);
-    if (demandTotal(demand) === 0) return { triggered: false, written: 0 };
+    if (demandTotal(demand) === 0) return { triggered: false, calls: 0 };
 
     const supabase = getSupabaseServerClient();
     const { data: chapterRow, error } = await supabase
@@ -108,7 +111,7 @@ export async function refillChapter(
     // questions que personne ne verra. Le tirage refuse déjà en amont — ce filet
     // couvre le cas où un chapitre est écarté pendant qu'une recharge est en
     // vol, la recharge étant lancée en tâche de fond après la réponse.
-    if (!chapterRow || chapterRow.hidden === true) return { triggered: false, written: 0 };
+    if (!chapterRow || chapterRow.hidden === true) return { triggered: false, calls: 0 };
 
     const chapter = { id: chapterRow.id as string, name: chapterRow.name as string };
 
@@ -122,25 +125,17 @@ export async function refillChapter(
       origin: 'refill',
     });
 
-    // Une seule vague, comme l'écran de génération : le nombre d'appels se
-    // calcule sans appeler le modèle, et tous partent ensemble. En série, les
-    // appels de huit questions (22/09/2026) ne tiendraient pas dans la durée de
-    // vie de la fonction : une recharge de 60 en fait huit, soit quatre minutes
-    // bout à bout contre une demi-minute en parallèle.
+    // Une seule vague : le nombre d'appels se calcule sans appeler le modèle, et
+    // tous partent ensemble, chacun dans sa fonction serveur. La recharge se
+    // referme d'elle-même quand le dernier a fini (@/lib/ingest/orchestrator).
     const counts = await countParcoursCalls(workshopId, importId, [{ id: chapter.id, demand }]);
-    const calls = (counts[chapter.id] ?? []).map((_, batchIndex) => batchIndex);
-    const results = await mapWithConcurrency(calls, QUESTIONS_CONCURRENCY, (batchIndex) =>
-      ingestParcoursQuestions(workshopId, userId, importId, chapter, batchIndex, { demand }),
-    );
-    const written = results.reduce((sum, r) => sum + r.written, 0);
-
-    // La recharge va au bout dans le même appel : contrairement à l'écran de
-    // génération, elle sait ici même comment elle se termine.
-    await markOutcome(importId, 'finished');
-    console.info('[parcours] recharge', { workshopId, chapterId, userId, importId, written });
-    return { triggered: true, written, importId };
+    const calls = (counts[chapter.id] ?? []).map((_, batchIndex) => ({ batchIndex }));
+    const dispatch = await startRefill(workshopId, importId, chapter, calls, demand, baseUrl);
+    await dispatchTasks(dispatch.baseUrl, dispatch.taskIds);
+    console.info('[parcours] recharge lancée', { workshopId, chapterId, userId, importId, calls: calls.length });
+    return { triggered: true, calls: calls.length, importId };
   } catch (err) {
     console.error('refillChapter error:', err);
-    return { triggered: false, written: 0 };
+    return { triggered: false, calls: 0 };
   }
 }

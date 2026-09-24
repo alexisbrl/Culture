@@ -27,6 +27,7 @@
 //
 // Les deux premières sont des fonctions pures, testées (tests/unit/imports.test.ts).
 
+import { cache } from 'react';
 import { getSupabaseServerClient } from '@/lib/supabase';
 
 /** Délai au-delà duquel un import ne s'annule plus. Passé ce point, l'atelier a
@@ -293,3 +294,18 @@ export async function cancelImport(workshopId: string, importId: string): Promis
 
   return { cancelled: true, ...deleted };
 }
+
+/** Le lot appartient-il à cet atelier ? Un identifiant de lot arrive du
+ *  navigateur : sans cette vérification, un gestionnaire d'un atelier pourrait
+ *  faire travailler une génération d'un autre — lire ses documents, écrire dans
+ *  son lot. Mémorisé pour la durée d'une requête, comme le rôle. */
+export const importBelongsTo = cache(async (importId: string, workshopId: string): Promise<boolean> => {
+  if (typeof importId !== 'string' || typeof workshopId !== 'string') return false;
+  const { data } = await getSupabaseServerClient()
+    .from('ai_imports')
+    .select('id')
+    .eq('id', importId)
+    .eq('workshop_id', workshopId)
+    .maybeSingle();
+  return data !== null;
+});

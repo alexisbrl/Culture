@@ -22,9 +22,9 @@ import { refillChapter } from '@/lib/ingest/refill';
 //      que l'écran demande ensuite.
 //
 // Une route d'API est un `fetch` ordinaire : elle ne passe par aucune file, ne
-// revalide rien, et n'a aucun effet sur le rendu. C'est exactement ce qu'on veut
-// d'une tâche de fond tant qu'il n'existe pas de vraie file d'attente côté
-// serveur (voir docs/backlog.md).
+// revalide rien, et n'a aucun effet sur le rendu. Elle ne fait que décider et
+// lancer : les appels au modèle sont des tâches de génération, qui tournent
+// ensuite sur le serveur (@/lib/ingest/orchestrator).
 //
 // ⚠️ **Le contrôle d'accès est ici comme ailleurs.** Une route d'API est une URL
 // publique au même titre qu'une server action : `requireMember` en tête, et
@@ -32,7 +32,7 @@ import { refillChapter } from '@/lib/ingest/refill';
 // n'importe qui pourrait faire dépenser des appels au modèle sur l'atelier de
 // n'importe qui d'autre.
 //
-// Les garde-fous de la dépense (plafond de 60 questions, délai de garde de 10
+// Les garde-fous de la dépense (plafond de 60 questions, délai de garde de 5
 // minutes par chapitre, lot tracé et annulable) restent dans
 // @/lib/ingest/refill : l'écran n'est qu'un déclencheur, pas une autorité.
 
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     const ctx = await requireMember(workshopId);
     if (!ctx) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
 
-    const outcome = await refillChapter(workshopId, chapterId, ctx.userId);
+    const outcome = await refillChapter(workshopId, chapterId, ctx.userId, req.nextUrl.origin);
     return NextResponse.json(outcome);
   } catch (error) {
     // `refillChapter` ne lève jamais : ce qui arrive ici est un corps de requête

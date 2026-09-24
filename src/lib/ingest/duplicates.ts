@@ -315,3 +315,122 @@ export function dropRepeatedQuestions<G extends { questions: readonly { content:
 
   return { kept, removed };
 }
+
+// ─── Les redites entre chapitres (docs/architecture.md §7.6) ────────────────
+//
+// L'étape notions d'un chapitre ne voit que son chapitre : si elle recrée une
+// notion qui vit dans un autre, rien ne le lui dit. Une fois tous les chapitres
+// passés, le site repère les paires suspectes, un seul appel les tranche, et
+// ces deux fonctions encadrent l'appel : ce qu'on lui soumet, et ce qu'on fait
+// de sa réponse.
+
+/** Au-delà, les paires les moins proches ne sont pas soumises : un appel qui
+ *  ne répond que « redite ou pas » n'a pas à devenir un second import. */
+export const MAX_REDITE_PAIRS = 300;
+
+export interface RediteNotion {
+  id: string;
+  title: string;
+  chapterId: string | null;
+}
+
+export interface ReditePair {
+  /** La notion NEUVE de ce lot — la seule qui puisse s'effacer. */
+  candidate: RediteNotion;
+  /** Une notion d'un AUTRE chapitre, neuve ou non. */
+  other: RediteNotion;
+  proximity: number;
+}
+
+/** Les paires suspectes : une notion neuve, et une notion trop proche rangée
+ *  dans un autre chapitre. Une paire de deux notions neuves n'est soumise
+ *  qu'une fois. Les plus proches d'abord, plafonnées. */
+export function rediteCandidates(
+  fresh: readonly RediteNotion[],
+  all: readonly RediteNotion[],
+  limit = MAX_REDITE_PAIRS,
+): ReditePair[] {
+  const seen = new Set<string>();
+  const pairs: ReditePair[] = [];
+  for (const candidate of fresh) {
+    const others = all.filter((o) => o.id !== candidate.id && o.chapterId !== candidate.chapterId);
+    for (const flagged of flagSimilar([candidate], others, (n) => n.title, (n) => n.title)) {
+      const key = [candidate.id, flagged.other.id].sort().join('|');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      pairs.push({ candidate, other: flagged.other, proximity: flagged.proximity });
+    }
+  }
+  return pairs.sort((a, b) => b.proximity - a.proximity).slice(0, limit);
+}
+
+/**
+ * Ce que la réponse du modèle efface. **Garanti par le code, pas seulement
+ * demandé** : seule la notion neuve d'une paire peut sortir par ce chemin, et
+ * une notion préexistante n'est jamais rendue comme « à effacer », quoi que dise
+ * le modèle. Une réponse sur une paire inconnue est ignorée ; une notion déjà
+ * effacée ne peut plus servir de notion gardée.
+ */
+export function rediteRemovals(
+  pairs: readonly ReditePair[],
+  answers: readonly { pair: number; duplicate: boolean }[],
+  freshIds: ReadonlySet<string>,
+): { remove: string; keep: string }[] {
+  const removed = new Set<string>();
+  const out: { remove: string; keep: string }[] = [];
+  const answered = new Set<number>();
+  for (const answer of answers) {
+    if (!answer.duplicate || !Number.isInteger(answer.pair) || answered.has(answer.pair)) continue;
+    answered.add(answer.pair);
+    const pair = pairs[answer.pair];
+    if (!pair) continue;
+    const { candidate, other } = pair;
+    if (!freshIds.has(candidate.id)) continue;
+    if (removed.has(candidate.id) || removed.has(other.id)) continue;
+    removed.add(candidate.id);
+    out.push({ remove: candidate.id, keep: other.id });
+  }
+  return out;
+}
+
+/**
+ * Les effacements de redites rendus par le navigateur au ménage de fin,
+ * **revalidés un à un** : ils ont fait l'aller-retour, donc ils ne valent pas
+ * mieux qu'une donnée saisie. Même garantie que `rediteRemovals`, reposée côté
+ * serveur : seule une notion NEUVE de ce lot peut sortir par ce chemin, la
+ * notion gardée doit exister dans l'atelier, et une notion effacée ne peut plus
+ * servir de notion gardée.
+ */
+export function revalidateRedites(
+  removals: unknown,
+  allowed: { fresh: ReadonlySet<string>; existing: ReadonlySet<string> },
+): { removals: { remove: string; keep: string }[]; ignored: number } {
+  const list = Array.isArray(removals) ? removals : [];
+  const removed = new Set<string>();
+  const kept = new Set<string>();
+  const out: { remove: string; keep: string }[] = [];
+  let ignored = 0;
+  for (const entry of list) {
+    const r = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
+    const { remove, keep } = r;
+    if (typeof remove !== 'string' || typeof keep !== 'string' || remove === keep
+      || !allowed.fresh.has(remove) || !allowed.existing.has(keep)
+      || removed.has(remove) || removed.has(keep) || kept.has(remove)) {
+      ignored += 1;
+      continue;
+    }
+    removed.add(remove);
+    kept.add(keep);
+    out.push({ remove, keep });
+  }
+  return { removals: out, ignored };
+}
+
+/** Soumet les paires au modèle — **et ne l'appelle pas s'il n'y en a aucune**. */
+export async function judgeRedites(
+  pairs: readonly ReditePair[],
+  ask: (pairs: readonly ReditePair[]) => Promise<{ pair: number; duplicate: boolean }[]>,
+): Promise<{ pair: number; duplicate: boolean }[]> {
+  if (pairs.length === 0) return [];
+  return ask(pairs);
+}

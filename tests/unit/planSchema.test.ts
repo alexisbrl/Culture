@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parsePlan, planSchema } from '@/lib/ingest/planSchema';
+import { parsePlan, planSchema, shortenChapterName } from '@/lib/ingest/planSchema';
 import { MAX_CHOICES, MAX_LIST_ANSWERS } from '@/lib/workshops/examTypes';
 
 // Le contrat d'entrée de l'ingestion. Deux propriétés à tenir, et elles tirent
@@ -52,6 +52,31 @@ describe('planSchema — sortie contrainte du modèle', () => {
     const plan = parsePlan({ groups: [sansContexte] });
     expect(plan.groups).toHaveLength(1);
     expect(plan.discarded).toEqual([]);
+  });
+});
+
+describe('titre de chapitre trop long — raccourci, jamais écarté', () => {
+  const long = `Repères utiles pour débuter ${'avec les grands ensembles du monde '.repeat(4)}fin`;
+
+  it('garde le chapitre, raccourci sous la limite et signalé', () => {
+    const plan = parsePlan({ chapters: [{ ref: 'ch1', name: long }] });
+    expect(plan.discarded).toEqual([]);
+    expect(plan.chapters).toHaveLength(1);
+    expect(plan.chapters[0].name.length).toBeLessThanOrEqual(120);
+    expect(plan.chapters[0].name.endsWith('…')).toBe(true);
+    expect(plan.adjusted.some((a) => a.ref === 'ch1' && /raccourci/.test(a.reason))).toBe(true);
+  });
+
+  it('coupe au dernier mot entier', () => {
+    const short = shortenChapterName(long);
+    expect(long.startsWith(short.slice(0, -1))).toBe(true);
+    expect(long[short.length - 1]).toBe(' ');
+  });
+
+  it('ne touche pas un titre dans la limite', () => {
+    expect(shortenChapterName('  Les pays d’Europe  ')).toBe('Les pays d’Europe');
+    const plan = parsePlan({ chapters: [{ ref: 'ch1', name: 'Les pays d’Europe' }] });
+    expect(plan.adjusted).toEqual([]);
   });
 });
 
@@ -551,5 +576,114 @@ describe('types à réglages — la question tombe, jamais le lot', () => {
     // proposition, et la question survit sur celles qui restent.
     expect(q.correctChoices).toEqual([0]);
     expect(plan.adjusted.some((a) => a.reason.includes(`${MAX_CHOICES} propositions`))).toBe(true);
+  });
+});
+
+describe('parsePlan — étape chapitres : bornes et verdicts (§7.2, §7.6)', () => {
+  const existing = { chapterIds: ['c1', 'c2'], notionIds: ['n1', 'n2', 'n3', 'n4'] };
+
+  it('lit une réponse valide, avec des bornes multiples et un verdict par notion', () => {
+    const plan = parsePlan(
+      {
+        chapters: [{ ref: 'ch1', name: 'Nouveau' }],
+        chapterOrder: [
+          { ref: 'c1', rank: 1, reason: '', spans: [{ document: 'cours.pdf', pageStart: 1, pageEnd: 4 }] },
+          {
+            ref: 'ch1',
+            rank: 2,
+            reason: '',
+            spans: [
+              { document: 'cours.pdf', pageStart: 5, pageEnd: 7 },
+              { document: 'annexe.pdf', pageStart: 2, pageEnd: 3 },
+            ],
+          },
+          { ref: 'c2', rank: 0, reason: 'plus traité', spans: [] },
+        ],
+        notionVerdicts: [
+          { notion: 'n1', verdict: 'chapter', chapter: 'ch1' },
+          { notion: 'n2', verdict: 'out', chapter: '' },
+          { notion: 'n3', verdict: 'check', chapter: '' },
+          { notion: 'n4', verdict: 'chapter', chapter: 'c2' },
+        ],
+      },
+      existing,
+    );
+    expect(plan.chapterOrder).toEqual([
+      { ref: 'c1', rank: 1, reason: '' },
+      { ref: 'ch1', rank: 2, reason: '' },
+      { ref: 'c2', rank: 0, reason: 'plus traité' },
+    ]);
+    expect(plan.chapterBounds).toEqual([
+      { ref: 'c1', spans: [{ document: 'cours.pdf', from: 1, to: 4 }] },
+      {
+        ref: 'ch1',
+        spans: [
+          { document: 'cours.pdf', from: 5, to: 7 },
+          { document: 'annexe.pdf', from: 2, to: 3 },
+        ],
+      },
+    ]);
+    expect(plan.notionVerdicts).toEqual([
+      { notionId: 'n1', verdict: 'chapter', chapterRef: 'ch1' },
+      { notionId: 'n2', verdict: 'out' },
+      { notionId: 'n3', verdict: 'check' },
+      { notionId: 'n4', verdict: 'chapter', chapterRef: 'c2' },
+    ]);
+    expect(plan.discarded).toEqual([]);
+  });
+
+  it('une valeur de verdict inconnue est écartée et comptée', () => {
+    const plan = parsePlan({ notionVerdicts: [{ notion: 'n1', verdict: 'maybe', chapter: '' }] }, existing);
+    expect(plan.notionVerdicts).toEqual([]);
+    expect(plan.discarded).toHaveLength(1);
+    expect(plan.discarded[0]).toMatchObject({ kind: 'verdict', ref: 'n1' });
+  });
+
+  it('notion ou chapitre inconnus : verdict écarté et compté', () => {
+    const plan = parsePlan(
+      {
+        notionVerdicts: [
+          { notion: 'inventée', verdict: 'out', chapter: '' },
+          { notion: 'n1', verdict: 'chapter', chapter: 'nulle-part' },
+          { notion: 'n2', verdict: 'chapter', chapter: '' },
+        ],
+      },
+      existing,
+    );
+    expect(plan.notionVerdicts).toEqual([]);
+    expect(plan.discarded.map((d) => d.ref)).toEqual(['inventée', 'n1', 'n2']);
+  });
+
+  it('deux verdicts sur la même notion : le premier fait foi', () => {
+    const plan = parsePlan(
+      {
+        notionVerdicts: [
+          { notion: 'n1', verdict: 'check', chapter: '' },
+          { notion: 'n1', verdict: 'out', chapter: '' },
+        ],
+      },
+      existing,
+    );
+    expect(plan.notionVerdicts).toEqual([{ notionId: 'n1', verdict: 'check' }]);
+  });
+
+  it('une borne illisible tombe seule, le chapitre garde les autres', () => {
+    const plan = parsePlan(
+      {
+        chapterOrder: [
+          { ref: 'c1', rank: 1, spans: [{ document: 'a.pdf', pageStart: 'x', pageEnd: 3 }, 'nimporte', { document: 'a.pdf', pageStart: 4, pageEnd: 6 }] },
+        ],
+      },
+      existing,
+    );
+    expect(plan.chapterBounds).toEqual([
+      {
+        ref: 'c1',
+        spans: [
+          { document: 'a.pdf', from: 0, to: 3 },
+          { document: 'a.pdf', from: 4, to: 6 },
+        ],
+      },
+    ]);
   });
 });

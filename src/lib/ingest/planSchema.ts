@@ -64,7 +64,7 @@ import { NOTION_TITLE_MAX } from '@/lib/workshops/notions';
 
 export type PlanIssue = {
   /** Ce qui est concerné, pour un message lisible. */
-  kind: 'chapter' | 'notion' | 'assignment' | 'question';
+  kind: 'chapter' | 'notion' | 'assignment' | 'question' | 'verdict';
   /** La clé locale fournie par la source, quand elle en a fourni une. */
   ref?: string;
   reason: string;
@@ -91,6 +91,10 @@ export type ParsedPlan = {
   /** L'architecture du programme : chaque chapitre avec son rang, 0 pour ceux
    *  que le cours ne couvre plus. Un chapitre absent d'ici garde sa place. */
   chapterOrder: PlanChapterRank[];
+  /** Où se trouve chaque chapitre rangé dans le cours (§7.2). */
+  chapterBounds: PlanChapterBounds[];
+  /** Le verdict de l'étape chapitres sur chaque notion existante (§7.6). */
+  notionVerdicts: PlanNotionVerdict[];
   groups: PlanGroup[];
   /** Éléments écartés : inexploitables. */
   discarded: PlanIssue[];
@@ -102,9 +106,25 @@ export type ParsedPlan = {
 
 const refSchema = z.string().trim().min(1).max(64);
 
+/** Même valeur que `CHAPTER_NAME_MAX` (@/lib/workshops/chapters), recopiée ici
+ *  parce que ce module-là lit la base et que celui-ci doit rester pur. */
+const CHAPTER_NAME_LIMIT = 120;
+
+/** Un titre de chapitre trop long est RACCOURCI, jamais une raison d'écarter le
+ *  chapitre : le perdre ferait perdre les pages qu'il couvre. La consigne demande
+ *  au modèle de reformuler lui-même ; ceci n'est que le filet — coupe au dernier
+ *  mot entier, et points de suspension. */
+export function shortenChapterName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length <= CHAPTER_NAME_LIMIT) return trimmed;
+  const head = trimmed.slice(0, CHAPTER_NAME_LIMIT - 1);
+  const cut = head.lastIndexOf(' ');
+  return `${(cut > CHAPTER_NAME_LIMIT / 2 ? head.slice(0, cut) : head).replace(/[\s,;:.–—-]+$/, '')}…`;
+}
+
 const chapterSchema = z.object({
   ref: refSchema,
-  name: z.string().trim().min(1).max(120), // CHAPTER_NAME_MAX
+  name: z.string().trim().min(1).max(CHAPTER_NAME_LIMIT),
   position: z.number().int().min(0).optional(),
   // Provenance : sur quelles pages ce chapitre court, à peu près. C'est ce qui
   // permet à la passe RANGEMENT de se passer du cours (§ migration du
@@ -256,10 +276,37 @@ const groupSchema = z.object({
   questions: z.array(questionSchema).min(1, { message: 'groupe sans question' }),
 });
 
+/** Un intervalle de pages, lu SANS le juger : des bornes absentes, inversées ou
+ *  hors document se règlent au découpage, en élargissant (§7.3) — jamais ici en
+ *  écartant, ce qui ferait perdre le reste du chapitre. */
+const spanSchema = z.object({
+  document: z.string().trim().max(255).default(''),
+  pageStart: z.coerce.number().int().catch(0),
+  pageEnd: z.coerce.number().int().catch(0),
+});
+
 const chapterRankSchema = z.object({
   ref: refSchema,
   rank: z.coerce.number().int().min(0),
   reason: z.string().trim().default(''),
+  spans: z.array(z.unknown()).optional(),
+});
+
+/** Les bornes d'un chapitre, telles que rendues : le document par son nom. */
+export type PlanChapterBounds = {
+  ref: string;
+  spans: { document: string; from: number; to: number }[];
+};
+
+export type PlanNotionVerdict =
+  | { notionId: string; verdict: 'chapter'; chapterRef: string }
+  | { notionId: string; verdict: 'out' }
+  | { notionId: string; verdict: 'check' };
+
+const notionVerdictSchema = z.object({
+  notion: refSchema,
+  verdict: z.enum(['chapter', 'out', 'check'], { message: 'verdict inconnu' }),
+  chapter: z.string().trim().max(64).default(''),
 });
 
 // ─── Ce qu'un type de réponse exige pour fonctionner ─────────────────────────
@@ -500,7 +547,7 @@ function notionsOf(raw: QuestionInput, adjusted: string[]): { ref: string; bloom
   return [...seen].map(([ref, bloomLevel]) => ({ ref, bloomLevel }));
 }
 
-export type PlanChapterRank = z.infer<typeof chapterRankSchema>;
+export type PlanChapterRank = { ref: string; rank: number; reason: string };
 export type PlanChapter = z.infer<typeof chapterSchema>;
 export type PlanAssignment = z.infer<typeof assignmentSchema>;
 export type PlanNotion = z.infer<typeof notionSchema>;
@@ -569,7 +616,17 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
   //    plan complète l'existant, il ne le recrée pas (§8 du plan d'ingestion).
   const chapters: PlanChapter[] = [];
   const chapterRefs = new Set<string>(existing.chapterIds ?? []);
-  for (const item of asArray(root.chapters)) {
+  for (const raw of asArray(root.chapters)) {
+    const name = raw && typeof raw === 'object' ? (raw as Record<string, unknown>).name : undefined;
+    const shortened = typeof name === 'string' ? shortenChapterName(name) : name;
+    const item = shortened === name ? raw : { ...(raw as Record<string, unknown>), name: shortened };
+    if (shortened !== name && typeof name === 'string' && name.trim().length > CHAPTER_NAME_LIMIT) {
+      adjusted.push({
+        kind: 'chapter',
+        ref: refOf(raw),
+        reason: `titre de plus de ${CHAPTER_NAME_LIMIT} caractères — raccourci en « ${shortened} »`,
+      });
+    }
     const result = chapterSchema.safeParse(item);
     if (!result.success) {
       discarded.push({ kind: 'chapter', ref: refOf(item), reason: firstMessage(result.error) });
@@ -605,6 +662,7 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
   //        Dans le doute on ne fait rien : écarter est une perte, ne pas
   //        écarter n'en est pas une.
   const chapterOrder: PlanChapterRank[] = [];
+  const chapterBounds: PlanChapterBounds[] = [];
   const known = new Set<string>(existing.chapterIds ?? []);
   const fromThisPlan = new Set(chapters.map((c) => c.ref));
   const ranked = new Set<string>();
@@ -625,7 +683,52 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
     }
     if (ranked.has(ref)) continue;
     ranked.add(ref);
-    chapterOrder.push(result.data);
+    chapterOrder.push({ ref, rank, reason: result.data.reason });
+
+    // Les bornes, intervalle par intervalle : un intervalle illisible tombe
+    // seul, les autres restent. Un chapitre sans aucune borne recevra le
+    // document entier au découpage — plus cher, jamais faux (§7.3).
+    if (rank > 0) {
+      const spans: PlanChapterBounds['spans'] = [];
+      for (const rawSpan of result.data.spans ?? []) {
+        const span = spanSchema.safeParse(rawSpan);
+        if (span.success) spans.push({ document: span.data.document, from: span.data.pageStart, to: span.data.pageEnd });
+      }
+      chapterBounds.push({ ref, spans });
+    }
+  }
+
+  // 1 ter. Les VERDICTS sur les notions existantes. Une référence inconnue —
+  //        notion ou chapitre — écarte le verdict, et c'est compté : la notion
+  //        est alors tenue pour oubliée, ce qui la fait repasser en seconde
+  //        vérification plutôt que de la déplacer sur une faute de frappe.
+  const notionVerdicts: PlanNotionVerdict[] = [];
+  const existingNotions = new Set<string>(existing.notionIds ?? []);
+  const judged = new Set<string>();
+  for (const item of asArray(root.notionVerdicts)) {
+    const result = notionVerdictSchema.safeParse(item);
+    const r = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+    const itemRef = typeof r.notion === 'string' ? r.notion : undefined;
+    if (!result.success) {
+      discarded.push({ kind: 'verdict', ref: itemRef, reason: firstMessage(result.error) });
+      continue;
+    }
+    const { notion, verdict, chapter } = result.data;
+    if (!existingNotions.has(notion)) {
+      discarded.push({ kind: 'verdict', ref: notion, reason: 'notion inconnue — verdict ignoré' });
+      continue;
+    }
+    if (judged.has(notion)) continue;
+    if (verdict === 'chapter') {
+      if (!chapterRefs.has(chapter)) {
+        discarded.push({ kind: 'verdict', ref: notion, reason: `chapitre inconnu (${chapter || 'vide'}) — verdict ignoré` });
+        continue;
+      }
+      notionVerdicts.push({ notionId: notion, verdict, chapterRef: chapter });
+    } else {
+      notionVerdicts.push({ notionId: notion, verdict });
+    }
+    judged.add(notion);
   }
 
   // 2. Notions — idem : une question peut viser une notion déjà en base.
@@ -761,5 +864,5 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
     groups.push({ ref: group.ref, context: group.context, questions });
   }
 
-  return { chapters, notions, assignments, groups, chapterOrder, discarded, adjusted };
+  return { chapters, notions, assignments, groups, chapterOrder, chapterBounds, notionVerdicts, discarded, adjusted };
 }

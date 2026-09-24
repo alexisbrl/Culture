@@ -222,6 +222,7 @@ Le cours entier n'entre qu'une fois, dans le premier appel.
 |---|---|
 | **Chapitres** — 1 appel | le **texte seul** des documents, tous les chapitres, toutes les notions |
 | **Notions** — 1 appel par chapitre | les **pages de son chapitre** (texte et images), les notions qui lui sont attribuées |
+| **Redites** — 1 appel, seulement s'il y a des paires suspectes | les seules paires (nouvelle notion, notion d'un autre chapitre) repérées par le site (§7.6) |
 | **Questions** — 1 appel par tranche de huit questions de la demande d'un chapitre | **aucun document** : les notions de l'appel et ce qu'on lui demande sur chacune, les intitulés de **tout le chapitre** (150 au plus), et au plus 300 questions existantes des notions de l'appel |
 
 Trois gains du même geste : moins de bruit par appel (qualité), moins de jetons
@@ -243,16 +244,28 @@ différente, qui les empêchent de se répéter. Deux morceaux au même niveau r
 met pas d'appels en série pour ce cas. Une consigne libre, sans demande par notion, découpe
 son budget de la même taille et répartit les notions en tranches contiguës.
 
-**Le plan se calcule sans le modèle, et tout part en une vague.** Le nombre d'appels de
-chaque chapitre se déduit de la demande et de l'existant, arrêté à l'ouverture du lot :
-l'écran le demande d'abord au serveur, puis lance tous les appels de tous les chapitres
-ensemble. La recharge fait de même. Chaque appel recalcule la même découpe et y prend sa
-part par son indice.
+**Le plan se calcule sans le modèle, et un chapitre n'attend pas les autres.** Le nombre
+d'appels d'un chapitre se déduit de la demande et de l'existant — l'existant étant arrêté à
+l'ouverture du lot, pour que tous les appels d'un chapitre voient la même découpe. Dès que
+l'étape notions d'un chapitre est finie, ses appels de questions partent, tous ensemble,
+sans attendre que les autres chapitres aient fini : attendre le dernier pour écrire les
+questions du premier est du temps perdu. La part du plafond d'import se réserve donc
+chapitre par chapitre, sinon les premiers arrivés consommeraient le fusible entier. La
+recharge, qui ne vise qu'un chapitre, lance tous ses appels d'un coup. Chaque appel
+recalcule la même découpe et y prend sa part par son indice.
 
 **Ce qui rend le reste possible : l'étape chapitres rend des bornes de pages.** Pour
 chaque chapitre, le document et l'intervalle de pages — plusieurs intervalles si le
 chapitre est éclaté. Sans elles, l'étape suivante devrait recevoir le cours entier
 pour retrouver son chapitre ; avec elles, elle reçoit dix-sept pages.
+
+**Les chapitres sont ceux du cours, sous leurs titres mot pour mot.** Le découpage d'un
+enseignant est un choix pédagogique que l'atelier doit refléter : l'étape reprend les
+divisions du document — chapitres, parties, thèmes — sans en fusionner ni en scinder, et
+leur titre sans le reformuler, numérotation retirée. Deux exceptions : un titre de plus de
+120 caractères est reformulé plus court, et un cours sans aucune division est découpé par
+le modèle. Un titre encore trop long à l'arrivée est **raccourci par le serveur, jamais une
+raison d'écarter le chapitre** : ses pages ne seraient lues par personne.
 
 **L'étape chapitres reçoit tout l'existant, et c'est acceptable** : elle est la seule
 à voir le cours, donc la seule à pouvoir juger ce qui est encore d'actualité. C'est un
@@ -280,6 +293,14 @@ imprimé) ; vérifier si une couche de texte est déjà présente ; reconnaître
 caractères sur les seules pages qui en manquent ; un modèle multimodal en dernier
 recours. Un document dont la reconnaissance a échoué retombe sur la règle par défaut :
 ses pages partent en image. **Rien ne bloque, rien n'attend.**
+
+**Chez le fournisseur, un document ne vit que le temps d'une génération.** Il est envoyé **à
+l'ouverture de la fenêtre de génération** — le temps passé à écrire la consigne masque
+l'envoi — et **tout est supprimé à la fin de chaque génération**, extraits de chapitre
+compris. Fenêtre fermée sans lancer : suppression immédiate. Onglet perdu en route : un
+ménage régulier retire ce qui est envoyé depuis plus d'une heure sans génération. Envoyer
+et supprimer sont gratuits ; garder remplirait l'espace du compte (100 Go) à mesure que
+les ateliers s'accumulent, et c'est aussi une question de confidentialité.
 
 ### 7.3 Le découpage physique : le modèle dit où, le serveur coupe
 
@@ -311,6 +332,10 @@ Trois gestes, et aucun autre :
 3. **Fixer le nombre de questions d'un examen**, si la demande en exprime un, même en
    toutes lettres. *Ce geste n'existe pas pour l'entraînement*, dont la volumétrie est
    automatique : le modèle n'est même pas informé que la possibilité existe.
+
+**Lancée depuis l'examen, elle n'écrit pas de document** : elle n'en a ni le droit ni le
+moyen. Elle ne reçoit alors que la demande, le nom de l'atelier et la liste des chapitres
+— ni le catalogue des documents, ni le document de l'IA, ni second tour.
 
 **Un atelier a au plus un document écrit par l'IA**, l'unicité étant tenue en base. Il
 apparaît dans les ressources, marqué comme tel, téléchargeable et supprimable mais
@@ -414,10 +439,10 @@ prochain import, un doublon reste et encombre l'atelier.
 
 ### 7.6 Le rangement, l'ordre, et ce qui sort du programme
 
-**C'est l'étape CHAPITRES qui écarte, parce qu'elle seule voit le cours.** L'argument
-n'est pas l'élégance, c'est **où vit l'information** : l'étape de rangement ne reçoit
-aucun document, elle ne voit que des noms de chapitres — elle trouve donc légitimes
-deux chapitres qui se recouvrent.
+**C'est l'étape CHAPITRES qui écarte, parce qu'elle seule voit tout le cours.**
+L'argument n'est pas l'élégance, c'est **où vit l'information** : chaque appel de
+l'étape notions ne voit que les pages de son chapitre — il ne peut pas juger que deux
+chapitres se recouvrent.
 
 **La forme : le rang de chaque chapitre, 0 pour ceux qui sortent.** Le modèle rend
 l'architecture entière, chapitres neufs et anciens mêlés, avec un rang par chapitre.
@@ -446,10 +471,28 @@ chapitre **et** écarte l'ancien. Les notions encore d'actualité rejoignent le 
 les autres restent dans l'ancien et sortent du programme avec lui. Un renommage aurait
 gardé les notions périmées sous le nouveau titre.
 
-**Une notion que l'IA ne range pas ne bouge pas.** Le modèle n'a qu'une façon de dire
-« nulle part » : un chapitre vide. Cette réponse recouvre deux situations, distinguées
-**côté serveur, jamais côté modèle** — une redite dont la ressemblance lui avait été
-soumise sort du programme ; tout le reste **reste où il était**.
+**Un verdict sur chaque notion existante, en trois réponses possibles** — et le silence
+n'en est pas une :
+
+- **un chapitre visible**, neuf ou existant : elle y va ;
+- **hors programme** : le cours ne la couvre plus ;
+- **à vérifier** : elle est introuvable dans le texte. L'étape ne lit que le texte, et une
+  notion peut venir d'un schéma ou d'un tableau. **Ne pas retrouver une notion dans le texte
+  n'est jamais un motif de la déclarer hors programme.**
+
+Une notion que la réponse ne mentionne pas est **oubliée**. Dans une partie qui se
+resserre, laisser une notion dans l'ancien chapitre écarté vaut « hors programme ».
+
+**Tout ce qui n'est pas rangé dans un chapitre visible est vérifié une seconde fois** —
+oubliée, à vérifier ou hors programme, y compris chaque notion d'un chapitre écarté en
+entier. L'étape chapitres ne voit pas les images ; l'étape notions, si. Aucune notion ne
+quitte le programme sur le seul avis d'une étape qui n'a pas vu toute sa matière.
+
+**Ce qui arrive si personne ne la réclame à l'étape notions** : une notion oubliée ou à
+vérifier **ne bouge pas** ; une notion hors programme reste dans son chapitre s'il est
+écarté, et passe **sans chapitre** s'il reste visible — elle sort du programme sans être
+détruite, et un gestionnaire peut la replacer. **Une notion existante n'est jamais
+effacée par une génération.**
 
 **Mais une notion NEUVE non rangée n'est pas créée.** À la fin, toute notion née de cet
 import et restée sans chapitre est effacée. Le motif de la règle inverse — ne pas
@@ -457,6 +500,20 @@ détruire ce que personne n'a jugé — s'est retourné en pratique : les oublis
 s'accumulaient d'une génération à l'autre, hors programme, jamais tirés et jamais rangés
 par personne. Le remède au rangement raté est de **relancer la génération**. Les notions
 antérieures à l'import, elles, ne sont jamais touchées.
+
+**Les redites entre chapitres se jugent à la fin, en une fois.** L'étape notions d'un
+chapitre ne voit que les notions de son chapitre : si elle recrée une notion qui existe
+dans un autre, rien ne le lui dit. Quand tous les chapitres ont fini leur étape notions,
+le site repère les paires suspectes (une nouvelle notion trop proche d'une notion d'un
+autre chapitre) et **un seul appel** les tranche — il ne répond que « redite ou pas », et
+ne part pas s'il n'y a aucune paire. Il tourne **en même temps que les questions**, qui ne
+l'attendent pas — et c'est pourquoi **il juge sans rien effacer** : l'effacement se fait au
+ménage de fin, une fois toutes les questions écrites, pour qu'aucune question en vol ne vise
+une notion déjà partie. **Entre deux redites, c'est toujours la nouvelle qui s'efface**, jamais
+celle qui existait — l'ancienne peut porter des questions et un historique de révision —,
+et c'est **garanti par le code, pas seulement demandé au modèle** : seule la notion neuve
+d'une paire peut sortir par ce chemin. Les questions déjà écrites sur la notion effacée
+sont **rattachées à celle qui reste** : elles portent sur le même fait.
 
 **Le chapitre suit ses notions** : un chapitre dont il ne reste que des notions que
 personne n'a su placer est écarté avec elles dedans. Le bouton « restaurer » reste ainsi
@@ -467,9 +524,10 @@ rangement.** Ce serait la réponse confortable pour tout ce qu'il ne veut pas tr
 et le hors-programme grossirait tout seul sous une étiquette qui a l'air propre. Il ne
 voit que les chapitres visibles.
 
-**Le rattrapage des notions sans verdict** : ces notions partent dans **chaque** appel
-de l'étape suivante, étiquetées — *celle-ci n'a été rangée nulle part ; dis si elle
-relève de ton chapitre, sinon ignore-la*. Départage quand plusieurs chapitres la
+**La seconde vérification** : ces notions partent dans **chaque** appel de l'étape
+notions, étiquetées selon leur cas — *celle-ci n'a été rangée nulle part* / *celle-ci est
+introuvable dans le texte, elle vient peut-être d'une image* / *celle-ci a été jugée hors
+programme* — *dis si elle relève de ton chapitre, sinon ignore-la*. Départage quand plusieurs chapitres la
 réclament : son chapitre actuel s'il est parmi eux (la règle qui ne déplace rien sur une
 ambiguïté), sinon le premier dans l'ordre du programme (déterministe, et indépendant de
 l'ordre d'arrivée des réponses), sinon elle ne bouge pas. Chaque arbitrage est écrit au
@@ -481,13 +539,15 @@ rangée franchement.
 > modèle, c'est une étape chapitres ratée. Sans ce seuil, le rattrapage masquerait
 > exactement la panne qu'on veut voir.
 
-Les seuils sont **proportionnels** — ce qu'on mesure est la part des notions sur
-lesquelles le modèle a renoncé à statuer ; cinq oubliées sur vingt est un signal fort,
+Les seuils sont **proportionnels**, et ne comptent **que les oubliées** — ce qu'on mesure
+est la part des notions sur lesquelles le modèle a renoncé à statuer. « À vérifier » et
+« hors programme » sont des réponses, pas des renoncements : sur un cours fait de
+schémas, les compter ferait relancer ou annuler une génération qui se déroule bien ; cinq oubliées sur vingt est un signal fort,
 cinq sur mille n'est rien. Une seule borne absolue, très basse : **une** notion isolée ne
 déclenche jamais rien. **Sous 10 %** on passe à l'étape des notions, qui fait le
 rattrapage ci-dessus. **À partir de 10 % (inclus)**, on ne passe pas à l'étape suivante :
-on **relance l'étape chapitres**, en ne lui redemandant que les notions restées sans
-verdict (redemander à l'identique retronquerait une réponse trop longue). Après cette
+on **relance l'étape chapitres**, en ne lui redemandant que les notions oubliées
+(redemander à l'identique retronquerait une réponse trop longue). Après cette
 relance, sous 25 % on continue — les oubliées restantes partent au rattrapage ; **à partir
 de 25 % (inclus), la mise à jour de l'atelier est annulée**, rien n'est écrit, et
 l'utilisateur est prévenu qu'un problème est survenu. Le second seuil est plus tolérant, et c'est voulu : à ce stade on a déjà tenté
@@ -698,9 +758,15 @@ mentir, aucun rejet.
 
 **Le contexte est tout le chapitre, jamais les seules notions visées.** Une recharge ou un
 démarrage ne visent souvent qu'une partie du chapitre — 24 questions de démarrage sur un
-chapitre de 150 notions n'en visent que 24. Ne montrer que celles-là laisserait le modèle
-écrire sur la notion voisine sans le savoir. Les intitulés de tout le chapitre partent donc
-en contexte, plafonnés à 150 : au-delà, les notions visées d'abord.
+chapitre de 150 notions n'en visent que 24. Les intitulés de tout le chapitre partent donc
+en contexte, plafonnés à 150 : au-delà, les notions visées d'abord. Deux raisons :
+
+1. **Ils tiennent lieu de cours.** Cette étape ne reçoit aucun document : sans les notions
+   voisines, le modèle n'a rien pour situer ses questions. Et une question peut mobiliser
+   plusieurs notions, même au plus bas niveau — encore faut-il qu'il sache lesquelles
+   existent pour les déclarer honnêtement.
+2. **Ils évitent la redite involontaire** : ne montrer que les notions visées laisserait le
+   modèle écrire sur la notion voisine sans le savoir.
 
 **Le bloc des énoncés existants est plafonné** à 300 par appel. Le volume d'un appel ne
 dépend pas du total de la banque : un appel ne voit que les questions des notions qu'il
@@ -716,7 +782,39 @@ trois règles de choix :
 - **Réparti entre les notions du lot**, à tour de rôle : la part d'une notion qui a peu de
   questions revient aux autres.
 
-### 7.11 Une génération à la fois, par atelier
+### 7.11 La génération tourne sur le serveur, une à la fois par atelier
+
+**L'écran lance, le serveur enchaîne.** Chaque appel au modèle est une **tâche** rangée en
+base, exécutée dans sa propre fonction serveur — pour tenir dans la limite de durée de
+l'hébergeur, cinq minutes par fonction. Une tâche qui se termine relit toutes les tâches du
+lot, en déduit la suite, et **lance elle-même les suivantes**. Fermer la fenêtre, quitter la
+page ou fermer l'onglet ne change rien : l'écran ne fait que lire l'avancement, et le
+bandeau de l'atelier montre la génération en cours à qui revient. Rouvrir la fenêtre
+retrouve la génération au lieu d'en proposer une seconde.
+
+**La suite se déduit de l'état, jamais d'une mémoire.** Plusieurs tâches finissent au même
+instant et demandent chacune « et maintenant ? » : la réponse, tirée de toutes les tâches du
+lot, est la même pour toutes, et une étape planifiée deux fois n'existe qu'une fois (clé
+unique par étape). Une fonction peut mourir entre deux tâches sans rien perdre.
+
+**Tout part en même temps, cinquante au plus.** Les notions de tous les chapitres partent
+ensemble, et les questions d'un chapitre dès que ses notions sont écrites. Le plafond ne
+borne qu'une boucle emballée.
+
+**La veille rattrape ce qui se perd.** Une tâche coupée par la limite de durée n'écrit rien :
+elle est **reprise une fois**, et abandonnée si elle est coupée de nouveau (l'écran dit alors
+combien de questions manquent). Une tâche qu'aucun relais n'a prise est relancée. Cette
+veille passe à chaque lecture d'avancement par l'écran, et chaque minute par une tâche
+planifiée de la base, pour les générations que plus personne ne regarde. **Une génération
+n'est menée que par le serveur qui l'a ouverte** : le développement local partage la base
+avec la production, et chacun ne touche qu'à ses lots.
+
+**Les relais ne passent par aucune session** : chaque appel porte une signature de la tâche,
+calculée avec un secret du serveur, qui ne permet que d'exécuter une tâche déjà rangée par
+une action qui a contrôlé les droits.
+
+**Arrêter** referme le lot puis défait ce qu'il a écrit : les tâches encore en vol se
+refusent d'elles-mêmes à écrire dans un lot refermé.
 
 Deux générations sur le même atelier écrivent les mêmes chapitres et les mêmes notions, et
 le ménage de fin de l'une peut cacher ce que l'autre vient de remplir. Ce n'est pas deux
@@ -724,21 +822,16 @@ fois plus de contenu : c'est un programme incohérent et deux fois la facture. *
 ateliers différents, rien n'est bloqué** — aucune écriture n'y est partagée, et seul le
 débit vers le fournisseur l'est, qui se régule tout seul.
 
-**Le verrou est un signe de vie, pas un interrupteur.** Un drapeau posé par un onglet qui
-meurt brutalement ne se relâcherait jamais et bloquerait l'atelier sans recours. L'onglet
-qui travaille **bat** régulièrement ; un lot sans battement depuis quelques minutes cesse
-de bloquer. Une fin propre — terminée, arrêtée ou en erreur — relâche immédiatement.
+**Le verrou est un signe de vie, pas un interrupteur.** Un drapeau posé par une génération
+que le serveur perd en route ne se relâcherait jamais et bloquerait l'atelier sans recours.
+Chaque tâche **bat** en commençant et en finissant ; un lot sans battement depuis plus
+longtemps que la plus longue tâche cesse de bloquer. Une fin propre — terminée, arrêtée ou
+en erreur — relâche immédiatement.
 
 **Les recharges automatiques ne battent jamais** : elles tournent en tâche de fond,
 l'utilisateur n'en sait rien, et lui refuser un lancement à cause d'elles serait
-incompréhensible.
-
-**Quitter la page** demande confirmation, mais **le texte n'est pas le nôtre** : les
-navigateurs imposent leur propre formulation. On ne peut que provoquer la question, pas la
-rédiger. Ce n'est pas grave — les questions sont écrites au fur et à mesure, donc un import
-interrompu ne casse rien : ce qui est écrit reste, et le bandeau d'annulation le propose
-comme n'importe quel autre lot. L'écran propose aussi d'**ouvrir le site dans un second
-onglet**, celui qui travaille restant intact derrière.
+incompréhensible. Leurs appels sont pourtant des tâches comme les autres, menées de la même
+façon.
 
 ### 7.12 Coût : ce qui le gouverne
 
@@ -1088,6 +1181,11 @@ middleware de langue les redirigerait. *Précédent : la recharge automatique a 
 erreur pendant deux jours pour cette raison exacte — personne n'attend sa réponse, donc rien
 ne le signalait à l'écran.*
 
+**Le navigateur envoie les actions serveur une par une.** Des appels lancés « en parallèle »
+s'exécutent en file — et une lecture répétée, comme l'avancement d'une génération, bloque
+tout le reste de l'écran. Ce qui doit partir ensemble ou se répéter passe par une route
+d'API. *Constaté au journal : 18 minutes au lieu de 4.*
+
 ### B. Pièges React et CSS
 
 **La mise à jour d'état n'est pas synchrone.** Construire l'objet à passer à une action
@@ -1185,3 +1283,20 @@ Une liste d'identifiants passée en filtre part **dans l'URL** de la couche d'ac
 au-delà de quelques centaines d'éléments, la requête est refusée, et l'erreur peut se
 journaliser vide. Une jointure interne pour une lecture, un découpage par paquets pour une
 écriture, une fonction en base quand la règle elle-même y vit.
+
+### I. Génération par chapitres
+
+**La lecture du texte d'un PDF peut détacher le tampon qu'on lui donne** : on lui passe une
+copie, sinon le même document ne se découpe plus ensuite. **Rien n'est écrit avant la décision
+de seuil** : la réponse de l'étape chapitres attend la relance dans le lot d'import, pour
+qu'une annulation à 25 % ne laisse aucun chapitre créé.
+
+### J. Arbitrages de l'IA (24/09/2026)
+
+Tranchés sur le journal réel. **Gardés** : la réflexion du rédacteur de questions (pas
+coupée pour la vitesse), Sonnet 5 sur le programme (ni Opus 5.5 ni Fable 5.1), la relecture
+de tout le cours et de toutes les notions à chaque génération (voulue), DeepSeek pour les
+questions, données des cours comprises. **Écartés** : les lots à moitié prix pour la
+recharge (DeepSeek n'en propose pas ; ses heures creuses, à moitié prix, s'appliquent
+d'elles-mêmes). **Jev** (TypeSafe AI) : à tester sur la correction des réponses écrites, pas
+sur la génération.

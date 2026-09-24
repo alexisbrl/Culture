@@ -57,10 +57,10 @@ describe('PASS_MODELS — Sonnet sur le programme, Haiku sur les questions', () 
   // Haiku laissait des doublons littéraux, oubliait des notions au rangement et
   // dérivait vers le détail sans intérêt. Les trois passes qui JUGENT montent
   // donc en gamme ; les deux qui produisent du volume restent en bas.
-  it('les trois passes du programme visent Sonnet 5', () => {
+  it('les étapes du programme visent Sonnet 5', () => {
     expect(PASS_MODELS.chapters).toBe(MODELS.sonnet);
     expect(PASS_MODELS.notions).toBe(MODELS.sonnet);
-    expect(PASS_MODELS.assign).toBe(MODELS.sonnet);
+    expect(PASS_MODELS.redites).toBe(MODELS.sonnet);
   });
 
   it('les deux passes de questions restent sur Haiku 4.5', () => {

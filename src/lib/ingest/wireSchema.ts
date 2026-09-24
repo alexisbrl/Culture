@@ -255,20 +255,20 @@ function groupSchemaFor<Q extends z.ZodTypeAny>(questionSchema: Q) {
 export const wireGroupSchema = groupSchemaFor(wireQuestionSchema);
 export const wireExamGroupSchema = groupSchemaFor(wireExamQuestionSchema);
 
+/** Un chapitre NOUVEAU : son nom seulement. Où il se trouve dans le cours se dit
+ *  dans `chapterOrder`, comme pour les chapitres existants — une seule forme de
+ *  bornes pour tous. */
 export const wireChapterSchema = z.object({
   ref: z.string().describe('Clé locale unique de ce chapitre dans ce plan.'),
-  name: z.string().describe('Nom du chapitre, 120 caractères maximum.'),
-  sourceDocument: z
-    .string()
-    .describe("Nom du document où ce chapitre commence. Chaîne vide si tu ne peux pas le dire."),
-  pageStart: z
-    .number()
-    .int()
-    .describe('Première page approximative du chapitre dans ce document. 0 si tu ne peux pas le dire.'),
-  pageEnd: z
-    .number()
-    .int()
-    .describe('Dernière page approximative du chapitre. 0 si tu ne peux pas le dire.'),
+  name: z.string().describe("Titre du chapitre tel qu'il figure dans le cours, sans sa numérotation ; reformulé plus court seulement s'il dépasse 120 caractères."),
+});
+
+/** Un intervalle de pages d'un document. C'est ce qui permet à l'étape suivante
+ *  de ne recevoir que les pages de son chapitre (docs/architecture.md §7.2). */
+export const wireChapterSpanSchema = z.object({
+  document: z.string().describe('Nom du document, recopié tel qu’il apparaît dans les en-têtes « Document ».'),
+  pageStart: z.number().int().describe('Première page du chapitre dans ce document, d’après les marqueurs « [page N] ».'),
+  pageEnd: z.number().int().describe('Dernière page du chapitre dans ce document (incluse).'),
 });
 
 /** ⚠️ Une notion naît SANS chapitre (feuille de route « notions d'abord », §3).
@@ -289,23 +289,6 @@ export const wireNotionSchema = z.object({
     .number()
     .int()
     .describe("Page du document d'où vient cette notion. 0 si tu ne peux pas la déterminer."),
-});
-
-/** Ranger une notion dans un chapitre.
- *
- *  `notionRef` désigne une notion qui EXISTE DÉJÀ — celles qu'on vient
- *  d'extraire des documents comme celles que l'atelier portait avant. C'est ce
- *  qui rend la mise à jour possible : réorganiser un atelier, c'est n'émettre
- *  que des affectations. */
-export const wireAssignmentSchema = z.object({
-  notionRef: z
-    .string()
-    .describe("Identifiant de la notion à ranger, recopié tel quel depuis la liste des notions fournie."),
-  chapterRef: z
-    .string()
-    .describe(
-      "Référence du chapitre où la ranger, parmi ceux de cette réponse. Chaîne vide pour laisser la notion hors du programme (elle reste consultable, sans chapitre).",
-    ),
 });
 
 // Une sortie par passe : on ne demande jamais au modèle de produire le programme
@@ -348,21 +331,47 @@ export const wireChapterRankSchema = z.object({
   reason: z
     .string()
     .describe("Uniquement pour un rang 0 : en quelques mots, pourquoi le cours ne le couvre plus. S'affiche à l'utilisateur. Chaîne vide sinon."),
+  spans: z
+    .array(wireChapterSpanSchema)
+    .describe('Où le chapitre se trouve dans le cours : un intervalle de pages, plusieurs si le chapitre est éclaté. Liste vide pour un rang 0.'),
+});
+
+/** Le verdict sur UNE notion existante (§7.6). Trois réponses, et le silence
+ *  n'en est pas une : une notion absente de la liste est tenue pour oubliée. */
+export const wireNotionVerdictSchema = z.object({
+  notion: z.string().describe("Identifiant de la notion existante, recopié tel quel."),
+  verdict: z
+    .enum(['chapter', 'out', 'check'])
+    .describe("« chapter » : elle va dans le chapitre donné. « out » : le cours ne la couvre plus. « check » : tu ne la retrouves pas dans le texte — elle vient peut-être d'une image."),
+  chapter: z
+    .string()
+    .describe("Pour « chapter » seulement : la référence d'un chapitre au programme, existant ou de cette réponse. Chaîne vide sinon."),
 });
 
 export const wireChaptersOutput = z.object({
   chapters: z.array(wireChapterSchema),
   chapterOrder: z.array(wireChapterRankSchema),
+  notionVerdicts: z.array(wireNotionVerdictSchema),
 });
-export const wireAssignmentsOutput = z.object({ assignments: z.array(wireAssignmentSchema) });
-export const wireNotionsOutput = z.object({ notions: z.array(wireNotionSchema) });
+
+/** La relance de l'étape chapitres : les chapitres sont déjà écrits, on ne
+ *  redemande que les verdicts des notions oubliées. */
+export const wireChaptersRelaunchOutput = z.object({
+  notionVerdicts: z.array(wireNotionVerdictSchema),
+});
+/** L'étape notions d'UN chapitre (§7.2) : ses notions nouvelles, et les notions
+ *  de la seconde vérification qu'il réclame (§7.6). */
+export const wireChapterNotionsOutput = z.object({
+  notions: z.array(wireNotionSchema),
+  claimed: z
+    .array(z.string())
+    .describe("Identifiants, recopiés tels quels, des notions « à vérifier » qui relèvent de TON chapitre. Liste vide si aucune."),
+});
 export const wireGroupsOutput = z.object({ groups: z.array(wireGroupSchema) });
 /** Même sortie, jeu de types de l’examen — voir EXAM_RESPONSE_TYPES. */
 export const wireExamGroupsOutput = z.object({ groups: z.array(wireExamGroupSchema) });
 
 export type WireChaptersOutput = z.infer<typeof wireChaptersOutput>;
-export type WireAssignmentsOutput = z.infer<typeof wireAssignmentsOutput>;
-export type WireNotionsOutput = z.infer<typeof wireNotionsOutput>;
 export type WireGroupsOutput = z.infer<typeof wireGroupsOutput>;
 
 /** ÉTAPE 0 — le document de l'IA, et la consigne réécrite.
@@ -449,3 +458,14 @@ export const wireResourceOutputExam = z.object({
 });
 
 export type WireResourceOutput = z.infer<typeof wireResourceOutput>;
+
+/** Les REDITES entre chapitres (§7.6) : pour chaque paire soumise, redite ou
+ *  pas — rien d'autre. Qui s'efface est décidé par le code, jamais ici. */
+export const wireReditesOutput = z.object({
+  verdicts: z.array(
+    z.object({
+      pair: z.number().int().describe('Le numéro de la paire, tel qu’il est donné dans la liste.'),
+      duplicate: z.boolean().describe('true si les deux notions disent le même fait, false si l’une apporte un fait vérifiable de plus.'),
+    }),
+  ),
+});

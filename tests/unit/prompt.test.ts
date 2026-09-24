@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  assignInstruction,
   bloomDefinitions,
   bloomInstruction,
   chaptersInstruction,
+  chaptersRelaunchInstruction,
+  chapterNotionsInstruction,
   DEFAULT_BLOOM_DISTRIBUTION,
   EXAM_QUESTIONS_RANGE,
   existingContentBlock,
   MAX_QUESTIONS_PER_IMPORT,
-  notionsInstruction,
   PLAUSIBLE_CHAPTERS,
+  RECHECK_LABELS,
   questionsInstruction,
   questionsPerNotion,
   systemPrompt,
@@ -23,7 +24,7 @@ import {
   PARCOURS_RESPONSE_TYPES,
   wireExamGroupsOutput,
   wireGroupsOutput,
-  wireNotionsOutput,
+  wireChapterNotionsOutput,
 } from '@/lib/ingest/wireSchema';
 
 const empty: ExistingContent = { chapters: [], notions: [], questions: [] };
@@ -86,15 +87,14 @@ describe('existingContentBlock — la portée, poste de coût numéro un (§16.3
     ],
   };
 
-  it('passe chapitres : les chapitres SEULS — ni notions, ni énoncés', () => {
-    // 31/08/2026 : la liste des notions y pesait jusqu'à ~20 000 tokens pour
-    // rien. Cette passe ne range pas, et ce qui décide qu'un chapitre n'est plus
-    // couvert, c'est le COURS — pas une liste dont une partie peut dater d'une
-    // version périmée.
+  it('passe chapitres : tous les chapitres et toutes les notions, rangées sous leur chapitre — aucun énoncé', () => {
+    // §7.2 : la seule étape qui voit le cours statue sur chaque notion existante.
     const block = existingContentBlock(atelier, { pass: 'chapters' });
     expect(block).toContain('Les fleuves');
     expect(block).toContain('Les montagnes');
-    expect(block).not.toContain('La Loire');
+    for (const id of ['n1', 'n2', 'n3', 'n4']) expect(block).toContain(`- ${id} — `);
+    expect(block.indexOf('Dans ch1')).toBeLessThan(block.indexOf('n1 —'));
+    expect(block.indexOf('Sans chapitre')).toBeLessThan(block.indexOf('n4 —'));
     expect(block).not.toContain('Énoncé');
   });
 
@@ -131,23 +131,44 @@ describe('existingContentBlock — la portée, poste de coût numéro un (§16.3
 });
 
 describe('instructions de passe', () => {
-  it('la passe notions cible UN document et ne range dans aucun chapitre', () => {
-    const instruction = notionsInstruction({ fileName: 'Chapitre 3.pdf' });
-    expect(instruction).toContain('Chapitre 3.pdf');
+  it('la passe notions d’un chapitre : ses extraits, les règles d’une notion', () => {
+    const instruction = chapterNotionsInstruction({
+      chapter: { name: 'Les fleuves' },
+      extracts: [{ name: 'cours.pdf — pages 3 à 4', pages: [3, 4] }, { name: 'notes.md', pages: null }],
+      recheck: [],
+    });
+    expect(instruction).toContain('« Les fleuves »');
+    expect(instruction).toContain('1 = page 3 du cours, 2 = page 4 du cours');
+    expect(instruction).toContain('« notes.md » : le document entier');
     expect(instruction).toContain('500');
     // Une notion est lue SEULE, des semaines plus tard : la consigne doit le
     // dire, sinon le modèle écrit « ces améliorations… » et la notion devient
-    // inutilisable (constaté le 30/08/2026).
+    // inutilisable.
     expect(instruction).toMatch(/SERA LUE SEULE/);
-    // Le rangement est le travail de la passe suivante, et la consigne le dit.
-    expect(instruction).toMatch(/Ne range rien/);
+    expect(instruction).not.toMatch(/SECONDE VÉRIFICATION/);
+  });
+
+  it('la seconde vérification : chaque notion avec son étiquette (§7.6)', () => {
+    const instruction = chapterNotionsInstruction({
+      chapter: { name: 'Les fleuves' },
+      extracts: [],
+      recheck: [
+        { id: 'n1', title: 'La Loire', label: 'forgotten' },
+        { id: 'n2', title: 'Le Rhône', label: 'check' },
+        { id: 'n3', title: 'La Seine', label: 'out' },
+      ],
+    });
+    expect(instruction).toContain(`- n1 — La Loire (celle-ci ${RECHECK_LABELS.forgotten})`);
+    expect(instruction).toContain(`- n2 — Le Rhône (celle-ci ${RECHECK_LABELS.check})`);
+    expect(instruction).toContain(`- n3 — La Seine (celle-ci ${RECHECK_LABELS.out})`);
+    expect(instruction).toMatch(/sinon, ignore-la/);
   });
 
   it('la passe notions donne le critère OBJECTIF de réutilisation', () => {
     // « Est-ce mieux formulé ? » ferait doubler l'atelier à chaque import : le
     // modèle répond oui presque à chaque fois. « Apporte-t-elle un fait
     // vérifiable de plus ? » se tranche.
-    const instruction = notionsInstruction({ fileName: 'cours.pdf' });
+    const instruction = chapterNotionsInstruction({ chapter: { name: 'X' }, extracts: [], recheck: [] });
     expect(instruction).toMatch(/FAIT VÉRIFIABLE DE PLUS/);
     expect(instruction).toMatch(/RÉUTILISE/);
     expect(instruction).not.toMatch(/mieux formulé/);
@@ -233,13 +254,45 @@ describe('instructions de passe', () => {
     expect(instruction).toMatch(/jamais posée/);
   });
 
-  it('la passe chapitres SITUE les chapitres et ne range rien', () => {
-    // Le rangement est une passe à part depuis le 24/08/2026 : ranger 500
-    // notions dans une seule réponse dépasserait le plafond de sortie.
+  it('la passe chapitres situe les chapitres par pages et statue sur chaque notion', () => {
     const instruction = chaptersInstruction([]);
-    expect(instruction).toMatch(/Situe chaque chapitre/);
-    expect(instruction).toMatch(/Tu ne ranges aucune notion ici/);
+    expect(instruction).toMatch(/SITUE CHAQUE CHAPITRE/);
+    expect(instruction).toMatch(/\[page N\]/);
+    expect(instruction).toMatch(/UN VERDICT SUR CHAQUE NOTION EXISTANTE/);
     expect(instruction).not.toMatch(/question/i);
+  });
+
+  it('introuvable dans le texte ⇒ « check », jamais « out » (§7.6)', () => {
+    const rule = /Ne pas retrouver une notion dans le texte n'est JAMAIS un motif de « out » : c'est « check »/;
+    expect(chaptersInstruction([])).toMatch(rule);
+    expect(chaptersRelaunchInstruction({ notions: [{ id: 'n1', title: 'T' }], chapters: [{ id: 'c1', name: 'C' }] }))
+      .toMatch(rule);
+  });
+
+  it('elle dit qu’elle ne lit que le texte', () => {
+    expect(chaptersInstruction([])).toMatch(/Tu reçois le TEXTE du cours/);
+  });
+
+  it('une partie qui se resserre : créer le nouveau chapitre ET écarter l’ancien', () => {
+    expect(chaptersInstruction([])).toMatch(/créer le nouveau chapitre ET de mettre l'ancien à 0/);
+  });
+
+  it('les titres de chapitre sont ceux du cours, mot pour mot, avec deux exceptions', () => {
+    const instruction = chaptersInstruction([]);
+    expect(instruction).toMatch(/LE DÉCOUPAGE ET LES TITRES SONT CEUX DU COURS/);
+    expect(instruction).toMatch(/\*\*mot pour mot\*\*/);
+    expect(instruction).toMatch(/Un titre de plus de 120 caractères/);
+    expect(instruction).toMatch(/Un cours sans aucune division/);
+  });
+
+  it('la relance ne porte que sur les notions données, chapitres figés', () => {
+    const instruction = chaptersRelaunchInstruction({
+      notions: [{ id: 'n7', title: 'La Loire' }],
+      chapters: [{ id: 'c1', name: 'Les fleuves' }],
+    });
+    expect(instruction).toContain('- n7 — La Loire');
+    expect(instruction).toContain('- c1 — Les fleuves');
+    expect(instruction).toMatch(/tu ne crées, ne renommes et n'écartes aucun chapitre/);
   });
 });
 
@@ -375,12 +428,9 @@ describe('wireSchema — ce qu’on autorise le modèle à produire', () => {
     expect(wireGroupsOutput.safeParse({ groups: [{ ref: 'g1', questions: [question] }] }).success).toBe(true);
   });
 
-  it('une notion naît SANS chapitre, et porte sa page', () => {
-    // Au moment où les notions sont extraites, aucun chapitre n'existe encore.
-    // Le rangement est une passe séparée — et c'est la PAGE qui lui permet de se
-    // passer du cours.
-    expect(wireNotionsOutput.safeParse({ notions: [{ ref: 'n1', title: 'T' }] }).success).toBe(false);
-    expect(wireNotionsOutput.safeParse({ notions: [{ ref: 'n1', title: 'T', page: 12 }] }).success).toBe(true);
+  it('une notion porte sa page, et le chapitre dit ce qu’il réclame', () => {
+    expect(wireChapterNotionsOutput.safeParse({ notions: [{ ref: 'n1', title: 'T' }], claimed: [] }).success).toBe(false);
+    expect(wireChapterNotionsOutput.safeParse({ notions: [{ ref: 'n1', title: 'T', page: 12 }], claimed: ['x'] }).success).toBe(true);
   });
 });
 
@@ -432,96 +482,6 @@ describe('volumétrie — répartition de Bloom paramétrable (§16.1)', () => {
   it('une répartition entièrement à zéro ne demande rien', () => {
     expect(bloomInstruction({ 1: 0, 2: 0, 3: 0, 4: 0 })).toMatch(/aucune question/i);
     expect(questionsPerNotion({ 1: 0, 2: 0, 3: 0, 4: 0 })).toBe(0);
-  });
-});
-
-describe('assignInstruction — la page range, elle ne juge pas', () => {
-  const base = {
-    notions: [{ id: 'n1', title: 'La Loire est le plus long fleuve de France.', sourceDocument: 'cours.pdf', page: 12 }],
-    chapters: [{ id: 'c1', name: 'Les fleuves', sourceDocument: 'cours.pdf', pageStart: 10, pageEnd: 20 }],
-    similar: [],
-  };
-
-  it('donne la provenance de chaque notion et la plage de chaque chapitre', () => {
-    const instruction = assignInstruction(base);
-    expect(instruction).toContain('cours.pdf, page 12');
-    expect(instruction).toContain('pages ~10 à ~20');
-  });
-
-  it('dit explicitement que le CONTENU prime sur la page', () => {
-    // Sans cette phrase, le modèle range au numéro et cesse de lire la notion :
-    // on obtiendrait des rangements plausibles mais faux, donc invisibles.
-    const instruction = assignInstruction(base);
-    expect(instruction).toMatch(/indication, pas une règle/);
-    expect(instruction).toMatch(/c'est le contenu qui décide/i);
-  });
-
-  it('interdit de conclure « pages différentes, donc notions différentes »', () => {
-    // Un cours énonce souvent le même fait deux fois — introduction puis
-    // conclusion. Les deux extractions n'en font qu'une seule notion.
-    const instruction = assignInstruction({
-      ...base,
-      similar: [{ notionId: 'n1', other: 'Le plus long fleuve français est la Loire.', proximity: 0.7 }],
-    });
-    expect(instruction).toMatch(/ne prouve JAMAIS que deux notions sont différentes/);
-  });
-
-  it('ne parle de ressemblances que s’il y en a', () => {
-    expect(assignInstruction(base)).not.toMatch(/RESSEMBLANCES/);
-    expect(
-      assignInstruction({ ...base, similar: [{ notionId: 'n1', other: 'Autre', proximity: 0.5 }] }),
-    ).toMatch(/RESSEMBLANCES REPÉRÉES/);
-  });
-
-  it('dit au modèle que le calcul ne juge rien — c’est lui qui tranche', () => {
-    const instruction = assignInstruction({
-      ...base,
-      similar: [{ notionId: 'n1', other: 'Autre', proximity: 0.5 }],
-    });
-    expect(instruction).toMatch(/Ce calcul ne juge rien/);
-    expect(instruction).toMatch(/SE DÉMARQUE VRAIMENT/);
-    // C'est toujours la NOUVELLE qui s'efface : l'ancienne peut déjà porter des
-    // questions, et cette passe n'a pas les documents pour en juger.
-    expect(instruction).toMatch(/celle de cette liste qui s.efface/);
-  });
-
-  it('se passe de provenance sans broncher', () => {
-    // Les notions d'avant le 24/08/2026 n'en ont pas, et une page périmée est
-    // retirée avant d'arriver ici.
-    const instruction = assignInstruction({
-      notions: [{ id: 'n1', title: 'Une notion sans provenance.' }],
-      chapters: [{ id: 'c1', name: 'Un chapitre' }],
-      similar: [],
-    });
-    // La ligne de la notion ne porte aucune provenance entre crochets — le mot
-    // « page » reste ailleurs, dans l'explication générale.
-    expect(instruction).toContain('- n1 — Une notion sans provenance.');
-    expect(instruction).not.toContain('Une notion sans provenance. [');
-  });
-
-  it('dit où la notion se trouve déjà — comme une information, pas une consigne', () => {
-    // L'IA DOIT pouvoir déplacer une notion existante, y compris rangée à la
-    // main : le rangement actuel l'informe, il ne le lie pas. Il sert surtout
-    // quand la notion n'a plus de provenance — c'est alors le seul indice.
-    const instruction = assignInstruction({
-      ...base,
-      notions: [{ ...base.notions[0], currentChapterId: 'c1' }],
-    });
-    expect(instruction).toContain('(actuellement dans c1)');
-    expect(instruction).toMatch(/une information, pas une consigne/);
-    expect(instruction).toMatch(/aucune provenance/);
-    // Et surtout : rien qui en fasse un argument décisif.
-    expect(instruction).not.toMatch(/sauf raison de la déplacer/);
-  });
-
-  it('ne dit rien de son chapitre quand elle n’en a pas', () => {
-    // La mention n'apparaît que sur la LIGNE de la notion : l'explication
-    // générale, elle, parle forcément de « actuellement dans ».
-    expect(assignInstruction(base)).not.toContain('(actuellement dans');
-  });
-  it('le dit quand il n’y a aucun chapitre où ranger', () => {
-    const instruction = assignInstruction({ notions: base.notions, chapters: [], similar: [] });
-    expect(instruction).toMatch(/Aucun chapitre n'existe/);
   });
 });
 
