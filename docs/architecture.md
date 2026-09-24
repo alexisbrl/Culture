@@ -294,6 +294,14 @@ caractères sur les seules pages qui en manquent ; un modèle multimodal en dern
 recours. Un document dont la reconnaissance a échoué retombe sur la règle par défaut :
 ses pages partent en image. **Rien ne bloque, rien n'attend.**
 
+**Chez le fournisseur, un document ne vit que le temps d'une génération.** Il est envoyé **à
+l'ouverture de la fenêtre de génération** — le temps passé à écrire la consigne masque
+l'envoi — et **tout est supprimé à la fin de chaque génération**, extraits de chapitre
+compris. Fenêtre fermée sans lancer : suppression immédiate. Onglet perdu en route : un
+ménage régulier retire ce qui est envoyé depuis plus d'une heure sans génération. Envoyer
+et supprimer sont gratuits ; garder remplirait l'espace du compte (100 Go) à mesure que
+les ateliers s'accumulent, et c'est aussi une question de confidentialité.
+
 ### 7.3 Le découpage physique : le modèle dit où, le serveur coupe
 
 Un modèle ne lit jamais « seulement les bonnes pages » d'un document qu'on lui a
@@ -499,7 +507,9 @@ dans un autre, rien ne le lui dit. Quand tous les chapitres ont fini leur étape
 le site repère les paires suspectes (une nouvelle notion trop proche d'une notion d'un
 autre chapitre) et **un seul appel** les tranche — il ne répond que « redite ou pas », et
 ne part pas s'il n'y a aucune paire. Il tourne **en même temps que les questions**, qui ne
-l'attendent pas. **Entre deux redites, c'est toujours la nouvelle qui s'efface**, jamais
+l'attendent pas — et c'est pourquoi **il juge sans rien effacer** : l'effacement se fait au
+ménage de fin, une fois toutes les questions écrites, pour qu'aucune question en vol ne vise
+une notion déjà partie. **Entre deux redites, c'est toujours la nouvelle qui s'efface**, jamais
 celle qui existait — l'ancienne peut porter des questions et un historique de révision —,
 et c'est **garanti par le code, pas seulement demandé au modèle** : seule la notion neuve
 d'une paire peut sortir par ce chemin. Les questions déjà écrites sur la notion effacée
@@ -1252,3 +1262,13 @@ journaliser vide. Une jointure interne pour une lecture, un découpage par paque
 copie, sinon le même document ne se découpe plus ensuite. **Rien n'est écrit avant la décision
 de seuil** : la réponse de l'étape chapitres attend la relance dans le lot d'import, pour
 qu'une annulation à 25 % ne laisse aucun chapitre créé.
+
+### J. Arbitrages de l'IA (24/09/2026)
+
+Tranchés sur le journal réel. **Gardés** : la réflexion du rédacteur de questions (pas
+coupée pour la vitesse), Sonnet 5 sur le programme (ni Opus 5.5 ni Fable 5.1), la relecture
+de tout le cours et de toutes les notions à chaque génération (voulue), DeepSeek pour les
+questions, données des cours comprises. **Écartés** : les lots à moitié prix pour la
+recharge (DeepSeek n'en propose pas ; ses heures creuses, à moitié prix, s'appliquent
+d'elles-mêmes). **Jev** (TypeSafe AI) : à tester sur la correction des réponses écrites, pas
+sur la génération.

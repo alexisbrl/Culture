@@ -393,6 +393,39 @@ export function rediteRemovals(
   return out;
 }
 
+/**
+ * Les effacements de redites rendus par le navigateur au ménage de fin,
+ * **revalidés un à un** : ils ont fait l'aller-retour, donc ils ne valent pas
+ * mieux qu'une donnée saisie. Même garantie que `rediteRemovals`, reposée côté
+ * serveur : seule une notion NEUVE de ce lot peut sortir par ce chemin, la
+ * notion gardée doit exister dans l'atelier, et une notion effacée ne peut plus
+ * servir de notion gardée.
+ */
+export function revalidateRedites(
+  removals: unknown,
+  allowed: { fresh: ReadonlySet<string>; existing: ReadonlySet<string> },
+): { removals: { remove: string; keep: string }[]; ignored: number } {
+  const list = Array.isArray(removals) ? removals : [];
+  const removed = new Set<string>();
+  const kept = new Set<string>();
+  const out: { remove: string; keep: string }[] = [];
+  let ignored = 0;
+  for (const entry of list) {
+    const r = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
+    const { remove, keep } = r;
+    if (typeof remove !== 'string' || typeof keep !== 'string' || remove === keep
+      || !allowed.fresh.has(remove) || !allowed.existing.has(keep)
+      || removed.has(remove) || removed.has(keep) || kept.has(remove)) {
+      ignored += 1;
+      continue;
+    }
+    removed.add(remove);
+    kept.add(keep);
+    out.push({ remove, keep });
+  }
+  return { removals: out, ignored };
+}
+
 /** Soumet les paires au modèle — **et ne l'appelle pas s'il n'y en a aucune**. */
 export async function judgeRedites(
   pairs: readonly ReditePair[],

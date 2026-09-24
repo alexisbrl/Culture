@@ -212,11 +212,20 @@ export type ChapterNotionsResult =
   | { ok: false; error: string };
 
 export type RedundancyResult =
-  | { ok: true; pairs: number; removed: number; reattached: number; adjusted: PlanIssue[] }
+  | {
+      ok: true;
+      pairs: number;
+      removed: number;
+      /** À renvoyer telles quelles à la finalisation, qui les efface. */
+      removals: { remove: string; keep: string }[];
+      adjusted: PlanIssue[];
+    }
   | { ok: false; error: string };
 
 /** La vérification finale des redites entre chapitres — une fois toutes les
- *  étapes notions finies, en même temps que les questions. */
+ *  étapes notions finies, en même temps que les questions. Juge sans rien
+ *  effacer : l'effacement attend la finalisation, que les questions soient
+ *  toutes écrites. */
 export async function checkWorkshopRedites(
   workshopId: string,
   importId: string,
@@ -226,7 +235,6 @@ export async function checkWorkshopRedites(
 
   try {
     const result = await run.ingestRedites(workshopId, importId);
-    if (result.removed > 0) revalidateWorkshop();
     return { ok: true, ...result };
   } catch (error) {
     return { ok: false, error: failed('redites', error, { workshopId, importId }) };
@@ -252,7 +260,7 @@ export async function relaunchWorkshopChapters(
   }
 }
 
-/** La finalisation : départage des notions réclamées, sort final de celles
+/** La finalisation : effacement des redites, départage des notions réclamées, sort final de celles
  *  que personne ne réclame, puis le ménage — chapitres qui ne gardent que des
  *  notions non placées, notions neuves restées sans chapitre.
  *
@@ -264,10 +272,12 @@ export async function finishWorkshopIngestion(
   /** Les réclamations de la seconde vérification, chapitre par chapitre, telles
    *  que les ont rendues les étapes notions. Revalidées côté serveur. */
   claims: { chapterId: string; notionIds: string[] }[] = [],
+  /** Les redites jugées par `checkWorkshopRedites`. Revalidées côté serveur. */
+  redites: { remove: string; keep: string }[] = [],
 ): Promise<{ hidden: number; removed: number; adjusted: PlanIssue[] }> {
   if (!(await requireImportManager(workshopId, importId))) return { hidden: 0, removed: 0, adjusted: [] };
 
-  const result = await run.finishIngestion(workshopId, importId, Array.isArray(claims) ? claims : []);
+  const result = await run.finishIngestion(workshopId, importId, Array.isArray(claims) ? claims : [], redites);
   revalidateWorkshop();
   return {
     hidden: result.hidden.length,

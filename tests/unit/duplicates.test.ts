@@ -9,6 +9,7 @@ import {
   judgeRedites,
   rediteCandidates,
   rediteRemovals,
+  revalidateRedites,
   SIMILAR_ENOUGH_TO_ASK,
   proximity,
   significantWords,
@@ -396,5 +397,40 @@ describe('redites entre chapitres (§7.6)', () => {
     expect(rediteRemovals(pairs, [{ pair: 0, duplicate: true }, { pair: 1, duplicate: true }], new Set(['new1', 'new3']))).toEqual([
       { remove: 'new1', keep: 'new3' },
     ]);
+  });
+});
+
+// Les redites reviennent du navigateur à la finalisation, qui les efface : ce
+// sont des effacements pilotés par une donnée qui a fait l'aller-retour.
+describe('revalidateRedites', () => {
+  const allowed = { fresh: new Set(['new1', 'new2']), existing: new Set(['new1', 'new2', 'old1', 'old2']) };
+
+  it('garde un effacement valide', () => {
+    expect(revalidateRedites([{ remove: 'new1', keep: 'old1' }], allowed)).toEqual({
+      removals: [{ remove: 'new1', keep: 'old1' }],
+      ignored: 0,
+    });
+  });
+
+  it("n'efface jamais une notion antérieure au lot, quoi qu'on lui envoie", () => {
+    expect(revalidateRedites([{ remove: 'old1', keep: 'new1' }], allowed)).toEqual({ removals: [], ignored: 1 });
+  });
+
+  it('refuse une notion gardée absente de l’atelier, et une notion gardée qui est elle-même', () => {
+    const out = revalidateRedites([{ remove: 'new1', keep: 'ailleurs' }, { remove: 'new2', keep: 'new2' }], allowed);
+    expect(out).toEqual({ removals: [], ignored: 2 });
+  });
+
+  it("n'utilise jamais comme notion gardée une notion effacée, dans un sens comme dans l'autre", () => {
+    expect(revalidateRedites([{ remove: 'new1', keep: 'old1' }, { remove: 'new2', keep: 'new1' }], allowed).removals)
+      .toEqual([{ remove: 'new1', keep: 'old1' }]);
+    expect(revalidateRedites([{ remove: 'new2', keep: 'new1' }, { remove: 'new1', keep: 'old1' }], allowed).removals)
+      .toEqual([{ remove: 'new2', keep: 'new1' }]);
+  });
+
+  it('ignore une entrée mal formée sans faire échouer le reste', () => {
+    expect(revalidateRedites([null, 'x', { remove: 3, keep: 'old1' }, { remove: 'new1', keep: 'old2' }], allowed))
+      .toEqual({ removals: [{ remove: 'new1', keep: 'old2' }], ignored: 3 });
+    expect(revalidateRedites('pas une liste', allowed)).toEqual({ removals: [], ignored: 0 });
   });
 });

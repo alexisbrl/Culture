@@ -596,13 +596,16 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
 
       // Tous les chapitres ont fini leur étape notions : les redites entre
       // chapitres se jugent maintenant, en même temps que les questions encore
-      // en vol, qui ne les attendent pas (§7.6).
+      // en vol, qui ne les attendent pas (§7.6). Jugées seulement : elles
+      // s'effacent à la finalisation, une fois toutes les questions écrites.
       if (stopped.current) return;
+      let rediteRemovals: { remove: string; keep: string }[] = [];
       const redites = checkWorkshopRedites(workshopId, importId).then((result) => {
         if (!result.ok) {
           adjusted.push({ kind: 'notion', reason: result.error });
           return;
         }
+        rediteRemovals = result.removals;
         adjusted.push(...result.adjusted);
         tally.notions -= result.removed;
         setCounts({ ...tally });
@@ -614,7 +617,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       // du programme de ce que personne ne réclame, et le ménage n'ont de sens
       // qu'une fois TOUS les chapitres passés.
       if (stopped.current) return;
-      const finish = await finishWorkshopIngestion(workshopId, importId, claims);
+      const finish = await finishWorkshopIngestion(workshopId, importId, claims, rediteRemovals);
       adjusted.push(...finish.adjusted);
     } else if (context !== 'exam') {
       // Pas de programme à construire : on écrit les questions qui manquent à

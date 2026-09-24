@@ -60,6 +60,7 @@ import {
   judgeRedites,
   rediteCandidates,
   rediteRemovals,
+  revalidateRedites,
 } from './duplicates';
 import {
   contextNotions,
@@ -1859,6 +1860,9 @@ export type FinishResult = {
 /** La fin de l'import : ce qui se décide une fois TOUTES les étapes notions
  *  finies (§7.6).
  *
+ *  0. Les redites jugées pendant l'écriture des questions : questions
+ *     rattachées à la notion qui reste, puis notion neuve effacée. Revalidées
+ *     une à une — elles reviennent du navigateur.
  *  1. Les réclamations de la seconde vérification, revalidées une à une — elles
  *     reviennent du navigateur.
  *  2. Le sort final de chaque notion existante : départage, sortie du programme
@@ -1873,10 +1877,30 @@ export async function finishIngestion(
   workshopId: string,
   importId: string,
   claims: readonly ChapterClaims[] = [],
+  /** Les redites jugées pendant l'écriture des questions (`ingestRedites`),
+   *  telles que les a rendues l'écran. Revalidées ici. */
+  redites: unknown = [],
 ): Promise<FinishResult> {
   const adjusted: PlanIssue[] = [];
   try {
     const supabase = getSupabaseServerClient();
+
+    // 0. Les redites, en premier : toutes les questions sont écrites, plus
+    // aucune ne peut viser la notion qu'on efface. Ses questions rejoignent
+    // d'abord la notion qui reste — elles portent sur le même fait.
+    const arranged = await loadNotionsToArrange(workshopId);
+    const checked = revalidateRedites(redites, {
+      fresh: new Set(arranged.filter((n) => n.importId === importId).map((n) => n.id)),
+      existing: new Set(arranged.map((n) => n.id)),
+    });
+    if (checked.ignored > 0) {
+      adjusted.push({ kind: 'notion', reason: `${checked.ignored} redite(s) irrecevable(s) — ignorée(s)` });
+    }
+    for (const { remove, keep } of checked.removals) await reattachQuestions(remove, keep);
+    if (checked.removals.length > 0) {
+      await removeOrphans(workshopId, { chapterIds: [], notionIds: checked.removals.map((r) => r.remove) });
+    }
+
     const scope = await readScope(importId);
     const stage1 = scope.stage1 as Stage1State | undefined;
 
@@ -2117,10 +2141,11 @@ export async function ingestChapterNotions(
 export type RedundancyResult = {
   /** Paires soumises au modèle — 0 : aucun appel n'est parti. */
   pairs: number;
-  /** Notions neuves effacées comme redites. */
+  /** Notions neuves jugées redites — effacées au ménage de fin, pas ici. */
   removed: number;
-  /** Questions déjà écrites sur ces notions, rattachées à la notion qui reste. */
-  reattached: number;
+  /** Ce que le ménage de fin devra effacer, et la notion qui reste pour chacune.
+   *  Rendu à l'écran, qui le renvoie à `finishIngestion`. */
+  removals: { remove: string; keep: string }[];
   adjusted: PlanIssue[];
 };
 
@@ -2131,9 +2156,11 @@ export type RedundancyResult = {
  *  chapitre — et un seul appel les tranche. Pas d'appel s'il n'y a aucune paire.
  *  Tourne en même temps que les questions, qui ne l'attendent pas.
  *
- *  Pour chaque redite confirmée, seule la notion NEUVE s'efface — garanti par
- *  `rediteRemovals`, pas seulement demandé —, et ses questions déjà écrites sont
- *  d'abord rattachées à la notion qui reste : elles portent sur le même fait. */
+ *  ⚠️ **Juge, n'efface rien.** Des questions sont encore en vol sur ces notions :
+ *  effacer maintenant ferait échouer celles qui visent une notion déjà partie.
+ *  L'effacement — seule la notion NEUVE, garanti par `rediteRemovals` — et le
+ *  rattachement de ses questions à la notion qui reste se font au ménage de fin
+ *  (`finishIngestion`), une fois toutes les questions écrites. */
 export async function ingestRedites(
   workshopId: string,
   importId: string,
@@ -2171,17 +2198,13 @@ export async function ingestRedites(
   });
 
   const removals = rediteRemovals(pairs, answers, freshIds);
-  if (removals.length === 0) return { pairs: pairs.length, removed: 0, reattached: 0, adjusted: [] };
-
-  let reattached = 0;
-  for (const { remove, keep } of removals) reattached += await reattachQuestions(remove, keep);
-  await removeOrphans(workshopId, { chapterIds: [], notionIds: removals.map((r) => r.remove) });
+  if (removals.length === 0) return { pairs: pairs.length, removed: 0, removals: [], adjusted: [] };
 
   const titles = new Map(placed.map((n) => [n.id, n.title]));
   return {
     pairs: pairs.length,
     removed: removals.length,
-    reattached,
+    removals,
     adjusted: removals.map(({ remove, keep }) => ({
       kind: 'notion' as const,
       ref: remove,
