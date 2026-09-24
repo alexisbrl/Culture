@@ -24,18 +24,40 @@ import {
   closeWorkshopImport,
   finishWorkshopIngestion,
   countParcoursQuestionCalls,
-  ingestParcoursQuestions,
   ingestWorkshopResource,
   ingestWorkshopChapters,
-  ingestWorkshopChapterNotions,
   relaunchWorkshopChapters,
   checkWorkshopRedites,
-  ingestWorkshopExamQuestions,
   prepareWorkshopIngestion,
   releaseWorkshopImportFiles,
+  type ChapterNotionsResult,
   type PlanIssue,
+  type QuestionPassResult,
 } from '@/app/actions/aiIngest';
 import type { GenerationOrigin } from '@/lib/ingest/journal';
+
+/** Les appels qui partent EN PARALLÈLE — notions d'un chapitre, questions —
+ *  passent par une route d'API et non par des server actions, que le navigateur
+ *  envoie une par une (voir `app/api/ingest/route.ts`). Même forme de réponse
+ *  qu'une action ; une réponse illisible (délai dépassé, panne réseau) devient
+ *  un échec ordinaire au lieu de lever. */
+async function postIngest<T extends { ok: true } | { ok: false; error: string }>(
+  body: Record<string, unknown>,
+): Promise<T | { ok: false; error: string }> {
+  try {
+    const res = await fetch('/api/ingest', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!(res.headers.get('content-type') ?? '').includes('application/json')) {
+      return { ok: false, error: `HTTP ${res.status}` };
+    }
+    return (await res.json()) as T;
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
 
 // Le dialogue de génération par IA — **un seul composant pour tous les points
 // d'entrée** (Ressources, Chapitre & Notion, et les deux listes de questions).
@@ -508,9 +530,15 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         if (stopped.current) return;
         const share = ledger.reserve(chapter.id, job.asked);
         if (share <= 0) { doneCalls += 1; showQuestions(); return; }
-        const result = await ingestParcoursQuestions(
-          workshopId, importId, chapter, job.batchIndex, share, startBudgets.get(chapter.id),
-        );
+        const result = await postIngest<QuestionPassResult>({
+          pass: 'parcours-questions',
+          workshopId,
+          importId,
+          chapter: { id: chapter.id, name: chapter.name },
+          batchIndex: job.batchIndex,
+          budgetShare: share,
+          startBudget: startBudgets.get(chapter.id),
+        });
         doneCalls += 1;
         if (!result.ok) {
           ledger.release(chapter.id, share);
@@ -548,7 +576,9 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       showNotions();
       await mapWithConcurrency(chapters, INGEST_CONCURRENCY, async (chapter) => {
         if (stopped.current) return;
-        const result = await ingestWorkshopChapterNotions(workshopId, importId, chapter.id);
+        const result = await postIngest<ChapterNotionsResult>({
+          pass: 'chapter-notions', workshopId, importId, chapterId: chapter.id,
+        });
         notionsDone += 1;
         if (!result.ok) { notionError ??= result.error; showNotions(); return; }
         discarded.push(...result.discarded);
@@ -632,9 +662,11 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
         // fois, seul le client sait combien il en a en vol.
         const remaining = MAX_QUESTIONS - tally.questions;
         if (remaining <= 0) return null;
-        const result = await ingestWorkshopExamQuestions(workshopId, importId, {
-          ...slice,
-          budget: Math.min(slice.budget, remaining),
+        const result = await postIngest<QuestionPassResult>({
+          pass: 'exam-questions',
+          workshopId,
+          importId,
+          slice: { ...slice, budget: Math.min(slice.budget, remaining) },
         });
         doneCalls += 1;
         if (!result.ok) { error ??= result.error; showExam(); return null; }

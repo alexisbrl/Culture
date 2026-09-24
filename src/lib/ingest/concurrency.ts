@@ -35,12 +35,10 @@ export const INGEST_CONCURRENCY = 4;
  *  3. **L'hébergeur.** Jusqu'à 30 000 exécutions simultanées sur l'offre
  *     actuelle : un appel qui attend le modèle n'en bloque aucun autre.
  *
- *  ⚠️ La documentation de Next.js dit que le client « dispatche et attend les
- *  server actions une par une ». Le journal de bord montre pourtant des appels
- *  qui se chevauchent : le parallélisme fonctionne aujourd'hui. Si ce détail
- *  d'implémentation change, les appels repasseront en série sans erreur — le
- *  journal le montrerait (durées qui s'additionnent), et la réponse serait de
- *  lancer la vague côté serveur. */
+ *  ⚠️ **Ces appels passent par une route d'API, jamais par des server actions**
+ *  (`app/api/ingest`). Le navigateur envoie les server actions une par une :
+ *  lancées « à 50 », elles s'exécutaient en file — constaté au journal le
+ *  24/09/2026, chaque appel démarrant à la seconde où finissait le précédent. */
 export const QUESTIONS_CONCURRENCY = 50;
 
 /** `Promise.all` avec un plafond d'appels simultanés, **et l'ordre préservé**.

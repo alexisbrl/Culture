@@ -1144,6 +1144,10 @@ middleware de langue les redirigerait. *Précédent : la recharge automatique a 
 erreur pendant deux jours pour cette raison exacte — personne n'attend sa réponse, donc rien
 ne le signalait à l'écran.*
 
+**Le navigateur envoie les actions serveur une par une.** Des appels lancés « en parallèle »
+s'exécutent en file. Tout ce qui doit réellement partir ensemble — notions par chapitre,
+questions — passe par une route d'API. *Constaté au journal : 18 minutes au lieu de 4.*
+
 ### B. Pièges React et CSS
 
 **La mise à jour d'état n'est pas synchrone.** Construire l'objet à passer à une action

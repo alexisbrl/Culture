@@ -1,9 +1,10 @@
 'use server';
 
-import { requireManager } from '@/lib/authz';
+import { requireImportManager, requireManager } from '@/lib/authz';
 import * as journal from '@/lib/ingest/journal';
 import * as lock from '@/lib/ingest/lock';
-import { BUSY_ERROR, CLOSED_ERROR } from '@/lib/ingest/lock';
+import { errorMessage as message, passFailed as failed } from '@/lib/ingest/failure';
+import { BUSY_ERROR } from '@/lib/ingest/lock';
 import * as run from '@/lib/ingest/run';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import * as imports from '@/lib/workshops/imports';
@@ -27,6 +28,12 @@ import * as imports from '@/lib/workshops/imports';
 // plusieurs minutes — la fonction serveur est limitée à 300 s. L'ordre d'appel
 // est celui de docs/architecture.md §7 : chapitres, notions par chapitre (et
 // leurs questions dès qu'un chapitre est prêt), redites, finalisation.
+//
+// ⚠️ **Les appels qui doivent partir EN PARALLÈLE ne sont pas ici** — notions
+// d'un chapitre, questions d'entraînement, questions d'examen : ils passent par
+// la route `app/api/ingest`. Le navigateur envoie les server actions une par une
+// (documenté par Next.js) : vingt appels « parallèles » s'y exécutaient en file.
+// Ne reste ici que ce qui part seul.
 
 export type PlanIssue = {
   kind: 'chapter' | 'notion' | 'assignment' | 'question' | 'verdict';
@@ -90,32 +97,6 @@ export type ImportBanner = {
   examQuestions: number;
 };
 
-/** Une passe qui échoue laisse une trace CÔTÉ SERVEUR, en plus du message rendu
- *  à l'écran.
- *
- *  ⚠️ Sans elle, une panne d'ingestion ne survivait nulle part : le seul endroit
- *  où elle s'affichait était le dialogue, et un rafraîchissement de page — ou la
- *  fermeture de l'onglet — l'emportait avec lui. Constaté le 29/08/2026, sur une
- *  erreur de fin de génération qu'il a été impossible de retrouver après coup.
- *
- *  Le contexte (atelier, lot, chapitre, numéro de lot) est joint : « la passe
- *  questions a échoué » sans dire laquelle, sur quoi, ne se diagnostique pas. */
-function failed(pass: string, error: unknown, context: Record<string, unknown>): string {
-  const detail = message(error);
-  // Un lot refermé n'est pas une panne : c'est une annulation qui a fait son
-  // travail, et l'appel qui retombe se refuse tout seul. Le dire, sans le crier.
-  if (detail === CLOSED_ERROR) {
-    console.info(`[ingest] passe ${pass} : écriture refusée, le lot a été annulé`, context);
-    return detail;
-  }
-  console.error(`[ingest] passe ${pass} échouée :`, detail, context);
-  return detail;
-}
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : 'Erreur inattendue';
-}
-
 /** Étape 0 — ouvre le lot et téléverse les documents chez le fournisseur.
  *
  *  Elle reste **séparée** du lancement, alors que l'estimation de coût qui l'avait
@@ -151,7 +132,7 @@ export async function prepareWorkshopIngestion(
  *  et l'atelier redevient disponible : voir @/lib/ingest/lock pour le pourquoi
  *  d'un verrou qui s'oublie de lui-même. */
 export async function beatWorkshopImport(workshopId: string, importId: string): Promise<void> {
-  if (!(await requireManager(workshopId))) return;
+  if (!(await requireImportManager(workshopId, importId))) return;
   await lock.beatImport(importId);
 }
 
@@ -168,7 +149,7 @@ export async function closeWorkshopImport(
   importId: string,
   outcome?: 'finished' | 'failed',
 ): Promise<void> {
-  if (!(await requireManager(workshopId))) return;
+  if (!(await requireImportManager(workshopId, importId))) return;
   await lock.closeImport(importId);
   if (outcome) await journal.markOutcome(importId, outcome);
 }
@@ -185,7 +166,7 @@ export async function ingestWorkshopResource(
   workshopId: string,
   importId: string,
 ): Promise<ResourcePassResult> {
-  const ctx = await requireManager(workshopId);
+  const ctx = await requireImportManager(workshopId, importId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
@@ -205,7 +186,7 @@ export async function ingestWorkshopChapters(
   workshopId: string,
   importId: string,
 ): Promise<ChapterStructureResult> {
-  const ctx = await requireManager(workshopId);
+  const ctx = await requireImportManager(workshopId, importId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
@@ -230,25 +211,6 @@ export type ChapterNotionsResult =
     }
   | { ok: false; error: string };
 
-/** Étape 2 — les notions d'UN chapitre, sur ses seules pages. L'écran lance
- *  tous les chapitres en parallèle. */
-export async function ingestWorkshopChapterNotions(
-  workshopId: string,
-  importId: string,
-  chapterId: string,
-): Promise<ChapterNotionsResult> {
-  const ctx = await requireManager(workshopId);
-  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
-
-  try {
-    const result = await run.ingestChapterNotions(workshopId, ctx.userId, importId, chapterId);
-    revalidateWorkshop();
-    return { ok: true, ...result };
-  } catch (error) {
-    return { ok: false, error: failed('notions', error, { workshopId, importId, chapterId }) };
-  }
-}
-
 export type RedundancyResult =
   | { ok: true; pairs: number; removed: number; reattached: number; adjusted: PlanIssue[] }
   | { ok: false; error: string };
@@ -259,7 +221,7 @@ export async function checkWorkshopRedites(
   workshopId: string,
   importId: string,
 ): Promise<RedundancyResult> {
-  const ctx = await requireManager(workshopId);
+  const ctx = await requireImportManager(workshopId, importId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
@@ -278,7 +240,7 @@ export async function relaunchWorkshopChapters(
   workshopId: string,
   importId: string,
 ): Promise<ChapterStructureResult> {
-  const ctx = await requireManager(workshopId);
+  const ctx = await requireImportManager(workshopId, importId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
@@ -303,7 +265,7 @@ export async function finishWorkshopIngestion(
    *  que les ont rendues les étapes notions. Revalidées côté serveur. */
   claims: { chapterId: string; notionIds: string[] }[] = [],
 ): Promise<{ hidden: number; removed: number; adjusted: PlanIssue[] }> {
-  if (!(await requireManager(workshopId))) return { hidden: 0, removed: 0, adjusted: [] };
+  if (!(await requireImportManager(workshopId, importId))) return { hidden: 0, removed: 0, adjusted: [] };
 
   const result = await run.finishIngestion(workshopId, importId, Array.isArray(claims) ? claims : []);
   revalidateWorkshop();
@@ -324,67 +286,12 @@ export async function countParcoursQuestionCalls(
   importId: string,
   chapters: { id: string; startBudget?: number }[],
 ): Promise<{ ok: true; calls: Record<string, number[]> } | { ok: false; error: string }> {
-  if (!(await requireManager(workshopId))) return { ok: false, error: 'Droits insuffisants' };
+  if (!(await requireImportManager(workshopId, importId))) return { ok: false, error: 'Droits insuffisants' };
 
   try {
     return { ok: true, calls: await run.countParcoursCalls(workshopId, importId, chapters) };
   } catch (error) {
     return { ok: false, error: failed('plan des questions du parcours', error, { workshopId, importId }) };
-  }
-}
-
-/** Passe 4a — les questions d'ENTRAÎNEMENT, pour UN appel d'un chapitre
- *  (`batchIndex`, de 0 au nombre rendu par `countParcoursQuestionCalls`). */
-export async function ingestParcoursQuestions(
-  workshopId: string,
-  importId: string,
-  chapter: { id: string; name: string },
-  batchIndex = 0,
-  /** Part du plafond de questions réservée à CET appel. Indispensable dès que
-   *  le client lance plusieurs lots en parallèle : sans elle, chacun croirait
-   *  disposer du plafond entier (voir `run.ingestParcoursQuestions`). */
-  budgetShare?: number,
-  /** Le budget de démarrage de CE chapitre, calculé par le client sur
-   *  l'atelier entier (`chapterStartBudgets`, `@/lib/ingest/demand`). */
-  startBudget?: number,
-): Promise<QuestionPassResult> {
-  const ctx = await requireManager(workshopId);
-  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
-
-  try {
-    const result = await run.ingestParcoursQuestions(workshopId, ctx.userId, importId, chapter, batchIndex, { budgetShare, startBudget });
-    revalidateWorkshop();
-    return { ok: true, ...result };
-  } catch (error) {
-    return { ok: false, error: failed('questions du parcours', error, { workshopId, importId, chapter: chapter.name, batchIndex }) };
-  }
-}
-
-/** Passe 4b — les questions d'EXAMEN d'une tranche du programme.
- *
- *  Rien de commun avec la précédente sinon le format de sortie : elle ne compte
- *  pas par notion mais rend un nombre total de questions pour tout le programme,
- *  chacune croisant plusieurs notions (§ examen, 24/08/2026).
- *
- *  ⚠️ **L'appel arrive tout composé** (06/09/2026) : le lancement a décidé
- *  combien d'appels au total, le budget de chacun et sa nature — que des groupes,
- *  ou que des questions isolées. Le serveur n'en décide plus rien : la
- *  répartition se calcule sur l'examen entier, ce qu'un appel ne peut pas voir.
- *  Les tailles des groupes, elles, restent au modèle. */
-export async function ingestWorkshopExamQuestions(
-  workshopId: string,
-  importId: string,
-  slice: { index: number; count: number; budget: number; grouped: boolean },
-): Promise<QuestionPassResult> {
-  const ctx = await requireManager(workshopId);
-  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
-
-  try {
-    const result = await run.ingestExamQuestions(workshopId, ctx.userId, importId, slice);
-    revalidateWorkshop();
-    return { ok: true, ...result };
-  } catch (error) {
-    return { ok: false, error: failed("questions d'examen", error, { workshopId, importId, sliceIndex: slice.index }) };
   }
 }
 
@@ -399,7 +306,7 @@ export async function releaseWorkshopImportFiles(
   workshopId: string,
   importId: string,
 ): Promise<{ released: boolean }> {
-  if (!(await requireManager(workshopId))) return { released: false };
+  if (!(await requireImportManager(workshopId, importId))) return { released: false };
   return { released: await run.releaseImportDocuments(importId) };
 }
 
@@ -445,7 +352,7 @@ export async function cancelWorkshopImport(
   workshopId: string,
   importId: string,
 ): Promise<{ ok: true; chapters: number; notions: number; questionGroups: number } | { ok: false; error: string }> {
-  const ctx = await requireManager(workshopId);
+  const ctx = await requireImportManager(workshopId, importId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
