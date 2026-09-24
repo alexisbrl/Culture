@@ -1,18 +1,22 @@
 'use server';
 
+import { headers } from 'next/headers';
+
 import { requireImportManager, requireManager } from '@/lib/authz';
+import { dispatchTasks } from '@/lib/ingest/dispatch';
+import { errorMessage as message } from '@/lib/ingest/failure';
 import * as journal from '@/lib/ingest/journal';
 import * as lock from '@/lib/ingest/lock';
-import { errorMessage as message, passFailed as failed } from '@/lib/ingest/failure';
 import { BUSY_ERROR } from '@/lib/ingest/lock';
+import * as orchestrator from '@/lib/ingest/orchestrator';
 import * as run from '@/lib/ingest/run';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import * as imports from '@/lib/workshops/imports';
 
-// Logique métier : voir @/lib/ingest/run et @/lib/workshops/imports. Ces
-// wrappers ne portent que l'authz Clerk et la revalidation Next.js. Types
+// Logique métier : voir @/lib/ingest/orchestrator et @/lib/workshops/imports.
+// Ces wrappers ne portent que l'authz Clerk et la revalidation Next.js. Types
 // redéclarés localement (un fichier `'use server'` ne peut pas réexporter un
-// type importé — piège Turbopack, cf. .claude/rules/server-architecture.md).
+// type importé — piège Turbopack, voir docs/architecture.md annexe A).
 //
 // ─── Droits ──────────────────────────────────────────────────────────────────
 //
@@ -21,19 +25,13 @@ import * as imports from '@/lib/workshops/imports';
 // dont elles sont issues — celui qui peut écrire le programme à la main peut le
 // faire écrire par l'IA, et le retirer.
 //
-// ─── Une action = une unité bornée ───────────────────────────────────────────
+// ─── L'écran lance, le serveur enchaîne ──────────────────────────────────────
 //
-// Chaque fonction ci-dessous fait UN appel au modèle. C'est le client qui les
-// enchaîne, ce qui évite d'avoir à tenir une fonction serveur ouverte pendant
-// plusieurs minutes — la fonction serveur est limitée à 300 s. L'ordre d'appel
-// est celui de docs/architecture.md §7 : chapitres, notions par chapitre (et
-// leurs questions dès qu'un chapitre est prêt), redites, finalisation.
-//
-// ⚠️ **Les appels qui doivent partir EN PARALLÈLE ne sont pas ici** — notions
-// d'un chapitre, questions d'entraînement, questions d'examen : ils passent par
-// la route `app/api/ingest`. Le navigateur envoie les server actions une par une
-// (documenté par Next.js) : vingt appels « parallèles » s'y exécutaient en file.
-// Ne reste ici que ce qui part seul.
+// Une génération ne vit plus dans l'onglet (docs/architecture.md §7.11) : l'action
+// de lancement ouvre le lot et range la première tâche, puis le serveur enchaîne
+// seul. L'avancement se lit par la route `/api/ingest/status` — pas par une
+// action : les actions d'un même onglet passent une par une, et une lecture
+// répétée bloquerait le reste de l'écran.
 
 export type PlanIssue = {
   kind: 'chapter' | 'notion' | 'assignment' | 'question' | 'verdict';
@@ -41,50 +39,14 @@ export type PlanIssue = {
   reason: string;
 };
 
-export type ResourcePassResult =
-  | {
-      ok: true;
-      /** L'IA a-t-elle écrit ou réécrit son document ? */
-      written: boolean;
-      /** Documents du lot après son passage — le sien compris. */
-      documents: number;
-      /** Le nombre de questions d'examen que l'étape a fixé, s'il y en a un —
-       *  `null` en dehors d'un examen, ou si rien n'a été précisé. Le dialogue
-       *  DOIT s'en servir pour tout calcul de rattrapage fait après cette étape
-       *  (voir `ResourcePassResult` dans `@/lib/ingest/run.ts`). */
-      examQuestionCount: number | null;
-    }
-  | { ok: false; error: string };
-
-export type ChapterStructureResult =
-  | {
-      ok: true;
-      chapters: { id: string; name: string }[];
-      discarded: PlanIssue[];
-      adjusted: PlanIssue[];
-      /** `relaunch` : rien n'est écrit, appeler `relaunchWorkshopChapters`.
-       *  `cancel` : rien n'est écrit, la mise à jour est annulée. */
-      decision: 'continue' | 'relaunch' | 'cancel';
-      forgottenShare: number;
-    }
-  | { ok: false; error: string };
-
-export type PrepareIngestionResult =
-  | { ok: true; importId: string; documents: number }
-  /** `reason: 'busy'` = une génération tourne déjà sur cet atelier (voir
-   *  @/lib/ingest/lock). L'écran a sa propre phrase pour ce cas-là : le message
-   *  brut ne serait pas traduit. */
-  | { ok: false; error: string; reason?: 'busy' };
-
-export type QuestionPassResult =
-  | { ok: true; written: number; discarded: PlanIssue[]; adjusted: PlanIssue[]; batches: number }
-  | { ok: false; error: string };
-
 export type ImportBanner = {
   importId: string;
   state: 'cancellable' | 'empty' | 'expired' | 'modified';
-  /** La génération s'est arrêtée avant la fin (onglet fermé, page rechargée,
-   *  serveur perdu). Ce qu'elle a écrit est là, mais ce n'est pas un résultat
+  /** La génération tourne encore, sur le serveur : ce qu'on compte est ce
+   *  qu'elle a écrit jusqu'ici. */
+  running: boolean;
+  /** La génération s'est arrêtée avant la fin (serveur perdu, tâche coupée
+   *  deux fois). Ce qu'elle a écrit est là, mais ce n'est pas un résultat
    *  voulu : le bandeau le dit au lieu de l'annoncer comme un import réussi.
    *  Voir `interruptedAmong` (@/lib/ingest/lock). */
   interrupted: boolean;
@@ -97,27 +59,60 @@ export type ImportBanner = {
   examQuestions: number;
 };
 
-/** Étape 0 — ouvre le lot et téléverse les documents chez le fournisseur.
+export type StartGenerationResult =
+  | { ok: true; importId: string }
+  /** `reason: 'busy'` = une génération tourne déjà sur cet atelier (voir
+   *  @/lib/ingest/lock). L'écran a sa propre phrase pour ce cas-là : le message
+   *  brut ne serait pas traduit. */
+  | { ok: false; error: string; reason?: 'busy' };
+
+/** Où joindre ce serveur : c'est à lui que les tâches de la génération se
+ *  relaient. Lu sur la requête plutôt que dans une variable d'environnement — le
+ *  même code tourne en local et en ligne, sur la même base. */
+async function ownOrigin(): Promise<string> {
+  const h = await headers();
+  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3000';
+  const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https');
+  return `${proto}://${host}`;
+}
+
+/** Lance une génération : ouvre le lot, téléverse les documents, range la
+ *  première tâche et la lance. Rend la main aussitôt — la suite se fait sur le
+ *  serveur, que l'onglet reste ouvert ou non.
  *
- *  Elle reste **séparée** du lancement, alors que l'estimation de coût qui l'avait
- *  justifiée a été retirée (22/08/2026) : c'est cette découpe qui garantit qu'un
- *  import ne téléverse jamais deux fois le même corpus. Les fichiers vivent
- *  ensuite chez le fournisseur sous leur identifiant, et chaque passe les cite
- *  au lieu de les renvoyer. */
-export async function prepareWorkshopIngestion(
+ *  Ce que l'écran décide (le contexte, les étapes, le total d'examen) voyage
+ *  tel quel : ce sont des choix d'orchestration, pas des droits — le contrôle
+ *  d'accès est fait ici, et chaque étape revérifie ce qui la concerne. */
+export async function startWorkshopGeneration(
   workshopId: string,
-  fileIds: string[],
-  scope: Record<string, unknown> = {},
-): Promise<PrepareIngestionResult> {
+  input: {
+    fileIds: string[];
+    context: 'parcours' | 'exam';
+    withResource: boolean;
+    needsProgram: boolean;
+    visibleNotions: number;
+    examTarget: number;
+    hint: string;
+    origin: string;
+  },
+): Promise<StartGenerationResult> {
   const ctx = await requireManager(workshopId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
-  // Aucun fichier est un cas VALIDE depuis le 24/08/2026 : ajouter des questions
-  // à une liste ne relit pas le cours, donc ne téléverse rien. C'est le dialogue
-  // qui exige un document quand la génération en demande un.
 
   try {
-    const { importId, documents } = await run.prepareIngestion(workshopId, ctx.userId, fileIds, { scope });
-    return { ok: true, importId, documents };
+    const { importId, dispatch } = await orchestrator.startGeneration(workshopId, ctx.userId, {
+      fileIds: Array.isArray(input.fileIds) ? input.fileIds.filter((id) => typeof id === 'string') : [],
+      context: input.context === 'exam' ? 'exam' : 'parcours',
+      withResource: input.withResource === true,
+      needsProgram: input.needsProgram === true,
+      visibleNotions: Number.isFinite(input.visibleNotions) ? input.visibleNotions : 0,
+      examTarget: Number.isFinite(input.examTarget) ? input.examTarget : 0,
+      hint: typeof input.hint === 'string' ? input.hint.slice(0, 600) : '',
+      origin: typeof input.origin === 'string' ? input.origin : null,
+      baseUrl: await ownOrigin(),
+    });
+    await dispatchTasks(dispatch.baseUrl, dispatch.taskIds);
+    return { ok: true, importId };
   } catch (error) {
     const detail = message(error);
     if (detail === BUSY_ERROR) return { ok: false, error: detail, reason: 'busy' };
@@ -125,199 +120,12 @@ export async function prepareWorkshopIngestion(
   }
 }
 
-/** Le signe de vie de l'onglet qui pilote une génération, toutes les 30 s.
- *
- *  C'est ce battement — et lui seul — qui empêche un second lancement sur le
- *  même atelier. S'il s'arrête (onglet fermé, machine éteinte), le verrou expire
- *  et l'atelier redevient disponible : voir @/lib/ingest/lock pour le pourquoi
- *  d'un verrou qui s'oublie de lui-même. */
-export async function beatWorkshopImport(workshopId: string, importId: string): Promise<void> {
-  if (!(await requireImportManager(workshopId, importId))) return;
-  await lock.beatImport(importId);
-}
-
-/** Referme un lot piloté : terminé, arrêté ou en erreur. Relâche le verrou tout
- *  de suite, au lieu d'attendre son expiration.
- *
- *  `outcome` est ce que l'écran SAIT et que le serveur ne peut pas deviner : la
- *  génération a-t-elle abouti, ou s'est-elle arrêtée sur une panne ? Une
- *  génération qui ne repasse jamais par ici n'a pas d'issue du tout — et c'est
- *  très bien ainsi : ce silence, c'est l'interruption (onglet fermé, machine
- *  éteinte), qu'aucun code ne pourrait écrire puisque plus personne n'est là. */
-export async function closeWorkshopImport(
-  workshopId: string,
-  importId: string,
-  outcome?: 'finished' | 'failed',
-): Promise<void> {
-  if (!(await requireImportManager(workshopId, importId))) return;
-  await lock.closeImport(importId);
-  if (outcome) await journal.markOutcome(importId, outcome);
-}
-
-/** Étape 0 — lit la consigne de l'utilisateur, et écrit la matière qui manque.
- *
- *  Ne part que s'il y a une consigne : sans elle, il n'y a rien à interpréter.
- *  L'écran le sait avant d'appeler, le serveur le revérifie — une garde ne se
- *  délègue pas au client.
- *
- *  Rend le nombre de documents du lot APRÈS son passage : si l'IA a écrit, il y
- *  en a un de plus, et c'est celui-là que la passe notions devra parcourir. */
-export async function ingestWorkshopResource(
-  workshopId: string,
-  importId: string,
-): Promise<ResourcePassResult> {
-  const ctx = await requireImportManager(workshopId, importId);
-  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
-
-  try {
-    const result = await run.ingestResource(workshopId, ctx.userId, importId);
-    // Le document apparaît dans les ressources de l'atelier : la page doit le
-    // montrer sans attendre un rechargement manuel.
-    if (result.written) revalidateWorkshop();
-    return { ok: true, ...result };
-  } catch (error) {
-    return { ok: false, error: failed('ressource', error, { workshopId, importId }) };
-  }
-}
-
-/** Étape 1 — les chapitres, sur le texte du cours : bornes de pages, et un
- *  verdict sur chaque notion existante. Rend la décision du seuil d'oubli. */
-export async function ingestWorkshopChapters(
-  workshopId: string,
-  importId: string,
-): Promise<ChapterStructureResult> {
-  const ctx = await requireImportManager(workshopId, importId);
-  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
-
-  try {
-    const result = await run.ingestChapters(workshopId, ctx.userId, importId);
-    revalidateWorkshop();
-    return { ok: true, ...result };
-  } catch (error) {
-    return { ok: false, error: failed('chapitres', error, { workshopId, importId }) };
-  }
-}
-
-export type ChapterNotionsResult =
-  | {
-      ok: true;
-      written: number;
-      discarded: PlanIssue[];
-      adjusted: PlanIssue[];
-      /** Les notions de la seconde vérification réclamées par ce chapitre —
-       *  à renvoyer telles quelles à la finalisation. */
-      claimed: string[];
-      wholeDocumentFallback: boolean;
-    }
-  | { ok: false; error: string };
-
-export type RedundancyResult =
-  | {
-      ok: true;
-      pairs: number;
-      removed: number;
-      /** À renvoyer telles quelles à la finalisation, qui les efface. */
-      removals: { remove: string; keep: string }[];
-      adjusted: PlanIssue[];
-    }
-  | { ok: false; error: string };
-
-/** La vérification finale des redites entre chapitres — une fois toutes les
- *  étapes notions finies, en même temps que les questions. Juge sans rien
- *  effacer : l'effacement attend la finalisation, que les questions soient
- *  toutes écrites. */
-export async function checkWorkshopRedites(
-  workshopId: string,
-  importId: string,
-): Promise<RedundancyResult> {
-  const ctx = await requireImportManager(workshopId, importId);
-  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
-
-  try {
-    const result = await run.ingestRedites(workshopId, importId);
-    return { ok: true, ...result };
-  } catch (error) {
-    return { ok: false, error: failed('redites', error, { workshopId, importId }) };
-  }
-}
-
-/** Étape 1, relance — quand trop de notions sont restées sans verdict. Une
- *  action à part : un appel au modèle par action, pour tenir dans la durée
- *  d'une fonction serveur. */
-export async function relaunchWorkshopChapters(
-  workshopId: string,
-  importId: string,
-): Promise<ChapterStructureResult> {
-  const ctx = await requireImportManager(workshopId, importId);
-  if (!ctx) return { ok: false, error: 'Droits insuffisants' };
-
-  try {
-    const result = await run.ingestChaptersRelaunch(workshopId, ctx.userId, importId);
-    if (result.decision === 'continue') revalidateWorkshop();
-    return { ok: true, ...result };
-  } catch (error) {
-    return { ok: false, error: failed('chapitres (relance)', error, { workshopId, importId }) };
-  }
-}
-
-/** La finalisation : effacement des redites, départage des notions réclamées, sort final de celles
- *  que personne ne réclame, puis le ménage — chapitres qui ne gardent que des
- *  notions non placées, notions neuves restées sans chapitre.
- *
- *  ⚠️ **Après la dernière étape notions, jamais avant.** Ne renvoie pas
- *  d'erreur : un import réussi ne doit pas être annoncé en échec pour ça. */
-export async function finishWorkshopIngestion(
-  workshopId: string,
-  importId: string,
-  /** Les réclamations de la seconde vérification, chapitre par chapitre, telles
-   *  que les ont rendues les étapes notions. Revalidées côté serveur. */
-  claims: { chapterId: string; notionIds: string[] }[] = [],
-  /** Les redites jugées par `checkWorkshopRedites`. Revalidées côté serveur. */
-  redites: { remove: string; keep: string }[] = [],
-): Promise<{ hidden: number; removed: number; adjusted: PlanIssue[] }> {
-  if (!(await requireImportManager(workshopId, importId))) return { hidden: 0, removed: 0, adjusted: [] };
-
-  const result = await run.finishIngestion(workshopId, importId, Array.isArray(claims) ? claims : [], redites);
-  revalidateWorkshop();
-  return {
-    hidden: result.hidden.length,
-    removed: result.removedChapters + result.removedNotions,
-    adjusted: result.adjusted,
-  };
-}
-
-/** Les appels de la passe 4a, chapitre par chapitre — pour chacun, le nombre
- *  de questions qu'il demande —, **sans appeler le modèle**. Le client s'en sert
- *  pour lancer tous les appels en une seule vague et réserver à chacun sa part
- *  du plafond (22/09/2026). Une liste vide veut dire qu'il n'y a rien à écrire
- *  sur ce chapitre : aucune notion, ou un stock déjà au complet. */
-export async function countParcoursQuestionCalls(
-  workshopId: string,
-  importId: string,
-  chapters: { id: string; startBudget?: number }[],
-): Promise<{ ok: true; calls: Record<string, number[]> } | { ok: false; error: string }> {
-  if (!(await requireImportManager(workshopId, importId))) return { ok: false, error: 'Droits insuffisants' };
-
-  try {
-    return { ok: true, calls: await run.countParcoursCalls(workshopId, importId, chapters) };
-  } catch (error) {
-    return { ok: false, error: failed('plan des questions du parcours', error, { workshopId, importId }) };
-  }
-}
-
-/** Rend les documents au fournisseur, une fois qu'aucune passe n'en a plus
- *  besoin — c'est-à-dire dès la fin de la passe notions (T3 : la passe questions
- *  ne les reçoit plus).
- *
- *  Rien ne s'efface tout seul chez le fournisseur (§16.8), et un ménage raté ne
- *  doit jamais faire échouer l'import : cette action ne renvoie donc pas
- *  d'erreur, juste ce qui s'est passé. */
-export async function releaseWorkshopImportFiles(
-  workshopId: string,
-  importId: string,
-): Promise<{ released: boolean }> {
-  if (!(await requireImportManager(workshopId, importId))) return { released: false };
-  return { released: await run.releaseImportDocuments(importId) };
+/** La génération en cours sur cet atelier, s'il y en a une : l'écran la
+ *  retrouve quand on rouvre la fenêtre, au lieu de proposer d'en lancer une
+ *  autre qui serait refusée. */
+export async function getLiveGeneration(workshopId: string): Promise<string | null> {
+  if (!(await requireManager(workshopId))) return null;
+  return orchestrator.liveGenerationOf(workshopId);
 }
 
 /** Les imports encore annulables, du plus récent au plus ancien. Liste vide
@@ -329,7 +137,14 @@ export async function getImportBanners(workshopId: string): Promise<ImportBanner
   if (!(await requireManager(workshopId))) return [];
 
   try {
-    const ids = await imports.recentImportIds(workshopId);
+    const [recent, live] = await Promise.all([
+      imports.recentImportIds(workshopId),
+      orchestrator.liveGenerationOf(workshopId),
+    ]);
+    // La génération en cours a toujours son bandeau, même avant d'avoir écrit
+    // quoi que ce soit : c'est lui qui dit, à qui revient sur l'atelier, qu'elle
+    // tourne encore.
+    const ids = live && !recent.includes(live) ? [live, ...recent] : recent;
     // Les deux lectures sont indépendantes → en parallèle (règle N+1). Le
     // relevé des lots interrompus est une seule requête pour toute la liste,
     // pas une par lot.
@@ -341,11 +156,12 @@ export async function getImportBanners(workshopId: string): Promise<ImportBanner
     ]);
 
     return summaries
-      .filter(({ summary }) => summary.state === 'cancellable')
+      .filter(({ importId, summary }) => summary.state === 'cancellable' || importId === live)
       .map(({ importId, summary }) => ({
         importId,
         state: summary.state,
-        interrupted: interrupted.has(importId),
+        running: importId === live,
+        interrupted: importId !== live && interrupted.has(importId),
         chapters: summary.chapters,
         notions: summary.notions,
         parcoursQuestions: summary.parcoursQuestions,

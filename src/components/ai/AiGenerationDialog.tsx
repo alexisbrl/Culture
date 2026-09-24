@@ -1,61 +1,39 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
-import { Sparkles, AlertTriangle, Check, ExternalLink, Info, X } from 'lucide-react';
+import { useTranslations } from 'next-intl';
+import { Sparkles, AlertTriangle, Check, Info, X } from 'lucide-react';
 
 import Modal from '@/components/Modal';
 import { Tooltip } from '@/components/ui/tooltip';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ink, palette, radius } from '@/lib/theme';
-import { INGEST_CONCURRENCY, QUESTIONS_CONCURRENCY, mapWithConcurrency } from '@/lib/ingest/concurrency';
-import {
-  DEFAULT_EXAM_QUESTIONS,
-  MAX_QUESTIONS_PER_IMPORT as MAX_QUESTIONS,
-} from '@/lib/ingest/prompt';
-import { createBudgetLedger, planExamCalls } from '@/lib/ingest/passInput';
-import { chapterStartBudgets } from '@/lib/ingest/demand';
+import { DEFAULT_EXAM_QUESTIONS } from '@/lib/ingest/prompt';
+import { PIPELINE_ERRORS, type PipelineSummary } from '@/lib/ingest/pipeline';
 import { questionCountFromHint } from '@/lib/ingest/resource';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import {
-  beatWorkshopImport,
   cancelWorkshopImport,
-  closeWorkshopImport,
-  finishWorkshopIngestion,
-  countParcoursQuestionCalls,
-  ingestWorkshopResource,
-  ingestWorkshopChapters,
-  relaunchWorkshopChapters,
-  checkWorkshopRedites,
-  prepareWorkshopIngestion,
-  releaseWorkshopImportFiles,
-  type ChapterNotionsResult,
+  getLiveGeneration,
+  startWorkshopGeneration,
   type PlanIssue,
-  type QuestionPassResult,
 } from '@/app/actions/aiIngest';
 import type { GenerationOrigin } from '@/lib/ingest/journal';
 
-/** Les appels qui partent EN PARALLÈLE — notions d'un chapitre, questions —
- *  passent par une route d'API et non par des server actions, que le navigateur
- *  envoie une par une (voir `app/api/ingest/route.ts`). Même forme de réponse
- *  qu'une action ; une réponse illisible (délai dépassé, panne réseau) devient
- *  un échec ordinaire au lieu de lever. */
-async function postIngest<T extends { ok: true } | { ok: false; error: string }>(
-  body: Record<string, unknown>,
-): Promise<T | { ok: false; error: string }> {
+/** L'avancement d'une génération, lu sur le serveur. Une route et non une
+ *  server action : les actions d'un même onglet passent une par une, et une
+ *  lecture répétée bloquerait le reste de l'écran. `null` : lecture ratée —
+ *  on réessaiera au tour suivant. */
+async function readStatus(workshopId: string, importId: string): Promise<PipelineSummary | null> {
   try {
-    const res = await fetch('/api/ingest', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!(res.headers.get('content-type') ?? '').includes('application/json')) {
-      return { ok: false, error: `HTTP ${res.status}` };
-    }
-    return (await res.json()) as T;
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    const params = new URLSearchParams({ workshopId, importId });
+    const res = await fetch(`/api/ingest/status?${params}`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const body = (await res.json()) as ({ ok: true } & PipelineSummary) | { ok: false };
+    return body.ok ? body : null;
+  } catch {
+    return null;
   }
 }
 
@@ -64,30 +42,17 @@ async function postIngest<T extends { ok: true } | { ok: false; error: string }>
 // Ce qui change d'un bouton à l'autre, ce sont les cases cochées au départ, pas
 // le dialogue (§8 du plan d'ingestion).
 //
-// ─── C'est ICI que vit l'enchaînement des passes ─────────────────────────────
+// ─── L'enchaînement ne vit PAS ici ───────────────────────────────────────────
 //
-// Chaque server action ne fait qu'UN appel au modèle (§5.4) : c'est donc le
-// client qui boucle. Deux conséquences visibles :
-//   • la progression est réelle, pas simulée — on sait exactement où on en est ;
-//   • un onglet fermé interrompt l'ingestion. Ce qui a déjà été écrit reste, et
-//     reste annulable ; c'est le prix assumé de l'approche, à revoir le jour où
-//     une vraie tâche de fond existera.
-//
-// L'ordre des étages est celui de docs/architecture.md §7 : les CHAPITRES sur
-// le texte du cours, qui statuent aussi sur chaque notion existante ; puis les
-// NOTIONS de chaque chapitre sur ses seules pages, en parallèle, chacun
-// enchaînant ses questions dès qu'il a fini ; puis les redites entre chapitres,
-// en même temps que les dernières questions ; puis la finalisation.
+// Le dialogue lance la génération, puis lit son avancement ; c'est le serveur
+// qui enchaîne les étapes (docs/architecture.md §7.11, @/lib/ingest/orchestrator).
+// Fermer la fenêtre, quitter la page ou fermer l'onglet ne change donc rien : la
+// génération continue, et le bandeau de l'atelier la montre. Rouvrir le dialogue
+// retrouve la génération en cours.
 
-/** Rythme du signe de vie envoyé pendant une génération.
- *
- *  ⚠️ **À tenir sous `LIVE_TIMEOUT_MS` (@/lib/ingest/lock), avec de la marge** :
- *  le serveur oublie un lot qui n'a plus battu depuis deux minutes. Trente
- *  secondes laissent passer trois battements manqués — le temps qu'un réseau
- *  hésitant se reprenne — avant que le verrou ne se relâche pour de bon. La
- *  constante est redéclarée ici plutôt qu'importée : `lock.ts` ouvre un client
- *  Supabase de service, qui n'a rien à faire dans un composant client. */
-const LIVE_BEAT_MS = 30_000;
+/** Rythme de lecture de l'avancement. Une étape dure de quelques secondes à
+ *  quelques minutes : lire plus souvent n'apprendrait rien de plus. */
+const STATUS_POLL_MS = 2500;
 
 // ─── Champ de consigne : hauteur suivie, plancher de trois lignes ───────────
 // Les mesures sont sorties du style pour que le plancher se CALCULE au lieu
@@ -197,7 +162,6 @@ type Props = {
 
 export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, onDone, frame = 'modal', onRunningChange, hint: hintProp, onHintChange }: Props) {
   const t = useTranslations('ai');
-  const locale = useLocale();
 
   // ─── Les documents ne se choisissent plus, et ne s'affichent plus ────────
   //
@@ -216,16 +180,6 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // fait UNIQUEMENT de chiffres EST ce nombre. Deux champs disaient la même
   // chose, et un seul des deux était visible selon le bouton d’entrée.
   // `null` = la consigne est une vraie consigne, ou il n’y en a pas.
-  // ⚠️ TEMPORAIRE — phase de test. Le fournisseur de la passe questions est
-  // exposé le temps de comparer Claude et DeepSeek sur un vrai corpus ; il n'a
-  // pas vocation à rester un choix d'utilisateur. Seule cette passe est
-  // concernée : elle ne reçoit aucun document (voir `providers/deepseek.ts`).
-  //
-  // **DeepSeek d'office** depuis le 30/08/2026 : c'est le fournisseur des
-  // questions partout ailleurs (recharge automatique, et le chat quand il
-  // existera, qui ne proposera aucun choix). Ce dialogue est le seul endroit
-  // d'où l'on peut encore demander Claude, et c'est alors un geste délibéré.
-  const [questionsProvider, setQuestionsProvider] = useState<'claude' | 'deepseek'>('deepseek');
   const [ownHint, setOwnHint] = useState('');
   const hintRef = useRef<HTMLTextAreaElement>(null);
   // Consigne pilotée par l'appelant quand il en fournit une (voir `hint`).
@@ -236,13 +190,11 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // interpréter, rien à écrire — et va droit au reste de la génération.
   const askedCount = questionCountFromHint(hint);
   const [phase, setPhase] = useState<Phase>({ step: 'select' });
-  // ─── L'arrêt, et pourquoi il tient dans des refs ────────────────────────
-  //
-  // L'enchaînement des passes vit dans une fonction async : elle ne relèverait
-  // jamais un changement d'état, qu'elle a capturé à son premier tour. Le drapeau
-  // d'arrêt et le numéro de lot passent donc par des refs, lues à chaque étage.
-  const stopped = useRef(false);
+  // Le lot suivi : celui qu'on vient de lancer, ou celui qu'on a retrouvé en
+  // rouvrant le dialogue. C'est aussi ce que l'arrêt devra défaire.
   const importIdRef = useRef<string | null>(null);
+  const [followId, setFollowId] = useState<string | null>(null);
+  const [missing, setMissing] = useState(0);
   const [stopAsk, setStopAsk] = useState(false);
   const [counts, setCounts] = useState({ chapters: 0, notions: 0, questions: 0 });
   const [issues, setIssues] = useState<{ discarded: PlanIssue[]; adjusted: PlanIssue[] }>({ discarded: [], adjusted: [] });
@@ -252,8 +204,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // bon (@/lib/ingest/journal). Un affichage à l'écran ne mesurait qu'une
   // génération — celle qu'on regardait — et disparaissait avec elle.
 
-  // Le téléversement en cours n'est pas interruptible proprement : on ferme la
-  // sortie tant qu'il dure, comme pendant la génération.
+  // Une génération lancée : le téléversement, puis les étapes sur le serveur.
   const running = phase.step === 'running' || phase.step === 'preparing';
   // Hauteur du champ de consigne : recalculée à chaque frappe. `field-sizing:
   // content` ferait ça tout seul mais n'est pas encore partout, d'où la mesure
@@ -306,17 +257,16 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // Ni document, ni programme, ni consigne : il n'y a rien à lire, rien à faire
   // travailler, et rien à écrire. C'est le seul vrai blocage qui reste.
   const nothingToDo = !hasFiles && visibleNotions === 0 && !hasHint;
+  /** L'arrêt a son propre bouton : la croix ne fait plus que fermer la fenêtre,
+   *  la génération continuant sans elle. */
+  const stopAction = (
+    <Actions>
+      <Ghost onClick={() => setStopAsk(true)}>{t('stop.aria')}</Ghost>
+    </Actions>
+  );
   /** Ce que ce lancement va faire, dit d'une phrase. Affichée telle quelle en
    *  fenêtre ; repliée derrière le point d'information de la consigne quand le
    *  dialogue est posé dans une liste, où la place est comptée. */
-  /** ⚠️ **En ligne, l'arrêt n'a plus de croix où se poser** : ces deux étapes
-   *  n'ont aucun autre bouton, et sans lui une génération lancée ne pourrait plus
-   *  être arrêtée du tout. En fenêtre, la croix du coin fait déjà ce travail. */
-  const stopAction = frame === 'inline' ? (
-    <Actions>
-      <Ghost onClick={requestClose}>{t('stop.aria')}</Ghost>
-    </Actions>
-  ) : null;
   const planText = nothingToDo
     ? t('plan.nothing')
     : !hasFiles && hasHint
@@ -347,532 +297,130 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   }, [workshopId]);
 
 
-  /** Téléverse les documents, puis enchaîne directement sur la génération. */
-  async function prepare() {
+  // Une génération tourne déjà sur cet atelier (lancée d'ici puis fenêtre
+  // fermée, ou par un autre gestionnaire) : on la retrouve et on la suit, au lieu
+  // de proposer d'en lancer une seconde qui serait refusée.
+  useEffect(() => {
+    let cancelled = false;
+    getLiveGeneration(workshopId)
+      .then((importId) => {
+        if (cancelled || !importId || importIdRef.current) return;
+        importIdRef.current = importId;
+        setPhase({ step: 'running', label: t('estimate.preparing'), done: 0, total: 1 });
+        setFollowId(importId);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [workshopId, t]);
+
+  /** Lance la génération. Le serveur ouvre le lot, téléverse les documents et
+   *  range la première étape ; la suite se fait sans nous. */
+  async function start() {
     setPhase({ step: 'preparing' });
-    const prepared = await prepareWorkshopIngestion(workshopId, needsFiles ? usable.map((f) => f.id) : [], {
-      // Le périmètre n'est plus un choix : il se déduit du point d'entrée. On le
-      // range quand même dans le lot, c'est lui qu'on relira pour comprendre ce
-      // qu'un import a voulu faire.
-      program: needsProgram,
+    const started = await startWorkshopGeneration(workshopId, {
+      fileIds: needsFiles ? usable.map((f) => f.id) : [],
       context,
-      examQuestions: context === 'exam' ? (askedCount ?? DEFAULT_EXAM_QUESTIONS) : undefined,
-      // Rangée dans le `scope` de l'import : chaque passe la relit depuis la
-      // base, y compris celles qui s'exécutent dans des appels ultérieurs.
-      // Un nombre seul n'est pas une consigne : le transmettre en ferait une,
-      // et chaque étape lirait « 40 » comme une instruction de rédaction.
+      // L'étape 0 ne dépend pas du point d'entrée mais de la CONSIGNE : sans
+      // elle, il n'y a rien à interpréter. Un nombre seul n'en est pas une.
+      withResource: hint.trim().length > 0 && askedCount === null,
+      needsProgram,
+      visibleNotions: visibleNotions ?? 0,
+      examTarget: askedCount ?? DEFAULT_EXAM_QUESTIONS,
+      // Un nombre seul n'est pas une consigne : le transmettre en ferait une, et
+      // chaque étape lirait « 40 » comme une instruction de rédaction.
       hint: askedCount === null ? hint.trim() : '',
-      questionsProvider,
       // Le bouton par lequel on est entré — journal de bord, rien d'autre.
       origin,
     });
-    // Une génération tourne déjà sur cet atelier, dans un autre onglet : le
-    // serveur a refusé avant le moindre téléversement. Le message affiché est le
-    // nôtre — le refus, lui, ne voyage que sous forme de mot-clé.
-    if (!prepared.ok) {
-      return setPhase({ step: 'error', message: prepared.reason === 'busy' ? t('busy') : prepared.error });
+    // Une génération tourne déjà sur cet atelier : le serveur a refusé avant le
+    // moindre téléversement. Le message affiché est le nôtre.
+    if (!started.ok) {
+      return setPhase({ step: 'error', message: started.reason === 'busy' ? t('busy') : started.error });
     }
-    // Retenu tout de suite : c'est ce numéro que l'arrêt devra défaire, même si
-    // l'utilisateur ferme au tout premier étage.
-    importIdRef.current = prepared.importId;
-    if (stopped.current) return;
-    await generate(prepared.importId, prepared.documents);
+    importIdRef.current = started.importId;
+    setFollowId(started.importId);
   }
 
-  async function generate(importId: string, documentCount: number) {
-    // Le nombre de documents peut GRANDIR en cours de route : l'étage 0 en écrit
-    // un, que les notions doivent ensuite parcourir comme les autres.
-    let documents = documentCount;
-    const discarded: PlanIssue[] = [];
-    const adjusted: PlanIssue[] = [];
-    const tally = { chapters: 0, notions: 0, questions: 0 };
-    // ⚠️ **Le total d'examen VISÉ, distinct du total ENVOYÉ au lancement**
-    // (04/09/2026). `askedCount` est figé à l'ouverture du dialogue — il ne
-    // sait rien de ce que l'étage 0 décide ensuite. Le rattrapage plus bas
-    // (Ligne « short ») doit viser le total réel, sous peine de rattraper
-    // jusqu'à un chiffre déjà périmé : c'est exactement ce qui a fait tourner
-    // une demande d'« une seule question » comme un examen de 40 — l'étage 0
-    // avait bien compris et corrigé le total côté serveur, mais l'écran
-    // continuait de rattraper vers son propre total de lancement, jamais
-    // rafraîchi. Réaffectée juste après l'étage 0, si celui-ci a tranché.
-    let examTarget = askedCount ?? DEFAULT_EXAM_QUESTIONS;
-
-    // ─── Les étages, et ce qui décide de leur présence ──────────────────────
-    //
-    // Plus aucun choix d'étage : le point d'entrée décide (voir `needsProgram`).
-    // Ce qui existe déjà n'est jamais refait — chaque étage COMPLÈTE.
-    //
-    // L'ordre suit docs/architecture.md §7 : l'étape 0 si une consigne l'appelle,
-    // puis les CHAPITRES sur le texte du cours, puis les NOTIONS de chaque
-    // chapitre sur ses seules pages — tous en parallèle, chacun enchaînant ses
-    // questions dès qu'il a fini —, puis, une fois tous les chapitres passés, la
-    // vérification des redites en même temps que les questions restantes, et
-    // la finalisation.
-    //
-    // ⚠️ **L'étage 0 ne dépend pas du point d'entrée, mais de la CONSIGNE**
-    // (04/09/2026) : c'est la seule étape qui parte d'une demande écrite plutôt
-    // que d'un document. Sans consigne, elle n'a rien à interpréter et ne part
-    // pas — ce qui est le cas de la plupart des générations.
-    const withResource = hint.trim().length > 0 && askedCount === null;
-    const steps = [
-      ...(withResource ? ['resource' as const] : []),
-      ...(needsProgram ? ['chapters' as const, 'notions' as const] : []),
-      'questions' as const,
-    ];
-    const totalSteps = steps.length;
-    // Le rang d'un étage dans la barre dépend de ceux qui ont lieu.
-    const stepAt = (name: (typeof steps)[number]) => Math.max(0, steps.indexOf(name));
-
-    // ── Étage 0 : la consigne, et la matière qui manque ──
-    //
-    // Elle peut écrire un document, et c'est pourquoi elle passe avant tout le
-    // reste : ce qu'elle écrit est de la matière que les étages suivants vont
-    // lire. Le nombre de documents change donc sous nos pieds — d'où la
-    // réaffectation plutôt qu'une constante.
-    if (stopped.current) return;
-    if (withResource) {
-      setPhase({ step: 'running', label: t('progress.resource'), done: stepAt('resource'), total: totalSteps });
-      const resource = await ingestWorkshopResource(workshopId, importId);
-      if (!resource.ok) return setPhase({ step: 'error', message: resource.error });
-      documents = resource.documents;
-      if (resource.examQuestionCount !== null) examTarget = resource.examQuestionCount;
-      // On distingue les deux échecs : « elle n'a rien écrit » et « elle a
-      // écrit, mais son document n'a pas pu être relu par CETTE génération »
-      // (téléversement raté). Les confondre enverrait l'utilisateur reformuler
-      // une consigne qui n'avait rien à se reprocher.
-      if (resource.written && documents === 0) {
-        return setPhase({ step: 'error', message: t('writtenNotRead') });
-      }
-      if (!resource.written && (visibleNotions ?? 0) === 0) {
-        return setPhase({ step: 'error', message: t('nothingWritten') });
-      }
+  /** L'échec tel que l'utilisateur le lit : les cas connus ont leur phrase, les
+   *  autres gardent le message de l'étape. */
+  function failureText(error: string | null): string {
+    switch (error) {
+      case PIPELINE_ERRORS.writtenNotRead: return t('writtenNotRead');
+      case PIPELINE_ERRORS.nothingWritten: return t('nothingWritten');
+      case PIPELINE_ERRORS.cancelledForgotten: return t('cancelledForgotten');
+      case PIPELINE_ERRORS.timeout: return t('timeout');
+      default: return error ?? t('stopped');
     }
-
-    // ⚠️ **Pas de document, pas de découpage.** Sans fichier déposé, le seul
-    // document possible est celui que l'étape 0 vient d'écrire — et elle a pu
-    // n'avoir rien à écrire. Demander un découpage sans cours produirait des
-    // chapitres inventés, ce que tout le reste du pipeline interdit.
-    const buildProgram = needsProgram && documents > 0;
-
-    // ── Étage 1 : les chapitres, sur le texte du cours ──
-    //
-    // Un seul appel, qui statue aussi sur chaque notion existante. Trop de
-    // notions sans verdict : on relance une fois ; encore trop après la relance :
-    // la mise à jour est annulée, et rien n'a été écrit (§7.6).
-    if (stopped.current) return;
-    if (buildProgram) {
-      setPhase({ step: 'running', label: t('progress.chapters'), done: stepAt('chapters'), total: totalSteps });
-      let structure = await ingestWorkshopChapters(workshopId, importId);
-      if (!structure.ok) return setPhase({ step: 'error', message: structure.error });
-      discarded.push(...structure.discarded);
-      if (structure.decision === 'relaunch') {
-        if (stopped.current) return;
-        setPhase({ step: 'running', label: t('progress.chaptersRelaunch'), done: stepAt('chapters'), total: totalSteps });
-        structure = await relaunchWorkshopChapters(workshopId, importId);
-        if (!structure.ok) return setPhase({ step: 'error', message: structure.error });
-        // La relance rend les écarts des deux appels : on les remplace.
-        discarded.length = 0;
-        discarded.push(...structure.discarded);
-      }
-      if (structure.decision === 'cancel') {
-        return setPhase({ step: 'error', message: t('cancelledForgotten') });
-      }
-      adjusted.push(...structure.adjusted);
-      // Le compteur affiche ce que CET import a créé, pas le total de l'atelier.
-      tally.chapters = structure.chapters.length;
-      setCounts({ ...tally });
-    }
-
-    // Le programme tel qu'il est désormais : chapitres nouveaux et anciens dans
-    // la même liste, dans l'ordre. Un import complète les DEUX — le nouveau part
-    // de zéro, l'ancien se voit proposer ce qui lui manque. Les chapitres écartés
-    // sont hors programme : on ne leur écrit ni notions ni questions.
-    const chapters = (await getWorkshopChapters(workshopId))
-      .filter((c) => !c.hidden)
-      .map((c) => ({ id: c.id, name: c.name, position: c.position }));
-
-    // ─── Les questions d'entraînement d'UN chapitre ─────────────────────────
-    //
-    // Le chapitre n°1 du programme reçoit 24 questions d'office, le reste du
-    // plafond se répartit également entre les autres — calculé une fois ici sur
-    // l'atelier ENTIER (`chapterStartBudgets`). Chaque chapitre puise dans SA
-    // part : les premiers à finir leur étape notions ne peuvent pas consommer
-    // celle des derniers (§7.2).
-    const startBudgets = chapterStartBudgets(chapters);
-    const ledger = createBudgetLedger(startBudgets, MAX_QUESTIONS);
-    let questionError: string | null = null;
-    let doneCalls = 0;
-    let totalCalls = 0;
-    const showQuestions = () => setPhase({
-      step: 'running',
-      // Avec des appels concurrents, « le lot en cours » n'existe plus : le
-      // nombre de lots terminés est la seule chose qu'on puisse afficher
-      // honnêtement.
-      label: t('progress.questionsCount', { done: doneCalls, n: totalCalls }),
-      done: stepAt('questions') + (totalCalls === 0 ? 0 : doneCalls / totalCalls),
-      total: totalSteps,
-    });
-
-    const runChapterQuestions = async (chapter: (typeof chapters)[number]) => {
-      if (context === 'exam' || stopped.current) return;
-      // Le plan du chapitre se calcule sans le modèle, sur l'existant arrêté à
-      // l'ouverture du lot : tous ses appels partent ensemble.
-      const plan = await countParcoursQuestionCalls(
-        workshopId,
-        importId,
-        [{ id: chapter.id, startBudget: startBudgets.get(chapter.id) }],
-      );
-      if (!plan.ok) { questionError ??= plan.error; return; }
-      const jobs = (plan.calls[chapter.id] ?? []).map((asked, batchIndex) => ({ asked, batchIndex }));
-      totalCalls += jobs.length;
-      showQuestions();
-      await mapWithConcurrency(jobs, QUESTIONS_CONCURRENCY, async (job) => {
-        if (stopped.current) return;
-        const share = ledger.reserve(chapter.id, job.asked);
-        if (share <= 0) { doneCalls += 1; showQuestions(); return; }
-        const result = await postIngest<QuestionPassResult>({
-          pass: 'parcours-questions',
-          workshopId,
-          importId,
-          chapter: { id: chapter.id, name: chapter.name },
-          batchIndex: job.batchIndex,
-          budgetShare: share,
-          startBudget: startBudgets.get(chapter.id),
-        });
-        doneCalls += 1;
-        if (!result.ok) {
-          ledger.release(chapter.id, share);
-          questionError ??= result.error;
-          showQuestions();
-          return;
-        }
-        // Ce qui n'a pas été écrit revient à la part du chapitre.
-        ledger.release(chapter.id, share - result.written);
-        discarded.push(...result.discarded);
-        adjusted.push(...result.adjusted);
-        tally.questions += result.written;
-        setCounts({ ...tally });
-        showQuestions();
-      });
-    };
-
-    // ── Étage 2 : les notions, chapitre par chapitre, en parallèle ──
-    //
-    // Chaque chapitre ne lit que ses pages, et reçoit la seconde vérification.
-    // Ses questions partent dès qu'il a fini, sans attendre les autres.
-    if (stopped.current) return;
-    if (buildProgram) {
-      let notionError: string | null = null;
-      let notionsDone = 0;
-      const claims: { chapterId: string; notionIds: string[] }[] = [];
-      const questionRuns: Promise<void>[] = [];
-      const showNotions = () => setPhase({
-        step: 'running',
-        label: t('progress.notionsChapters', { done: notionsDone, n: chapters.length }),
-        done: stepAt('notions') + (chapters.length === 0 ? 1 : notionsDone / chapters.length),
-        total: totalSteps,
-      });
-
-      showNotions();
-      await mapWithConcurrency(chapters, INGEST_CONCURRENCY, async (chapter) => {
-        if (stopped.current) return;
-        const result = await postIngest<ChapterNotionsResult>({
-          pass: 'chapter-notions', workshopId, importId, chapterId: chapter.id,
-        });
-        notionsDone += 1;
-        if (!result.ok) { notionError ??= result.error; showNotions(); return; }
-        discarded.push(...result.discarded);
-        adjusted.push(...result.adjusted);
-        tally.notions += result.written;
-        setCounts({ ...tally });
-        if (result.claimed.length > 0) claims.push({ chapterId: chapter.id, notionIds: result.claimed });
-        showNotions();
-        questionRuns.push(runChapterQuestions(chapter));
-      });
-      if (notionError) {
-        await Promise.allSettled(questionRuns);
-        return setPhase({ step: 'error', message: notionError });
-      }
-
-      // Tous les chapitres ont fini leur étape notions : les redites entre
-      // chapitres se jugent maintenant, en même temps que les questions encore
-      // en vol, qui ne les attendent pas (§7.6). Jugées seulement : elles
-      // s'effacent à la finalisation, une fois toutes les questions écrites.
-      if (stopped.current) return;
-      let rediteRemovals: { remove: string; keep: string }[] = [];
-      const redites = checkWorkshopRedites(workshopId, importId).then((result) => {
-        if (!result.ok) {
-          adjusted.push({ kind: 'notion', reason: result.error });
-          return;
-        }
-        rediteRemovals = result.removals;
-        adjusted.push(...result.adjusted);
-        tally.notions -= result.removed;
-        setCounts({ ...tally });
-      });
-      await Promise.all([...questionRuns, redites]);
-      if (questionError) return setPhase({ step: 'error', message: questionError });
-
-      // ⚠️ **Ici et pas avant.** Le départage des notions réclamées, la sortie
-      // du programme de ce que personne ne réclame, et le ménage n'ont de sens
-      // qu'une fois TOUS les chapitres passés.
-      if (stopped.current) return;
-      const finish = await finishWorkshopIngestion(workshopId, importId, claims, rediteRemovals);
-      adjusted.push(...finish.adjusted);
-    } else if (context !== 'exam') {
-      // Pas de programme à construire : on écrit les questions qui manquent à
-      // chaque chapitre existant.
-      await mapWithConcurrency(chapters, INGEST_CONCURRENCY, (chapter) => runChapterQuestions(chapter));
-      if (questionError) return setPhase({ step: 'error', message: questionError });
-    }
-
-    // Les documents ont fini de servir : seules les étapes chapitres et notions
-    // les portent, et rien ne s'efface tout seul chez le fournisseur. On les
-    // rend ici plutôt qu'à la toute fin, pour que ça arrive même si les
-    // questions d'examen échouent. Volontairement non attendu — c'est du ménage.
-    void releaseWorkshopImportFiles(workshopId, importId);
-
-    if (context === 'exam') {
-      let error: string | null = null;
-      let doneCalls = 0;
-      let totalCalls = 1;
-
-      const showExam = () => setPhase({
-        step: 'running',
-        label: t('progress.questionsCount', { done: doneCalls, n: totalCalls }),
-        done: stepAt('questions') + doneCalls / Math.max(1, totalCalls),
-        total: totalSteps,
-      });
-
-      // ─── Deux appels à vide d'affilée, et on arrête ───────────────────────
-      //
-      // ⚠️ **Un appel qui n'écrit rien n'est pas un appel à retenter** (décision
-      // d'Alexis du 05/09/2026, sur les chiffres du journal de bord). Quand le
-      // modèle rend zéro question, ce n'est presque jamais un accident : c'est
-      // que la demande ne peut pas être satisfaite telle quelle. Le journal l'a
-      // montré en grand — vingt-cinq appels de suite à zéro question, quarante
-      // minutes d'attente, rien d'écrit. Insister n'a jamais rien changé.
-      //
-      // Un appel à vide isolé reste toléré (une tranche de programme peut être
-      // trop pauvre pour son budget) ; deux d'affilée arrêtent l'étape. Les
-      // appels déjà en vol vont au bout — on ne les interrompt pas, ils sont
-      // payés — mais aucun nouveau ne part.
-      let emptyStreak = 0;
-
-      const runSlice = async (slice: { index: number; count: number; budget: number; grouped: boolean }) => {
-        if (stopped.current || emptyStreak >= 2) return null;
-        // Même raison que pour le parcours : le serveur ne voit qu'un appel à la
-        // fois, seul le client sait combien il en a en vol.
-        const remaining = MAX_QUESTIONS - tally.questions;
-        if (remaining <= 0) return null;
-        const result = await postIngest<QuestionPassResult>({
-          pass: 'exam-questions',
-          workshopId,
-          importId,
-          slice: { ...slice, budget: Math.min(slice.budget, remaining) },
-        });
-        doneCalls += 1;
-        if (!result.ok) { error ??= result.error; showExam(); return null; }
-        discarded.push(...result.discarded);
-        adjusted.push(...result.adjusted);
-        emptyStreak = result.written > 0 ? 0 : emptyStreak + 1;
-        tally.questions += result.written;
-        setCounts({ ...tally });
-        showExam();
-        return result;
-      };
-
-      // ─── Une seule vague, parce que le plan est connu d'avance ────────────
-      //
-      // ⚠️ **Plus d'appel de découverte** (06/09/2026). Le premier appel partait
-      // seul, sa réponse servant à apprendre en combien de tranches l'examen se
-      // découpait : une attente entière de plus, à chaque génération, pour un
-      // chiffre que le client sait maintenant calculer lui-même
-      // (`planExamCalls`). Il compose aussi la FORME de chaque appel — que des
-      // groupes, aux tailles voulues, ou que des questions isolées.
-      const plan = planExamCalls(Math.min(examTarget, MAX_QUESTIONS));
-      totalCalls = Math.max(1, plan.length);
-      showExam();
-      await mapWithConcurrency(
-        plan,
-        QUESTIONS_CONCURRENCY,
-        // Chaque appel reçoit le nombre TOTAL d'appels du plan : c'est lui qui
-        // découpe le programme côté serveur, et deux appels du même plan doivent
-        // en voir exactement la même découpe pour ne pas se recouvrir.
-        (call, i) => runSlice({ index: i, count: plan.length, budget: call.budget, grouped: call.grouped }),
-      );
-      if (error) return setPhase({ step: 'error', message: error });
-
-      // ─── Le rattrapage ────────────────────────────────────────────────────
-      //
-      // Une question écartée — parce qu'elle redisait une question
-      // d'entraînement, parce que le modèle en a rendu moins que demandé, ou
-      // parce que sa réponse a été coupée — laisserait l'examen court sans que
-      // personne ne l'ait voulu. On redemande le MANQUE : chaque passage relit
-      // la banque, donc il ne réécrit pas ce qui vient d'être écrit.
-      //
-      // ⚠️ **Autant d'appels que le manque en exige**, et non un seul
-      // (28/08/2026). Un appel n'écrit qu'une part du total — la taille d'un
-      // appel — si bien qu'un rattrapage unique plafonnait à cette part : sur
-      // quarante demandées dont vingt manquantes, il n'en rendait jamais plus.
-      //
-      // ⚠️ **UN SEUL tour, et non deux** (05/09/2026). Le second tour n'a jamais
-      // rien rattrapé que le premier n'aurait pas rattrapé : quand le premier
-      // rend zéro question, le second rend zéro question aussi, et il double
-      // simplement l'attente — c'est ce qui faisait douze appels et quarante
-      // minutes pour une demande d'une seule question. Une passe, un rattrapage,
-      // et on rend ce qu'on a en le disant.
-      const short = Math.min(examTarget, MAX_QUESTIONS) - tally.questions;
-      if (short > 0 && emptyStreak < 2) {
-        // Le manque se replanifie comme un examen à part entière : il retrouve
-        // donc sa part de groupes et de questions isolées, et son propre
-        // découpage du programme — sans quoi le rattrapage écrirait toujours sur
-        // le début du cours.
-        const catchUp = planExamCalls(short);
-        totalCalls += catchUp.length;
-        showExam();
-        await mapWithConcurrency(
-          catchUp,
-          QUESTIONS_CONCURRENCY,
-          (call, i) => runSlice({ index: i, count: catchUp.length, budget: call.budget, grouped: call.grouped }),
-        );
-        if (error) return setPhase({ step: 'error', message: error });
-      }
-
-      setIssues({ discarded, adjusted });
-      setPhase({ step: 'done' });
-      return;
-    }
-
-    // Un arrêt n'est pas une fin : le compte-rendu décrirait un travail que
-    // l'utilisateur vient justement de faire défaire.
-    if (stopped.current) return;
-    setIssues({ discarded, adjusted });
-    setPhase({ step: 'done' });
   }
 
-  // ─── Le signe de vie, et ce qu'il tient ──────────────────────────────────
+  // ─── Le suivi ───────────────────────────────────────────────────────────
   //
-  // Tant que cet onglet enchaîne les passes, il le dit au serveur toutes les
-  // 30 s. C'est ce battement qui interdit une seconde génération sur le MÊME
-  // atelier — deux enchaînements y réécrivent les mêmes chapitres et les mêmes
-  // notions (voir @/lib/ingest/lock). Sur deux ateliers différents, rien n'est
-  // bloqué : il n'y a là aucune écriture partagée.
-  //
-  // Le verrou s'oublie de lui-même s'il cesse de battre : un onglet fermé
-  // brutalement ne condamne pas l'atelier, il le libère au bout de deux minutes.
+  // Une lecture toutes les quelques secondes, tant que la génération tourne.
+  // Chaque lecture fait aussi, côté serveur, la veille de CE lot : une étape
+  // coupée ou perdue repart sans attendre la veille planifiée.
   useEffect(() => {
-    if (!running) return;
-    const id = setInterval(() => {
-      const importId = importIdRef.current;
-      if (importId) void beatWorkshopImport(workshopId, importId);
-    }, LIVE_BEAT_MS);
-    return () => clearInterval(id);
-  }, [running, workshopId]);
-
-  // Fin de partie — terminé ou en panne : le lot se referme tout de suite, sans
-  // attendre l'expiration du battement. Un seul endroit pour toutes les sorties,
-  // l'enchaînement pouvant s'arrêter en erreur à n'importe lequel de ses étages.
-  // (L'arrêt volontaire, lui, passe par l'annulation, qui referme aussi.)
-  useEffect(() => {
-    if (phase.step !== 'done' && phase.step !== 'error') return;
-    const importId = importIdRef.current;
-    // L'issue part avec la fermeture : c'est l'écran, et lui seul, qui sait si
-    // l'enchaînement est allé au bout ou s'il s'est arrêté sur une panne (voir
-    // le journal de bord, @/lib/ingest/journal).
-    if (importId) void closeWorkshopImport(workshopId, importId, phase.step === 'done' ? 'finished' : 'failed');
-  }, [phase.step, workshopId]);
-
-  // ─── Quitter la PAGE pendant une génération ──────────────────────────────
-  //
-  // La croix et la touche Échap passent par 'requestClose', qui demande
-  // confirmation. Restaient les sorties que la fenêtre ne voit pas : rafraîchir,
-  // fermer l'onglet, revenir en arrière. Un appui distrait sur F5 interrompait
-  // l'enchaînement sans un mot.
-  //
-  // ⚠️ **Le navigateur n'affiche pas notre texte.** Les navigateurs ignorent
-  // depuis longtemps le message fourni par le site — ils montrent leur propre
-  // formulation (« Quitter le site ? ») avec leurs propres boutons, et on ne
-  // peut ni la choisir ni y ajouter le nôtre. C'est une protection contre les
-  // pages qui retenaient leurs visiteurs de force. Tout ce qu'on peut faire,
-  // c'est déclencher cette demande — ce que fait 'preventDefault', et ce que
-  // fait n'importe quel site à notre place.
-  //
-  // Limite connue : un retour arrière traité par le routeur sans recharger la
-  // page ne déclenche pas cet événement. Rien de dramatique — les questions sont
-  // écrites au fur et à mesure et le lot reste annulable par le bandeau.
-  useEffect(() => {
-    if (!running) return;
-    const warn = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      // Exigé par les navigateurs anciens, ignoré par les autres : la chaîne
-      // elle-même n'est jamais affichée.
-      event.returnValue = '';
+    if (!followId) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = async () => {
+      const status = await readStatus(workshopId, followId);
+      if (cancelled) return;
+      if (status) {
+        setCounts(status.counts);
+        if (status.state === 'running') {
+          const label = status.step === 'resource'
+            ? t('progress.resource')
+            : status.step === 'chapters'
+              ? t('progress.chapters')
+              : status.step === 'chaptersRelaunch'
+                ? t('progress.chaptersRelaunch')
+                : status.step === 'notions'
+                  ? t('progress.notionsChapters', { done: status.stepDone, n: status.stepTotal })
+                  : t('progress.questionsCount', { done: status.stepDone, n: status.stepTotal });
+          setPhase({ step: 'running', label, done: status.progress, total: status.progressMax });
+        } else if (status.state === 'done') {
+          setIssues({ discarded: status.discarded, adjusted: status.adjusted });
+          setMissing(status.missingQuestions);
+          setPhase({ step: 'done' });
+          return;
+        } else {
+          setPhase({ step: 'error', message: status.state === 'stopped' ? t('stopped') : failureText(status.error) });
+          return;
+        }
+      }
+      timer = setTimeout(tick, STATUS_POLL_MS);
     };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [running]);
+    void tick();
+    return () => { cancelled = true; clearTimeout(timer); };
+    // `failureText` et `t` ne changent pas pendant un suivi.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [followId, workshopId]);
 
-  // ─── La sortie, et ce qu'elle coûte selon le moment ──────────────────────
+  // ─── La sortie ne coûte plus rien ────────────────────────────────────────
   //
-  // Hors génération, la croix ferme, point. Pendant, elle DEMANDE d'abord : une
-  // génération interrompue laisse un atelier à moitié rempli, ce que personne
-  // ne veut déclencher d'un appui distrait (28/08/2026).
-  // ─── Le rafraîchissement a lieu à la FERMETURE, pas à la fin ─────────────
+  // Fermer la fenêtre n'arrête pas la génération : elle tourne sur le serveur.
+  // L'arrêt est un geste à part, avec son bouton et sa confirmation.
   //
-  // ⚠️ **Deux raisons, et la première était un bug** (30/08/2026).
-  //
-  // `onDone` partait juste après `setPhase({ step: 'done' })`, et les trois
-  // écrans qui l'utilisent rechargent la page. Or un état React ne s'applique
-  // pas dans l'instant : au moment de l'appel, le rendu affichait encore
-  // « en cours », donc l'écouteur `beforeunload` posé plus haut était TOUJOURS
-  // en place. Le rechargement déclenchait alors la demande « Quitter le site ? »
-  // du navigateur — et il suffisait de ne pas la confirmer pour que l'écran ne
-  // se rafraîchisse jamais. C'est ce qui a fait croire qu'une génération
-  // n'avait rien changé alors qu'elle avait rangé un chapitre et déplacé des
-  // notions.
-  //
-  // La seconde raison tient toute seule : recharger à l'instant où le
-  // compte-rendu s'affiche emporte le compte-rendu avec lui. On le laisse donc
-  // se lire, et c'est la fermeture — le moment où l'on revient à l'écran — qui
-  // le rafraîchit. À ce moment-là, `running` est faux depuis longtemps et
-  // l'écouteur a été retiré.
-  //
-  // La condition porte sur le lot, pas sur l'étape : une génération arrêtée ou
-  // en erreur a pu écrire, elle aussi. Fermer sans avoir rien lancé ne
-  // recharge rien.
+  // Le rafraîchissement a lieu à la FERMETURE, et seulement une fois la
+  // génération terminée : recharger à l'instant où le compte-rendu s'affiche
+  // l'emporterait avec lui. Fermer pendant qu'elle tourne ne recharge rien — le
+  // bandeau de l'atelier rafraîchira l'écran quand elle aura fini.
   function requestClose() {
-    if (running) return setStopAsk(true);
-    if (importIdRef.current) onDone?.();
+    if (importIdRef.current && !running) onDone?.();
     onClose();
   }
 
-  /** Arrête l'enchaînement, **rend la main tout de suite**, et défait le reste
-   *  côté serveur.
-   *
-   *  ⚠️ **Plus aucune attente ici, et c'est ce qui rend l'annulation fiable**
-   *  (29/08/2026). Elle attendait jusqu'ici que les appels déjà en vol retombent,
-   *  faute de quoi un retardataire réécrivait ce qu'on venait d'effacer : une
-   *  minute d'attente, portée par la page — donc perdue si l'utilisateur
-   *  naviguait ailleurs, et l'import restait alors en place.
-   *
-   *  Le retrait ferme désormais le lot AVANT d'effacer, et un lot fermé
-   *  n'accepte plus rien (voir `assertImportOpen`, @/lib/ingest/lock) : les
-   *  retardataires se refusent d'eux-mêmes. Une fois l'appel parti, il se termine
-   *  côté serveur quoi que fasse l'utilisateur — y compris fermer l'onglet.
-   *
-   *  L'enchaînement, lui, s'arrête par le drapeau : ce qui est déjà parti finit
-   *  sa course, mais n'écrit plus rien. */
+  /** Arrête la génération et défait ce qu'elle a écrit, **sans attendre** : le
+   *  lot est refermé d'abord, donc les étapes encore en vol se refusent d'elles-
+   *  mêmes (voir `assertImportOpen`, @/lib/ingest/lock), et le retrait se
+   *  termine sur le serveur quoi que fasse l'utilisateur. */
   function confirmStop() {
-    stopped.current = true;
     const importId = importIdRef.current;
+    setFollowId(null);
     onClose();
-
     if (!importId) return;
     void (async () => {
       await cancelWorkshopImport(workshopId, importId).catch(() => {});
-      // L'écran se rafraîchit une fois le ménage fait : ce qui a clignoté pendant
-      // la génération disparaît, sans que personne ait attendu devant.
       onDone?.();
     })();
   }
@@ -891,7 +439,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
           <button
             type="button"
             onClick={requestClose}
-            aria-label={t(running ? 'stop.aria' : 'close')}
+            aria-label={t('close')}
             style={{
               position: 'absolute', top: 12, right: 12, display: 'flex',
               padding: 6, borderRadius: radius.md, border: 'none',
@@ -963,40 +511,6 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 chiffres EST ce nombre — « 40 » demande quarante questions, sans
                 passer par l’IA de lecture ni coûter un appel de plus. */}
 
-            {/* ⚠️ TEMPORAIRE — phase de test : comparer les deux fournisseurs sur
-                un vrai corpus. Seule la passe questions est concernée, et c'est
-                dit — elle ne reçoit aucun document, donc rien ne s'y perd à
-                changer de modèle ; les chapitres et les notions restent sur
-                Claude, qui seul lit les PDF. */}
-            {/* Pas de point d'information ici : ce réglage est temporaire (voir
-                plus haut), et il n'en reste qu'un seul dans l'encadré — celui de
-                la consigne, qui est le seul champ à remplir. */}
-            <SectionLabel>{t('provider.label')}</SectionLabel>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-              {(['claude', 'deepseek'] as const).map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setQuestionsProvider(id)}
-                  style={{
-                    flex: 1, padding: '7px 10px', borderRadius: radius.md, cursor: 'pointer',
-                    fontFamily: 'inherit', fontSize: 12.5,
-                    border: `1px solid ${questionsProvider === id ? palette.ink : ink(0.12)}`,
-                    boxShadow: questionsProvider === id ? `0 0 0 2px ${ink(0.18)}` : 'none',
-                    background: palette.surfaceInput,
-                    color: questionsProvider === id ? palette.ink : palette.inkMuted,
-                    fontWeight: questionsProvider === id ? 600 : 400,
-                  }}
-                >
-                  {t(`provider.${id}`)}
-                </button>
-              ))}
-            </div>
-            {frame === 'modal' && (
-              <div style={{ marginBottom: 20 }}>
-                <Hint>{t('provider.help')}</Hint>
-              </div>
-            )}
             {frame === 'inline' && <div style={{ marginBottom: 16 }} />}
 
             <SectionLabel info={frame === 'inline' ? t('hint.info') : undefined} infoMore={frame === 'inline' ? t('hint.infoIdeas') : undefined}>{t('hint.label')}</SectionLabel>
@@ -1049,7 +563,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                   seconde que partir sur la mauvaise voie ; et un atelier sans
                   document ET sans notion n'offre rien à quoi se raccrocher. */}
               <Primary
-                onClick={() => { void prepare(); }}
+                onClick={() => { void start(); }}
                 disabled={visibleNotions === null || nothingToDo}
               >
                 {t('generate')}
@@ -1065,19 +579,16 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
           <div style={{ padding: '4px 0 8px' }}>
             <ProgressBar animated value={0} max={1} label={t('estimate.preparing')} />
             <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 14 }}>{t('estimate.preparingHint')}</p>
-            <SecondTab href={`/${locale}/dashboard`} label={t('newTab')} />
-            {stopAction}
           </div>
         )}
 
         {!stopAsk && phase.step === 'running' && (
           <div style={{ padding: '4px 0 8px' }}>
             <ProgressBar animated value={phase.done} max={phase.total} label={phase.label} />
-            <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 14 }}>{t('keepOpen')}</p>
+            <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 14 }}>{t('canClose')}</p>
             <p style={{ fontSize: 12.5, color: palette.inkFaint, marginTop: 6 }}>
               {t('runningCounts', { chapters: counts.chapters, notions: counts.notions, questions: counts.questions })}
             </p>
-            <SecondTab href={`/${locale}/dashboard`} label={t('newTab')} />
             {stopAction}
           </div>
         )}
@@ -1090,6 +601,9 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 {t('doneCounts', { chapters: counts.chapters, notions: counts.notions, questions: counts.questions })}
               </strong>
             </div>
+            {missing > 0 && (
+              <p style={{ fontSize: 13, color: palette.amber, margin: '0 0 8px' }}>{t('partialQuestions', { count: missing })}</p>
+            )}
             <IssueList heading={t('discarded')} issues={issues.discarded} tone="warn" />
             <IssueList heading={t('adjusted')} issues={issues.adjusted} tone="soft" />
             <p style={{ fontSize: 12.5, color: palette.inkSoft, marginTop: 12 }}>{t('cancellable')}</p>
@@ -1168,36 +682,6 @@ function Hint({ children }: { children: React.ReactNode }) {
 
 function Actions({ children }: { children: React.ReactNode }) {
   return <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>{children}</div>;
-}
-
-/** La sortie de secours pendant une génération : un SECOND onglet.
- *
- *  L'enchaînement des passes vit dans cette page (voir l'en-tête du fichier) :
- *  la quitter interrompt la génération, et c'est pour ça que le dialogue retient
- *  celui qui la lance. Plutôt que de le laisser attendre devant une barre,
- *  on lui ouvre l'app ailleurs — l'onglet qui travaille reste intact derrière,
- *  et il fait ce qu'il veut du nouveau (29/08/2026).
- *
- *  Un vrai lien, pas un `window.open` : il survit aux bloqueurs de fenêtres,
- *  s'ouvre au clic du milieu, et se copie. `noopener` est indispensable — sans
- *  lui, la page ouverte peut atteindre l'onglet qui l'a ouverte, c'est-à-dire
- *  précisément celui qu'on protège. */
-function SecondTab({ href, label }: { href: string; label: string }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 14,
-        padding: '7px 12px', borderRadius: radius.md, border: `1px solid ${ink(0.12)}`,
-        fontSize: 12.5, fontWeight: 600, color: palette.inkMuted, textDecoration: 'none',
-      }}
-    >
-      <ExternalLink size={13} />
-      {label}
-    </a>
-  );
 }
 
 function Ghost({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {

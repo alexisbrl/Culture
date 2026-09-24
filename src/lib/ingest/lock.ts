@@ -2,9 +2,8 @@
 //
 // ─── Le problème ─────────────────────────────────────────────────────────────
 //
-// L'enchaînement des passes vit dans le NAVIGATEUR (voir l'en-tête de
-// `src/components/ai/AiGenerationDialog.tsx`) : rien n'empêchait d'ouvrir un
-// second onglet sur le même atelier et d'y lancer une seconde génération. Les
+// Rien n'empêchait de lancer une seconde génération sur le même atelier depuis un
+// autre onglet, ou un autre gestionnaire, pendant que la première tournait. Les
 // deux écrivent alors les mêmes chapitres et les mêmes notions en même temps, et
 // le ménage de fin de l'une (`finishIngestion`) peut cacher les chapitres que
 // l'autre vient tout juste de remplir. Le résultat n'est pas « deux fois plus de
@@ -16,10 +15,11 @@
 //
 // ─── Un signe de vie, pas un verrou ──────────────────────────────────────────
 //
-// Un booléen posé par un onglet qui meurt brutalement (plantage, coupure,
-// machine éteinte) ne se relâche jamais : l'atelier resterait bloqué sans que
-// personne puisse rien y faire, et sans même savoir pourquoi. Le verrou est donc
-// un BATTEMENT rafraîchi par l'onglet qui travaille, et il expire de lui-même.
+// Un booléen posé par une génération que le serveur perd en route ne se
+// relâcherait jamais : l'atelier resterait bloqué sans que personne puisse rien y
+// faire, et sans même savoir pourquoi. Le verrou est donc un BATTEMENT, rafraîchi
+// par chaque tâche de la génération (@/lib/ingest/orchestrator), et il expire de
+// lui-même.
 //
 // Deux façons de le relâcher, et les deux comptent :
 //   • `closed_at` — la fin propre (terminé, arrêté, en erreur). Immédiate.
@@ -33,12 +33,12 @@ import { getSupabaseServerClient } from '@/lib/supabase';
 
 /** Sans battement depuis ce délai, le lot est tenu pour abandonné.
  *
- *  Le choix se joue entre deux ennuis : trop court, un onglet momentanément
- *  ralenti perd son verrou et une seconde génération peut partir par-dessus ;
- *  trop long, un onglet fermé brutalement bloque l'atelier pour rien. L'onglet
- *  bat toutes les 30 s (`AiGenerationDialog`), donc deux minutes laissent passer
- *  trois battements manqués d'affilée avant de conclure. */
-export const LIVE_TIMEOUT_MS = 2 * 60 * 1000;
+ *  Le battement vient des tâches de la génération, qui tournent sur le serveur
+ *  (@/lib/ingest/orchestrator) : chacune bat en commençant et en finissant. Une
+ *  tâche dure au plus cinq minutes (la limite de l'hébergeur) ; sept laissent
+ *  passer la plus longue avec de la marge, sans bloquer l'atelier trop longtemps
+ *  si le serveur a perdu la génération. */
+export const LIVE_TIMEOUT_MS = 7 * 60 * 1000;
 
 /** Le refus, sous une forme que l'appelant peut RECONNAÎTRE — et non une phrase
  *  à afficher. Le message vu par l'utilisateur est traduit côté écran (clé

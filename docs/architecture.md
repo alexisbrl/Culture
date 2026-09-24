@@ -782,7 +782,39 @@ trois règles de choix :
 - **Réparti entre les notions du lot**, à tour de rôle : la part d'une notion qui a peu de
   questions revient aux autres.
 
-### 7.11 Une génération à la fois, par atelier
+### 7.11 La génération tourne sur le serveur, une à la fois par atelier
+
+**L'écran lance, le serveur enchaîne.** Chaque appel au modèle est une **tâche** rangée en
+base, exécutée dans sa propre fonction serveur — pour tenir dans la limite de durée de
+l'hébergeur, cinq minutes par fonction. Une tâche qui se termine relit toutes les tâches du
+lot, en déduit la suite, et **lance elle-même les suivantes**. Fermer la fenêtre, quitter la
+page ou fermer l'onglet ne change rien : l'écran ne fait que lire l'avancement, et le
+bandeau de l'atelier montre la génération en cours à qui revient. Rouvrir la fenêtre
+retrouve la génération au lieu d'en proposer une seconde.
+
+**La suite se déduit de l'état, jamais d'une mémoire.** Plusieurs tâches finissent au même
+instant et demandent chacune « et maintenant ? » : la réponse, tirée de toutes les tâches du
+lot, est la même pour toutes, et une étape planifiée deux fois n'existe qu'une fois (clé
+unique par étape). Une fonction peut mourir entre deux tâches sans rien perdre.
+
+**Tout part en même temps, cinquante au plus.** Les notions de tous les chapitres partent
+ensemble, et les questions d'un chapitre dès que ses notions sont écrites. Le plafond ne
+borne qu'une boucle emballée.
+
+**La veille rattrape ce qui se perd.** Une tâche coupée par la limite de durée n'écrit rien :
+elle est **reprise une fois**, et abandonnée si elle est coupée de nouveau (l'écran dit alors
+combien de questions manquent). Une tâche qu'aucun relais n'a prise est relancée. Cette
+veille passe à chaque lecture d'avancement par l'écran, et chaque minute par une tâche
+planifiée de la base, pour les générations que plus personne ne regarde. **Une génération
+n'est menée que par le serveur qui l'a ouverte** : le développement local partage la base
+avec la production, et chacun ne touche qu'à ses lots.
+
+**Les relais ne passent par aucune session** : chaque appel porte une signature de la tâche,
+calculée avec un secret du serveur, qui ne permet que d'exécuter une tâche déjà rangée par
+une action qui a contrôlé les droits.
+
+**Arrêter** referme le lot puis défait ce qu'il a écrit : les tâches encore en vol se
+refusent d'elles-mêmes à écrire dans un lot refermé.
 
 Deux générations sur le même atelier écrivent les mêmes chapitres et les mêmes notions, et
 le ménage de fin de l'une peut cacher ce que l'autre vient de remplir. Ce n'est pas deux
@@ -790,21 +822,16 @@ fois plus de contenu : c'est un programme incohérent et deux fois la facture. *
 ateliers différents, rien n'est bloqué** — aucune écriture n'y est partagée, et seul le
 débit vers le fournisseur l'est, qui se régule tout seul.
 
-**Le verrou est un signe de vie, pas un interrupteur.** Un drapeau posé par un onglet qui
-meurt brutalement ne se relâcherait jamais et bloquerait l'atelier sans recours. L'onglet
-qui travaille **bat** régulièrement ; un lot sans battement depuis quelques minutes cesse
-de bloquer. Une fin propre — terminée, arrêtée ou en erreur — relâche immédiatement.
+**Le verrou est un signe de vie, pas un interrupteur.** Un drapeau posé par une génération
+que le serveur perd en route ne se relâcherait jamais et bloquerait l'atelier sans recours.
+Chaque tâche **bat** en commençant et en finissant ; un lot sans battement depuis plus
+longtemps que la plus longue tâche cesse de bloquer. Une fin propre — terminée, arrêtée ou
+en erreur — relâche immédiatement.
 
 **Les recharges automatiques ne battent jamais** : elles tournent en tâche de fond,
 l'utilisateur n'en sait rien, et lui refuser un lancement à cause d'elles serait
-incompréhensible.
-
-**Quitter la page** demande confirmation, mais **le texte n'est pas le nôtre** : les
-navigateurs imposent leur propre formulation. On ne peut que provoquer la question, pas la
-rédiger. Ce n'est pas grave — les questions sont écrites au fur et à mesure, donc un import
-interrompu ne casse rien : ce qui est écrit reste, et le bandeau d'annulation le propose
-comme n'importe quel autre lot. L'écran propose aussi d'**ouvrir le site dans un second
-onglet**, celui qui travaille restant intact derrière.
+incompréhensible. Leurs appels sont pourtant des tâches comme les autres, menées de la même
+façon.
 
 ### 7.12 Coût : ce qui le gouverne
 
@@ -1155,8 +1182,9 @@ erreur pendant deux jours pour cette raison exacte — personne n'attend sa rép
 ne le signalait à l'écran.*
 
 **Le navigateur envoie les actions serveur une par une.** Des appels lancés « en parallèle »
-s'exécutent en file. Tout ce qui doit réellement partir ensemble — notions par chapitre,
-questions — passe par une route d'API. *Constaté au journal : 18 minutes au lieu de 4.*
+s'exécutent en file — et une lecture répétée, comme l'avancement d'une génération, bloque
+tout le reste de l'écran. Ce qui doit partir ensemble ou se répéter passe par une route
+d'API. *Constaté au journal : 18 minutes au lieu de 4.*
 
 ### B. Pièges React et CSS
 
