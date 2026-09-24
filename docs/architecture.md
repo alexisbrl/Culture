@@ -259,6 +259,14 @@ chaque chapitre, le document et l'intervalle de pages — plusieurs intervalles 
 chapitre est éclaté. Sans elles, l'étape suivante devrait recevoir le cours entier
 pour retrouver son chapitre ; avec elles, elle reçoit dix-sept pages.
 
+**Les chapitres sont ceux du cours, sous leurs titres mot pour mot.** Le découpage d'un
+enseignant est un choix pédagogique que l'atelier doit refléter : l'étape reprend les
+divisions du document — chapitres, parties, thèmes — sans en fusionner ni en scinder, et
+leur titre sans le reformuler, numérotation retirée. Deux exceptions : un titre de plus de
+120 caractères est reformulé plus court, et un cours sans aucune division est découpé par
+le modèle. Un titre encore trop long à l'arrivée est **raccourci par le serveur, jamais une
+raison d'écarter le chapitre** : ses pages ne seraient lues par personne.
+
 **L'étape chapitres reçoit tout l'existant, et c'est acceptable** : elle est la seule
 à voir le cours, donc la seule à pouvoir juger ce qui est encore d'actualité. C'est un
 seul appel, et une notion est une ligne de texte — même à mille notions, le bloc reste

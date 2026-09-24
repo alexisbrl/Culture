@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parsePlan, planSchema } from '@/lib/ingest/planSchema';
+import { parsePlan, planSchema, shortenChapterName } from '@/lib/ingest/planSchema';
 import { MAX_CHOICES, MAX_LIST_ANSWERS } from '@/lib/workshops/examTypes';
 
 // Le contrat d'entrée de l'ingestion. Deux propriétés à tenir, et elles tirent
@@ -52,6 +52,31 @@ describe('planSchema — sortie contrainte du modèle', () => {
     const plan = parsePlan({ groups: [sansContexte] });
     expect(plan.groups).toHaveLength(1);
     expect(plan.discarded).toEqual([]);
+  });
+});
+
+describe('titre de chapitre trop long — raccourci, jamais écarté', () => {
+  const long = `Repères utiles pour débuter ${'avec les grands ensembles du monde '.repeat(4)}fin`;
+
+  it('garde le chapitre, raccourci sous la limite et signalé', () => {
+    const plan = parsePlan({ chapters: [{ ref: 'ch1', name: long }] });
+    expect(plan.discarded).toEqual([]);
+    expect(plan.chapters).toHaveLength(1);
+    expect(plan.chapters[0].name.length).toBeLessThanOrEqual(120);
+    expect(plan.chapters[0].name.endsWith('…')).toBe(true);
+    expect(plan.adjusted.some((a) => a.ref === 'ch1' && /raccourci/.test(a.reason))).toBe(true);
+  });
+
+  it('coupe au dernier mot entier', () => {
+    const short = shortenChapterName(long);
+    expect(long.startsWith(short.slice(0, -1))).toBe(true);
+    expect(long[short.length - 1]).toBe(' ');
+  });
+
+  it('ne touche pas un titre dans la limite', () => {
+    expect(shortenChapterName('  Les pays d’Europe  ')).toBe('Les pays d’Europe');
+    const plan = parsePlan({ chapters: [{ ref: 'ch1', name: 'Les pays d’Europe' }] });
+    expect(plan.adjusted).toEqual([]);
   });
 });
 

@@ -260,7 +260,7 @@ export const wireExamGroupSchema = groupSchemaFor(wireExamQuestionSchema);
  *  bornes pour tous. */
 export const wireChapterSchema = z.object({
   ref: z.string().describe('Clé locale unique de ce chapitre dans ce plan.'),
-  name: z.string().describe('Nom du chapitre, 120 caractères maximum.'),
+  name: z.string().describe("Titre du chapitre tel qu'il figure dans le cours, sans sa numérotation ; reformulé plus court seulement s'il dépasse 120 caractères."),
 });
 
 /** Un intervalle de pages d'un document. C'est ce qui permet à l'étape suivante

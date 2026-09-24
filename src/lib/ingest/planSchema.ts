@@ -106,9 +106,25 @@ export type ParsedPlan = {
 
 const refSchema = z.string().trim().min(1).max(64);
 
+/** Même valeur que `CHAPTER_NAME_MAX` (@/lib/workshops/chapters), recopiée ici
+ *  parce que ce module-là lit la base et que celui-ci doit rester pur. */
+const CHAPTER_NAME_LIMIT = 120;
+
+/** Un titre de chapitre trop long est RACCOURCI, jamais une raison d'écarter le
+ *  chapitre : le perdre ferait perdre les pages qu'il couvre. La consigne demande
+ *  au modèle de reformuler lui-même ; ceci n'est que le filet — coupe au dernier
+ *  mot entier, et points de suspension. */
+export function shortenChapterName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length <= CHAPTER_NAME_LIMIT) return trimmed;
+  const head = trimmed.slice(0, CHAPTER_NAME_LIMIT - 1);
+  const cut = head.lastIndexOf(' ');
+  return `${(cut > CHAPTER_NAME_LIMIT / 2 ? head.slice(0, cut) : head).replace(/[\s,;:.–—-]+$/, '')}…`;
+}
+
 const chapterSchema = z.object({
   ref: refSchema,
-  name: z.string().trim().min(1).max(120), // CHAPTER_NAME_MAX
+  name: z.string().trim().min(1).max(CHAPTER_NAME_LIMIT),
   position: z.number().int().min(0).optional(),
   // Provenance : sur quelles pages ce chapitre court, à peu près. C'est ce qui
   // permet à la passe RANGEMENT de se passer du cours (§ migration du
@@ -600,7 +616,17 @@ export function parsePlan(raw: unknown, existing: ExistingRefs = {}): ParsedPlan
   //    plan complète l'existant, il ne le recrée pas (§8 du plan d'ingestion).
   const chapters: PlanChapter[] = [];
   const chapterRefs = new Set<string>(existing.chapterIds ?? []);
-  for (const item of asArray(root.chapters)) {
+  for (const raw of asArray(root.chapters)) {
+    const name = raw && typeof raw === 'object' ? (raw as Record<string, unknown>).name : undefined;
+    const shortened = typeof name === 'string' ? shortenChapterName(name) : name;
+    const item = shortened === name ? raw : { ...(raw as Record<string, unknown>), name: shortened };
+    if (shortened !== name && typeof name === 'string' && name.trim().length > CHAPTER_NAME_LIMIT) {
+      adjusted.push({
+        kind: 'chapter',
+        ref: refOf(raw),
+        reason: `titre de plus de ${CHAPTER_NAME_LIMIT} caractères — raccourci en « ${shortened} »`,
+      });
+    }
     const result = chapterSchema.safeParse(item);
     if (!result.success) {
       discarded.push({ kind: 'chapter', ref: refOf(item), reason: firstMessage(result.error) });

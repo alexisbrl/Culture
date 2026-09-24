@@ -767,7 +767,11 @@ ${retry.previous.length < PLAUSIBLE_CHAPTERS.min ? RETRY_TOO_FEW : RETRY_TOO_MAN
 
 Découpe ce cours en CHAPITRES : ses grandes parties, dans l'ordre où elles se lisent.
 
-Un chapitre est une unité d'enseignement, pas une section de mise en page : deux sous-parties qui traitent du même sujet forment un seul chapitre. Vise le découpage qu'un enseignant ferait pour organiser sa progression.
+**LE DÉCOUPAGE ET LES TITRES SONT CEUX DU COURS.** Quand le cours est divisé, ce découpage est celui que l'enseignant a choisi, et c'est lui qu'on veut retrouver dans l'atelier. Reprends ses divisions telles qu'elles sont — n'en fusionne pas deux, n'en scinde pas une — et leur titre **mot pour mot** : ne le reformule pas, ne le complète pas, ne le « clarifie » pas, même si tu trouves une formulation meilleure. Seule la numérotation qui le précède (« Chapitre 3 : », « II. », « Partie 1 — ») s'omet : l'ordre du programme la porte déjà.
+
+Deux exceptions, et deux seulement :
+- **Un titre de plus de 120 caractères** : reformule-le plus court, en restant au plus près des mots du cours.
+- **Un cours sans aucune division** — un texte d'un seul tenant, sans titres de parties : là seulement, crée les chapitres toi-même, en visant le découpage qu'un enseignant ferait pour organiser sa progression, et donne-leur un nom.
 
 **Le mot « chapitre » est le nôtre, pas celui du document.** Un cours nomme ses grandes parties comme il veut — thèmes, séquences, modules, parties, unités —, ou ne les nomme pas du tout. Ce qu'on te demande est un NIVEAU DE DÉCOUPAGE, pas la recherche d'un mot.
 
@@ -779,7 +783,7 @@ Le niveau à prendre, sauf demande contraire de l'utilisateur : **le plus fin de
 
 Ordre de grandeur : un cours en compte typiquement ${PLAUSIBLE_CHAPTERS.min} à ${PLAUSIBLE_CHAPTERS.max}, davantage pour un programme annuel ou un découpage fin explicitement demandé. C'est une indication et non une limite — dépasse-la si le contenu ou la demande le justifient.
 
-Donne à chacun une référence courte et unique (ch1, ch2…), et un nom de 120 caractères maximum.
+Donne à chacun une référence courte et unique (ch1, ch2…), et pour nom le titre du cours, tel qu'il y figure (120 caractères maximum).
 
 **Dans \`chapters\`, ne liste que les chapitres NOUVEAUX.** Ceux qui existent déjà sont listés plus haut avec leur référence : tu ne donnes que leur rang, dans \`chapterOrder\`. Un cours qu'on repasse à l'identique se répond donc avec un \`chapters\` VIDE, et c'est la bonne réponse.
 

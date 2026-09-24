@@ -277,6 +277,14 @@ describe('instructions de passe', () => {
     expect(chaptersInstruction([])).toMatch(/créer le nouveau chapitre ET de mettre l'ancien à 0/);
   });
 
+  it('les titres de chapitre sont ceux du cours, mot pour mot, avec deux exceptions', () => {
+    const instruction = chaptersInstruction([]);
+    expect(instruction).toMatch(/LE DÉCOUPAGE ET LES TITRES SONT CEUX DU COURS/);
+    expect(instruction).toMatch(/\*\*mot pour mot\*\*/);
+    expect(instruction).toMatch(/Un titre de plus de 120 caractères/);
+    expect(instruction).toMatch(/Un cours sans aucune division/);
+  });
+
   it('la relance ne porte que sur les notions données, chapitres figés', () => {
     const instruction = chaptersRelaunchInstruction({
       notions: [{ id: 'n7', title: 'La Loire' }],
