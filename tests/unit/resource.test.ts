@@ -1,10 +1,10 @@
 // La lecture de la réponse de l'étape 0 — le contrat d'une entrée non fiable.
 //
 // Trois raisons d'être testée, là où le reste de l'étape ne l'est pas :
-//   • elle décide d'ÉCRIRE un document qui devient ensuite la source de vérité
-//     de tout l'atelier ;
-//   • elle lit un champ (`needs`) qui décide de la facture : mal lu, il fait
-//     partir un corpus entier pour rien ;
+//   • elle ÉCRIT un document qui devient ensuite la source de vérité de tout
+//     l'atelier ;
+//   • la question posée au décideur décide de la facture et du délai : un « oui »
+//     de trop réécrit tout le cours, un « non » de trop perd la demande ;
 //   • elle doit rendre « ne touche à rien » sur tout ce qu'elle ne comprend pas,
 //     et jamais lever — une étape optionnelle n'a pas à faire tomber une
 //     génération.
@@ -17,29 +17,28 @@ import {
   extractBody,
   questionCountFromHint,
   readResourceOutput,
+  writingQuestion,
 } from '@/lib/ingest/resource';
 import { EXAM_QUESTIONS_RANGE, MAX_QUESTIONS_PER_IMPORT } from '@/lib/ingest/prompt';
 
 describe('readResourceOutput', () => {
   it('lit une réponse complète', () => {
     const outcome = readResourceOutput({
-      document: { action: 'write', content: '## Titre\n\nDu cours.', summary: 'Cours créé' },
+      document: { content: '## Titre\n\nDu cours.', summary: 'Cours créé' },
       instruction: 'Insiste sur les dates',
       dropped: false,
-      needs: [],
     });
     expect(outcome.body).toBe('## Titre\n\nDu cours.');
     expect(outcome.instruction).toBe('Insiste sur les dates');
     expect(outcome.summary).toBe('Cours créé');
   });
 
-  it('« keep » ne touche à rien, et une action inconnue non plus', () => {
-    const keep = readResourceOutput({ document: { action: 'keep', content: 'ignoré' } });
-    expect(keep.body).toBeNull();
-    // Une valeur inattendue vaut « ne touche à rien » : c'est toujours la
-    // conduite la moins dommageable sur un document qui fait foi.
-    const unknown = readResourceOutput({ document: { action: 'replace', content: 'du texte' } });
-    expect(unknown.body).toBeNull();
+  it('sans champ document, ou avec un corps vide, ne touche à rien', () => {
+    // Sans décision d'écrire, le schéma n'offre même pas le champ : son absence
+    // est le cas normal, pas une panne.
+    expect(readResourceOutput({ instruction: 'En anglais' }).body).toBeNull();
+    expect(readResourceOutput({ document: { content: '   ' } }).body).toBeNull();
+    expect(readResourceOutput({ document: { content: 42 } }).body).toBeNull();
   });
 
   it('ne lève jamais, quoi qu’on lui donne', () => {
@@ -47,13 +46,12 @@ describe('readResourceOutput', () => {
       const outcome = readResourceOutput(raw);
       expect(outcome.body).toBeNull();
       expect(outcome.instruction).toBe('');
-      expect(outcome.needs).toEqual([]);
     }
   });
 
   it('tronque un document trop long au lieu de le jeter', () => {
     const outcome = readResourceOutput({
-      document: { action: 'write', content: 'a'.repeat(MAX_GENERATED_LENGTH + 500) },
+      document: { content: 'a'.repeat(MAX_GENERATED_LENGTH + 500) },
     });
     // Jeter la réponse ferait perdre un appel cher pour un dépassement sans
     // conséquence : on coupe.
@@ -61,32 +59,8 @@ describe('readResourceOutput', () => {
   });
 
   it('une consigne réécrite vide est un résultat, pas une absence', () => {
-    const outcome = readResourceOutput({ document: { action: 'keep' }, instruction: '   ' });
+    const outcome = readResourceOutput({ instruction: '   ' });
     expect(outcome.instruction).toBe('');
-  });
-
-  describe('les documents demandés', () => {
-    it('garde les numéros, dédoublonnés', () => {
-      expect(readResourceOutput({ needs: [2, 0, 2] }).needs).toEqual([2, 0]);
-    });
-
-    it('écarte tout ce qui n’est pas un numéro de document', () => {
-      expect(readResourceOutput({ needs: [1, -1, 1.5, '2', null, NaN] }).needs).toEqual([1]);
-    });
-
-    it('ne plafonne pas : « relis tout mon cours » est une demande légitime', () => {
-      // Un plafond a existé une demi-journée. Il cassait le cas le plus banal —
-      // « relis mon cours et corrige les erreurs » — en n'en relisant qu'une
-      // partie, sans le dire. Ce qui borne la dépense, c'est que le contenu ne
-      // parte que sur demande, pas un compte arbitraire.
-      const many = Array.from({ length: 20 }, (_, i) => i);
-      expect(readResourceOutput({ needs: many }).needs).toEqual(many);
-    });
-
-    it('un champ absent ou mal formé ne demande rien', () => {
-      expect(readResourceOutput({ needs: 'tout' }).needs).toEqual([]);
-      expect(readResourceOutput({}).needs).toEqual([]);
-    });
   });
 
   describe('le nombre de questions d’examen', () => {
@@ -111,6 +85,35 @@ describe('readResourceOutput', () => {
       expect(readResourceOutput({ examQuestionCount: 4.5 }).examQuestionCount).toBeNull();
       expect(readResourceOutput({ examQuestionCount: '10' }).examQuestionCount).toBeNull();
     });
+  });
+});
+
+describe('writingQuestion — ce que voit le décideur', () => {
+  const base = { hint: 'Fais-moi un cours sur les volcans', chapters: [], fileNames: [] };
+
+  it('porte la demande, telle quelle', () => {
+    expect(writingQuestion(base).state).toContain('« Fais-moi un cours sur les volcans »');
+  });
+
+  it('ne montre du cours de l’IA que ses titres, jamais son corps', () => {
+    // Le corps peut peser des dizaines de milliers de caractères : le décideur doit rester rapide.
+    const current = '## Les volcans\n\nUn volcan est une ouverture de la croûte.\n\n### Le magma\n\nRoche en fusion.';
+    const { state } = writingQuestion({ ...base, current });
+    expect(state).toContain('## Les volcans');
+    expect(state).toContain('### Le magma');
+    expect(state).not.toContain('Roche en fusion');
+  });
+
+  it('dit quand il n’y a ni document déposé ni cours de l’IA', () => {
+    const { state } = writingQuestion(base);
+    expect(state).toContain("Les documents déposés par l'utilisateur : aucun.");
+    expect(state).toContain("aucun pour l'instant");
+  });
+
+  it('nomme les documents déposés, sans leur contenu', () => {
+    const { state } = writingQuestion({ ...base, fileNames: ['Cours.pdf', 'Annexe.pdf'] });
+    expect(state).toContain('- Cours.pdf');
+    expect(state).toContain('- Annexe.pdf');
   });
 });
 

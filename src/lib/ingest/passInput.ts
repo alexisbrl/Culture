@@ -27,19 +27,12 @@ export type IngestPass = 'resource' | 'chapters' | 'notions' | 'questions' | 'ex
 export function documentsForPass(
   pass: IngestPass,
   prepared: PreparedDocument[],
-  /** Les documents que l'étape 0 a **demandés**, par numéro. Elle est la seule
-   *  passe à recevoir ses documents sur demande plutôt que d'office : elle part
-   *  à l'aveugle, avec le seul catalogue des noms, et n'obtient le contenu que
-   *  si elle dit en avoir besoin (04/09/2026). */
-  granted?: readonly number[],
+  /** L'étape 0 écrit-elle ? Décidé en amont (docs/architecture.md §7.4) : tout
+   *  le corpus si oui, rien sinon. */
+  write?: boolean,
 ): PreparedDocument[] {
-  // L'étape 0 ne reçoit QUE ce qu'elle a demandé, et rien par défaut. Un numéro
-  // hors liste est ignoré : il vient du modèle.
-  if (pass === 'resource') {
-    return (granted ?? [])
-      .map((index) => prepared[index])
-      .filter((document): document is PreparedDocument => Boolean(document));
-  }
+  // L'étape 0 ne lit que pour écrire, et rien par défaut.
+  if (pass === 'resource') return write ? prepared : [];
 
   // Les questions, l'examen et les redites travaillent sur des notions, pas
   // sur le cours.

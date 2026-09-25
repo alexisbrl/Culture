@@ -45,6 +45,7 @@ import {
   wireGroupsOutput,
   wireResourceOutput,
   wireResourceOutputExam,
+  wireResourceOutputInstruction,
 } from '@/lib/ingest/wireSchema';
 import { MAX_GENERATED_LENGTH } from '@/lib/ingest/resource';
 
@@ -316,12 +317,8 @@ function instructionFor(scope: IngestScope): string {
         hint: scope.hint,
         workshop: scope.workshop,
         chapters: scope.chapters,
-        // Le CATALOGUE (tous les documents, par leur numéro) et ce qui est
-        // réellement joint (`granted`) sont deux choses distinctes, et la
-        // consigne le dit : c'est ce qui permet au modèle de demander ce qu'il
-        // n'a pas plutôt que de faire semblant de l'avoir lu.
-        catalogue: scope.catalogue,
-        granted: scope.granted,
+        fileNames: scope.fileNames,
+        write: scope.write,
         current: scope.current,
         maxLength: MAX_GENERATED_LENGTH,
         context: scope.context,
@@ -380,13 +377,24 @@ function existingScopeFor(scope: IngestScope): ExistingScope {
   }
 }
 
+/** Le socle système de l'appel : l'étape 0 en a trois, selon ce qu'elle a le
+ *  droit de faire — écrire (parcours, écriture décidée), réécrire la consigne
+ *  seule (parcours), ou préparer l'examen. */
+function resourceSystemFor(scope: IngestScope): string {
+  if (scope.pass !== 'resource') return scope.pass;
+  if (scope.context === 'exam') return 'resource-exam';
+  return scope.write ? 'resource' : 'resource-instruction';
+}
+
 function outputSchemaFor(scope: IngestScope) {
   switch (scope.pass) {
     case 'resource':
-      // Deux formes pour la même étape : partie de l'examen, elle n'a pas de
-      // champ `document` — elle ne PEUT donc pas en écrire un, plutôt que d'en
-      // avoir le droit et l'interdiction (voir `wireResourceOutputExam`).
-      return scope.context === 'exam' ? wireResourceOutputExam : wireResourceOutput;
+      // Trois formes pour la même étape : un champ `document` n'existe QUE
+      // quand l'écriture a été décidée en amont. Sans lui, le modèle ne PEUT pas
+      // en écrire un, plutôt que d'en avoir le droit et l'interdiction (voir
+      // `wireResourceOutputExam`).
+      if (scope.context === 'exam') return wireResourceOutputExam;
+      return scope.write ? wireResourceOutput : wireResourceOutputInstruction;
     case 'chapters':
       return scope.relaunch ? wireChaptersRelaunchOutput : wireChaptersOutput;
     case 'notions':
@@ -525,7 +533,7 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
       const sent = documentsForPass(
         scope.pass,
         documents,
-        scope.pass === 'resource' ? scope.granted : undefined,
+        scope.pass === 'resource' ? scope.write : undefined,
       );
 
       // Les documents d'abord, puis le texte du cours (étape chapitres),
@@ -591,7 +599,7 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
           // L'étape 0 a son propre socle : le commun lui interdisait
           // explicitement d'écrire ce qui n'est dans aucun document, ce qui est
           // pourtant tout son travail (voir `resourceSystemPrompt`).
-          system: [{ type: 'text', text: systemPrompt(scope.pass === 'resource' && scope.context === 'exam' ? 'resource-exam' : scope.pass) }],
+          system: [{ type: 'text', text: systemPrompt(resourceSystemFor(scope)) }],
           thinking: tuning.thinking,
           output_config: {
             // `effort` est absent sur Haiku 4.5 : il y est refusé (voir `tuningFor`).

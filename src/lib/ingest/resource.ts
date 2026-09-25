@@ -16,13 +16,15 @@
 // Elle doit donc passer avant tout le reste : ce qu'elle écrit est de la matière
 // que les notions, les chapitres et les questions vont exploiter.
 //
-// ─── Un seul appel, et pas deux ──────────────────────────────────────────────
+// ─── Décider, puis écrire une seule fois ─────────────────────────────────────
 //
-// Analyser la consigne puis écrire le document auraient pu être deux étapes.
-// Décision d'Alexis du 04/09/2026 : un seul appel. Les deux moitiés partagent
-// exactement la même lecture — la consigne, le cours, le programme — et les
-// séparer les ferait payer deux fois pour rien, en rallongeant une génération
-// déjà longue.
+// Écrire ou non est une question fermée, tranchée AVANT l'appel par le décideur
+// (@/lib/decision) — Jev à terme, Haiku en attendant (Alexis, 25/09/2026). Le
+// modèle qui écrit reçoit la décision toute faite : tout le corpus quand il
+// écrit, rien quand il ne fait que réécrire la consigne. Lui laisser le choix,
+// c'était un premier appel à l'aveugle qui rédigeait un cours entier pour
+// annoncer « j'écris », puis un second qui le réécrivait documents en main —
+// plus de cinq minutes, coupées par l'hébergeur, le 24/09/2026.
 //
 // ─── Elle ne se déclenche que s'il y a une consigne ──────────────────────────
 //
@@ -94,25 +96,24 @@ const BODY_MARKER = '<!-- culture:corps -->';
  *  sortie à chaque génération qui y touche — en temps de génération surtout, le
  *  coût en tokens restant marginal au regard de ce que le modèle accepte.
  *
- *  **250 000 caractères depuis le 08/09/2026**, à la demande d'Alexis : c'est
- *  l’ordre de grandeur d’un cours qui porte 1 000 notions, le plafond retenu le
- *  même jour pour un atelier. Environ 150 pages de texte simple.
+ *  **40 000 caractères depuis le 25/09/2026** (Alexis) : ce qu'un seul appel
+ *  écrit dans la durée d'une fonction serveur, cinq minutes. Mesuré le
+ *  24/09/2026 : ~150 caractères par seconde, réflexion comprise (13 300 en 87 s,
+ *  21 600 en 141 s), soit ~46 000 en 300 s — 40 000 garde de la marge pour une
+ *  réflexion plus longue. Au-delà, l'étape est coupée, reprise une fois puis
+ *  abandonnée, et le cours demandé n'arrive jamais.
  *
- *  ⚠️ **Ce chiffre n'était pas atteignable avant le 08/09/2026.** 250 000
- *  caractères de français pèsent ~71 000 jetons de sortie, auxquels la réflexion
- *  s'ajoute **en se prélevant sur le même budget** : au plafond que nous nous
- *  imposions alors (64 000), la réponse aurait été tronquée, donc perdue. Il ne
- *  passe que parce que le plafond est désormais celui du modèle — 128 000 sur
- *  Sonnet 5, qui porte cette étape (`MAX_OUTPUT_TOKENS`, `providers/claude.ts`).
- *  Marge restante : ~57 000 jetons pour la réflexion. **Ne pas relever ce
- *  plafond sans refaire ce calcul**, et sans vérifier le modèle de l'étape 0.
+ *  ⚠️ **À relever dès que l'écriture pourra durer plus longtemps** — fonction
+ *  plus longue, ou document écrit par parties (voir le backlog). 250 000 était
+ *  l'objectif du 08/09/2026, l'ordre de grandeur d'un cours de 1 000 notions ;
+ *  le plafond de réponse du modèle le permet (~71 000 jetons sur 128 000), c'est
+ *  la durée qui ne le permet pas.
  *
  *  Ce plafond ne vise cependant PAS à loger un cours entier : la consigne dit
  *  explicitement de n'écrire que ce qui MANQUE (`resourceInstruction`), et « un
  *  cours de synthèse, pas un manuel » reste la limite qui compte le plus — la
- *  longueur n'est qu'un filet, pas un objectif. Relevé de 40 000 à 60 000, puis
- *  100 000 le 04/09/2026, puis 250 000 le 08/09/2026. */
-export const MAX_GENERATED_LENGTH = 250_000;
+ *  longueur n'est qu'un filet, pas un objectif. */
+export const MAX_GENERATED_LENGTH = 40_000;
 
 /** Ce que l'étape rend, une fois la réponse du modèle relue. */
 export type ResourceOutcome = {
@@ -131,12 +132,6 @@ export type ResourceOutcome = {
   dropped: boolean;
   /** Ce que le modèle dit avoir fait, en une phrase. Journal seulement. */
   summary: string;
-  /** Les documents qu'il réclame pour travailler, par numéro.
-   *
-   *  Non vide, l'étape rejoue son appel **une fois** avec ces documents joints.
-   *  C'est ce qui permet de ne payer le cours que lorsqu'il faut réellement le
-   *  lire — et non à chaque génération portant une consigne. */
-  needs: number[];
   /** Le nombre de questions d'examen que le modèle a compris de la demande, s'il
    *  y en avait un. `null` = rien à en tirer, le réglage déjà en place s'applique.
    *
@@ -150,21 +145,6 @@ export type ResourceOutcome = {
   examQuestionCount: number | null;
 };
 
-// ⚠️ **Aucun plafond sur le nombre de documents demandés** (04/09/2026).
-//
-// Un plafond de quatre a existé une demi-journée, sur l'idée qu'un modèle
-// réclamant « tout » ferait exactement ce qu'on cherche à éviter. Il était faux,
-// et l'exemple qui l'a fait tomber (Alexis, même jour) est le cas le plus banal
-// qui soit : « relis mon cours et corrige les erreurs ». Un professeur qui
-// demande ça veut que TOUT son cours soit relu ; lui en relire quatre cinquièmes
-// et se taire sur le reste est pire que de refuser.
-//
-// Ce qui borne la dépense, ce n'est pas un compte de documents : c'est que le
-// contenu ne part **que sur demande**, et que la porte se referme après un seul
-// envoi. Un plafond n'aurait rien protégé — le corpus entier tient de toute façon
-// sous `MAX_CORPUS_TOKENS`, puisque la passe chapitres le reçoit en entier à
-// chaque génération.
-
 /** Relit la réponse du modèle. **Fonction pure**, et volontairement méfiante :
  *  tout ce qui n'est pas exploitable devient « ne touche à rien », jamais une
  *  exception. Une étape qui refuse d'écrire laisse la génération continuer ;
@@ -176,7 +156,7 @@ export type ResourceOutcome = {
  *  tentative de finir la phrase) et le journal enregistre qu'elle a eu lieu. */
 export function readResourceOutput(raw: unknown): ResourceOutcome {
   const empty: ResourceOutcome = {
-    body: null, instruction: '', dropped: false, summary: '', needs: [], examQuestionCount: null,
+    body: null, instruction: '', dropped: false, summary: '', examQuestionCount: null,
   };
   if (!raw || typeof raw !== 'object') return empty;
 
@@ -187,21 +167,10 @@ export function readResourceOutput(raw: unknown): ResourceOutcome {
   const dropped = value.dropped === true;
   const summary = typeof document.summary === 'string' ? document.summary.trim().slice(0, 300) : '';
 
-  // « write » et rien d'autre : une valeur inattendue vaut « ne touche à rien »,
-  // qui est toujours la conduite la moins dommageable.
-  const body = document.action === 'write' && typeof document.content === 'string'
-    ? document.content.trim()
-    : null;
-
-  // Les numéros viennent du modèle : on ne garde que des entiers positifs, et on
-  // dédoublonne. Pas de plafond — voir la note ci-dessus : « relis tout mon
-  // cours » est une demande légitime, et la borner en silence rendrait la
-  // réponse fausse sans que personne ne le sache.
-  const needs = Array.isArray(value.needs)
-    ? [...new Set(
-        value.needs.filter((n): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0),
-      )]
-    : [];
+  // Un corps n'existe que si l'écriture a été décidée en amont : le schéma
+  // n'offre pas de champ `document` sinon. Vide ou mal formé, il vaut « ne
+  // touche à rien », qui est toujours la conduite la moins dommageable.
+  const body = typeof document.content === 'string' ? document.content.trim() : null;
 
   // Un entier hors bornes est ramené dans la plage plutôt que rejeté : demander
   // 5000 questions veut dire « beaucoup », pas « erreur » — même logique que
@@ -217,8 +186,67 @@ export function readResourceOutput(raw: unknown): ResourceOutcome {
     instruction,
     dropped,
     summary,
-    needs,
     examQuestionCount,
+  };
+}
+
+/** Combien de titres du document de l'IA la question au décideur en montre au
+ *  plus : de quoi reconnaître ce qu'il couvre déjà, sans lui faire lire le corps
+ *  pour un oui ou un non. */
+const OUTLINE_MAX_HEADINGS = 60;
+
+/** La question fermée « faut-il écrire ? », posée au décideur AVANT l'appel qui
+ *  écrit (docs/architecture.md §7.4). **Fonction pure.**
+ *
+ *  La situation ne porte que des noms et des titres, jamais le contenu d'un
+ *  document : une décision de cette nature se prend sur la demande, et le
+ *  décideur doit rester rapide. Dans le doute, c'est l'appel qui écrit qui lira
+ *  tout — un « oui » de trop coûte une réécriture, un « non » de trop perd la
+ *  demande de l'utilisateur. */
+export function writingQuestion(input: {
+  hint: string;
+  workshop?: { name: string; description?: string | null } | null;
+  chapters: { name: string }[];
+  fileNames: string[];
+  /** Le corps actuel du document de l'IA, s'il existe. Seuls ses titres partent. */
+  current?: string | null;
+}): { state: string; question: string } {
+  const lines: string[] = [];
+  const name = input.workshop?.name?.trim();
+  if (name) {
+    const description = (input.workshop?.description ?? '').trim();
+    lines.push(`L'atelier : « ${name} »${description ? ` — ${description}` : ''}`);
+  }
+  lines.push(input.chapters.length > 0
+    ? `Son programme :\n${input.chapters.map((c) => `- ${c.name}`).join('\n')}`
+    : 'Son programme : vide, aucun chapitre.');
+  lines.push(input.fileNames.length > 0
+    ? `Les documents déposés par l'utilisateur :\n${input.fileNames.map((f) => `- ${f}`).join('\n')}`
+    : "Les documents déposés par l'utilisateur : aucun.");
+
+  const current = (input.current ?? '').trim();
+  if (current) {
+    const headings = current
+      .split('\n')
+      .filter((line) => /^#{1,6}\s/.test(line))
+      .slice(0, OUTLINE_MAX_HEADINGS);
+    lines.push(`Le cours déjà écrit par l'IA pour cet atelier (${current.length} caractères)${headings.length > 0 ? `, dont voici les titres :\n${headings.join('\n')}` : '.'}`);
+  } else {
+    lines.push("Le cours écrit par l'IA pour cet atelier : aucun pour l'instant.");
+  }
+  lines.push(`La demande de l'utilisateur :\n« ${input.hint.trim()} »`);
+
+  return {
+    state: lines.join('\n\n'),
+    // ⚠️ **Posée comme un classement, pas comme « faut-il écrire ? »** (essai du
+    // 25/09/2026, Haiku). Sous cette forme-là, il répondait oui à tout, y compris
+    // à « des questions plus difficiles, en anglais ». ⚠️ **Modifier compte autant
+    // que créer** : une première version ne nommait que les ajouts, et « retire
+    // la partie sur les anecdotes » ou « réécris le cours en anglais » partaient
+    // en « non » — la demande était perdue. Sous cette forme, à température
+    // nulle, 18 sur 19 sur trois passages ; la seule erreur (« insiste sur les
+    // éruptions », un cours de l'IA existant) va dans le sens coûteux.
+    question: "Classe la demande. A : elle demande d'agir sur un COURS — en écrire un, le compléter, l'enrichir, le corriger, ou au contraire en retirer, raccourcir, simplifier, réécrire ou traduire une partie. B : elle ne porte que sur les questions à venir — leur difficulté, leur langue, leur type, les points sur lesquels insister, le contenu d'une question précise —, ou sur rien d'enseignable. La demande est-elle de type A ?",
   };
 }
 
