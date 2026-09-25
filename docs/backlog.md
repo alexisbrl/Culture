@@ -41,7 +41,7 @@
 
 - **⚠️ Remise à zéro de progression — mécanisme de test temporaire à retirer.** `resetUserMastery` (`src/lib/workshops/mastery.ts`) + `resetMyParcoursProgress` (`src/app/actions/parcoursProgress.ts`) + le bouton « réinitialiser ma progression » de `ProgrammeTab.tsx` (clés `programme.resetProgress*`). À supprimer d'un bloc avant la mise en service.
 
-- **Le compte-rendu de génération parle en langage de développeur.** Le bloc « Écarté » affiche des chemins de champ bruts, répétés (« questions.1.content : énoncé vide » trois fois). À reprendre : une phrase par cause, en français, avec son nombre d'occurrences. Fait partie d'un chantier d'affichage plus large sur ce dialogue.
+- **Le compte-rendu de génération parle en langage de développeur.** L'alerte posée à côté du bouton de génération (`ProblemText`, `src/components/ai/AiGenerationButton.tsx`) liste les éléments écartés par leurs chemins de champ bruts, répétés (« questions.1.content : énoncé vide » trois fois). À reprendre : une phrase par cause, en français, avec son nombre d'occurrences.
 
 - **Un chapitre caché ne l'est QUE dans l'écran des paramètres.** Cible : `docs/product-spec.md` § Chapitres (chapitre caché). Le parcours, l'onglet examen et la maîtrise ne filtrent pas encore `hidden = false` (l'index partiel `workshop_chapters_workshop_visible_idx` existe). **Décision ouverte** : que devient la progression affichée d'un élève sur un chapitre écarté — masquée, ou conservée jusqu'à restauration ?
 
@@ -123,7 +123,7 @@
 
 ## T2 2027 — le confort, une fois que ça tourne
 
-- **La barre de progression de la génération IA n'avance pas.** Elle avance d'un cran par appel terminé ; or un atelier à un document ne fait qu'un appel par passe, et il n'y a rien à mesurer pendant un appel. Deux issues honnêtes : (1) lire la réponse du modèle au fil de l'eau et compter les notions à mesure qu'elles arrivent ; (2) retirer la barre au profit des seuls compteurs. Une estimation de temps déguisée en progression est exclue. ⚠️ Dans les deux cas, garder la vague de chargement (`animated` sur `ProgressBar`, `src/components/ui/progress-bar.tsx`).
+- **Le remplissage du bouton de génération n'avance pas pendant un appel.** Il avance d'un cran par étape terminée (`docs/architecture.md` §7.11) ; or une étape peut durer plusieurs minutes, et il n'y a rien à mesurer pendant un appel. Deux issues honnêtes : (1) lire la réponse du modèle au fil de l'eau et compter les notions à mesure qu'elles arrivent ; (2) remplacer le pourcentage par les compteurs. Une estimation de temps déguisée en progression est exclue. ⚠️ Le bouton n'a plus de signe animé depuis le 25/09/2026 : rien ne distingue « ça travaille » de « c'est planté » tant que le pourcentage est figé — à ajouter dans les deux cas.
 
 ## T3 2027
 
