@@ -1232,6 +1232,10 @@
       "removeConfirm": "retirer",
       "empty": "Cet atelier n’a encore aucune notion au programme : il n’y avait rien sur quoi écrire des questions.",
       "emptyLink": "Ajouter un document dans les Ressources"
+    },
+    "box": {
+      "newTitle": "génération par IA",
+      "editTitle": "modifier la génération"
     }
   }
 }

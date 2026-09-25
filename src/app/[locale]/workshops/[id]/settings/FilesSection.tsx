@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { Check, Download, Loader2, Pencil, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { palette, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import AiGenerationButton from '@/components/ai/AiGenerationButton';
+import AiGenerationButton, { AiGenerationBox, type GenerationEditing } from '@/components/ai/AiGenerationButton';
 import ImportBanner from '@/components/ai/ImportBanner';
 import { useGenerationRefresh } from '@/components/ai/generationStore';
 import { ProgressBar } from '@/components/ui/progress-bar';
@@ -23,6 +23,9 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
   const [files, setFiles] = useState<WorkshopFile[]>(initialFiles);
   const [uploadProgress, setUploadProgress] = useState<{ name: string; percent: number } | null>(null);
   const [fileError, setFileError] = useState('');
+  /** L'encadré de génération par IA, ouvert à la place de la zone de dépôt —
+   *  vierge, ou sur une génération en attente qu'on modifie. */
+  const [aiBox, setAiBox] = useState<{ editing?: GenerationEditing } | null>(null);
   const [fileDragOver, setFileDragOver] = useState(false);
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [editingFileName, setEditingFileName] = useState('');
@@ -177,9 +180,22 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
           <ImportBanner workshopId={workshopId} scope="programme" />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
             <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{t('files.title')}</div>
-            <AiGenerationButton workshopId={workshopId} origin="settings-files" />
+            <AiGenerationButton workshopId={workshopId} onOpen={(editing) => setAiBox({ editing })} />
           </div>
 
+          {/* L'encadré de génération prend la place de la zone de dépôt tant qu'il
+              est ouvert (25/09/2026) : on écrit sa consigne là où l'on dépose
+              ses documents, sans fenêtre par-dessus la page. */}
+          {aiBox ? (
+            <AiGenerationBox
+              key={aiBox.editing?.requestId ?? 'new'}
+              workshopId={workshopId}
+              origin="settings-files"
+              editing={aiBox.editing}
+              onClose={() => setAiBox(null)}
+            />
+          ) : (
+          <>
           {/* Zone de dépôt — bordure pointillée `--line-strong`, vire au vert au
               survol et au glisser-déposer. Bordure/fond en className (pas en
               style) pour que le `hover:` CSS puisse s'appliquer. */}
@@ -227,6 +243,8 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
             </span>
             <span style={{ fontSize: 12.5, color: palette.inkSoft }}>{t('files.addFileHint')}</span>
           </label>
+          </>
+          )}
 
           {uploadProgress !== null && (
             <div style={{ padding: '10px 0 8px' }}>

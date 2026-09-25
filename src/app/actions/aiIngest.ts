@@ -129,10 +129,32 @@ export async function startWorkshopGeneration(workshopId: string, input: Generat
 }
 
 /** Modifie une demande qui attend encore son tour (sa consigne, et ce qui en
- *  découle) : elle garde sa place dans la file. `false` : elle est déjà partie. */
-export async function updateGenerationRequest(workshopId: string, requestId: string, input: GenerationInput): Promise<boolean> {
+ *  découle) : elle garde sa place dans la file. Voir `queue.updateRequest`
+ *  pour ce que dit la réponse. */
+export async function updateGenerationRequest(
+  workshopId: string,
+  requestId: string,
+  input: GenerationInput,
+): Promise<'updated' | 'started' | 'gone'> {
+  if (!(await requireManager(workshopId))) return 'started';
+  const updated = await queue.updateRequest(workshopId, requestId, cleanInput(input));
+  // Elle a pu être sautée pendant la modification : si la place est libre, elle
+  // part maintenant.
+  const baseUrl = await ownOrigin();
+  after(() => queue.promoteNext(workshopId, baseUrl));
+  return updated;
+}
+
+/** Met une demande à l'écart le temps de modifier sa consigne, ou l'y remet
+ *  quand la modification est abandonnée. `false` : elle est déjà partie. */
+export async function holdGenerationRequest(workshopId: string, requestId: string, hold: boolean): Promise<boolean> {
   if (!(await requireManager(workshopId))) return false;
-  return queue.updateRequest(workshopId, requestId, cleanInput(input));
+  const held = await queue.holdRequest(workshopId, requestId, hold);
+  if (!hold) {
+    const baseUrl = await ownOrigin();
+    after(() => queue.promoteNext(workshopId, baseUrl));
+  }
+  return held;
 }
 
 /** Retire une demande qui attend encore son tour. Rien n'a été écrit, rien

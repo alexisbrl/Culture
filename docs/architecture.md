@@ -807,8 +807,14 @@ dès que la précédente est finie — onglet fermé ou non. **Trois génératio
 par atelier**, celle qui tourne comprise : au-delà, tout bouton de génération s'éteint et
 dit pourquoi au survol. Trois passages font partir la suivante, un seul y parvient : la fin
 (ou l'arrêt) de la précédente, chaque lecture d'avancement, la veille planifiée. Une demande
-qui attend garde sa place quand on **modifie sa consigne**, et se retire d'une croix, après
-confirmation.
+qui attend se retire d'une croix, après confirmation.
+
+**Modifier une demande qui attend la met à l'écart, sans lui faire perdre sa place.** Tant
+que sa consigne est rouverte, la file la saute : si c'est son tour, la suivante passe devant.
+Enregistrer ou abandonner la modification la remet en tête de celles qui attendent. Une
+modification restée ouverte plus de dix minutes fait **quitter la file** à la demande — elle
+ne part jamais avec une consigne qu'on est en train de réécrire —, mais l'encadré garde le
+texte, et l'enregistrer la redemande, en dernière position.
 
 **Seuls les Paramètres construisent le programme.** Une liste de questions n'écrit que des
 questions, sur les notions en place, et n'écrit jamais le document de l'IA. Ce qui dépend de
@@ -817,8 +823,14 @@ avant peut encore le remplir : si l'atelier n'a alors aucune notion au programme
 échoue sans rien appeler, et son encadré le dit à la place de sa barre, avec un lien vers les
 Ressources.
 
-**Chaque porte montre ce qu'elle a lancé, à l'instant du clic.** La fenêtre de lancement se
-ferme au clic et la génération se montre aussitôt, avant la réponse du serveur. Le bouton des
+**Un encadré, jamais une fenêtre.** « Générer par IA » ouvre un encadré en place, fait comme
+l'encadré de création de la banque d'examen : à la place de la zone de dépôt dans Ressources,
+au-dessus des listes dans Chapitre & Notion. Il ne montre que la consigne et ses deux boutons ;
+ce que la génération va faire et ce qu'on peut lui demander passent dans l'infobulle.
+Modifier une génération en attente rouvre ce même encadré, là où elle se trouve.
+
+**Chaque porte montre ce qu'elle a lancé, à l'instant du clic.** L'encadré se ferme au clic
+et la génération se montre aussitôt, avant la réponse du serveur. Le bouton des
 Paramètres — le même dans Ressources et dans Chapitre & Notion — **devient** l'avancement de
 la génération qu'il a lancée : « en attente » avec son explication au survol, puis rempli au
 fil des étapes avec le pourcentage, une coche brève à la réussite. Une liste de questions peut

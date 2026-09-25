@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   cancelGenerationRequest,
   cancelWorkshopImport,
+  holdGenerationRequest,
   startWorkshopGeneration,
   updateGenerationRequest,
   type GenerationInput,
@@ -413,14 +414,39 @@ export async function launchGeneration(workshopId: string, input: GenerationInpu
   restart(workshopId, entry);
 }
 
+/** Rouvre une génération qui attend encore, pour modifier sa consigne : la file
+ *  la saute tant que dure la modification, et elle garde sa place. `false` :
+ *  elle est partie entre-temps — il n'y a plus rien à modifier. */
+export async function holdGeneration(workshopId: string, id: string): Promise<boolean> {
+  if (id.startsWith('local:')) return false;
+  const held = await holdGenerationRequest(workshopId, id, true).catch(() => false);
+  if (!held) restart(workshopId, entryOf(workshopId));
+  return held;
+}
+
+/** La modification est abandonnée : la génération reprend sa place, et part si
+ *  c'est son tour. */
+export async function releaseGeneration(workshopId: string, id: string): Promise<void> {
+  if (id.startsWith('local:')) return;
+  await holdGenerationRequest(workshopId, id, false).catch(() => false);
+  restart(workshopId, entryOf(workshopId));
+}
+
 /** Modifie une génération qui attend encore son tour : elle garde sa place.
  *  Partie entre-temps, elle n'est plus modifiable — le suivi la montre alors
  *  telle qu'elle tourne. */
 export async function editGeneration(workshopId: string, id: string, input: GenerationInput): Promise<void> {
   const entry = entryOf(workshopId);
-  if (id.startsWith('local:')) return;
+  if (id.startsWith('local:')) return launchGeneration(workshopId, input);
   patchItem(entry, id, { hint: input.prompt });
-  await updateGenerationRequest(workshopId, id, input).catch(() => false);
+  const outcome = await updateGenerationRequest(workshopId, id, input).catch(() => 'started' as const);
+  // Elle a quitté la file (modification restée ouverte trop longtemps, ou
+  // retirée ailleurs) : la consigne n'est pas perdue, elle repart en dernière
+  // position, comme une demande neuve.
+  if (outcome === 'gone') {
+    removeItem(entry, id);
+    return launchGeneration(workshopId, input);
+  }
   restart(workshopId, entry);
 }
 

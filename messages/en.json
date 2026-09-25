@@ -1232,6 +1232,10 @@
       "removeConfirm": "remove",
       "empty": "This workshop has no notion in its programme yet: there was nothing to write questions about.",
       "emptyLink": "Add a document in Resources"
+    },
+    "box": {
+      "newTitle": "AI generation",
+      "editTitle": "edit the generation"
     }
   }
 }

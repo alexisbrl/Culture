@@ -99,6 +99,10 @@ type Props = {
    *  d'autre : le dialogue se comporte exactement pareil d'un bouton à l'autre. */
   origin: GenerationOrigin;
   onClose: () => void;
+  /** Sortie SANS lancer (annuler, croix). Absente, c'est `onClose` qui sert :
+   *  seule la modification d'une génération en attente a besoin de distinguer —
+   *  abandonner la remet dans la file, enregistrer la met à jour. */
+  onCancel?: () => void;
   /** Où le dialogue est posé (07/09/2026).
    *
    *  `modal` (défaut) : la fenêtre flottante habituelle, avec son fond flouté et
@@ -120,7 +124,7 @@ type Props = {
   editing?: { requestId: string; prompt: string };
 };
 
-export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, frame = 'modal', hint: hintProp, onHintChange, editing }: Props) {
+export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, onCancel, frame = 'modal', hint: hintProp, onHintChange, editing }: Props) {
   const t = useTranslations('ai');
 
   // ─── Les documents ne se choisissent plus, et ne s'affichent plus ────────
@@ -258,7 +262,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
     onClose();
   }
 
-  const requestClose = onClose;
+  const requestClose = onCancel ?? onClose;
 
   // Le corps est écrit une seule fois : seule la coquille change (voir `frame`).
   // `position: relative` en ligne — la croix se pose en absolu, et sans repère
@@ -324,7 +328,15 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
 
             {frame === 'inline' && <div style={{ marginBottom: 16 }} />}
 
-            <SectionLabel info={frame === 'inline' ? t('hint.info') : undefined} infoMore={frame === 'inline' ? t('hint.infoIdeas') : undefined}>{t('hint.label')}</SectionLabel>
+            {/* En encadré, tout le texte d'aide passe dans l'infobulle (25/09/2026,
+                demandé par Alexis — même sobriété que dans la banque d'examen) :
+                ce que la génération va faire, puis ce qu'on peut lui demander. */}
+            <SectionLabel
+              info={frame === 'inline' ? (forcedContext === null ? planText : t('hint.info')) : undefined}
+              infoMore={frame === 'inline' ? (forcedContext === null ? t('hint.help') : t('hint.infoIdeas')) : undefined}
+            >
+              {t('hint.label')}
+            </SectionLabel>
             {/* Champ libre, facultatif, posé APRÈS les cases : il précise ce
                 qu'on vient de demander, il ne le remplace pas. L'exemple n'est
                 pas décoratif — sans lui, personne ne devine que c'est ici qu'on
@@ -344,7 +356,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
               // qu'il ne puisse pas mentir le jour où la constante bouge.
               // En fenêtre, le champ sert aussi à construire un programme : son
               // exemple d'origine y reste plus juste.
-              placeholder={frame === 'inline' ? t('hint.placeholderExam', { count: DEFAULT_EXAM_QUESTIONS }) : t('hint.placeholder')}
+              placeholder={forcedContext === 'exam' ? t('hint.placeholderExam', { count: DEFAULT_EXAM_QUESTIONS }) : t('hint.placeholder')}
               style={{
                 // ⚠️ **Plus de poignée de redimensionnement** (07/09/2026,
                 // demandé par Alexis) : la hauteur suit le texte saisi, comme le

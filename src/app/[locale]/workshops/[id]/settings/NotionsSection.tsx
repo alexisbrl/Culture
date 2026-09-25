@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { ChevronDown, EllipsisVertical, EyeOff, GripVertical, Loader2, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { palette, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import AiGenerationButton from '@/components/ai/AiGenerationButton';
+import AiGenerationButton, { AiGenerationBox, type GenerationEditing } from '@/components/ai/AiGenerationButton';
 import ImportBanner from '@/components/ai/ImportBanner';
 import { useGenerationRefresh } from '@/components/ai/generationStore';
 import {
@@ -218,6 +218,9 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  /** L'encadré de génération par IA, ouvert au-dessus des listes — vierge, ou
+   *  sur une génération en attente qu'on modifie. */
+  const [aiBox, setAiBox] = useState<{ editing?: GenerationEditing } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Notion | null>(null);
 
   // Chapitres
@@ -591,9 +594,39 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
           chapitres et les notions ; il ne s'affiche que tant que le lot est
           réellement annulable, et disparaît de lui-même. */}
       <ImportBanner workshopId={workshopId} scope="programme" />
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <AiGenerationButton workshopId={workshopId} origin="settings-notions" />
+
+      {/* ─── Les titres, et le bouton sur la même ligne (25/09/2026) ─────────
+          Comme dans Ressources : le bouton de génération s'aligne sur les
+          titres. Les titres sortent donc des colonnes pour former une ligne à
+          eux — c'est ce qui permet de poser l'encadré de génération ENTRE eux
+          et les listes, qui glissent vers le bas quand il s'ouvre. Sur
+          téléphone, chaque titre reste en tête de sa colonne : seule la ligne
+          du bouton demeure ici. */}
+      <div className="grid grid-cols-1 md:grid-cols-[0.85fr_1.45fr]" style={{ gap: 16, alignItems: 'center', marginBottom: 10 }}>
+        <div className="hidden md:block" style={{ fontSize: 17, fontWeight: 500, color: palette.ink, padding: '0 2px' }}>
+          {t('chapters.title')}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div className="hidden md:block" style={{ fontSize: 17, fontWeight: 500, color: palette.ink, padding: '0 2px' }}>
+            {t('notions.title')}
+          </div>
+          <span style={{ marginLeft: 'auto' }}>
+            <AiGenerationButton workshopId={workshopId} onOpen={(editing) => setAiBox({ editing })} />
+          </span>
+        </div>
       </div>
+
+      {aiBox && (
+        <div style={{ marginBottom: 16 }}>
+          <AiGenerationBox
+            key={aiBox.editing?.requestId ?? 'new'}
+            workshopId={workshopId}
+            origin="settings-notions"
+            editing={aiBox.editing}
+            onClose={() => setAiBox(null)}
+          />
+        </div>
+      )}
 
       {(
         // `minWidth: 0` sur chaque colonne : une colonne de grille ne descend pas
@@ -605,7 +638,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         <div className="grid grid-cols-1 md:grid-cols-[0.85fr_1.45fr]" style={{ gap: 16, alignItems: 'start' }}>
           {/* ── Colonne Chapitres ── */}
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: palette.ink, padding: '0 2px 8px' }}>
+            <div className="md:hidden" style={{ fontSize: 17, fontWeight: 500, color: palette.ink, padding: '0 2px 8px' }}>
               {t('chapters.title')}
             </div>
             <div style={{ background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 14, boxShadow: shadow.sm, overflow: 'hidden' }}>
@@ -810,7 +843,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
 
           {/* ── Colonne Notions du chapitre sélectionné ── */}
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: palette.ink, padding: '0 2px 8px' }}>
+            <div className="md:hidden" style={{ fontSize: 17, fontWeight: 500, color: palette.ink, padding: '0 2px 8px' }}>
               {t('notions.title')}
             </div>
             <div style={{ background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 14, boxShadow: shadow.sm, overflow: 'hidden' }}>

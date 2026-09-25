@@ -58,6 +58,13 @@ export const MAX_ACTIVE_GENERATIONS = 3;
  *  secondes au plus). Elle redevient une demande en attente. */
 const STARTING_TIMEOUT_MS = 3 * 60 * 1000;
 
+/** Une demande rouverte pour modifier sa consigne est mise à l'écart le temps
+ *  de la modification : la file la saute, et elle garde sa place. Passé ce
+ *  délai sans enregistrement ni abandon (un encadré oublié ouvert), elle QUITTE
+ *  la file (décision d'Alexis du 25/09/2026) : l'encadré garde la consigne à
+ *  l'écran, et l'enregistrer la remet dans la file, en dernière position. */
+const HOLD_MS = 10 * 60 * 1000;
+
 /** L'écran ne suit que les demandes récentes : au-delà, une génération est
  *  finie depuis longtemps, et le bandeau des imports prend le relais. */
 const RECENT_MS = 24 * 60 * 60 * 1000;
@@ -106,12 +113,29 @@ type RequestRow = {
   import_id: string | null;
   started_at: string | null;
   error: string | null;
+  held_until: string | null;
   created_at: string;
 };
 
-const COLUMNS = 'id, workshop_id, created_by, input, base_url, import_id, started_at, error, created_at';
+const COLUMNS = 'id, workshop_id, created_by, input, base_url, import_id, started_at, error, held_until, created_at';
+
+/** Retire de la file les demandes dont la modification a expiré. Fait AVANT
+ *  toute lecture de la file : une demande expirée qu'on y laisserait partirait
+ *  avec sa consigne d'avant la modification. */
+async function dropExpiredHolds(workshopId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase
+    .from('ai_generation_requests')
+    .delete()
+    .eq('workshop_id', workshopId)
+    .is('import_id', null)
+    .is('started_at', null)
+    .lt('held_until', new Date().toISOString());
+  if (error) console.error('dropExpiredHolds error:', error);
+}
 
 async function recentRequests(workshopId: string): Promise<RequestRow[]> {
+  await dropExpiredHolds(workshopId);
   const supabase = getSupabaseServerClient();
   const since = new Date(Date.now() - RECENT_MS).toISOString();
   const { data, error } = await supabase
@@ -125,6 +149,8 @@ async function recentRequests(workshopId: string): Promise<RequestRow[]> {
 }
 
 const isWaiting = (r: RequestRow) => r.import_id === null && r.error === null;
+/** Rouverte pour modification : la file la saute tant que ça dure. */
+const isHeld = (r: RequestRow, now: number) => r.held_until !== null && Date.parse(r.held_until) > now;
 const isStarting = (r: RequestRow, now: number) =>
   isWaiting(r) && r.started_at !== null && now - Date.parse(r.started_at) < STARTING_TIMEOUT_MS;
 
@@ -179,13 +205,55 @@ export async function cancelRequest(workshopId: string, requestId: string): Prom
   return (data ?? []).length > 0;
 }
 
-/** Modifie une demande qui attend encore son tour : elle garde sa place dans la
- *  file. `false` : elle est déjà partie, ou n'existe plus. */
-export async function updateRequest(workshopId: string, requestId: string, input: RequestInput): Promise<boolean> {
+/** Met une demande à l'écart le temps de modifier sa consigne (`hold`), ou
+ *  l'y remet (`false`, modification abandonnée). `false` en retour : elle est
+ *  déjà partie — il n'y a plus rien à modifier. */
+export async function holdRequest(workshopId: string, requestId: string, hold: boolean): Promise<boolean> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from('ai_generation_requests')
-    .update({ input })
+    .update({ held_until: hold ? new Date(Date.now() + HOLD_MS).toISOString() : null })
+    .eq('id', requestId)
+    .eq('workshop_id', workshopId)
+    .is('import_id', null)
+    .is('started_at', null)
+    .select('id');
+  if (error) {
+    console.error('holdRequest error:', error);
+    return false;
+  }
+  return (data ?? []).length > 0;
+}
+
+/** Modifie une demande qui attend encore son tour : elle garde sa place dans la
+ *  file, et la mise à l'écart de la modification tombe.
+ *
+ *  `updated` : c'est fait. `started` : elle est partie entre-temps, avec sa
+ *  consigne d'avant. `gone` : elle n'est plus dans la file — retirée, ou sa
+ *  modification a expiré ; l'écran la redemande alors comme une neuve. */
+export async function updateRequest(
+  workshopId: string,
+  requestId: string,
+  input: RequestInput,
+): Promise<'updated' | 'started' | 'gone'> {
+  if (await updateWaiting(workshopId, requestId, input)) return 'updated';
+  const supabase = getSupabaseServerClient();
+  const { data } = await supabase
+    .from('ai_generation_requests')
+    .select('id')
+    .eq('id', requestId)
+    .eq('workshop_id', workshopId)
+    .maybeSingle();
+  return data ? 'started' : 'gone';
+}
+
+async function updateWaiting(workshopId: string, requestId: string, input: RequestInput): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('ai_generation_requests')
+    .update({ input, held_until: null })
+    // Une modification expirée ne se ranime pas : la demande a quitté la file.
+    .or(`held_until.is.null,held_until.gt.${new Date().toISOString()}`)
     .eq('id', requestId)
     .eq('workshop_id', workshopId)
     .is('import_id', null)
@@ -243,7 +311,9 @@ export async function promoteNext(workshopId: string, baseUrl: string): Promise<
       const rows = await recentRequests(workshopId);
       const now = Date.now();
       if (rows.some((r) => isStarting(r, now))) return;
-      const next = rows.find((r) => isWaiting(r) && r.base_url === baseUrl);
+      // La première qui attend et n'est pas en cours de modification : celle
+      // qu'on modifie garde sa place, les suivantes peuvent passer devant.
+      const next = rows.find((r) => isWaiting(r) && !isHeld(r, now) && r.base_url === baseUrl);
       if (!next) return;
 
       const staleBefore = new Date(now - STARTING_TIMEOUT_MS).toISOString();
@@ -339,7 +409,7 @@ export async function listRequests(workshopId: string, followed: readonly string
       continue;
     }
     if (r.import_id === null) {
-      const starting = isStarting(r, now) || !placeTaken;
+      const starting = isStarting(r, now) || (!placeTaken && !isHeld(r, now));
       if (starting) placeTaken = true;
       views.push({ id: r.id, door, state: starting ? 'starting' : 'queued', importId: null, hint: r.input?.prompt ?? r.input?.hint ?? '', status: null, error: null });
       continue;

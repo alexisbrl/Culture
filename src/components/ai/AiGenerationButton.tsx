@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { Check, Info, Pencil, Sparkles, TriangleAlert, X } from 'lucide-react';
@@ -8,6 +8,7 @@ import { Check, Info, Pencil, Sparkles, TriangleAlert, X } from 'lucide-react';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { Tooltip } from '@/components/ui/tooltip';
 import { PIPELINE_ERRORS } from '@/lib/ingest/pipeline';
+import { palette } from '@/lib/theme';
 
 import type { GenerationOrigin } from '@/lib/ingest/journal';
 
@@ -17,27 +18,35 @@ import {
   capacityOf,
   dismissGeneration,
   displayPhase,
+  holdGeneration,
+  releaseGeneration,
   useGenerations,
   type GenerationDoor,
   type GenerationItem,
   type GenerationProblem,
 } from './generationStore';
 
-// Le bouton « générer par IA » des Paramètres, et les encadrés d'avancement des
-// listes de questions.
+// Le bouton « générer par IA » des Paramètres, l'encadré où l'on écrit sa
+// consigne, et les encadrés d'avancement des listes de questions.
 //
 // Les Paramètres ont **deux portes sur la même fonction** — Ressources et
 // Chapitre & Notion — et c'est voulu : on arrive à la génération soit par les
-// documents, soit par le programme qu'ils alimentent. Le dialogue derrière est
-// le même (§8 du plan d'ingestion).
+// documents, soit par le programme qu'ils alimentent.
 //
-// ─── Le bouton EST l'avancement (25/09/2026) ─────────────────────────────────
+// ─── Un encadré, jamais une fenêtre (25/09/2026) ─────────────────────────────
 //
-// Le dialogue se ferme dès le lancement. Le bouton des Paramètres montre alors
-// la génération QU'IL a lancée — et seulement elle : en attente tant qu'une
-// autre tourne, puis rempli de vert au fil des étapes, avec le pourcentage. Les
-// deux portes n'en font qu'une : lancer depuis Ressources fait basculer le
-// bouton de Chapitre & Notion au même instant.
+// Cliquer « générer par IA » ouvre un ENCADRÉ en place — à la place de la zone
+// de dépôt dans Ressources, au-dessus des listes dans Chapitre & Notion —, fait
+// comme l'encadré de création de la banque d'examen. Modifier une génération en
+// attente rouvre ce même encadré, là où elle se trouve.
+//
+// ─── Le bouton EST l'avancement ──────────────────────────────────────────────
+//
+// L'encadré se ferme dès le lancement. Le bouton des Paramètres montre alors la
+// génération QU'IL a lancée — et seulement elle : en attente tant qu'une autre
+// tourne, puis rempli de vert au fil des étapes, avec le pourcentage. Les deux
+// portes n'en font qu'une : lancer depuis Ressources fait basculer le bouton de
+// Chapitre & Notion au même instant.
 //
 // Une liste de questions, elle, peut lancer plusieurs générations à la suite
 // (le chapitre 1, puis le 2…) : chacune y a son encadré, en tête de liste.
@@ -46,11 +55,14 @@ import {
 // confondues : au-delà, tout bouton de génération s'éteint et dit pourquoi au
 // survol.
 
+/** Une génération rouverte pour modifier sa consigne. */
+export type GenerationEditing = { requestId: string; prompt: string };
+
 type Props = {
   workshopId: string;
-  /** Laquelle des portes est celle-ci. Ne change rien au comportement : c'est le
-   *  journal de bord qui la relira (@/lib/ingest/journal). */
-  origin: GenerationOrigin;
+  /** Ouvre l'encadré de génération, là où l'écran le pose — vierge, ou sur la
+   *  génération en attente qu'on veut modifier. */
+  onOpen: (editing?: GenerationEditing) => void;
   /** Rendu compact, pour se glisser dans une barre d'outils déjà chargée. */
   compact?: boolean;
 };
@@ -66,62 +78,135 @@ function itemOf(items: GenerationItem[], door: GenerationDoor): GenerationItem |
 const editable = (item: GenerationItem, phase: GenerationItem['phase']) =>
   phase === 'queued' && !item.importId && !item.id.startsWith('local:');
 
-export default function AiGenerationButton({ workshopId, origin, compact = false }: Props) {
+export default function AiGenerationButton({ workshopId, onOpen, compact = false }: Props) {
   const t = useTranslations('ai');
-  const [open, setOpen] = useState(false);
-  // `open` en second argument : la liste est relue à chaque ouverture, donc un
-  // document téléversé (ou supprimé) juste avant est pris en compte sans avoir à
-  // recharger la page.
-  const files = useWorkshopFiles(workshopId, open);
   const state = useGenerations(workshopId);
   const item = itemOf(state.items, 'settings');
   const phase = item ? displayPhase(state, item) : null;
   const { full } = capacityOf(state);
   // Une alerte n'occupe pas le bouton : on peut relancer à côté d'elle.
   const busy = item !== null && item.phase !== 'problem';
-  // En attente, le bouton rouvre sa consigne pour la modifier.
-  const editing = item && phase && editable(item, phase) ? { requestId: item.id, prompt: item.hint } : undefined;
 
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       {busy && phase
-        ? <GenerationBar item={item} phase={phase} compact={compact} onEdit={editing ? () => setOpen(true) : undefined} />
+        ? (
+          <GenerationBar
+            item={item}
+            phase={phase}
+            compact={compact}
+            // En attente, le bouton rouvre sa consigne pour la modifier.
+            onEdit={editable(item, phase) ? () => onOpen({ requestId: item.id, prompt: item.hint }) : undefined}
+          />
+        )
         : (
           <IdleButton
             compact={compact}
             disabled={full}
             disabledReason={t('queue.full')}
-            onClick={() => setOpen(true)}
+            onClick={() => onOpen()}
           />
         )}
       {item && phase && <GenerationCompanions workshopId={workshopId} item={item} phase={phase} />}
-
-      {open && (editing || (!busy && !full)) && (
-        <AiGenerationDialog
-          key={editing?.requestId ?? 'new'}
-          workshopId={workshopId}
-          files={files ?? []}
-          origin={origin}
-          editing={editing}
-          onClose={() => setOpen(false)}
-        />
-      )}
     </span>
   );
 }
 
+/** L'encadré de génération : sa ligne de titre, puis la consigne et ses deux
+ *  boutons — le même contenu que l'ancienne fenêtre, sans la fenêtre.
+ *
+ *  Rouvert sur une génération en attente (`editing`), il la met à l'écart de
+ *  la file le temps de la modification : la file la saute, elle garde sa place.
+ *  Abandonner la remet dans la file ; enregistrer la met à jour. Si la
+ *  modification traîne au point que la génération quitte la file, la consigne
+ *  reste là, et l'enregistrer la redemande (@/lib/ingest/queue). */
+export function AiGenerationBox({ workshopId, origin, forcedContext = null, editing, onClose, titleSlot, hint, onHintChange }: {
+  workshopId: string;
+  origin: GenerationOrigin;
+  forcedContext?: 'parcours' | 'exam' | null;
+  editing?: GenerationEditing;
+  onClose: () => void;
+  /** Ce qui se pose à droite de la ligne de titre (la bascule manuel / IA de
+   *  la banque d'examen). */
+  titleSlot?: React.ReactNode;
+  hint?: string;
+  onHintChange?: (hint: string) => void;
+}) {
+  const t = useTranslations('ai');
+  // Une liste de questions ne relit pas les documents : inutile de les charger.
+  const files = useWorkshopFiles(workshopId, editing?.requestId, forcedContext !== null);
+  const requestId = editing?.requestId;
+
+  // La mise à l'écart, à l'ouverture. Partie entre-temps, la génération n'a
+  // plus rien à modifier : l'encadré se referme.
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; });
+  useEffect(() => {
+    if (!requestId) return;
+    let cancelled = false;
+    void holdGeneration(workshopId, requestId).then((held) => { if (!held && !cancelled) closeRef.current(); });
+    return () => { cancelled = true; };
+  }, [workshopId, requestId]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 16px', borderRadius: 14, background: palette.surfaceRaised, border: `1px solid ${palette.line}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 30 }}>
+        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: palette.green }}>
+          {(editing ? t('box.editTitle') : t('box.newTitle')).toUpperCase()}
+        </div>
+        {titleSlot}
+      </div>
+      <AiGenerationDialog
+        workshopId={workshopId}
+        files={files ?? []}
+        forcedContext={forcedContext}
+        origin={origin}
+        frame="inline"
+        editing={editing}
+        hint={hint}
+        onHintChange={onHintChange}
+        onClose={onClose}
+        onCancel={() => {
+          if (requestId) void releaseGeneration(workshopId, requestId);
+          onClose();
+        }}
+      />
+    </div>
+  );
+}
+
 /** Les générations lancées depuis une liste de questions, une par encadré, en
- *  tête de liste. Rien quand il n'y en a pas. */
+ *  tête de liste. Rien quand il n'y en a pas.
+ *
+ *  Modifier une génération en attente rouvre l'encadré de génération À SA
+ *  PLACE, comme on rouvre une question pour la modifier. */
 export function AiGenerationQueue({ workshopId, door }: { workshopId: string; door: Exclude<GenerationDoor, 'settings'> }) {
   const state = useGenerations(workshopId);
   const items = state.items.filter((i) => i.door === door);
-  // Le dialogue de modification : un seul à la fois, pour l'encadré cliqué.
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const edited = items.find((i) => i.id === editingId);
-  if (items.length === 0) return null;
+  // La modification en cours. Gardée à part de la génération elle-même : si
+  // celle-ci quitte la file pendant qu'on écrit, l'encadré et sa consigne restent.
+  const [editing, setEditing] = useState<GenerationEditing | null>(null);
+  const [draft, setDraft] = useState('');
+  const origin: GenerationOrigin = door === 'exam' ? 'questions-exam' : 'questions-parcours';
+  const box = editing && (
+    <AiGenerationBox
+      key={editing.requestId}
+      workshopId={workshopId}
+      origin={origin}
+      forcedContext={door}
+      editing={editing}
+      hint={draft}
+      onHintChange={setDraft}
+      onClose={() => setEditing(null)}
+    />
+  );
+  const shown = items.some((i) => i.id === editing?.requestId);
+  if (items.length === 0 && !box) return null;
   return (
     <>
+      {!shown && box}
       {items.map((item) => {
+        if (item.id === editing?.requestId) return <div key={item.id}>{box}</div>;
         const phase = displayPhase(state, item);
         return (
           <GenerationCard
@@ -129,23 +214,10 @@ export function AiGenerationQueue({ workshopId, door }: { workshopId: string; do
             workshopId={workshopId}
             item={item}
             phase={phase}
-            onEdit={editable(item, phase) ? () => setEditingId(item.id) : undefined}
+            onEdit={editable(item, phase) ? () => { setDraft(item.hint); setEditing({ requestId: item.id, prompt: item.hint }); } : undefined}
           />
         );
       })}
-      {edited && editable(edited, displayPhase(state, edited)) && (
-        <AiGenerationDialog
-          key={edited.id}
-          workshopId={workshopId}
-          // Une liste de questions ne lit pas les documents : elle n'écrit que
-          // des questions sur le programme en place.
-          files={[]}
-          forcedContext={door}
-          origin={door === 'exam' ? 'questions-exam' : 'questions-parcours'}
-          editing={{ requestId: edited.id, prompt: edited.hint }}
-          onClose={() => setEditingId(null)}
-        />
-      )}
     </>
   );
 }
