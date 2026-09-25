@@ -1199,7 +1199,13 @@ async function writeGeneratedFile(
  *
  *  Ne lève jamais : un téléversement raté prive la génération de cette matière,
  *  ce qui est fâcheux mais rattrapable à la génération suivante — la faire
- *  échouer entière ne le serait pas. */
+ *  échouer entière ne le serait pas.
+ *
+ *  ⚠️ **Une réécriture REMPLACE l'ancienne version dans le lot, elle ne s'y
+ *  ajoute pas.** `writeGeneratedFile` vient d'effacer l'ancien objet : le
+ *  laisser dans la liste faisait lire aux étapes suivantes une clé qui n'existe
+ *  plus, et toute la génération tombait sur « Fichier illisible ». L'ancienne
+ *  version sort donc de la liste même si le nouveau téléversement échoue. */
 async function attachDocument(
   importId: string,
   provider: PlanProvider,
@@ -1207,11 +1213,15 @@ async function attachDocument(
   file: { fileId: string; key: string; fileName: string; mimeType: string; bytes: Uint8Array },
 ): Promise<number> {
   try {
-    const [uploaded] = await provider.prepare([file]);
-    if (!uploaded) return prepared.length;
+    const kept = prepared.filter((doc) => doc.fileId !== file.fileId);
+    const [uploaded] = await provider.prepare([file]).catch((error) => {
+      console.warn('[ingest] document de l’IA non remis au modèle :', error instanceof Error ? error.message : error);
+      return [];
+    });
+    if (!uploaded && kept.length === prepared.length) return prepared.length;
 
     const supabase = getSupabaseServerClient();
-    const next = [...prepared, uploaded];
+    const next = uploaded ? [...kept, uploaded] : kept;
     const { error } = await supabase
       .from('ai_imports')
       .update({ file_ids: next as unknown as string[] })
