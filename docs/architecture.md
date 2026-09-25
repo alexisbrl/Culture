@@ -894,6 +894,10 @@ Elles forment une chaîne, et chacune borne un débordement que la précédente 
 - **1 à 200 énoncés d'examen par lancement**, 500 questions par import — ce dernier est un
   **fusible** contre une boucle emballée, pas un quota, et il doit rester au-dessus de
   l'usage nominal.
+- **Le document de l'IA : 40 000 caractères**, soit ce qu'un seul appel écrit dans la
+  durée d'une fonction serveur (cinq minutes, à ~150 caractères par seconde réflexion
+  comprise, avec de la marge). Ce n'est pas une limite de qualité : le plafond suit la
+  durée d'écriture permise, et monte avec elle.
 - **Le plafond de réponse d'un appel est celui du modèle, jamais un réglage à nous** — chez
   chaque fournisseur. Une réponse coupée est perdue entière mais facturée, alors qu'un
   plafond haut ne coûte rien : on ne paie que ce qui est produit. La taille des réponses se

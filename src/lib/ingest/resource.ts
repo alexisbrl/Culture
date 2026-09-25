@@ -96,25 +96,24 @@ const BODY_MARKER = '<!-- culture:corps -->';
  *  sortie à chaque génération qui y touche — en temps de génération surtout, le
  *  coût en tokens restant marginal au regard de ce que le modèle accepte.
  *
- *  **250 000 caractères depuis le 08/09/2026**, à la demande d'Alexis : c'est
- *  l’ordre de grandeur d’un cours qui porte 1 000 notions, le plafond retenu le
- *  même jour pour un atelier. Environ 150 pages de texte simple.
+ *  **40 000 caractères depuis le 25/09/2026** (Alexis) : ce qu'un seul appel
+ *  écrit dans la durée d'une fonction serveur, cinq minutes. Mesuré le
+ *  24/09/2026 : ~150 caractères par seconde, réflexion comprise (13 300 en 87 s,
+ *  21 600 en 141 s), soit ~46 000 en 300 s — 40 000 garde de la marge pour une
+ *  réflexion plus longue. Au-delà, l'étape est coupée, reprise une fois puis
+ *  abandonnée, et le cours demandé n'arrive jamais.
  *
- *  ⚠️ **Ce chiffre n'était pas atteignable avant le 08/09/2026.** 250 000
- *  caractères de français pèsent ~71 000 jetons de sortie, auxquels la réflexion
- *  s'ajoute **en se prélevant sur le même budget** : au plafond que nous nous
- *  imposions alors (64 000), la réponse aurait été tronquée, donc perdue. Il ne
- *  passe que parce que le plafond est désormais celui du modèle — 128 000 sur
- *  Sonnet 5, qui porte cette étape (`MAX_OUTPUT_TOKENS`, `providers/claude.ts`).
- *  Marge restante : ~57 000 jetons pour la réflexion. **Ne pas relever ce
- *  plafond sans refaire ce calcul**, et sans vérifier le modèle de l'étape 0.
+ *  ⚠️ **À relever dès que l'écriture pourra durer plus longtemps** — fonction
+ *  plus longue, ou document écrit par parties (voir le backlog). 250 000 était
+ *  l'objectif du 08/09/2026, l'ordre de grandeur d'un cours de 1 000 notions ;
+ *  le plafond de réponse du modèle le permet (~71 000 jetons sur 128 000), c'est
+ *  la durée qui ne le permet pas.
  *
  *  Ce plafond ne vise cependant PAS à loger un cours entier : la consigne dit
  *  explicitement de n'écrire que ce qui MANQUE (`resourceInstruction`), et « un
  *  cours de synthèse, pas un manuel » reste la limite qui compte le plus — la
- *  longueur n'est qu'un filet, pas un objectif. Relevé de 40 000 à 60 000, puis
- *  100 000 le 04/09/2026, puis 250 000 le 08/09/2026. */
-export const MAX_GENERATED_LENGTH = 250_000;
+ *  longueur n'est qu'un filet, pas un objectif. */
+export const MAX_GENERATED_LENGTH = 40_000;
 
 /** Ce que l'étape rend, une fois la réponse du modèle relue. */
 export type ResourceOutcome = {
@@ -193,7 +192,7 @@ export function readResourceOutput(raw: unknown): ResourceOutcome {
 
 /** Combien de titres du document de l'IA la question au décideur en montre au
  *  plus : de quoi reconnaître ce qu'il couvre déjà, sans lui faire lire le corps
- *  — jusqu'à 250 000 caractères — pour un oui ou un non. */
+ *  pour un oui ou un non. */
 const OUTLINE_MAX_HEADINGS = 60;
 
 /** La question fermée « faut-il écrire ? », posée au décideur AVANT l'appel qui

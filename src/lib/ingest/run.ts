@@ -1009,7 +1009,7 @@ async function resourceStep(
     hint,
     workshop,
     chapters: chapters.map((c) => ({ name: c.name })),
-    // Le document courant ne sert qu'à écrire : il peut peser 250 000 caractères.
+    // Le document courant ne sert qu'à écrire : inutile de le transmettre sinon.
     current: write ? (existing?.body ?? null) : null,
     fileNames: write ? fileNames : [],
     write,

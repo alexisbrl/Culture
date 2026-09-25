@@ -96,7 +96,7 @@ describe('writingQuestion — ce que voit le décideur', () => {
   });
 
   it('ne montre du cours de l’IA que ses titres, jamais son corps', () => {
-    // Le corps peut peser 250 000 caractères : le décideur doit rester rapide.
+    // Le corps peut peser des dizaines de milliers de caractères : le décideur doit rester rapide.
     const current = '## Les volcans\n\nUn volcan est une ouverture de la croûte.\n\n### Le magma\n\nRoche en fusion.';
     const { state } = writingQuestion({ ...base, current });
     expect(state).toContain('## Les volcans');
