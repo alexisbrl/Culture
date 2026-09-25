@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 
-import { dispatchTasks, isValidTaskToken } from '@/lib/ingest/dispatch';
+import { isValidTaskToken } from '@/lib/ingest/dispatch';
 import { runTask } from '@/lib/ingest/orchestrator';
+import { followUp } from '@/lib/ingest/queue';
 
 // Une tâche de génération — un appel au modèle au plus —, dans SA fonction
 // serveur (docs/architecture.md §7.11).
@@ -30,8 +31,9 @@ export async function POST(req: NextRequest) {
   }
 
   after(async () => {
-    const next = await runTask(taskId);
-    await dispatchTasks(next.baseUrl, next.taskIds);
+    // La dernière tâche d'une génération libère la place : la suivante de la
+    // file part aussitôt (@/lib/ingest/queue).
+    await followUp([await runTask(taskId)]);
   });
   return NextResponse.json({ ok: true }, { status: 202 });
 }

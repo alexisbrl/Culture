@@ -7,8 +7,7 @@ import { palette, withAlpha, ink } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AiGenerationDialog, { useWorkshopFiles } from '@/components/ai/AiGenerationDialog';
 import ImportBanner from '@/components/ai/ImportBanner';
-import { AiGenerationStatus } from '@/components/ai/AiGenerationButton';
-import { useGeneration } from '@/components/ai/generationStore';
+import { AiGenerationQueue } from '@/components/ai/AiGenerationButton';
 import { type Question, type ResponseType, type BloomLevel } from '../QuestionEditor';
 import { BLOOM_LEVELS } from '@/lib/workshops/examTypes';
 import { RESPONSE_TYPE_ORDER } from './questionFields';
@@ -208,9 +207,6 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
    *  qu'il avait : le bouton ouvre le formulaire, sans encadré ni bascule — il
    *  n'y a pas de second côté vers lequel basculer. */
   const aiAvailable = aiContext === 'exam' && !!workshopId;
-  /** Une génération tourne sur l'atelier : la bascule se verrouille, on n'en
-   *  lance pas une seconde. Son avancement se lit au-dessus de la liste. */
-  const { running: aiRunning } = useGeneration(aiAvailable ? workshopId ?? null : null);
   /** ⚠️ **Le texte suit la bascule** (07/09/2026, demandé par Alexis) : ce qu'on
    *  a commencé à écrire comme énoncé devient la consigne donnée à l'IA, et
    *  réciproquement. On hésite entre écrire la question et la faire écrire — le
@@ -224,7 +220,6 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   const creationToggle = (
     <SegmentedToggle
       value={generating ? 'ai' : 'manual'}
-      disabled={aiRunning}
       onChange={side => {
         if (side === 'ai') {
           // L'énoncé en cours part avec nous : il devient la consigne.
@@ -722,12 +717,6 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
           waitFor={loading}
         />
       )}
-      {/* La génération se lance depuis « nouvelle question » : c'est donc ici,
-          au-dessus de la liste, que son avancement se lit. Rien quand elle ne
-          tourne pas. */}
-      {aiAvailable && workshopId && (
-        <AiGenerationStatus workshopId={workshopId} style={{ marginBottom: 10 }} />
-      )}
 
 
       {/* Barre d'outils commune aux deux listes (`ListToolbar`) : la banque n'y
@@ -935,6 +924,13 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
             parcours ferait 79 px pour des cartes de 59, et la liste sauterait à
             l'arrivée des questions — c'est précisément ce qu'il est là pour
             éviter (`showLabels`, voir le `meta` de la carte plus haut). */}
+        {/* ─── Les générations lancées d'ici, une par encadré (25/09/2026) ───
+            On peut en lancer plusieurs à la suite — le chapitre 1, puis le 2 :
+            chacune a son encadré, en tête de liste, avec sa barre. Celles qui
+            attendent leur tour le disent, et se retirent d'une croix. */}
+        {aiAvailable && workshopId && !loading && (
+          <AiGenerationQueue workshopId={workshopId} door={aiContext === 'exam' ? 'exam' : 'parcours'} />
+        )}
         {loading && Array.from({ length: skeletonCount }, (_, i) => <ListCardSkeleton key={i} index={i} meta={showLabels} />)}
         {/* Sans IA (parcours), pas d'encadré ni de bascule : le formulaire garde
             son propre cadre, exactement comme avant. */}

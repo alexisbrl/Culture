@@ -23,6 +23,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_generation_requests: {
+        Row: {
+          base_url: string
+          created_at: string
+          created_by: string
+          error: string | null
+          id: string
+          import_id: string | null
+          input: Json
+          started_at: string | null
+          workshop_id: string
+        }
+        Insert: {
+          base_url: string
+          created_at?: string
+          created_by: string
+          error?: string | null
+          id?: string
+          import_id?: string | null
+          input?: Json
+          started_at?: string | null
+          workshop_id: string
+        }
+        Update: {
+          base_url?: string
+          created_at?: string
+          created_by?: string
+          error?: string | null
+          id?: string
+          import_id?: string | null
+          input?: Json
+          started_at?: string | null
+          workshop_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_generation_requests_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "ai_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_import_events: {
         Row: {
           attempt: number

@@ -13,7 +13,7 @@ import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import type { GenerationOrigin } from '@/lib/ingest/journal';
 
-import { launchGeneration } from './generationStore';
+import { capacityOf, launchGeneration, useGenerations } from './generationStore';
 
 // Le dialogue de génération par IA — **un seul composant pour tous les points
 // d'entrée** (Ressources, Chapitre & Notion, et les deux listes de questions).
@@ -157,6 +157,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   }, [hint, frame]);
 
   const context = forcedContext ?? 'parcours';
+  const { full } = capacityOf(useGenerations(workshopId));
 
   // ─── Ce que ce lancement va faire, et qui n'est plus une case à cocher ────
   //
@@ -232,7 +233,12 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
    *  avancement, arrêt, échec — se lit sur le bouton (`generationStore`). */
   function start() {
     void launchGeneration(workshopId, {
-      fileIds: needsFiles ? usable.map((f) => f.id) : [],
+      // Depuis une liste, la génération peut attendre son tour derrière une
+      // mise à jour de l'atelier : le serveur redécide AU DÉPART s'il faut
+      // encore construire le programme (@/lib/ingest/queue). Il a donc besoin
+      // des documents, et de savoir s'il y avait de quoi le construire.
+      fileIds: needsFiles || forcedContext !== null ? usable.map((f) => f.id) : [],
+      canBuildProgram: hasFiles || hasHint,
       context,
       // L'étape 0 ne dépend pas du point d'entrée mais de la CONSIGNE : sans
       // elle, il n'y a rien à interpréter. Un nombre seul n'en est pas une.
@@ -364,12 +370,24 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                   pas encore quoi lancer — mieux vaut attendre une fraction de
                   seconde que partir sur la mauvaise voie ; et un atelier sans
                   document ET sans notion n'offre rien à quoi se raccrocher. */}
-              <Primary
-                onClick={() => { void start(); }}
-                disabled={visibleNotions === null || nothingToDo}
-              >
-                {t('generate')}
-              </Primary>
+              {/* Trois générations déjà actives sur l'atelier : on ne peut pas en
+                  demander une quatrième, et le bouton dit pourquoi au survol. Un
+                  bouton désactivé n'émet aucun événement de souris : l'infobulle
+                  se pose sur un conteneur. */}
+              {full ? (
+                <Tooltip content={t('queue.full')}>
+                  <span style={{ display: 'inline-flex' }}>
+                    <Primary onClick={() => {}} disabled>{t('generate')}</Primary>
+                  </span>
+                </Tooltip>
+              ) : (
+                <Primary
+                  onClick={() => { void start(); }}
+                  disabled={visibleNotions === null || nothingToDo}
+                >
+                  {t('generate')}
+                </Primary>
+              )}
             </Actions>
           </>
         )}

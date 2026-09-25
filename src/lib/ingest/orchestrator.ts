@@ -68,8 +68,10 @@ type Pipeline = {
   cfg: PipelineConfig;
 };
 
-/** Ce qu'il reste à lancer après un geste, et où. */
-export type Dispatch = { baseUrl: string; taskIds: string[] };
+/** Ce qu'il reste à lancer après un geste, et où. `finished` : l'atelier dont
+ *  une génération vient de se refermer — la place est libre, la suivante de la
+ *  file peut partir (@/lib/ingest/queue). */
+export type Dispatch = { baseUrl: string; taskIds: string[]; finished?: string };
 
 const NOTHING: Dispatch = { baseUrl: '', taskIds: [] };
 
@@ -286,7 +288,9 @@ export async function advance(importId: string): Promise<Dispatch> {
     const intents = decide(p.cfg, tasks);
     if (intents.length === 0) break;
     for (const intent of intents) await apply(p, intent, tasks);
-    if (intents.some((i) => i.type === 'close')) return NOTHING;
+    if (intents.some((i) => i.type === 'close')) {
+      return p.cfg.kind === 'generation' ? { baseUrl: p.cfg.baseUrl, taskIds: [], finished: p.workshopId } : NOTHING;
+    }
   }
 
   const tasks = await listTasks(importId);
@@ -478,6 +482,8 @@ export type StartInput = {
   hint: string;
   origin: string | null;
   baseUrl: string;
+  /** La demande de la file que ce lot réalise (@/lib/ingest/queue). */
+  requestId?: string;
 };
 
 /** Ouvre le lot, téléverse les documents, et range la première tâche.
@@ -504,6 +510,7 @@ export async function startGeneration(
       examQuestions: input.context === 'exam' ? input.examTarget : undefined,
       hint: input.hint,
       origin: input.origin,
+      requestId: input.requestId,
       pipeline: cfg,
     },
   });

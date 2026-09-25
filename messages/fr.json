@@ -1171,7 +1171,6 @@
     "generate": "générer",
     "cancel": "annuler",
     "close": "fermer",
-    "busy": "Une génération est déjà en cours sur cet atelier. Attends qu’elle se termine, ou arrête-la avant d’en lancer une autre.",
     "cancellable": "Tu peux annuler cet import pendant 24 h, tant que rien n’a été modifié.",
     "banner": {
       "text": "L’IA a ajouté {items}.",
@@ -1220,6 +1219,13 @@
       "dismiss": "masquer l’alerte",
       "failed": "La génération a échoué : {reason}",
       "discarded": "{count, plural, one {# élément proposé par l’IA a été écarté} other {# éléments proposés par l’IA ont été écartés}} :"
+    },
+    "queue": {
+      "waiting": "en attente",
+      "waitingInfo": "Elle partira d’elle-même dès que la génération en cours sera terminée.",
+      "cancel": "retirer de la file",
+      "full": "Trois générations sont déjà en cours ou en attente sur cet atelier. Attends que l’une d’elles se termine pour en lancer une autre.",
+      "untitled": "génération par IA"
     }
   }
 }

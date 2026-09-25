@@ -1171,7 +1171,6 @@
     "generate": "generate",
     "cancel": "cancel",
     "close": "close",
-    "busy": "A generation is already running on this workshop. Wait for it to finish, or stop it before starting another.",
     "cancellable": "You can undo this import for 24 hours, as long as nothing has been edited.",
     "banner": {
       "text": "AI added {items}.",
@@ -1220,6 +1219,13 @@
       "dismiss": "dismiss the alert",
       "failed": "The generation failed: {reason}",
       "discarded": "{count, plural, one {# item suggested by the AI was discarded} other {# items suggested by the AI were discarded}}:"
+    },
+    "queue": {
+      "waiting": "waiting",
+      "waitingInfo": "It will start on its own as soon as the current generation is finished.",
+      "cancel": "remove from the queue",
+      "full": "Three generations are already running or waiting on this workshop. Wait for one of them to finish before starting another.",
+      "untitled": "AI generation"
     }
   }
 }

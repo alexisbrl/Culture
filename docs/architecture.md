@@ -801,15 +801,34 @@ l'hébergeur, cinq minutes par fonction. Une tâche qui se termine relit toutes 
 lot, en déduit la suite, et **lance elle-même les suivantes**. Fermer la fenêtre, quitter la
 page ou fermer l'onglet ne change rien : l'écran ne fait que lire l'avancement.
 
-**Le bouton est l'avancement.** La fenêtre de lancement se ferme au clic. Pendant la
-génération, le bouton de génération se remplit au fil des étapes, affiche le pourcentage
-et n'est plus cliquable ; une coche brève à la réussite. À côté : l'arrêt, confirmé
-puisqu'il défait ce qui a été écrit, et une alerte seulement si la génération a échoué ou
-n'a pas tout écrit. L'état est **partagé par tout l'onglet** : lancer d'un écran fait
-basculer tous les boutons de l'atelier, et les listes qui montrent ce qu'elle écrit se
-relisent d'elles-mêmes à mesure (au plus toutes les quelques secondes, les lectures
-passant en file), puis à la fin. Une génération lancée ailleurs est retrouvée en arrivant
-sur l'atelier, puis par un sondage lent (§9).
+**On demande, la file enchaîne.** Un clic sur « générer » écrit une **demande** dans la file
+de l'atelier ; elle part aussitôt si rien ne tourne, sinon elle attend et part d'elle-même
+dès que la précédente est finie — onglet fermé ou non. **Trois générations actives au plus
+par atelier**, celle qui tourne comprise : au-delà, tout bouton de génération s'éteint et
+dit pourquoi au survol. Ce qui dépend de l'état de l'atelier se décide **au départ** et non
+au clic : une demande venue d'une liste de questions ne construit le programme que s'il est
+encore vide à ce moment-là. Trois passages font partir la suivante, un seul y parvient : la
+fin (ou l'arrêt) de la précédente, chaque lecture d'avancement, la veille planifiée. Une
+demande qui attend se retire d'une croix, sans confirmation : elle n'a rien écrit.
+
+**Chaque porte montre ce qu'elle a lancé, à l'instant du clic.** La fenêtre de lancement se
+ferme au clic et la génération se montre aussitôt, avant la réponse du serveur. Le bouton des
+Paramètres — le même dans Ressources et dans Chapitre & Notion — **devient** l'avancement de
+la génération qu'il a lancée : « en attente » avec son explication au survol, puis rempli au
+fil des étapes avec le pourcentage, une coche brève à la réussite. Une liste de questions peut
+en lancer plusieurs à la suite : chacune y a **son encadré en tête de liste**, avec sa
+consigne et sa barre. À côté de chacune : l'arrêt, confirmé puisqu'il défait ce qui a été
+écrit, la croix de la file, et une alerte seulement si elle a échoué ou n'a pas tout écrit.
+L'état est **partagé par tout l'onglet**, et les listes qui montrent ce qu'une génération
+écrit se relisent d'elles-mêmes — tout de suite à sa première écriture, puis au plus toutes
+les quelques secondes (les lectures passant en file), puis à la fin. Une génération lancée
+ailleurs est retrouvée en arrivant sur l'atelier, puis par un sondage lent (§9).
+
+**La recharge automatique reste à part** : elle ne passe pas par la file et n'y compte pas,
+elle tourne en parallèle de tout. Elle n'ajoute que des questions dans un chapitre, sans
+toucher aux chapitres ni aux notions ; le pire croisement avec une mise à jour de l'atelier
+est quelques questions rattachées à une notion que la mise à jour retire, et qui partent avec
+elle.
 
 **La suite se déduit de l'état, jamais d'une mémoire.** Plusieurs tâches finissent au même
 instant et demandent chacune « et maintenant ? » : la réponse, tirée de toutes les tâches du
