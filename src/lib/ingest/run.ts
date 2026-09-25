@@ -78,7 +78,9 @@ import {
   composeDocument,
   extractBody,
   readResourceOutput,
+  writingQuestion,
 } from './resource';
+import { getDecider, isYes, readProbability, type ClosedQuestion, type Decider } from '@/lib/decision';
 import type { BloomLevel } from '@/lib/workshops/examTypes';
 import {
   CHAPTER_START_QUESTIONS,
@@ -87,7 +89,7 @@ import {
   demandTotal,
   type QuestionDemand,
 } from './demand';
-import { BUSY_ERROR, CLOSED_ERROR, closeImport, liveImportOf } from './lock';
+import { BUSY_ERROR, CLOSED_ERROR, assertImportOpen, closeImport, liveImportOf } from './lock';
 import { parsePlan, type PlanIssue } from './planSchema';
 import {
   classifyNotions,
@@ -645,7 +647,8 @@ type StepMeta = {
   step: StepName;
   /** Indice du document ou du lot. Absent quand l'étape est unique. */
   batch?: number;
-  provider: PlanProvider;
+  /** Qui répond — un fournisseur de plan ou un décideur : seul son nom compte. */
+  provider: { readonly name: string };
 };
 
 /** Appelle le modèle : relance UNE fois si la panne est passagère, et laisse une
@@ -929,7 +932,7 @@ export async function ingestResource(
   workshopId: string,
   actorId: string,
   importId: string,
-  options: { provider?: PlanProvider } = {},
+  options: { provider?: PlanProvider; decider?: Decider } = {},
 ): Promise<ResourcePassResult> {
   const prepared = await preparedOf(importId);
   const hint = await rawHintOf(importId);
@@ -955,7 +958,7 @@ async function resourceStep(
   importId: string,
   prepared: PreparedDocument[],
   hint: string,
-  options: { provider?: PlanProvider },
+  options: { provider?: PlanProvider; decider?: Decider },
 ): Promise<ResourcePassResult> {
   const [corpusTokens, oversizeModels, context] = await Promise.all([
     corpusTokensOf(importId),
@@ -977,84 +980,59 @@ async function resourceStep(
     loadGeneratedFile(workshopId),
   ]);
 
-  // ─── À l'aveugle d'abord, sur demande ensuite ────────────────────────────
-  //
-  // Le premier appel ne porte AUCUN document : seulement leurs noms. La plupart
-  // des consignes n'ont rien à lire — écrire un cours qui n'existe pas ne demande
-  // aucun cours, une consigne de forme non plus — et le corpus est le plus gros
-  // poste de la facture. Le modèle réclame ce dont il a besoin, on le lui joint,
-  // et on ne recommence pas : un aller-retour de plus au maximum, ce qui reste
-  // sans commune mesure avec le prix d'un corpus envoyé pour rien.
   // ⚠️ **Rien de tout cela quand la demande vient de l'EXAMEN** (arbitrage
-  // d'Alexis du 06/09/2026). L'étape n'y a plus le droit d'écrire — elle n'en a
-  // même plus le moyen, son schéma de sortie n'ayant pas de champ pour un
-  // document — donc le catalogue, le document courant (jusqu'à 100 000
-  // caractères) et le second appel n'ont plus d'objet. L'appel rétrécit d'autant :
-  // il ne porte que la demande, le nom de l'atelier et la liste des chapitres.
+  // d'Alexis du 06/09/2026). L'étape n'y a pas le droit d'écrire — elle n'en a
+  // même pas le moyen, son schéma de sortie n'ayant pas de champ pour un
+  // document — donc ni décision, ni documents, ni document courant : l'appel ne
+  // porte que la demande, le nom de l'atelier et la liste des chapitres.
   const isExam = context === 'exam';
-  const catalogue = isExam
-    ? []
-    : prepared.map((document, index) => ({ index, fileName: document.fileName }));
-  const ask = (granted: number[]) => ({
-    pass: 'resource' as const,
+  const fileNames = prepared.map((document) => document.fileName);
+
+  // ─── Écrire ou non : tranché AVANT l'appel qui écrit (25/09/2026) ─────────
+  //
+  // Le modèle qui écrit ne choisit plus : il reçoit la décision. Jusqu'au
+  // 24/09/2026, il la prenait lui-même en deux temps — un premier appel, à
+  // l'aveugle, qui rédigeait tout un cours pour annoncer « j'écris », puis un
+  // second qui le réécrivait documents en main. Plus de cinq minutes : coupé
+  // par l'hébergeur, et une génération bloquée toute une nuit.
+  const write = isExam
+    ? false
+    : await decideWriting(
+        { importId, workshopId },
+        options.decider,
+        writingQuestion({ hint, workshop, chapters, fileNames, current: existing?.body ?? null }),
+      );
+
+  const meta: StepMeta = { importId, workshopId, step: 'resource', batch: 0, provider };
+  const call = await modelCall(meta, () => provider.documentToPlan(prepared, EMPTY, {
+    pass: 'resource',
     hint,
     workshop,
     chapters: chapters.map((c) => ({ name: c.name })),
-    current: isExam ? null : (existing?.body ?? null),
-    catalogue,
-    granted,
+    // Le document courant ne sert qu'à écrire : il peut peser 250 000 caractères.
+    current: write ? (existing?.body ?? null) : null,
+    fileNames: write ? fileNames : [],
+    write,
     context,
-  });
-
-  const meta: StepMeta = { importId, workshopId, step: 'resource', batch: 0, provider };
-  // Côté examen, les documents ne partent pas non plus : ils ne serviraient
-  // qu'à écrire, et il n'y a plus rien à écrire.
-  let call = await modelCall(meta, () => provider.documentToPlan(isExam ? [] : prepared, EMPTY, ask([])));
+  }));
   await addImportUsage(importId, call.result.usage);
-  let outcome = readResourceOutput(call.result.plan);
-
-  // Le premier appel garde sa ligne au journal : c'est en comparant les deux
-  // qu'on saura quelle part des consignes réclame vraiment le cours.
+  const outcome = readResourceOutput(call.result.plan);
   await stepDone(meta, call, {
-    documentsDemandes: outcome.needs.length,
-    documentsDisponibles: catalogue.length,
+    ecritureDecidee: write,
+    documentsJoints: write ? prepared.length : 0,
+    documentEcrit: outcome.body !== null,
+    tailleDuDocument: outcome.body?.length ?? 0,
     consigneReecrite: outcome.instruction.length > 0,
     partieEcartee: outcome.dropped,
-    // ⚠️ **Enregistré dès le PREMIER appel, et c'est ce qui a manqué le
-    // 04/09/2026** : la première génération réelle n'a rien écrit, et la ligne
-    // de journal ne disait pas si le modèle avait proposé un texte qu'on avait
-    // mal relu, ou s'il avait décidé de n'en écrire aucun. C'était la seconde —
-    // le socle commun lui interdisait d'écrire hors des documents — mais il a
-    // fallu le déduire au lieu de le lire.
-    documentPropose: outcome.body !== null,
-    tailleProposee: outcome.body?.length ?? 0,
     nombreExamenFixe: outcome.examQuestionCount,
   });
 
-  // ⚠️ **Écrire ⇒ tout le corpus, sans que le modèle ait eu à le demander**
-  // (arbitrage d'Alexis, 04/09/2026). Un nom de fichier ne dit pas fiablement
-  // ce qu'il contient — le modèle ne doit donc plus deviner, sur ce seul
-  // indice, lesquels lire avant d'écrire : une décision d'écrire force
-  // désormais le second appel avec TOUT joint, quoi que `needs` contienne.
-  // `needs` ne garde son rôle que pour l'autre cas, rare : une lecture SANS
-  // décision d'écrire (voir `resourceInstruction`).
-  const granted = isExam
-    ? []
-    : outcome.body !== null
-      ? prepared.map((_, index) => index)
-      : outcome.needs.filter((index) => index < prepared.length);
-  if (granted.length > 0) {
-    const second: StepMeta = { ...meta, batch: 1 };
-    call = await modelCall(second, () => provider.documentToPlan(prepared, EMPTY, ask(granted)));
-    await addImportUsage(importId, call.result.usage);
-    outcome = readResourceOutput(call.result.plan);
-    await stepDone(second, call, {
-      documentsJoints: granted.length,
-      documentEcrit: outcome.body !== null,
-      tailleDuDocument: outcome.body?.length ?? 0,
-      nombreExamenFixe: outcome.examQuestionCount,
-    });
-  }
+  // ⚠️ **Un arrêt pendant l'appel ne laisse rien derrière lui.** Le 24/09/2026,
+  // une génération arrêtée a quand même enregistré son cours vingt secondes plus
+  // tard : l'appel était parti avant l'arrêt, et rien ne vérifiait le lot au
+  // retour. Le document de l'IA n'est pas étiqueté au lot — l'annulation ne sait
+  // donc pas le retirer — : c'est ICI qu'il faut refuser de l'écrire.
+  await assertImportOpen(importId);
 
   // La consigne réécrite est rangée AVANT toute écriture de document : c'est
   // elle que les passes suivantes liront, et elle doit être en place même si
@@ -1070,12 +1048,12 @@ async function resourceStep(
 
   let documents = prepared.length;
   let written = false;
-  // ⚠️ **Garde de dernier recours côté examen.** Le schéma de sortie n'y offre
-  // aucun champ pour un document, donc `body` y est toujours nul — mais cette
-  // garantie vit chez le fournisseur, et un fournisseur sans sortie contrainte
-  // pourrait un jour en renvoyer un quand même. L'invariant « une demande partie
-  // de l'examen ne modifie pas le cours » se tient ici, où l'écriture a lieu.
-  if (!isExam && outcome.body) {
+  // ⚠️ **Garde de dernier recours.** Sans décision d'écrire, le schéma de sortie
+  // n'offre aucun champ pour un document, donc `body` y est toujours nul — mais
+  // cette garantie vit chez le fournisseur, et un fournisseur sans sortie
+  // contrainte pourrait un jour en renvoyer un quand même. L'invariant « on
+  // n'écrit que ce qui a été décidé » se tient ici, où l'écriture a lieu.
+  if (write && outcome.body) {
     const file = await writeGeneratedFile(workshopId, actorId, outcome.body, existing);
     if (file) {
       written = true;
@@ -1089,7 +1067,7 @@ async function resourceStep(
 
   console.info('[ingest] étape 0', {
     workshopId,
-    documentsDemandes: granted.length,
+    ecritureDecidee: write,
     documentEcrit: written,
     // Écarté en silence côté écran (décision du 04/09/2026) : la trace, elle,
     // dira si le champ sert à autre chose qu'à demander du cours.
@@ -1098,6 +1076,43 @@ async function resourceStep(
   });
 
   return { written, documents, examQuestionCount: context === 'exam' ? outcome.examQuestionCount : null };
+}
+
+/** Pose au décideur la question « faut-il écrire ? ». **Ne lève jamais.**
+ *
+ *  ⚠️ **Sans réponse, on écrit.** Un « oui » de trop coûte une réécriture du
+ *  document de l'IA ; un « non » de trop perd en silence ce que l'utilisateur a
+ *  demandé — un cours qu'il ne verra jamais arriver. */
+async function decideWriting(
+  ids: { importId: string; workshopId: string },
+  injected: Decider | undefined,
+  question: ClosedQuestion,
+): Promise<boolean> {
+  let decider: Decider;
+  try {
+    decider = injected ?? getDecider();
+  } catch (error) {
+    console.warn('[ingest] décideur indisponible, écriture par défaut :', error instanceof Error ? error.message : error);
+    return true;
+  }
+
+  const meta: StepMeta = { ...ids, step: 'decision', provider: decider };
+  try {
+    const read: { probability: number | null } = { probability: null };
+    const call = await modelCall(meta, async () => {
+      const decision = await decider.decide(question);
+      read.probability = readProbability(decision.probability);
+      return { plan: null, model: decision.model, truncated: false, usage: decision.usage };
+    });
+    await addImportUsage(ids.importId, call.result.usage);
+    const write = read.probability === null ? true : isYes(read.probability);
+    await stepDone(meta, call, { probabilite: read.probability, ecrire: write });
+    return write;
+  } catch (error) {
+    // L'échec est déjà au journal (`modelCall`).
+    console.warn('[ingest] décision impossible, écriture par défaut :', error instanceof Error ? error.message : error);
+    return true;
+  }
 }
 
 /** Le document déjà écrit par l'IA pour cet atelier, s'il existe. Rend son corps

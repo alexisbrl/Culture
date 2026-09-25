@@ -72,6 +72,13 @@ describe('documentsForPass — ce qui part au modèle', () => {
   it('la passe questions n’en reçoit AUCUN', () => {
     expect(documentsForPass('questions', prepared)).toHaveLength(0);
   });
+
+  it('l’étape 0 reçoit tout le corpus quand l’écriture est décidée, rien sinon', () => {
+    // Le corpus est le plus gros poste de la facture : il ne part que pour écrire.
+    expect(documentsForPass('resource', prepared, true)).toEqual(prepared);
+    expect(documentsForPass('resource', prepared, false)).toHaveLength(0);
+    expect(documentsForPass('resource', prepared)).toHaveLength(0);
+  });
 });
 
 describe('passe questions — l’appel capturé ne porte aucun document', () => {

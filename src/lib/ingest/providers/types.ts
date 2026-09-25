@@ -77,20 +77,14 @@ export type IngestScope =
       chapters: { name: string }[];
       /** Le corps du document déjà écrit par l'IA, sans son en-tête. */
       current?: string | null;
-      /** Le CATALOGUE des documents de l'atelier — leurs numéros et leurs noms,
-       *  pas leur contenu. C'est ce qui permet au modèle de demander ce dont il
-       *  a besoin plutôt que de tout recevoir. */
-      catalogue: { index: number; fileName: string }[];
-      /** Les documents effectivement joints à CET appel, par numéro.
-       *
-       *  ⚠️ **Vide au premier appel, et c'est tout l'intérêt** (04/09/2026). La
-       *  plupart des consignes n'ont aucun besoin du cours : écrire un cours qui
-       *  n'existe pas ne demande rien à lire, et une consigne de forme (« plus
-       *  difficile », « en anglais ») encore moins. Envoyer le corpus à tous les
-       *  coups reviendrait à payer le cas rare — compléter un chapitre existant —
-       *  à chaque génération. Le modèle demande, on lui donne, et on ne recommence
-       *  pas : un seul aller-retour supplémentaire, jamais deux. */
-      granted: number[];
+      /** Les noms des documents de l'utilisateur, joints à l'appel quand il
+       *  écrit — pour qu'il puisse dire à quel document se rapporte un complément. */
+      fileNames: string[];
+      /** La décision d'écrire, **prise en amont** par le décideur (@/lib/decision,
+       *  docs/architecture.md §7.4). Vrai : tout le corpus est joint et le modèle
+       *  écrit son document. Faux : ni document joint, ni document à écrire — il
+       *  ne fait que réécrire la consigne. Toujours faux depuis l'examen. */
+      write: boolean;
       /** D'où vient la demande — décide si le modèle peut fixer un nombre de
        *  questions d'examen (§ voir `resourceInstruction`). Le parcours n'a pas
        *  de notion de total, donc ce pouvoir ne lui est même pas proposé. */
