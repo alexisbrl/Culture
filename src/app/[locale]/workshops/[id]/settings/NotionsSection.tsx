@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { ChevronDown, EllipsisVertical, EyeOff, GripVertical, Loader2, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { palette, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import AiGenerationButton, { AiGenerationBox, GENERATION_BOX_MIN_HEIGHT, type GenerationEditing } from '@/components/ai/AiGenerationButton';
+import AiGenerationButton, { SettingsGenerationBox } from '@/components/ai/AiGenerationButton';
 import ImportBanner from '@/components/ai/ImportBanner';
 import { useGenerationRefresh } from '@/components/ai/generationStore';
 import {
@@ -218,9 +218,6 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  /** L'encadré de génération par IA, ouvert au-dessus des listes — vierge, ou
-   *  sur une génération en attente qu'on modifie. */
-  const [aiBox, setAiBox] = useState<{ editing?: GenerationEditing } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Notion | null>(null);
 
   // Chapitres
@@ -595,21 +592,10 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
           réellement annulable, et disparaît de lui-même. */}
       <ImportBanner workshopId={workshopId} scope="programme" />
 
-      {/* L'encadré de génération s'ouvre AU-DESSUS des titres, et prend la
-          place du bouton — il en naît. Les listes glissent vers le bas. */}
-      {aiBox && (
-        <div style={{ marginBottom: 16 }}>
-          <AiGenerationBox
-            key={aiBox.editing?.requestId ?? 'new'}
-            workshopId={workshopId}
-            origin="settings-notions"
-            editing={aiBox.editing}
-            onClose={() => setAiBox(null)}
-            minHeight={GENERATION_BOX_MIN_HEIGHT}
-            grow
-          />
-        </div>
-      )}
+      {/* L'encadré de génération, au-dessus des titres : le même que dans
+          Ressources, qui garde sa consigne d'un onglet à l'autre. Il prend la
+          place du bouton, et les listes glissent vers le bas. */}
+      <SettingsGenerationBox workshopId={workshopId} origin="settings-notions" />
 
       {/* ─── Les titres, et le bouton sur la même ligne (25/09/2026) ─────────
           Comme dans Ressources : le bouton de génération s'aligne sur les
@@ -625,7 +611,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
             {t('notions.title')}
           </div>
           <span style={{ marginLeft: 'auto' }}>
-            {!aiBox && <AiGenerationButton workshopId={workshopId} onOpen={(editing) => setAiBox({ editing })} />}
+            <AiGenerationButton workshopId={workshopId} />
           </span>
         </div>
       </div>

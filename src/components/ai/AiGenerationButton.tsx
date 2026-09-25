@@ -25,6 +25,16 @@ import {
   type GenerationItem,
   type GenerationProblem,
 } from './generationStore';
+import {
+  closeSettingsBox,
+  openSettingsBox,
+  setSettingsBoxPrompt,
+  useSettingsBox,
+  type GenerationEditing,
+  type SettingsBox,
+} from './settingsBoxStore';
+
+export type { GenerationEditing };
 
 // Le bouton « générer par IA » des Paramètres, l'encadré où l'on écrit sa
 // consigne, et les encadrés d'avancement des listes de questions.
@@ -35,10 +45,12 @@ import {
 //
 // ─── Un encadré, jamais une fenêtre (25/09/2026) ─────────────────────────────
 //
-// Cliquer « générer par IA » ouvre un ENCADRÉ en place — à la place de la zone
-// de dépôt dans Ressources, au-dessus des listes dans Chapitre & Notion —, fait
-// comme l'encadré de création de la banque d'examen. Modifier une génération en
-// attente rouvre ce même encadré, là où elle se trouve.
+// Cliquer « générer par IA » ouvre un ENCADRÉ en place, fait comme l'encadré de
+// création de la banque d'examen, qui naît du bouton et le remplace. Dans les
+// Paramètres, c'est le MÊME encadré dans Ressources et dans Chapitre & Notion,
+// posé au-dessus du titre : on passe d'un onglet à l'autre sans perdre ni lui,
+// ni sa consigne (./settingsBoxStore). Modifier une génération en attente
+// rouvre ce même encadré, là où elle se trouve.
 //
 // ─── Le bouton EST l'avancement ──────────────────────────────────────────────
 //
@@ -56,20 +68,14 @@ import {
 // survol.
 
 /** La hauteur de la zone de dépôt des Ressources, et donc celle de l'encadré de
- *  génération des Paramètres, qui la remplace (25/09/2026, demandé par Alexis :
- *  « exactement la même taille »). Posée sur les deux plutôt que mesurée : dans
- *  Chapitre & Notion, la zone de dépôt n'est pas à l'écran. L'encadré grandit
- *  au-delà avec le texte saisi. */
+ *  génération des Paramètres (25/09/2026, demandé par Alexis : « exactement la
+ *  même taille »). Posée sur les deux plutôt que mesurée : dans Chapitre &
+ *  Notion, la zone de dépôt n'est pas à l'écran. L'encadré grandit au-delà avec
+ *  le texte saisi. */
 export const GENERATION_BOX_MIN_HEIGHT = 160;
-
-/** Une génération rouverte pour modifier sa consigne. */
-export type GenerationEditing = { requestId: string; prompt: string };
 
 type Props = {
   workshopId: string;
-  /** Ouvre l'encadré de génération, là où l'écran le pose — vierge, ou sur la
-   *  génération en attente qu'on veut modifier. */
-  onOpen: (editing?: GenerationEditing) => void;
   /** Rendu compact, pour se glisser dans une barre d'outils déjà chargée. */
   compact?: boolean;
 };
@@ -85,14 +91,19 @@ function itemOf(items: GenerationItem[], door: GenerationDoor): GenerationItem |
 const editable = (item: GenerationItem, phase: GenerationItem['phase']) =>
   phase === 'queued' && !item.importId && !item.id.startsWith('local:');
 
-export default function AiGenerationButton({ workshopId, onOpen, compact = false }: Props) {
+export default function AiGenerationButton({ workshopId, compact = false }: Props) {
   const t = useTranslations('ai');
   const state = useGenerations(workshopId);
+  const box = useSettingsBox(workshopId);
+  const onOpen = (editing?: GenerationEditing) => openSettingsBox(workshopId, editing);
   const item = itemOf(state.items, 'settings');
   const phase = item ? displayPhase(state, item) : null;
   const { full } = capacityOf(state);
   // Une alerte n'occupe pas le bouton : on peut relancer à côté d'elle.
   const busy = item !== null && item.phase !== 'problem';
+
+  // L'encadré ouvert a pris sa place : il en est né.
+  if (box) return null;
 
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -162,6 +173,11 @@ export function AiGenerationBox({ workshopId, origin, forcedContext = null, edit
   return (
     <div
       className={grow ? 'ai-box-grow' : undefined}
+      // ⚠️ Les deux onglets des Paramètres montent le même encadré, et l'un est
+      // masqué : une animation ne court pas sous un `display: none`, elle
+      // attend — et se jouerait au premier retour sur l'onglet. L'encadré né
+      // masqué renonce donc à la sienne.
+      ref={grow ? (el) => { if (el && el.offsetParent === null) el.classList.remove('ai-box-grow'); } : undefined}
       style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 16px', minHeight, borderRadius: 14, background: palette.surfaceRaised, border: `1px solid ${palette.line}` }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 24 }}>
@@ -184,6 +200,35 @@ export function AiGenerationBox({ workshopId, origin, forcedContext = null, edit
           if (requestId) void releaseGeneration(workshopId, requestId);
           onClose();
         }}
+      />
+    </div>
+  );
+}
+
+/** L'encadré de génération des Paramètres, commun à Ressources et à Chapitre &
+ *  Notion, posé au-dessus du titre. Rien quand il est fermé. */
+export function SettingsGenerationBox({ workshopId, origin }: { workshopId: string; origin: GenerationOrigin }) {
+  const box = useSettingsBox(workshopId);
+  if (!box) return null;
+  return <SettingsBoxBody key={box.openedAt} workshopId={workshopId} origin={origin} box={box} />;
+}
+
+function SettingsBoxBody({ workshopId, origin, box }: { workshopId: string; origin: GenerationOrigin; box: SettingsBox }) {
+  // Déployé seulement s'il vient d'être ouvert : l'onglet masqué, lui, le
+  // trouve déjà ouvert en revenant, et ne le redéploie pas.
+  const [grow] = useState(() => Date.now() - box.openedAt < 400);
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <AiGenerationBox
+        key={box.editing?.requestId ?? 'new'}
+        workshopId={workshopId}
+        origin={origin}
+        editing={box.editing}
+        hint={box.prompt}
+        onHintChange={(prompt) => setSettingsBoxPrompt(workshopId, prompt)}
+        onClose={() => closeSettingsBox(workshopId)}
+        minHeight={GENERATION_BOX_MIN_HEIGHT}
+        grow={grow}
       />
     </div>
   );

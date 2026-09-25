@@ -824,9 +824,10 @@ avant peut encore le remplir : si l'atelier n'a alors aucune notion au programme
 Ressources.
 
 **Un encadré, jamais une fenêtre.** « Générer par IA » ouvre un encadré en place, fait comme
-l'encadré de création de la banque d'examen, qui **naît du bouton et le remplace** : à la place
-de la zone de dépôt dans Ressources, et de la même hauteur qu'elle ; au-dessus des titres dans
-Chapitre & Notion. Il ne montre que la consigne et ses deux boutons ; ce que la génération va
+l'encadré de création de la banque d'examen, qui **naît du bouton et le remplace**. Dans les
+Paramètres, Ressources et Chapitre & Notion ont le même bouton, donc **le même encadré** : posé
+au-dessus du titre, de la hauteur de la zone de dépôt, il reste ouvert d'un onglet à l'autre
+avec sa consigne en cours d'écriture. Il ne montre que la consigne et ses deux boutons ; ce que la génération va
 faire et ce qu'on peut lui demander passent dans l'infobulle.
 Modifier une génération en attente rouvre ce même encadré, là où elle se trouve.
 
