@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { Check, Download, Loader2, Pencil, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { palette, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import AiGenerationButton, { AiGenerationBox, type GenerationEditing } from '@/components/ai/AiGenerationButton';
+import AiGenerationButton, { AiGenerationBox, GENERATION_BOX_MIN_HEIGHT, type GenerationEditing } from '@/components/ai/AiGenerationButton';
 import ImportBanner from '@/components/ai/ImportBanner';
 import { useGenerationRefresh } from '@/components/ai/generationStore';
 import { ProgressBar } from '@/components/ui/progress-bar';
@@ -180,7 +180,8 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
           <ImportBanner workshopId={workshopId} scope="programme" />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
             <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{t('files.title')}</div>
-            <AiGenerationButton workshopId={workshopId} onOpen={(editing) => setAiBox({ editing })} />
+            {/* Ouvert, l'encadré prend la place du bouton : il en naît. */}
+            {!aiBox && <AiGenerationButton workshopId={workshopId} onOpen={(editing) => setAiBox({ editing })} />}
           </div>
 
           {/* L'encadré de génération prend la place de la zone de dépôt tant qu'il
@@ -193,6 +194,8 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
               origin="settings-files"
               editing={aiBox.editing}
               onClose={() => setAiBox(null)}
+              minHeight={GENERATION_BOX_MIN_HEIGHT}
+              grow
             />
           ) : (
           <>
@@ -217,6 +220,8 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
               textAlign: 'center',
               cursor: uploadProgress !== null ? 'default' : 'pointer',
               padding: '26px 20px',
+              // La même hauteur que l'encadré de génération, qui prend sa place.
+              minHeight: GENERATION_BOX_MIN_HEIGHT,
               borderRadius: 16,
               transition: 'border-color 160ms, background 160ms',
               position: 'relative',

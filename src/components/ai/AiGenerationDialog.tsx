@@ -37,6 +37,11 @@ const HINT_PAD_Y = 8;
 const HINT_MIN_LINES = 3;
 // `box-sizing: border-box` : la hauteur minimale comprend les retraits et le filet.
 const HINT_MIN_HEIGHT = Math.round(HINT_MIN_LINES * HINT_FONT_SIZE * HINT_LINE_HEIGHT) + 2 * HINT_PAD_Y + 2;
+/** En encadré, deux lignes suffisent : l'encadré des Paramètres doit tenir dans
+ *  la hauteur de la zone de dépôt qu'il remplace, et celui de la banque
+ *  d'examen se glisse dans une liste (25/09/2026). Le champ grandit toujours
+ *  avec le texte. */
+const HINT_MIN_HEIGHT_INLINE = Math.round(2 * HINT_FONT_SIZE * HINT_LINE_HEIGHT) + 2 * HINT_PAD_Y + 2;
 
 /** Ce que l'API accepte aujourd'hui (§6). Les autres formats restent visibles
  *  mais non sélectionnables : mieux vaut le dire à la sélection qu'échouer au
@@ -268,7 +273,12 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // `position: relative` en ligne — la croix se pose en absolu, et sans repère
   // elle irait se caler sur le premier ancêtre positionné de la page.
   const body = (
-      <div style={{ textAlign: 'left', position: frame === 'inline' ? 'relative' : undefined }}>
+      <div style={frame === 'inline'
+        // En encadré, le corps occupe toute la hauteur laissée par la ligne de
+        // titre : les boutons se calent en bas quand l'encadré est plus haut
+        // que son contenu (celui des Paramètres a la hauteur de la zone de dépôt).
+        ? { textAlign: 'left', position: 'relative', display: 'flex', flexDirection: 'column', flex: 1 }
+        : { textAlign: 'left' }}>
         {/* La croix : une sortie visible, au même endroit à chaque étape. Sans
             elle, la seule façon de quitter une génération était de fermer
             l'onglet — et l'étape « en cours » n'a pas d'autre sortie que celle-ci.
@@ -326,17 +336,11 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 chiffres EST ce nombre — « 40 » demande quarante questions, sans
                 passer par l’IA de lecture ni coûter un appel de plus. */}
 
-            {frame === 'inline' && <div style={{ marginBottom: 16 }} />}
-
-            {/* En encadré, tout le texte d'aide passe dans l'infobulle (25/09/2026,
-                demandé par Alexis — même sobriété que dans la banque d'examen) :
-                ce que la génération va faire, puis ce qu'on peut lui demander. */}
-            <SectionLabel
-              info={frame === 'inline' ? (forcedContext === null ? planText : t('hint.info')) : undefined}
-              infoMore={frame === 'inline' ? (forcedContext === null ? t('hint.help') : t('hint.infoIdeas')) : undefined}
-            >
-              {t('hint.label')}
-            </SectionLabel>
+            {/* En encadré, ni intitulé au-dessus du champ ni texte d'aide
+                (25/09/2026, demandé par Alexis) : le texte grisé du champ dit
+                quoi y écrire, et le reste passe dans l'infobulle posée à gauche
+                des boutons. */}
+            {frame === 'modal' && <SectionLabel>{t('hint.label')}</SectionLabel>}
             {/* Champ libre, facultatif, posé APRÈS les cases : il précise ce
                 qu'on vient de demander, il ne le remplace pas. L'exemple n'est
                 pas décoratif — sans lui, personne ne devine que c'est ici qu'on
@@ -368,18 +372,26 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 // Plancher de trois lignes : `height: auto` retombe dessus, donc
                 // `scrollHeight` est déjà borné et la mesure n'a pas à s'en
                 // occuper (même mécanique qu'`AutoTextarea`, côté examen).
-                minHeight: HINT_MIN_HEIGHT,
+                minHeight: frame === 'inline' ? HINT_MIN_HEIGHT_INLINE : HINT_MIN_HEIGHT,
                 fontFamily: 'inherit', fontSize: HINT_FONT_SIZE, lineHeight: HINT_LINE_HEIGHT,
                 padding: `${HINT_PAD_Y}px 10px`, borderRadius: radius.md,
                 border: `1px solid ${ink(0.12)}`, background: palette.surfaceInput,
                 color: palette.ink, outline: 'none',
               }}
             />
-            {frame === 'modal'
-              ? <div style={{ marginTop: 6, marginBottom: 20 }}><Hint>{t('hint.help')}</Hint></div>
-              : <div style={{ marginBottom: 4 }} />}
+            {frame === 'modal' && <div style={{ marginTop: 6, marginBottom: 20 }}><Hint>{t('hint.help')}</Hint></div>}
 
-            <Actions>
+            <Actions inline={frame === 'inline'}>
+              {/* L'infobulle de l'encadré : ce que la génération va faire, puis ce
+                  qu'on peut lui demander. */}
+              {frame === 'inline' && (
+                <span style={{ marginRight: 'auto', display: 'inline-flex' }}>
+                  <InfoDot
+                    text={forcedContext === null ? planText : t('hint.info')}
+                    more={forcedContext === null ? t('hint.infoIdeasProgram') : t('hint.infoIdeas')}
+                  />
+                </span>
+              )}
               <Ghost onClick={requestClose}>{t('cancel')}</Ghost>
               {/* Deux blocages : tant que le programme n'est pas lu, on ne sait
                   pas encore quoi lancer — mieux vaut attendre une fraction de
@@ -461,8 +473,14 @@ function Hint({ children }: { children: React.ReactNode }) {
   return <p style={{ fontSize: 12.5, color: palette.inkFaint, margin: '2px 0 0' }}>{children}</p>;
 }
 
-function Actions({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>{children}</div>;
+function Actions({ children, inline = false }: { children: React.ReactNode; inline?: boolean }) {
+  // En encadré, les boutons se calent en bas (`marginTop: auto`), au plus près
+  // du champ quand l'encadré n'a que la hauteur de son contenu.
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: inline ? 'auto' : 18, paddingTop: inline ? 10 : 0 }}>
+      {children}
+    </div>
+  );
 }
 
 function Ghost({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {

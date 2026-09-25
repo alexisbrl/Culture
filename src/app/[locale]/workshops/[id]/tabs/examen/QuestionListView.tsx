@@ -947,7 +947,7 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
              tient le formulaire ouvert : la laisser derrière soi bloquerait
              toute autre création tant qu'on ne l'a pas retrouvée. Passer à l'IA
              l'annule donc, et revenir au manuel en ouvre une fraîche. */
-          <div ref={editorRef} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 16px', borderRadius: 14, background: palette.surfaceRaised, border: `1px solid ${palette.line}` }}>
+          <div ref={editorRef} style={{ display: 'flex', flexDirection: 'column', gap: generating ? 8 : 12, padding: generating ? '12px 16px' : '14px 16px', borderRadius: 14, background: palette.surfaceRaised, border: `1px solid ${palette.line}` }}>
             {/* ⚠️ **La ligne de titre appartient à l'encadré, pas à son contenu**
                 (07/09/2026). Elle doit être la MÊME des deux côtés de la bascule
                 — c'est la même chose qu'on crée, par deux chemins —, donc ni le

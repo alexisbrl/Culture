@@ -1166,7 +1166,8 @@
       "placeholderExam": "Write me {count} questions across all chapters…",
       "help": "What the AI cannot guess: the students’ level, the expected structure, the word used in the document. It can also write or extend a course if you ask it to. A bare number (“40”) simply asks for that many questions.",
       "info": "AI writes exam questions from the workshop’s notions.",
-      "infoIdeas": "You can steer it: the number of questions, which notions or chapters to cover, the answer types you want, the students’ level, the wording to use."
+      "infoIdeas": "You can steer it: the number of questions, which notions or chapters to cover, the answer types you want, the target level, the wording to use.",
+      "infoIdeasProgram": "You can steer it: the course you want, the target level, the expected structure…"
     },
     "generate": "generate",
     "cancel": "cancel",
@@ -1192,7 +1193,7 @@
     "chooseAi": "with AI",
     "chooseManual": "manual",
     "plan": {
-      "program": "The AI will read the documents, extract the notions, sort them into chapters, then write the practice questions. Whatever already exists is completed, never redone.",
+      "program": "The AI will read the resources (which it can complete if needed), extract the notions from them, sort them into chapters, then write the practice questions.",
       "parcoursQuestions": "The AI will top up the practice questions for notions that are still short. The documents are not read again.",
       "examQuestions": "The AI will write exam questions across the whole programme — each crossing several notions, some following on from one another. The documents are not read again.",
       "questionsOnly": "No readable document in this workshop: the AI will not touch the programme. It will write the practice questions still missing from the existing notions.",

@@ -665,3 +665,19 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* L'encadré de génération par IA naît du bouton qui l'ouvre (25/09/2026,
+   demandé par Alexis) : il se déploie depuis le coin haut droit — là où se
+   trouvait le bouton, qu'il remplace — jusqu'à sa pleine taille. Un découpage
+   (`clip-path`) et non une mise à l'échelle : le texte ne se déforme pas
+   pendant qu'il grandit. */
+@keyframes ai-box-grow {
+  from { clip-path: inset(0 0 calc(100% - 38px) calc(100% - 170px) round 12px); opacity: 0.6; }
+  to   { clip-path: inset(0 0 0 0 round 14px); opacity: 1; }
+}
+.ai-box-grow {
+  animation: ai-box-grow 260ms var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-box-grow { animation: none; }
+}

@@ -55,6 +55,13 @@ import {
 // confondues : au-delà, tout bouton de génération s'éteint et dit pourquoi au
 // survol.
 
+/** La hauteur de la zone de dépôt des Ressources, et donc celle de l'encadré de
+ *  génération des Paramètres, qui la remplace (25/09/2026, demandé par Alexis :
+ *  « exactement la même taille »). Posée sur les deux plutôt que mesurée : dans
+ *  Chapitre & Notion, la zone de dépôt n'est pas à l'écran. L'encadré grandit
+ *  au-delà avec le texte saisi. */
+export const GENERATION_BOX_MIN_HEIGHT = 160;
+
 /** Une génération rouverte pour modifier sa consigne. */
 export type GenerationEditing = { requestId: string; prompt: string };
 
@@ -120,12 +127,16 @@ export default function AiGenerationButton({ workshopId, onOpen, compact = false
  *  Abandonner la remet dans la file ; enregistrer la met à jour. Si la
  *  modification traîne au point que la génération quitte la file, la consigne
  *  reste là, et l'enregistrer la redemande (@/lib/ingest/queue). */
-export function AiGenerationBox({ workshopId, origin, forcedContext = null, editing, onClose, titleSlot, hint, onHintChange }: {
+export function AiGenerationBox({ workshopId, origin, forcedContext = null, editing, onClose, titleSlot, hint, onHintChange, minHeight, grow = false }: {
   workshopId: string;
   origin: GenerationOrigin;
   forcedContext?: 'parcours' | 'exam' | null;
   editing?: GenerationEditing;
   onClose: () => void;
+  /** Hauteur plancher — celle de la zone de dépôt, dans les Paramètres. */
+  minHeight?: number;
+  /** Se déploie depuis le bouton qui l'ouvre, qu'il remplace. */
+  grow?: boolean;
   /** Ce qui se pose à droite de la ligne de titre (la bascule manuel / IA de
    *  la banque d'examen). */
   titleSlot?: React.ReactNode;
@@ -149,8 +160,11 @@ export function AiGenerationBox({ workshopId, origin, forcedContext = null, edit
   }, [workshopId, requestId]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 16px', borderRadius: 14, background: palette.surfaceRaised, border: `1px solid ${palette.line}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 30 }}>
+    <div
+      className={grow ? 'ai-box-grow' : undefined}
+      style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 16px', minHeight, borderRadius: 14, background: palette.surfaceRaised, border: `1px solid ${palette.line}` }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 24 }}>
         <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: palette.green }}>
           {(editing ? t('box.editTitle') : t('box.newTitle')).toUpperCase()}
         </div>
@@ -237,16 +251,9 @@ function GenerationCard({ workshopId, item, phase, onEdit }: {
     <div className="flex flex-col gap-2 rounded-[14px] border border-[var(--line)] bg-[var(--surface-raised)] px-4 py-3">
       <div className="flex min-w-0 items-center gap-2">
         <Sparkles size={14} strokeWidth={1.75} className="shrink-0 text-[var(--green-strong)]" />
-        {onEdit
-          ? (
-            <Tooltip content={t('queue.edit')}>
-              <button type="button" onClick={onEdit} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 bg-transparent p-0">
-                {label}
-                <Pencil size={13} strokeWidth={1.9} className="shrink-0 text-[var(--ink-faint)]" />
-              </button>
-            </Tooltip>
-          )
-          : label}
+        {/* La consigne se lit ici ; elle se modifie depuis la ligne « en
+            attente », en dessous — une seule porte, pas deux. */}
+        {label}
         <GenerationCompanions workshopId={workshopId} item={item} phase={phase} inCard />
       </div>
       {phase === 'problem' && item.problem
