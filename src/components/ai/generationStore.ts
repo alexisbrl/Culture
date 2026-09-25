@@ -5,9 +5,8 @@ import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   cancelGenerationRequest,
   cancelWorkshopImport,
-  holdGenerationRequest,
   startWorkshopGeneration,
-  updateGenerationRequest,
+  takeBackGenerationRequest,
   type GenerationInput,
   type PlanIssue,
 } from '@/app/actions/aiIngest';
@@ -99,6 +98,9 @@ export type GenerationItem = {
   importId: string | null;
   /** La consigne donnée, pour distinguer deux générations d'une même liste. */
   hint: string;
+  /** Son entrée dans la file — le rang qu'elle reprend si on la modifie.
+   *  Vide tant que le serveur ne l'a pas enregistrée. */
+  createdAt: string;
   problem: GenerationProblem | null;
 };
 
@@ -170,6 +172,7 @@ type RequestView = {
   state: 'queued' | 'starting' | PipelineSummary['state'];
   importId: string | null;
   hint: string;
+  createdAt: string;
   status: PipelineSummary | null;
   error: string | null;
 };
@@ -298,7 +301,11 @@ async function tick(workshopId: string, entry: Entry, token: number) {
     settled.push(item);
   }
 
-  setItems(entry, settled, wrote || finished);
+  // L'ordre du serveur fait foi : une génération renvoyée après modification
+  // reprend son rang, devant celles arrivées après elle.
+  const rank = new Map(status.requests.map((r, i) => [r.id, i]));
+  const ordered = [...settled].sort((a, b) => (rank.get(a.id) ?? 1e9) - (rank.get(b.id) ?? 1e9));
+  setItems(entry, ordered, wrote || finished);
   for (const id of doneIds) setTimeout(() => removeItem(entry, id), DONE_FLASH_MS);
   schedule(workshopId, entry, token, settled.some(isActive) ? RUNNING_POLL_MS : IDLE_POLL_MS);
 }
@@ -314,6 +321,7 @@ function itemFrom(entry: Entry, view: RequestView, prev: GenerationItem | null):
     progress: view.state === 'running' ? progress : 0,
     importId: view.importId,
     hint: view.hint || prev?.hint || '',
+    createdAt: view.createdAt,
     problem: null,
   };
 }
@@ -395,6 +403,7 @@ export async function launchGeneration(workshopId: string, input: GenerationInpu
     progress: 0,
     importId: null,
     hint: input.prompt,
+    createdAt: '',
     problem: null,
   }]);
 
@@ -414,40 +423,17 @@ export async function launchGeneration(workshopId: string, input: GenerationInpu
   restart(workshopId, entry);
 }
 
-/** Rouvre une génération qui attend encore, pour modifier sa consigne : la file
- *  la saute tant que dure la modification, et elle garde sa place. `false` :
- *  elle est partie entre-temps — il n'y a plus rien à modifier. */
-export async function holdGeneration(workshopId: string, id: string): Promise<boolean> {
-  if (id.startsWith('local:')) return false;
-  const held = await holdGenerationRequest(workshopId, id, true).catch(() => false);
-  if (!held) restart(workshopId, entryOf(workshopId));
-  return held;
-}
-
-/** La modification est abandonnée : la génération reprend sa place, et part si
- *  c'est son tour. */
-export async function releaseGeneration(workshopId: string, id: string): Promise<void> {
-  if (id.startsWith('local:')) return;
-  await holdGenerationRequest(workshopId, id, false).catch(() => false);
-  restart(workshopId, entryOf(workshopId));
-}
-
-/** Modifie une génération qui attend encore son tour : elle garde sa place.
- *  Partie entre-temps, elle n'est plus modifiable — le suivi la montre alors
- *  telle qu'elle tourne. */
-export async function editGeneration(workshopId: string, id: string, input: GenerationInput): Promise<void> {
+/** Retire de la file une génération qui attend, pour modifier sa consigne
+ *  (26/09/2026) : rend son texte et son rang, que le renvoi réutilisera pour
+ *  reprendre sa place. `null` : elle est partie entre-temps — il n'y a plus
+ *  rien à modifier. */
+export async function takeBackGeneration(workshopId: string, id: string): Promise<{ prompt: string; rankAt: string } | null> {
   const entry = entryOf(workshopId);
-  if (id.startsWith('local:')) return launchGeneration(workshopId, input);
-  patchItem(entry, id, { hint: input.prompt });
-  const outcome = await updateGenerationRequest(workshopId, id, input).catch(() => 'started' as const);
-  // Elle a quitté la file (modification restée ouverte trop longtemps, ou
-  // retirée ailleurs) : la consigne n'est pas perdue, elle repart en dernière
-  // position, comme une demande neuve.
-  if (outcome === 'gone') {
-    removeItem(entry, id);
-    return launchGeneration(workshopId, input);
-  }
+  if (id.startsWith('local:')) return null;
+  const back = await takeBackGenerationRequest(workshopId, id).catch(() => null);
+  if (back) removeItem(entry, id);
   restart(workshopId, entry);
+  return back;
 }
 
 /** Arrête une génération qui tourne — et défait ce qu'elle a écrit —, ou retire

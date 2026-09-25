@@ -94,6 +94,9 @@ export type GenerationInput = {
   /** Le texte tel que l'utilisateur l'a tapé (voir @/lib/ingest/queue). */
   prompt: string;
   origin: string;
+  /** Renvoi d'une demande retirée pour modification : son rang d'origine
+   *  (voir @/lib/ingest/queue). */
+  rankAt?: string | null;
 };
 
 /** Ce que l'écran envoie, remis en forme : une URL POST publique peut recevoir
@@ -118,7 +121,8 @@ export async function startWorkshopGeneration(workshopId: string, input: Generat
 
   try {
     const baseUrl = await ownOrigin();
-    const requestId = await queue.enqueue(workshopId, ctx.userId, cleanInput(input), baseUrl);
+    const rankAt = typeof input.rankAt === 'string' ? input.rankAt : null;
+    const requestId = await queue.enqueue(workshopId, ctx.userId, cleanInput(input), baseUrl, rankAt);
     after(() => queue.promoteNext(workshopId, baseUrl));
     return { ok: true, requestId };
   } catch (error) {
@@ -128,33 +132,14 @@ export async function startWorkshopGeneration(workshopId: string, input: Generat
   }
 }
 
-/** Modifie une demande qui attend encore son tour (sa consigne, et ce qui en
- *  découle) : elle garde sa place dans la file. Voir `queue.updateRequest`
- *  pour ce que dit la réponse. */
-export async function updateGenerationRequest(
+/** Retire une demande qui attend, pour en modifier la consigne : rend son texte
+ *  et son rang, que le renvoi réutilisera. `null` : elle est déjà partie. */
+export async function takeBackGenerationRequest(
   workshopId: string,
   requestId: string,
-  input: GenerationInput,
-): Promise<'updated' | 'started' | 'gone'> {
-  if (!(await requireManager(workshopId))) return 'started';
-  const updated = await queue.updateRequest(workshopId, requestId, cleanInput(input));
-  // Elle a pu être sautée pendant la modification : si la place est libre, elle
-  // part maintenant.
-  const baseUrl = await ownOrigin();
-  after(() => queue.promoteNext(workshopId, baseUrl));
-  return updated;
-}
-
-/** Met une demande à l'écart le temps de modifier sa consigne, ou l'y remet
- *  quand la modification est abandonnée. `false` : elle est déjà partie. */
-export async function holdGenerationRequest(workshopId: string, requestId: string, hold: boolean): Promise<boolean> {
-  if (!(await requireManager(workshopId))) return false;
-  const held = await queue.holdRequest(workshopId, requestId, hold);
-  if (!hold) {
-    const baseUrl = await ownOrigin();
-    after(() => queue.promoteNext(workshopId, baseUrl));
-  }
-  return held;
+): Promise<{ prompt: string; rankAt: string } | null> {
+  if (!(await requireManager(workshopId))) return null;
+  return queue.takeBack(workshopId, requestId);
 }
 
 /** Retire une demande qui attend encore son tour. Rien n'a été écrit, rien

@@ -19,6 +19,7 @@ import {
 } from './examen/examShared';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useGenerationRefresh } from '@/components/ai/generationStore';
+import { readListDraft, setListCreation } from '@/components/ai/listDraftStore';
 import HistoryContent from './examen/HistoryContent';
 import BankContent from './examen/BankContent';
 import GeneratorContent from './examen/GeneratorContent';
@@ -370,6 +371,22 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   // instances voudraient dire deux brouillons pour une seule question).
   const sheetCarriesEditor = isPhone && phonePane === 'sheet' && editingQuestion !== null;
 
+  // ─── La question neuve laissée en changeant de page (26/09/2026) ─────────
+  //
+  // Elle est gardée dans l'onglet (`listDraftStore`) à chaque frappe. Au retour,
+  // une fois la banque chargée — avant, sa lecture l'écraserait —, on la rouvre
+  // exactement comme on l'avait laissée. Elle reprend sa place en fin d'examen :
+  // une question neuve n'est rangée dans une partie qu'à l'enregistrement.
+  const restoredNew = useRef(false);
+  useEffect(() => {
+    if (loading || restoredNew.current) return;
+    restoredNew.current = true;
+    const { creation } = readListDraft(workshopId, 'exam');
+    if (creation?.side === 'manual' && creation.question) handleNewQuestionInSection(-1, undefined, creation.question);
+    // Une seule fois, à l'arrivée des données : la fonction change à chaque rendu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, workshopId]);
+
   function handleNewQuestion(initialStatement?: string) {
     handleNewQuestionInSection(-1, initialStatement);
   }
@@ -381,7 +398,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
    *  Un index qui ne désigne aucune partie (-1) vaut « à la fin de l'examen » :
    *  c'est le cas du bouton « nouvelle question » de la banque, qui ne vise
    *  aucun endroit. */
-  function handleNewQuestionInSection(sectionIdx: number, initialStatement?: string) {
+  function handleNewQuestionInSection(sectionIdx: number, initialStatement?: string, restored?: Question) {
     // Tant que le serveur n'a pas répondu, sa réponse écraserait la question
     // qu'on créerait ici — voir `loading`. Les affordances sont déjà éteintes ;
     // ce filet couvre ce qui pourrait les contourner (double-clic sur la copie).
@@ -392,7 +409,10 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     }
     // L'énoncé peut arriver pré-rempli : c'est le texte qu'on avait commencé à
     // écrire côté IA, que la bascule fait suivre (voir `sharedText`).
-    const q = { ...emptyQuestion(), content: initialStatement ?? '' };
+    // `restored` : la question neuve qu'on avait laissée en changeant de page,
+    // reprise telle quelle (voir la reprise plus bas).
+    const q = restored ?? { ...emptyQuestion(), content: initialStatement ?? '' };
+    setListCreation(workshopId, 'exam', { side: 'manual', aiPrompt: '', question: q });
     setQuestions(prev => [q, ...prev]);
     setExamConfig(prev => ({
       ...prev,
@@ -410,6 +430,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   function handleCancelQuestion() {
     const id = newQuestionId;
     if (id) {
+      setListCreation(workshopId, 'exam', null);
       setQuestions(prev => prev.filter(p => p.id !== id));
       setExamConfig(prev => ({
         ...prev,
@@ -451,7 +472,12 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         frame={frame}
         pools={pools}
         notions={notions}
-        onDraftChange={setEditingDraft}
+        onDraftChange={draft => {
+          setEditingDraft(draft);
+          // La question neuve est gardée dans l'onglet à chaque frappe : quitter
+          // la page et revenir la retrouve telle quelle.
+          if (draft.id === newQuestionId) setListCreation(workshopId, 'exam', { side: 'manual', aiPrompt: '', question: draft });
+        }}
         onRemovePart={idx => shiftPartWeights(editingQuestion.id, idx)}
         onCreatePool={handleCreatePool}
         onUpdatePool={handleUpdatePool}
@@ -495,6 +521,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         ? prev.map(p => (p.id === saved.id ? saved : p))
         : [saved, ...prev]
     ));
+    if (saved.id === newQuestionId) setListCreation(workshopId, 'exam', null);
     setEditingQuestion(null);
     setEditingDraft(null);
     setNewQuestionId(null);

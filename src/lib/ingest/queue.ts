@@ -58,19 +58,12 @@ export const MAX_ACTIVE_GENERATIONS = 3;
  *  secondes au plus). Elle redevient une demande en attente. */
 const STARTING_TIMEOUT_MS = 3 * 60 * 1000;
 
-/** Une demande rouverte pour modifier sa consigne est mise à l'écart le temps
- *  de la modification : la file la saute, et elle garde sa place.
- *
- *  La mise à l'écart est un BATTEMENT, que l'encadré ouvert renouvelle
- *  (`HOLD_RENEW_MS`, generationStore) : un encadré qui disparaît sans rien dire
- *  — page rechargée, onglet fermé — la laisse retomber d'elle-même, et la
- *  demande reprend sa place avec sa consigne d'avant. Sans ça, un simple
- *  rafraîchissement pendant une modification bloquait la demande.
- *
- *  L'encadré resté ouvert dix minutes, lui, fait quitter la file à la demande
- *  (décision d'Alexis du 25/09/2026) : c'est lui qui compte ce délai et la
- *  retire, en gardant la consigne à l'écran. */
-const HOLD_MS = 90 * 1000;
+// ─── Modifier une demande qui attend (26/09/2026, décision d'Alexis) ────────
+//
+// Rouvrir sa consigne la RETIRE de la file (`takeBack`) — c'est tout. Tant
+// qu'elle n'est pas renvoyée, elle n'existe plus : l'oublier, c'est la perdre.
+// Renvoyée, elle reprend son rang d'origine (`rankAt`, sa date d'entrée dans la
+// file) : première si elle l'était, et devant celles arrivées après elle.
 
 /** L'écran ne suit que les demandes récentes : au-delà, une génération est
  *  finie depuis longtemps, et le bandeau des imports prend le relais. */
@@ -105,6 +98,8 @@ export type RequestView = {
   importId: string | null;
   /** La consigne donnée, pour distinguer deux générations d'une même liste. */
   hint: string;
+  /** Son entrée dans la file : le rang qu'elle reprend si on la modifie. */
+  createdAt: string;
   /** L'avancement du lot, une fois ouvert. */
   status: GenerationStatus | null;
   /** Le démarrage a échoué : la raison. */
@@ -120,27 +115,12 @@ type RequestRow = {
   import_id: string | null;
   started_at: string | null;
   error: string | null;
-  held_until: string | null;
   created_at: string;
 };
 
-const COLUMNS = 'id, workshop_id, created_by, input, base_url, import_id, started_at, error, held_until, created_at';
-
-/** Remet dans la file les demandes dont la modification a été abandonnée sans
- *  un mot (plus de battement de l'encadré). */
-async function releaseExpiredHolds(workshopId: string): Promise<void> {
-  const supabase = getSupabaseServerClient();
-  const { error } = await supabase
-    .from('ai_generation_requests')
-    .update({ held_until: null })
-    .eq('workshop_id', workshopId)
-    .is('import_id', null)
-    .lt('held_until', new Date().toISOString());
-  if (error) console.error('releaseExpiredHolds error:', error);
-}
+const COLUMNS = 'id, workshop_id, created_by, input, base_url, import_id, started_at, error, created_at';
 
 async function recentRequests(workshopId: string): Promise<RequestRow[]> {
-  await releaseExpiredHolds(workshopId);
   const supabase = getSupabaseServerClient();
   const since = new Date(Date.now() - RECENT_MS).toISOString();
   const { data, error } = await supabase
@@ -154,8 +134,6 @@ async function recentRequests(workshopId: string): Promise<RequestRow[]> {
 }
 
 const isWaiting = (r: RequestRow) => r.import_id === null && r.error === null;
-/** Rouverte pour modification : la file la saute tant que ça dure. */
-const isHeld = (r: RequestRow, now: number) => r.held_until !== null && Date.parse(r.held_until) > now;
 const isStarting = (r: RequestRow, now: number) =>
   isWaiting(r) && r.started_at !== null && now - Date.parse(r.started_at) < STARTING_TIMEOUT_MS;
 
@@ -174,17 +152,25 @@ export async function activeCount(workshopId: string): Promise<number> {
 /** Écrit une demande. Lève `QUEUE_FULL` quand l'atelier en a déjà assez. */
 export const QUEUE_FULL = 'INGEST_QUEUE_FULL';
 
+/** `rankAt` : le rang d'une demande retirée pour modification et renvoyée —
+ *  sa date d'entrée d'origine. Ignoré s'il n'est pas une date des dernières
+ *  vingt-quatre heures : il ne sert qu'à reprendre une place, pas à en voler. */
 export async function enqueue(
   workshopId: string,
   userId: string,
   input: RequestInput,
   baseUrl: string,
+  rankAt?: string | null,
 ): Promise<string> {
   if ((await activeCount(workshopId)) >= MAX_ACTIVE_GENERATIONS) throw new Error(QUEUE_FULL);
+  const rank = rankAt ? Date.parse(rankAt) : NaN;
+  const createdAt = Number.isFinite(rank) && rank <= Date.now() && Date.now() - rank < RECENT_MS
+    ? new Date(rank).toISOString()
+    : undefined;
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from('ai_generation_requests')
-    .insert({ workshop_id: workshopId, created_by: userId, input, base_url: baseUrl })
+    .insert({ workshop_id: workshopId, created_by: userId, input, base_url: baseUrl, created_at: createdAt })
     .select('id')
     .single();
   if (error || !data) throw new Error(error?.message ?? 'demande non enregistrée');
@@ -210,63 +196,26 @@ export async function cancelRequest(workshopId: string, requestId: string): Prom
   return (data ?? []).length > 0;
 }
 
-/** Met une demande à l'écart le temps de modifier sa consigne (`hold`), ou
- *  l'y remet (`false`, modification abandonnée). `false` en retour : elle est
- *  déjà partie — il n'y a plus rien à modifier. */
-export async function holdRequest(workshopId: string, requestId: string, hold: boolean): Promise<boolean> {
+/** Retire une demande qui attend, pour en modifier la consigne : rend ce qu'il
+ *  faut pour la renvoyer — son texte, et son rang. `null` : elle est déjà
+ *  partie, il n'y a plus rien à modifier. */
+export async function takeBack(workshopId: string, requestId: string): Promise<{ prompt: string; rankAt: string } | null> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from('ai_generation_requests')
-    .update({ held_until: hold ? new Date(Date.now() + HOLD_MS).toISOString() : null })
+    .delete()
     .eq('id', requestId)
     .eq('workshop_id', workshopId)
     .is('import_id', null)
     .is('started_at', null)
-    .select('id');
+    .select('input, created_at');
   if (error) {
-    console.error('holdRequest error:', error);
-    return false;
+    console.error('takeBack error:', error);
+    return null;
   }
-  return (data ?? []).length > 0;
-}
-
-/** Modifie une demande qui attend encore son tour : elle garde sa place dans la
- *  file, et la mise à l'écart de la modification tombe.
- *
- *  `updated` : c'est fait. `started` : elle est partie entre-temps, avec sa
- *  consigne d'avant. `gone` : elle n'est plus dans la file — retirée, ou sa
- *  modification a expiré ; l'écran la redemande alors comme une neuve. */
-export async function updateRequest(
-  workshopId: string,
-  requestId: string,
-  input: RequestInput,
-): Promise<'updated' | 'started' | 'gone'> {
-  if (await updateWaiting(workshopId, requestId, input)) return 'updated';
-  const supabase = getSupabaseServerClient();
-  const { data } = await supabase
-    .from('ai_generation_requests')
-    .select('id')
-    .eq('id', requestId)
-    .eq('workshop_id', workshopId)
-    .maybeSingle();
-  return data ? 'started' : 'gone';
-}
-
-async function updateWaiting(workshopId: string, requestId: string, input: RequestInput): Promise<boolean> {
-  const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('ai_generation_requests')
-    .update({ input, held_until: null })
-    .eq('id', requestId)
-    .eq('workshop_id', workshopId)
-    .is('import_id', null)
-    .is('started_at', null)
-    .select('id');
-  if (error) {
-    console.error('updateRequest error:', error);
-    return false;
-  }
-  return (data ?? []).length > 0;
+  const row = (data ?? [])[0] as { input: RequestInput; created_at: string } | undefined;
+  if (!row) return null;
+  return { prompt: row.input?.prompt ?? row.input?.hint ?? '', rankAt: row.created_at };
 }
 
 /** Le nombre de notions au programme — celles des chapitres qui n'ont pas été
@@ -314,9 +263,7 @@ export async function promoteNext(workshopId: string, baseUrl: string): Promise<
       const rows = await recentRequests(workshopId);
       const now = Date.now();
       if (rows.some((r) => isStarting(r, now))) return;
-      // La première qui attend et n'est pas en cours de modification : celle
-      // qu'on modifie garde sa place, les suivantes peuvent passer devant.
-      const next = rows.find((r) => isWaiting(r) && !isHeld(r, now) && r.base_url === baseUrl);
+      const next = rows.find((r) => isWaiting(r) && r.base_url === baseUrl);
       if (!next) return;
 
       const staleBefore = new Date(now - STARTING_TIMEOUT_MS).toISOString();
@@ -408,19 +355,19 @@ export async function listRequests(workshopId: string, followed: readonly string
   for (const r of rows) {
     const door = doorOf(r.input?.origin);
     if (r.error) {
-      if (wanted.has(r.id)) views.push({ id: r.id, door, state: 'failed', importId: null, hint: r.input?.prompt ?? r.input?.hint ?? '', status: null, error: r.error });
+      if (wanted.has(r.id)) views.push({ id: r.id, door, state: 'failed', importId: null, hint: r.input?.prompt ?? r.input?.hint ?? '', createdAt: r.created_at, status: null, error: r.error });
       continue;
     }
     if (r.import_id === null) {
-      const starting = isStarting(r, now) || (!placeTaken && !isHeld(r, now));
+      const starting = isStarting(r, now) || !placeTaken;
       if (starting) placeTaken = true;
-      views.push({ id: r.id, door, state: starting ? 'starting' : 'queued', importId: null, hint: r.input?.prompt ?? r.input?.hint ?? '', status: null, error: null });
+      views.push({ id: r.id, door, state: starting ? 'starting' : 'queued', importId: null, hint: r.input?.prompt ?? r.input?.hint ?? '', createdAt: r.created_at, status: null, error: null });
       continue;
     }
     const status = await generationStatus(r.import_id);
     if (!status) continue;
     if (status.state === 'running' || wanted.has(r.id)) {
-      views.push({ id: r.id, door, state: status.state, importId: r.import_id, hint: r.input?.prompt ?? r.input?.hint ?? '', status, error: null });
+      views.push({ id: r.id, door, state: status.state, importId: r.import_id, hint: r.input?.prompt ?? r.input?.hint ?? '', createdAt: r.created_at, status, error: null });
     }
   }
 
@@ -431,7 +378,7 @@ export async function listRequests(workshopId: string, followed: readonly string
     const supabase = getSupabaseServerClient();
     const { data } = await supabase
       .from('ai_imports')
-      .select('id, origin, scope')
+      .select('id, origin, scope, created_at')
       .eq('workshop_id', workshopId)
       .in('id', [...orphans]);
     for (const row of data ?? []) {
@@ -441,7 +388,7 @@ export async function listRequests(workshopId: string, followed: readonly string
       if (requestId && rows.some((r) => r.id === requestId)) continue;
       const status = await generationStatus(row.id as string);
       if (!status) continue;
-      views.unshift({ id: row.id as string, door: doorOf(row.origin as string | null), state: status.state, importId: row.id as string, hint: (row.scope as { hint?: string } | null)?.hint ?? '', status, error: null });
+      views.unshift({ id: row.id as string, door: doorOf(row.origin as string | null), state: status.state, importId: row.id as string, hint: (row.scope as { hint?: string } | null)?.hint ?? '', createdAt: row.created_at as string, status, error: null });
     }
   }
   return views;

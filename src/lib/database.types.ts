@@ -29,7 +29,6 @@ export type Database = {
           created_at: string
           created_by: string
           error: string | null
-          held_until: string | null
           id: string
           import_id: string | null
           input: Json
@@ -41,7 +40,6 @@ export type Database = {
           created_at?: string
           created_by: string
           error?: string | null
-          held_until?: string | null
           id?: string
           import_id?: string | null
           input?: Json
@@ -53,7 +51,6 @@ export type Database = {
           created_at?: string
           created_by?: string
           error?: string | null
-          held_until?: string | null
           id?: string
           import_id?: string | null
           input?: Json

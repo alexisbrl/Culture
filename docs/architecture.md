@@ -809,15 +809,15 @@ dit pourquoi au survol. Trois passages font partir la suivante, un seul y parvie
 (ou l'arrêt) de la précédente, chaque lecture d'avancement, la veille planifiée. Une demande
 qui attend se retire d'une croix, après confirmation.
 
-**Modifier une demande qui attend la met à l'écart, sans lui faire perdre sa place.** Tant
-que sa consigne est rouverte, la file la saute : si c'est son tour, la suivante passe devant.
-Enregistrer ou abandonner la modification la remet en tête de celles qui attendent. Une
-modification restée ouverte plus de dix minutes fait **quitter la file** à la demande — elle
-ne part jamais avec une consigne qu'on est en train de réécrire —, mais l'encadré garde le
-texte, et l'enregistrer la redemande, en dernière position. La mise à l'écart est un battement que
-l'encadré ouvert renouvelle : une page rechargée ou un onglet fermé pendant la modification la
-laisse retomber d'elle-même en moins de deux minutes, et la demande reprend sa place avec sa
-consigne d'avant.
+**Modifier une demande qui attend la retire de la file.** Rouvrir sa consigne la sort de la
+file, et c'est tout : tant qu'elle n'est pas renvoyée, elle n'existe plus — l'oublier, c'est la
+perdre. Renvoyée, elle **reprend son rang d'origine**, devant celles arrivées après elle.
+
+**Ce qu'on écrit en tête d'une liste est gardé dans l'onglet.** L'encadré de génération des
+Paramètres, l'encadré de nouvelle question d'une liste — côté manuel comme côté IA — et une
+génération rouverte pour modification survivent à un changement de page : on les retrouve tels
+qu'on les a laissés. Pas à un rafraîchissement, qui vide la mémoire de l'onglet. L'encadré de
+nouvelle question passe avant tout, au-dessus des générations en cours et en attente.
 
 **Seuls les Paramètres construisent le programme.** Une liste de questions n'écrit que des
 questions, sur les notions en place, et n'écrit jamais le document de l'IA. Ce qui dépend de

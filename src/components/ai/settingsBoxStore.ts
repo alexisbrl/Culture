@@ -10,8 +10,9 @@ import { useCallback, useSyncExternalStore } from 'react';
 // l'encadré, ni la consigne en cours d'écriture, ni la génération en attente
 // qu'on modifie. D'où un état hors des deux sections, qui ne font que l'afficher.
 
-/** Une génération rouverte pour modifier sa consigne. */
-export type GenerationEditing = { requestId: string; prompt: string };
+/** Une génération retirée de la file pour modifier sa consigne : son texte, et
+ *  son rang d'origine, que le renvoi lui rend (@/lib/ingest/queue). */
+export type GenerationEditing = { prompt: string; rankAt: string };
 
 export type SettingsBox = {
   editing?: GenerationEditing;
@@ -45,7 +46,7 @@ export function useSettingsBox(workshopId: string): SettingsBox | null {
  *  ouvert sur la même chose, il reste tel quel, consigne comprise. */
 export function openSettingsBox(workshopId: string, editing?: GenerationEditing): void {
   const current = boxes.get(workshopId);
-  if (current && current.editing?.requestId === editing?.requestId) return;
+  if (current && current.editing?.rankAt === editing?.rankAt) return;
   set(workshopId, { editing, prompt: editing?.prompt ?? '', openedAt: Date.now() });
 }
 

@@ -8,6 +8,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import AiGenerationDialog, { useWorkshopFiles } from '@/components/ai/AiGenerationDialog';
 import ImportBanner from '@/components/ai/ImportBanner';
 import { AiGenerationQueue } from '@/components/ai/AiGenerationButton';
+import { setListCreation, useListDraft, type ListCreation, type ListDoor } from '@/components/ai/listDraftStore';
 import { type Question, type ResponseType, type BloomLevel } from '../QuestionEditor';
 import { BLOOM_LEVELS } from '@/lib/workshops/examTypes';
 import { RESPONSE_TYPE_ORDER } from './questionFields';
@@ -197,7 +198,16 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   const tAi = useTranslations('ai');
   // Génération par IA : les documents sont chargés d'avance pour que le
   // dialogue s'ouvre déjà rempli.
-  const [generating, setGenerating] = useState(false);
+  //
+  // ⚠️ **L'encadré est gardé dans l'onglet, pas dans la page** (26/09/2026,
+  // demandé par Alexis) : le côté choisi et la consigne de l'IA vivent dans
+  // `listDraftStore`, comme la question manuelle en cours (que tient l'écran
+  // appelant). Changer de page et revenir retrouve l'encadré tel qu'on l'a
+  // laissé.
+  const door: ListDoor = aiContext === 'exam' ? 'exam' : 'parcours';
+  const { creation } = useListDraft(workshopId, door);
+  const writeCreation = (next: ListCreation | null) => { if (workshopId) setListCreation(workshopId, door, next); };
+  const generating = creation?.side === 'ai';
   /** L'encadré de création est ouvert : soit l'appelant tient une question neuve
    *  (côté manuel), soit on est passé à l'IA. Les deux occupent la MÊME boîte,
    *  en tête de liste, sous la même bascule. */
@@ -212,7 +222,8 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
    *  réciproquement. On hésite entre écrire la question et la faire écrire — le
    *  premier jet ne doit pas être perdu par ce choix. Tant que rien n'est ni
    *  enregistré ni lancé, c'est le même texte des deux côtés. */
-  const [sharedText, setSharedText] = useState('');
+  const sharedText = creation?.side === 'ai' ? creation.aiPrompt : '';
+  const setSharedText = (aiPrompt: string) => writeCreation({ side: 'ai', aiPrompt, question: null });
   /** La bascule de l'encadré. Elle n'est pas rendue ici : elle est posée sur la
    *  LIGNE DE TITRE du côté affiché — « NOUVELLE QUESTION » à gauche et elle à
    *  droite (demandé par Alexis) —, donc c'est le formulaire ou le dialogue qui
@@ -222,14 +233,17 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
       value={generating ? 'ai' : 'manual'}
       onChange={side => {
         if (side === 'ai') {
-          // L'énoncé en cours part avec nous : il devient la consigne.
-          setSharedText(draftStatement ?? '');
+          // L'énoncé en cours part avec nous : il devient la consigne. La
+          // question manuelle est refermée D'ABORD — elle efface l'encadré
+          // gardé —, puis le côté IA s'y inscrit.
+          const text = draftStatement ?? '';
           onCancelNewQuestion?.();
-          setGenerating(true);
+          writeCreation({ side: 'ai', aiPrompt: text, question: null });
           return;
         }
-        setGenerating(false);
-        onNewQuestion(sharedText);
+        const text = sharedText;
+        writeCreation(null);
+        onNewQuestion(text);
       }}
       options={[
         { value: 'manual', label: tAi('chooseManual'), icon: <Pencil size={13} strokeWidth={1.9} /> },
@@ -739,7 +753,7 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
           kind: 'button',
           label: tr('bank.newShort'),
           title: tr('bank.newQuestion'),
-          onClick: () => { setGenerating(false); setSharedText(''); onNewQuestion(); },
+          onClick: () => { writeCreation(null); onNewQuestion(); },
           disabled: loading,
         }}
         filter={
@@ -924,13 +938,6 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
             parcours ferait 79 px pour des cartes de 59, et la liste sauterait à
             l'arrivée des questions — c'est précisément ce qu'il est là pour
             éviter (`showLabels`, voir le `meta` de la carte plus haut). */}
-        {/* ─── Les générations lancées d'ici, une par encadré (25/09/2026) ───
-            On peut en lancer plusieurs à la suite — le chapitre 1, puis le 2 :
-            chacune a son encadré, en tête de liste, avec sa barre. Celles qui
-            attendent leur tour le disent, et se retirent d'une croix. */}
-        {aiAvailable && workshopId && !loading && (
-          <AiGenerationQueue workshopId={workshopId} door={aiContext === 'exam' ? 'exam' : 'parcours'} />
-        )}
         {loading && Array.from({ length: skeletonCount }, (_, i) => <ListCardSkeleton key={i} index={i} meta={showLabels} />)}
         {/* Sans IA (parcours), pas d'encadré ni de bascule : le formulaire garde
             son propre cadre, exactement comme avant. */}
@@ -966,7 +973,7 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
                   files={aiFiles ?? []}
                   forcedContext={aiContext}
                   origin={aiContext === 'exam' ? 'questions-exam' : 'questions-parcours'}
-                  onClose={() => setGenerating(false)}
+                  onClose={() => writeCreation(null)}
                   frame="inline"
                   hint={sharedText}
                   onHintChange={setSharedText}
@@ -977,6 +984,14 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
               // boîte dans la boîte (signalé par Alexis, capture à l'appui).
               : renderEditor?.({ bare: true, hideTitle: true })}
           </div>
+        )}
+        {/* ─── Les générations lancées d'ici, une par encadré (25/09/2026) ───
+            On peut en lancer plusieurs à la suite — le chapitre 1, puis le 2 :
+            chacune a son encadré, en tête de liste — sous l'encadré de nouvelle question, qui passe avant
+            tout (26/09/2026) —, avec sa barre. Celles qui
+            attendent leur tour le disent, et se retirent d'une croix. */}
+        {aiAvailable && workshopId && !loading && (
+          <AiGenerationQueue workshopId={workshopId} door={aiContext === 'exam' ? 'exam' : 'parcours'} />
         )}
         {!loading && !creating && renderEditor && editingQuestionId !== null && !filtered.some(q => q.id === editingQuestionId) && <div ref={editorRef}>{renderEditor()}</div>}
         {!loading && filtered.map(q => (

@@ -23,7 +23,7 @@
 //     avec rien ici, une carte de parcours n'ayant pas d'action au clic simple
 //     (côté banque, le clic pose la question sur la feuille).
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { palette } from '@/lib/theme';
@@ -40,6 +40,7 @@ import InlineQuestionEditor from '../examen/InlineQuestionEditor';
 import QuestionListView from '../examen/QuestionListView';
 import { LIST_INSET_X } from '../examen/examShared';
 import { useGenerationRefresh } from '@/components/ai/generationStore';
+import { readListDraft, setListCreation } from '@/components/ai/listDraftStore';
 import {
   getParcoursQuestions,
   saveParcoursQuestion,
@@ -96,6 +97,28 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
     setError('');
   }
 
+  /** Une question neuve : ouverte, et gardée dans l'onglet à chaque frappe —
+   *  quitter la page et revenir la retrouve telle quelle (26/09/2026). */
+  function openNewQuestion(q: Question) {
+    setListCreation(workshopId, 'parcours', { side: 'manual', aiPrompt: '', question: q });
+    openEditor(q);
+  }
+
+  function closeNewQuestion() {
+    setListCreation(workshopId, 'parcours', null);
+    setEditing(null);
+  }
+
+  // Au retour sur la page, une fois les questions chargées, la question neuve
+  // laissée en route est rouverte.
+  const restoredNew = useRef(false);
+  useEffect(() => {
+    if (loading || restoredNew.current) return;
+    restoredNew.current = true;
+    const { creation } = readListDraft(workshopId, 'parcours');
+    if (creation?.side === 'manual' && creation.question) openEditor(creation.question);
+  }, [loading, workshopId]);
+
   async function handleSave(question: Question) {
     setSaving(true);
     setError('');
@@ -116,6 +139,7 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
       // attendant la relecture.
       return [{ ...question, createdAt: question.createdAt ?? new Date().toISOString() }, ...prev];
     });
+    if (editing && !questions.some((x) => x.id === editing.id)) setListCreation(workshopId, 'parcours', null);
     setEditing(null);
   }
 
@@ -155,8 +179,11 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
           frame="plain"
           showLabels={false}
           notions={notions}
+          onDraftChange={(draft) => {
+            if (!questions.some((q) => q.id === draft.id)) setListCreation(workshopId, 'parcours', { side: 'manual', aiPrompt: '', question: draft });
+          }}
           onSave={handleSave}
-          onCancel={() => setEditing(null)}
+          onCancel={() => (questions.some((q) => q.id === editing.id) ? setEditing(null) : closeNewQuestion())}
         />
         {saving && (
           <div style={{ fontSize: 12, color: palette.inkSoft, marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -219,8 +246,8 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
         openId={openId}
         setOpenId={setOpenId}
         onEditQuestion={openEditor}
-        onNewQuestion={() => openEditor(emptyQuestion())}
-        onCancelNewQuestion={() => setEditing(null)}
+        onNewQuestion={() => openNewQuestion(emptyQuestion())}
+        onCancelNewQuestion={closeNewQuestion}
         onDeleteQuestion={handleDelete}
       />
       </div>

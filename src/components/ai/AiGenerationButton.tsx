@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { Check, Info, Pencil, Sparkles, TriangleAlert, X } from 'lucide-react';
@@ -18,8 +18,7 @@ import {
   capacityOf,
   dismissGeneration,
   displayPhase,
-  holdGeneration,
-  releaseGeneration,
+  takeBackGeneration,
   useGenerations,
   type GenerationDoor,
   type GenerationItem,
@@ -33,6 +32,7 @@ import {
   type GenerationEditing,
   type SettingsBox,
 } from './settingsBoxStore';
+import { setListEditing, useListDraft } from './listDraftStore';
 
 export type { GenerationEditing };
 
@@ -67,14 +67,6 @@ export type { GenerationEditing };
 // confondues : au-delà, tout bouton de génération s'éteint et dit pourquoi au
 // survol.
 
-/** Tant que l'encadré de modification est ouvert, il renouvelle la mise à
- *  l'écart de sa génération à ce rythme — bien en deçà de son expiration côté
- *  serveur (90 s, @/lib/ingest/queue). */
-const HOLD_RENEW_MS = 30_000;
-/** Une modification restée ouverte plus longtemps fait quitter la file à sa
- *  génération (décision d'Alexis du 25/09/2026). */
-const EDIT_LIMIT_MS = 10 * 60 * 1000;
-
 type Props = {
   workshopId: string;
   /** Rendu compact, pour se glisser dans une barre d'outils déjà chargée. */
@@ -87,16 +79,24 @@ function itemOf(items: GenerationItem[], door: GenerationDoor): GenerationItem |
   return [...items].reverse().find((i) => i.door === door) ?? null;
 }
 
+/** Modifier une génération qui attend : l'encadré s'ouvre tout de suite sur sa
+ *  consigne, et elle quitte la file (26/09/2026, décision d'Alexis). Partie
+ *  entre-temps, il n'y a plus rien à modifier : l'encadré se referme. */
+function editQueued(workshopId: string, item: GenerationItem, open: (editing: GenerationEditing) => void, close: () => void) {
+  open({ prompt: item.hint, rankAt: item.createdAt });
+  void takeBackGeneration(workshopId, item.id).then((back) => { if (!back) close(); });
+}
+
 /** Une génération qui attend encore son tour, et que le serveur a enregistrée :
  *  on peut en modifier la consigne. */
 const editable = (item: GenerationItem, phase: GenerationItem['phase']) =>
-  phase === 'queued' && !item.importId && !item.id.startsWith('local:');
+  phase === 'queued' && !item.importId && !item.id.startsWith('local:') && item.createdAt !== '';
 
 export default function AiGenerationButton({ workshopId, compact = false }: Props) {
   const t = useTranslations('ai');
   const state = useGenerations(workshopId);
   const box = useSettingsBox(workshopId);
-  const onOpen = (editing?: GenerationEditing) => openSettingsBox(workshopId, editing);
+  const onOpen = () => openSettingsBox(workshopId);
   const item = itemOf(state.items, 'settings');
   const phase = item ? displayPhase(state, item) : null;
   const { full } = capacityOf(state);
@@ -115,7 +115,9 @@ export default function AiGenerationButton({ workshopId, compact = false }: Prop
             phase={phase}
             compact={compact}
             // En attente, le bouton rouvre sa consigne pour la modifier.
-            onEdit={editable(item, phase) ? () => onOpen({ requestId: item.id, prompt: item.hint }) : undefined}
+            onEdit={editable(item, phase)
+              ? () => editQueued(workshopId, item, (editing) => openSettingsBox(workshopId, editing), () => closeSettingsBox(workshopId))
+              : undefined}
           />
         )
         : (
@@ -134,11 +136,9 @@ export default function AiGenerationButton({ workshopId, compact = false }: Prop
 /** L'encadré de génération : sa ligne de titre, puis la consigne et ses deux
  *  boutons — le même contenu que l'ancienne fenêtre, sans la fenêtre.
  *
- *  Rouvert sur une génération en attente (`editing`), il la met à l'écart de
- *  la file le temps de la modification : la file la saute, elle garde sa place.
- *  Abandonner la remet dans la file ; enregistrer la met à jour. Si la
- *  modification traîne au point que la génération quitte la file, la consigne
- *  reste là, et l'enregistrer la redemande (@/lib/ingest/queue). */
+ *  Rouvert sur une génération en attente (`editing`), celle-ci a quitté la file
+ *  (@/lib/ingest/queue) : enregistrer la renvoie à son rang d'origine ;
+ *  annuler l'abandonne, avec sa consigne. */
 export function AiGenerationBox({ workshopId, origin, forcedContext = null, editing, onClose, titleSlot, hint, onHintChange, grow = false }: {
   workshopId: string;
   origin: GenerationOrigin;
@@ -155,30 +155,8 @@ export function AiGenerationBox({ workshopId, origin, forcedContext = null, edit
 }) {
   const t = useTranslations('ai');
   // Une liste de questions ne relit pas les documents : inutile de les charger.
-  const files = useWorkshopFiles(workshopId, editing?.requestId, forcedContext !== null);
-  const requestId = editing?.requestId;
+  const files = useWorkshopFiles(workshopId, editing?.rankAt, forcedContext !== null);
 
-  // La mise à l'écart, à l'ouverture, puis renouvelée tant que l'encadré est
-  // là (@/lib/ingest/queue). Partie entre-temps, la génération n'a plus rien à
-  // modifier : l'encadré se referme. Au bout de dix minutes, elle quitte la
-  // file — l'encadré reste, avec la consigne, et l'enregistrer la redemande.
-  const closeRef = useRef(onClose);
-  useEffect(() => { closeRef.current = onClose; });
-  useEffect(() => {
-    if (!requestId) return;
-    let cancelled = false;
-    const hold = () => holdGeneration(workshopId, requestId).then((held) => {
-      if (!held && !cancelled) { cancelled = true; clearInterval(timer); closeRef.current(); }
-    });
-    void hold();
-    const timer = setInterval(() => { void hold(); }, HOLD_RENEW_MS);
-    const drop = setTimeout(() => {
-      cancelled = true;
-      clearInterval(timer);
-      void cancelGeneration(workshopId, requestId);
-    }, EDIT_LIMIT_MS);
-    return () => { cancelled = true; clearInterval(timer); clearTimeout(drop); };
-  }, [workshopId, requestId]);
 
   return (
     <div
@@ -206,10 +184,7 @@ export function AiGenerationBox({ workshopId, origin, forcedContext = null, edit
         hint={hint}
         onHintChange={onHintChange}
         onClose={onClose}
-        onCancel={() => {
-          if (requestId) void releaseGeneration(workshopId, requestId);
-          onClose();
-        }}
+        onCancel={onClose}
       />
     </div>
   );
@@ -230,7 +205,7 @@ function SettingsBoxBody({ workshopId, origin, box }: { workshopId: string; orig
   return (
     <div style={{ marginBottom: 16 }}>
       <AiGenerationBox
-        key={box.editing?.requestId ?? 'new'}
+        key={box.editing?.rankAt ?? 'new'}
         workshopId={workshopId}
         origin={origin}
         editing={box.editing}
@@ -244,48 +219,58 @@ function SettingsBoxBody({ workshopId, origin, box }: { workshopId: string; orig
 }
 
 /** Les générations lancées depuis une liste de questions, une par encadré, en
- *  tête de liste. Rien quand il n'y en a pas.
+ *  tête de liste — sous l'encadré de nouvelle question. Rien quand il n'y en a
+ *  pas.
  *
  *  Modifier une génération en attente rouvre l'encadré de génération À SA
- *  PLACE, comme on rouvre une question pour la modifier. */
+ *  PLACE, comme on rouvre une question pour la modifier : elle quitte la file,
+ *  et l'encadré reste là, avec sa consigne, jusqu'à ce qu'on la renvoie ou
+ *  qu'on l'abandonne. Il est gardé dans l'onglet (./listDraftStore) : changer
+ *  de page et revenir le retrouve tel quel. */
 export function AiGenerationQueue({ workshopId, door }: { workshopId: string; door: Exclude<GenerationDoor, 'settings'> }) {
   const state = useGenerations(workshopId);
   const items = state.items.filter((i) => i.door === door);
-  // La modification en cours. Gardée à part de la génération elle-même : si
-  // celle-ci quitte la file pendant qu'on écrit, l'encadré et sa consigne restent.
-  const [editing, setEditing] = useState<GenerationEditing | null>(null);
-  const [draft, setDraft] = useState('');
+  const { editing } = useListDraft(workshopId, door);
   const origin: GenerationOrigin = door === 'exam' ? 'questions-exam' : 'questions-parcours';
   const box = editing && (
     <AiGenerationBox
-      key={editing.requestId}
+      key={editing.rankAt}
       workshopId={workshopId}
       origin={origin}
       forcedContext={door}
       editing={editing}
-      hint={draft}
-      onHintChange={setDraft}
-      onClose={() => setEditing(null)}
+      hint={editing.draft}
+      onHintChange={(draft) => setListEditing(workshopId, door, { ...editing, draft })}
+      onClose={() => setListEditing(workshopId, door, null)}
     />
   );
-  const shown = items.some((i) => i.id === editing?.requestId);
   if (items.length === 0 && !box) return null;
+  // L'encadré de modification se pose là où était la génération retirée.
+  const at = editing ? Math.min(editing.index, items.length) : -1;
   return (
     <>
-      {!shown && box}
-      {items.map((item) => {
-        if (item.id === editing?.requestId) return <div key={item.id}>{box}</div>;
+      {items.map((item, index) => {
         const phase = displayPhase(state, item);
         return (
-          <GenerationCard
-            key={item.id}
-            workshopId={workshopId}
-            item={item}
-            phase={phase}
-            onEdit={editable(item, phase) ? () => { setDraft(item.hint); setEditing({ requestId: item.id, prompt: item.hint }); } : undefined}
-          />
+          <Fragment key={item.id}>
+            {index === at && box}
+            <GenerationCard
+              workshopId={workshopId}
+              item={item}
+              phase={phase}
+              onEdit={editable(item, phase)
+                ? () => editQueued(
+                  workshopId,
+                  item,
+                  (e) => setListEditing(workshopId, door, { ...e, draft: e.prompt, index }),
+                  () => setListEditing(workshopId, door, null),
+                )
+                : undefined}
+            />
+          </Fragment>
         );
       })}
+      {at === items.length && box}
     </>
   );
 }

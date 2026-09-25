@@ -13,7 +13,7 @@ import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import type { GenerationOrigin } from '@/lib/ingest/journal';
 
-import { capacityOf, editGeneration, launchGeneration, useGenerations } from './generationStore';
+import { capacityOf, launchGeneration, useGenerations } from './generationStore';
 
 // Le dialogue de génération par IA — **un seul composant pour tous les points
 // d'entrée** (Ressources, Chapitre & Notion, et les deux listes de questions).
@@ -123,10 +123,10 @@ type Props = {
    *  ni enregistré ni lancé. Absents, le dialogue garde sa consigne pour lui. */
   hint?: string;
   onHintChange?: (hint: string) => void;
-  /** Rouvre une génération qui attend encore son tour, pour en modifier la
-   *  consigne (25/09/2026) : le dialogue part de son texte, et « enregistrer »
-   *  la met à jour sans lui faire perdre sa place dans la file. */
-  editing?: { requestId: string; prompt: string };
+  /** Une génération retirée de la file pour modifier sa consigne (26/09/2026) :
+   *  le dialogue part de son texte, et « enregistrer » la renvoie à son rang
+   *  d'origine (@/lib/ingest/queue). */
+  editing?: { prompt: string; rankAt: string };
 };
 
 export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, onCancel, frame = 'modal', hint: hintProp, onHintChange, editing }: Props) {
@@ -284,7 +284,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       // Le bouton par lequel on est entré — journal de bord, rien d'autre.
       origin,
     };
-    void (editing ? editGeneration(workshopId, editing.requestId, input) : launchGeneration(workshopId, input));
+    void launchGeneration(workshopId, editing ? { ...input, rankAt: editing.rankAt } : input);
     onClose();
   }
 
