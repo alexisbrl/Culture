@@ -1193,7 +1193,6 @@
     "chooseManual": "manual",
     "plan": {
       "program": "The AI will read the documents, extract the notions, sort them into chapters, then write the practice questions. Whatever already exists is completed, never redone.",
-      "programThenQuestions": "This workshop has no notion in its programme yet: the AI will build it from the documents first, then write this list’s questions.",
       "parcoursQuestions": "The AI will top up the practice questions for notions that are still short. The documents are not read again.",
       "examQuestions": "The AI will write exam questions across the whole programme — each crossing several notions, some following on from one another. The documents are not read again.",
       "questionsOnly": "No readable document in this workshop: the AI will not touch the programme. It will write the practice questions still missing from the existing notions.",
@@ -1223,9 +1222,16 @@
     "queue": {
       "waiting": "waiting",
       "waitingInfo": "It will start on its own as soon as the current generation is finished.",
-      "cancel": "remove from the queue",
       "full": "Three generations are already running or waiting on this workshop. Wait for one of them to finish before starting another.",
-      "untitled": "AI generation"
+      "untitled": "AI generation",
+      "save": "save",
+      "edit": "edit the prompt",
+      "removeTitle": "Remove this generation?",
+      "removeBody": "It is still waiting for its turn and hasn’t written anything: nothing will be undone.",
+      "removeKeep": "keep it",
+      "removeConfirm": "remove",
+      "empty": "This workshop has no notion in its programme yet: there was nothing to write questions about.",
+      "emptyLink": "Add a document in Resources"
     }
   }
 }

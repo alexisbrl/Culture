@@ -1193,7 +1193,6 @@
     "chooseManual": "manuel",
     "plan": {
       "program": "L’IA va lire les documents, en extraire les notions, les ranger en chapitres, puis écrire les questions du parcours. Ce qui existe déjà est complété, jamais refait.",
-      "programThenQuestions": "Cet atelier n’a encore aucune notion au programme : l’IA va d’abord le construire à partir des documents, puis écrire les questions de cette liste.",
       "parcoursQuestions": "L’IA va compléter les questions du parcours pour les notions qui n’ont pas encore leur compte. Les documents ne sont pas relus.",
       "examQuestions": "L’IA va écrire des questions d’examen sur l’ensemble du programme — chacune croisant plusieurs notions, certaines s’enchaînant. Les documents ne sont pas relus.",
       "questionsOnly": "Aucun document lisible dans cet atelier : l’IA ne touchera pas au programme. Elle écrira les questions d’entraînement qui manquent encore aux notions en place.",
@@ -1223,9 +1222,16 @@
     "queue": {
       "waiting": "en attente",
       "waitingInfo": "Elle partira d’elle-même dès que la génération en cours sera terminée.",
-      "cancel": "retirer de la file",
       "full": "Trois générations sont déjà en cours ou en attente sur cet atelier. Attends que l’une d’elles se termine pour en lancer une autre.",
-      "untitled": "génération par IA"
+      "untitled": "génération par IA",
+      "save": "enregistrer",
+      "edit": "modifier la consigne",
+      "removeTitle": "Retirer cette génération ?",
+      "removeBody": "Elle attend encore son tour et n’a rien écrit : rien ne sera défait.",
+      "removeKeep": "la garder",
+      "removeConfirm": "retirer",
+      "empty": "Cet atelier n’a encore aucune notion au programme : il n’y avait rien sur quoi écrire des questions.",
+      "emptyLink": "Ajouter un document dans les Ressources"
     }
   }
 }

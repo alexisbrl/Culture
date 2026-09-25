@@ -6,6 +6,8 @@ import {
   cancelGenerationRequest,
   cancelWorkshopImport,
   startWorkshopGeneration,
+  updateGenerationRequest,
+  type GenerationInput,
   type PlanIssue,
 } from '@/app/actions/aiIngest';
 import type { PipelineSummary } from '@/lib/ingest/pipeline';
@@ -70,6 +72,9 @@ export type GenerationDoor = 'settings' | 'exam' | 'parcours';
 export type GenerationProblem =
   /** L'atelier avait déjà son compte de générations : la demande a été refusée. */
   | { kind: 'full' }
+  /** Une génération de questions est partie sur un atelier sans notion au
+   *  programme : il n'y avait rien à faire travailler (@/lib/ingest/queue). */
+  | { kind: 'empty' }
   /** La génération a échoué. `error` : un code de `PIPELINE_ERRORS` ou le
    *  message brut de l'étape. */
   | { kind: 'failed'; error: string | null }
@@ -199,7 +204,12 @@ function restart(workshopId: string, entry: Entry) {
 }
 
 /** Comment une génération finie se termine à l'écran. */
+/** Le code du refus « atelier vide » (`EMPTY_WORKSHOP`, @/lib/ingest/queue) :
+ *  recopié, un module client ne pouvant pas importer la file du serveur. */
+const EMPTY_WORKSHOP = 'INGEST_EMPTY_WORKSHOP';
+
 function problemOf(view: RequestView): GenerationProblem | null {
+  if (view.state === 'failed' && view.error === EMPTY_WORKSHOP) return { kind: 'empty' };
   if (view.state === 'failed') return { kind: 'failed', error: view.status?.error ?? view.error };
   const s = view.status;
   if (view.state === 'done' && s && (s.missingQuestions > 0 || s.discarded.length > 0)) {
@@ -365,8 +375,6 @@ export function useGenerationRefresh(workshopId: string | null, onChange: () => 
   }, [version]);
 }
 
-type LaunchInput = Omit<Parameters<typeof startWorkshopGeneration>[1], 'origin'> & { origin: string };
-
 function doorOfOrigin(origin: string): GenerationDoor {
   if (origin === 'questions-exam') return 'exam';
   if (origin === 'questions-parcours') return 'parcours';
@@ -375,7 +383,7 @@ function doorOfOrigin(origin: string): GenerationDoor {
 
 /** Demande une génération. Elle se montre À L'INSTANT du clic — partie, ou en
  *  attente derrière celle qui tourne —, avant même la réponse du serveur. */
-export async function launchGeneration(workshopId: string, input: LaunchInput): Promise<void> {
+export async function launchGeneration(workshopId: string, input: GenerationInput): Promise<void> {
   const entry = entryOf(workshopId);
   localSeq += 1;
   const localId = `local:${localSeq}`;
@@ -385,7 +393,7 @@ export async function launchGeneration(workshopId: string, input: LaunchInput): 
     phase: 'launching',
     progress: 0,
     importId: null,
-    hint: input.hint,
+    hint: input.prompt,
     problem: null,
   }]);
 
@@ -402,6 +410,17 @@ export async function launchGeneration(workshopId: string, input: LaunchInput): 
     if (entry.state.items.some((i) => i.id === started.requestId)) removeItem(entry, localId);
     else patchItem(entry, localId, { id: started.requestId, phase: ahead ? 'queued' : 'running' });
   }
+  restart(workshopId, entry);
+}
+
+/** Modifie une génération qui attend encore son tour : elle garde sa place.
+ *  Partie entre-temps, elle n'est plus modifiable — le suivi la montre alors
+ *  telle qu'elle tourne. */
+export async function editGeneration(workshopId: string, id: string, input: GenerationInput): Promise<void> {
+  const entry = entryOf(workshopId);
+  if (id.startsWith('local:')) return;
+  patchItem(entry, id, { hint: input.prompt });
+  await updateGenerationRequest(workshopId, id, input).catch(() => false);
   restart(workshopId, entry);
 }
 

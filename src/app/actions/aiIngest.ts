@@ -83,36 +83,42 @@ async function ownOrigin(): Promise<string> {
  *  Ce que l'écran décide (le contexte, les étapes, le total d'examen) voyage
  *  tel quel : ce sont des choix d'orchestration, pas des droits — le contrôle
  *  d'accès est fait ici, et chaque étape revérifie ce qui la concerne. */
-export async function startWorkshopGeneration(
-  workshopId: string,
-  input: {
-    fileIds: string[];
-    context: 'parcours' | 'exam';
-    withResource: boolean;
-    needsProgram: boolean;
-    canBuildProgram: boolean;
-    visibleNotions: number;
-    examTarget: number;
-    hint: string;
-    origin: string;
-  },
-): Promise<StartGenerationResult> {
+export type GenerationInput = {
+  fileIds: string[];
+  context: 'parcours' | 'exam';
+  withResource: boolean;
+  needsProgram: boolean;
+  visibleNotions: number;
+  examTarget: number;
+  hint: string;
+  /** Le texte tel que l'utilisateur l'a tapé (voir @/lib/ingest/queue). */
+  prompt: string;
+  origin: string;
+};
+
+/** Ce que l'écran envoie, remis en forme : une URL POST publique peut recevoir
+ *  n'importe quoi. */
+function cleanInput(input: GenerationInput): queue.RequestInput {
+  return {
+    fileIds: Array.isArray(input.fileIds) ? input.fileIds.filter((id) => typeof id === 'string') : [],
+    context: input.context === 'exam' ? 'exam' : 'parcours',
+    withResource: input.withResource === true,
+    needsProgram: input.needsProgram === true,
+    visibleNotions: Number.isFinite(input.visibleNotions) ? input.visibleNotions : 0,
+    examTarget: Number.isFinite(input.examTarget) ? input.examTarget : 0,
+    hint: typeof input.hint === 'string' ? input.hint.slice(0, 600) : '',
+    origin: typeof input.origin === 'string' ? input.origin : null,
+    prompt: typeof input.prompt === 'string' ? input.prompt.slice(0, 600) : '',
+  };
+}
+
+export async function startWorkshopGeneration(workshopId: string, input: GenerationInput): Promise<StartGenerationResult> {
   const ctx = await requireManager(workshopId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
     const baseUrl = await ownOrigin();
-    const requestId = await queue.enqueue(workshopId, ctx.userId, {
-      fileIds: Array.isArray(input.fileIds) ? input.fileIds.filter((id) => typeof id === 'string') : [],
-      context: input.context === 'exam' ? 'exam' : 'parcours',
-      withResource: input.withResource === true,
-      needsProgram: input.needsProgram === true,
-      canBuildProgram: input.canBuildProgram === true,
-      visibleNotions: Number.isFinite(input.visibleNotions) ? input.visibleNotions : 0,
-      examTarget: Number.isFinite(input.examTarget) ? input.examTarget : 0,
-      hint: typeof input.hint === 'string' ? input.hint.slice(0, 600) : '',
-      origin: typeof input.origin === 'string' ? input.origin : null,
-    }, baseUrl);
+    const requestId = await queue.enqueue(workshopId, ctx.userId, cleanInput(input), baseUrl);
     after(() => queue.promoteNext(workshopId, baseUrl));
     return { ok: true, requestId };
   } catch (error) {
@@ -122,8 +128,15 @@ export async function startWorkshopGeneration(
   }
 }
 
+/** Modifie une demande qui attend encore son tour (sa consigne, et ce qui en
+ *  découle) : elle garde sa place dans la file. `false` : elle est déjà partie. */
+export async function updateGenerationRequest(workshopId: string, requestId: string, input: GenerationInput): Promise<boolean> {
+  if (!(await requireManager(workshopId))) return false;
+  return queue.updateRequest(workshopId, requestId, cleanInput(input));
+}
+
 /** Retire une demande qui attend encore son tour. Rien n'a été écrit, rien
- *  n'est à défaire : pas de confirmation côté écran. `false` : elle est déjà
+ *  n'est à défaire. `false` : elle est déjà
  *  partie — c'est alors l'arrêt de la génération qui s'applique. */
 export async function cancelGenerationRequest(workshopId: string, requestId: string): Promise<boolean> {
   if (!(await requireManager(workshopId))) return false;

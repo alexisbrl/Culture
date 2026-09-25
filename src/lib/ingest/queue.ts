@@ -25,8 +25,10 @@
 //
 // Une demande peut attendre derrière une mise à jour complète de l'atelier. Ce
 // qui dépend de l'état de l'atelier se relit donc AU DÉPART, pas au clic : le
-// nombre de notions au programme, et — pour une demande venue d'une liste de
-// questions — s'il faut encore construire le programme avant d'écrire.
+// nombre de notions au programme. **Une liste de questions ne touche jamais au
+// programme** (décision d'Alexis du 25/09/2026) : si l'atelier n'a aucune
+// notion au programme quand vient son tour, la demande échoue avec
+// `EMPTY_WORKSHOP`, et l'écran renvoie vers les Ressources.
 //
 // Aucun `'use server'`, aucun `auth()` : les droits sont contrôlés à la demande,
 // par l'action qui l'écrit (CLAUDE.md §5).
@@ -71,10 +73,14 @@ export function doorOf(origin: string | null | undefined): GenerationDoor {
   return 'settings';
 }
 
-/** Ce que l'écran a demandé. `canBuildProgram` : il y avait de quoi construire
- *  un programme (un document lisible, ou une consigne) — c'est ce qui permet de
- *  redécider au départ, pour une liste de questions, s'il faut le construire. */
-export type RequestInput = Omit<StartInput, 'baseUrl' | 'requestId'> & { canBuildProgram: boolean };
+/** Ce que l'écran a demandé. `prompt` : le texte tel que l'utilisateur l'a
+ *  tapé — la consigne, ou un nombre seul, qui n'en est pas une. C'est lui que
+ *  l'écran affiche, et qu'il rouvre pour modifier une demande en attente. */
+export type RequestInput = Omit<StartInput, 'baseUrl' | 'requestId'> & { prompt?: string };
+
+/** Le refus d'une demande venue d'une liste de questions, sur un atelier qui
+ *  n'a encore aucune notion au programme. Reconnu et traduit par l'écran. */
+export const EMPTY_WORKSHOP = 'INGEST_EMPTY_WORKSHOP';
 
 /** Une demande, telle que l'écran la montre. */
 export type RequestView = {
@@ -173,6 +179,25 @@ export async function cancelRequest(workshopId: string, requestId: string): Prom
   return (data ?? []).length > 0;
 }
 
+/** Modifie une demande qui attend encore son tour : elle garde sa place dans la
+ *  file. `false` : elle est déjà partie, ou n'existe plus. */
+export async function updateRequest(workshopId: string, requestId: string, input: RequestInput): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('ai_generation_requests')
+    .update({ input })
+    .eq('id', requestId)
+    .eq('workshop_id', workshopId)
+    .is('import_id', null)
+    .is('started_at', null)
+    .select('id');
+  if (error) {
+    console.error('updateRequest error:', error);
+    return false;
+  }
+  return (data ?? []).length > 0;
+}
+
 /** Le nombre de notions au programme — celles des chapitres qui n'ont pas été
  *  écartés —, relu au départ. */
 async function visibleNotionsOf(workshopId: string): Promise<number> {
@@ -181,12 +206,14 @@ async function visibleNotionsOf(workshopId: string): Promise<number> {
 }
 
 /** Ce que la demande fera en partant, décidé sur l'atelier tel qu'il est
- *  MAINTENANT. Les Paramètres construisent toujours le programme s'ils en ont
- *  de quoi ; une liste de questions ne le construit que s'il est vide. */
+ *  MAINTENANT. Seuls les Paramètres construisent le programme ; une liste de
+ *  questions n'écrit que des questions, et refuse de partir sur un atelier
+ *  sans notion au programme. */
 async function resolveInput(workshopId: string, input: RequestInput): Promise<Omit<StartInput, 'baseUrl'>> {
   const visibleNotions = await visibleNotionsOf(workshopId);
   const fromList = doorOf(input.origin) !== 'settings';
-  const needsProgram = fromList ? input.canBuildProgram && visibleNotions === 0 : input.needsProgram;
+  if (fromList && visibleNotions === 0) throw new Error(EMPTY_WORKSHOP);
+  const needsProgram = fromList ? false : input.needsProgram;
   return {
     fileIds: needsProgram ? input.fileIds : [],
     context: input.context,
@@ -248,7 +275,8 @@ export async function promoteNext(workshopId: string, baseUrl: string): Promise<
           await supabase.from('ai_generation_requests').update({ started_at: null }).eq('id', next.id);
           return;
         }
-        console.error('[ingest] demande non démarrée :', next.id, detail);
+        // Un atelier vide n'est pas une panne : l'écran le dit, et renvoie aux Ressources.
+        if (detail !== EMPTY_WORKSHOP) console.error('[ingest] demande non démarrée :', next.id, detail);
         await supabase.from('ai_generation_requests').update({ error: detail }).eq('id', next.id);
       }
     }
@@ -307,19 +335,19 @@ export async function listRequests(workshopId: string, followed: readonly string
   for (const r of rows) {
     const door = doorOf(r.input?.origin);
     if (r.error) {
-      if (wanted.has(r.id)) views.push({ id: r.id, door, state: 'failed', importId: null, hint: r.input?.hint ?? '', status: null, error: r.error });
+      if (wanted.has(r.id)) views.push({ id: r.id, door, state: 'failed', importId: null, hint: r.input?.prompt ?? r.input?.hint ?? '', status: null, error: r.error });
       continue;
     }
     if (r.import_id === null) {
       const starting = isStarting(r, now) || !placeTaken;
       if (starting) placeTaken = true;
-      views.push({ id: r.id, door, state: starting ? 'starting' : 'queued', importId: null, hint: r.input?.hint ?? '', status: null, error: null });
+      views.push({ id: r.id, door, state: starting ? 'starting' : 'queued', importId: null, hint: r.input?.prompt ?? r.input?.hint ?? '', status: null, error: null });
       continue;
     }
     const status = await generationStatus(r.import_id);
     if (!status) continue;
     if (status.state === 'running' || wanted.has(r.id)) {
-      views.push({ id: r.id, door, state: status.state, importId: r.import_id, hint: r.input?.hint ?? '', status, error: null });
+      views.push({ id: r.id, door, state: status.state, importId: r.import_id, hint: r.input?.prompt ?? r.input?.hint ?? '', status, error: null });
     }
   }
 

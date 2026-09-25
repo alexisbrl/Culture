@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
-import { Check, Info, Sparkles, Square, TriangleAlert, X } from 'lucide-react';
+import Link from 'next/link';
+import { useLocale, useTranslations } from 'next-intl';
+import { Check, Info, Pencil, Sparkles, TriangleAlert, X } from 'lucide-react';
 
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -60,6 +61,11 @@ function itemOf(items: GenerationItem[], door: GenerationDoor): GenerationItem |
   return [...items].reverse().find((i) => i.door === door) ?? null;
 }
 
+/** Une génération qui attend encore son tour, et que le serveur a enregistrée :
+ *  on peut en modifier la consigne. */
+const editable = (item: GenerationItem, phase: GenerationItem['phase']) =>
+  phase === 'queued' && !item.importId && !item.id.startsWith('local:');
+
 export default function AiGenerationButton({ workshopId, origin, compact = false }: Props) {
   const t = useTranslations('ai');
   const [open, setOpen] = useState(false);
@@ -69,14 +75,17 @@ export default function AiGenerationButton({ workshopId, origin, compact = false
   const files = useWorkshopFiles(workshopId, open);
   const state = useGenerations(workshopId);
   const item = itemOf(state.items, 'settings');
+  const phase = item ? displayPhase(state, item) : null;
   const { full } = capacityOf(state);
   // Une alerte n'occupe pas le bouton : on peut relancer à côté d'elle.
   const busy = item !== null && item.phase !== 'problem';
+  // En attente, le bouton rouvre sa consigne pour la modifier.
+  const editing = item && phase && editable(item, phase) ? { requestId: item.id, prompt: item.hint } : undefined;
 
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      {busy
-        ? <GenerationBar item={item} phase={displayPhase(state, item)} compact={compact} />
+      {busy && phase
+        ? <GenerationBar item={item} phase={phase} compact={compact} onEdit={editing ? () => setOpen(true) : undefined} />
         : (
           <IdleButton
             compact={compact}
@@ -85,13 +94,15 @@ export default function AiGenerationButton({ workshopId, origin, compact = false
             onClick={() => setOpen(true)}
           />
         )}
-      {item && <GenerationCompanions workshopId={workshopId} item={item} phase={displayPhase(state, item)} />}
+      {item && phase && <GenerationCompanions workshopId={workshopId} item={item} phase={phase} />}
 
-      {open && !busy && !full && (
+      {open && (editing || (!busy && !full)) && (
         <AiGenerationDialog
+          key={editing?.requestId ?? 'new'}
           workshopId={workshopId}
           files={files ?? []}
           origin={origin}
+          editing={editing}
           onClose={() => setOpen(false)}
         />
       )}
@@ -104,28 +115,94 @@ export default function AiGenerationButton({ workshopId, origin, compact = false
 export function AiGenerationQueue({ workshopId, door }: { workshopId: string; door: Exclude<GenerationDoor, 'settings'> }) {
   const state = useGenerations(workshopId);
   const items = state.items.filter((i) => i.door === door);
+  // Le dialogue de modification : un seul à la fois, pour l'encadré cliqué.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const edited = items.find((i) => i.id === editingId);
   if (items.length === 0) return null;
   return (
     <>
-      {items.map((item) => (
-        <GenerationCard key={item.id} workshopId={workshopId} item={item} phase={displayPhase(state, item)} />
-      ))}
+      {items.map((item) => {
+        const phase = displayPhase(state, item);
+        return (
+          <GenerationCard
+            key={item.id}
+            workshopId={workshopId}
+            item={item}
+            phase={phase}
+            onEdit={editable(item, phase) ? () => setEditingId(item.id) : undefined}
+          />
+        );
+      })}
+      {edited && editable(edited, displayPhase(state, edited)) && (
+        <AiGenerationDialog
+          key={edited.id}
+          workshopId={workshopId}
+          // Une liste de questions ne lit pas les documents : elle n'écrit que
+          // des questions sur le programme en place.
+          files={[]}
+          forcedContext={door}
+          origin={door === 'exam' ? 'questions-exam' : 'questions-parcours'}
+          editing={{ requestId: edited.id, prompt: edited.hint }}
+          onClose={() => setEditingId(null)}
+        />
+      )}
     </>
   );
 }
 
-function GenerationCard({ workshopId, item, phase }: { workshopId: string; item: GenerationItem; phase: GenerationItem['phase'] }) {
+/** L'encadré d'une génération lancée depuis une liste : sa consigne, et sa barre
+ *  — remplacée par l'alerte quand elle a mal fini. En attente, un clic rouvre
+ *  sa consigne pour la modifier. */
+function GenerationCard({ workshopId, item, phase, onEdit }: {
+  workshopId: string;
+  item: GenerationItem;
+  phase: GenerationItem['phase'];
+  onEdit?: () => void;
+}) {
   const t = useTranslations('ai');
+  const label = <span className="min-w-0 flex-1 truncate text-left text-[13px] text-[var(--ink)]">{item.hint || t('queue.untitled')}</span>;
   return (
     <div className="flex flex-col gap-2 rounded-[14px] border border-[var(--line)] bg-[var(--surface-raised)] px-4 py-3">
       <div className="flex min-w-0 items-center gap-2">
         <Sparkles size={14} strokeWidth={1.75} className="shrink-0 text-[var(--green-strong)]" />
-        <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ink)]">{item.hint || t('queue.untitled')}</span>
-        <GenerationCompanions workshopId={workshopId} item={item} phase={phase} />
+        {onEdit
+          ? (
+            <Tooltip content={t('queue.edit')}>
+              <button type="button" onClick={onEdit} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 bg-transparent p-0">
+                {label}
+                <Pencil size={13} strokeWidth={1.9} className="shrink-0 text-[var(--ink-faint)]" />
+              </button>
+            </Tooltip>
+          )
+          : label}
+        <GenerationCompanions workshopId={workshopId} item={item} phase={phase} inCard />
       </div>
       {phase === 'problem' && item.problem
-        ? <div className="text-[12.5px] text-[var(--ink-muted)]"><ProblemText problem={item.problem} /></div>
-        : <GenerationBar item={item} phase={phase} compact wide />}
+        ? <ProblemRow workshopId={workshopId} problem={item.problem} />
+        : <GenerationBar item={item} phase={phase} compact wide onEdit={onEdit} />}
+    </div>
+  );
+}
+
+/** L'alerte, à la place de la barre. Sur un atelier vide, elle mène aux
+ *  Ressources des Paramètres, où l'on dépose de quoi construire le programme. */
+function ProblemRow({ workshopId, problem }: { workshopId: string; problem: GenerationProblem }) {
+  const t = useTranslations('ai');
+  const locale = useLocale();
+  return (
+    <div className="flex items-start gap-2 text-[12.5px] text-[var(--ink-muted)]">
+      <TriangleAlert size={16} strokeWidth={1.9} className="mt-px shrink-0 text-[var(--tan)]" />
+      <div className="flex min-w-0 flex-col gap-1">
+        <ProblemText problem={problem} />
+        {problem.kind === 'empty' && (
+          <Link
+            href={`/${locale}/workshops/${workshopId}/settings?section=files`}
+            className="font-medium text-[var(--green-strong)] underline underline-offset-2"
+          >
+            {t('queue.emptyLink')}
+          </Link>
+        )}
+      </div>
     </div>
   );
 }
@@ -164,24 +241,25 @@ function IdleButton({ compact, disabled, disabledReason, onClick }: {
 
 /** La barre d'une génération : en attente (vide, avec son explication), en cours
  *  (remplie au fil de l'avancement), terminée (une coche). */
-function GenerationBar({ item, phase, compact, wide = false }: {
+function GenerationBar({ item, phase, compact, wide = false, onEdit }: {
   item: GenerationItem;
   phase: GenerationItem['phase'];
   compact: boolean;
   wide?: boolean;
+  /** En attente, un clic sur la barre rouvre la consigne pour la modifier. */
+  onEdit?: () => void;
 }) {
   const t = useTranslations('ai');
   const fill = phase === 'done' ? 100 : phase === 'running' ? Math.max(0, Math.min(100, item.progress)) : 0;
   const iconSize = compact ? 14 : 16;
+  const clickable = phase === 'queued' && !!onEdit;
+  const Shell = clickable ? 'button' : 'div';
 
   return (
-    <div
-      role="progressbar"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={fill}
-      aria-busy={phase === 'running'}
-      aria-live="polite"
+    <Shell
+      {...(clickable
+        ? { type: 'button' as const, onClick: onEdit, 'aria-label': t('queue.edit') }
+        : { role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': fill, 'aria-busy': phase === 'running', 'aria-live': 'polite' as const })}
       className={[
         'relative inline-flex items-center gap-2 overflow-hidden whitespace-nowrap rounded-[12px]',
         'border border-[var(--line-strong)] bg-[var(--surface-input)] font-medium',
@@ -191,7 +269,9 @@ function GenerationBar({ item, phase, compact, wide = false }: {
           ? 'cursor-progress text-[var(--green-strong)]'
           : phase === 'done'
             ? 'cursor-default text-[var(--success-strong)]'
-            : 'cursor-default text-[var(--ink-muted)]',
+            : clickable
+              ? 'cursor-pointer text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)]'
+              : 'cursor-default text-[var(--ink-muted)]',
       ].join(' ')}
     >
       {/* Le remplissage passe SOUS le texte : c'est la barre de progression. */}
@@ -222,17 +302,27 @@ function GenerationBar({ item, phase, compact, wide = false }: {
           <span className="relative">{t('finished')}</span>
         </>
       )}
-    </div>
+      {clickable && <Pencil size={12} strokeWidth={1.9} className={['relative text-[var(--ink-faint)]', wide ? 'ml-auto' : ''].join(' ')} />}
+    </Shell>
   );
 }
 
-/** Ce qu'on peut faire d'une génération : l'arrêter quand elle tourne (avec
- *  confirmation — il défait ce qui a été écrit), la retirer de la file quand
- *  elle attend (sans confirmation — elle n'a rien écrit), ou lire son alerte
- *  quand elle a mal fini. */
-function GenerationCompanions({ workshopId, item, phase }: { workshopId: string; item: GenerationItem; phase: GenerationItem['phase'] }) {
+/** Ce qu'on peut faire d'une génération, toujours d'une CROIX (25/09/2026,
+ *  demandé par Alexis — un carré pour l'arrêt et une croix pour la file
+ *  disaient deux fois la même chose) : l'arrêter quand elle tourne — ce qui
+ *  défait ce qu'elle a écrit —, la retirer quand elle attend, masquer son
+ *  alerte quand elle a mal fini. Les deux premiers se confirment. */
+function GenerationCompanions({ workshopId, item, phase, inCard = false }: {
+  workshopId: string;
+  item: GenerationItem;
+  phase: GenerationItem['phase'];
+  /** Dans un encadré, l'alerte est déjà écrite à la place de la barre : il ne
+   *  reste que la croix pour la masquer. À côté du bouton des Paramètres,
+   *  c'est l'icône qui la porte, en infobulle. */
+  inCard?: boolean;
+}) {
   const t = useTranslations('ai');
-  const [askStop, setAskStop] = useState(false);
+  const [ask, setAsk] = useState<'stop' | 'remove' | null>(null);
   const saved = !item.id.startsWith('local:');
 
   return (
@@ -243,29 +333,42 @@ function GenerationCompanions({ workshopId, item, phase }: { workshopId: string;
         <Tooltip content={t('stop.aria')}>
           <button
             type="button"
-            onClick={() => setAskStop(true)}
+            onClick={() => setAsk('stop')}
             aria-label={t('stop.aria')}
-            className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-[10px] border border-[var(--line-strong)] bg-[var(--surface-input)] text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)]"
-          >
-            <Square size={12} strokeWidth={2} />
-          </button>
-        </Tooltip>
-      )}
-
-      {phase === 'queued' && saved && !item.importId && (
-        <Tooltip content={t('queue.cancel')}>
-          <button
-            type="button"
-            onClick={() => { void cancelGeneration(workshopId, item.id); }}
-            aria-label={t('queue.cancel')}
-            className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-[10px] border border-[var(--line-strong)] bg-[var(--surface-input)] text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)]"
+            className={CROSS}
           >
             <X size={14} strokeWidth={2} />
           </button>
         </Tooltip>
       )}
 
-      {phase === 'problem' && item.problem && (
+      {phase === 'queued' && saved && !item.importId && (
+        <Tooltip content={t('queue.removeTitle')}>
+          <button
+            type="button"
+            onClick={() => setAsk('remove')}
+            aria-label={t('queue.removeTitle')}
+            className={CROSS}
+          >
+            <X size={14} strokeWidth={2} />
+          </button>
+        </Tooltip>
+      )}
+
+      {phase === 'problem' && item.problem && inCard && (
+        <Tooltip content={t('problem.dismiss')}>
+          <button
+            type="button"
+            onClick={() => dismissGeneration(workshopId, item.id)}
+            aria-label={t('problem.dismiss')}
+            className={CROSS}
+          >
+            <X size={14} strokeWidth={2} />
+          </button>
+        </Tooltip>
+      )}
+
+      {phase === 'problem' && item.problem && !inCard && (
         <Tooltip content={<ProblemText problem={item.problem} />}>
           <button
             type="button"
@@ -278,18 +381,18 @@ function GenerationCompanions({ workshopId, item, phase }: { workshopId: string;
         </Tooltip>
       )}
 
-      {/* Arrêter défait ce qui a été écrit : c'est la seule commande
-          destructrice de la génération, elle se confirme. */}
-      {askStop && (
+      {/* Arrêter défait ce qui a été écrit ; retirer de la file perd une
+          consigne qu'on a pris la peine d'écrire. Les deux se confirment. */}
+      {ask && (
         <ConfirmDialog
           portal
-          title={t('stop.title')}
-          description={t('stop.body')}
-          confirmLabel={t('stop.confirm')}
-          cancelLabel={t('stop.keep')}
-          onCancel={() => setAskStop(false)}
+          title={t(ask === 'stop' ? 'stop.title' : 'queue.removeTitle')}
+          description={t(ask === 'stop' ? 'stop.body' : 'queue.removeBody')}
+          confirmLabel={t(ask === 'stop' ? 'stop.confirm' : 'queue.removeConfirm')}
+          cancelLabel={t(ask === 'stop' ? 'stop.keep' : 'queue.removeKeep')}
+          onCancel={() => setAsk(null)}
           onConfirm={() => {
-            setAskStop(false);
+            setAsk(null);
             void cancelGeneration(workshopId, item.id);
           }}
         />
@@ -298,11 +401,14 @@ function GenerationCompanions({ workshopId, item, phase }: { workshopId: string;
   );
 }
 
+const CROSS = 'inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-[10px] border border-[var(--line-strong)] bg-[var(--surface-input)] text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)]';
+
 /** Ce qui s'est mal passé, en toutes lettres : les cas connus ont leur phrase,
  *  les autres gardent le message de l'étape. */
 function ProblemText({ problem }: { problem: GenerationProblem }) {
   const t = useTranslations('ai');
   if (problem.kind === 'full') return <>{t('queue.full')}</>;
+  if (problem.kind === 'empty') return <>{t('queue.empty')}</>;
   if (problem.kind === 'failed') {
     const text = (() => {
       switch (problem.error) {

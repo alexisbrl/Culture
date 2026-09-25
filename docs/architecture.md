@@ -805,11 +805,17 @@ page ou fermer l'onglet ne change rien : l'écran ne fait que lire l'avancement.
 de l'atelier ; elle part aussitôt si rien ne tourne, sinon elle attend et part d'elle-même
 dès que la précédente est finie — onglet fermé ou non. **Trois générations actives au plus
 par atelier**, celle qui tourne comprise : au-delà, tout bouton de génération s'éteint et
-dit pourquoi au survol. Ce qui dépend de l'état de l'atelier se décide **au départ** et non
-au clic : une demande venue d'une liste de questions ne construit le programme que s'il est
-encore vide à ce moment-là. Trois passages font partir la suivante, un seul y parvient : la
-fin (ou l'arrêt) de la précédente, chaque lecture d'avancement, la veille planifiée. Une
-demande qui attend se retire d'une croix, sans confirmation : elle n'a rien écrit.
+dit pourquoi au survol. Trois passages font partir la suivante, un seul y parvient : la fin
+(ou l'arrêt) de la précédente, chaque lecture d'avancement, la veille planifiée. Une demande
+qui attend garde sa place quand on **modifie sa consigne**, et se retire d'une croix, après
+confirmation.
+
+**Seuls les Paramètres construisent le programme.** Une liste de questions n'écrit que des
+questions, sur les notions en place, et n'écrit jamais le document de l'IA. Ce qui dépend de
+l'état de l'atelier se vérifie **au départ** et non au clic — une mise à jour lancée juste
+avant peut encore le remplir : si l'atelier n'a alors aucune notion au programme, la demande
+échoue sans rien appeler, et son encadré le dit à la place de sa barre, avec un lien vers les
+Ressources.
 
 **Chaque porte montre ce qu'elle a lancé, à l'instant du clic.** La fenêtre de lancement se
 ferme au clic et la génération se montre aussitôt, avant la réponse du serveur. Le bouton des
@@ -817,8 +823,9 @@ Paramètres — le même dans Ressources et dans Chapitre & Notion — **devient
 la génération qu'il a lancée : « en attente » avec son explication au survol, puis rempli au
 fil des étapes avec le pourcentage, une coche brève à la réussite. Une liste de questions peut
 en lancer plusieurs à la suite : chacune y a **son encadré en tête de liste**, avec sa
-consigne et sa barre. À côté de chacune : l'arrêt, confirmé puisqu'il défait ce qui a été
-écrit, la croix de la file, et une alerte seulement si elle a échoué ou n'a pas tout écrit.
+consigne et sa barre ; en attente, un clic rouvre sa consigne. À côté de chacune, **toujours
+une croix** : elle arrête la génération qui tourne — confirmé, puisque ça défait ce qui a été
+écrit —, retire celle qui attend, masque l'alerte de celle qui a échoué ou n'a pas tout écrit.
 L'état est **partagé par tout l'onglet**, et les listes qui montrent ce qu'une génération
 écrit se relisent d'elles-mêmes — tout de suite à sa première écriture, puis au plus toutes
 les quelques secondes (les lectures passant en file), puis à la fin. Une génération lancée

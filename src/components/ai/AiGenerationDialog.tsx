@@ -13,7 +13,7 @@ import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
 import type { GenerationOrigin } from '@/lib/ingest/journal';
 
-import { capacityOf, launchGeneration, useGenerations } from './generationStore';
+import { capacityOf, editGeneration, launchGeneration, useGenerations } from './generationStore';
 
 // Le dialogue de génération par IA — **un seul composant pour tous les points
 // d'entrée** (Ressources, Chapitre & Notion, et les deux listes de questions).
@@ -114,9 +114,13 @@ type Props = {
    *  ni enregistré ni lancé. Absents, le dialogue garde sa consigne pour lui. */
   hint?: string;
   onHintChange?: (hint: string) => void;
+  /** Rouvre une génération qui attend encore son tour, pour en modifier la
+   *  consigne (25/09/2026) : le dialogue part de son texte, et « enregistrer »
+   *  la met à jour sans lui faire perdre sa place dans la file. */
+  editing?: { requestId: string; prompt: string };
 };
 
-export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, frame = 'modal', hint: hintProp, onHintChange }: Props) {
+export default function AiGenerationDialog({ workshopId, files, forcedContext = null, origin, onClose, frame = 'modal', hint: hintProp, onHintChange, editing }: Props) {
   const t = useTranslations('ai');
 
   // ─── Les documents ne se choisissent plus, et ne s'affichent plus ────────
@@ -136,7 +140,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // fait UNIQUEMENT de chiffres EST ce nombre. Deux champs disaient la même
   // chose, et un seul des deux était visible selon le bouton d’entrée.
   // `null` = la consigne est une vraie consigne, ou il n’y en a pas.
-  const [ownHint, setOwnHint] = useState('');
+  const [ownHint, setOwnHint] = useState(editing?.prompt ?? '');
   const hintRef = useRef<HTMLTextAreaElement>(null);
   // Consigne pilotée par l'appelant quand il en fournit une (voir `hint`).
   const hint = hintProp ?? ownHint;
@@ -171,11 +175,13 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   //
   // …avec deux rattrapages, un dans chaque sens :
   //
-  //   • demander des questions à un atelier qui n'a aucune notion AU PROGRAMME
-  //     ne produirait rien — il n'y a rien à faire travailler. On construit
-  //     donc le programme d'abord, puis on écrit les questions. Les notions sans
-  //     chapitre et celles des chapitres écartés ne comptent pas : elles sont
-  //     hors programme, c'est la définition de leur état ;
+  //   • ⚠️ **une liste de questions ne construit JAMAIS le programme**
+  //     (décision d'Alexis du 25/09/2026). Elle le faisait sur un atelier vide
+  //     depuis le 24/08 ; c'est désormais le rôle des seuls Paramètres. Un
+  //     atelier sans notion au programme quand vient son tour fait échouer la
+  //     génération, et son encadré renvoie vers les Ressources
+  //     (@/lib/ingest/queue) — vérifié au départ et non au clic, puisqu'une
+  //     mise à jour lancée juste avant peut encore le remplir ;
   //   • **sans document lisible, on ne construit rien** (25/08/2026). Un atelier
   //     qui a déjà ses chapitres et ses notions n'a pas besoin qu'on relise un
   //     cours pour lui écrire des questions de plus : on saute les trois premiers
@@ -189,27 +195,25 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   //     demande que des questions, et n'écrit rien.
   const hasFiles = usable.length > 0;
   const hasHint = askedCount === null && hint.trim().length > 0;
-  const needsProgram = (hasFiles || hasHint) && (forcedContext === null || visibleNotions === 0);
+  const needsProgram = forcedContext === null && (hasFiles || hasHint);
   // On ne téléverse que ce qui existe : une consigne seule n'a aucun fichier à
   // remettre au fournisseur.
   const needsFiles = needsProgram && hasFiles;
   // Ni document, ni programme, ni consigne : il n'y a rien à lire, rien à faire
   // travailler, et rien à écrire. C'est le seul vrai blocage qui reste.
-  const nothingToDo = !hasFiles && visibleNotions === 0 && !hasHint;
+  const nothingToDo = forcedContext === null && !hasFiles && visibleNotions === 0 && !hasHint;
   /** Ce que ce lancement va faire, dit d'une phrase. Affichée telle quelle en
    *  fenêtre ; repliée derrière le point d'information de la consigne quand le
    *  dialogue est posé dans une liste, où la place est comptée. */
   const planText = nothingToDo
     ? t('plan.nothing')
-    : !hasFiles && hasHint
-      ? t('plan.fromHint')
-      : forcedContext === null
-        ? needsProgram
-          ? t('plan.program')
-          : t('plan.questionsOnly')
+    : forcedContext !== null
+      ? t(forcedContext === 'exam' ? 'plan.examQuestions' : 'plan.parcoursQuestions')
+      : !hasFiles && hasHint
+        ? t('plan.fromHint')
         : needsProgram
-          ? t('plan.programThenQuestions')
-          : t(forcedContext === 'exam' ? 'plan.examQuestions' : 'plan.parcoursQuestions');
+          ? t('plan.program')
+          : t('plan.questionsOnly');
 
   // La liste des chapitres porte déjà le compte de notions et l'état écarté :
   // pas besoin d'une lecture dédiée. Montée à l'ouverture — le dialogue n'est
@@ -232,13 +236,8 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   /** Lance la génération et ferme la fenêtre dans le même geste : la suite —
    *  avancement, arrêt, échec — se lit sur le bouton (`generationStore`). */
   function start() {
-    void launchGeneration(workshopId, {
-      // Depuis une liste, la génération peut attendre son tour derrière une
-      // mise à jour de l'atelier : le serveur redécide AU DÉPART s'il faut
-      // encore construire le programme (@/lib/ingest/queue). Il a donc besoin
-      // des documents, et de savoir s'il y avait de quoi le construire.
-      fileIds: needsFiles || forcedContext !== null ? usable.map((f) => f.id) : [],
-      canBuildProgram: hasFiles || hasHint,
+    const input = {
+      fileIds: needsFiles ? usable.map((f) => f.id) : [],
       context,
       // L'étape 0 ne dépend pas du point d'entrée mais de la CONSIGNE : sans
       // elle, il n'y a rien à interpréter. Un nombre seul n'en est pas une.
@@ -249,9 +248,13 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
       // Un nombre seul n'est pas une consigne : le transmettre en ferait une, et
       // chaque étape lirait « 40 » comme une instruction de rédaction.
       hint: askedCount === null ? hint.trim() : '',
+      // Le texte tel qu'il a été tapé : c'est lui que l'encadré affiche, et
+      // qu'on rouvre pour modifier une génération en attente.
+      prompt: hint.trim(),
       // Le bouton par lequel on est entré — journal de bord, rien d'autre.
       origin,
-    });
+    };
+    void (editing ? editGeneration(workshopId, editing.requestId, input) : launchGeneration(workshopId, input));
     onClose();
   }
 
@@ -374,7 +377,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                   demander une quatrième, et le bouton dit pourquoi au survol. Un
                   bouton désactivé n'émet aucun événement de souris : l'infobulle
                   se pose sur un conteneur. */}
-              {full ? (
+              {full && !editing ? (
                 <Tooltip content={t('queue.full')}>
                   <span style={{ display: 'inline-flex' }}>
                     <Primary onClick={() => {}} disabled>{t('generate')}</Primary>
@@ -385,7 +388,7 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                   onClick={() => { void start(); }}
                   disabled={visibleNotions === null || nothingToDo}
                 >
-                  {t('generate')}
+                  {editing ? t('queue.save') : t('generate')}
                 </Primary>
               )}
             </Actions>
