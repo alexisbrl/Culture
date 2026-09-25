@@ -162,6 +162,27 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
   // Hauteur du champ de consigne : recalculée à chaque frappe. `field-sizing:
   // content` ferait ça tout seul mais n'est pas encore partout, d'où la mesure
   // explicite — la même qu'`AutoTextarea` côté examen.
+  //
+  // ⚠️ **Et chaque fois que sa LARGEUR change** (25/09/2026). L'encadré des
+  // Paramètres est monté dans deux onglets à la fois, dont un masqué : mesuré
+  // sous un `display: none`, le champ n'a aucune largeur, sa hauteur retombait
+  // au plancher, et l'onglet révélé ensuite montrait une ligne de moins que
+  // l'autre. La largeur passe de zéro à la vraie au moment où il apparaît :
+  // c'est ce qui déclenche la nouvelle mesure. Seule la largeur compte — la
+  // hauteur, c'est nous qui la posons, et y réagir tournerait en rond.
+  useLayoutEffect(() => {
+    const el = hintRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let width = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      el.style.height = 'auto';
+      el.style.height = `${el.scrollHeight}px`;
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   useLayoutEffect(() => {
     const el = hintRef.current;
     if (!el) return;

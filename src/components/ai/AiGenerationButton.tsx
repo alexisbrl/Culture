@@ -75,13 +75,6 @@ const HOLD_RENEW_MS = 30_000;
  *  génération (décision d'Alexis du 25/09/2026). */
 const EDIT_LIMIT_MS = 10 * 60 * 1000;
 
-/** La hauteur de la zone de dépôt des Ressources, et donc celle de l'encadré de
- *  génération des Paramètres (25/09/2026, demandé par Alexis : « exactement la
- *  même taille »). Posée sur les deux plutôt que mesurée : dans Chapitre &
- *  Notion, la zone de dépôt n'est pas à l'écran. L'encadré grandit au-delà avec
- *  le texte saisi. */
-export const GENERATION_BOX_MIN_HEIGHT = 182;
-
 type Props = {
   workshopId: string;
   /** Rendu compact, pour se glisser dans une barre d'outils déjà chargée. */
@@ -146,14 +139,12 @@ export default function AiGenerationButton({ workshopId, compact = false }: Prop
  *  Abandonner la remet dans la file ; enregistrer la met à jour. Si la
  *  modification traîne au point que la génération quitte la file, la consigne
  *  reste là, et l'enregistrer la redemande (@/lib/ingest/queue). */
-export function AiGenerationBox({ workshopId, origin, forcedContext = null, editing, onClose, titleSlot, hint, onHintChange, minHeight, grow = false }: {
+export function AiGenerationBox({ workshopId, origin, forcedContext = null, editing, onClose, titleSlot, hint, onHintChange, grow = false }: {
   workshopId: string;
   origin: GenerationOrigin;
   forcedContext?: 'parcours' | 'exam' | null;
   editing?: GenerationEditing;
   onClose: () => void;
-  /** Hauteur plancher — celle de la zone de dépôt, dans les Paramètres. */
-  minHeight?: number;
   /** Se déploie depuis le bouton qui l'ouvre, qu'il remplace. */
   grow?: boolean;
   /** Ce qui se pose à droite de la ligne de titre (la bascule manuel / IA de
@@ -197,7 +188,7 @@ export function AiGenerationBox({ workshopId, origin, forcedContext = null, edit
       // attend — et se jouerait au premier retour sur l'onglet. L'encadré né
       // masqué renonce donc à la sienne.
       ref={grow ? (el) => { if (el && el.offsetParent === null) el.classList.remove('ai-box-grow'); } : undefined}
-      style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 16px', minHeight, borderRadius: 14, background: palette.surfaceRaised, border: `1px solid ${palette.line}` }}
+      style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 16px', borderRadius: 14, background: palette.surfaceRaised, border: `1px solid ${palette.line}` }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 24 }}>
         <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: palette.green }}>
@@ -246,7 +237,6 @@ function SettingsBoxBody({ workshopId, origin, box }: { workshopId: string; orig
         hint={box.prompt}
         onHintChange={(prompt) => setSettingsBoxPrompt(workshopId, prompt)}
         onClose={() => closeSettingsBox(workshopId)}
-        minHeight={GENERATION_BOX_MIN_HEIGHT}
         grow={grow}
       />
     </div>

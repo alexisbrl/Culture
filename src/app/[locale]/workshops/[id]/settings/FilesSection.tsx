@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { Check, Download, Loader2, Pencil, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { palette, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import AiGenerationButton, { GENERATION_BOX_MIN_HEIGHT, SettingsGenerationBox } from '@/components/ai/AiGenerationButton';
+import AiGenerationButton, { SettingsGenerationBox } from '@/components/ai/AiGenerationButton';
 import ImportBanner from '@/components/ai/ImportBanner';
 import { useGenerationRefresh } from '@/components/ai/generationStore';
 import { ProgressBar } from '@/components/ui/progress-bar';
@@ -204,8 +204,9 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
               textAlign: 'center',
               cursor: uploadProgress !== null ? 'default' : 'pointer',
               padding: '26px 20px',
-              // La même hauteur que l'encadré de génération, qui prend sa place.
-              minHeight: GENERATION_BOX_MIN_HEIGHT,
+              // ⚠️ Hauteur fixée à la demande d'Alexis (25/09/2026) : n'y toucher
+              // que sur une demande explicite de sa part.
+              minHeight: 168,
               borderRadius: 16,
               transition: 'border-color 160ms, background 160ms',
               position: 'relative',
