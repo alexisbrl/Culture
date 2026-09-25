@@ -335,7 +335,7 @@ Trois gestes, et aucun autre :
 
 **Lancée depuis l'examen, elle n'écrit pas de document** : elle n'en a ni le droit ni le
 moyen. Elle ne reçoit alors que la demande, le nom de l'atelier et la liste des chapitres
-— ni le catalogue des documents, ni le document de l'IA, ni second tour.
+— ni décision d'écrire, ni documents, ni document de l'IA.
 
 **Un atelier a au plus un document écrit par l'IA**, l'unicité étant tenue en base. Il
 apparaît dans les ressources, marqué comme tel, téléchargeable et supprimable mais
@@ -352,12 +352,22 @@ L'en-tête du document est posée **par le code** à chaque écriture, jamais de
 modèle : elle doit être là à tous les coups, et un modèle à qui on demande de recopier
 une en-tête finit par ne pas le faire.
 
-**Elle demande les documents, on ne les lui donne pas d'office.** Le premier appel ne
-porte que leurs **noms**. La règle est binaire : **si elle décide d'écrire, tout le
-corpus lui est joint au tour suivant, sans qu'elle ait rien à désigner** — un nom de
-fichier ne dit pas fiablement ce qu'il contient, et une redite non vue coûte plus cher
-qu'un aller-retour. Le champ de demande ne sert qu'au cas inverse et rare : lire un
-document précis **sans** avoir décidé d'écrire.
+**Écrire ou non se décide avant, par un modèle de décision.** C’est une question fermée
+— la demande appelle-t-elle de la matière de cours ? —, posée à **Jev** (TypeSafe AI), qui
+ne rédige pas et rend une probabilité en une fraction de seconde. Elle ne voit que la
+demande, le programme, les **noms** des documents et les **titres** du document de l’IA,
+jamais un contenu. **Sans réponse, on écrit** : un « oui » de trop coûte une réécriture,
+un « non » de trop perd la demande.
+
+Le modèle qui écrit reçoit ensuite la décision toute faite, en **un seul appel** :
+
+- **oui** — tout le corpus lui est joint, avec le document de l’IA en entier ; il
+  l’écrit et réécrit la consigne ;
+- **non** — ni document, ni document de l’IA ; il ne fait que réécrire la consigne, et
+  son schéma de sortie n’a même pas de champ pour un document.
+
+Sa consigne ne lui présente jamais le choix d’écrire : un geste qu’on présente puis
+qu’on interdit se paie quand même en réflexion.
 
 **Elle reçoit une commande et ne sort pas de son rôle.** La consigne lui est présentée
 comme **une donnée à interpréter**, jamais comme une instruction qui lui serait
@@ -1298,5 +1308,5 @@ coupée pour la vitesse), Sonnet 5 sur le programme (ni Opus 5.5 ni Fable 5.1), 
 de tout le cours et de toutes les notions à chaque génération (voulue), DeepSeek pour les
 questions, données des cours comprises. **Écartés** : les lots à moitié prix pour la
 recharge (DeepSeek n'en propose pas ; ses heures creuses, à moitié prix, s'appliquent
-d'elles-mêmes). **Jev** (TypeSafe AI) : à tester sur la correction des réponses écrites, pas
-sur la génération.
+d'elles-mêmes). **Jev** (TypeSafe AI) : retenu le 25/09/2026 pour les
+questions fermées — la décision d'écrire de l'étape 0 d'abord (§7.4).
