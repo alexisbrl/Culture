@@ -67,12 +67,20 @@ export type { GenerationEditing };
 // confondues : au-delà, tout bouton de génération s'éteint et dit pourquoi au
 // survol.
 
+/** Tant que l'encadré de modification est ouvert, il renouvelle la mise à
+ *  l'écart de sa génération à ce rythme — bien en deçà de son expiration côté
+ *  serveur (90 s, @/lib/ingest/queue). */
+const HOLD_RENEW_MS = 30_000;
+/** Une modification restée ouverte plus longtemps fait quitter la file à sa
+ *  génération (décision d'Alexis du 25/09/2026). */
+const EDIT_LIMIT_MS = 10 * 60 * 1000;
+
 /** La hauteur de la zone de dépôt des Ressources, et donc celle de l'encadré de
  *  génération des Paramètres (25/09/2026, demandé par Alexis : « exactement la
  *  même taille »). Posée sur les deux plutôt que mesurée : dans Chapitre &
  *  Notion, la zone de dépôt n'est pas à l'écran. L'encadré grandit au-delà avec
  *  le texte saisi. */
-export const GENERATION_BOX_MIN_HEIGHT = 160;
+export const GENERATION_BOX_MIN_HEIGHT = 182;
 
 type Props = {
   workshopId: string;
@@ -159,15 +167,26 @@ export function AiGenerationBox({ workshopId, origin, forcedContext = null, edit
   const files = useWorkshopFiles(workshopId, editing?.requestId, forcedContext !== null);
   const requestId = editing?.requestId;
 
-  // La mise à l'écart, à l'ouverture. Partie entre-temps, la génération n'a
-  // plus rien à modifier : l'encadré se referme.
+  // La mise à l'écart, à l'ouverture, puis renouvelée tant que l'encadré est
+  // là (@/lib/ingest/queue). Partie entre-temps, la génération n'a plus rien à
+  // modifier : l'encadré se referme. Au bout de dix minutes, elle quitte la
+  // file — l'encadré reste, avec la consigne, et l'enregistrer la redemande.
   const closeRef = useRef(onClose);
   useEffect(() => { closeRef.current = onClose; });
   useEffect(() => {
     if (!requestId) return;
     let cancelled = false;
-    void holdGeneration(workshopId, requestId).then((held) => { if (!held && !cancelled) closeRef.current(); });
-    return () => { cancelled = true; };
+    const hold = () => holdGeneration(workshopId, requestId).then((held) => {
+      if (!held && !cancelled) { cancelled = true; clearInterval(timer); closeRef.current(); }
+    });
+    void hold();
+    const timer = setInterval(() => { void hold(); }, HOLD_RENEW_MS);
+    const drop = setTimeout(() => {
+      cancelled = true;
+      clearInterval(timer);
+      void cancelGeneration(workshopId, requestId);
+    }, EDIT_LIMIT_MS);
+    return () => { cancelled = true; clearInterval(timer); clearTimeout(drop); };
   }, [workshopId, requestId]);
 
   return (

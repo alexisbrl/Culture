@@ -59,11 +59,18 @@ export const MAX_ACTIVE_GENERATIONS = 3;
 const STARTING_TIMEOUT_MS = 3 * 60 * 1000;
 
 /** Une demande rouverte pour modifier sa consigne est mise à l'écart le temps
- *  de la modification : la file la saute, et elle garde sa place. Passé ce
- *  délai sans enregistrement ni abandon (un encadré oublié ouvert), elle QUITTE
- *  la file (décision d'Alexis du 25/09/2026) : l'encadré garde la consigne à
- *  l'écran, et l'enregistrer la remet dans la file, en dernière position. */
-const HOLD_MS = 10 * 60 * 1000;
+ *  de la modification : la file la saute, et elle garde sa place.
+ *
+ *  La mise à l'écart est un BATTEMENT, que l'encadré ouvert renouvelle
+ *  (`HOLD_RENEW_MS`, generationStore) : un encadré qui disparaît sans rien dire
+ *  — page rechargée, onglet fermé — la laisse retomber d'elle-même, et la
+ *  demande reprend sa place avec sa consigne d'avant. Sans ça, un simple
+ *  rafraîchissement pendant une modification bloquait la demande.
+ *
+ *  L'encadré resté ouvert dix minutes, lui, fait quitter la file à la demande
+ *  (décision d'Alexis du 25/09/2026) : c'est lui qui compte ce délai et la
+ *  retire, en gardant la consigne à l'écran. */
+const HOLD_MS = 90 * 1000;
 
 /** L'écran ne suit que les demandes récentes : au-delà, une génération est
  *  finie depuis longtemps, et le bandeau des imports prend le relais. */
@@ -119,23 +126,21 @@ type RequestRow = {
 
 const COLUMNS = 'id, workshop_id, created_by, input, base_url, import_id, started_at, error, held_until, created_at';
 
-/** Retire de la file les demandes dont la modification a expiré. Fait AVANT
- *  toute lecture de la file : une demande expirée qu'on y laisserait partirait
- *  avec sa consigne d'avant la modification. */
-async function dropExpiredHolds(workshopId: string): Promise<void> {
+/** Remet dans la file les demandes dont la modification a été abandonnée sans
+ *  un mot (plus de battement de l'encadré). */
+async function releaseExpiredHolds(workshopId: string): Promise<void> {
   const supabase = getSupabaseServerClient();
   const { error } = await supabase
     .from('ai_generation_requests')
-    .delete()
+    .update({ held_until: null })
     .eq('workshop_id', workshopId)
     .is('import_id', null)
-    .is('started_at', null)
     .lt('held_until', new Date().toISOString());
-  if (error) console.error('dropExpiredHolds error:', error);
+  if (error) console.error('releaseExpiredHolds error:', error);
 }
 
 async function recentRequests(workshopId: string): Promise<RequestRow[]> {
-  await dropExpiredHolds(workshopId);
+  await releaseExpiredHolds(workshopId);
   const supabase = getSupabaseServerClient();
   const since = new Date(Date.now() - RECENT_MS).toISOString();
   const { data, error } = await supabase
@@ -252,8 +257,6 @@ async function updateWaiting(workshopId: string, requestId: string, input: Reque
   const { data, error } = await supabase
     .from('ai_generation_requests')
     .update({ input, held_until: null })
-    // Une modification expirée ne se ranime pas : la demande a quitté la file.
-    .or(`held_until.is.null,held_until.gt.${new Date().toISOString()}`)
     .eq('id', requestId)
     .eq('workshop_id', workshopId)
     .is('import_id', null)

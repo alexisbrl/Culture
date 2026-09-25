@@ -1167,7 +1167,8 @@
       "help": "Ce que l’IA ne peut pas deviner : le niveau des élèves, le découpage attendu, le mot employé dans le document. Elle peut aussi écrire ou compléter un cours si tu le lui demandes. Un nombre seul (« 40 ») demande simplement ce nombre de questions.",
       "info": "L’IA écrit des questions d’examen à partir des notions de l’atelier.",
       "infoIdeas": "Tu peux l’orienter : le nombre de questions, les notions ou chapitres à couvrir, les types de réponse attendus, le niveau visé, le vocabulaire à employer.",
-      "infoIdeasProgram": "Tu peux l’orienter : le cours que tu souhaites, le niveau visé, le découpage attendu…"
+      "infoIdeasProgram": "Tu peux l’orienter : le cours que tu souhaites, le niveau visé, le découpage attendu…",
+      "placeholderProgram": "Crée-moi un cours de niveau … sur … ; complète le chapitre 3 de mon cours avant de mettre à jour l’atelier ; dans mon cours, les chapitres s’appellent thèmes, parties, sections, etc."
     },
     "generate": "générer",
     "cancel": "annuler",
@@ -1193,7 +1194,7 @@
     "chooseAi": "par IA",
     "chooseManual": "manuel",
     "plan": {
-      "program": "L’IA va lire les ressources (qu’elle peut compléter si besoin), en extraire les notions, les ranger en chapitres, puis écrire les questions d’entraînement.",
+      "program": "L’IA va lire les ressources (qu’elle peut compléter si besoin), en extraire les notions, les ranger en chapitres, puis écrire des questions d’entraînement.",
       "parcoursQuestions": "L’IA va compléter les questions du parcours pour les notions qui n’ont pas encore leur compte. Les documents ne sont pas relus.",
       "examQuestions": "L’IA va écrire des questions d’examen sur l’ensemble du programme — chacune croisant plusieurs notions, certaines s’enchaînant. Les documents ne sont pas relus.",
       "questionsOnly": "Aucun document lisible dans cet atelier : l’IA ne touchera pas au programme. Elle écrira les questions d’entraînement qui manquent encore aux notions en place.",

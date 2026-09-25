@@ -336,11 +336,16 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
                 chiffres EST ce nombre — « 40 » demande quarante questions, sans
                 passer par l’IA de lecture ni coûter un appel de plus. */}
 
-            {/* En encadré, ni intitulé au-dessus du champ ni texte d'aide
-                (25/09/2026, demandé par Alexis) : le texte grisé du champ dit
-                quoi y écrire, et le reste passe dans l'infobulle posée à gauche
-                des boutons. */}
-            {frame === 'modal' && <SectionLabel>{t('hint.label')}</SectionLabel>}
+            {/* En encadré, pas de texte d'aide sous le champ (25/09/2026,
+                demandé par Alexis) : il passe dans l'infobulle, à droite de
+                l'intitulé — ce que la génération va faire, puis ce qu'on peut
+                lui demander. */}
+            <SectionLabel
+              info={frame === 'inline' ? (forcedContext === null ? planText : t('hint.info')) : undefined}
+              infoMore={frame === 'inline' ? (forcedContext === null ? t('hint.infoIdeasProgram') : t('hint.infoIdeas')) : undefined}
+            >
+              {t('hint.label')}
+            </SectionLabel>
             {/* Champ libre, facultatif, posé APRÈS les cases : il précise ce
                 qu'on vient de demander, il ne le remplace pas. L'exemple n'est
                 pas décoratif — sans lui, personne ne devine que c'est ici qu'on
@@ -360,7 +365,9 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
               // qu'il ne puisse pas mentir le jour où la constante bouge.
               // En fenêtre, le champ sert aussi à construire un programme : son
               // exemple d'origine y reste plus juste.
-              placeholder={forcedContext === 'exam' ? t('hint.placeholderExam', { count: DEFAULT_EXAM_QUESTIONS }) : t('hint.placeholder')}
+              placeholder={forcedContext === 'exam'
+                ? t('hint.placeholderExam', { count: DEFAULT_EXAM_QUESTIONS })
+                : frame === 'inline' ? t('hint.placeholderProgram') : t('hint.placeholder')}
               style={{
                 // ⚠️ **Plus de poignée de redimensionnement** (07/09/2026,
                 // demandé par Alexis) : la hauteur suit le texte saisi, comme le
@@ -382,16 +389,6 @@ export default function AiGenerationDialog({ workshopId, files, forcedContext = 
             {frame === 'modal' && <div style={{ marginTop: 6, marginBottom: 20 }}><Hint>{t('hint.help')}</Hint></div>}
 
             <Actions inline={frame === 'inline'}>
-              {/* L'infobulle de l'encadré : ce que la génération va faire, puis ce
-                  qu'on peut lui demander. */}
-              {frame === 'inline' && (
-                <span style={{ marginRight: 'auto', display: 'inline-flex' }}>
-                  <InfoDot
-                    text={forcedContext === null ? planText : t('hint.info')}
-                    more={forcedContext === null ? t('hint.infoIdeasProgram') : t('hint.infoIdeas')}
-                  />
-                </span>
-              )}
               <Ghost onClick={requestClose}>{t('cancel')}</Ghost>
               {/* Deux blocages : tant que le programme n'est pas lu, on ne sait
                   pas encore quoi lancer — mieux vaut attendre une fraction de

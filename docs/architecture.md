@@ -814,7 +814,10 @@ que sa consigne est rouverte, la file la saute : si c'est son tour, la suivante 
 Enregistrer ou abandonner la modification la remet en tête de celles qui attendent. Une
 modification restée ouverte plus de dix minutes fait **quitter la file** à la demande — elle
 ne part jamais avec une consigne qu'on est en train de réécrire —, mais l'encadré garde le
-texte, et l'enregistrer la redemande, en dernière position.
+texte, et l'enregistrer la redemande, en dernière position. La mise à l'écart est un battement que
+l'encadré ouvert renouvelle : une page rechargée ou un onglet fermé pendant la modification la
+laisse retomber d'elle-même en moins de deux minutes, et la demande reprend sa place avec sa
+consigne d'avant.
 
 **Seuls les Paramètres construisent le programme.** Une liste de questions n'écrit que des
 questions, sur les notions en place, et n'écrit jamais le document de l'IA. Ce qui dépend de
