@@ -7,11 +7,13 @@ import { palette, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AiGenerationButton from '@/components/ai/AiGenerationButton';
 import ImportBanner from '@/components/ai/ImportBanner';
+import { useGenerationRefresh } from '@/components/ai/generationStore';
 import {
   createWorkshopNotion,
   updateWorkshopNotion,
   deleteWorkshopNotion,
   moveWorkshopNotion,
+  getWorkshopNotions,
   type Notion,
 } from '@/app/actions/workshopNotions';
 import {
@@ -20,6 +22,7 @@ import {
   restoreWorkshopChapter,
   deleteWorkshopChapter,
   reorderWorkshopChapters,
+  getWorkshopChapters,
   type Chapter,
 } from '@/app/actions/workshopChapters';
 import { SmallBtn } from './settingsShared';
@@ -194,6 +197,22 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
   const t = useTranslations('settings');
   const [notions, setNotions] = useState<Notion[]>(initialNotions);
   const [chapters, setChapters] = useState<Chapter[]>(initialChapters);
+
+  // Ce qu'écrit une génération apparaît au fil de l'eau, sans rechargement.
+  // Les deux lectures se suivent (les actions passent une par une) : elles
+  // n'ont lieu qu'au rythme du suivi, pas à chaque frappe.
+  useGenerationRefresh(workshopId, () => {
+    void (async () => {
+      try {
+        const nextNotions = await getWorkshopNotions(workshopId);
+        const nextChapters = await getWorkshopChapters(workshopId);
+        setNotions(nextNotions);
+        setChapters(nextChapters);
+      } catch {
+        // Rafraîchissement d'agrément : un échec laisse la liste affichée.
+      }
+    })();
+  });
 
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -571,9 +590,9 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
           posé ici parce que c'est ici qu'on constate le résultat sur les
           chapitres et les notions ; il ne s'affiche que tant que le lot est
           réellement annulable, et disparaît de lui-même. */}
-      <ImportBanner workshopId={workshopId} scope="programme" onCancelled={() => window.location.reload()} />
+      <ImportBanner workshopId={workshopId} scope="programme" />
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <AiGenerationButton workshopId={workshopId} origin="settings-notions" onDone={() => window.location.reload()} />
+        <AiGenerationButton workshopId={workshopId} origin="settings-notions" />
       </div>
 
       {(

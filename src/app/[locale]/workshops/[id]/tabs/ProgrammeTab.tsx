@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useGenerationRefresh } from '@/components/ai/generationStore';
 import { useTranslations, useLocale } from 'next-intl';
 import { ListChecks, Play, ArrowRight, RotateCcw, Sprout } from 'lucide-react';
 import type { Chapter } from '@/app/actions/workshopChapters';
@@ -45,6 +46,10 @@ export default function ProgrammeTab({ chapters, workshopId, workshopName, canMa
   const locale = useLocale();
   const router = useRouter();
   const [showQuestions, setShowQuestions] = useState(false);
+  // Les chapitres viennent du rendu serveur : une génération qui en écrit les
+  // fait apparaître par un rafraîchissement, sans recharger la page. Seuls les
+  // gestionnaires suivent l'avancement d'une génération.
+  useGenerationRefresh(canManage ? workshopId : null, () => router.refresh());
 
   // ─── Exercices en pause ────────────────────────────────────────────────
   //

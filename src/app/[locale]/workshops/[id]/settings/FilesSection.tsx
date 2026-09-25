@@ -7,10 +7,11 @@ import { palette, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AiGenerationButton from '@/components/ai/AiGenerationButton';
 import ImportBanner from '@/components/ai/ImportBanner';
+import { useGenerationRefresh } from '@/components/ai/generationStore';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import {
   createFileUploadTicket, finalizeWorkshopFileUpload, deleteWorkshopFile, renameWorkshopFile,
-  getFileDownloadUrl, type WorkshopFile,
+  getFileDownloadUrl, getWorkshopFiles, type WorkshopFile,
 } from '@/app/actions/workshopFiles';
 import type { UploadTicket } from '@/lib/storage';
 import { FileCategoryIcon, formatFileSize } from './settingsShared';
@@ -27,6 +28,12 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
   const [editingFileName, setEditingFileName] = useState('');
   const [pendingDeleteFile, setPendingDeleteFile] = useState<WorkshopFile | null>(null);
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
+
+  // Le cours qu'écrit l'IA apparaît dans la liste sans rechargement, comme ce
+  // qu'une génération retire quand on l'arrête ou l'annule.
+  useGenerationRefresh(workshopId, () => {
+    getWorkshopFiles(workshopId).then(setFiles).catch(() => {});
+  });
 
   // Téléchargement : on demande au serveur une URL signée (gestionnaire requis),
   // puis on déclenche le téléchargement côté navigateur.
@@ -167,10 +174,10 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
               Même dialogue derrière — §8 du plan d'ingestion. Le bandeau
               d'annulation suit, pour qu'on puisse revenir en arrière sans changer
               d'écran. */}
-          <ImportBanner workshopId={workshopId} scope="programme" onCancelled={() => window.location.reload()} />
+          <ImportBanner workshopId={workshopId} scope="programme" />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
             <div style={{ fontSize: 17, fontWeight: 500, color: palette.ink }}>{t('files.title')}</div>
-            <AiGenerationButton workshopId={workshopId} origin="settings-files" onDone={() => window.location.reload()} />
+            <AiGenerationButton workshopId={workshopId} origin="settings-files" />
           </div>
 
           {/* Zone de dépôt — bordure pointillée `--line-strong`, vire au vert au

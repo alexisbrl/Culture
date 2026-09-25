@@ -669,7 +669,8 @@ coup. Deux conditions : **moins de 24 h**, et **aucun élément modifié**.
 par l'IA il y a 12 minutes · Annuler », en tête de **chacun** des écrans concernés. Un
 import touche trois écrans à la fois : l'ancrer sur un seul le rendrait introuvable depuis
 les autres. Le bandeau disparaît de lui-même et ne laisse traîner aucune commande
-destructrice.
+destructrice. Il n'annonce que des générations **terminées** : celle qui tourne se lit sur
+le bouton de génération (§7.11).
 
 **Pas de transaction atomique, et c'est assumé.** Un échec en cours laisse un atelier
 partiellement rempli — l'étiquette permet de nettoyer d'un coup, **et elle sert bien
@@ -798,9 +799,17 @@ trois règles de choix :
 base, exécutée dans sa propre fonction serveur — pour tenir dans la limite de durée de
 l'hébergeur, cinq minutes par fonction. Une tâche qui se termine relit toutes les tâches du
 lot, en déduit la suite, et **lance elle-même les suivantes**. Fermer la fenêtre, quitter la
-page ou fermer l'onglet ne change rien : l'écran ne fait que lire l'avancement, et le
-bandeau de l'atelier montre la génération en cours à qui revient. Rouvrir la fenêtre
-retrouve la génération au lieu d'en proposer une seconde.
+page ou fermer l'onglet ne change rien : l'écran ne fait que lire l'avancement.
+
+**Le bouton est l'avancement.** La fenêtre de lancement se ferme au clic. Pendant la
+génération, le bouton de génération se remplit au fil des étapes, affiche le pourcentage
+et n'est plus cliquable ; une coche brève à la réussite. À côté : l'arrêt, confirmé
+puisqu'il défait ce qui a été écrit, et une alerte seulement si la génération a échoué ou
+n'a pas tout écrit. L'état est **partagé par tout l'onglet** : lancer d'un écran fait
+basculer tous les boutons de l'atelier, et les listes qui montrent ce qu'elle écrit se
+relisent d'elles-mêmes à mesure (au plus toutes les quelques secondes, les lectures
+passant en file), puis à la fin. Une génération lancée ailleurs est retrouvée en arrivant
+sur l'atelier, puis par un sondage lent (§9).
 
 **La suite se déduit de l'état, jamais d'une mémoire.** Plusieurs tâches finissent au même
 instant et demandent chacune « et maintenant ? » : la réponse, tirée de toutes les tâches du

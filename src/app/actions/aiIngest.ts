@@ -42,9 +42,6 @@ export type PlanIssue = {
 export type ImportBanner = {
   importId: string;
   state: 'cancellable' | 'empty' | 'expired' | 'modified';
-  /** La génération tourne encore, sur le serveur : ce qu'on compte est ce
-   *  qu'elle a écrit jusqu'ici. */
-  running: boolean;
   /** La génération s'est arrêtée avant la fin (serveur perdu, tâche coupée
    *  deux fois). Ce qu'elle a écrit est là, mais ce n'est pas un résultat
    *  voulu : le bandeau le dit au lieu de l'annoncer comme un import réussi.
@@ -141,10 +138,9 @@ export async function getImportBanners(workshopId: string): Promise<ImportBanner
       imports.recentImportIds(workshopId),
       orchestrator.liveGenerationOf(workshopId),
     ]);
-    // La génération en cours a toujours son bandeau, même avant d'avoir écrit
-    // quoi que ce soit : c'est lui qui dit, à qui revient sur l'atelier, qu'elle
-    // tourne encore.
-    const ids = live && !recent.includes(live) ? [live, ...recent] : recent;
+    // La génération en cours n'a PAS de bandeau (25/09/2026) : c'est le bouton de
+    // génération qui la montre. Le bandeau n'annonce que ce qui est terminé.
+    const ids = recent.filter((id) => id !== live);
     // Les deux lectures sont indépendantes → en parallèle (règle N+1). Le
     // relevé des lots interrompus est une seule requête pour toute la liste,
     // pas une par lot.
@@ -156,12 +152,11 @@ export async function getImportBanners(workshopId: string): Promise<ImportBanner
     ]);
 
     return summaries
-      .filter(({ importId, summary }) => summary.state === 'cancellable' || importId === live)
+      .filter(({ summary }) => summary.state === 'cancellable')
       .map(({ importId, summary }) => ({
         importId,
         state: summary.state,
-        running: importId === live,
-        interrupted: importId !== live && interrupted.has(importId),
+        interrupted: interrupted.has(importId),
         chapters: summary.chapters,
         notions: summary.notions,
         parcoursQuestions: summary.parcoursQuestions,

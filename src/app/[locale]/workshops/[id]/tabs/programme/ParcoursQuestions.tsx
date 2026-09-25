@@ -39,6 +39,7 @@ import { type Question, emptyQuestion } from '../QuestionEditor';
 import InlineQuestionEditor from '../examen/InlineQuestionEditor';
 import QuestionListView from '../examen/QuestionListView';
 import { LIST_INSET_X } from '../examen/examShared';
+import { useGenerationRefresh } from '@/components/ai/generationStore';
 import {
   getParcoursQuestions,
   saveParcoursQuestion,
@@ -79,6 +80,16 @@ export default function ParcoursQuestions({ workshopId, chapters, onBack }: { wo
       cancelled = true;
     };
   }, [workshopId, t]);
+
+  // Ce qu'écrit une génération apparaît sans rechargement.
+  useGenerationRefresh(workshopId, () => {
+    getParcoursQuestions(workshopId)
+      .then((data) => {
+        setQuestions(data.questions);
+        setNotions(data.notions);
+      })
+      .catch(() => {});
+  });
 
   function openEditor(q: Question) {
     setEditing(q);

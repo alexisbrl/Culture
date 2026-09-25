@@ -18,6 +18,7 @@ import {
   toggleQuestionInSections, isPageBreakId, pruneUnknownQuestions, LIST_INSET_X, partWeightKey,
 } from './examen/examShared';
 import { Tooltip } from '@/components/ui/tooltip';
+import { useGenerationRefresh } from '@/components/ai/generationStore';
 import HistoryContent from './examen/HistoryContent';
 import BankContent from './examen/BankContent';
 import GeneratorContent from './examen/GeneratorContent';
@@ -193,6 +194,23 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     }).catch(err => console.error('chargement banque de questions échoué', err))
       .finally(() => { draftLoaded.current = true; setLoading(false); });
   }, [workshopId]);
+
+  // Ce qu'écrit une génération apparaît dans la banque sans rechargement. Seuls
+  // les contenus que la génération touche sont relus — ni le brouillon, ni les
+  // examens —, et une question neuve encore en cours de saisie, qui n'existe
+  // qu'ici, est gardée en tête.
+  const pendingNewId = useRef(newQuestionId);
+  useEffect(() => { pendingNewId.current = newQuestionId; }, [newQuestionId]);
+  useGenerationRefresh(workshopId, () => {
+    getExamPageData(workshopId).then(({ questions: fresh, notions, chapters }) => {
+      setQuestions(prev => {
+        const known = new Set(fresh.map(q => q.id));
+        return [...prev.filter(q => q.id === pendingNewId.current && !known.has(q.id)), ...fresh];
+      });
+      setNotions(notions);
+      setChapters(chapters);
+    }).catch(err => console.error('rafraîchissement de la banque échoué', err));
+  });
 
   // Sauvegarde du brouillon de l'éditeur d'examen (reprise après reconnexion /
   // le lendemain). Une question en cours de création n'existe qu'en mémoire tant
