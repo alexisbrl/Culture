@@ -241,9 +241,13 @@ export function writingQuestion(input: {
     state: lines.join('\n\n'),
     // ⚠️ **Posée comme un classement, pas comme « faut-il écrire ? »** (essai du
     // 25/09/2026, Haiku). Sous cette forme-là, il répondait oui à tout, y compris
-    // à « des questions plus difficiles, en anglais » ; en A/B et à température
-    // nulle, 22 bonnes réponses sur 22 (onze demandes types, deux passages).
-    question: "Classe la demande. A : elle demande d'écrire, compléter, corriger ou enrichir un COURS — des connaissances à enseigner, des explications, des exemples, une partie trop mince. B : elle ne porte que sur le travail à venir — la difficulté, la langue ou le type des questions, les points sur lesquels insister, le contenu d'une question précise —, ou sur rien d'enseignable. La demande est-elle de type A ?",
+    // à « des questions plus difficiles, en anglais ». ⚠️ **Modifier compte autant
+    // que créer** : une première version ne nommait que les ajouts, et « retire
+    // la partie sur les anecdotes » ou « réécris le cours en anglais » partaient
+    // en « non » — la demande était perdue. Sous cette forme, à température
+    // nulle, 18 sur 19 sur trois passages ; la seule erreur (« insiste sur les
+    // éruptions », un cours de l'IA existant) va dans le sens coûteux.
+    question: "Classe la demande. A : elle demande d'agir sur un COURS — en écrire un, le compléter, l'enrichir, le corriger, ou au contraire en retirer, raccourcir, simplifier, réécrire ou traduire une partie. B : elle ne porte que sur les questions à venir — leur difficulté, leur langue, leur type, les points sur lesquels insister, le contenu d'une question précise —, ou sur rien d'enseignable. La demande est-elle de type A ?",
   };
 }
 
