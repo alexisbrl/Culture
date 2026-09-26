@@ -432,7 +432,6 @@
     "generator": {
       "cancelEdits": "cancel changes",
       "editingPrefix": "Editing",
-      "cancelEdit": "cancel ✕",
       "headerZone": "HEADER",
       "saveFavorite": "save as favourite",
       "minShort": "min",
@@ -467,6 +466,7 @@
       "dragReorder": "drag to reorder",
       "dragSection": "drag to move the part and its questions",
       "shuffleNotice": "random order: this question's answer items will be shuffled from one paper to the next during the exam",
+      "generateWithAi": "Generate with AI",
       "saveExamShort": "Save",
       "reset": "Reset",
       "pageNumber": "{n} / {total}",

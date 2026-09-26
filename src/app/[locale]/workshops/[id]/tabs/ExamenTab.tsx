@@ -47,6 +47,22 @@ function configFingerprint(c: ExamConfig): string {
   return JSON.stringify(sort(normalizeExamConfig(c)));
 }
 
+/** La copie n'a rien qu'on perdrait en la quittant : un examen enregistré
+ *  identique à sa version enregistrée, ou une copie neuve sans question ni
+ *  partie ajoutée à la « Partie 1 » posée d'office (un titre seul ne compte
+ *  pas). C'est la règle de « réinitialiser », de la fenêtre d'alerte et de la
+ *  fermeture automatique au retour. */
+function copyHasChanges(config: ExamConfig, saved: string | null, editing: boolean): boolean {
+  return editing
+    ? saved !== null && configFingerprint(config) !== saved
+    : configQuestionIds(config).length > 0 || config.sections.length > 1;
+}
+
+/** Une copie qui n'a rien à perdre est fermée si l'on revient plus de 3 h
+ *  après sa dernière modification : on retrouve une feuille vierge, comme si
+ *  on avait fermé l'examen — il n'y a pas d'autre geste pour le faire. */
+const IDLE_CLOSE_MS = 3 * 60 * 60 * 1000;
+
 /** Geste mis en attente par la fenêtre « copie non enregistrée » : ouvrir une
  *  copie vierge, ou ouvrir un autre examen. */
 type PendingSwitch = { kind: 'new' } | { kind: 'open'; exam: Exam };
@@ -54,7 +70,9 @@ type PendingSwitch = { kind: 'new' } | { kind: 'open'; exam: Exam };
 // ---- MAIN EXAMEN TAB ----
 export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const t = useTranslations('examen');
-  const [leftTab, setLeftTab] = useState<LeftTab>('bank');
+  // La liste des examens à l'arrivée ; celle des questions seulement quand un
+  // examen est en cours d'édition — décidé à la lecture du brouillon.
+  const [leftTab, setLeftTab] = useState<LeftTab>('history');
   // Un glisser est en cours sur la feuille (voir `onDragActiveChange` de
   // `GeneratorContent`) : la colonne des questions cesse alors de défiler.
   const [sheetDragging, setSheetDragging] = useState(false);
@@ -147,9 +165,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
    *    ne suffisent pas — demandé par Alexis le 26/09/2026.
    *  C'est la même règle qui montre « réinitialiser » et qui déclenche la
    *  fenêtre d'alerte : un bouton qui ne ferait rien n'a pas à s'afficher. */
-  const hasChanges = editing
-    ? baseline !== null && configFingerprint(examConfig) !== baseline
-    : configQuestionIds(examConfig).length > 0 || examConfig.sections.length > 1;
+  const hasChanges = copyHasChanges(examConfig, baseline, editing !== null);
 
   function isEditorEmpty() {
     return editing === null && draftIds.length === 0 && examConfig.title.trim() === '' && configQuestionIds(examConfig).length === 0;
@@ -230,7 +246,15 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
       setNotions(notions);
       setChapters(chapters);
       setExams(mappedExams);
-      if (draft) {
+      // Brouillon ignoré — feuille vierge — s'il n'a rien à perdre et date de
+      // plus de 3 h. Une copie qui porte des modifications, elle, attend
+      // toujours son auteur, quel que soit le temps passé.
+      const restoredEditing = draft?.editingId ? mappedExams.find(e => e.id === draft.editingId) ?? null : null;
+      const savedFingerprint = restoredEditing?.config?.sections ? configFingerprint(normalizeExamConfig(restoredEditing.config)) : null;
+      const idle = draft?.updatedAt ? Date.now() - new Date(draft.updatedAt).getTime() > IDLE_CLOSE_MS : false;
+      const draftConfig = draft?.config?.sections ? normalizeExamConfig(draft.config) : null;
+      const closeDraft = !draftConfig || (idle && !copyHasChanges(draftConfig, savedFingerprint, restoredEditing !== null));
+      if (draft && !closeDraft) {
         // Filet : un brouillon peut référencer une question qui n'existe plus
         // (supprimée ailleurs, ou création abandonnée par une fermeture d'onglet
         // avant enregistrement). Ces identifiants ne s'affichent nulle part mais
@@ -248,15 +272,16 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         // questions) porte des identifiants que la copie ne montre plus, et
         // rien ne l'en sortait — le rechargement réenregistrait l'écart tel quel.
         setDraftIds(configQuestionIds(config));
-        if (draft.editingId) {
-          const found = mappedExams.find(e => e.id === draft.editingId);
-          if (found) {
-            setEditing(found);
-            // Référence de « modifié » : la version enregistrée de l'examen, pas
-            // le brouillon relu, qui peut déjà porter des modifications.
-            if (found.config?.sections) setBaseline(configFingerprint(normalizeExamConfig(found.config)));
-          }
+        if (restoredEditing) {
+          setEditing(restoredEditing);
+          // Référence de « modifié » : la version enregistrée de l'examen, pas
+          // le brouillon relu, qui peut déjà porter des modifications.
+          setBaseline(savedFingerprint);
         }
+        // Un examen est en cours d'édition — enregistré rouvert, ou copie neuve
+        // qui porte déjà quelque chose : on arrive sur les questions, là où on
+        // le compose.
+        if (restoredEditing || copyHasChanges(config, null, false)) setLeftTab('bank');
       }
     }).catch(err => console.error('chargement banque de questions échoué', err))
       .finally(() => { draftLoaded.current = true; setLoading(false); });
@@ -850,7 +875,6 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             config={examConfig}
             onConfigChange={setExamConfig}
             editing={editing}
-            onCancelEdit={() => { setEditing(null); setBaseline(null); }}
             onGenerate={() => { handleGenerate(); }}
             canReset={hasChanges}
             onOpenQuestion={handleOpenQuestion}

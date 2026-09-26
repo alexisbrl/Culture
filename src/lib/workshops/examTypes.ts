@@ -789,4 +789,7 @@ export type GeneratedExam = {
   config?: ExamConfig;
 };
 
-export type ExamDraft = { draftIds: string[]; config: ExamConfig; editingId: string | null };
+/** `updatedAt` n'existe qu'à la lecture : c'est la base qui date la dernière
+ *  écriture, et l'éditeur s'en sert pour fermer une copie laissée sans rien à
+ *  perdre depuis plus de 3 h (voir `ExamenTab`). */
+export type ExamDraft = { draftIds: string[]; config: ExamConfig; editingId: string | null; updatedAt?: string };

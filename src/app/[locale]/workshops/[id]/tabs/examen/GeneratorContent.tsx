@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { ArrowLeft, Clock, Star, RefreshCw, SeparatorHorizontal, SlidersHorizontal, PenLine } from 'lucide-react';
+import { ArrowLeft, Clock, Star, RefreshCw, SeparatorHorizontal, SlidersHorizontal, PenLine, Sparkles } from 'lucide-react';
 import { palette, ink, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { PillToggle } from './questionFields';
@@ -236,13 +236,12 @@ const SHEET_ALIGNED: React.CSSProperties = {
 };
 
 // ---- GENERATOR / APERÇU EN DIRECT ----
-function GeneratorContent({ workshopId, questions, config, onConfigChange, editing, onCancelEdit, onGenerate, onOpenQuestion, onNewQuestionInSection, onRemoveFromDraft, onClearEditor, canReset, previewQuestion, sheetEditor, onBack, focusRequest, onRequestFocus, onDragActiveChange }: {
+function GeneratorContent({ workshopId, questions, config, onConfigChange, editing, onGenerate, onOpenQuestion, onNewQuestionInSection, onRemoveFromDraft, onClearEditor, canReset, previewQuestion, sheetEditor, onBack, focusRequest, onRequestFocus, onDragActiveChange }: {
   workshopId: string;
   questions: Question[];
   config: ExamConfig;
   onConfigChange: (config: ExamConfig) => void;
   editing: Exam | null;
-  onCancelEdit: () => void;
   onGenerate: () => void;
   onOpenQuestion: (id: string, rowKey?: string) => void;
   /** Double-clic dans le BLANC de la copie : une question neuve s'ajoute à la
@@ -1249,7 +1248,6 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: withAlpha(palette.amberGlow, 0.18), border: `1px solid ${withAlpha(palette.amber, 0.35)}`, marginBottom: 14, flexShrink: 0 }}>
           <PenLine size={14} strokeWidth={1.75} color={palette.amber} />
           <div style={{ flex: 1, fontSize: 12.5, color: palette.ink }}>{t('generator.editingPrefix')} <b style={{ fontWeight: 600 }}>{editing.title}</b></div>
-          <button onClick={onCancelEdit} style={{ fontSize: 11.5, color: palette.amberLight, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{t('generator.cancelEdit')}</button>
         </div>
       )}
       {/* Colonne unique. La liste intermédiaire « questions envoyées » a disparu :
@@ -1302,6 +1300,15 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
           >
             <SlidersHorizontal size={15} strokeWidth={1.75} />
             {hdrOpen ? t('generator.done') : t('generator.customize')}
+          </button>
+          {/* Génération de l'examen entier par IA : le bouton est posé, le
+              geste n'est pas encore écrit (26/09/2026). */}
+          <button
+            type="button"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: BAR_BUTTON_H, boxSizing: 'border-box' as const, fontSize: 13.5, fontWeight: 600, color: palette.ink, background: palette.surfaceRaised, border: `1px solid ${palette.lineStrong}`, borderRadius: 999, padding: '0 18px', cursor: 'pointer', fontFamily: 'inherit', boxShadow: shadow.sm }}
+          >
+            <Sparkles size={15} strokeWidth={1.75} />
+            {t('generator.generateWithAi')}
           </button>
           {/* « Réinitialiser » n'apparaît que s'il y a quelque chose à défaire :
               une copie neuve vide, ou un examen enregistré qu'on n'a pas touché,

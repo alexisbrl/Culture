@@ -1066,10 +1066,10 @@ export async function saveGeneratedExam(workshopId: string, exam: GeneratedExam)
 
 export async function getExamDraft(workshopId: string, userId: string): Promise<ExamDraft | null> {
   const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase.from('exam_draft').select('draft_ids, config, editing_id').eq('workshop_id', workshopId).eq('user_id', userId).maybeSingle();
+  const { data, error } = await supabase.from('exam_draft').select('draft_ids, config, editing_id, updated_at').eq('workshop_id', workshopId).eq('user_id', userId).maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return null;
-  return { draftIds: data.draft_ids ?? [], config: data.config as ExamConfig, editingId: data.editing_id ?? null };
+  return { draftIds: data.draft_ids ?? [], config: data.config as ExamConfig, editingId: data.editing_id ?? null, updatedAt: data.updated_at ?? undefined };
 }
 
 export async function deleteGeneratedExam(workshopId: string, examId: string): Promise<void> {

@@ -432,7 +432,6 @@
     "generator": {
       "cancelEdits": "annuler les modifications",
       "editingPrefix": "Modification de",
-      "cancelEdit": "annuler ✕",
       "headerZone": "EN-TÊTE",
       "saveFavorite": "enregistrer en favori",
       "minShort": "min",
@@ -467,6 +466,7 @@
       "dragReorder": "glisser pour réorganiser",
       "dragSection": "glisser pour déplacer la partie et ses questions",
       "shuffleNotice": "ordre aléatoire : les éléments de réponse de cette question seront mélangés d'une copie à l'autre lors de l'examen",
+      "generateWithAi": "Générer par IA",
       "saveExamShort": "Enregistrer",
       "reset": "Réinitialiser",
       "pageNumber": "{n} / {total}",
