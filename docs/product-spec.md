@@ -387,7 +387,7 @@ Chaque question est associée à une réponse. Une même question peut apparteni
 
 | Option | Détail |
 |---|---|
-| Libellés (pools) | Créer des groupes de questions [base : off] |
+| Libellés (pools) | Créer des groupes de questions [base : off]. Dans la liste des questions, un clic sur les libellés d'une carte — ou sur « + libellé » si elle n'en a pas — ouvre un menu qui pose ou retire des libellés sans ouvrir la question ; les libellés y sont rangés du dernier utilisé au plus ancien, ordre retenu sur l'appareil. |
 | Difficulté | Annoter la difficulté de la question, réglable par partie [base : off] |
 | Édition d'images | Les images/graphiques joints peuvent être édités via un outil basique |
 | Discussion IA | Discuter avec l'IA pour générer ou retravailler des questions spécifiques |
@@ -396,6 +396,8 @@ Chaque question est associée à une réponse. Une même question peut apparteni
 **Type de question :** toujours textuel — une question peut porter en plus une image et/ou un audio en pièce jointe, indépendamment l'un de l'autre (pas un type exclusif). Voir `QuestionMedia` dans `src/lib/workshops/examTypes.ts`.
 
 **Types de réponse :** Sans réponse `[base]` / QCS / QCM / Textuelle (avec option « réponse libre / sans correction ») / Liste / Tableau / Matching / Dessin (fond blanc ou calque) / Fichier (dépôt, y compris un fichier audio)
+
+**Liste.** L'auteur saisit les réponses acceptées et choisit combien en demander. Classée ou non, ce nombre se règle librement ; une liste classée attend alors les N premières réponses saisies, dans l'ordre. Sur la feuille A4, chaque ligne de réponse commence par son numéro si la liste est classée, par une puce sinon.
 
 **Mode de réponse** (paramètres avancés, exclusifs l'un de l'autre) : une question peut demander que la réponse soit donnée **à la voix** (« réponse orale » — textuelle, liste, paire) ou **sur l'image de la question** (« répondre sur l'image » — dessin, liste ; proposé seulement si une image est jointe). Les deux ne concernent **que les versions en ligne** (examen passé en ligne, parcours) : la feuille A4 les ignore. À ce jour ils ne font qu'identifier la question — le branchement réel, et le format d'une réponse orale, sont au backlog.
 

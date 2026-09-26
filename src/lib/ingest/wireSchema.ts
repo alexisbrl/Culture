@@ -101,12 +101,9 @@ export const EXAM_RESPONSE_TYPES = [...PARCOURS_RESPONSE_TYPES, 'fichier', 'sans
  *  (`isListCorrect`, option `ordered`). Une liste numérotée est désormais
  *  corrigée LIGNE À LIGNE.
  *
- *  ⚠️ **Les deux réglages s'excluent** : une liste numérotée est demandée en
- *  entier, donc `listExpected` n'est plus lu tant que `listNumbered` vaut vrai
- *  (`listAnswerCount`). L'ordre d'un extrait n'a pas de référence — « trois de
- *  ces huit, dans l'ordre » ne dit pas lesquelles trois. Une valeur envoyée
- *  quand même n'est pas une erreur : elle est simplement mise en sommeil, et
- *  reprend effet si un gestionnaire décoche la numérotation.
+ *  ⚠️ **Les deux réglages se combinent** (arbitrage du 26/09/2026) : une liste
+ *  numérotée de N réponses demandées attend les N PREMIÈRES de `choices`, dans
+ *  l'ordre (`listAnswerCount`, `isListCorrect`).
  *
  *  ⚠️ **`tableUnique` en est sorti** le même jour : « une seule case par ligne »
  *  est un réglage d'affichage que le modèle déduisait de la forme de sa grille
@@ -138,7 +135,7 @@ const wireTypeOptionsSchema = z.object({
     .min(1)
     .optional()
     .describe(
-      "liste — combien de réponses le candidat doit donner, quand tu n'attends pas la liste complète : « cite trois fleuves français » se rédige avec les huit réponses acceptées dans `choices` et 3 ici. Omettre pour les demander toutes.",
+      "liste — combien de réponses le candidat doit donner, quand tu n'attends pas la liste complète : « cite trois fleuves français » se rédige avec les huit réponses acceptées dans `choices` et 3 ici. Avec `listNumbered`, ce sont les N PREMIÈRES réponses de `choices` qui sont attendues, dans cet ordre. Omettre pour les demander toutes.",
     ),
   fileTypes: z
     .array(z.enum(FILE_TYPE_KEYS))

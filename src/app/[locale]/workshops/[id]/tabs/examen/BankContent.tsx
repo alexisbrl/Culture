@@ -11,7 +11,7 @@ import { type Question } from '../QuestionEditor';
 import { type Pool, type Exam } from './examShared';
 import QuestionListView, { type EditorSlotOptions } from './QuestionListView';
 
-function BankContent({ workshopId, questions, loading, pools, exams, notions, chapters, draftIds, renderEditor, editingQuestionId, editingIsNew, openId, setOpenId, onEditQuestion, onNewQuestion, onCancelNewQuestion, draftStatement, onToggleInExam, onCreatePool, onUpdatePool, onDeletePool, onDeleteQuestion }: {
+function BankContent({ workshopId, questions, loading, pools, exams, notions, chapters, draftIds, renderEditor, editingQuestionId, editingIsNew, openId, setOpenId, onEditQuestion, onNewQuestion, onCancelNewQuestion, draftStatement, onToggleInExam, onCreatePool, onUpdatePool, onDeletePool, onToggleQuestionPool, onDeleteQuestion }: {
   workshopId: string;
   questions: Question[];
   /** Les questions ne sont pas encore arrivées du serveur — voir `loading` de
@@ -48,6 +48,7 @@ function BankContent({ workshopId, questions, loading, pools, exams, notions, ch
   onCreatePool: (name: string) => string;
   onUpdatePool: (pool: Pool) => void;
   onDeletePool: (id: string) => void;
+  onToggleQuestionPool: (questionId: string, poolId: string) => void;
   onDeleteQuestion: (q: Question) => void;
 }) {
   return (
@@ -58,7 +59,7 @@ function BankContent({ workshopId, questions, loading, pools, exams, notions, ch
       loading={loading}
       notions={notions}
       chapters={chapters}
-      labels={{ pools, onCreate: onCreatePool, onUpdate: onUpdatePool, onDelete: onDeletePool }}
+      labels={{ pools, onCreate: onCreatePool, onUpdate: onUpdatePool, onDelete: onDeletePool, onToggleQuestion: onToggleQuestionPool }}
       exams={{ list: exams, draftIds, onToggleInExam }}
       renderEditor={renderEditor}
       editOnDoubleClick

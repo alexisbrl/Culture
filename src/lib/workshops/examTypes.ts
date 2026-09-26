@@ -244,17 +244,12 @@ export function shufflesAnswerItems(source: {
 /** Combien de réponses une LISTE réclame au candidat : le nombre de lignes de
  *  saisie qu'il voit, et le nombre de bonnes réponses qu'il doit donner.
  *
- *  Deux règles, dans cet ordre :
- *
- *  - **Une liste numérotée est exhaustive.** `listNumbered` dit que l'ordre
- *    compte ; or l'ordre d'un extrait n'a pas de référence — « classe trois de
- *    ces huit événements » ne dit pas lesquels trois, donc ne dit pas quel
- *    ordre. On demande alors la liste entière (arbitrage d'Alexis du
- *    06/09/2026). `listExpected` reste enregistré et reprend effet si le
- *    réglage est décoché : décocher ne doit pas faire perdre un réglage.
- *  - **Sinon, le nombre demandé par l'auteur**, borné par ce qui est
- *    réellement saisi : on ne peut pas réclamer plus de réponses qu'il n'y en a
- *    d'acceptées, ni moins d'une.
+ *  Le nombre demandé par l'auteur, borné par ce qui est réellement saisi : on
+ *  ne peut pas réclamer plus de réponses qu'il n'y en a d'acceptées, ni moins
+ *  d'une. Numérotée ou non, la règle est la même (arbitrage d'Alexis du
+ *  26/09/2026) : une liste numérotée de N réponses demandées attend les N
+ *  PREMIÈRES réponses saisies, dans l'ordre (`isListCorrect`, option
+ *  `ordered`).
  *
  *  `undefined` quand aucune réponse n'est saisie : il n'y a rien à borner et
  *  rien à corriger (certaines questions écrites à la main portent leurs
@@ -271,7 +266,6 @@ export function listAnswerCount(source: {
 }): number | undefined {
   const accepted = (source.choices ?? []).filter((entry) => entry.trim().length > 0).length;
   if (accepted === 0) return undefined;
-  if (source.typeOptions?.listNumbered === true) return accepted;
   const asked = source.typeOptions?.listExpected ?? accepted;
   return Math.min(Math.max(asked, 1), accepted);
 }

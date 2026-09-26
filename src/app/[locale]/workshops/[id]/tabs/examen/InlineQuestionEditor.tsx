@@ -38,7 +38,7 @@ import { palette, ink, withAlpha } from '@/lib/theme';
 import type { Question, QuestionPart } from '@/lib/workshops/examTypes';
 import { QuestionFields, emptyPart } from './questionFields';
 import { MediaAttachment, useQuestionMediaDrop } from './questionMedia';
-import { type Pool, LabelPill, LabelEditor, LabelPicker } from './examShared';
+import { type Pool, LabelPill, LabelEditor, LabelPicker, useLabelRecency, touchLabelRecency, sortPoolsByRecency } from './examShared';
 import { Tooltip } from '@/components/ui/tooltip';
 
 type Props = {
@@ -152,14 +152,19 @@ export default function InlineQuestionEditor({
     // il n'y a pas de barème, donc rien à décaler.
     onRemovePart?.(idx);
   }
+  // Le menu montre les libellés récemment posés d'abord (voir `useLabelRecency`).
+  const labelRecency = useLabelRecency(workshopId);
   function togglePool(id: string) {
+    if (!draft.pools.includes(id)) touchLabelRecency(workshopId, id);
     patch({ pools: draft.pools.includes(id) ? draft.pools.filter(p => p !== id) : [...draft.pools, id] });
   }
   function addPool(name: string) {
     // `onCreatePool` n'est fourni que là où les libellés sont affichés : ce
     // chemin est injoignable côté parcours, la garde n'est là que pour le typage.
     if (!onCreatePool) return;
-    patch({ pools: [...draft.pools, onCreatePool(name)] });
+    const id = onCreatePool(name);
+    touchLabelRecency(workshopId, id);
+    patch({ pools: [...draft.pools, id] });
   }
 
   const selectStyle: React.CSSProperties = {
@@ -281,7 +286,7 @@ export default function InlineQuestionEditor({
             {/* Choisir, modifier et créer un libellé se font tous les trois dans
                 le panneau du menu — voir `LabelPicker`. */}
             <LabelPicker
-              pools={pools}
+              pools={sortPoolsByRecency(pools, labelRecency)}
               selected={draft.pools}
               onToggle={togglePool}
               onCreate={onCreatePool ? addPool : undefined}

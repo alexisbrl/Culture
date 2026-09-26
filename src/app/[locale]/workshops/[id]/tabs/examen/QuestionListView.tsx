@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, type Dispatch, type SetStateAction, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Link2, Pencil, Sparkles, Trash2 } from 'lucide-react';
+import { Link2, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { palette, withAlpha, ink } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AiGenerationDialog, { useWorkshopFiles } from '@/components/ai/AiGenerationDialog';
@@ -16,8 +16,8 @@ import {
   type Pool, type Exam, type SortBy, type SortDir,
   DEFAULT_SORT_DIR, NEVER_EXAM_ID, CARD_LINE, CARD_ACTION_BTN, LIST_INSET_X,
   RESPONSE_TYPE_ICONS,
-  TypeIcon, IconBtn, ListToolbar, FilterButton, ListCard, ListCardSkeleton, LabelPill, LabelEditor, SegmentedToggle,
-  useDismissOnOutsideClick, useRememberedCount,
+  TypeIcon, IconBtn, ListToolbar, FilterButton, ListCard, ListCardSkeleton, LabelPill, LabelEditor, LabelQuickMenu, SegmentedToggle,
+  useDismissOnOutsideClick, useRememberedCount, useLabelRecency, touchLabelRecency,
 } from './examShared';
 import { Tooltip } from '@/components/ui/tooltip';
 
@@ -129,6 +129,9 @@ export type QuestionListLabels = {
   onCreate: (name: string) => string;
   onUpdate: (pool: Pool) => void;
   onDelete: (id: string) => void;
+  /** Pose ou retire un libellé depuis la carte (menu rapide). Absent = les
+   *  pastilles de la carte restent de simples témoins. */
+  onToggleQuestion?: (questionId: string, poolId: string) => void;
 };
 
 export type QuestionListExams = {
@@ -268,6 +271,7 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   const pools = labels?.pools ?? [];
   const exams = examsProp?.list ?? [];
   const draftIds = examsProp?.draftIds ?? [];
+  const labelRecency = useLabelRecency(workshopId);
   const [filterPools, setFilterPools] = useState<string[]>([]);
   const [filterTypes, setFilterTypes] = useState<ResponseType[]>([]);
   const [filterChapters, setFilterChapters] = useState<string[]>([]);
@@ -637,6 +641,42 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
     }
   });
 
+  /** Pastilles d'une carte. Avec `onToggleQuestion`, elles ouvrent le menu
+   *  rapide des libellés — et un « + libellé » le fait quand la question n'en a
+   *  aucun. Pas sur la question ouverte dans le formulaire : ses libellés s'y
+   *  règlent, et deux endroits pour la même modification en cours finiraient
+   *  par se contredire. */
+  function renderCardLabels(q: Question, isEditing: boolean) {
+    const pills = q.pools.map(pid => {
+      const p = pools.find(pp => pp.id === pid);
+      if (!p) return null;
+      return <LabelPill key={pid} name={p.name} color={p.color} size="xs" />;
+    });
+    const onToggle = labels?.onToggleQuestion;
+    if (!labels || !onToggle || isEditing) return pills;
+    const toggle = (poolId: string) => {
+      if (!q.pools.includes(poolId)) touchLabelRecency(workshopId, poolId);
+      onToggle(q.id, poolId);
+    };
+    return (
+      <LabelQuickMenu
+        pools={pools}
+        selected={q.pools}
+        recency={labelRecency}
+        onToggle={toggle}
+        onCreate={name => toggle(labels.onCreate(name))}
+        triggerLabel={tr('bank.quickLabels')}
+      >
+        {q.pools.length > 0 ? pills : (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, color: palette.inkFaint, border: `1px dashed ${palette.lineStrong}`, borderRadius: 999, padding: '1px 8px 1px 6px' }}>
+            <Plus size={11} strokeWidth={2} />
+            {tr('bank.addLabelShort')}
+          </span>
+        )}
+      </LabelQuickMenu>
+    );
+  }
+
   function renderQuestionCard(q: Question) {
     const open = openId === q.id;
     const hasParts = q.parts.length > 0;
@@ -680,11 +720,7 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
             )}
           </>
         }
-        meta={!showLabels ? undefined : q.pools.map(pid => {
-          const p = pools.find(pp => pp.id === pid);
-          if (!p) return null;
-          return <LabelPill key={pid} name={p.name} color={p.color} size="xs" />;
-        })}
+        meta={!showLabels ? undefined : renderCardLabels(q, isEditing)}
         actions={
           <>
             <IconBtn size={CARD_ACTION_BTN} active={isEditing} title={isEditing ? tr('cancelEditQuestion') : tr('bank.editQuestion')} onClick={() => onEditQuestion(q)}>

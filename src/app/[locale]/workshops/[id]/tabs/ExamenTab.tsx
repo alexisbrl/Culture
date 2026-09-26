@@ -668,6 +668,18 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     updatePoolAction(workshopId, pool).catch(err => console.error('modification du libellé échouée', err));
   }
 
+  // Menu rapide des cartes de la banque : pose ou retire un libellé sans ouvrir
+  // le formulaire. La question est enregistrée entière, comme depuis le
+  // formulaire — la liste ne l'offre pas sur la question ouverte, dont le
+  // brouillon écraserait ce changement.
+  function handleToggleQuestionPool(questionId: string, poolId: string) {
+    const q = questions.find(x => x.id === questionId);
+    if (!q) return;
+    const updated = { ...q, pools: q.pools.includes(poolId) ? q.pools.filter(p => p !== poolId) : [...q.pools, poolId] };
+    setQuestions(prev => prev.map(x => (x.id === questionId ? updated : x)));
+    saveQuestion(workshopId, updated).catch(err => console.error('enregistrement des libellés échoué', err));
+  }
+
   function handleDeletePool(id: string) {
     setPools(prev => prev.filter(p => p.id !== id));
     const affected = questions.filter(q => q.pools.includes(id)).map(q => ({ ...q, pools: q.pools.filter(p => p !== id) }));
@@ -857,6 +869,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 onCreatePool={handleCreatePool}
                 onUpdatePool={handleUpdatePool}
                 onDeletePool={handleDeletePool}
+                onToggleQuestionPool={handleToggleQuestionPool}
                 onDeleteQuestion={handleDeleteQuestion}
               />
               </div>

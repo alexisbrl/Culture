@@ -202,7 +202,7 @@ const MENU_AUTO_MAX = 240;
  *  propre. */
 export const SHEET_PANEL_Z = 3;
 
-export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, title, triggerLabel, triggerStyle, wrapperStyle, panelWidth = 'trigger', align = 'left', onScroll = 'close', variant = 'list', footer, children }: {
+export function SelectMenu({ items, value, values, keepOpen = false, onSelect, onEditItem, editTitle, title, triggerLabel, triggerStyle, wrapperStyle, panelWidth = 'trigger', align = 'left', onScroll = 'close', variant = 'list', footer, children }: {
   /** `tone: 'danger'` — entrée destructrice (exclure, supprimer), rendue en
    *  rouge. Elle reste une entrée comme les autres : c'est la couleur qui
    *  prévient, pas une mécanique à part.
@@ -215,6 +215,11 @@ export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, titl
   /** Entrée à marquer comme courante. Absent = menu d'action (« ajouter… »), où
    *  aucune entrée n'est « la » valeur. */
   value?: string;
+  /** `variant: 'pills'` seulement — menu à cases : les entrées marquées, et
+   *  `keepOpen` pour que le menu reste ouvert d'un clic à l'autre (on coche et
+   *  décoche plusieurs libellés d'affilée). */
+  values?: readonly string[];
+  keepOpen?: boolean;
   onSelect: (value: string) => void;
   /** `variant: 'pills'` seulement — crayon sur chaque pastille, qui modifie
    *  l'entrée au lieu de la choisir. Le menu se ferme avant de rappeler :
@@ -333,8 +338,8 @@ export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, titl
                   key={item.value}
                   name={item.label}
                   color={item.color!}
-                  active={item.value === value}
-                  onClick={() => { setOpen(false); onSelect(item.value); }}
+                  active={values ? values.includes(item.value) : item.value === value}
+                  onClick={() => { if (!keepOpen) setOpen(false); onSelect(item.value); }}
                   onEdit={onEditItem ? () => { setOpen(false); onEditItem(item.value); } : undefined}
                   editTitle={editTitle}
                 />
@@ -801,6 +806,96 @@ export function LabelPicker({ pools, selected, onToggle, onCreate, onEdit, panel
     >
       {children}
     </SelectMenu>
+  );
+}
+
+// ─── Libellés récemment utilisés ────────────────────────────────────────────
+// L'ordre « dernier utilisé en premier » des menus de libellés (comme l'ajout à
+// une playlist sur Deezer). Retenu sur l'appareil, par atelier — choix d'Alexis
+// du 26/09/2026 : rien en base. Un événement de fenêtre synchronise les menus
+// déjà montés (carte de la liste, formulaire de la question).
+const LABEL_RECENCY_EVENT = 'culture:label-recency';
+const LABEL_RECENCY_MAX = 50;
+const labelRecencyKey = (workshopId: string) => `culture.labelRecency.${workshopId}`;
+
+function readLabelRecency(workshopId: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(labelRecencyKey(workshopId)) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Marque un libellé comme tout juste posé sur une question. */
+export function touchLabelRecency(workshopId: string | undefined, id: string) {
+  if (!workshopId) return;
+  try {
+    const next = [id, ...readLabelRecency(workshopId).filter(v => v !== id)].slice(0, LABEL_RECENCY_MAX);
+    window.localStorage.setItem(labelRecencyKey(workshopId), JSON.stringify(next));
+  } catch {
+    // Stockage indisponible : l'ordre reste celui de création, rien à signaler.
+  }
+  window.dispatchEvent(new Event(LABEL_RECENCY_EVENT));
+}
+
+/** Lu après le montage : le serveur ne connaît pas le stockage de l'appareil. */
+export function useLabelRecency(workshopId: string | undefined): string[] {
+  const [order, setOrder] = useState<string[]>([]);
+  useEffect(() => {
+    if (!workshopId) return;
+    const sync = () => setOrder(readLabelRecency(workshopId));
+    sync();
+    window.addEventListener(LABEL_RECENCY_EVENT, sync);
+    return () => window.removeEventListener(LABEL_RECENCY_EVENT, sync);
+  }, [workshopId]);
+  return order;
+}
+
+/** Les libellés récents d'abord, les autres ensuite dans leur ordre d'origine. */
+export function sortPoolsByRecency<P extends { id: string }>(pools: readonly P[], order: readonly string[]): P[] {
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return pools
+    .map((p, i) => ({ p, key: rank.get(p.id) ?? order.length + i }))
+    .sort((a, b) => a.key - b.key)
+    .map(({ p }) => p);
+}
+
+/** Menu rapide des libellés d'une carte de question : tous les libellés de
+ *  l'atelier, les récents d'abord, ceux de la question marqués. Un clic pose
+ *  ou retire, et le menu reste ouvert pour enchaîner. Le déclencheur est
+ *  fourni par l'appelant — les pastilles de la question, ou un « + libellé »
+ *  quand elle n'en a aucune.
+ *
+ *  La carte qui le porte est elle-même cliquable (clic : entrer dans l'examen,
+ *  double-clic : modifier) : le conteneur arrête donc les deux, y compris pour
+ *  les clics dans le panneau, qui est son descendant dans le DOM. */
+export function LabelQuickMenu({ pools, selected, recency, onToggle, onCreate, triggerLabel, children }: {
+  pools: readonly Pool[];
+  selected: readonly string[];
+  recency: readonly string[];
+  onToggle: (id: string) => void;
+  onCreate?: (name: string) => void;
+  triggerLabel: string;
+  children: ReactNode;
+}) {
+  return (
+    <span onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} style={{ display: 'flex', minWidth: 0 }}>
+      <SelectMenu
+        items={sortPoolsByRecency(pools, recency).map(p => ({ value: p.id, label: p.name, color: p.color }))}
+        values={selected}
+        keepOpen
+        onSelect={onToggle}
+        variant="pills"
+        panelWidth={260}
+        title={triggerLabel}
+        triggerLabel={triggerLabel}
+        triggerStyle={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit' }}
+        footer={onCreate ? close => <LabelCreateRow onCreate={name => { onCreate(name); close(); }} /> : undefined}
+      >
+        {children}
+      </SelectMenu>
+    </span>
   );
 }
 

@@ -112,19 +112,27 @@ describe('gradeStatement — les quatre types jugés', () => {
     expect(result.correctList).toEqual(['Bleu', 'Rouge']);
   });
 
-  it('liste numérotée : corrigée dans l’ordre, et demandée en entier', () => {
-    // ⚠️ `listExpected` est mis en sommeil par la numérotation : l'ordre d'un
-    // extrait n'a pas de référence. Les deux réglages arrivent pourtant
-    // ensemble depuis l'IA, c'est donc le cas à tenir.
+  it('liste numérotée : corrigée dans l’ordre, entière par défaut', () => {
+    const q: GradableStatement = {
+      responseType: 'liste',
+      choices: ['Bleu', 'Blanc', 'Rouge'],
+      typeOptions: { listNumbered: true },
+    };
+    expect(gradeStatement(q, answer({ list: ['bleu', 'blanc', 'rouge'] })).correct).toBe(true);
+    expect(gradeStatement(q, answer({ list: ['rouge', 'blanc', 'bleu'] })).correct).toBe(false);
+    expect(gradeStatement(q, answer({ list: ['bleu', 'blanc'] })).correct).toBe(false);
+  });
+
+  it('liste numérotée avec un nombre demandé : les N premières, dans l’ordre', () => {
     const q: GradableStatement = {
       responseType: 'liste',
       choices: ['Bleu', 'Blanc', 'Rouge'],
       typeOptions: { listNumbered: true, listExpected: 2 },
     };
-    expect(gradeStatement(q, answer({ list: ['bleu', 'blanc', 'rouge'] })).correct).toBe(true);
-    expect(gradeStatement(q, answer({ list: ['rouge', 'blanc', 'bleu'] })).correct).toBe(false);
-    // Les deux premières seulement : la liste numérotée les veut toutes.
-    expect(gradeStatement(q, answer({ list: ['bleu', 'blanc'] })).correct).toBe(false);
+    expect(gradeStatement(q, answer({ list: ['bleu', 'blanc'] })).correct).toBe(true);
+    expect(gradeStatement(q, answer({ list: ['blanc', 'bleu'] })).correct).toBe(false);
+    // Deux réponses justes mais pas les deux premières : c'est faux.
+    expect(gradeStatement(q, answer({ list: ['bleu', 'rouge'] })).correct).toBe(false);
   });
 
   it('liste : le nombre demandé par l’auteur fait foi, pas le nombre accepté', () => {
