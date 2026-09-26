@@ -311,6 +311,17 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   // dérivée (`partWeightKey`). Trois lectures en découlent — la ligne, la
   // grappe, la partie — et le total de l'en-tête est la somme des parties.
   const pointsOf = (key: string) => config.weighting[key]?.points ?? defaultWeight().points;
+  // Un barème ne descend pas sous le dixième de point : le chiffre en trop est
+  // coupé à la saisie plutôt qu'arrondi, pour que taper « 1,25 » laisse « 1,2 »
+  // à l'écran au lieu de le changer en une valeur qu'on n'a pas écrite. Lu sur
+  // le texte du champ, pas sur le nombre — `1.2 * 10` n'est pas toujours 12.
+  const oneDecimal = (raw: string) => {
+    const [whole, decimals] = raw.split('.');
+    return Math.max(0, Number(decimals === undefined ? whole : `${whole}.${decimals.slice(0, 1)}`) || 0);
+  };
+  // Les sommes de dixièmes laissent des restes flottants (0,1 + 0,2) : un total
+  // affiché se lit au dixième, comme ce qui le compose.
+  const roundTenth = (n: number) => Math.round(n * 10) / 10;
   // Mention « éliminatoire » de la copie : indexée par la même clé que les
   // points, donc disponible pour une question comme pour une question liée.
   const isEliminatory = (key: string) => config.weighting[key]?.eliminatory ?? defaultWeight().eliminatory;
@@ -323,7 +334,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
     .reduce((sum, id) => sum + clusterPoints(id), 0);
 
   const includedIds = configQuestionIds(config);
-  const totalPoints = includedIds.reduce((sum, id) => sum + clusterPoints(id), 0);
+  const totalPoints = roundTenth(includedIds.reduce((sum, id) => sum + clusterPoints(id), 0));
 
   // Le barème imprimé dans la marge droite est un réglage de mise en page, pas
   // une donnée de question : il s'allume et s'éteint pour toute la copie depuis
@@ -740,7 +751,8 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   // pointillés — la place où le correcteur écrit la note est ici un blanc
   // réservé devant la barre (`MARK_SPACE`), pas une ligne de points.
   function pointsLabel(n: number): string {
-    return `/ ${t('generator.points', { count: n, plural: n === 1 ? '' : 's' })}`;
+    const r = roundTenth(n);
+    return `/ ${t('generator.points', { count: r, plural: r === 1 ? '' : 's' })}`;
   }
   /** Barème imprimé au bout d'une ligne de la copie, calé sur sa première ligne
    *  de texte (`lineHeight`) pour que l'énoncé et son nombre de points se lisent
@@ -819,7 +831,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
             min={0}
             step={0.5}
             value={points}
-            onChange={e => updateWeight(weightKey, { points: Math.max(0, Number(e.target.value) || 0) })}
+            onChange={e => updateWeight(weightKey, { points: oneDecimal(e.target.value) })}
             aria-label={t('inline.pointsTitle')}
             style={{ width: 44, fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: palette.ink, background: palette.surfaceInput, border: `1px solid ${palette.lineStrong}`, borderRadius: 6, padding: '1px 4px', textAlign: 'center' as const, outline: 'none' }}
           />
@@ -866,7 +878,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                   step={0.5}
                   value={w.negative.value}
                   onChange={e => {
-                    const v = Math.max(0, Number(e.target.value) || 0);
+                    const v = oneDecimal(e.target.value);
                     updateWeight(weightKey, { negative: { enabled: v > 0, value: v } });
                   }}
                   aria-label={t('inline.penaltyTitle')}

@@ -696,12 +696,13 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
           </>
         }
       >
-        {/* Déplié : rien que les énoncés de chaque partie, chacun précédé de son
-            type de réponse. Ni difficulté, ni durée, ni réponse attendue — le
-            détail complet se lit dans l'éditeur de question. */}
+        {/* Déplié : rien que les énoncés des parties SUIVANTES, chacun précédé de
+            son type de réponse — la première est déjà le titre de la carte, la
+            répéter faisait lire deux fois la même question. Ni difficulté, ni
+            durée, ni réponse attendue — le détail complet se lit dans l'éditeur. */}
         {open && (
           <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8, borderTop: `1px solid ${palette.line}`, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 8, cursor: 'default' }}>
-            {[{ responseType: q.responseType, content: q.content }, ...q.parts.map(p => ({ responseType: p.responseType, content: p.content }))].map((part, i) => (
+            {q.parts.map((part, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                 <TypeIcon type={part.responseType} size={13} />
                 <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: palette.ink, lineHeight: 1.45 }}>{part.content || tr('noStatement')}</div>
