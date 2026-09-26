@@ -33,6 +33,24 @@ type LeftTab = 'history' | 'bank';
 // génération d'id unique au niveau module (hors composant) — évite l'appel impur Date.now() dans le render
 function newExamId() { return 'e' + Date.now(); }
 
+/** Empreinte d'une copie, indépendante de l'ordre des clés : deux copies
+ *  identiques doivent donner la même chaîne, même si l'une a été reconstruite
+ *  par morceaux (barème réglé ligne par ligne, présentation retouchée…). */
+function configFingerprint(c: ExamConfig): string {
+  const sort = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(sort);
+    if (v && typeof v === 'object') {
+      return Object.fromEntries(Object.keys(v as Record<string, unknown>).sort().map(k => [k, sort((v as Record<string, unknown>)[k])]));
+    }
+    return v;
+  };
+  return JSON.stringify(sort(normalizeExamConfig(c)));
+}
+
+/** Geste mis en attente par la fenêtre « copie non enregistrée » : ouvrir une
+ *  copie vierge, ou ouvrir un autre examen. */
+type PendingSwitch = { kind: 'new' } | { kind: 'open'; exam: Exam };
+
 // ---- MAIN EXAMEN TAB ----
 export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const t = useTranslations('examen');
@@ -87,20 +105,17 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   const [draftIds, setDraftIds] = useState<string[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [examConfig, setExamConfig] = useState<ExamConfig>(defaultExamConfig());
-  const [pendingEditExam, setPendingEditExam] = useState<Exam | null>(null);
+  // Copie telle qu'elle était à l'ouverture de l'examen enregistré qu'on
+  // modifie — ce contre quoi on juge qu'elle a changé. `null` quand on ne
+  // modifie pas d'examen enregistré.
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(null);
   // Geste refusé parce qu'un formulaire de question est ouvert sur la feuille —
   // `null` quand il n'y en a pas. Deux gestes distincts sont concernés, et le
   // toast ne dit pas la même chose pour l'un et pour l'autre : ouvrir une
   // seconde question, ou enregistrer l'examen.
   const [blockedAction, setBlockedAction] = useState<'open' | 'save' | null>(null);
   const blockedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** ⚠️ **Il n'y a plus de fenêtre d'accueil** (07/09/2026, demandé par Alexis).
-   *  « + nouvel » ouvrait une présentation en trois étapes dont le bouton final
-   *  ne faisait que ce qu'on demandait : vider la copie et montrer les questions.
-   *  Le geste le fait maintenant directement. Reste cette confirmation, et
-   *  uniquement quand il y a quelque chose à perdre : la copie en cours est
-   *  jetée, et rien ailleurs ne la rattrape.  */
-  const [confirmNewExamOpen, setConfirmNewExamOpen] = useState(false);
   // Ligne de la feuille à ramener au centre du panneau de droite. Tout ce qui
   // ajoute ou ouvre quelque chose sur la copie passe par là : la question
   // envoyée depuis la banque, le formulaire en ligne, « + partie » et « + saut
@@ -124,36 +139,82 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     blockedTimer.current = setTimeout(() => setBlockedAction(null), 2200);
   }
 
+  /** La copie porte quelque chose qu'on perdrait en la quittant :
+   *  - examen enregistré : la moindre différence avec sa version enregistrée
+   *    (questions, parties, barème, titre, durée, présentation) ;
+   *  - copie neuve : au moins une question, ou une partie ajoutée à la
+   *    « Partie 1 » posée d'office. Un titre seul ou une présentation retouchée
+   *    ne suffisent pas — demandé par Alexis le 26/09/2026.
+   *  C'est la même règle qui montre « réinitialiser » et qui déclenche la
+   *  fenêtre d'alerte : un bouton qui ne ferait rien n'a pas à s'afficher. */
+  const hasChanges = editing
+    ? baseline !== null && configFingerprint(examConfig) !== baseline
+    : configQuestionIds(examConfig).length > 0 || examConfig.sections.length > 1;
+
   function isEditorEmpty() {
     return editing === null && draftIds.length === 0 && examConfig.title.trim() === '' && configQuestionIds(examConfig).length === 0;
   }
 
-  /** Ouvre une copie vierge. La confirmation n'apparaît que si la copie en
-   *  cours porte quelque chose — sinon il n'y a rien à jeter, et demander
-   *  serait une question pour rien. */
+  function loadExam(e: Exam) {
+    const config = e.config?.sections ? normalizeExamConfig(e.config) : defaultExamConfig(e.title);
+    setEditing(e);
+    setDraftIds(configQuestionIds(config));
+    setExamConfig(config);
+    setBaseline(configFingerprint(config));
+    focus('generator');
+  }
+
+  /** Ouvre une copie vierge — directement s'il n'y a rien à perdre, sinon après
+   *  la fenêtre « copie non enregistrée ». */
   function requestNewExam() {
-    if (isEditorEmpty()) { startNewExam(); return; }
-    setConfirmNewExamOpen(true);
+    if (!hasChanges) { startNewExam(); return; }
+    setPendingSwitch({ kind: 'new' });
   }
 
   function startNewExam() {
-    setConfirmNewExamOpen(false);
     handleClearEditor();
     // La banque au premier plan : une copie vierge se remplit de questions, et
-    // c'est là qu'on les prend. Sur téléphone, c'est aussi ce que faisait le
-    // bouton final de l'ancienne fenêtre d'accueil.
+    // c'est là qu'on les prend.
     focus('bank');
   }
 
   function requestEditExam(e: Exam) {
-    if (editing?.id === e.id || isEditorEmpty()) {
-      setEditing(e);
-      setDraftIds(e.questionIds ?? []);
-      setExamConfig(e.config?.sections ? normalizeExamConfig(e.config) : defaultExamConfig(e.title));
-      focus('generator');
-    } else {
-      setPendingEditExam(e);
-    }
+    // L'examen déjà ouvert : on y retourne tel quel, sans recharger sa version
+    // enregistrée par-dessus les modifications en cours.
+    if (editing?.id === e.id) { focus('generator'); return; }
+    if (!hasChanges) { loadExam(e); return; }
+    setPendingSwitch({ kind: 'open', exam: e });
+  }
+
+  function runPendingSwitch(p: PendingSwitch) {
+    setPendingSwitch(null);
+    if (p.kind === 'new') startNewExam();
+    else loadExam(p.exam);
+  }
+
+  /** « Enregistrer » dans la fenêtre d'alerte : la copie est enregistrée, puis
+   *  le geste suspendu reprend. Refusé comme le bouton de la feuille si une
+   *  question est ouverte — la fenêtre se ferme et renvoie au formulaire. */
+  function saveThenSwitch() {
+    const p = pendingSwitch;
+    if (!p) return;
+    if (!handleGenerate()) { setPendingSwitch(null); return; }
+    runPendingSwitch(p);
+  }
+
+  /** « Réinitialiser » de la feuille : un examen enregistré revient à sa
+   *  version enregistrée et reste ouvert ; une copie neuve se vide. */
+  function handleResetEditor() {
+    if (!editing) { handleClearEditor(); return; }
+    handleCancelQuestion();
+    loadExam(editing);
+  }
+
+  function discardThenSwitch() {
+    const p = pendingSwitch;
+    if (!p) return;
+    handleClearEditor();
+    runPendingSwitch(p);
   }
 
   const draftLoaded = useRef(false);
@@ -189,7 +250,12 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         setDraftIds(configQuestionIds(config));
         if (draft.editingId) {
           const found = mappedExams.find(e => e.id === draft.editingId);
-          if (found) setEditing(found);
+          if (found) {
+            setEditing(found);
+            // Référence de « modifié » : la version enregistrée de l'examen, pas
+            // le brouillon relu, qui peut déjà porter des modifications.
+            if (found.config?.sections) setBaseline(configFingerprint(normalizeExamConfig(found.config)));
+          }
         }
       }
     }).catch(err => console.error('chargement banque de questions échoué', err))
@@ -240,6 +306,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   function handleClearEditor() {
     handleCancelQuestion();
     setEditing(null);
+    setBaseline(null);
     setDraftIds([]);
     setExamConfig(defaultExamConfig());
   }
@@ -256,7 +323,8 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     setPhonePane('list');
   }
 
-  function handleGenerate() {
+  /** Vrai si l'examen est parti à l'enregistrement, faux si le geste est refusé. */
+  function handleGenerate(): boolean {
     // Une question ouverte interdit l'enregistrement : son formulaire porte des
     // modifications non enregistrées, et si elle vient d'être créée elle n'existe
     // qu'en mémoire — l'examen partirait en base avec l'identifiant d'une
@@ -267,7 +335,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     if (editingQuestion) {
       blockForOpenQuestion('save');
       requestSheetFocus(editingQuestion.id);
-      return;
+      return false;
     }
     const id = newExamId();
     const title = examConfig.title;
@@ -286,11 +354,13 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     const hotId = editing ? editing.id : id;
     setJustAdded(hotId);
     setEditing(null);
+    setBaseline(null);
     setDraftIds([]);
     setExamConfig(defaultExamConfig());
     focus('history');
     setTimeout(() => setJustAdded(cur => cur === hotId ? null : cur), 2600);
     saveGeneratedExam(workshopId, saved).catch(err => console.error('enregistrement examen échoué', err));
+    return true;
   }
 
   function handleDeleteExam(exam: Exam) {
@@ -780,12 +850,13 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
             config={examConfig}
             onConfigChange={setExamConfig}
             editing={editing}
-            onCancelEdit={() => setEditing(null)}
-            onGenerate={handleGenerate}
+            onCancelEdit={() => { setEditing(null); setBaseline(null); }}
+            onGenerate={() => { handleGenerate(); }}
+            canReset={hasChanges}
             onOpenQuestion={handleOpenQuestion}
             onNewQuestionInSection={handleNewQuestionInSection}
             onRemoveFromDraft={handleRemoveFromDraft}
-            onClearEditor={handleClearEditor}
+            onClearEditor={handleResetEditor}
             previewQuestion={editingDraft}
             sheetEditor={sheetCarriesEditor && editingQuestion ? { questionId: editingQuestion.id, render: (number: number) => renderQuestionEditor('sheet', number) } : undefined}
             onBack={isPhone ? () => setPhonePane('list') : undefined}
@@ -814,33 +885,24 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         </div>,
         document.body
       )}
-      {confirmNewExamOpen && createPortal(
+      {/* Copie non enregistrée, au moment d'en ouvrir une autre (vierge ou
+          enregistrée). Trois issues : l'enregistrer puis continuer, la
+          laisser tomber puis continuer, ou renoncer au geste. */}
+      {pendingSwitch && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div onClick={() => setConfirmNewExamOpen(false)} style={{ position: 'absolute', inset: 0, background: ink(0.42), backdropFilter: 'blur(2px)' }} />
-          <div style={{ position: 'relative', zIndex: 1, background: palette.cream, borderRadius: 20, padding: '32px 28px 24px', maxWidth: 380, width: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
+          <div onClick={() => setPendingSwitch(null)} style={{ position: 'absolute', inset: 0, background: ink(0.42), backdropFilter: 'blur(2px)' }} />
+          <div style={{ position: 'relative', zIndex: 1, background: palette.cream, borderRadius: 20, padding: '32px 28px 24px', maxWidth: 440, width: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
             <div style={{ width: 44, height: 44, borderRadius: '50%', background: withAlpha(palette.danger, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>!</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>{t('tab.newExamTitle')}</div>
-            <div style={{ fontSize: 13, color: palette.inkMuted, lineHeight: 1.5 }}>{t('tab.newExamDesc')}</div>
-            <div style={{ display: 'flex', gap: 10, marginTop: 8, width: '100%' }}>
-              <button onClick={() => setConfirmNewExamOpen(false)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: `1px solid ${ink(0.15)}`, background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: palette.inkMuted, cursor: 'pointer' }}>{t('cancel')}</button>
-              <button onClick={startNewExam} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: palette.green, fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: palette.paper, cursor: 'pointer' }}>{t('tab.newExamConfirm')}</button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-      {pendingEditExam && createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div onClick={() => setPendingEditExam(null)} style={{ position: 'absolute', inset: 0, background: ink(0.42), backdropFilter: 'blur(2px)' }} />
-          <div style={{ position: 'relative', zIndex: 1, background: palette.cream, borderRadius: 20, padding: '32px 28px 24px', maxWidth: 380, width: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '50%', background: withAlpha(palette.danger, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>!</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>{t('tab.editorBusyTitle')}</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>{editing ? t('tab.unsavedEditTitle') : t('tab.unsavedNewTitle')}</div>
             <div style={{ fontSize: 13, color: palette.inkMuted, lineHeight: 1.5 }}>
-              {t('tab.editorBusyDesc', { target: pendingEditExam.title })}
+              {pendingSwitch.kind === 'open'
+                ? t('tab.unsavedDescOpen', { target: pendingSwitch.exam.title })
+                : t('tab.unsavedDescNew')}
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 8, width: '100%' }}>
-              <button onClick={() => setPendingEditExam(null)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: `1px solid ${ink(0.15)}`, background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: palette.inkMuted, cursor: 'pointer' }}>{t('cancel')}</button>
-              <button onClick={() => { setPendingEditExam(null); focus('generator'); }} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: palette.green, fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: palette.paper, cursor: 'pointer' }}>{t('tab.editorBusyGo')}</button>
+              <button onClick={() => setPendingSwitch(null)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: `1px solid ${ink(0.15)}`, background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: palette.inkMuted, cursor: 'pointer' }}>{t('cancel')}</button>
+              <button onClick={discardThenSwitch} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: `1px solid ${withAlpha(palette.danger, 0.28)}`, background: withAlpha(palette.danger, 0.08), fontFamily: 'inherit', fontSize: 13, color: palette.danger, cursor: 'pointer' }}>{editing ? t('tab.unsavedDiscardEdits') : t('tab.unsavedDiscardNew')}</button>
+              <button onClick={saveThenSwitch} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: palette.green, fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: palette.paper, cursor: 'pointer' }}>{t('tab.unsavedSave')}</button>
             </div>
           </div>
         </div>,

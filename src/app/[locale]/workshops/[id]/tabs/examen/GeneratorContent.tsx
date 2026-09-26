@@ -175,6 +175,49 @@ const AUTO_SCROLL_STALE_MS = 500;
 /** Les lignes de la copie portent toutes un `bi` sauf les titres de partie, dont
  *  la hauteur est portée par le premier bloc de leur partie (voir
  *  `computePagination`). */
+/** Champ du barème : un nombre positif au dixième près, qu'on tape avec une
+ *  virgule OU un point — les deux valent virgule (26/09/2026). Un champ
+ *  numérique du navigateur ne le permet pas : selon la langue du système, il
+ *  refuse l'un des deux, et il efface « 1, » avant qu'on ait tapé la décimale.
+ *  Le champ garde donc son propre texte pendant la frappe, ne laisse passer
+ *  qu'un chiffre après le séparateur, et remet le nombre en forme en sortant.
+ *  Les flèches haut/bas avancent d'un demi-point, comme l'ancien champ. */
+function DecimalInput({ value, onChange, ...rest }: Omit<React.ComponentProps<'input'>, 'value' | 'onChange' | 'type'> & {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const format = (n: number) => String(n).replace('.', ',');
+  const [text, setText] = useState(() => format(value));
+  const [focused, setFocused] = useState(false);
+  const shown = focused ? text : format(value);
+  function commit(raw: string) {
+    const m = raw.replace('.', ',').match(/^\d*(,\d?)?/);
+    const clean = m ? m[0] : '';
+    setText(clean);
+    onChange(Math.max(0, Number(clean.replace(',', '.')) || 0));
+  }
+  return (
+    <input
+      {...rest}
+      type="text"
+      inputMode="decimal"
+      value={shown}
+      onFocus={e => { setText(format(value)); setFocused(true); rest.onFocus?.(e); }}
+      onBlur={e => { setFocused(false); rest.onBlur?.(e); }}
+      onChange={e => commit(e.target.value)}
+      onKeyDown={e => {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          const next = Math.max(0, Math.round((value + (e.key === 'ArrowUp' ? 0.5 : -0.5)) * 10) / 10);
+          setText(format(next));
+          onChange(next);
+        }
+        rest.onKeyDown?.(e);
+      }}
+    />
+  );
+}
+
 function isBlockRow(row: SheetRow): row is Extract<SheetRow, { bi: number }> {
   return row.kind !== 'header';
 }
@@ -193,7 +236,7 @@ const SHEET_ALIGNED: React.CSSProperties = {
 };
 
 // ---- GENERATOR / APERÇU EN DIRECT ----
-function GeneratorContent({ workshopId, questions, config, onConfigChange, editing, onCancelEdit, onGenerate, onOpenQuestion, onNewQuestionInSection, onRemoveFromDraft, onClearEditor, previewQuestion, sheetEditor, onBack, focusRequest, onRequestFocus, onDragActiveChange }: {
+function GeneratorContent({ workshopId, questions, config, onConfigChange, editing, onCancelEdit, onGenerate, onOpenQuestion, onNewQuestionInSection, onRemoveFromDraft, onClearEditor, canReset, previewQuestion, sheetEditor, onBack, focusRequest, onRequestFocus, onDragActiveChange }: {
   workshopId: string;
   questions: Question[];
   config: ExamConfig;
@@ -210,6 +253,9 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   onNewQuestionInSection: (sectionIdx: number) => void;
   onRemoveFromDraft: (ids: string[]) => void;
   onClearEditor: () => void;
+  /** La copie porte quelque chose à réinitialiser (voir `hasChanges` dans
+   *  `ExamenTab`) — sinon le bouton ne s'affiche pas. */
+  canReset: boolean;
   /** Brouillon de la question en cours de modification — le formulaire, lui,
    *  vit dans la liste de gauche (06/09/2026). La copie s'en sert pour montrer
    *  en direct ce qui s'écrit, sans que rien ne soit enregistré. `null` quand
@@ -311,14 +357,6 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   // dérivée (`partWeightKey`). Trois lectures en découlent — la ligne, la
   // grappe, la partie — et le total de l'en-tête est la somme des parties.
   const pointsOf = (key: string) => config.weighting[key]?.points ?? defaultWeight().points;
-  // Un barème ne descend pas sous le dixième de point : le chiffre en trop est
-  // coupé à la saisie plutôt qu'arrondi, pour que taper « 1,25 » laisse « 1,2 »
-  // à l'écran au lieu de le changer en une valeur qu'on n'a pas écrite. Lu sur
-  // le texte du champ, pas sur le nombre — `1.2 * 10` n'est pas toujours 12.
-  const oneDecimal = (raw: string) => {
-    const [whole, decimals] = raw.split('.');
-    return Math.max(0, Number(decimals === undefined ? whole : `${whole}.${decimals.slice(0, 1)}`) || 0);
-  };
   // Les sommes de dixièmes laissent des restes flottants (0,1 + 0,2) : un total
   // affiché se lit au dixième, comme ce qui le compose.
   const roundTenth = (n: number) => Math.round(n * 10) / 10;
@@ -826,12 +864,9 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
       >
         <span aria-hidden style={{ color: palette.inkFaint }}>/</span>
         <Tooltip content={t('inline.pointsTitle')}>
-          <input
-            type="number"
-            min={0}
-            step={0.5}
+          <DecimalInput
             value={points}
-            onChange={e => updateWeight(weightKey, { points: oneDecimal(e.target.value) })}
+            onChange={v => updateWeight(weightKey, { points: v })}
             aria-label={t('inline.pointsTitle')}
             style={{ width: 44, fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: palette.ink, background: palette.surfaceInput, border: `1px solid ${palette.lineStrong}`, borderRadius: 6, padding: '1px 4px', textAlign: 'center' as const, outline: 'none' }}
           />
@@ -872,15 +907,9 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
             <>
               <span style={{ fontSize: 12, fontWeight: 700, color: palette.danger }}>−</span>
               <Tooltip content={t('inline.penaltyTitle')}>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.5}
+                <DecimalInput
                   value={w.negative.value}
-                  onChange={e => {
-                    const v = oneDecimal(e.target.value);
-                    updateWeight(weightKey, { negative: { enabled: v > 0, value: v } });
-                  }}
+                  onChange={v => updateWeight(weightKey, { negative: { enabled: v > 0, value: v } })}
                   aria-label={t('inline.penaltyTitle')}
                   style={{ width: 44, fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: w.negative.value > 0 ? palette.danger : palette.ink, background: palette.surfaceInput, border: `1px solid ${palette.lineStrong}`, borderRadius: 6, padding: '1px 4px', textAlign: 'center' as const, outline: 'none' }}
                 />
@@ -1207,8 +1236,15 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   // laissée au contenu zoomé ne vaudrait plus exactement 1188 unités locales et
   // la feuille déborderait (échelle < 1) ou flotterait (échelle > 1).
   const SCALED_PAD_RIGHT = 'calc(12px * var(--exam-scale, 1))';
+  // Barre d'actions au-dessus de la feuille. Ses boutons ont été agrandis
+  // (26/09/2026) sans que la feuille descende : la hauteur gagnée est reprise
+  // sur le blanc au-dessus et au-dessous de la barre, dont la somme avec le
+  // bouton reste celle d'avant (8 + ≈33 + 10).
+  const BAR_BUTTON_H = 40;
+  const BAR_GAP_ABOVE = 4;
+  const BAR_GAP_BELOW = 7;
   return (
-    <div style={{ padding: `8px ${SCALED_PAD_RIGHT} 0 calc(24px * var(--exam-scale, 1))`, height: '100%', boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ padding: `${BAR_GAP_ABOVE}px ${SCALED_PAD_RIGHT} 0 calc(24px * var(--exam-scale, 1))`, height: '100%', boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column' }}>
       {editing && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: withAlpha(palette.amberGlow, 0.18), border: `1px solid ${withAlpha(palette.amber, 0.35)}`, marginBottom: 14, flexShrink: 0 }}>
           <PenLine size={14} strokeWidth={1.75} color={palette.amber} />
@@ -1240,7 +1276,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
             personnalisation, lui, défile normalement avec la feuille — il ne
             concerne que l'en-tête, en haut du document. Le fond crème (celui
             de la page) est ce qui masque la feuille qui passe dessous. */}
-        <div style={{ position: 'sticky' as const, top: 0, zIndex: 6, background: palette.cream, paddingBottom: 10 }}>
+        <div style={{ position: 'sticky' as const, top: 0, zIndex: 6, background: palette.cream, paddingBottom: BAR_GAP_BELOW }}>
         <div style={{ ...SHEET_ALIGNED, display: 'flex', alignItems: 'center', gap: 10 }}>
           {/* Retour à la liste, en tête de barre — téléphone seulement. Le
               libellé dit OÙ l'on va, pas seulement qu'on recule : c'est par là
@@ -1262,24 +1298,30 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                boutons de la barre dans la maquette — pas un aplat de couleur,
                qui le faisait ressortir bien trop fort. Même habillage ouvert
                ou fermé, seul le libellé change. */
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: palette.ink, background: palette.surfaceRaised, border: `1.5px solid ${palette.ink}`, borderRadius: 999, padding: '7px 14px', cursor: 'pointer', fontFamily: 'inherit', boxShadow: shadow.sm }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: BAR_BUTTON_H, boxSizing: 'border-box' as const, fontSize: 13.5, fontWeight: 600, color: palette.ink, background: palette.surfaceRaised, border: `1.5px solid ${palette.ink}`, borderRadius: 999, padding: '0 18px', cursor: 'pointer', fontFamily: 'inherit', boxShadow: shadow.sm }}
           >
-            <SlidersHorizontal size={14} strokeWidth={1.75} />
+            <SlidersHorizontal size={15} strokeWidth={1.75} />
             {hdrOpen ? t('generator.done') : t('generator.customize')}
           </button>
-          <button
-            type="button"
-            onClick={() => setConfirmClearOpen(true)}
-            style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 12, padding: '7px 14px', borderRadius: 999, border: `1px solid ${withAlpha(palette.danger, 0.28)}`, background: withAlpha(palette.danger, 0.08), color: palette.danger, cursor: 'pointer', fontFamily: 'inherit' }}
-          >
-            {editing ? t('generator.cancelEdits') : t('generator.resetEditor')}
-          </button>
+          {/* « Réinitialiser » n'apparaît que s'il y a quelque chose à défaire :
+              une copie neuve vide, ou un examen enregistré qu'on n'a pas touché,
+              n'ont rien à réinitialiser. La marge automatique passe alors au
+              bouton suivant, pour que « enregistrer » reste calé à droite. */}
+          {canReset && (
+            <button
+              type="button"
+              onClick={() => setConfirmClearOpen(true)}
+              style={{ marginLeft: 'auto', flexShrink: 0, height: BAR_BUTTON_H, boxSizing: 'border-box' as const, fontSize: 13.5, fontWeight: 500, padding: '0 18px', borderRadius: 999, border: `1px solid ${withAlpha(palette.danger, 0.28)}`, background: withAlpha(palette.danger, 0.08), color: palette.danger, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              {t('generator.reset')}
+            </button>
+          )}
           <button
             type="button"
             onClick={handleGenerateClick}
-            style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 600, padding: '7px 16px', borderRadius: 999, border: 'none', background: palette.green, color: palette.parchment, cursor: 'pointer', fontFamily: 'inherit', boxShadow: shadow.sm }}
+            style={{ marginLeft: canReset ? undefined : 'auto', flexShrink: 0, height: BAR_BUTTON_H, boxSizing: 'border-box' as const, fontSize: 13.5, fontWeight: 600, padding: '0 22px', borderRadius: 999, border: 'none', background: palette.green, color: palette.parchment, cursor: 'pointer', fontFamily: 'inherit', boxShadow: shadow.sm }}
           >
-            {editing ? t('generator.saveChanges') : t('generator.saveExam')}
+            {t('generator.saveExamShort')}
           </button>
         </div>
         </div>
