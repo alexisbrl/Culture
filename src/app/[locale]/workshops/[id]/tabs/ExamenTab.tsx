@@ -65,7 +65,7 @@ const IDLE_CLOSE_MS = 3 * 60 * 60 * 1000;
 
 /** Geste mis en attente par la fenêtre « copie non enregistrée » : ouvrir une
  *  copie vierge, ou ouvrir un autre examen. */
-type PendingSwitch = { kind: 'new' } | { kind: 'open'; exam: Exam };
+type PendingSwitch = { kind: 'new' } | { kind: 'open'; exam: Exam; withQuestions?: boolean };
 
 // ---- MAIN EXAMEN TAB ----
 export default function ExamenTab({ workshopId }: { workshopId: string }) {
@@ -171,13 +171,13 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     return editing === null && draftIds.length === 0 && examConfig.title.trim() === '' && configQuestionIds(examConfig).length === 0;
   }
 
-  function loadExam(e: Exam) {
+  function loadExam(e: Exam, withQuestions = false) {
     const config = e.config?.sections ? normalizeExamConfig(e.config) : defaultExamConfig(e.title);
     setEditing(e);
     setDraftIds(configQuestionIds(config));
     setExamConfig(config);
     setBaseline(configFingerprint(config));
-    focus('generator');
+    focus(withQuestions ? 'bank' : 'generator');
   }
 
   /** Ouvre une copie vierge — directement s'il n'y a rien à perdre, sinon après
@@ -194,18 +194,18 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     focus('bank');
   }
 
-  function requestEditExam(e: Exam) {
+  function requestEditExam(e: Exam, withQuestions = false) {
     // L'examen déjà ouvert : on y retourne tel quel, sans recharger sa version
     // enregistrée par-dessus les modifications en cours.
-    if (editing?.id === e.id) { focus('generator'); return; }
-    if (!hasChanges) { loadExam(e); return; }
-    setPendingSwitch({ kind: 'open', exam: e });
+    if (editing?.id === e.id) { focus(withQuestions ? 'bank' : 'generator'); return; }
+    if (!hasChanges) { loadExam(e, withQuestions); return; }
+    setPendingSwitch({ kind: 'open', exam: e, withQuestions });
   }
 
   function runPendingSwitch(p: PendingSwitch) {
     setPendingSwitch(null);
     if (p.kind === 'new') startNewExam();
-    else loadExam(p.exam);
+    else loadExam(p.exam, p.withQuestions);
   }
 
   /** « Enregistrer » dans la fenêtre d'alerte : la copie est enregistrée, puis
@@ -828,7 +828,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 est conservée. */}
             <div className="scroll-panel" style={{ display: leftTab === 'history' ? 'block' : 'none', height: '100%', overflowY: sheetDragging ? 'hidden' : undefined }}>
               <div style={{ zoom: 'var(--exam-list-zoom, 1)' }}>
-                <HistoryContent workshopId={workshopId} exams={exams} loading={loading} justAddedId={justAdded} onEdit={requestEditExam} onNew={requestNewExam} onDelete={e => setPendingDeleteExam(e)} />
+                <HistoryContent workshopId={workshopId} exams={exams} loading={loading} justAddedId={justAdded} onEdit={e => requestEditExam(e)} onOpenWithQuestions={e => requestEditExam(e, true)} onNew={requestNewExam} onDelete={e => setPendingDeleteExam(e)} />
               </div>
             </div>
             <div className="scroll-panel" style={{ display: leftTab === 'bank' ? 'block' : 'none', height: '100%', position: 'relative', overflowY: sheetDragging ? 'hidden' : undefined }}>
