@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { dispatchTasks } from '@/lib/ingest/dispatch';
 import { watch } from '@/lib/ingest/orchestrator';
+import { followUp, promoteAll } from '@/lib/ingest/queue';
 
 // La veille des générations, appelée chaque minute par une tâche planifiée de la
 // base (docs/migrations/2026-09-24-veille-des-generations.sql).
@@ -21,6 +21,8 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest) {
   const baseUrl = req.nextUrl.origin;
   const dispatches = await watch({ baseUrl });
-  await Promise.all(dispatches.map((d) => dispatchTasks(d.baseUrl, d.taskIds)));
+  await followUp(dispatches);
+  // Et la file : une demande qui attend une place libérée sans relais.
+  await promoteAll(baseUrl);
   return NextResponse.json({ ok: true, imports: dispatches.length });
 }

@@ -431,9 +431,7 @@
     },
     "generator": {
       "cancelEdits": "annuler les modifications",
-      "resetEditor": "réinitialiser l'éditeur",
       "editingPrefix": "Modification de",
-      "cancelEdit": "annuler ✕",
       "headerZone": "EN-TÊTE",
       "saveFavorite": "enregistrer en favori",
       "minShort": "min",
@@ -468,14 +466,15 @@
       "dragReorder": "glisser pour réorganiser",
       "dragSection": "glisser pour déplacer la partie et ses questions",
       "shuffleNotice": "ordre aléatoire : les éléments de réponse de cette question seront mélangés d'une copie à l'autre lors de l'examen",
-      "saveChanges": "enregistrer les modifications",
-      "saveExam": "enregistrer l'examen",
+      "generateWithAi": "Générer par IA",
+      "saveExamShort": "Enregistrer",
+      "reset": "Réinitialiser",
       "pageNumber": "{n} / {total}",
       "removeSectionTitle": "Supprimer la partie « {title} » ?",
       "removeSectionDesc": "Les {count} question(s) de cette partie quitteront l'examen. Elles restent dans la banque de questions.",
       "cancelEditsTitle": "Annuler les modifications ?",
       "clearTitle": "Effacer l'éditeur d'examen ?",
-      "clearDescEditing": "Les modifications en cours seront abandonnées. L'examen déjà enregistré n'est pas affecté.",
+      "clearDescEditing": "Les modifications en cours seront abandonnées : l'examen revient à sa version enregistrée.",
       "clearDesc": "L'intitulé, les parties, la pondération et les questions envoyées seront réinitialisés.",
       "applyFavoriteTitle": "Appliquer la présentation favorite ?",
       "applyFavoriteDesc": "La section présentation va être remplacée par votre favori.",
@@ -489,12 +488,13 @@
       "tabBank": "Questions",
       "phoneBackToExam": "retour à l’examen",
       "deleteExamTitle": "Supprimer l'examen ?",
-      "newExamTitle": "un examen est en cours de composition",
-      "newExamDesc": "la copie en cours sera vidée pour repartir d’un examen vierge. elle n’est enregistrée nulle part.",
-      "newExamConfirm": "repartir de zéro",
-      "editorBusyTitle": "Éditeur déjà en cours d'utilisation",
-      "editorBusyDesc": "L'éditeur d'examen contient déjà des modifications en cours. Termine ou efface l'éditeur avant de modifier {target}.",
-      "editorBusyGo": "Aller à l'éditeur",
+      "unsavedNewTitle": "Cet examen n'est pas enregistré",
+      "unsavedEditTitle": "Les modifications ne sont pas enregistrées",
+      "unsavedDescNew": "Enregistrer la copie en cours avant d'en commencer une nouvelle ?",
+      "unsavedDescOpen": "Enregistrer la copie en cours avant d'ouvrir « {target} » ?",
+      "unsavedSave": "Enregistrer",
+      "unsavedDiscardNew": "Abandonner",
+      "unsavedDiscardEdits": "Annuler les modifications",
       "questionEditing": "question déjà en cours d'édition",
       "questionEditingSave": "terminez la modification de la question avant d'enregistrer l'examen"
     },
@@ -1166,24 +1166,13 @@
       "placeholderExam": "Génère-moi {count} questions sur l’ensemble des chapitres…",
       "help": "Ce que l’IA ne peut pas deviner : le niveau des élèves, le découpage attendu, le mot employé dans le document. Elle peut aussi écrire ou compléter un cours si tu le lui demandes. Un nombre seul (« 40 ») demande simplement ce nombre de questions.",
       "info": "L’IA écrit des questions d’examen à partir des notions de l’atelier.",
-      "infoIdeas": "Tu peux l’orienter : le nombre de questions, les notions ou chapitres à couvrir, les types de réponse attendus, le niveau des élèves, le vocabulaire à employer."
+      "infoIdeas": "Tu peux l’orienter : le nombre de questions, les notions ou chapitres à couvrir, les types de réponse attendus, le niveau visé, le vocabulaire à employer.",
+      "infoIdeasProgram": "Tu peux l’orienter : le cours que tu souhaites, le niveau visé, le découpage attendu…",
+      "placeholderProgram": "Crée-moi un cours de niveau … sur … ; complète le chapitre 3 de mon cours avant de mettre à jour l’atelier ; dans mon cours, les chapitres s’appellent thèmes, parties, sections, etc."
     },
     "generate": "générer",
     "cancel": "annuler",
     "close": "fermer",
-    "retry": "réessayer",
-    "progress": {
-      "resource": "Lecture de ta consigne…",
-      "chapters": "Découpage du cours en chapitres…",
-      "chaptersRelaunch": "Vérification des notions restées sans chapitre…",
-      "notionsChapters": "Notions — {done}/{n} chapitres lus",
-      "questionsCount": "Questions — {done}/{n} lots traités"
-    },
-    "busy": "Une génération est déjà en cours sur cet atelier. Attends qu’elle se termine, ou arrête-la depuis le bandeau de l’atelier avant d’en lancer une autre.",
-    "runningCounts": "{chapters} chapitres · {notions} notions · {questions} questions",
-    "doneCounts": "{chapters} chapitres, {notions} notions et {questions} questions ajoutés",
-    "discarded": "Écarté",
-    "adjusted": "Corrigé",
     "cancellable": "Tu peux annuler cet import pendant 24 h, tant que rien n’a été modifié.",
     "banner": {
       "text": "L’IA a ajouté {items}.",
@@ -1199,22 +1188,13 @@
       "error": "Annulation impossible : {reason}",
       "previous": "{count, plural, one {# import précédent} other {# imports précédents}}",
       "interruptedText": "Génération interrompue : l’IA a eu le temps d’ajouter {items}.",
-      "interruptedHint": "Cette génération s’est arrêtée avant la fin : le serveur l’a perdue en route. Ce qu’elle avait déjà écrit est resté en place : tu peux le retirer ici, puis relancer une génération.",
-      "runningText": "Génération en cours : l’IA a déjà ajouté {items}.",
-      "runningEmpty": "Génération en cours…",
-      "stop": "arrêter",
-      "stopHint": "Arrête la génération et retire ce qu’elle a déjà écrit."
+      "interruptedHint": "Cette génération s’est arrêtée avant la fin : le serveur l’a perdue en route. Ce qu’elle avait déjà écrit est resté en place : tu peux le retirer ici, puis relancer une génération."
     },
     "button": "générer par IA",
     "chooseAi": "par IA",
     "chooseManual": "manuel",
-    "estimate": {
-      "preparing": "Préparation des documents…",
-      "preparingHint": "Les documents sont envoyés au fournisseur ; la génération démarre juste après."
-    },
     "plan": {
-      "program": "L’IA va lire les documents, en extraire les notions, les ranger en chapitres, puis écrire les questions du parcours. Ce qui existe déjà est complété, jamais refait.",
-      "programThenQuestions": "Cet atelier n’a encore aucune notion au programme : l’IA va d’abord le construire à partir des documents, puis écrire les questions de cette liste.",
+      "program": "L’IA va lire les ressources (qu’elle peut compléter si besoin), en extraire les notions, les ranger en chapitres, puis écrire des questions d’entraînement.",
       "parcoursQuestions": "L’IA va compléter les questions du parcours pour les notions qui n’ont pas encore leur compte. Les documents ne sont pas relus.",
       "examQuestions": "L’IA va écrire des questions d’examen sur l’ensemble du programme — chacune croisant plusieurs notions, certaines s’enchaînant. Les documents ne sont pas relus.",
       "questionsOnly": "Aucun document lisible dans cet atelier : l’IA ne touchera pas au programme. Elle écrira les questions d’entraînement qui manquent encore aux notions en place.",
@@ -1224,16 +1204,40 @@
     "stop": {
       "aria": "arrêter la génération",
       "title": "Arrêter la génération ?",
-      "body": "Ce qui a déjà été écrit sera retiré : l’atelier revient à son état d’avant. La fenêtre se ferme tout de suite, le retrait se termine seul sur le serveur.",
+      "body": "Ce qui a déjà été écrit sera retiré : l’atelier revient à son état d’avant.",
       "keep": "continuer la génération",
       "confirm": "arrêter et défaire"
     },
     "nothingWritten": "L’IA n’a rien écrit à partir de ta consigne, et cet atelier n’a ni document ni notion : il n’y avait donc rien à construire. Reformule en disant ce que le cours doit contenir, ou ajoute un document.",
     "writtenNotRead": "Le cours a bien été écrit et il apparaît dans Ressources, mais cette génération n’a pas pu le relire pour en tirer le programme. Relance la génération : elle repartira de ce cours.",
     "cancelledForgotten": "La mise à jour de l’atelier a été annulée : l’IA n’a pas su situer dans le cours une trop grande part des notions déjà présentes. Rien n’a été modifié. Relance la génération ; si ça se reproduit, c’est un problème de notre côté.",
-    "canClose": "Tu peux fermer cette fenêtre, et même quitter le site : la génération continue sur le serveur. Un bandeau sur l’atelier montre où elle en est, puis ce qu’elle a ajouté.",
     "partialQuestions": "{count, plural, one {# question n’a pas pu être écrite} other {# questions n’ont pas pu être écrites}} : relance une génération pour compléter.",
     "timeout": "Une étape de la génération a dépassé deux fois le temps permis par le serveur, et a été abandonnée. Relance la génération.",
-    "stopped": "La génération a été arrêtée."
+    "stopped": "La génération a été arrêtée.",
+    "running": "génération…",
+    "finished": "génération terminée",
+    "problem": {
+      "dismiss": "masquer l’alerte",
+      "failed": "La génération a échoué : {reason}",
+      "discarded": "{count, plural, one {# élément proposé par l’IA a été écarté} other {# éléments proposés par l’IA ont été écartés}} :"
+    },
+    "queue": {
+      "waiting": "en attente",
+      "waitingInfo": "Elle partira d’elle-même dès que la génération en cours sera terminée.",
+      "full": "Trois générations sont déjà en cours ou en attente sur cet atelier. Attends que l’une d’elles se termine pour en lancer une autre.",
+      "untitled": "génération par IA",
+      "save": "enregistrer",
+      "edit": "modifier la consigne",
+      "removeTitle": "Retirer cette génération ?",
+      "removeBody": "Elle attend encore son tour et n’a rien écrit : rien ne sera défait.",
+      "removeKeep": "la garder",
+      "removeConfirm": "retirer",
+      "empty": "Cet atelier n’a encore aucune notion au programme : il n’y avait rien sur quoi écrire des questions.",
+      "emptyLink": "Ajouter un document dans les Ressources"
+    },
+    "box": {
+      "newTitle": "génération par IA",
+      "editTitle": "modifier la génération"
+    }
   }
 }

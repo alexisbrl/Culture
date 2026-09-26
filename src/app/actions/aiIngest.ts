@@ -1,14 +1,14 @@
 'use server';
 
 import { headers } from 'next/headers';
+import { after } from 'next/server';
 
 import { requireImportManager, requireManager } from '@/lib/authz';
-import { dispatchTasks } from '@/lib/ingest/dispatch';
 import { errorMessage as message } from '@/lib/ingest/failure';
 import * as journal from '@/lib/ingest/journal';
 import * as lock from '@/lib/ingest/lock';
-import { BUSY_ERROR } from '@/lib/ingest/lock';
 import * as orchestrator from '@/lib/ingest/orchestrator';
+import * as queue from '@/lib/ingest/queue';
 import * as run from '@/lib/ingest/run';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import * as imports from '@/lib/workshops/imports';
@@ -42,9 +42,6 @@ export type PlanIssue = {
 export type ImportBanner = {
   importId: string;
   state: 'cancellable' | 'empty' | 'expired' | 'modified';
-  /** La génération tourne encore, sur le serveur : ce qu'on compte est ce
-   *  qu'elle a écrit jusqu'ici. */
-  running: boolean;
   /** La génération s'est arrêtée avant la fin (serveur perdu, tâche coupée
    *  deux fois). Ce qu'elle a écrit est là, mais ce n'est pas un résultat
    *  voulu : le bandeau le dit au lieu de l'annoncer comme un import réussi.
@@ -60,11 +57,13 @@ export type ImportBanner = {
 };
 
 export type StartGenerationResult =
-  | { ok: true; importId: string }
-  /** `reason: 'busy'` = une génération tourne déjà sur cet atelier (voir
-   *  @/lib/ingest/lock). L'écran a sa propre phrase pour ce cas-là : le message
-   *  brut ne serait pas traduit. */
-  | { ok: false; error: string; reason?: 'busy' };
+  /** La demande est dans la file (@/lib/ingest/queue) : elle part tout de
+   *  suite si rien ne tourne, après la génération en cours sinon. */
+  | { ok: true; requestId: string }
+  /** `reason: 'full'` = l'atelier a déjà son compte de générations actives.
+   *  L'écran a sa propre phrase pour ce cas-là : le message brut ne serait pas
+   *  traduit. */
+  | { ok: false; error: string; reason?: 'full' };
 
 /** Où joindre ce serveur : c'est à lui que les tâches de la génération se
  *  relaient. Lu sur la requête plutôt que dans une variable d'environnement — le
@@ -76,48 +75,79 @@ async function ownOrigin(): Promise<string> {
   return `${proto}://${host}`;
 }
 
-/** Lance une génération : ouvre le lot, téléverse les documents, range la
- *  première tâche et la lance. Rend la main aussitôt — la suite se fait sur le
- *  serveur, que l'onglet reste ouvert ou non.
+/** Demande une génération : l'écrit dans la file de l'atelier, et la fait
+ *  partir si la place est libre. Rend la main aussitôt — le démarrage
+ *  (téléversement des documents compris) se fait après la réponse, et la suite
+ *  sur le serveur, que l'onglet reste ouvert ou non.
  *
  *  Ce que l'écran décide (le contexte, les étapes, le total d'examen) voyage
  *  tel quel : ce sont des choix d'orchestration, pas des droits — le contrôle
  *  d'accès est fait ici, et chaque étape revérifie ce qui la concerne. */
-export async function startWorkshopGeneration(
-  workshopId: string,
-  input: {
-    fileIds: string[];
-    context: 'parcours' | 'exam';
-    withResource: boolean;
-    needsProgram: boolean;
-    visibleNotions: number;
-    examTarget: number;
-    hint: string;
-    origin: string;
-  },
-): Promise<StartGenerationResult> {
+export type GenerationInput = {
+  fileIds: string[];
+  context: 'parcours' | 'exam';
+  withResource: boolean;
+  needsProgram: boolean;
+  visibleNotions: number;
+  examTarget: number;
+  hint: string;
+  /** Le texte tel que l'utilisateur l'a tapé (voir @/lib/ingest/queue). */
+  prompt: string;
+  origin: string;
+  /** Renvoi d'une demande retirée pour modification : son rang d'origine
+   *  (voir @/lib/ingest/queue). */
+  rankAt?: string | null;
+};
+
+/** Ce que l'écran envoie, remis en forme : une URL POST publique peut recevoir
+ *  n'importe quoi. */
+function cleanInput(input: GenerationInput): queue.RequestInput {
+  return {
+    fileIds: Array.isArray(input.fileIds) ? input.fileIds.filter((id) => typeof id === 'string') : [],
+    context: input.context === 'exam' ? 'exam' : 'parcours',
+    withResource: input.withResource === true,
+    needsProgram: input.needsProgram === true,
+    visibleNotions: Number.isFinite(input.visibleNotions) ? input.visibleNotions : 0,
+    examTarget: Number.isFinite(input.examTarget) ? input.examTarget : 0,
+    hint: typeof input.hint === 'string' ? input.hint.slice(0, 600) : '',
+    origin: typeof input.origin === 'string' ? input.origin : null,
+    prompt: typeof input.prompt === 'string' ? input.prompt.slice(0, 600) : '',
+  };
+}
+
+export async function startWorkshopGeneration(workshopId: string, input: GenerationInput): Promise<StartGenerationResult> {
   const ctx = await requireManager(workshopId);
   if (!ctx) return { ok: false, error: 'Droits insuffisants' };
 
   try {
-    const { importId, dispatch } = await orchestrator.startGeneration(workshopId, ctx.userId, {
-      fileIds: Array.isArray(input.fileIds) ? input.fileIds.filter((id) => typeof id === 'string') : [],
-      context: input.context === 'exam' ? 'exam' : 'parcours',
-      withResource: input.withResource === true,
-      needsProgram: input.needsProgram === true,
-      visibleNotions: Number.isFinite(input.visibleNotions) ? input.visibleNotions : 0,
-      examTarget: Number.isFinite(input.examTarget) ? input.examTarget : 0,
-      hint: typeof input.hint === 'string' ? input.hint.slice(0, 600) : '',
-      origin: typeof input.origin === 'string' ? input.origin : null,
-      baseUrl: await ownOrigin(),
-    });
-    await dispatchTasks(dispatch.baseUrl, dispatch.taskIds);
-    return { ok: true, importId };
+    const baseUrl = await ownOrigin();
+    const rankAt = typeof input.rankAt === 'string' ? input.rankAt : null;
+    const requestId = await queue.enqueue(workshopId, ctx.userId, cleanInput(input), baseUrl, rankAt);
+    after(() => queue.promoteNext(workshopId, baseUrl));
+    return { ok: true, requestId };
   } catch (error) {
     const detail = message(error);
-    if (detail === BUSY_ERROR) return { ok: false, error: detail, reason: 'busy' };
+    if (detail === queue.QUEUE_FULL) return { ok: false, error: detail, reason: 'full' };
     return { ok: false, error: detail };
   }
+}
+
+/** Retire une demande qui attend, pour en modifier la consigne : rend son texte
+ *  et son rang, que le renvoi réutilisera. `null` : elle est déjà partie. */
+export async function takeBackGenerationRequest(
+  workshopId: string,
+  requestId: string,
+): Promise<{ prompt: string; rankAt: string } | null> {
+  if (!(await requireManager(workshopId))) return null;
+  return queue.takeBack(workshopId, requestId);
+}
+
+/** Retire une demande qui attend encore son tour. Rien n'a été écrit, rien
+ *  n'est à défaire. `false` : elle est déjà
+ *  partie — c'est alors l'arrêt de la génération qui s'applique. */
+export async function cancelGenerationRequest(workshopId: string, requestId: string): Promise<boolean> {
+  if (!(await requireManager(workshopId))) return false;
+  return queue.cancelRequest(workshopId, requestId);
 }
 
 /** La génération en cours sur cet atelier, s'il y en a une : l'écran la
@@ -141,10 +171,9 @@ export async function getImportBanners(workshopId: string): Promise<ImportBanner
       imports.recentImportIds(workshopId),
       orchestrator.liveGenerationOf(workshopId),
     ]);
-    // La génération en cours a toujours son bandeau, même avant d'avoir écrit
-    // quoi que ce soit : c'est lui qui dit, à qui revient sur l'atelier, qu'elle
-    // tourne encore.
-    const ids = live && !recent.includes(live) ? [live, ...recent] : recent;
+    // La génération en cours n'a PAS de bandeau (25/09/2026) : c'est le bouton de
+    // génération qui la montre. Le bandeau n'annonce que ce qui est terminé.
+    const ids = recent.filter((id) => id !== live);
     // Les deux lectures sont indépendantes → en parallèle (règle N+1). Le
     // relevé des lots interrompus est une seule requête pour toute la liste,
     // pas une par lot.
@@ -156,12 +185,11 @@ export async function getImportBanners(workshopId: string): Promise<ImportBanner
     ]);
 
     return summaries
-      .filter(({ importId, summary }) => summary.state === 'cancellable' || importId === live)
+      .filter(({ summary }) => summary.state === 'cancellable')
       .map(({ importId, summary }) => ({
         importId,
         state: summary.state,
-        running: importId === live,
-        interrupted: importId !== live && interrupted.has(importId),
+        interrupted: interrupted.has(importId),
         chapters: summary.chapters,
         notions: summary.notions,
         parcoursQuestions: summary.parcoursQuestions,
@@ -186,6 +214,10 @@ export async function cancelWorkshopImport(
     // son expiration. Posé AVANT le reste — une annulation refusée (lot déjà
     // annulé, délai dépassé) ne laisse pas pour autant une génération en cours.
     await lock.closeImport(importId);
+    // La place est libre : la suivante de la file part, après la réponse (son
+    // démarrage téléverse des documents).
+    const baseUrl = await ownOrigin();
+    after(() => queue.promoteNext(workshopId, baseUrl));
     // Une génération arrêtée par quelqu'un n'est pas une génération en panne :
     // les mélanger fausserait le taux d'échec dans les deux sens.
     await journal.markOutcome(importId, 'stopped');

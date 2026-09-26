@@ -36,7 +36,7 @@ const CARD_HOT_TINT = withAlpha(palette.gold, 0.14); // teinte de l'examen tout 
 // le filtre qui allait avec — `Exam.status` reste en donnée, plus rien ne
 // l'affiche. Le bouton « filtrer » demeure, désactivé, tant qu'aucun critère de
 // filtre n'existe pour cette liste. ----
-function HistoryContent({ workshopId, exams, loading, justAddedId, onEdit, onNew, onDelete }: {
+function HistoryContent({ workshopId, exams, loading, justAddedId, onEdit, onOpenWithQuestions, onNew, onDelete }: {
   workshopId: string;
   exams: Exam[];
   /** Les examens ne sont pas encore arrivés du serveur : la liste montre leur
@@ -44,6 +44,9 @@ function HistoryContent({ workshopId, exams, loading, justAddedId, onEdit, onNew
   loading: boolean;
   justAddedId: string | null;
   onEdit: (e: Exam) => void;
+  /** Double-clic : ouvre l'examen ET montre la liste des questions, là où on
+   *  le compose. */
+  onOpenWithQuestions: (e: Exam) => void;
   onNew: () => void;
   onDelete: (e: Exam) => void;
 }) {
@@ -102,6 +105,7 @@ function HistoryContent({ workshopId, exams, loading, justAddedId, onEdit, onNew
             <ListCard
               key={e.id}
               onClick={() => onEdit(e)}
+              onDoubleClick={() => onOpenWithQuestions(e)}
               tint={hot ? CARD_HOT_TINT : undefined}
               borderColor={hot ? palette.gold : undefined}
               title={e.title}

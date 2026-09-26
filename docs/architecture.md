@@ -669,7 +669,8 @@ coup. Deux conditions : **moins de 24 h**, et **aucun élément modifié**.
 par l'IA il y a 12 minutes · Annuler », en tête de **chacun** des écrans concernés. Un
 import touche trois écrans à la fois : l'ancrer sur un seul le rendrait introuvable depuis
 les autres. Le bandeau disparaît de lui-même et ne laisse traîner aucune commande
-destructrice.
+destructrice. Il n'annonce que des générations **terminées** : celle qui tourne se lit sur
+le bouton de génération (§7.11).
 
 **Pas de transaction atomique, et c'est assumé.** Un échec en cours laisse un atelier
 partiellement rempli — l'étiquette permet de nettoyer d'un coup, **et elle sert bien
@@ -798,9 +799,60 @@ trois règles de choix :
 base, exécutée dans sa propre fonction serveur — pour tenir dans la limite de durée de
 l'hébergeur, cinq minutes par fonction. Une tâche qui se termine relit toutes les tâches du
 lot, en déduit la suite, et **lance elle-même les suivantes**. Fermer la fenêtre, quitter la
-page ou fermer l'onglet ne change rien : l'écran ne fait que lire l'avancement, et le
-bandeau de l'atelier montre la génération en cours à qui revient. Rouvrir la fenêtre
-retrouve la génération au lieu d'en proposer une seconde.
+page ou fermer l'onglet ne change rien : l'écran ne fait que lire l'avancement.
+
+**On demande, la file enchaîne.** Un clic sur « générer » écrit une **demande** dans la file
+de l'atelier ; elle part aussitôt si rien ne tourne, sinon elle attend et part d'elle-même
+dès que la précédente est finie — onglet fermé ou non. **Trois générations actives au plus
+par atelier**, celle qui tourne comprise : au-delà, tout bouton de génération s'éteint et
+dit pourquoi au survol. Trois passages font partir la suivante, un seul y parvient : la fin
+(ou l'arrêt) de la précédente, chaque lecture d'avancement, la veille planifiée. Une demande
+qui attend se retire d'une croix, après confirmation.
+
+**Modifier une demande qui attend la retire de la file.** Rouvrir sa consigne la sort de la
+file, et c'est tout : tant qu'elle n'est pas renvoyée, elle n'existe plus — l'oublier, c'est la
+perdre. Renvoyée, elle **reprend son rang d'origine**, devant celles arrivées après elle.
+
+**Ce qu'on écrit en tête d'une liste est gardé dans l'onglet.** L'encadré de génération des
+Paramètres, l'encadré de nouvelle question d'une liste — côté manuel comme côté IA — et une
+génération rouverte pour modification survivent à un changement de page : on les retrouve tels
+qu'on les a laissés. Pas à un rafraîchissement, qui vide la mémoire de l'onglet. L'encadré de
+nouvelle question passe avant tout, au-dessus des générations en cours et en attente.
+
+**Seuls les Paramètres construisent le programme.** Une liste de questions n'écrit que des
+questions, sur les notions en place, et n'écrit jamais le document de l'IA. Ce qui dépend de
+l'état de l'atelier se vérifie **au départ** et non au clic — une mise à jour lancée juste
+avant peut encore le remplir : si l'atelier n'a alors aucune notion au programme, la demande
+échoue sans rien appeler, et son encadré le dit à la place de sa barre, avec un lien vers les
+Ressources.
+
+**Un encadré, jamais une fenêtre.** « Générer par IA » ouvre un encadré en place, fait comme
+l'encadré de création de la banque d'examen, qui **naît du bouton et le remplace**. Dans les
+Paramètres, Ressources et Chapitre & Notion ont le même bouton, donc **le même encadré** : posé
+au-dessus du titre, il reste ouvert d'un onglet à l'autre
+avec sa consigne en cours d'écriture. Il ne montre que la consigne et ses deux boutons ; ce que la génération va
+faire et ce qu'on peut lui demander passent dans l'infobulle.
+Modifier une génération en attente rouvre ce même encadré, là où elle se trouve.
+
+**Chaque porte montre ce qu'elle a lancé, à l'instant du clic.** L'encadré se ferme au clic
+et la génération se montre aussitôt, avant la réponse du serveur. Le bouton des
+Paramètres — le même dans Ressources et dans Chapitre & Notion — **devient** l'avancement de
+la génération qu'il a lancée : « en attente » avec son explication au survol, puis rempli au
+fil des étapes avec le pourcentage, une coche brève à la réussite. Une liste de questions peut
+en lancer plusieurs à la suite : chacune y a **son encadré en tête de liste**, avec sa
+consigne et sa barre ; en attente, un clic rouvre sa consigne. À côté de chacune, **toujours
+une croix** : elle arrête la génération qui tourne — confirmé, puisque ça défait ce qui a été
+écrit —, retire celle qui attend, masque l'alerte de celle qui a échoué ou n'a pas tout écrit.
+L'état est **partagé par tout l'onglet**, et les listes qui montrent ce qu'une génération
+écrit se relisent d'elles-mêmes — tout de suite à sa première écriture, puis au plus toutes
+les quelques secondes (les lectures passant en file), puis à la fin. Une génération lancée
+ailleurs est retrouvée en arrivant sur l'atelier, puis par un sondage lent (§9).
+
+**La recharge automatique reste à part** : elle ne passe pas par la file et n'y compte pas,
+elle tourne en parallèle de tout. Elle n'ajoute que des questions dans un chapitre, sans
+toucher aux chapitres ni aux notions ; le pire croisement avec une mise à jour de l'atelier
+est quelques questions rattachées à une notion que la mise à jour retire, et qui partent avec
+elle.
 
 **La suite se déduit de l'état, jamais d'une mémoire.** Plusieurs tâches finissent au même
 instant et demandent chacune « et maintenant ? » : la réponse, tirée de toutes les tâches du

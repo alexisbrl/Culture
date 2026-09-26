@@ -7,6 +7,8 @@ import { palette, withAlpha, ink } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AiGenerationDialog, { useWorkshopFiles } from '@/components/ai/AiGenerationDialog';
 import ImportBanner from '@/components/ai/ImportBanner';
+import { AiGenerationQueue } from '@/components/ai/AiGenerationButton';
+import { setListCreation, useListDraft, type ListCreation, type ListDoor } from '@/components/ai/listDraftStore';
 import { type Question, type ResponseType, type BloomLevel } from '../QuestionEditor';
 import { BLOOM_LEVELS } from '@/lib/workshops/examTypes';
 import { RESPONSE_TYPE_ORDER } from './questionFields';
@@ -196,7 +198,16 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   const tAi = useTranslations('ai');
   // Génération par IA : les documents sont chargés d'avance pour que le
   // dialogue s'ouvre déjà rempli.
-  const [generating, setGenerating] = useState(false);
+  //
+  // ⚠️ **L'encadré est gardé dans l'onglet, pas dans la page** (26/09/2026,
+  // demandé par Alexis) : le côté choisi et la consigne de l'IA vivent dans
+  // `listDraftStore`, comme la question manuelle en cours (que tient l'écran
+  // appelant). Changer de page et revenir retrouve l'encadré tel qu'on l'a
+  // laissé.
+  const door: ListDoor = aiContext === 'exam' ? 'exam' : 'parcours';
+  const { creation } = useListDraft(workshopId, door);
+  const writeCreation = (next: ListCreation | null) => { if (workshopId) setListCreation(workshopId, door, next); };
+  const generating = creation?.side === 'ai';
   /** L'encadré de création est ouvert : soit l'appelant tient une question neuve
    *  (côté manuel), soit on est passé à l'IA. Les deux occupent la MÊME boîte,
    *  en tête de liste, sous la même bascule. */
@@ -206,17 +217,13 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
    *  qu'il avait : le bouton ouvre le formulaire, sans encadré ni bascule — il
    *  n'y a pas de second côté vers lequel basculer. */
   const aiAvailable = aiContext === 'exam' && !!workshopId;
-  /** Une génération est en cours : la bascule se verrouille. En partir
-   *  démonterait le dialogue en pleine passe, donc sans passer par la demande
-   *  d'arrêt — la seule qui défasse ce qui a déjà été écrit. La croix du
-   *  dialogue reste, elle, la sortie. */
-  const [aiRunning, setAiRunning] = useState(false);
   /** ⚠️ **Le texte suit la bascule** (07/09/2026, demandé par Alexis) : ce qu'on
    *  a commencé à écrire comme énoncé devient la consigne donnée à l'IA, et
    *  réciproquement. On hésite entre écrire la question et la faire écrire — le
    *  premier jet ne doit pas être perdu par ce choix. Tant que rien n'est ni
    *  enregistré ni lancé, c'est le même texte des deux côtés. */
-  const [sharedText, setSharedText] = useState('');
+  const sharedText = creation?.side === 'ai' ? creation.aiPrompt : '';
+  const setSharedText = (aiPrompt: string) => writeCreation({ side: 'ai', aiPrompt, question: null });
   /** La bascule de l'encadré. Elle n'est pas rendue ici : elle est posée sur la
    *  LIGNE DE TITRE du côté affiché — « NOUVELLE QUESTION » à gauche et elle à
    *  droite (demandé par Alexis) —, donc c'est le formulaire ou le dialogue qui
@@ -224,17 +231,19 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   const creationToggle = (
     <SegmentedToggle
       value={generating ? 'ai' : 'manual'}
-      disabled={aiRunning}
       onChange={side => {
         if (side === 'ai') {
-          // L'énoncé en cours part avec nous : il devient la consigne.
-          setSharedText(draftStatement ?? '');
+          // L'énoncé en cours part avec nous : il devient la consigne. La
+          // question manuelle est refermée D'ABORD — elle efface l'encadré
+          // gardé —, puis le côté IA s'y inscrit.
+          const text = draftStatement ?? '';
           onCancelNewQuestion?.();
-          setGenerating(true);
+          writeCreation({ side: 'ai', aiPrompt: text, question: null });
           return;
         }
-        setGenerating(false);
-        onNewQuestion(sharedText);
+        const text = sharedText;
+        writeCreation(null);
+        onNewQuestion(text);
       }}
       options={[
         { value: 'manual', label: tAi('chooseManual'), icon: <Pencil size={13} strokeWidth={1.9} /> },
@@ -687,12 +696,13 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
           </>
         }
       >
-        {/* Déplié : rien que les énoncés de chaque partie, chacun précédé de son
-            type de réponse. Ni difficulté, ni durée, ni réponse attendue — le
-            détail complet se lit dans l'éditeur de question. */}
+        {/* Déplié : rien que les énoncés des parties SUIVANTES, chacun précédé de
+            son type de réponse — la première est déjà le titre de la carte, la
+            répéter faisait lire deux fois la même question. Ni difficulté, ni
+            durée, ni réponse attendue — le détail complet se lit dans l'éditeur. */}
         {open && (
           <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8, borderTop: `1px solid ${palette.line}`, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 8, cursor: 'default' }}>
-            {[{ responseType: q.responseType, content: q.content }, ...q.parts.map(p => ({ responseType: p.responseType, content: p.content }))].map((part, i) => (
+            {q.parts.map((part, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                 <TypeIcon type={part.responseType} size={13} />
                 <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: palette.ink, lineHeight: 1.45 }}>{part.content || tr('noStatement')}</div>
@@ -719,7 +729,6 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
         <ImportBanner
           workshopId={workshopId}
           scope={aiContext === 'exam' ? 'exam' : 'programme'}
-          onCancelled={() => window.location.reload()}
           waitFor={loading}
         />
       )}
@@ -745,7 +754,7 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
           kind: 'button',
           label: tr('bank.newShort'),
           title: tr('bank.newQuestion'),
-          onClick: () => { setGenerating(false); setSharedText(''); onNewQuestion(); },
+          onClick: () => { writeCreation(null); onNewQuestion(); },
           disabled: loading,
         }}
         filter={
@@ -946,7 +955,7 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
              tient le formulaire ouvert : la laisser derrière soi bloquerait
              toute autre création tant qu'on ne l'a pas retrouvée. Passer à l'IA
              l'annule donc, et revenir au manuel en ouvre une fraîche. */
-          <div ref={editorRef} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 16px', borderRadius: 14, background: palette.surfaceRaised, border: `1px solid ${palette.line}` }}>
+          <div ref={editorRef} style={{ display: 'flex', flexDirection: 'column', gap: generating ? 8 : 12, padding: generating ? '12px 16px' : '14px 16px', borderRadius: 14, background: palette.surfaceRaised, border: `1px solid ${palette.line}` }}>
             {/* ⚠️ **La ligne de titre appartient à l'encadré, pas à son contenu**
                 (07/09/2026). Elle doit être la MÊME des deux côtés de la bascule
                 — c'est la même chose qu'on crée, par deux chemins —, donc ni le
@@ -965,10 +974,8 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
                   files={aiFiles ?? []}
                   forcedContext={aiContext}
                   origin={aiContext === 'exam' ? 'questions-exam' : 'questions-parcours'}
-                  onClose={() => setGenerating(false)}
-                  onDone={() => window.location.reload()}
+                  onClose={() => writeCreation(null)}
                   frame="inline"
-                  onRunningChange={setAiRunning}
                   hint={sharedText}
                   onHintChange={setSharedText}
                 />
@@ -978,6 +985,14 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
               // boîte dans la boîte (signalé par Alexis, capture à l'appui).
               : renderEditor?.({ bare: true, hideTitle: true })}
           </div>
+        )}
+        {/* ─── Les générations lancées d'ici, une par encadré (25/09/2026) ───
+            On peut en lancer plusieurs à la suite — le chapitre 1, puis le 2 :
+            chacune a son encadré, en tête de liste — sous l'encadré de nouvelle question, qui passe avant
+            tout (26/09/2026) —, avec sa barre. Celles qui
+            attendent leur tour le disent, et se retirent d'une croix. */}
+        {aiAvailable && workshopId && !loading && (
+          <AiGenerationQueue workshopId={workshopId} door={aiContext === 'exam' ? 'exam' : 'parcours'} />
         )}
         {!loading && !creating && renderEditor && editingQuestionId !== null && !filtered.some(q => q.id === editingQuestionId) && <div ref={editorRef}>{renderEditor()}</div>}
         {!loading && filtered.map(q => (

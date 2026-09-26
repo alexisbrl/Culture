@@ -431,9 +431,7 @@
     },
     "generator": {
       "cancelEdits": "cancel changes",
-      "resetEditor": "reset the editor",
       "editingPrefix": "Editing",
-      "cancelEdit": "cancel ✕",
       "headerZone": "HEADER",
       "saveFavorite": "save as favourite",
       "minShort": "min",
@@ -468,14 +466,15 @@
       "dragReorder": "drag to reorder",
       "dragSection": "drag to move the part and its questions",
       "shuffleNotice": "random order: this question's answer items will be shuffled from one paper to the next during the exam",
-      "saveChanges": "save changes",
-      "saveExam": "save the exam",
+      "generateWithAi": "Generate with AI",
+      "saveExamShort": "Save",
+      "reset": "Reset",
       "pageNumber": "{n} / {total}",
       "removeSectionTitle": "Delete section « {title} »?",
       "removeSectionDesc": "The {count} question(s) in this section will leave the exam. They stay in the question bank.",
       "cancelEditsTitle": "Cancel changes?",
       "clearTitle": "Clear the exam editor?",
-      "clearDescEditing": "Your current changes will be discarded. The already saved exam is not affected.",
+      "clearDescEditing": "Your current changes will be discarded: the exam goes back to its saved version.",
       "clearDesc": "The title, sections, weighting and sent questions will be reset.",
       "applyFavoriteTitle": "Apply favorite presentation?",
       "applyFavoriteDesc": "The presentation section will be replaced by your favorite.",
@@ -489,12 +488,13 @@
       "tabBank": "Questions",
       "phoneBackToExam": "back to the exam",
       "deleteExamTitle": "Delete the exam?",
-      "newExamTitle": "an exam is already being built",
-      "newExamDesc": "the current sheet will be cleared to start a blank exam. it is not saved anywhere.",
-      "newExamConfirm": "start over",
-      "editorBusyTitle": "Editor already in use",
-      "editorBusyDesc": "The exam editor already has changes in progress. Finish or clear the editor before editing {target}.",
-      "editorBusyGo": "Go to the editor",
+      "unsavedNewTitle": "This exam is not saved",
+      "unsavedEditTitle": "Your changes are not saved",
+      "unsavedDescNew": "Save the current sheet before starting a new one?",
+      "unsavedDescOpen": "Save the current sheet before opening “{target}”?",
+      "unsavedSave": "Save",
+      "unsavedDiscardNew": "Discard",
+      "unsavedDiscardEdits": "Discard changes",
       "questionEditing": "question already being edited",
       "questionEditingSave": "finish editing the question before saving the exam"
     },
@@ -1166,24 +1166,13 @@
       "placeholderExam": "Write me {count} questions across all chapters…",
       "help": "What the AI cannot guess: the students’ level, the expected structure, the word used in the document. It can also write or extend a course if you ask it to. A bare number (“40”) simply asks for that many questions.",
       "info": "AI writes exam questions from the workshop’s notions.",
-      "infoIdeas": "You can steer it: the number of questions, which notions or chapters to cover, the answer types you want, the students’ level, the wording to use."
+      "infoIdeas": "You can steer it: the number of questions, which notions or chapters to cover, the answer types you want, the target level, the wording to use.",
+      "infoIdeasProgram": "You can steer it: the course you want, the target level, the expected structure…",
+      "placeholderProgram": "Write me a … level course on … ; complete chapter 3 of my course before updating the workshop ; in my course, chapters are called themes, parts, sections, etc."
     },
     "generate": "generate",
     "cancel": "cancel",
     "close": "close",
-    "retry": "try again",
-    "progress": {
-      "resource": "Reading your instructions…",
-      "chapters": "Splitting the course into chapters…",
-      "chaptersRelaunch": "Checking the notions left without a chapter…",
-      "notionsChapters": "Notions — {done}/{n} chapters read",
-      "questionsCount": "Questions — {done}/{n} batches done"
-    },
-    "busy": "A generation is already running on this workshop. Wait for it to finish, or stop it from the workshop banner before starting another.",
-    "runningCounts": "{chapters} chapters · {notions} notions · {questions} questions",
-    "doneCounts": "{chapters} chapters, {notions} notions and {questions} questions added",
-    "discarded": "Discarded",
-    "adjusted": "Adjusted",
     "cancellable": "You can undo this import for 24 hours, as long as nothing has been edited.",
     "banner": {
       "text": "AI added {items}.",
@@ -1199,22 +1188,13 @@
       "error": "Cannot undo: {reason}",
       "previous": "{count, plural, one {# earlier import} other {# earlier imports}}",
       "interruptedText": "Generation interrupted: AI had time to add {items}.",
-      "interruptedHint": "This generation stopped before finishing: the server lost it along the way. Whatever it had already written stayed: you can remove it here, then start a new generation.",
-      "runningText": "Generation in progress: AI has already added {items}.",
-      "runningEmpty": "Generation in progress…",
-      "stop": "stop",
-      "stopHint": "Stops the generation and removes what it has already written."
+      "interruptedHint": "This generation stopped before finishing: the server lost it along the way. Whatever it had already written stayed: you can remove it here, then start a new generation."
     },
     "button": "generate with AI",
     "chooseAi": "with AI",
     "chooseManual": "manual",
-    "estimate": {
-      "preparing": "Preparing the documents…",
-      "preparingHint": "The documents are sent to the provider; generation starts right after."
-    },
     "plan": {
-      "program": "The AI will read the documents, extract the notions, sort them into chapters, then write the practice questions. Whatever already exists is completed, never redone.",
-      "programThenQuestions": "This workshop has no notion in its programme yet: the AI will build it from the documents first, then write this list’s questions.",
+      "program": "The AI will read the resources (which it can complete if needed), extract the notions from them, sort them into chapters, then write practice questions.",
       "parcoursQuestions": "The AI will top up the practice questions for notions that are still short. The documents are not read again.",
       "examQuestions": "The AI will write exam questions across the whole programme — each crossing several notions, some following on from one another. The documents are not read again.",
       "questionsOnly": "No readable document in this workshop: the AI will not touch the programme. It will write the practice questions still missing from the existing notions.",
@@ -1224,16 +1204,40 @@
     "stop": {
       "aria": "stop generating",
       "title": "Stop generating?",
-      "body": "Whatever was written will be removed: the workshop goes back to how it was. This closes right away, the cleanup finishes on its own on the server.",
+      "body": "Whatever was written will be removed: the workshop goes back to how it was.",
       "keep": "keep generating",
       "confirm": "stop and undo"
     },
     "nothingWritten": "The AI wrote nothing from your instructions, and this workshop has no document and no notion: there was nothing to build. Say what the course should contain, or add a document.",
     "writtenNotRead": "The course was written and now appears under Resources, but this generation could not read it back to build the programme. Run it again: it will start from that course.",
     "cancelledForgotten": "The workshop update was cancelled: the AI could not place too large a share of the existing notions in the course. Nothing was changed. Run the generation again; if it happens again, the problem is on our side.",
-    "canClose": "You can close this window, or even leave the site: generation carries on on the server. A banner on the workshop shows how far it has got, then what it added.",
     "partialQuestions": "{count, plural, one {# question could not be written} other {# questions could not be written}}: start a new generation to fill the gap.",
     "timeout": "A generation step ran over the server time limit twice and was abandoned. Start the generation again.",
-    "stopped": "The generation was stopped."
+    "stopped": "The generation was stopped.",
+    "running": "generating…",
+    "finished": "generation complete",
+    "problem": {
+      "dismiss": "dismiss the alert",
+      "failed": "The generation failed: {reason}",
+      "discarded": "{count, plural, one {# item suggested by the AI was discarded} other {# items suggested by the AI were discarded}}:"
+    },
+    "queue": {
+      "waiting": "waiting",
+      "waitingInfo": "It will start on its own as soon as the current generation is finished.",
+      "full": "Three generations are already running or waiting on this workshop. Wait for one of them to finish before starting another.",
+      "untitled": "AI generation",
+      "save": "save",
+      "edit": "edit the prompt",
+      "removeTitle": "Remove this generation?",
+      "removeBody": "It is still waiting for its turn and hasn’t written anything: nothing will be undone.",
+      "removeKeep": "keep it",
+      "removeConfirm": "remove",
+      "empty": "This workshop has no notion in its programme yet: there was nothing to write questions about.",
+      "emptyLink": "Add a document in Resources"
+    },
+    "box": {
+      "newTitle": "AI generation",
+      "editTitle": "edit the generation"
+    }
   }
 }

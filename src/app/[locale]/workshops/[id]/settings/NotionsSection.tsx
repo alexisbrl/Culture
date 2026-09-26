@@ -5,13 +5,15 @@ import { useTranslations } from 'next-intl';
 import { ChevronDown, EllipsisVertical, EyeOff, GripVertical, Loader2, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { palette, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import AiGenerationButton from '@/components/ai/AiGenerationButton';
+import AiGenerationButton, { SettingsGenerationBox } from '@/components/ai/AiGenerationButton';
 import ImportBanner from '@/components/ai/ImportBanner';
+import { useGenerationRefresh } from '@/components/ai/generationStore';
 import {
   createWorkshopNotion,
   updateWorkshopNotion,
   deleteWorkshopNotion,
   moveWorkshopNotion,
+  getWorkshopNotions,
   type Notion,
 } from '@/app/actions/workshopNotions';
 import {
@@ -20,6 +22,7 @@ import {
   restoreWorkshopChapter,
   deleteWorkshopChapter,
   reorderWorkshopChapters,
+  getWorkshopChapters,
   type Chapter,
 } from '@/app/actions/workshopChapters';
 import { SmallBtn } from './settingsShared';
@@ -194,6 +197,22 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
   const t = useTranslations('settings');
   const [notions, setNotions] = useState<Notion[]>(initialNotions);
   const [chapters, setChapters] = useState<Chapter[]>(initialChapters);
+
+  // Ce qu'écrit une génération apparaît au fil de l'eau, sans rechargement.
+  // Les deux lectures se suivent (les actions passent une par une) : elles
+  // n'ont lieu qu'au rythme du suivi, pas à chaque frappe.
+  useGenerationRefresh(workshopId, () => {
+    void (async () => {
+      try {
+        const nextNotions = await getWorkshopNotions(workshopId);
+        const nextChapters = await getWorkshopChapters(workshopId);
+        setNotions(nextNotions);
+        setChapters(nextChapters);
+      } catch {
+        // Rafraîchissement d'agrément : un échec laisse la liste affichée.
+      }
+    })();
+  });
 
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -571,10 +590,32 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
           posé ici parce que c'est ici qu'on constate le résultat sur les
           chapitres et les notions ; il ne s'affiche que tant que le lot est
           réellement annulable, et disparaît de lui-même. */}
-      <ImportBanner workshopId={workshopId} scope="programme" onCancelled={() => window.location.reload()} />
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <AiGenerationButton workshopId={workshopId} origin="settings-notions" onDone={() => window.location.reload()} />
+      <ImportBanner workshopId={workshopId} scope="programme" />
+
+      {/* L'encadré de génération, au-dessus des titres : le même que dans
+          Ressources, qui garde sa consigne d'un onglet à l'autre. Il prend la
+          place du bouton, et les listes glissent vers le bas. */}
+      <SettingsGenerationBox workshopId={workshopId} origin="settings-notions" />
+
+      {/* ─── Les titres, et le bouton sur la même ligne (25/09/2026) ─────────
+          Comme dans Ressources : le bouton de génération s'aligne sur les
+          titres. Les titres sortent donc des colonnes pour former une ligne à
+          eux, qui porte le bouton. Sur téléphone, chaque titre reste en tête de
+          sa colonne : seule la ligne du bouton demeure ici. */}
+      <div className="grid grid-cols-1 md:grid-cols-[0.85fr_1.45fr]" style={{ gap: 16, alignItems: 'center', marginBottom: 10 }}>
+        <div className="hidden md:block" style={{ fontSize: 17, fontWeight: 500, color: palette.ink, padding: '0 2px' }}>
+          {t('chapters.title')}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div className="hidden md:block" style={{ fontSize: 17, fontWeight: 500, color: palette.ink, padding: '0 2px' }}>
+            {t('notions.title')}
+          </div>
+          <span style={{ marginLeft: 'auto' }}>
+            <AiGenerationButton workshopId={workshopId} />
+          </span>
+        </div>
       </div>
+
 
       {(
         // `minWidth: 0` sur chaque colonne : une colonne de grille ne descend pas
@@ -586,7 +627,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         <div className="grid grid-cols-1 md:grid-cols-[0.85fr_1.45fr]" style={{ gap: 16, alignItems: 'start' }}>
           {/* ── Colonne Chapitres ── */}
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: palette.ink, padding: '0 2px 8px' }}>
+            <div className="md:hidden" style={{ fontSize: 17, fontWeight: 500, color: palette.ink, padding: '0 2px 8px' }}>
               {t('chapters.title')}
             </div>
             <div style={{ background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 14, boxShadow: shadow.sm, overflow: 'hidden' }}>
@@ -791,7 +832,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
 
           {/* ── Colonne Notions du chapitre sélectionné ── */}
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: palette.ink, padding: '0 2px 8px' }}>
+            <div className="md:hidden" style={{ fontSize: 17, fontWeight: 500, color: palette.ink, padding: '0 2px 8px' }}>
               {t('notions.title')}
             </div>
             <div style={{ background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 14, boxShadow: shadow.sm, overflow: 'hidden' }}>

@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { ChevronDown, ChevronUp, LoaderCircle, Sparkles, Square, TriangleAlert, Undo2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Sparkles, TriangleAlert, Undo2 } from 'lucide-react';
 
 import { Tooltip } from '@/components/ui/tooltip';
 import { ink, palette, radius } from '@/lib/theme';
 import { cancelWorkshopImport, getImportBanners, type ImportBanner as Banner } from '@/app/actions/aiIngest';
+
+import { notifyWorkshopChanged, useGenerationRefresh } from './generationStore';
 
 // Le bandeau d'annulation d'un import IA.
 //
@@ -29,6 +31,10 @@ import { cancelWorkshopImport, getImportBanners, type ImportBanner as Banner } f
 // L'annulation, elle, reste **entière** : elle défait le lot complet, y compris
 // ce que cet écran ne montre pas. C'est dit dans le bandeau plutôt que deviné.
 //
+// ⚠️ **Une génération EN COURS n'y figure pas** (25/09/2026) : c'est le bouton
+// de génération qui la montre, en se remplissant. Le bandeau apparaît quand elle
+// se termine — il se relit alors de lui-même (`useGenerationRefresh`).
+//
 // Il disparaît de lui-même : le serveur ne le renvoie que si le lot est encore
 // annulable — moins de 24 h, et rien de modifié depuis. Aucune commande
 // destructrice ne traîne donc dans l'interface une fois le délai passé, et il
@@ -47,8 +53,6 @@ export type ImportBannerScope = 'programme' | 'exam';
 type Props = {
   workshopId: string;
   scope: ImportBannerScope;
-  /** Remonté après une annulation réussie, pour que l'écran se rafraîchisse. */
-  onCancelled?: () => void;
   /** Attendre avant d'aller chercher les lots annulables (07/09/2026).
    *
    *  ⚠️ **Next met les server actions à la queue leu leu** : elles ne se
@@ -63,10 +67,7 @@ type Props = {
   waitFor?: boolean;
 };
 
-/** Rythme de relecture du bandeau pendant qu'une génération tourne. */
-const RUNNING_REFRESH_MS = 10_000;
-
-export default function ImportBanner({ workshopId, scope, onCancelled, waitFor = false }: Props) {
+export default function ImportBanner({ workshopId, scope, waitFor = false }: Props) {
   const t = useTranslations('ai');
   // ⚠️ **Une LISTE, pas un lot** (28/08/2026). Trois essais dans la même heure
   // laissaient deux lots annulables mais invisibles, donc perdus à l'expiration.
@@ -77,36 +78,19 @@ export default function ImportBanner({ workshopId, scope, onCancelled, waitFor =
   // faire, c'est presque toujours celui qu'on veut défaire.
   const [open, setOpen] = useState(false);
 
-  // Relu régulièrement tant qu'une génération tourne : elle se déroule sur le
-  // serveur, et c'est ce bandeau qui la montre à qui revient sur l'atelier. Quand
-  // elle se termine, l'écran se rafraîchit pour montrer ce qu'elle a écrit.
+  // Relu au montage, puis chaque fois qu'une génération a changé le contenu de
+  // l'atelier : celle qui se termine y apparaît sans rechargement.
   const [tick, setTick] = useState(0);
-  const wasRunning = useRef(false);
-  // Les écrans passent une fonction neuve à chaque rendu : la garder en ref évite
-  // de relancer la lecture à chaque rendu de l'hôte.
-  const refresh = useRef(onCancelled);
-  useEffect(() => { refresh.current = onCancelled; }, [onCancelled]);
-  const running = banners.some((b) => b.running);
+  useGenerationRefresh(workshopId, () => setTick((n) => n + 1));
   useEffect(() => {
     if (waitFor) return;
     let cancelled = false;
     getImportBanners(workshopId)
-      .then((list) => {
-        if (cancelled) return;
-        setBanners(list);
-        const now = list.some((b) => b.running);
-        if (wasRunning.current && !now) refresh.current?.();
-        wasRunning.current = now;
-      })
+      .then((list) => { if (!cancelled) setBanners(list); })
       // Le bandeau est un confort : son échec ne doit rien empêcher.
       .catch(() => {});
     return () => { cancelled = true; };
   }, [workshopId, waitFor, tick]);
-  useEffect(() => {
-    if (!running) return;
-    const id = setInterval(() => setTick((n) => n + 1), RUNNING_REFRESH_MS);
-    return () => clearInterval(id);
-  }, [running]);
 
   /** Les volumes du lot, rangés en « ce que cet écran montre » et « le reste,
    *  que l'annulation emportera quand même ». Les zéros sont écartés : un lot
@@ -129,7 +113,7 @@ export default function ImportBanner({ workshopId, scope, onCancelled, waitFor =
     return `${parts.slice(0, -1).join(', ')} ${t('banner.and')} ${parts[parts.length - 1]}`;
   }
 
-  const visible = banners.filter((b) => b.running || split(b).shown.length > 0);
+  const visible = banners.filter((b) => split(b).shown.length > 0);
   if (visible.length === 0) return null;
 
   const [latest, ...previous] = visible;
@@ -143,7 +127,8 @@ export default function ImportBanner({ workshopId, scope, onCancelled, waitFor =
     // Seul le lot annulé disparaît : les autres restent annulables, et leur
     // délai continue de courir.
     setBanners((list) => list.filter((b) => b.importId !== importId));
-    onCancelled?.();
+    // Les listes de l'atelier se relisent : ce que le lot avait écrit disparaît.
+    notifyWorkshopChanged(workshopId);
   }
 
   const row = (banner: Banner, main: boolean) => {
@@ -154,9 +139,7 @@ export default function ImportBanner({ workshopId, scope, onCancelled, waitFor =
           dans les lignes repliées : c'est l'information la plus importante de la
           ligne, et la reléguer au texte seul la rendrait invisible au survol de
           la liste. */}
-      {banner.running ? (
-        <LoaderCircle size={15} color={palette.green} style={{ flexShrink: 0 }} />
-      ) : banner.interrupted ? (
+      {banner.interrupted ? (
         <Tooltip content={t('banner.interruptedHint')}>
           <span style={{ display: 'inline-flex', flexShrink: 0 }}>
             <TriangleAlert size={15} color={palette.amber} />
@@ -168,15 +151,13 @@ export default function ImportBanner({ workshopId, scope, onCancelled, waitFor =
         <span style={{ width: 15, flexShrink: 0 }} />
       )}
       <span style={{ fontSize: main ? 13 : 12.5, color: main ? palette.inkMuted : palette.inkSoft, flex: 1, minWidth: 0 }}>
-        {banner.running
-          ? (shown.length > 0 ? t('banner.runningText', { items: join(shown) }) : t('banner.runningEmpty'))
-          : banner.interrupted
-            ? t('banner.interruptedText', { items: join(shown) })
-            : t('banner.text', { items: join(shown) })}
-        {!banner.running && hidden.length > 0 &&` ${t('banner.alsoRemoves', { items: join(hidden) })}`}
+        {banner.interrupted
+          ? t('banner.interruptedText', { items: join(shown) })
+          : t('banner.text', { items: join(shown) })}
+        {hidden.length > 0 && ` ${t('banner.alsoRemoves', { items: join(hidden) })}`}
       </span>
 
-      <Tooltip content={t(banner.running ? 'banner.stopHint' : 'cancellable')}>
+      <Tooltip content={t('cancellable')}>
         <button
           type="button"
           onClick={() => cancel(banner.importId)}
@@ -188,10 +169,8 @@ export default function ImportBanner({ workshopId, scope, onCancelled, waitFor =
             fontSize: 12.5, color: palette.inkMuted, cursor: busy !== null ? 'wait' : 'pointer',
           }}
         >
-          {banner.running ? <Square size={12} /> : <Undo2 size={13} />}
-          {busy === banner.importId
-            ? t('banner.cancelling')
-            : t(banner.running ? 'banner.stop' : 'banner.cancel')}
+          <Undo2 size={13} />
+          {busy === banner.importId ? t('banner.cancelling') : t('banner.cancel')}
         </button>
       </Tooltip>
     </div>
