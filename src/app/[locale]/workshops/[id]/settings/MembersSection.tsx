@@ -485,13 +485,12 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                                 pastille (`labelTint`), pas la couleur brute —
                                 même règle que `LabelEditor` côté examen. */}
                             {LABEL_COLORS.map((c) => (
-                              <Tooltip key={c} content={c}>
-                                <button
-                                  onClick={() => setEditGroupColor(c)}
-                                  aria-label={c}
-                                  style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c), border: editGroupColor === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }}
-                                />
-                              </Tooltip>
+                              <button
+                                key={c}
+                                onClick={() => setEditGroupColor(c)}
+                                aria-label={c}
+                                style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c), border: editGroupColor === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }}
+                              />
                             ))}
                           </div>
                           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>

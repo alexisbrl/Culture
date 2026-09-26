@@ -431,7 +431,6 @@
     },
     "generator": {
       "cancelEdits": "annuler les modifications",
-      "editingPrefix": "Modification de",
       "headerZone": "EN-TÊTE",
       "saveFavorite": "enregistrer en favori",
       "minShort": "min",

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { ArrowLeft, Clock, Star, RefreshCw, SeparatorHorizontal, SlidersHorizontal, PenLine, Sparkles } from 'lucide-react';
+import { ArrowLeft, Clock, Star, RefreshCw, SeparatorHorizontal, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { palette, ink, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { PillToggle } from './questionFields';
@@ -1244,12 +1244,6 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
   const BAR_GAP_BELOW = 7;
   return (
     <div style={{ padding: `${BAR_GAP_ABOVE}px ${SCALED_PAD_RIGHT} 0 calc(24px * var(--exam-scale, 1))`, height: '100%', boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column' }}>
-      {editing && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: withAlpha(palette.amberGlow, 0.18), border: `1px solid ${withAlpha(palette.amber, 0.35)}`, marginBottom: 14, flexShrink: 0 }}>
-          <PenLine size={14} strokeWidth={1.75} color={palette.amber} />
-          <div style={{ flex: 1, fontSize: 12.5, color: palette.ink }}>{t('generator.editingPrefix')} <b style={{ fontWeight: 600 }}>{editing.title}</b></div>
-        </div>
-      )}
       {/* Colonne unique. La liste intermédiaire « questions envoyées » a disparu :
           une question entre dans l'examen d'un clic sur sa carte dans la banque, à
           gauche (`bq.toggle` de la maquette), et en ressort du même clic ou par la
@@ -1939,7 +1933,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                             <div key={row.key} style={{ height: rh, minHeight: rh ? undefined : A4_SECTION_HEADER_HEIGHT, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: markTops[row.key] ?? SECTION_TITLE_PAD_TOP, boxSizing: 'border-box' as const }}>
                               {config.sections.length > 1 && (
                                 <Tooltip content={t('generator.removeSection')}>
-                                  <button type="button" onClick={() => removeSection(row.sectionIdx)} aria-label={t('generator.removeSection')} style={{ display: 'flex', alignItems: 'center', height: SECTION_TITLE_LINE_H, fontSize: 15, lineHeight: 1, color: palette.danger, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>×</button>
+                                  <button type="button" onClick={() => removeSection(row.sectionIdx)} aria-label={t('generator.removeSection')} style={{ display: 'flex', alignItems: 'center', height: SECTION_TITLE_LINE_H, fontSize: 20, lineHeight: 1, color: palette.danger, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>×</button>
                                 </Tooltip>
                               )}
                             </div>
@@ -1957,7 +1951,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                                la feuille comme les autres. */
                             <div key={row.key} {...gutterDropProps(row)} style={{ height: rh, minHeight: rh ? undefined : A4_PAGE_BREAK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
                               <Tooltip content={t('generator.removePageBreak')}>
-                                <span onClick={() => removePageBreak(row.id)} style={{ fontSize: 15, lineHeight: 1, color: palette.danger, cursor: 'pointer' }}>×</span>
+                                <span onClick={() => removePageBreak(row.id)} style={{ fontSize: 20, lineHeight: 1, color: palette.danger, cursor: 'pointer' }}>×</span>
                               </Tooltip>
                             </div>
                           );
@@ -1982,7 +1976,7 @@ function GeneratorContent({ workshopId, questions, config, onConfigChange, editi
                         return (
                           <div key={row.key} {...gutterDropProps(row)} style={{ height: rh, minHeight: rh ? undefined : A4_ROW_FALLBACK_HEIGHT, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', paddingTop: markTops[row.key] ?? STATEMENT_PAD_TOP, boxSizing: 'border-box' as const }}>
                             <Tooltip content={t('generator.removeFromExam')}>
-                              <span onClick={() => removeFromExam(row.q.id)} style={{ display: 'flex', alignItems: 'center', height: STATEMENT_LINE_H, fontSize: 15, lineHeight: 1, color: palette.danger, cursor: 'pointer' }}>×</span>
+                              <span onClick={() => removeFromExam(row.q.id)} style={{ display: 'flex', alignItems: 'center', height: STATEMENT_LINE_H, fontSize: 20, lineHeight: 1, color: palette.danger, cursor: 'pointer' }}>×</span>
                             </Tooltip>
                           </div>
                         );

@@ -982,9 +982,7 @@ export function LabelEditor({ label, usageCount, onSave, onDelete, onClose }: {
           {/* Les témoins montrent l'aplat réellement obtenu, pas la couleur
               brute : on choisit ce qu'on verra sur la pastille. */}
           {LABEL_COLORS.map(c => (
-            <Tooltip key={c} content={c}>
-              <button type="button" aria-label={c} onClick={() => setColor(c)} style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c), border: color === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }} />
-            </Tooltip>
+            <button key={c} type="button" aria-label={c} onClick={() => setColor(c)} style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c), border: color === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }} />
           ))}
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
@@ -1290,7 +1288,7 @@ export function renderAnswerSpace(q: Question) {
       );
     }
     // Liste : autant de lignes à remplir que de réponses attendues, numérotées
-    // si l'option l'est. Le contenu saisi côté éditeur est la référence de
+    // si l'option l'est, précédées d'une puce sinon. Le contenu saisi côté éditeur est la référence de
     // correction, il ne s'imprime pas sur la copie de l'élève.
     case 'liste': {
       // Même calcul que l'exercice et la correction : une liste numérotée se
@@ -1301,7 +1299,7 @@ export function renderAnswerSpace(q: Question) {
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: A4_ANSWER_LINE_GAP }}>
           {Array.from({ length: expected }, (_, i) => (
             <div key={i} style={{ height: A4_ANSWER_LINE_HEIGHT, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
-              {numbered && <span style={{ fontSize: 12, lineHeight: 1.2, color: palette.inkFaint, flexShrink: 0 }}>{i + 1}.</span>}
+              <span style={{ fontSize: 12, lineHeight: 1.2, color: palette.inkFaint, flexShrink: 0 }}>{numbered ? `${i + 1}.` : '•'}</span>
               <div style={{ flex: 1, borderBottom: `1px solid ${ink(0.18)}` }} />
             </div>
           ))}
@@ -1938,7 +1936,7 @@ export function ShuffleNoticeIcon({ title }: { title: string }) {
         onMouseLeave={() => setHovered(false)}
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, flexShrink: 0, color: hovered ? palette.greenBrand : palette.inkFaint, transition: 'color 0.12s' }}
       >
-        <Info size={13} strokeWidth={1.85} />
+        <Info size={17} strokeWidth={1.85} />
       </span>
     </Tooltip>
   );

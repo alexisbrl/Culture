@@ -431,7 +431,6 @@
     },
     "generator": {
       "cancelEdits": "cancel changes",
-      "editingPrefix": "Editing",
       "headerZone": "HEADER",
       "saveFavorite": "save as favourite",
       "minShort": "min",

@@ -828,7 +828,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 est conservée. */}
             <div className="scroll-panel" style={{ display: leftTab === 'history' ? 'block' : 'none', height: '100%', overflowY: sheetDragging ? 'hidden' : undefined }}>
               <div style={{ zoom: 'var(--exam-list-zoom, 1)' }}>
-                <HistoryContent workshopId={workshopId} exams={exams} loading={loading} justAddedId={justAdded} onEdit={e => requestEditExam(e)} onOpenWithQuestions={e => requestEditExam(e, true)} onNew={requestNewExam} onDelete={e => setPendingDeleteExam(e)} />
+                <HistoryContent workshopId={workshopId} exams={exams} loading={loading} justAddedId={justAdded} editingId={editing?.id ?? null} onEdit={e => requestEditExam(e)} onOpenWithQuestions={e => requestEditExam(e, true)} onNew={requestNewExam} onDelete={e => setPendingDeleteExam(e)} />
               </div>
             </div>
             <div className="scroll-panel" style={{ display: leftTab === 'bank' ? 'block' : 'none', height: '100%', position: 'relative', overflowY: sheetDragging ? 'hidden' : undefined }}>
