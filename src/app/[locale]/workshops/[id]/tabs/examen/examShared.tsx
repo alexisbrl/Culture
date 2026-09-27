@@ -6,7 +6,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { AlignLeft, ArrowDown, ArrowUp, Check, CheckSquare, File, Filter, Info, List, Palette, Paperclip, Pencil, Plus, Route, Search, Table, Trash2, X, type LucideIcon } from 'lucide-react';
-import { palette, ink, withAlpha, categoryTones, shadow } from '@/lib/theme';
+import { palette, ink, withAlpha, labelTones, shadow } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useIsClipped } from '@/components/ui/clipped-text';
@@ -627,10 +627,10 @@ export function isPageBreakId(id: string): boolean {
  *  d'un libellé tout juste créé, et la première de la palette (27/09/2026). */
 export const LABEL_NEUTRAL = palette.surfaceSunken;
 
-/** Palette des libellés : le neutre, puis les autres rangées en dégradé —
- *  taupe, tan, or, rouille, rouge, mauve, bleus, verts — pour qu'on lise une
- *  suite de teintes et non un mélange. */
-export const LABEL_COLORS = [LABEL_NEUTRAL, palette.inkFaint, palette.amber, palette.amberLight, categoryTones.rust, palette.danger, categoryTones.mauve, categoryTones.steelBlue, categoryTones.blueGray, palette.greenSoft, palette.greenBrand];
+/** Palette des libellés et des groupes de membres : le neutre, puis douze
+ *  teintes dans l'ordre du cercle chromatique (`labelTones`). Les libellés
+ *  déjà créés gardent la couleur enregistrée, même hors de cette liste. */
+export const LABEL_COLORS = [LABEL_NEUTRAL, ...Object.values(labelTones)];
 
 // Trois tailles pour un seul et même rendu de pastille : `xs` sur les cartes de
 // la banque (la ligne de métadonnées est serrée), `sm` dans le panneau de
@@ -646,7 +646,9 @@ const LABEL_PILL_SIZES = {
  *  `LABEL_COLORS` n'aurait rien réglé pour les libellés déjà enregistrés, qui
  *  portent leur hex en base. On garde donc la couleur telle quelle comme
  *  identité et on l'atténue à l'affichage, exactement comme `TypeIcon`. */
-export const labelTint = (color: string) => (color === LABEL_NEUTRAL ? LABEL_NEUTRAL : withAlpha(color, 0.22));
+// 0,34 depuis le 27/09/2026 (0,22 avant) : plus atténuées, les teintes se
+// confondaient sur le fond beige.
+export const labelTint = (color: string) => (color === LABEL_NEUTRAL ? LABEL_NEUTRAL : withAlpha(color, 0.34));
 
 /** Pastille de libellé — rendu unique de la banque, des filtres et des deux
  *  éditeurs de question. Le fond est l'aplat atténué du libellé (`labelTint`),

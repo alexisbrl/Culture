@@ -101,6 +101,28 @@ export const categoryTones = {
 } as const;
 
 /**
+ * Teintes des libellés d'examen et des groupes de membres (27/09/2026) : un
+ * tour complet du cercle chromatique, du rouge au rose, dans des tons adoucis.
+ * Elles ne servent qu'à ça — les couleurs de marque ne sont plus prêtées aux
+ * libellés, où elles se ressemblaient trop. Toujours affichées atténuées
+ * (`labelTint`), jamais en aplat plein.
+ */
+export const labelTones = {
+  red: '#D64545',
+  orange: '#E07B39',
+  amber: '#D9A21B',
+  lime: '#9DB82E',
+  green: '#4CAF6A',
+  mint: '#2EB5A0',
+  cyan: '#2BA7D1',
+  blue: '#3F7FD9',
+  indigo: '#5B5FD6',
+  violet: '#8A55D1',
+  magenta: '#C04FB8',
+  pink: '#E0668C',
+} as const;
+
+/**
  * Teinte stable d'un membre, dérivée de son nom. Somme des codes de caractères
  * plutôt que le seul premier caractère : deux membres dont le prénom commence
  * par la même lettre (fréquent) recevaient sinon toujours la même pastille.
