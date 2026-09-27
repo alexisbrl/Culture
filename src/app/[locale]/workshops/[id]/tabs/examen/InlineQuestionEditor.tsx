@@ -38,7 +38,7 @@ import { palette, ink, withAlpha } from '@/lib/theme';
 import type { Question, QuestionPart } from '@/lib/workshops/examTypes';
 import { QuestionFields, emptyPart } from './questionFields';
 import { MediaAttachment, useQuestionMediaDrop } from './questionMedia';
-import { type Pool, LabelPill, LabelEditor, LabelPicker } from './examShared';
+import { type Pool, LabelEditor, LabelQuickMenu } from './examShared';
 import { Tooltip } from '@/components/ui/tooltip';
 
 type Props = {
@@ -162,11 +162,6 @@ export default function InlineQuestionEditor({
     patch({ pools: [...draft.pools, onCreatePool(name)] });
   }
 
-  const selectStyle: React.CSSProperties = {
-    fontSize: 13, fontWeight: 600, color: palette.ink, border: `1px solid ${palette.lineStrong}`,
-    borderRadius: 10, padding: '8px 12px', background: palette.surfaceRaised, outline: 'none',
-    fontFamily: 'inherit', cursor: 'pointer',
-  };
   const footerBtn: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 600,
     padding: '8px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
@@ -277,40 +272,19 @@ export default function InlineQuestionEditor({
           <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.14em', color: palette.inkFaint }}>
             {t('inline.labelsTitle').toUpperCase()}
           </span>
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-            {/* Choisir, modifier et créer un libellé se font tous les trois dans
-                le panneau du menu — voir `LabelPicker`. */}
-            <LabelPicker
-              pools={pools}
-              selected={draft.pools}
-              onToggle={togglePool}
-              onCreate={onCreatePool ? addPool : undefined}
-              onEdit={onUpdatePool ? setEditingPool : undefined}
-              wrapperStyle={{ display: 'inline-flex' }}
-              triggerStyle={{ ...selectStyle, fontWeight: 500, fontSize: 12.5, color: palette.inkMuted, borderRadius: 999, padding: '6px 12px' }}
-            >
-              {t('editor.addLabelOption')}
-            </LabelPicker>
-            {draft.pools.map(pid => {
-              const p = pools.find(pp => pp.id === pid);
-              if (!p) return null;
-              return (
-                <LabelPill
-                  key={pid}
-                  name={p.name}
-                  color={p.color}
-                  size="md"
-                  // Pas de crayon quand l'appelant ne sait pas éditer un libellé
-                  // (parcours) : un bouton qui n'aboutit à rien vaut moins que
-                  // pas de bouton.
-                  onEdit={onUpdatePool ? () => setEditingPool(pid) : undefined}
-                  editTitle={t('bank.editLabelTitle')}
-                  onRemove={() => togglePool(pid)}
-                  removeTitle={t('inline.removeLabel')}
-                />
-              );
-            })}
-          </div>
+          {/* Le même menu que sur la carte de la liste (`LabelQuickMenu`) :
+              un clic sur une pastille ou sur « + libellé » l'ouvre, on y coche
+              et décoche. Le crayon reste sur chaque pastille — pas quand
+              l'appelant ne sait pas éditer un libellé (parcours) : un bouton
+              qui n'aboutit à rien vaut moins que pas de bouton. */}
+          <LabelQuickMenu
+            pools={pools}
+            selected={draft.pools}
+            onToggle={togglePool}
+            onCreate={onCreatePool ? addPool : undefined}
+            onEditLabel={onUpdatePool ? setEditingPool : undefined}
+            size="md"
+          />
           {editingPool && onUpdatePool && onDeletePool && (() => {
             const p = pools.find(pp => pp.id === editingPool);
             if (!p) return null;

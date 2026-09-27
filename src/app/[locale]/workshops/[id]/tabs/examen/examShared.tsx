@@ -202,7 +202,7 @@ const MENU_AUTO_MAX = 240;
  *  propre. */
 export const SHEET_PANEL_Z = 3;
 
-export function SelectMenu({ items, value, values, keepOpen = false, onSelect, onEditItem, editTitle, title, triggerLabel, triggerStyle, wrapperStyle, panelWidth = 'trigger', align = 'left', onScroll = 'close', variant = 'list', footer, children }: {
+export function SelectMenu({ items, value, values, keepOpen = false, triggerAs = 'button', onSelect, onEditItem, editTitle, title, triggerLabel, triggerStyle, wrapperStyle, panelWidth = 'trigger', align = 'left', onScroll = 'close', variant = 'list', footer, children }: {
   /** `tone: 'danger'` — entrée destructrice (exclure, supprimer), rendue en
    *  rouge. Elle reste une entrée comme les autres : c'est la couleur qui
    *  prévient, pas une mécanique à part.
@@ -220,6 +220,10 @@ export function SelectMenu({ items, value, values, keepOpen = false, onSelect, o
    *  décoche plusieurs libellés d'affilée). */
   values?: readonly string[];
   keepOpen?: boolean;
+  /** `div` : déclencheur qui porte lui-même des boutons (le crayon d'une
+   *  pastille) — un `<button>` ne peut pas en contenir un autre. Il reçoit
+   *  alors le rôle, le focus et le clavier d'un bouton. */
+  triggerAs?: 'button' | 'div';
   onSelect: (value: string) => void;
   /** `variant: 'pills'` seulement — crayon sur chaque pastille, qui modifie
    *  l'entrée au lieu de la choisir. Le menu se ferme avant de rappeler :
@@ -248,7 +252,7 @@ export function SelectMenu({ items, value, values, keepOpen = false, onSelect, o
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
+  const btnRef = useRef<HTMLElement>(null);
   const panelEl = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number; width: number | undefined; maxHeight: number } | null>(null);
   useDismissOnOutsideClick(open, wrapRef, () => setOpen(false));
@@ -320,9 +324,25 @@ export function SelectMenu({ items, value, values, keepOpen = false, onSelect, o
         {/* Sans `triggerLabel`, pas d'`aria-label` : le déclencheur porte déjà
             son texte visible (`children`), qui est son nom accessible — en
             ajouter un l'écraserait. */}
-        <button ref={btnRef} type="button" aria-label={triggerLabel} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(v => !v)} style={triggerStyle}>
-          {children}
-        </button>
+        {triggerAs === 'div' ? (
+          <div
+            ref={btnRef as React.RefObject<HTMLDivElement>}
+            role="button"
+            tabIndex={0}
+            aria-label={triggerLabel}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            onClick={() => setOpen(v => !v)}
+            onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setOpen(v => !v); } }}
+            style={triggerStyle}
+          >
+            {children}
+          </div>
+        ) : (
+          <button ref={btnRef as React.RefObject<HTMLButtonElement>} type="button" aria-label={triggerLabel} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(v => !v)} style={triggerStyle}>
+            {children}
+          </button>
+        )}
       </Tooltip>
       {open && (floating ? pos !== null : true) && (
         <div
@@ -818,23 +838,30 @@ export function LabelPicker({ pools, selected, onToggle, onCreate, onEdit, panel
   );
 }
 
-/** Menu rapide des libellés d'une carte de question : tous les libellés de
- *  l'atelier, dans leur ordre de création, ceux de la question marqués. Un clic pose
- *  ou retire, et le menu reste ouvert pour enchaîner. Le déclencheur est
- *  fourni par l'appelant — les pastilles de la question, ou un « + libellé »
- *  quand elle n'en a aucune.
+/** Menu des libellés d'une question, le même sur la carte de la liste et dans
+ *  le formulaire : tous les libellés de l'atelier, ceux de la question marqués.
+ *  Un clic pose ou retire, et le menu reste ouvert pour enchaîner. Le
+ *  déclencheur, ce sont les pastilles de la question — un clic sur n'importe
+ *  laquelle ouvre le menu — ou un « + libellé » quand elle n'en a aucune. Pas
+ *  de croix de retrait : on décoche dans le menu.
  *
  *  La carte qui le porte est elle-même cliquable (clic : entrer dans l'examen,
  *  double-clic : modifier) : le conteneur arrête donc les deux, y compris pour
  *  les clics dans le panneau, qui est son descendant dans le DOM. */
-export function LabelQuickMenu({ pools, selected, onToggle, onCreate, triggerLabel, children }: {
+export function LabelQuickMenu({ pools, selected, onToggle, onCreate, onEditLabel, size }: {
+  /** Déjà triés par nom (voir `sortPoolsByName`). */
   pools: readonly Pool[];
   selected: readonly string[];
   onToggle: (id: string) => void;
   onCreate?: (name: string) => void;
-  triggerLabel: string;
-  children: ReactNode;
+  /** Crayon sur les pastilles posées — dans le formulaire seulement. */
+  onEditLabel?: (id: string) => void;
+  /** `xs` sur la carte (une ligne, rognée), `md` dans le formulaire (à la ligne). */
+  size: 'xs' | 'md';
 }) {
+  const t = useTranslations('examen');
+  const chosen = pools.filter(p => selected.includes(p.id));
+  const xs = size === 'xs';
   return (
     <span onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} style={{ display: 'flex', minWidth: 0 }}>
       <SelectMenu
@@ -844,15 +871,35 @@ export function LabelQuickMenu({ pools, selected, onToggle, onCreate, triggerLab
         onSelect={onToggle}
         variant="pills"
         panelWidth={260}
-        title={triggerLabel}
-        triggerLabel={triggerLabel}
-        triggerStyle={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflowX: 'clip', overflowY: 'visible', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit' }}
+        title={t('bank.quickLabels')}
+        triggerLabel={t('bank.quickLabels')}
+        triggerAs="div"
+        triggerStyle={{ display: 'flex', alignItems: 'center', gap: xs ? 6 : 8, minWidth: 0, cursor: 'pointer', outline: 'none', ...(xs ? { overflowX: 'clip', overflowY: 'visible' } : { flexWrap: 'wrap' }) }}
         footer={onCreate ? close => <LabelCreateRow onCreate={name => { onCreate(name); close(); }} /> : undefined}
       >
-        {children}
+        {chosen.length > 0 ? chosen.map(p => (
+          <LabelPill
+            key={p.id}
+            name={p.name}
+            color={p.color}
+            size={size}
+            onEdit={onEditLabel ? () => onEditLabel(p.id) : undefined}
+            editTitle={t('bank.editLabelTitle')}
+          />
+        )) : (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: xs ? 3 : 5, fontSize: xs ? 11 : 12, color: palette.inkFaint, border: `1px dashed ${palette.lineStrong}`, borderRadius: 999, padding: xs ? '1px 8px 1px 6px' : '5px 12px 5px 9px' }}>
+            <Plus size={xs ? 11 : 13} strokeWidth={2} />
+            {t('bank.addLabelShort')}
+          </span>
+        )}
       </SelectMenu>
     </span>
   );
+}
+
+/** Libellés rangés par ordre alphabétique — l'ordre de tous les affichages. */
+export function sortPoolsByName<P extends { name: string }>(pools: readonly P[]): P[] {
+  return [...pools].sort((x, y) => x.name.localeCompare(y.name, 'fr', { sensitivity: 'base' }));
 }
 
 /** Rangée de création du bas du `LabelPicker`. Repliée, c'est une entrée de menu

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, type ReactNode } from 'react';
+import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, ArrowLeft, ArrowRight, FileText, Search, X } from 'lucide-react';
@@ -15,7 +15,7 @@ import {
 import {
   type Exam, type Pool, type ExamConfig, type SheetFocus,
   defaultExamConfig, normalizeExamConfig, configQuestionIds, formatDuration, clearWeightingFor,
-  toggleQuestionInSections, isPageBreakId, pruneUnknownQuestions, LIST_INSET_X, partWeightKey,
+  toggleQuestionInSections, isPageBreakId, pruneUnknownQuestions, LIST_INSET_X, partWeightKey, sortPoolsByName,
 } from './examen/examShared';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useGenerationRefresh } from '@/components/ai/generationStore';
@@ -91,6 +91,8 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
    *  éteints : le geste refusé est ainsi visible, au lieu d'être perdu. */
   const [loading, setLoading] = useState(true);
   const [pools, setPools] = useState<Pool[]>([]);
+  // Partout, les libellés s'affichent par ordre alphabétique.
+  const sortedPools = useMemo(() => sortPoolsByName(pools), [pools]);
   // `chapterId` sur la notion + la liste des chapitres : de quoi filtrer la
   // banque par chapitre, qu'une question ne porte pas elle-même (elle en hérite
   // par ses notions associées).
@@ -565,7 +567,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         number={frame === 'sheet' ? number : undefined}
         isNew={newQuestionId === editingQuestion.id}
         frame={frame}
-        pools={pools}
+        pools={sortedPools}
         notions={notions}
         onDraftChange={draft => {
           setEditingDraft(draft);
@@ -849,7 +851,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 workshopId={workshopId}
                 questions={bankQuestions}
                 loading={loading}
-                pools={pools}
+                pools={sortedPools}
                 exams={exams}
                 notions={notions}
                 chapters={chapters}

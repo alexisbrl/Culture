@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, type Dispatch, type SetStateAction, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Link2, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { Link2, Pencil, Sparkles, Trash2 } from 'lucide-react';
 import { palette, withAlpha, ink } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AiGenerationDialog, { useWorkshopFiles } from '@/components/ai/AiGenerationDialog';
@@ -646,11 +646,9 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
    *  règlent, et deux endroits pour la même modification en cours finiraient
    *  par se contredire. */
   function renderCardLabels(q: Question, isEditing: boolean) {
-    const pills = q.pools.map(pid => {
-      const p = pools.find(pp => pp.id === pid);
-      if (!p) return null;
-      return <LabelPill key={pid} name={p.name} color={p.color} size="xs" />;
-    });
+    const pills = pools.filter(p => q.pools.includes(p.id)).map(p => (
+      <LabelPill key={p.id} name={p.name} color={p.color} size="xs" />
+    ));
     const onToggle = labels?.onToggleQuestion;
     if (!labels || !onToggle || isEditing) return pills;
     const toggle = (poolId: string) => onToggle(q.id, poolId);
@@ -660,15 +658,8 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
         selected={q.pools}
         onToggle={toggle}
         onCreate={name => toggle(labels.onCreate(name))}
-        triggerLabel={tr('bank.quickLabels')}
-      >
-        {q.pools.length > 0 ? pills : (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, color: palette.inkFaint, border: `1px dashed ${palette.lineStrong}`, borderRadius: 999, padding: '1px 8px 1px 6px' }}>
-            <Plus size={11} strokeWidth={2} />
-            {tr('bank.addLabelShort')}
-          </span>
-        )}
-      </LabelQuickMenu>
+        size="xs"
+      />
     );
   }
 
