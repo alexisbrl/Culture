@@ -646,11 +646,7 @@ const LABEL_PILL_SIZES = {
  *  `LABEL_COLORS` n'aurait rien réglé pour les libellés déjà enregistrés, qui
  *  portent leur hex en base. On garde donc la couleur telle quelle comme
  *  identité et on l'atténue à l'affichage, exactement comme `TypeIcon`. */
-// Deux intensités (27/09/2026) : les libellés restent discrets (0,22), les
-// groupes de membres — les classes — sont plus soutenus (0,34), choix d'Alexis.
-export type LabelIntensity = 'soft' | 'strong';
-export const labelTint = (color: string, intensity: LabelIntensity = 'soft') =>
-  (color === LABEL_NEUTRAL ? LABEL_NEUTRAL : withAlpha(color, intensity === 'strong' ? 0.34 : 0.22));
+export const labelTint = (color: string) => (color === LABEL_NEUTRAL ? LABEL_NEUTRAL : withAlpha(color, 0.22));
 
 /** Pastille de libellé — rendu unique de la banque, des filtres et des deux
  *  éditeurs de question. Le fond est l'aplat atténué du libellé (`labelTint`),
@@ -699,12 +695,10 @@ export const labelTint = (color: string, intensity: LabelIntensity = 'soft') =>
  *  filtres, 290px, se mettait à défiler horizontalement, précédent du
  *  17/08/2026). Une fois la garde en largeur posée, il ne faisait plus que
  *  couper des noms qui avaient la place de tenir. */
-export function LabelPill({ name, color, intensity = 'soft', size = 'sm', active = false, excluded = false, icon, title, onClick, onEdit, onRemove, editTitle, removeTitle }: {
+export function LabelPill({ name, color, size = 'sm', active = false, excluded = false, icon, title, onClick, onEdit, onRemove, editTitle, removeTitle }: {
   name: string;
   /** Absent = pastille neutre (voir plus haut). */
   color?: string;
-  /** `strong` pour les groupes de membres, voir `labelTint`. */
-  intensity?: LabelIntensity;
   size?: keyof typeof LABEL_PILL_SIZES;
   /** Sélectionné : liseré d'encre. */
   active?: boolean;
@@ -775,7 +769,7 @@ export function LabelPill({ name, color, intensity = 'soft', size = 'sm', active
         border: `1px solid ${excluded ? palette.danger : active ? palette.ink : color && color !== LABEL_NEUTRAL ? 'transparent' : palette.line}`,
         boxShadow: excluded ? `0 0 0 2px ${withAlpha(palette.danger, 0.25)}`
           : active ? `0 0 0 2px ${ink(0.25)}` : 'none',
-        background: color ? labelTint(color, intensity) : palette.surfaceSunken,
+        background: color ? labelTint(color) : palette.surfaceSunken,
         // L'encre pleine est réservée à la sélection : au repos, une pastille
         // neutre reste en retrait, là où la colorée est déjà portée par son fond.
         color: excluded ? palette.danger : active || color ? palette.ink : palette.inkMuted,
@@ -1098,28 +1092,33 @@ export function useDismissOnOutsideClick(
   }, [active, ref]);
 }
 
-export function LabelEditor({ label, impact, onSave, onDelete, onDeleteWithQuestions, onClose }: {
-  label: Pool;
-  impact: LabelImpact;
-  onSave: (next: Pool) => void;
-  onDelete: () => void;
-  /** Absent : la fenêtre ne propose que la suppression du libellé seul. */
-  onDeleteWithQuestions?: () => void;
+/** Panneau de modification d'un nom et d'une couleur — le même pour les
+ *  libellés d'examen et les groupes de membres (27/09/2026). Un champ, la
+ *  palette, une corbeille ; pas de bouton « enregistrer » ni « annuler » :
+ *  une couleur s'enregistre au clic, le nom une demi-seconde après la
+ *  dernière frappe, et de toute façon à la fermeture — Entrée, Échap ou clic
+ *  dehors. Un nom vidé n'est pas enregistré.
+ *
+ *  N'importe quel clic hors du panneau le ferme : un panneau resté ouvert
+ *  pendant qu'on travaille ailleurs finit par viser un objet qu'on ne regarde
+ *  plus. La confirmation de suppression est une modale, que
+ *  `useDismissOnOutsideClick` ignore d'office.
+ *
+ *  Le positionnement revient à l'appelant (`style`). */
+export function NameColorPanel({ name: initialName, color: initialColor, onSave, onRequestDelete, deleteTitle, onClose, style }: {
+  name: string;
+  color: string;
+  onSave: (next: { name: string; color: string }) => void;
+  onRequestDelete: () => void;
+  deleteTitle: string;
   onClose: () => void;
+  style?: CSSProperties;
 }) {
-  const t = useTranslations('examen');
-  const [name, setName] = useState(label.name);
-  const [color, setColor] = useState(label.color);
-  const [confirming, setConfirming] = useState(false);
-  const [withQuestions, setWithQuestions] = useState(false);
-  const canPurge = !!onDeleteWithQuestions && impact.questions > 0;
+  const [name, setName] = useState(initialName);
+  const [color, setColor] = useState(initialColor);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // Enregistrement automatique (27/09/2026) : plus de bouton « enregistrer »
-  // ni « annuler ». Une couleur s'enregistre au clic ; le nom, une demi-seconde
-  // après la dernière frappe, et de toute façon à la fermeture — Entrée,
-  // Échap ou clic dehors ferment le panneau. Un nom vidé n'est pas enregistré.
-  const pending = useRef<Pool | null>(null);
+  const pending = useRef<{ name: string; color: string } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onSaveRef = useRef(onSave);
   useEffect(() => { onSaveRef.current = onSave; });
@@ -1134,27 +1133,61 @@ export function LabelEditor({ label, impact, onSave, onDelete, onDeleteWithQuest
   function changeName(value: string) {
     setName(value);
     if (!value.trim()) return;
-    pending.current = { ...label, name: value.trim(), color };
+    pending.current = { name: value.trim(), color };
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(flush, 500);
   }
   function changeColor(c: string) {
     setColor(c);
-    pending.current = { ...label, name: name.trim() || label.name, color: c };
+    pending.current = { name: name.trim() || initialName, color: c };
     flush();
   }
   function close() {
     flush();
     onClose();
   }
+  // Ce qui est en attente part AVANT la question de la suppression : rien ne
+  // doit plus viser l'objet une fois qu'il a disparu.
+  function requestDelete() {
+    flush();
+    onRequestDelete();
+  }
 
-  // N'importe quel clic hors du panneau le ferme, ce qui a été modifié étant
-  // déjà enregistré : un panneau qui reste ouvert pendant qu'on travaille
-  // ailleurs finit par viser un libellé qu'on ne regarde plus. Le voile ne couvre que
-  // l'ancêtre positionné, d'où l'écoute au niveau du document. La confirmation
-  // de suppression, elle, est une modale : `useDismissOnOutsideClick` l'ignore
-  // d'office, il n'y a pas de cas particulier à tenir ici.
   useDismissOnOutsideClick(true, cardRef, close);
+
+  return (
+    <div ref={cardRef} style={{ width: 190, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg, padding: 10, ...style }}>
+      <input autoFocus value={name} onChange={e => changeName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') close(); }} style={{ width: '100%', fontSize: 11.5, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box' as const, background: palette.surfaceInput, color: palette.ink }} />
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* Les témoins montrent l'aplat réellement obtenu, pas la couleur
+            brute : on choisit ce qu'on verra sur la pastille. */}
+        {LABEL_COLORS.map(c => (
+          <button key={c} type="button" aria-label={c} onClick={() => changeColor(c)} style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c), border: color === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }} />
+        ))}
+        {/* Suppression réduite à une corbeille, au bout de la dernière rangée. */}
+        <Tooltip content={deleteTitle}>
+          <button type="button" aria-label={deleteTitle} onClick={requestDelete} style={{ marginLeft: 'auto', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, borderRadius: 6, border: 'none', background: 'none', color: palette.danger, cursor: 'pointer' }}>
+            <Trash2 size={14} strokeWidth={1.75} />
+          </button>
+        </Tooltip>
+      </div>
+    </div>
+  );
+}
+
+export function LabelEditor({ label, impact, onSave, onDelete, onDeleteWithQuestions, onClose }: {
+  label: Pool;
+  impact: LabelImpact;
+  onSave: (next: Pool) => void;
+  onDelete: () => void;
+  /** Absent : la fenêtre ne propose que la suppression du libellé seul. */
+  onDeleteWithQuestions?: () => void;
+  onClose: () => void;
+}) {
+  const t = useTranslations('examen');
+  const [confirming, setConfirming] = useState(false);
+  const [withQuestions, setWithQuestions] = useState(false);
+  const canPurge = !!onDeleteWithQuestions && impact.questions > 0;
 
   return (
     <>
@@ -1164,23 +1197,15 @@ export function LabelEditor({ label, impact, onSave, onDelete, onDeleteWithQuest
           le panneau de filtres de la banque, qui a son propre plan (`fixed`,
           z-60), l'ordre relatif est inchangé — ses frères n'ont pas de z-index. */}
       <div style={{ position: 'absolute', inset: 0, zIndex: SHEET_PANEL_Z - 1, background: withAlpha(palette.cream, 0.7), borderRadius: 12 }} />
-      <div ref={cardRef} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: SHEET_PANEL_Z, width: 190, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg, padding: 10 }}>
-        <input autoFocus value={name} onChange={e => changeName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') close(); }} style={{ width: '100%', fontSize: 11.5, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box' as const, background: palette.surfaceInput, color: palette.ink }} />
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Les témoins montrent l'aplat réellement obtenu, pas la couleur
-              brute : on choisit ce qu'on verra sur la pastille. */}
-          {LABEL_COLORS.map(c => (
-            <button key={c} type="button" aria-label={c} onClick={() => changeColor(c)} style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c), border: color === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }} />
-          ))}
-          {/* Suppression réduite à une corbeille, poussée au bout de la
-              dernière rangée de couleurs. */}
-          <Tooltip content={t('bank.deleteLabel')}>
-            <button type="button" aria-label={t('bank.deleteLabel')} onClick={() => setConfirming(true)} style={{ marginLeft: 'auto', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, borderRadius: 6, border: 'none', background: 'none', color: palette.danger, cursor: 'pointer' }}>
-              <Trash2 size={14} strokeWidth={1.75} />
-            </button>
-          </Tooltip>
-        </div>
-      </div>
+      <NameColorPanel
+        name={label.name}
+        color={label.color}
+        onSave={next => onSave({ ...label, ...next })}
+        onRequestDelete={() => setConfirming(true)}
+        deleteTitle={t('bank.deleteLabel')}
+        onClose={onClose}
+        style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: SHEET_PANEL_Z }}
+      />
       {confirming && (
         <ConfirmDialog
           portal
@@ -1191,7 +1216,6 @@ export function LabelEditor({ label, impact, onSave, onDelete, onDeleteWithQuest
           onCancel={() => setConfirming(false)}
           onConfirm={() => {
             setConfirming(false);
-            pending.current = null;
             if (canPurge && withQuestions) onDeleteWithQuestions!(); else onDelete();
             onClose();
           }}
