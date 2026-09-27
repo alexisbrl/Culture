@@ -877,7 +877,16 @@ export function LabelQuickMenu({ pools, selected, onToggle, onCreate, onEditLabe
         triggerStyle={{ display: 'flex', alignItems: 'center', gap: xs ? 6 : 8, minWidth: 0, cursor: 'pointer', outline: 'none', ...(xs ? { overflowX: 'clip', overflowY: 'visible' } : { flexWrap: 'wrap' }) }}
         footer={onCreate ? close => <LabelCreateRow onCreate={name => { onCreate(name); close(); }} /> : undefined}
       >
-        {chosen.length > 0 ? chosen.map(p => (
+        {/* « + libellé » : seul quand la question n'en a aucun ; dans le
+            formulaire, il reste en plus en tête de la rangée — la carte, elle,
+            n'a pas la place de le garder. */}
+        {(chosen.length === 0 || !xs) && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: xs ? 3 : 5, fontSize: xs ? 11 : 12, color: palette.inkFaint, border: `1px dashed ${palette.lineStrong}`, borderRadius: 999, padding: xs ? '1px 8px 1px 6px' : '5px 12px 5px 9px' }}>
+            <Plus size={xs ? 11 : 13} strokeWidth={2} />
+            {t('bank.addLabelShort')}
+          </span>
+        )}
+        {chosen.map(p => (
           <LabelPill
             key={p.id}
             name={p.name}
@@ -886,12 +895,7 @@ export function LabelQuickMenu({ pools, selected, onToggle, onCreate, onEditLabe
             onEdit={onEditLabel ? () => onEditLabel(p.id) : undefined}
             editTitle={t('bank.editLabelTitle')}
           />
-        )) : (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: xs ? 3 : 5, fontSize: xs ? 11 : 12, color: palette.inkFaint, border: `1px dashed ${palette.lineStrong}`, borderRadius: 999, padding: xs ? '1px 8px 1px 6px' : '5px 12px 5px 9px' }}>
-            <Plus size={xs ? 11 : 13} strokeWidth={2} />
-            {t('bank.addLabelShort')}
-          </span>
-        )}
+        ))}
       </SelectMenu>
     </span>
   );
