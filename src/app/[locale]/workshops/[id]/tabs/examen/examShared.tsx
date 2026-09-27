@@ -264,13 +264,22 @@ export function SelectMenu({ items, value, values, keepOpen = false, onSelect, o
     const width = panelWidth === 'trigger' ? Math.max(r.width, 140)
       : panelWidth === 'auto' ? (panelEl.current?.offsetWidth ?? MENU_AUTO_MIN)
       : panelWidth;
-    const top = r.bottom + 6;
+    // Ouvert vers le bas, sauf si le panneau n'y tient pas et qu'il y a plus de
+    // place au-dessus du bouton (carte en bas de l'écran) : il s'ouvre alors
+    // vers le haut. La hauteur du panneau n'est connue qu'une fois peint — même
+    // convergence en une passe que pour la largeur automatique.
+    const panelH = panelEl.current?.scrollHeight ?? 0;
+    const below = window.innerHeight - r.bottom - 6 - 16;
+    const above = r.top - 6 - 16;
+    const upward = panelH > below && above > below;
+    const maxHeight = Math.max(96, upward ? above : below);
+    const top = upward ? r.top - 6 - Math.min(panelH, maxHeight) : r.bottom + 6;
     const wanted = align === 'right' ? r.right - width : r.left;
     const next = {
       left: Math.max(FILTER_PANEL_MARGIN, Math.min(wanted, window.innerWidth - width - FILTER_PANEL_MARGIN)),
       top,
       width: panelWidth === 'auto' ? undefined : width,
-      maxHeight: Math.max(96, window.innerHeight - top - 16),
+      maxHeight,
     };
     // Même précaution que `FilterButton` : l'effet tourne à chaque rendu, une
     // écriture systématique boucherait.
@@ -809,60 +818,8 @@ export function LabelPicker({ pools, selected, onToggle, onCreate, onEdit, panel
   );
 }
 
-// ─── Libellés récemment utilisés ────────────────────────────────────────────
-// L'ordre « dernier utilisé en premier » des menus de libellés (comme l'ajout à
-// une playlist sur Deezer). Retenu sur l'appareil, par atelier — choix d'Alexis
-// du 26/09/2026 : rien en base. Un événement de fenêtre synchronise les menus
-// déjà montés (carte de la liste, formulaire de la question).
-const LABEL_RECENCY_EVENT = 'culture:label-recency';
-const LABEL_RECENCY_MAX = 50;
-const labelRecencyKey = (workshopId: string) => `culture.labelRecency.${workshopId}`;
-
-function readLabelRecency(workshopId: string): string[] {
-  try {
-    const parsed: unknown = JSON.parse(window.localStorage.getItem(labelRecencyKey(workshopId)) ?? '[]');
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Marque un libellé comme tout juste posé sur une question. */
-export function touchLabelRecency(workshopId: string | undefined, id: string) {
-  if (!workshopId) return;
-  try {
-    const next = [id, ...readLabelRecency(workshopId).filter(v => v !== id)].slice(0, LABEL_RECENCY_MAX);
-    window.localStorage.setItem(labelRecencyKey(workshopId), JSON.stringify(next));
-  } catch {
-    // Stockage indisponible : l'ordre reste celui de création, rien à signaler.
-  }
-  window.dispatchEvent(new Event(LABEL_RECENCY_EVENT));
-}
-
-/** Lu après le montage : le serveur ne connaît pas le stockage de l'appareil. */
-export function useLabelRecency(workshopId: string | undefined): string[] {
-  const [order, setOrder] = useState<string[]>([]);
-  useEffect(() => {
-    if (!workshopId) return;
-    const sync = () => setOrder(readLabelRecency(workshopId));
-    sync();
-    window.addEventListener(LABEL_RECENCY_EVENT, sync);
-    return () => window.removeEventListener(LABEL_RECENCY_EVENT, sync);
-  }, [workshopId]);
-  return order;
-}
-
-/** Les libellés récents d'abord, les autres ensuite dans leur ordre d'origine. */
-export function sortPoolsByRecency<P extends { id: string }>(pools: readonly P[], order: readonly string[]): P[] {
-  const rank = new Map(order.map((id, i) => [id, i]));
-  return pools
-    .map((p, i) => ({ p, key: rank.get(p.id) ?? order.length + i }))
-    .sort((a, b) => a.key - b.key)
-    .map(({ p }) => p);
-}
-
 /** Menu rapide des libellés d'une carte de question : tous les libellés de
- *  l'atelier, les récents d'abord, ceux de la question marqués. Un clic pose
+ *  l'atelier, dans leur ordre de création, ceux de la question marqués. Un clic pose
  *  ou retire, et le menu reste ouvert pour enchaîner. Le déclencheur est
  *  fourni par l'appelant — les pastilles de la question, ou un « + libellé »
  *  quand elle n'en a aucune.
@@ -870,10 +827,9 @@ export function sortPoolsByRecency<P extends { id: string }>(pools: readonly P[]
  *  La carte qui le porte est elle-même cliquable (clic : entrer dans l'examen,
  *  double-clic : modifier) : le conteneur arrête donc les deux, y compris pour
  *  les clics dans le panneau, qui est son descendant dans le DOM. */
-export function LabelQuickMenu({ pools, selected, recency, onToggle, onCreate, triggerLabel, children }: {
+export function LabelQuickMenu({ pools, selected, onToggle, onCreate, triggerLabel, children }: {
   pools: readonly Pool[];
   selected: readonly string[];
-  recency: readonly string[];
   onToggle: (id: string) => void;
   onCreate?: (name: string) => void;
   triggerLabel: string;
@@ -882,7 +838,7 @@ export function LabelQuickMenu({ pools, selected, recency, onToggle, onCreate, t
   return (
     <span onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} style={{ display: 'flex', minWidth: 0 }}>
       <SelectMenu
-        items={sortPoolsByRecency(pools, recency).map(p => ({ value: p.id, label: p.name, color: p.color }))}
+        items={pools.map(p => ({ value: p.id, label: p.name, color: p.color }))}
         values={selected}
         keepOpen
         onSelect={onToggle}
@@ -890,7 +846,7 @@ export function LabelQuickMenu({ pools, selected, recency, onToggle, onCreate, t
         panelWidth={260}
         title={triggerLabel}
         triggerLabel={triggerLabel}
-        triggerStyle={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit' }}
+        triggerStyle={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflowX: 'clip', overflowY: 'visible', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit' }}
         footer={onCreate ? close => <LabelCreateRow onCreate={name => { onCreate(name); close(); }} /> : undefined}
       >
         {children}
@@ -1861,8 +1817,10 @@ export function ListCard({ onClick, onDoubleClick, tint, borderColor, leading, i
           <div style={{ position: 'absolute' as const, zIndex: 1, top: 0, left: 0, height: CARD_LINE, display: 'flex', alignItems: 'center', gap: 4 }}>{leading}</div>
         )}
         <ClampedTitle text={title} indent={indent} actionsTop={meta === undefined ? 0 : CARD_ACTIONS_SHAPE_TOP} />
+        {/* Rognée en largeur seulement : une pastille est un peu plus haute que
+            la ligne, et un `overflow: hidden` lui coupait le haut et le bas. */}
         {meta !== undefined && (
-          <div style={{ height: CARD_LINE, paddingRight: CARD_ACTIONS_W, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>{meta}</div>
+          <div style={{ height: CARD_LINE, paddingRight: CARD_ACTIONS_W, display: 'flex', alignItems: 'center', gap: 6, overflowX: 'clip', overflowY: 'visible' }}>{meta}</div>
         )}
         {actions && (
           <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute' as const, right: 0, bottom: 0, height: 2 * CARD_LINE, display: 'flex', alignItems: 'center', gap: CARD_ACTION_GAP }}>{actions}</div>

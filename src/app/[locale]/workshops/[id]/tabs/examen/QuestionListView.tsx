@@ -17,7 +17,7 @@ import {
   DEFAULT_SORT_DIR, NEVER_EXAM_ID, CARD_LINE, CARD_ACTION_BTN, LIST_INSET_X,
   RESPONSE_TYPE_ICONS,
   TypeIcon, IconBtn, ListToolbar, FilterButton, ListCard, ListCardSkeleton, LabelPill, LabelEditor, LabelQuickMenu, SegmentedToggle,
-  useDismissOnOutsideClick, useRememberedCount, useLabelRecency, touchLabelRecency,
+  useDismissOnOutsideClick, useRememberedCount,
 } from './examShared';
 import { Tooltip } from '@/components/ui/tooltip';
 
@@ -271,7 +271,6 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   const pools = labels?.pools ?? [];
   const exams = examsProp?.list ?? [];
   const draftIds = examsProp?.draftIds ?? [];
-  const labelRecency = useLabelRecency(workshopId);
   const [filterPools, setFilterPools] = useState<string[]>([]);
   const [filterTypes, setFilterTypes] = useState<ResponseType[]>([]);
   const [filterChapters, setFilterChapters] = useState<string[]>([]);
@@ -654,15 +653,11 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
     });
     const onToggle = labels?.onToggleQuestion;
     if (!labels || !onToggle || isEditing) return pills;
-    const toggle = (poolId: string) => {
-      if (!q.pools.includes(poolId)) touchLabelRecency(workshopId, poolId);
-      onToggle(q.id, poolId);
-    };
+    const toggle = (poolId: string) => onToggle(q.id, poolId);
     return (
       <LabelQuickMenu
         pools={pools}
         selected={q.pools}
-        recency={labelRecency}
         onToggle={toggle}
         onCreate={name => toggle(labels.onCreate(name))}
         triggerLabel={tr('bank.quickLabels')}

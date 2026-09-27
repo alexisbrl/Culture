@@ -387,7 +387,7 @@ Chaque question est associée à une réponse. Une même question peut apparteni
 
 | Option | Détail |
 |---|---|
-| Libellés (pools) | Créer des groupes de questions [base : off]. Dans la liste des questions, un clic sur les libellés d'une carte — ou sur « + libellé » si elle n'en a pas — ouvre un menu qui pose ou retire des libellés sans ouvrir la question ; les libellés y sont rangés du dernier utilisé au plus ancien, ordre retenu sur l'appareil. |
+| Libellés (pools) | Créer des groupes de questions [base : off]. Dans la liste des questions, un clic sur les libellés d'une carte — ou sur « + libellé » si elle n'en a pas — ouvre un menu qui pose ou retire des libellés sans ouvrir la question. |
 | Difficulté | Annoter la difficulté de la question, réglable par partie [base : off] |
 | Édition d'images | Les images/graphiques joints peuvent être édités via un outil basique |
 | Discussion IA | Discuter avec l'IA pour générer ou retravailler des questions spécifiques |
