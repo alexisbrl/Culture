@@ -595,7 +595,7 @@ export const LABEL_COLORS = [categoryTones.blueGray, categoryTones.mauve, palett
 // la banque (la ligne de métadonnées est serrée), `sm` dans le panneau de
 // filtres, `md` dans les éditeurs de question.
 const LABEL_PILL_SIZES = {
-  xs: { fontSize: 10.5, padding: '3px 9px', gap: 5, affordance: 13, icon: 8 },
+  xs: { fontSize: 10.5, padding: '1px 9px', gap: 5, affordance: 13, icon: 8 },
   sm: { fontSize: 11, padding: '4px 8px', gap: 5, affordance: 15, icon: 9 },
   md: { fontSize: 12, padding: '5px 9px', gap: 6, affordance: 17, icon: 10 },
 } as const;
