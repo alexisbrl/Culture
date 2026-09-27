@@ -10,6 +10,7 @@
 // (appels en fire-and-forget avec `.catch(console.error)`).
 
 import { getSupabaseServerClient } from '@/lib/supabase';
+import * as labelDeletion from './labelDeletion';
 import { createSignedDownloadUrl } from '@/lib/storage';
 import type {
   Question,
@@ -1032,6 +1033,11 @@ export async function deletePool(workshopId: string, poolId: string, affectedQue
 
   const { error } = await supabase.from('exam_pools').delete().eq('workshop_id', workshopId).eq('id', poolId);
   if (error) throw new Error(error.message);
+}
+
+/** Le libellé et les questions qui le portent — voir `labelDeletion.ts`. */
+export async function deletePoolWithQuestions(workshopId: string, poolId: string, questionIds: string[]): Promise<void> {
+  await labelDeletion.deletePoolWithQuestions(getSupabaseServerClient(), workshopId, poolId, questionIds);
 }
 
 export async function deleteQuestion(workshopId: string, questionId: string, affectedQuestions: Question[]): Promise<void> {

@@ -428,7 +428,10 @@
       "deleteQuestionTitle": "Supprimer cette question ?",
       "deleteQuestionInExams": "Elle sera retirée des examens suivants :",
       "deleteLabelTitle": "Supprimer le libellé « {name} » ?",
-      "deleteLabelCount": "Il sera retiré de {count} question(s). "
+      "deleteLabelCount": "Il sera retiré de {count} question(s). ",
+      "deleteLabelOnly": "Supprimer uniquement le libellé",
+      "deleteLabelWithQuestions": "Supprimer le libellé et {count, plural, one {la question liée} other {les # questions liées}}",
+      "deleteLabelWithQuestionsExams": "Dont {inExams, plural, one {# présente} other {# présentes}} dans {exams, plural, one {# examen enregistré, qui les perdra} other {# examens enregistrés, qui les perdront}}."
     },
     "generator": {
       "cancelEdits": "annuler les modifications",

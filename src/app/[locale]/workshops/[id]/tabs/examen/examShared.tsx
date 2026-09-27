@@ -10,6 +10,7 @@ import { palette, ink, withAlpha, categoryTones, shadow } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useIsClipped } from '@/components/ui/clipped-text';
+import type { LabelImpact } from '@/lib/workshops/labelDeletion';
 import { type Question, type QuestionPart, type ResponseType } from '../QuestionEditor';
 // Pièce jointe média (image/audio) : voir questionMedia.tsx pour l'explication
 // du cycle d'import évité. Réexporté ici pour ne pas casser les imports
@@ -921,6 +922,29 @@ export function sortPoolsByName<P extends { name: string }>(pools: readonly P[])
   return [...pools].sort((x, y) => x.name.localeCompare(y.name, 'fr', { sensitivity: 'base' }));
 }
 
+/** Une issue de la fenêtre de suppression d'un libellé : pastille ronde,
+ *  intitulé, et une ligne qui dit ce qu'elle coûte. */
+function DeleteChoice({ checked, danger = false, onSelect, label, hint }: { checked: boolean; danger?: boolean; onSelect: () => void; label: string; hint?: string }) {
+  const accent = danger ? palette.danger : palette.greenBrand;
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={checked}
+      onClick={onSelect}
+      style={{ display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', textAlign: 'left' as const, padding: '10px 12px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${checked ? accent : palette.line}`, background: checked ? withAlpha(accent, 0.06) : 'transparent' }}
+    >
+      <span style={{ flexShrink: 0, marginTop: 2, width: 14, height: 14, borderRadius: '50%', border: `1.5px solid ${checked ? accent : palette.lineStrong}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {checked && <span style={{ width: 6, height: 6, borderRadius: '50%', background: accent }} />}
+      </span>
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: danger && checked ? palette.danger : palette.ink }}>{label}</span>
+        {hint && <span style={{ fontSize: 11.5, color: palette.inkMuted }}>{hint}</span>}
+      </span>
+    </button>
+  );
+}
+
 /** Rangée de création du bas du `LabelPicker`. Repliée, c'est une entrée de menu
  *  ordinaire ; dépliée, un champ et ses deux boutons.
  *
@@ -1059,17 +1083,21 @@ export function useDismissOnOutsideClick(
   }, [active, ref]);
 }
 
-export function LabelEditor({ label, usageCount, onSave, onDelete, onClose }: {
+export function LabelEditor({ label, impact, onSave, onDelete, onDeleteWithQuestions, onClose }: {
   label: Pool;
-  usageCount: number;
+  impact: LabelImpact;
   onSave: (next: Pool) => void;
   onDelete: () => void;
+  /** Absent : la fenêtre ne propose que la suppression du libellé seul. */
+  onDeleteWithQuestions?: () => void;
   onClose: () => void;
 }) {
   const t = useTranslations('examen');
   const [name, setName] = useState(label.name);
   const [color, setColor] = useState(label.color);
   const [confirming, setConfirming] = useState(false);
+  const [withQuestions, setWithQuestions] = useState(false);
+  const canPurge = !!onDeleteWithQuestions && impact.questions > 0;
   const cardRef = useRef<HTMLDivElement>(null);
 
   // Enregistrement automatique (27/09/2026) : plus de bouton « enregistrer »
@@ -1141,13 +1169,40 @@ export function LabelEditor({ label, usageCount, onSave, onDelete, onClose }: {
       {confirming && (
         <ConfirmDialog
           portal
-          width={380}
+          width={400}
           title={t('bank.deleteLabelTitle', { name: label.name })}
-          description={`${usageCount > 0 ? t('bank.deleteLabelCount', { count: usageCount }) : ''}${t('irreversible')}`}
+          description={canPurge ? t('irreversible') : `${impact.questions > 0 ? t('bank.deleteLabelCount', { count: impact.questions }) : ''}${t('irreversible')}`}
           confirmLabel={t('delete')}
           onCancel={() => setConfirming(false)}
-          onConfirm={() => { setConfirming(false); pending.current = null; onDelete(); onClose(); }}
-        />
+          onConfirm={() => {
+            setConfirming(false);
+            pending.current = null;
+            if (canPurge && withQuestions) onDeleteWithQuestions!(); else onDelete();
+            onClose();
+          }}
+        >
+          {/* Deux issues (27/09/2026) : le libellé seul — ses questions restent,
+              sans lui — ou le libellé avec toutes les questions qui le portent,
+              quels que soient leurs autres libellés. La moins destructrice est
+              cochée d'office. */}
+          {canPurge && (
+            <div role="radiogroup" style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20, textAlign: 'left' as const }}>
+              <DeleteChoice
+                checked={!withQuestions}
+                onSelect={() => setWithQuestions(false)}
+                label={t('bank.deleteLabelOnly')}
+                hint={t('bank.deleteLabelCount', { count: impact.questions }).trim()}
+              />
+              <DeleteChoice
+                checked={withQuestions}
+                danger
+                onSelect={() => setWithQuestions(true)}
+                label={t('bank.deleteLabelWithQuestions', { count: impact.questions })}
+                hint={impact.inExams > 0 ? t('bank.deleteLabelWithQuestionsExams', { inExams: impact.inExams, exams: impact.exams }) : undefined}
+              />
+            </div>
+          )}
+        </ConfirmDialog>
       )}
     </>
   );

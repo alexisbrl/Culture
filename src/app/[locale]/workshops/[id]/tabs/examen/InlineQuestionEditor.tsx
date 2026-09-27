@@ -39,6 +39,7 @@ import type { Question, QuestionPart } from '@/lib/workshops/examTypes';
 import { QuestionFields, emptyPart } from './questionFields';
 import { MediaAttachment, useQuestionMediaDrop } from './questionMedia';
 import { type Pool, LabelEditor, LabelQuickMenu } from './examShared';
+import type { LabelImpact } from '@/lib/workshops/labelDeletion';
 import { Tooltip } from '@/components/ui/tooltip';
 
 type Props = {
@@ -81,7 +82,10 @@ type Props = {
   onDeletePool?: (id: string) => void;
   /** Nombre de questions portant un libellé, pour la confirmation de suppression
    *  (seul l'appelant connaît la banque complète). */
-  poolUsageCount?: (poolId: string) => number;
+  /** Ce que coûterait la suppression d'un libellé (fenêtre de confirmation). */
+  labelImpact?: (poolId: string) => LabelImpact;
+  /** Supprime le libellé ET les questions qui le portent. */
+  onDeletePoolWithQuestions?: (id: string) => void;
   /** Brouillon en cours, à chaque frappe — pour que la copie d'examen montre en
    *  DIRECT ce qui s'écrit dans le formulaire, alors qu'il vit ailleurs (dans la
    *  liste). Rien n'est enregistré pour autant : `onSave` reste le seul moment
@@ -95,7 +99,7 @@ type Props = {
 export default function InlineQuestionEditor({
   workshopId, question, number, isNew, notions, onDraftChange,
   onRemovePart, onCreatePool, onUpdatePool,
-  onDeletePool, poolUsageCount, onSave, onCancel, frame = 'sheet',
+  onDeletePool, labelImpact, onDeletePoolWithQuestions, onSave, onCancel, frame = 'sheet',
   pools = [], showLabels = true, hideTitle = false,
 }: Props) {
   const t = useTranslations('examen');
@@ -291,12 +295,15 @@ export default function InlineQuestionEditor({
             return (
               <LabelEditor
                 label={p}
-                usageCount={poolUsageCount?.(p.id) ?? 0}
+                impact={labelImpact?.(p.id) ?? { questions: 0, inExams: 0, exams: 0 }}
                 onSave={onUpdatePool}
                 // Le libellé disparaît de l'atelier : le retirer aussi du
                 // brouillon en cours, sinon la question serait enregistrée avec
                 // une référence morte.
                 onDelete={() => { onDeletePool(p.id); patch({ pools: draft.pools.filter(x => x !== p.id) }); }}
+                // Si la question ouverte porte le libellé, elle part avec les
+                // autres et le formulaire se ferme (voir ExamenTab).
+                onDeleteWithQuestions={onDeletePoolWithQuestions ? () => { patch({ pools: draft.pools.filter(x => x !== p.id) }); onDeletePoolWithQuestions(p.id); } : undefined}
                 onClose={() => setEditingPool(null)}
               />
             );

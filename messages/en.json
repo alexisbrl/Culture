@@ -428,7 +428,10 @@
       "deleteQuestionTitle": "Delete this question?",
       "deleteQuestionInExams": "It will be removed from the following exams:",
       "deleteLabelTitle": "Delete the label « {name} »?",
-      "deleteLabelCount": "It will be removed from {count} question(s). "
+      "deleteLabelCount": "It will be removed from {count} question(s). ",
+      "deleteLabelOnly": "Delete the label only",
+      "deleteLabelWithQuestions": "Delete the label and {count, plural, one {its question} other {its # questions}}",
+      "deleteLabelWithQuestionsExams": "{inExams, plural, one {# of them is} other {# of them are}} in {exams, plural, one {# saved exam, which will lose them} other {# saved exams, which will lose them}}."
     },
     "generator": {
       "cancelEdits": "cancel changes",

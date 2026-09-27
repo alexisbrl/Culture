@@ -19,6 +19,7 @@ import {
   TypeIcon, IconBtn, ListToolbar, FilterButton, ListCard, ListCardSkeleton, LabelPill, LabelEditor, LabelQuickMenu, SegmentedToggle,
   useDismissOnOutsideClick, useRememberedCount,
 } from './examShared';
+import type { LabelImpact } from '@/lib/workshops/labelDeletion';
 import { Tooltip } from '@/components/ui/tooltip';
 
 // Le filtre « QCM » couvre aussi les questions à réponse unique : `qcs` est la
@@ -132,6 +133,9 @@ export type QuestionListLabels = {
   /** Pose ou retire un libellé depuis la carte (menu rapide). Absent = les
    *  pastilles de la carte restent de simples témoins. */
   onToggleQuestion?: (questionId: string, poolId: string) => void;
+  /** Supprime le libellé ET les questions qui le portent. */
+  onDeleteWithQuestions?: (id: string) => void;
+  impact?: (id: string) => LabelImpact;
 };
 
 export type QuestionListExams = {
@@ -558,8 +562,9 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   }
   // Suppression d'un libellé : la banque a en plus à oublier le filtre qui le
   // visait, sans quoi la liste resterait filtrée sur un libellé disparu.
-  function deleteLabel(id: string) {
-    labels?.onDelete(id);
+  function deleteLabel(id: string, withQuestions = false) {
+    if (withQuestions) labels?.onDeleteWithQuestions?.(id);
+    else labels?.onDelete(id);
     setFilterPools(prev => prev.filter(p => p !== id));
     clearMode(`pool:${id}`);
   }
@@ -936,9 +941,10 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
                 return (
                   <LabelEditor
                     label={label}
-                    usageCount={questions.filter(q => q.pools.includes(label.id)).length}
+                    impact={labels?.impact?.(label.id) ?? { questions: questions.filter(q => q.pools.includes(label.id)).length, inExams: 0, exams: 0 }}
                     onSave={pool => labels?.onUpdate(pool)}
                     onDelete={() => deleteLabel(label.id)}
+                    onDeleteWithQuestions={labels?.onDeleteWithQuestions ? () => deleteLabel(label.id, true) : undefined}
                     onClose={() => setEditingLabel(null)}
                   />
                 );

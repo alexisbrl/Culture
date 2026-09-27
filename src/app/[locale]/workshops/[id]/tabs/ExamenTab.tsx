@@ -9,7 +9,7 @@ import { useIsPhone } from '@/lib/useIsPhone';
 import { type Question, emptyQuestion } from './QuestionEditor';
 import {
   getExamPageData, saveQuestion, createPool as createPoolAction, updatePool as updatePoolAction,
-  deletePool as deletePoolAction, deleteQuestion as deleteQuestionAction, saveGeneratedExam,
+  deletePool as deletePoolAction, deletePoolWithQuestions as deletePoolWithQuestionsAction, deleteQuestion as deleteQuestionAction, saveGeneratedExam,
   deleteGeneratedExam, saveExamDraft,
 } from '@/app/actions/examQuestions';
 import {
@@ -20,6 +20,7 @@ import {
 import { Tooltip } from '@/components/ui/tooltip';
 import { useGenerationRefresh } from '@/components/ai/generationStore';
 import { readListDraft, setListCreation } from '@/components/ai/listDraftStore';
+import { questionsCarryingLabel, type LabelImpact } from '@/lib/workshops/labelDeletion';
 import HistoryContent from './examen/HistoryContent';
 import BankContent from './examen/BankContent';
 import GeneratorContent from './examen/GeneratorContent';
@@ -579,7 +580,8 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         onCreatePool={handleCreatePool}
         onUpdatePool={handleUpdatePool}
         onDeletePool={handleDeletePool}
-        poolUsageCount={pid => questions.filter(qq => qq.pools.includes(pid)).length}
+        onDeletePoolWithQuestions={handleDeletePoolWithQuestions}
+        labelImpact={labelImpact}
         onSave={handleSaveQuestion}
         onCancel={handleCancelQuestion}
       />
@@ -680,6 +682,54 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
     const updated = { ...q, pools: q.pools.includes(poolId) ? q.pools.filter(p => p !== poolId) : [...q.pools, poolId] };
     setQuestions(prev => prev.map(x => (x.id === questionId ? updated : x)));
     saveQuestion(workshopId, updated).catch(err => console.error('enregistrement des libellés échoué', err));
+  }
+
+  /** Ce que coûterait la suppression d'un libellé avec ses questions : combien
+   *  de questions, et combien d'entre elles — dans combien d'examens
+   *  enregistrés — disparaîtraient d'un examen. */
+  function labelImpact(poolId: string): LabelImpact {
+    const ids = new Set(questionsCarryingLabel(questions, poolId));
+    const touched = exams.filter(e => e.config && configQuestionIds(e.config).some(qid => ids.has(qid)));
+    const inExams = new Set(touched.flatMap(e => configQuestionIds(e.config!).filter(qid => ids.has(qid))));
+    return { questions: ids.size, inExams: inExams.size, exams: touched.length };
+  }
+
+  // Suppression du libellé ET des questions qui le portent (27/09/2026). Même
+  // ménage que pour une question seule (`handleDeleteQuestion`), fait en une
+  // fois : les examens enregistrés perdent ces questions et sont réenregistrés
+  // une seule fois chacun, la copie en cours les perd aussi, et le formulaire se
+  // ferme si la question ouverte en fait partie.
+  function handleDeletePoolWithQuestions(poolId: string) {
+    const ids = new Set(questionsCarryingLabel(questions, poolId));
+    const strip = (config: ExamConfig): ExamConfig => {
+      let weighting = config.weighting;
+      ids.forEach(id => { weighting = clearWeightingFor(weighting, id); });
+      return { ...config, sections: config.sections.map(sec => ({ ...sec, questionIds: sec.questionIds.filter(qid => !ids.has(qid)) })), weighting };
+    };
+
+    const updatedExams = exams
+      .filter(e => e.config && configQuestionIds(e.config).some(qid => ids.has(qid)))
+      .map(e => {
+        const config = strip(e.config!);
+        const questionIds = configQuestionIds(config);
+        return { ...e, config, questionIds, q: questionIds.length };
+      });
+    const byId = new Map(updatedExams.map(e => [e.id, e]));
+    setExams(prev => prev.map(e => byId.get(e.id) ?? e));
+    setQuestions(prev => prev.filter(q => !ids.has(q.id)));
+    setPools(prev => prev.filter(p => p.id !== poolId));
+    setDraftIds(prev => prev.filter(qid => !ids.has(qid)));
+    setExamConfig(prev => (prev.sections.some(sec => sec.questionIds.some(qid => ids.has(qid))) ? strip(prev) : prev));
+    if (editingQuestion && ids.has(editingQuestion.id)) {
+      if (editingQuestion.id === newQuestionId) setListCreation(workshopId, 'exam', null);
+      setNewQuestionId(null);
+      setEditingQuestion(null);
+      setEditingDraft(null);
+    }
+
+    deletePoolWithQuestionsAction(workshopId, poolId, [...ids])
+      .then(() => Promise.all(updatedExams.map(e => saveGeneratedExam(workshopId, e))))
+      .catch(err => console.error('suppression du libellé et de ses questions échouée', err));
   }
 
   function handleDeletePool(id: string) {
@@ -871,6 +921,8 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 onCreatePool={handleCreatePool}
                 onUpdatePool={handleUpdatePool}
                 onDeletePool={handleDeletePool}
+                onDeletePoolWithQuestions={handleDeletePoolWithQuestions}
+                labelImpact={labelImpact}
                 onToggleQuestionPool={handleToggleQuestionPool}
                 onDeleteQuestion={handleDeleteQuestion}
               />

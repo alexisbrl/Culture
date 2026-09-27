@@ -99,6 +99,14 @@ export async function deletePool(workshopId: string, poolId: string, affectedQue
   revalidateWorkshop();
 }
 
+/** Le libellé ET les questions qui le portent. Les examens enregistrés qui les
+ *  contenaient sont mis à jour à part par l'appelant (`saveGeneratedExam`). */
+export async function deletePoolWithQuestions(workshopId: string, poolId: string, questionIds: string[]): Promise<void> {
+  await assertManager(workshopId);
+  await examLib.deletePoolWithQuestions(workshopId, poolId, questionIds);
+  revalidateWorkshop();
+}
+
 export async function deleteQuestion(workshopId: string, questionId: string, affectedQuestions: Question[]): Promise<void> {
   await assertManager(workshopId);
   await examLib.deleteQuestion(workshopId, questionId, affectedQuestions);
