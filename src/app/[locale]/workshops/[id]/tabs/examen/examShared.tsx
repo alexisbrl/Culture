@@ -866,7 +866,8 @@ export function LabelQuickMenu({ pools, selected, onToggle, onCreate, onEditLabe
   selected: readonly string[];
   onToggle: (id: string) => void;
   onCreate?: (name: string) => void;
-  /** Crayon sur les pastilles posées — dans le formulaire seulement. */
+  /** Crayon sur les pastilles, posées comme dans le menu — dans le formulaire
+   *  seulement. */
   onEditLabel?: (id: string) => void;
   /** `xs` sur la carte (une ligne, rognée), `md` dans le formulaire (à la ligne). */
   size: 'xs' | 'md';
@@ -881,6 +882,8 @@ export function LabelQuickMenu({ pools, selected, onToggle, onCreate, onEditLabe
         values={selected}
         keepOpen
         onSelect={onToggle}
+        onEditItem={onEditLabel}
+        editTitle={t('bank.editLabelTitle')}
         variant="pills"
         panelWidth={260}
         title={t('bank.quickLabels')}
