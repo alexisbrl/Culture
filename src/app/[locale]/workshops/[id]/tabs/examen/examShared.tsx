@@ -646,9 +646,11 @@ const LABEL_PILL_SIZES = {
  *  `LABEL_COLORS` n'aurait rien réglé pour les libellés déjà enregistrés, qui
  *  portent leur hex en base. On garde donc la couleur telle quelle comme
  *  identité et on l'atténue à l'affichage, exactement comme `TypeIcon`. */
-// 0,34 depuis le 27/09/2026 (0,22 avant) : plus atténuées, les teintes se
-// confondaient sur le fond beige.
-export const labelTint = (color: string) => (color === LABEL_NEUTRAL ? LABEL_NEUTRAL : withAlpha(color, 0.34));
+// Deux intensités (27/09/2026) : les libellés restent discrets (0,22), les
+// groupes de membres — les classes — sont plus soutenus (0,34), choix d'Alexis.
+export type LabelIntensity = 'soft' | 'strong';
+export const labelTint = (color: string, intensity: LabelIntensity = 'soft') =>
+  (color === LABEL_NEUTRAL ? LABEL_NEUTRAL : withAlpha(color, intensity === 'strong' ? 0.34 : 0.22));
 
 /** Pastille de libellé — rendu unique de la banque, des filtres et des deux
  *  éditeurs de question. Le fond est l'aplat atténué du libellé (`labelTint`),
@@ -697,10 +699,12 @@ export const labelTint = (color: string) => (color === LABEL_NEUTRAL ? LABEL_NEU
  *  filtres, 290px, se mettait à défiler horizontalement, précédent du
  *  17/08/2026). Une fois la garde en largeur posée, il ne faisait plus que
  *  couper des noms qui avaient la place de tenir. */
-export function LabelPill({ name, color, size = 'sm', active = false, excluded = false, icon, title, onClick, onEdit, onRemove, editTitle, removeTitle }: {
+export function LabelPill({ name, color, intensity = 'soft', size = 'sm', active = false, excluded = false, icon, title, onClick, onEdit, onRemove, editTitle, removeTitle }: {
   name: string;
   /** Absent = pastille neutre (voir plus haut). */
   color?: string;
+  /** `strong` pour les groupes de membres, voir `labelTint`. */
+  intensity?: LabelIntensity;
   size?: keyof typeof LABEL_PILL_SIZES;
   /** Sélectionné : liseré d'encre. */
   active?: boolean;
@@ -771,7 +775,7 @@ export function LabelPill({ name, color, size = 'sm', active = false, excluded =
         border: `1px solid ${excluded ? palette.danger : active ? palette.ink : color && color !== LABEL_NEUTRAL ? 'transparent' : palette.line}`,
         boxShadow: excluded ? `0 0 0 2px ${withAlpha(palette.danger, 0.25)}`
           : active ? `0 0 0 2px ${ink(0.25)}` : 'none',
-        background: color ? labelTint(color) : palette.surfaceSunken,
+        background: color ? labelTint(color, intensity) : palette.surfaceSunken,
         // L'encre pleine est réservée à la sélection : au repos, une pastille
         // neutre reste en retrait, là où la colorée est déjà portée par son fond.
         color: excluded ? palette.danger : active || color ? palette.ink : palette.inkMuted,

@@ -464,6 +464,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                     <LabelPill
                       name={g.name}
                       color={g.color}
+                      intensity="strong"
                       size="md"
                       active={active}
                       onClick={() => setFilterGroupId(active ? null : g.id)}
@@ -490,7 +491,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                                 key={c}
                                 onClick={() => setEditGroupColor(c)}
                                 aria-label={c}
-                                style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c), border: editGroupColor === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }}
+                                style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c, 'strong'), border: editGroupColor === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }}
                               />
                             ))}
                           </div>
@@ -697,7 +698,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                       {otherGroupIds.map((gid) => {
                         const g = localGroups.find((x) => x.id === gid);
                         if (!g) return null;
-                        return <LabelPill key={gid} name={g.name} color={g.color} size="xs" />;
+                        return <LabelPill key={gid} name={g.name} color={g.color} intensity="strong" size="xs" />;
                       })}
                     </div>
                   </div>
