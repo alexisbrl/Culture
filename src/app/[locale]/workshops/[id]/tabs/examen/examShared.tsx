@@ -416,7 +416,7 @@ function MenuItem({ item, current, wrap = false, withIcons = false, onPick }: { 
   );
 }
 
-export function FilterButton({ title, count = 0, open = false, disabled = false, onToggle, containerRef, panelWidth = 290, children }: {
+export function FilterButton({ title, count = 0, open = false, disabled = false, onToggle, containerRef, panelWidth = 350, children }: {
   title: string;
   count?: number;
   open?: boolean;
@@ -431,13 +431,25 @@ export function FilterButton({ title, count = 0, open = false, disabled = false,
   const [panelPos, setPanelPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
 
   const place = useCallback(() => {
-    const r = btnRef.current?.getBoundingClientRect();
-    if (!r) return;
-    const top = r.bottom + 6;
+    const btn = btnRef.current;
+    const r = btn?.getBoundingClientRect();
+    if (!btn || !r) return;
+    // La liste peut être zoomée (`--exam-list-zoom`) et le panneau, posé en
+    // `fixed` dans ce zoom, voit ses coordonnées multipliées par lui : on les
+    // écrit donc divisées, sans quoi il glissait sur le bouton et décrochait de
+    // la barre.
+    const z = btn.offsetWidth > 0 ? r.width / btn.offsetWidth : 1;
+    const top = r.bottom / z + 6;
+    // Le panneau finit au bord droit de la barre d'outils (celui du bouton
+    // d'ajout) et s'étend vers la gauche, au-dessus de la liste : parti du
+    // bouton vers la droite, il mordait sur la feuille A4 d'à côté. Il est
+    // assez large (350) pour tenir les quatre niveaux sur une ligne.
+    const bar = btnRef.current?.closest('[data-list-toolbar]')?.getBoundingClientRect();
+    const wanted = (bar ? bar.right : r.left + panelWidth * z) / z - panelWidth;
     const next = {
-      left: Math.max(FILTER_PANEL_MARGIN, Math.min(r.left, window.innerWidth - panelWidth - FILTER_PANEL_MARGIN)),
+      left: Math.max(FILTER_PANEL_MARGIN, Math.min(wanted, window.innerWidth / z - panelWidth - FILTER_PANEL_MARGIN)),
       top,
-      maxHeight: Math.max(220, window.innerHeight - top - 16),
+      maxHeight: Math.max(220, window.innerHeight / z - top - 16),
     };
     // Comparaison explicite avant d'écrire : cet effet tourne à chaque rendu
     // (pas de tableau de dépendances), une écriture systématique bouclerait.
@@ -542,7 +554,7 @@ export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter,
   action: ListToolbarAction;
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'stretch', gap: TOOLBAR_GAP, marginBottom: TOOLBAR_MB }}>
+    <div data-list-toolbar style={{ display: 'flex', alignItems: 'stretch', gap: TOOLBAR_GAP, marginBottom: TOOLBAR_MB }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0, background: palette.surfaceInput, border: `1px solid ${palette.line}`, borderRadius: 10, padding: '0 10px' }}>
         <Search size={15} strokeWidth={1.75} color={palette.inkFaint} style={{ flexShrink: 0 }} />
         <input value={search} onChange={e => onSearchChange(e.target.value)} placeholder={searchPlaceholder} style={{ flex: 1, minWidth: 0, fontSize: 13, color: palette.ink, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'inherit' }} />
