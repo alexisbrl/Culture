@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, ArrowLeft, ArrowRight, FileText, Search, X } from 'lucide-react';
-import { palette, ink, radius, withAlpha, categoryTones } from '@/lib/theme';
+import { palette, ink, radius, withAlpha } from '@/lib/theme';
 import { useIsPhone } from '@/lib/useIsPhone';
 import { type Question, emptyQuestion } from './QuestionEditor';
 import {
@@ -15,7 +15,7 @@ import {
 import {
   type Exam, type Pool, type ExamConfig, type SheetFocus,
   defaultExamConfig, normalizeExamConfig, configQuestionIds, formatDuration, clearWeightingFor,
-  toggleQuestionInSections, isPageBreakId, pruneUnknownQuestions, LIST_INSET_X, partWeightKey, sortPoolsByName,
+  toggleQuestionInSections, isPageBreakId, pruneUnknownQuestions, LIST_INSET_X, partWeightKey, sortPoolsByName, LABEL_NEUTRAL,
 } from './examen/examShared';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useGenerationRefresh } from '@/components/ai/generationStore';
@@ -661,7 +661,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
 
   function handleCreatePool(name: string): string {
     const id = 'pool' + Date.now();
-    const pool = { id, name, color: categoryTones.blueGray };
+    const pool = { id, name, color: LABEL_NEUTRAL };
     setPools(prev => [...prev, pool]);
     createPoolAction(workshopId, pool).catch(err => console.error('création libellé échouée', err));
     return id;

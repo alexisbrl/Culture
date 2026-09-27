@@ -133,7 +133,8 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
     const name = newGroupName.trim();
     if (!name) return;
     const id = 'group' + Date.now();
-    const color = LABEL_COLORS[localGroups.length % LABEL_COLORS.length];
+    // Le neutre (1re couleur) est réservé aux libellés : les groupes tournent sur les teintes.
+    const color = LABEL_COLORS[1 + (localGroups.length % (LABEL_COLORS.length - 1))];
     const group: MemberGroup = { id, name, color };
     setLocalGroups((prev) => [...prev, group]);
     setNewGroupName('');

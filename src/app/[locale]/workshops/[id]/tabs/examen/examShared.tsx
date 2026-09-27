@@ -622,7 +622,15 @@ export function isPageBreakId(id: string): boolean {
   return id.startsWith(PAGE_BREAK_PREFIX);
 }
 
-export const LABEL_COLORS = [categoryTones.blueGray, categoryTones.mauve, palette.greenSoft, palette.amberLight, palette.danger, palette.greenBrand, palette.amber, palette.inkFaint, categoryTones.steelBlue, categoryTones.rust];
+/** Couleur « neutre » d'un libellé : le beige des autres pastilles du panneau
+ *  de filtres (type de réponse, niveau, statut, chapitre). C'est la couleur
+ *  d'un libellé tout juste créé, et la première de la palette (27/09/2026). */
+export const LABEL_NEUTRAL = palette.surfaceSunken;
+
+/** Palette des libellés : le neutre, puis les autres rangées en dégradé —
+ *  taupe, tan, or, rouille, rouge, mauve, bleus, verts — pour qu'on lise une
+ *  suite de teintes et non un mélange. */
+export const LABEL_COLORS = [LABEL_NEUTRAL, palette.inkFaint, palette.amber, palette.amberLight, categoryTones.rust, palette.danger, categoryTones.mauve, categoryTones.steelBlue, categoryTones.blueGray, palette.greenSoft, palette.greenBrand];
 
 // Trois tailles pour un seul et même rendu de pastille : `xs` sur les cartes de
 // la banque (la ligne de métadonnées est serrée), `sm` dans le panneau de
@@ -638,7 +646,7 @@ const LABEL_PILL_SIZES = {
  *  `LABEL_COLORS` n'aurait rien réglé pour les libellés déjà enregistrés, qui
  *  portent leur hex en base. On garde donc la couleur telle quelle comme
  *  identité et on l'atténue à l'affichage, exactement comme `TypeIcon`. */
-export const labelTint = (color: string) => withAlpha(color, 0.22);
+export const labelTint = (color: string) => (color === LABEL_NEUTRAL ? LABEL_NEUTRAL : withAlpha(color, 0.22));
 
 /** Pastille de libellé — rendu unique de la banque, des filtres et des deux
  *  éditeurs de question. Le fond est l'aplat atténué du libellé (`labelTint`),
@@ -758,7 +766,7 @@ export function LabelPill({ name, color, size = 'sm', active = false, excluded =
         // filet clair au repos, qui prend la couleur de la sélection ensuite.
         // Le fond, lui, ne bouge jamais : c'est l'identité du libellé, elle ne
         // peut pas servir en même temps d'état.
-        border: `1px solid ${excluded ? palette.danger : active ? palette.ink : color ? 'transparent' : palette.line}`,
+        border: `1px solid ${excluded ? palette.danger : active ? palette.ink : color && color !== LABEL_NEUTRAL ? 'transparent' : palette.line}`,
         boxShadow: excluded ? `0 0 0 2px ${withAlpha(palette.danger, 0.25)}`
           : active ? `0 0 0 2px ${ink(0.25)}` : 'none',
         background: color ? labelTint(color) : palette.surfaceSunken,
