@@ -804,9 +804,6 @@ Donne à chacun une référence courte et unique (ch1, ch2…), et pour nom le t
 Quand le cours traite toujours la même matière sous un autre découpage — une partie qui s'élargit ou se resserre —, la bonne réponse est de **créer le nouveau chapitre ET de mettre l'ancien à 0**, jamais de garder l'ancien sous un autre nom. Les notions encore d'actualité vont dans le nouveau ; celles que tu laisses dans l'ancien sortent du programme avec lui. C'est ce qui évite de porter deux fois la même partie sous deux noms.
 
 **SITUE CHAQUE CHAPITRE DANS LE COURS.** Pour chaque chapitre de rang 1 ou plus, donne dans \`spans\` le document et l'intervalle de pages qu'il occupe, d'après les marqueurs « [page N] » du texte, bornes incluses — plusieurs intervalles si le chapitre est éclaté, ou s'il s'étend sur plusieurs documents. L'étape suivante ne recevra QUE ces pages-là : une page que tu n'attribues à aucun chapitre ne sera lue par personne. Dans le doute, prends large ; deux chapitres peuvent partager une page de transition.
-
-**Un chapitre sans pages n'est pas au programme.** Un chapitre existant auquel tu n'attribues aucune page en sort, comme au rang 0 ; un chapitre de ta réponse sans pages n'est pas créé. Donne donc des pages à chaque chapitre que le cours traite encore — existant comme nouveau.
-
 **UN VERDICT SUR CHAQUE NOTION EXISTANTE.** Les notions de l'atelier sont listées plus haut. Dans \`notionVerdicts\`, tu statues sur CHACUNE, sans exception — une notion que tu ne mentionnes pas est tenue pour oubliée. Trois réponses possibles :
 - **« chapter »**, avec la référence d'un chapitre au programme — existant ou de ta réponse : la notion y va. C'est la réponse attendue pour toute notion que le cours traite encore.
 - **« out »** : le cours la contredit, ou ne traite plus du tout son sujet. Elle sort du programme.
@@ -877,7 +874,7 @@ ${input.recheck.map((n) => `- ${n.id} — ${n.title} (celle-ci ${RECHECK_LABELS[
   return `Extrais les NOTIONS du chapitre « ${input.chapter.name} ». Tu as sous les yeux les seules pages de ce chapitre :
 ${extracts}
 
-Traite-les en entier, texte ET images : un tableau, un schéma ou une légende portent des notions comme le texte. Ne t'occupe d'aucun autre chapitre. Si ces pages ne traitent pas de « ${input.chapter.name} », ne produis aucune notion : c'est la bonne réponse. Pour chaque notion, \`page\` est le numéro de page DANS L'EXTRAIT où tu l'as lue.
+Traite-les en entier, texte ET images : un tableau, un schéma ou une légende portent des notions comme le texte. Parmi ces pages, ne traite que ce qui relève de « ${input.chapter.name} ». Pour chaque notion, \`page\` est le numéro de page DANS L'EXTRAIT où tu l'as lue.
 
 Les notions déjà rangées dans ce chapitre sont listées plus haut : tu ne les réécris pas.
 

@@ -660,9 +660,9 @@ tiendraient seules n'est pas un groupe.
 verser l'une dans l'autre ferait revenir le poste de coût qu'on a supprimé. La
 vérification est donc **locale et gratuite**, faite après coup sur les énoncés produits :
 ce qu'on cherche est la **recopie**, pas la parenté. Deux questions qui travaillent le
-même fait sous deux angles doivent passer : seuls les mêmes mots porteurs comptent —
-ponctuation, accents, casse, mots-outils et ordre des mots ignorés, et un mot de
-différence suffit à distinguer. **Tout est comparé, ou rien** : chaque question d'examen
+même fait sous deux angles doivent passer : seul le texte exact compte — ponctuation,
+accents, casse et espaces ignorés, mais l'ordre des mots, les chiffres et les symboles
+gardés (« 8 − 5 » n'est pas « 5 − 8 »). **Tout est comparé, ou rien** : chaque question d'examen
 l'est à **toutes** les questions d'entraînement qui partagent une de ses notions au même
 niveau — une recopie porte forcément sur la même —, sans plafond. Une vérification
 partielle ne dit pas ce qu'elle a manqué. **Le manque est

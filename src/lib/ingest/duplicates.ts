@@ -214,22 +214,26 @@ export function dropNearDuplicates<T>(
 
 export type RepeatedQuestion = { content: string; other: string };
 
-/** L'empreinte d'un énoncé : ses mots porteurs, triés. Deux énoncés de même
- *  empreinte sont une RECOPIE — et seule la recopie est cherchée ici.
+/** L'empreinte d'un énoncé : son texte exact, à la casse, aux accents, aux
+ *  espaces et à la ponctuation près. Deux énoncés de même empreinte sont une
+ *  RECOPIE — et seule la recopie est cherchée ici.
  *
- *  ⚠️ **Deux questions très ressemblantes sont deux questions.** « Combien fait
- *  7 + 13 » et « combien fait 7 + 23 » partagent presque tous leurs mots et
- *  n'ont rien de commun pédagogiquement ; une question de parcours reformulée
- *  autrement dans un examen est légitime. Un mot de différence — un nombre, une
- *  date, un nom — change souvent tout.
+ *  ⚠️ **Deux questions très ressemblantes sont deux questions.** « Combien font
+ *  8 − 5 » et « combien font 5 − 8 » partagent tous leurs mots et n'ont rien de
+ *  commun pédagogiquement : l'ordre des mots, les chiffres et les symboles
+ *  mathématiques comptent donc, et un mot de différence suffit à distinguer.
  *
- *  L'empreinte ignore la ponctuation, les accents, la casse, les mots-outils et
- *  l'ordre des mots : elle attrape bien la même question reponctuée ou remise
- *  dans un autre ordre. Elle se compare en une seule recherche, quel que soit
- *  le nombre d'énoncés déjà écrits — c'est ce qui permet de tout comparer. Un
- *  énoncé sans mot porteur n'a pas d'empreinte, et ne recopie rien. */
+ *  Elle se compare en une seule recherche, quel que soit le nombre d'énoncés
+ *  déjà écrits — c'est ce qui permet de tout comparer. Un énoncé vide n'a pas
+ *  d'empreinte, et ne recopie rien. */
 export function questionFingerprint(content: string): string {
-  return [...significantWords(content)].sort().join(' ');
+  return content
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[−–—]/g, '-')
+    .replace(/[^\p{L}\p{N}+\-×*/÷=<>≤≥%^]+/gu, ' ')
+    .trim();
 }
 
 /** Retire d'un lot de groupes les questions qui recopient un énoncé déjà écrit

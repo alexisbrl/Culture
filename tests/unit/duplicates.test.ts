@@ -291,11 +291,14 @@ describe('dropRepeatedQuestions', () => {
 });
 
 describe('questionFingerprint — la recopie, pas la parenté', () => {
-  it('ignore l’ordre des mots, la ponctuation, les accents et la casse', () => {
-    expect(questionFingerprint('Quelle est la capitale du Pérou ?')).toBe(questionFingerprint('du PEROU, la capitale est quelle.'));
+  it('ignore la ponctuation, les accents, la casse et les espaces', () => {
+    expect(questionFingerprint('Quelle est la  capitale du Pérou ?')).toBe(questionFingerprint('quelle est la capitale du PEROU.'));
   });
 
-  it('un mot de différence suffit à distinguer', () => {
+  it('garde l’ordre des mots, les chiffres et les symboles', () => {
+    expect(questionFingerprint('Combien font 8 - 5 ?')).not.toBe(questionFingerprint('Combien font 5 - 8 ?'));
+    expect(questionFingerprint('Combien font 8 − 5 ?')).toBe(questionFingerprint('Combien font 8 - 5 ?'));
+    expect(questionFingerprint('Combien font 7 + 13 ?')).not.toBe(questionFingerprint('Combien font 7 × 13 ?'));
     expect(questionFingerprint('Combien fait 7 + 13 ?')).not.toBe(questionFingerprint('Combien fait 7 + 23 ?'));
   });
 
