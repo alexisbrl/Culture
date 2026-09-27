@@ -315,9 +315,9 @@ donné : tout ce qui est envoyé entre dans le contexte et est facturé.
    rattacher les pages orphelines au chapitre précédent. **Perdre une page produit une
    notion manquante que rien ne signale** — le pire mode de défaillance de tout le
    système.
-3. **Ne jamais échouer sur des bornes absentes.** Chapitre sans bornes exploitables :
-   sa tranche est le document entier. Plus cher, jamais faux, et écrit au
-   compte-rendu.
+3. **Un chapitre sans page ne lit rien.** Il n'arrive pas jusqu'ici : sans page, il
+   sort du programme dès l'étape chapitres (§7.6). **Jamais le document entier** : un
+   chapitre à qui l'on donne tout le cours le réécrit en entier sous son titre.
 
 ### 7.4 L'étape 0 : lire la consigne, écrire ce qui manque
 
@@ -459,16 +459,22 @@ l'architecture entière, chapitres neufs et anciens mêlés, avec un rang par ch
 Demander le rang de **chacun** plutôt qu'une liste d'écartés oblige à statuer sur chaque
 chapitre existant, là où une liste se remplit au gré de ce que le modèle remarque.
 
-**Et pourtant l'omission reste inoffensive** — c'est tout le dispositif : un chapitre
-absent de la réponse **garde sa place et reste au programme**. C'est le rang 0 qui
-écarte, jamais le silence. Trois invariants tiennent le reste, tous testés : une
-référence inconnue est ignorée, un chapitre créé dans la même réponse ne peut pas être
-écarté, et ne rien dire ne déplace ni ne retire rien.
+**Un chapitre sans page n'est pas au programme.** Un chapitre que le cours traite encore
+y occupe forcément des pages : l'étape en donne à chaque chapitre, et celui qui n'en a
+aucune — qu'elle l'ait mis au rang 0, l'ait tu ou l'ait oublié — **sort** s'il existait,
+**n'est pas créé** s'il est neuf. On ne rattrape pas l'oubli : le rattraper, c'était
+donner le cours entier au chapitre, qui le réécrivait sous son titre. Si l'étape s'est
+trompée, le chapitre est caché, pas effacé, ses notions repassent à la seconde
+vérification, et l'on relance.
 
-**Garde-fou serveur : jamais tous.** Écarter chaque chapitre existant en un import n'est
-presque jamais une décision — c'est une consigne mal lue ou un document déposé par
-erreur. On n'applique rien et on le dit. Le cas légitime existe, mais il se fait en
-deux fois.
+**Aucun garde-fou ne retient une sortie**, même de tous les chapitres d'un coup : c'est
+le cas légitime d'un cours qui en remplace un autre, et une sortie se défait d'un clic
+(« restaurer »). Une référence inconnue est ignorée ; un chapitre créé dans la même
+réponse ne peut pas être mis au rang 0.
+
+**Un chapitre neuf n'est jamais fusionné dans un ancien au titre voisin.** Deux chapitres
+de même titre ne coexistent que si l'étape leur donne des pages à tous deux ; sinon
+l'ancien sort de lui-même.
 
 **L'ordre s'applique tout ou rien.** On ne réordonne que si chaque chapitre encore au
 programme a reçu un rang : un classement partiel est une consigne ambiguë — les oubliés
@@ -501,29 +507,46 @@ quitte le programme sur le seul avis d'une étape qui n'a pas vu toute sa matiè
 **Ce qui arrive si personne ne la réclame à l'étape notions** : une notion oubliée ou à
 vérifier **ne bouge pas** ; une notion hors programme reste dans son chapitre s'il est
 écarté, et passe **sans chapitre** s'il reste visible — elle sort du programme sans être
-détruite, et un gestionnaire peut la replacer. **Une notion existante n'est jamais
-effacée par une génération.**
+détruite, et un gestionnaire peut la replacer. **Une notion existante n'est effacée que
+par une redite**, et seulement après avoir transmis ses questions et la progression des
+élèves à celle qui la remplace (ci-dessous).
 
 **Mais une notion NEUVE non rangée n'est pas créée.** À la fin, toute notion née de cet
 import et restée sans chapitre est effacée. Le motif de la règle inverse — ne pas
 détruire ce que personne n'a jugé — s'est retourné en pratique : les oublis
 s'accumulaient d'une génération à l'autre, hors programme, jamais tirés et jamais rangés
 par personne. Le remède au rangement raté est de **relancer la génération**. Les notions
-antérieures à l'import, elles, ne sont jamais touchées.
+antérieures à l'import ne sont jamais touchées par ce ménage.
 
-**Les redites entre chapitres se jugent à la fin, en une fois.** L'étape notions d'un
-chapitre ne voit que les notions de son chapitre : si elle recrée une notion qui existe
-dans un autre, rien ne le lui dit. Quand tous les chapitres ont fini leur étape notions,
-le site repère les paires suspectes (une nouvelle notion trop proche d'une notion d'un
-autre chapitre) et **un seul appel** les tranche — il ne répond que « redite ou pas », et
-ne part pas s'il n'y a aucune paire. Il tourne **en même temps que les questions**, qui ne
-l'attendent pas — et c'est pourquoi **il juge sans rien effacer** : l'effacement se fait au
-ménage de fin, une fois toutes les questions écrites, pour qu'aucune question en vol ne vise
-une notion déjà partie. **Entre deux redites, c'est toujours la nouvelle qui s'efface**, jamais
-celle qui existait — l'ancienne peut porter des questions et un historique de révision —,
-et c'est **garanti par le code, pas seulement demandé au modèle** : seule la notion neuve
-d'une paire peut sortir par ce chemin. Les questions déjà écrites sur la notion effacée
-sont **rattachées à celle qui reste** : elles portent sur le même fait.
+**Les redites se jugent à la fin, en une fois.** L'étape notions d'un chapitre ne voit que
+les notions de son chapitre : si elle recrée une notion qui existe dans un autre, rien ne
+le lui dit. Quand tous les chapitres ont fini leur étape notions, le site repère les
+**paires suspectes** parmi les notions au programme — deux titres dont au moins 40 % des
+mots porteurs sont communs, les plus proches d'abord, 300 au plus — et **un seul appel**
+les tranche : il ne répond que « redite ou pas », et ne part pas s'il n'y a aucune paire.
+Une paire qui compte une notion neuve dans le même chapitre que l'autre n'est pas soumise :
+l'étape notions l'avait sous les yeux. Deux anciennes le sont, même dans un seul chapitre —
+personne ne les a jamais jugées. L'appel tourne **en même temps que les questions**, qui ne
+l'attendent pas — et c'est pourquoi **il juge sans rien toucher** : les gestes se font au
+ménage de fin, une fois toutes les questions écrites.
+
+**Ce qu'on fait d'une redite, selon l'âge des deux notions :**
+
+- **deux neuves** : celle du chapitre qui vient le premier au programme reste, l'autre
+  s'efface ;
+- **une neuve et une ancienne** : **la neuve reste** — c'est la formulation du cours
+  d'aujourd'hui. Elle reçoit les questions de l'ancienne, avec leur niveau, puis la
+  progression des élèves (un élève qui aurait déjà travaillé la neuve garde celle de
+  l'ancienne, qui seule a un historique), prend la place qui vient la première au
+  programme des deux, et l'ancienne s'efface. Dans cet ordre : une panne en route laisse
+  deux notions, jamais une notion perdue ;
+- **deux anciennes** : la plus récente reste où elle est, l'autre sort du programme, sans
+  chapitre et sans rien perdre — ni fusion, ni transfert.
+
+Une notion ne sert qu'à une paire par génération : la plus proche la fige. Les gestes sont
+**recalculés au ménage de fin sur l'état de l'atelier**, jamais repris tels quels : une
+paire dont une notion a quitté le programme, ou dont les titres ne se ressemblent pas
+assez pour avoir été soumis, est ignorée.
 
 **Le chapitre suit ses notions** : un chapitre dont il ne reste que des notions que
 personne n'a su placer est écarté avec elles dedans. Le bouton « restaurer » reste ainsi
@@ -637,8 +660,12 @@ tiendraient seules n'est pas un groupe.
 verser l'une dans l'autre ferait revenir le poste de coût qu'on a supprimé. La
 vérification est donc **locale et gratuite**, faite après coup sur les énoncés produits :
 ce qu'on cherche est la **recopie**, pas la parenté. Deux questions qui travaillent le
-même fait sous deux angles doivent passer — d'où un seuil très strict, qui ignore déjà la
-ponctuation, les accents, la casse, les mots-outils et l'ordre des mots. **Le manque est
+même fait sous deux angles doivent passer : seuls les mêmes mots porteurs comptent —
+ponctuation, accents, casse, mots-outils et ordre des mots ignorés, et un mot de
+différence suffit à distinguer. **Tout est comparé, ou rien** : chaque question d'examen
+l'est à **toutes** les questions d'entraînement qui partagent une de ses notions au même
+niveau — une recopie porte forcément sur la même —, sans plafond. Une vérification
+partielle ne dit pas ce qu'elle a manqué. **Le manque est
 rattrapé, une fois** : sans ça, un examen de 40 en rendrait 34 sans le dire ; le
 rattrapage redemande exactement ce qui manque, en un appel, et ne se répète pas — un
 atelier dont le programme ne porte pas quarante questions ne les portera pas davantage au

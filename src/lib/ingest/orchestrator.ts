@@ -350,8 +350,9 @@ async function execute(p: Pipeline, task: StoredTask): Promise<unknown> {
         .map((t) => ({ chapterId: t.payload.chapterId as string, notionIds: (t.result as NotionsResult).claimed ?? [] }))
         .filter((c) => c.notionIds.length > 0);
       const redites = tasks.find((t) => t.key === 'redites' && t.status === 'done');
-      const removals = (redites?.result as RedundancyResult | undefined)?.removals ?? [];
-      const result = await run.finishIngestion(workshopId, importId, claims, removals);
+      // `removals` : la forme d'avant, pour un lot ouvert avant la règle actuelle.
+      const judged = redites?.result as (RedundancyResult & { removals?: unknown[] }) | undefined;
+      const result = await run.finishIngestion(workshopId, importId, claims, judged?.duplicates ?? judged?.removals ?? []);
       return { adjusted: result.adjusted };
     }
     case 'exam':

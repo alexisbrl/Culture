@@ -2,6 +2,7 @@ import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 
 import {
+  chaptersWithPages,
   composeChapterSlices,
   composeChaptersInput,
   pageRanges,
@@ -127,6 +128,35 @@ describe('resolveDocumentName', () => {
   });
 });
 
+// Ce qui décide qu'un chapitre est au programme (§7.6) : sans page, il sort.
+describe('chaptersWithPages', () => {
+  const names = { d1: 'Cours.pdf', t1: 'Notes.md' };
+  const counts = { d1: 10, t1: null };
+  const at = (ref: string, ...spans: [string, number, number][]) =>
+    ({ ref, spans: spans.map(([document, from, to]) => ({ document, from, to })) });
+
+  it('garde un chapitre qui occupe au moins une page du cours', () => {
+    expect(chaptersWithPages([at('a', ['Cours.pdf', 3, 5])], counts, names)).toEqual(new Set(['a']));
+  });
+
+  it('écarte un chapitre sans bornes, ou aux bornes inexploitables', () => {
+    const out = chaptersWithPages(
+      [at('vide'), at('zero', ['Cours.pdf', 0, 0]), at('hors', ['Cours.pdf', 40, 45]), at('inconnu', ['Autre.pdf', 1, 2])],
+      counts,
+      names,
+    );
+    expect(out).toEqual(new Set());
+  });
+
+  it('un document sans pages compte dès qu’il est désigné', () => {
+    expect(chaptersWithPages([at('a', ['Notes.md', 1, 1])], counts, names)).toEqual(new Set(['a']));
+  });
+
+  it('une seule borne exploitable suffit', () => {
+    expect(chaptersWithPages([at('a', ['Cours.pdf', 0, 0], ['Cours.pdf', 9, 12])], counts, names)).toEqual(new Set(['a']));
+  });
+});
+
 describe('composeChapterSlices — les seules pages du chapitre (§7.3)', () => {
   const prepared = (fileId: string, fileName: string, mimeType = 'application/pdf'): PreparedDocument => ({
     fileId, key: `k/${fileId}`, fileName, mimeType, ref: `whole_${fileId}`,
@@ -160,25 +190,22 @@ describe('composeChapterSlices — les seules pages du chapitre (§7.3)', () => 
     expect(input.extracts).toEqual([{ documentId: 'd1', name: 'cours.pdf — pages 5 à 8', pages: [5, 6, 7, 8] }]);
     expect(input.uploaded).toHaveLength(1);
     expect(input.documents).toEqual(input.uploaded);
-    expect(input.wholeDocumentFallback).toBe(false);
   });
 
-  it('un chapitre sans borne lit le document entier, sans rien téléverser', async () => {
+  it('un chapitre sans borne ne reçoit rien, et rien n’est téléversé', async () => {
     const { readBytes } = await setup();
     const provider = fakeProvider();
-    const whole = prepared('d1', 'cours.pdf');
     const input = await composeChapterSlices(
       'c4',
       [...chapters, { key: 'c4', spans: [] }],
       { d1: 10 },
-      [whole],
+      [prepared('d1', 'cours.pdf')],
       readBytes,
       provider.prepare,
     );
     expect(provider.received).toEqual([]);
-    expect(input.documents).toEqual([whole]);
-    expect(input.extracts).toEqual([{ documentId: 'd1', name: 'cours.pdf', pages: null }]);
-    expect(input.wholeDocumentFallback).toBe(true);
+    expect(input.documents).toEqual([]);
+    expect(input.extracts).toEqual([]);
   });
 
   it('un document texte part en entier', async () => {

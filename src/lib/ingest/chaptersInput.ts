@@ -10,7 +10,7 @@
 
 import { extractPdfPages, readPdfText } from './pdf';
 import type { PreparedDocument, SourceDocument } from './providers/types';
-import { imagePages, sliceChapters, type ChapterBounds } from './slicing';
+import { imagePages, sliceChapters, usableSpan, type ChapterBounds } from './slicing';
 
 export const PDF_MIME = 'application/pdf';
 
@@ -134,6 +134,31 @@ export function resolveDocumentName(name: string, fileNames: Readonly<Record<str
   return entries.length === 1 ? entries[0][0] : null;
 }
 
+/** Les chapitres de la réponse qui occupent au moins une page du cours.
+ *
+ *  C'est ce qui décide qu'un chapitre est au programme (§7.6) : sans page, il
+ *  n'y est pas — un chapitre existant sort, un chapitre neuf n'est pas créé.
+ *  Une borne compte si elle désigne un document du lot et tombe dans ses pages ;
+ *  un document sans pages (texte, document de l'IA) compte dès qu'il est
+ *  désigné, puisque sa seule tranche possible est lui-même. */
+export function chaptersWithPages(
+  bounds: readonly { ref: string; spans: readonly { document: string; from: number; to: number }[] }[],
+  pageCounts: Readonly<Record<string, number | null>>,
+  fileNames: Readonly<Record<string, string>>,
+): Set<string> {
+  const out = new Set<string>();
+  for (const chapter of bounds) {
+    const paged = chapter.spans.some((span) => {
+      const documentId = resolveDocumentName(span.document, fileNames);
+      if (!documentId || !(documentId in pageCounts)) return false;
+      const count = pageCounts[documentId];
+      return count === null || usableSpan({ documentId, from: span.from, to: span.to }, count) !== null;
+    });
+    if (paged) out.add(chapter.ref);
+  }
+  return out;
+}
+
 // ─── Étape 2 : les pages d'UN chapitre ────────────────────────────────────────
 
 /** Un extrait joint à l'étape notions : son nom, et les pages du cours qu'il
@@ -151,9 +176,6 @@ export interface ChapterSlicesInput {
    *  documents entiers, déjà chez lui pour tout le lot, n'y sont pas. */
   uploaded: PreparedDocument[];
   extracts: ChapterExtract[];
-  /** Le chapitre n'avait aucune borne exploitable : il reçoit des documents
-   *  entiers, et c'est dit au compte-rendu. */
-  wholeDocumentFallback: boolean;
 }
 
 /** « 3 à 5, 9 » plutôt que « 3, 4, 5, 9 » : le nom d'un extrait reste lisible. */
@@ -189,7 +211,7 @@ export async function composeChapterSlices(
     prepared.map((d) => ({ id: d.fileId, pageCount: pageCounts[d.fileId] ?? null })),
   );
   const mine = sliced.chapters.find((c) => c.key === chapterId);
-  if (!mine) return { documents: [], uploaded: [], extracts: [], wholeDocumentFallback: false };
+  if (!mine) return { documents: [], uploaded: [], extracts: [] };
 
   const byId = new Map(prepared.map((d) => [d.fileId, d]));
   const documents: (PreparedDocument | SourceDocument)[] = [];
@@ -221,7 +243,6 @@ export async function composeChapterSlices(
     documents: documents.map((d) => ('ref' in d ? d : (handed.get(d) as PreparedDocument))),
     uploaded,
     extracts,
-    wholeDocumentFallback: mine.wholeDocumentFallback,
   };
 }
 

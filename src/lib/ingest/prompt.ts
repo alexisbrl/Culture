@@ -799,13 +799,13 @@ Donne à chacun une référence courte et unique (ch1, ch2…), et pour nom le t
 
 **L'ORDRE DU PROGRAMME, ET CE QUE LE COURS NE COUVRE PLUS.** Dans \`chapterOrder\`, donne son rang à chaque chapitre — ceux que tu viens de créer comme ceux qui existaient déjà —, à partir de 1 et dans l'ordre où le cours se lit. Seul l'ordre des rangs compte, pas leur valeur.
 
-**Le rang 0 veut dire : le cours ne couvre plus ce chapitre.** Il sort du programme avec ce qu'il contient. Deux points :
-- **Réservé aux chapitres qui existaient déjà** — jamais un chapitre de ta propre réponse.
-- **N'y mets que ceux dont tu es sûr** : un chapitre que tu ne nommes pas ici garde sa place et reste au programme, et c'est la bonne réponse quand tu hésites.
+**Le rang 0 veut dire : le cours ne couvre plus ce chapitre.** Il sort du programme avec ce qu'il contient. Il est réservé aux chapitres qui existaient déjà — jamais un chapitre de ta propre réponse.
 
 Quand le cours traite toujours la même matière sous un autre découpage — une partie qui s'élargit ou se resserre —, la bonne réponse est de **créer le nouveau chapitre ET de mettre l'ancien à 0**, jamais de garder l'ancien sous un autre nom. Les notions encore d'actualité vont dans le nouveau ; celles que tu laisses dans l'ancien sortent du programme avec lui. C'est ce qui évite de porter deux fois la même partie sous deux noms.
 
 **SITUE CHAQUE CHAPITRE DANS LE COURS.** Pour chaque chapitre de rang 1 ou plus, donne dans \`spans\` le document et l'intervalle de pages qu'il occupe, d'après les marqueurs « [page N] » du texte, bornes incluses — plusieurs intervalles si le chapitre est éclaté, ou s'il s'étend sur plusieurs documents. L'étape suivante ne recevra QUE ces pages-là : une page que tu n'attribues à aucun chapitre ne sera lue par personne. Dans le doute, prends large ; deux chapitres peuvent partager une page de transition.
+
+**Un chapitre sans pages n'est pas au programme.** Un chapitre existant auquel tu n'attribues aucune page en sort, comme au rang 0 ; un chapitre de ta réponse sans pages n'est pas créé. Donne donc des pages à chaque chapitre que le cours traite encore — existant comme nouveau.
 
 **UN VERDICT SUR CHAQUE NOTION EXISTANTE.** Les notions de l'atelier sont listées plus haut. Dans \`notionVerdicts\`, tu statues sur CHACUNE, sans exception — une notion que tu ne mentionnes pas est tenue pour oubliée. Trois réponses possibles :
 - **« chapter »**, avec la référence d'un chapitre au programme — existant ou de ta réponse : la notion y va. C'est la réponse attendue pour toute notion que le cours traite encore.
@@ -877,7 +877,7 @@ ${input.recheck.map((n) => `- ${n.id} — ${n.title} (celle-ci ${RECHECK_LABELS[
   return `Extrais les NOTIONS du chapitre « ${input.chapter.name} ». Tu as sous les yeux les seules pages de ce chapitre :
 ${extracts}
 
-Traite-les en entier, texte ET images : un tableau, un schéma ou une légende portent des notions comme le texte. Ne t'occupe d'aucun autre chapitre. Pour chaque notion, \`page\` est le numéro de page DANS L'EXTRAIT où tu l'as lue.
+Traite-les en entier, texte ET images : un tableau, un schéma ou une légende portent des notions comme le texte. Ne t'occupe d'aucun autre chapitre. Si ces pages ne traitent pas de « ${input.chapter.name} », ne produis aucune notion : c'est la bonne réponse. Pour chaque notion, \`page\` est le numéro de page DANS L'EXTRAIT où tu l'as lue.
 
 Les notions déjà rangées dans ce chapitre sont listées plus haut : tu ne les réécris pas.
 
@@ -1246,7 +1246,7 @@ Tu n'inventes aucun fait : tout ce qu'une question demande doit se déduire des 
  *  répond que « redite ou pas », paire par paire. Qui s'efface ne se demande
  *  pas au modèle — c'est toujours la nouvelle, et le code le garantit. */
 export function reditesInstruction(pairs: readonly { candidate: string; other: string }[]): string {
-  return `Des notions ont été extraites chapitre par chapitre, sans que chaque chapitre voie les autres. Un calcul automatique a repéré les paires ci-dessous : deux notions de chapitres différents qui se ressemblent. **Ce calcul ne juge rien** : il compare des mots. C'est à toi de dire, pour chaque paire, si c'est une REDITE.
+  return `Des notions ont été extraites chapitre par chapitre, sans que chaque chapitre voie les autres. Un calcul automatique a repéré les paires ci-dessous : deux notions de l'atelier qui se ressemblent. **Ce calcul ne juge rien** : il compare des mots. C'est à toi de dire, pour chaque paire, si c'est une REDITE.
 
 ${pairs.map((p, i) => `${i}. « ${p.candidate} » ↔ « ${p.other} »`).join('\n')}
 

@@ -46,9 +46,6 @@ export interface DocumentSlice {
 export interface ChapterSlice {
   key: string;
   slices: DocumentSlice[];
-  /** Vrai si le chapitre n'avait aucune borne exploitable et reçoit des
-   *  documents entiers — plus cher, jamais faux, et dit au compte-rendu. */
-  wholeDocumentFallback: boolean;
 }
 
 export interface SlicingResult {
@@ -61,7 +58,7 @@ export interface SlicingResult {
 /** Clampe un intervalle au document. `null` s'il est inexploitable : borne
  *  absente, 0, inversée, ou entièrement hors du document. Un intervalle qui
  *  dépasse seulement la fin est ramené à la dernière page — élargir, pas jeter. */
-function usableSpan(span: PageSpan, pageCount: number): { from: number; to: number } | null {
+export function usableSpan(span: PageSpan, pageCount: number): { from: number; to: number } | null {
   const { from, to } = span;
   if (!Number.isInteger(from) || !Number.isInteger(to)) return null;
   if (from < 1 || to < from || from > pageCount) return null;
@@ -74,8 +71,10 @@ function usableSpan(span: PageSpan, pageCount: number): { from: number; to: numb
  * - Chevauchement : les deux chapitres gardent la page.
  * - Page orpheline : rattachée au chapitre qui couvre la page couverte la plus
  *   proche AVANT elle ; au premier chapitre du document si elle précède tout.
- * - Chapitre sans aucune borne exploitable : les documents qu'il désignait en
- *   entier, ou tous les documents s'il n'en désignait aucun de connu.
+ * - Chapitre sans aucune borne exploitable : il ne reçoit rien. Il n'arrive
+ *   pas jusqu'ici — un chapitre sans page sort du programme dès l'étape
+ *   chapitres (§7.6). Lui donner le cours entier, comme on le faisait, lui
+ *   faisait réécrire tout le cours sous son titre.
  * - Document que rien ne couvre : en entier dans chaque chapitre.
  */
 export function sliceChapters(
@@ -85,14 +84,11 @@ export function sliceChapters(
   const docById = new Map(documents.map((d) => [d.id, d]));
   // pages[chapitre][document] = ensemble des pages ; `null` = document entier.
   const pages = chapters.map(() => new Map<string, Set<number> | null>());
-  const fallback = chapters.map(() => false);
 
   chapters.forEach((chapter, ci) => {
-    const named = new Set<string>();
     for (const span of chapter.spans) {
       const doc = docById.get(span.documentId);
       if (!doc) continue;
-      named.add(doc.id);
       if (doc.pageCount === null) {
         pages[ci].set(doc.id, null);
         continue;
@@ -106,11 +102,6 @@ export function sliceChapters(
         pages[ci].set(doc.id, set);
       }
       for (let p = usable.from; p <= usable.to; p++) set.add(p);
-    }
-    if (pages[ci].size === 0) {
-      fallback[ci] = true;
-      const targets = named.size > 0 ? [...named] : documents.map((d) => d.id);
-      for (const id of targets) pages[ci].set(id, null);
     }
   });
 
@@ -150,7 +141,6 @@ export function sliceChapters(
   return {
     chapters: chapters.map((chapter, ci) => ({
       key: chapter.key,
-      wholeDocumentFallback: fallback[ci],
       slices: documents
         .filter((d) => pages[ci].has(d.id))
         .map((d) => {

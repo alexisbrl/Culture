@@ -146,23 +146,25 @@ export function recheckList(standings: ReadonlyMap<string, NotionStanding>): Rec
   return out;
 }
 
-// ─── Le garde-fou « jamais tous » ────────────────────────────────────────────
+// ─── Les chapitres qui sortent du programme ─────────────────────────────────
 
 /**
- * Les chapitres réellement écartés. Écarter CHAQUE chapitre encore au programme
- * en un seul import n'est presque jamais une décision — une consigne mal lue,
- * un document déposé par erreur (§7.6). On n'applique alors rien, et
- * `blocked` permet de le dire au compte-rendu. Le cas légitime se fait en deux
- * fois. Une référence qui n'est pas un chapitre visible existant est ignorée.
+ * Les chapitres existants qui sortent du programme : ceux que l'étape met au
+ * rang 0, et **ceux auxquels elle n'attribue aucune page** (§7.6). Un chapitre
+ * que le cours traite encore y occupe forcément des pages ; n'en avoir aucune,
+ * c'est ne plus être au programme — que l'étape l'ait dit, l'ait tu ou l'ait
+ * oublié. Aucun garde-fou ne retient la sortie, même de tous les chapitres
+ * d'un coup : elle cache sans rien effacer, et « restaurer » la défait.
+ *
+ * Une référence qui n'est pas un chapitre visible existant est ignorée.
  */
-export function guardDrops(
+export function retiredChapters(
   visibleExistingIds: readonly string[],
-  droppedRefs: readonly string[],
-): { dropped: string[]; blocked: boolean } {
-  const visible = new Set(visibleExistingIds);
-  const dropped = [...new Set(droppedRefs)].filter((ref) => visible.has(ref));
-  if (visible.size > 0 && dropped.length >= visible.size) return { dropped: [], blocked: true };
-  return { dropped, blocked: false };
+  rankedZero: readonly string[],
+  withPages: ReadonlySet<string>,
+): string[] {
+  const zero = new Set(rankedZero);
+  return visibleExistingIds.filter((id) => zero.has(id) || !withPages.has(id));
 }
 
 // ─── Le sort final, après l'étape notions ────────────────────────────────────

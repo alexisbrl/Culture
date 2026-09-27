@@ -267,23 +267,65 @@ export async function reattachQuestions(from: string, to: string): Promise<numbe
   const supabase = getSupabaseServerClient();
 
   const [{ data: source, error }, { data: already }] = await Promise.all([
-    supabase.from('exam_question_item_bricks').select('item_id').eq('brick_id', from),
+    supabase.from('exam_question_item_bricks').select('item_id, bloom_level').eq('brick_id', from),
     supabase.from('exam_question_item_bricks').select('item_id').eq('brick_id', to),
   ]);
   if (error) throw new Error(error.message);
 
+  // Le niveau suit le lien : une question de niveau 3 sur l'ancienne notion
+  // l'est aussi sur la nouvelle, sans quoi le radar ne saurait plus la compter.
   const linked = new Set((already ?? []).map((r) => r.item_id as string));
-  const toLink = (source ?? [])
-    .map((r) => r.item_id as string)
-    .filter((itemId) => !linked.has(itemId));
+  const toLink = (source ?? []).filter((r) => !linked.has(r.item_id as string));
   if (toLink.length === 0) return 0;
 
   const { error: insertError } = await supabase
     .from('exam_question_item_bricks')
-    .insert(toLink.map((itemId) => ({ item_id: itemId, brick_id: to })));
+    .insert(toLink.map((r) => ({ item_id: r.item_id as string, brick_id: to, bloom_level: r.bloom_level as number | null })));
   if (insertError) throw new Error(insertError.message);
 
   return toLink.length;
+}
+
+/** Passe la progression des élèves d'une notion effacée à celle qui la
+ *  remplace (§7.6, redites) : l'élève garde ce qu'il avait acquis sur le fait,
+ *  sous sa nouvelle formulation.
+ *
+ *  Un élève qui a déjà une progression sur la notion gardée — une notion neuve,
+ *  donc au plus quelques minutes d'entraînement — garde celle de l'ancienne, qui
+ *  seule a un historique : la sienne est retirée avant le transfert, que la
+ *  contrainte d'unicité (notion, élève) refuserait sinon.
+ *
+ *  Une seule écriture pour le transfert, filtrée sur la notion : aucune liste
+ *  d'élèves ne voyage dans l'URL, quel que soit leur nombre. Rend le nombre
+ *  d'élèves transférés. */
+export async function transferMastery(from: string, to: string): Promise<number> {
+  if (from === to) return 0;
+  const supabase = getSupabaseServerClient();
+
+  // table encore nommée bricks en base (brick_mastery, brick_id)
+  const { data: fresh, error } = await supabase.from('brick_mastery').select('id, user_id').eq('brick_id', to);
+  if (error) throw new Error(error.message);
+  if ((fresh ?? []).length > 0) {
+    const { data: both, error: bothError } = await supabase
+      .from('brick_mastery')
+      .select('user_id')
+      .eq('brick_id', from)
+      .in('user_id', (fresh ?? []).map((r) => r.user_id as string));
+    if (bothError) throw new Error(bothError.message);
+    const clash = new Set((both ?? []).map((r) => r.user_id as string));
+    const drop = (fresh ?? []).filter((r) => clash.has(r.user_id as string)).map((r) => r.id as string);
+    if (drop.length > 0) {
+      const { error: dropError } = await supabase.from('brick_mastery').delete().in('id', drop);
+      if (dropError) throw new Error(dropError.message);
+    }
+  }
+
+  const { count, error: moveError } = await supabase
+    .from('brick_mastery')
+    .update({ brick_id: to }, { count: 'exact' })
+    .eq('brick_id', from);
+  if (moveError) throw new Error(moveError.message);
+  return count ?? 0;
 }
 
 /** Efface ce que cet import a créé et que personne n'a jamais rangé.

@@ -50,17 +50,18 @@ import {
   loadExistingRefs,
   reattachQuestions,
   removeOrphans,
+  transferMastery,
 } from './ingest';
 import { reorderChapters } from '@/lib/workshops/chapters';
 import { MAX_NOTIONS_PER_WORKSHOP, countNotions } from '@/lib/workshops/notions';
 import {
   dropNearDuplicates,
   dropRepeatedQuestions,
-  findExistingMatch,
   judgeRedites,
+  judgedDuplicates,
   rediteCandidates,
-  rediteRemovals,
-  revalidateRedites,
+  resolveRedites,
+  type RediteNotion,
 } from './duplicates';
 import {
   contextNotions,
@@ -95,8 +96,8 @@ import {
   classifyNotions,
   forgottenIds,
   forgottenShare,
-  guardDrops,
   mergeRelaunch,
+  retiredChapters,
   recheckList,
   revalidateClaims,
   strandedNotions,
@@ -108,7 +109,7 @@ import {
   type NotionVerdict,
   type ThresholdDecision,
 } from './verdicts';
-import { composeChapterSlices, composeChaptersInput, resolveDocumentName, sourcePageOf } from './chaptersInput';
+import { chaptersWithPages, composeChapterSlices, composeChaptersInput, resolveDocumentName, sourcePageOf } from './chaptersInput';
 import type { PageSpan } from './slicing';
 import { releaseDocuments } from './release';
 import {
@@ -302,32 +303,52 @@ async function loadExamQuestions(workshopId: string): Promise<ExistingContent> {
   return { ...EMPTY, questions };
 }
 
-/** Les énoncés d'ENTRAÎNEMENT de l'atelier, pour vérifier qu'un examen n'en
- *  recopie aucun (25/08/2026).
+/** Les énoncés d'ENTRAÎNEMENT qui partagent une notion au même niveau avec les
+ *  questions d'examen qu'on vient d'écrire, rangés par couple « notion|niveau »
+ *  — pour vérifier qu'un examen n'en recopie aucun (§7.7).
  *
  *  Rien à voir avec le bloc « existant » : ces énoncés ne partent JAMAIS au
  *  modèle — les verser dans la passe examen, c'est le poste de coût de §16.3 qui
  *  revient. Ils ne servent qu'à une comparaison locale, après coup.
  *
- *  Le plafond est un garde-fou de requête, pas une règle produit : au-delà, la
- *  vérification devient partielle, ce qui reste très supérieur à rien. */
-const PARCOURS_CONTEXT_CAP = 3000;
+ *  **Tous, sans plafond** : une vérification partielle ne dit pas ce qu'elle a
+ *  manqué. Ce qui borne le volume, c'est la restriction aux notions de l'appel —
+ *  une recopie porte forcément sur la même notion, au même niveau. Lu par
+ *  paquets de notions (la liste part dans l'URL) et par pages (la base rend au
+ *  plus mille lignes par lecture). */
+const TRAINING_PAGE = 1000;
 
-async function loadParcoursContents(workshopId: string): Promise<string[]> {
+async function loadParcoursByNotionLevel(notionIds: string[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (notionIds.length === 0) return out;
   const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('exam_questions')
-    .select('id, exam_question_items(content)')
-    .eq('workshop_id', workshopId)
-    .eq('context', 'parcours')
-    .order('created_at', { ascending: false })
-    .limit(PARCOURS_CONTEXT_CAP);
-  if (error) throw new Error(error.message);
 
-  return (data ?? [])
-    .flatMap((group) => ((group.exam_question_items ?? []) as unknown as { content: string }[]))
-    .map((item) => (item.content ?? '').trim())
-    .filter((content) => content.length > 0);
+  for (let i = 0; i < notionIds.length; i += NOTIONS_PER_COUNT_QUERY) {
+    const chunk = notionIds.slice(i, i + NOTIONS_PER_COUNT_QUERY);
+    for (let from = 0; ; from += TRAINING_PAGE) {
+      // table encore nommée bricks en base (exam_question_item_bricks, brick_id)
+      const { data, error } = await supabase
+        .from('exam_question_item_bricks')
+        .select('item_id, brick_id, bloom_level, exam_question_items!inner(content, exam_questions!inner(context))')
+        .eq('exam_question_items.exam_questions.context', 'parcours')
+        .in('brick_id', chunk)
+        .order('item_id')
+        .order('brick_id')
+        .range(from, from + TRAINING_PAGE - 1);
+      if (error) throw new Error(error.message);
+
+      for (const row of data ?? []) {
+        const content = ((row.exam_question_items as unknown as { content: string } | null)?.content ?? '').trim();
+        if (!content) continue;
+        const key = `${row.brick_id as string}|${row.bloom_level as number | null}`;
+        const list = out.get(key);
+        if (list) list.push(content);
+        else out.set(key, [content]);
+      }
+      if ((data ?? []).length < TRAINING_PAGE) break;
+    }
+  }
+  return out;
 }
 
 
@@ -1302,11 +1323,11 @@ export type Stage1State = {
 /** La réponse de l'étape, gardée sans rien écrire le temps de la relance. */
 type Stage1Pending = {
   fresh: { ref: string; name: string }[];
-  reused: [string, string][];
   chapterOrder: { ref: string; rank: number; reason: string }[];
   chapterBounds: { ref: string; spans: { document: string; from: number; to: number }[] }[];
   dropped: string[];
-  blocked: boolean;
+  /** Les chapitres existants sortis faute de page — pour le dire. */
+  withoutPages?: string[];
   visibleExisting: { id: string; name: string }[];
   notions: { id: string; title: string; chapterId: string | null }[];
   standings: Record<string, NotionStanding>;
@@ -1371,11 +1392,8 @@ async function loadProgramForChapters(workshopId: string): Promise<{
   };
 }
 
-function toVerdicts(
-  verdicts: ReturnType<typeof parsePlan>['notionVerdicts'],
-  idOf: (ref: string) => string,
-): NotionVerdict[] {
-  return verdicts.map((v) => (v.verdict === 'chapter' ? { ...v, chapterRef: idOf(v.chapterRef) } : v));
+function toVerdicts(verdicts: ReturnType<typeof parsePlan>['notionVerdicts']): NotionVerdict[] {
+  return verdicts.map((v) => (v.verdict === 'chapter' ? { ...v, chapterRef: v.chapterRef } : v));
 }
 
 /** Étape 1 — les CHAPITRES, sur le texte du cours. Un seul appel (deux si
@@ -1404,12 +1422,22 @@ export async function ingestChapters(
     const existing: ExistingContent = { chapters: program.chapters, notions: program.notions, questions: [] };
     const refs = { chapterIds: program.chapters.map((c) => c.id), notionIds: program.notions.map((n) => n.id) };
 
-    // Les chapitres existants que la réponse GARDE au programme, par leur nom :
-    // sert à mesurer le découpage résultant, et à le montrer au modèle si on le
-    // lui fait vérifier.
-    const keptChapters = (order: { ref: string; rank: number }[]): string[] => {
-      const retired = new Set(order.filter((o) => o.rank === 0).map((o) => o.ref));
+    // Ce que la réponse garde ou crée au programme : un chapitre sans page n'y
+    // est pas (§7.6). `pagedOf` sert à mesurer le découpage résultant, et à le
+    // montrer au modèle si on le lui fait vérifier.
+    const pagedOf = (parsed: ReturnType<typeof parsePlan>) =>
+      chaptersWithPages(parsed.chapterBounds, input.pageCounts, input.fileNames);
+    const keptChapters = (parsed: ReturnType<typeof parsePlan>): string[] => {
+      const retired = new Set(retiredChapters(
+        program.chapters.map((c) => c.id),
+        parsed.chapterOrder.filter((o) => o.rank === 0).map((o) => o.ref),
+        pagedOf(parsed),
+      ));
       return program.chapters.filter((c) => !retired.has(c.id)).map((c) => c.name);
+    };
+    const createdChapters = (parsed: ReturnType<typeof parsePlan>) => {
+      const paged = pagedOf(parsed);
+      return parsed.chapters.filter((c) => paged.has(c.ref));
     };
 
     const meta: StepMeta = { importId, workshopId, step: 'chapters', provider };
@@ -1438,57 +1466,42 @@ export async function ingestChapters(
         });
         return parsed;
       },
-      (parsed) => parsed.chapters.length + keptChapters(parsed.chapterOrder).length,
-      (parsed) => [...keptChapters(parsed.chapterOrder), ...parsed.chapters.map((c) => c.name)],
+      (parsed) => createdChapters(parsed).length + keptChapters(parsed).length,
+      (parsed) => [...keptChapters(parsed), ...createdChapters(parsed).map((c) => c.name)],
     );
 
-    // ⚠️ **Un chapitre proposé en double est REDIRIGÉ, jamais écarté.** Écarter
-    // un chapitre orphelinerait tout ce qu'on vient de lui attribuer : on ne le
-    // crée pas, et sa référence pointe vers le chapitre existant.
-    const reused = new Map<string, string>();
-    const fresh = plan.chapters.filter((c) => {
-      const found = findExistingMatch(c.name, program.chapters, (ch) => ch.name);
-      if (!found) return true;
-      reused.set(c.ref, found.match.id);
-      plan.adjusted.push({
-        kind: 'chapter',
-        ref: c.ref,
-        reason: `chapitre déjà présent (« ${found.match.name} ») — notions rangées dedans plutôt que dans un doublon`,
-      });
-      return false;
-    });
-
-    // Garde-fou « jamais tous » : écarter chaque chapitre au programme en un
-    // import n'est presque jamais une décision (§7.6).
-    const guard = guardDrops(
+    // Un chapitre est au programme s'il occupe des pages du cours, et
+    // seulement alors (§7.6) : un chapitre neuf sans page n'est pas créé, un
+    // chapitre existant sans page sort — caché, jamais effacé.
+    const paged = pagedOf(plan);
+    const fresh = createdChapters(plan);
+    for (const c of plan.chapters.filter((c) => !paged.has(c.ref))) {
+      plan.adjusted.push({ kind: 'chapter', ref: c.ref, reason: `« ${c.name} » non créé : aucune page du cours ne lui est attribuée` });
+    }
+    const dropped = retiredChapters(
       program.chapters.map((c) => c.id),
       plan.chapterOrder.filter((c) => c.rank === 0).map((c) => c.ref),
+      paged,
     );
-    if (guard.blocked) {
-      plan.adjusted.push({
-        kind: 'chapter',
-        reason: `l'IA proposait d'écarter les ${program.chapters.length} chapitres de l'atelier — rien n'a été écarté, un programme ne se vide pas d'un seul import`,
-      });
-    }
 
-    const idOf = (ref: string) => reused.get(ref) ?? ref;
-    const dropped = new Set(guard.dropped);
+    // Une notion rangée dans un chapitre neuf qui n'est pas créé est traitée
+    // comme rangée dans un chapitre qui sort : hors programme, et elle repasse
+    // à la seconde vérification.
     const layout: ChapterLayout = {
       visible: new Set([
-        ...program.chapters.map((c) => c.id).filter((id) => !dropped.has(id)),
+        ...program.chapters.map((c) => c.id).filter((id) => !dropped.includes(id)),
         ...fresh.map((c) => c.ref),
       ]),
-      dropped,
+      dropped: new Set([...dropped, ...plan.chapters.filter((c) => !paged.has(c.ref)).map((c) => c.ref)]),
     };
-    const standings = classifyNotions(program.notions, toVerdicts(plan.notionVerdicts, idOf), layout);
+    const standings = classifyNotions(program.notions, toVerdicts(plan.notionVerdicts), layout);
 
     const pending: Stage1Pending = {
       fresh: fresh.map((c) => ({ ref: c.ref, name: c.name })),
-      reused: [...reused],
       chapterOrder: plan.chapterOrder,
       chapterBounds: plan.chapterBounds,
-      dropped: guard.dropped,
-      blocked: guard.blocked,
+      dropped,
+      withoutPages: program.chapters.map((c) => c.id).filter((id) => !paged.has(id)),
       visibleExisting: program.chapters,
       notions: program.notions,
       standings: Object.fromEntries(standings),
@@ -1561,9 +1574,8 @@ export async function ingestChaptersRelaunch(
       notionIds: notions.map((n) => n.id),
     }, attempt.result.truncated);
 
-    const reused = new Map(pending.reused);
     const layout: ChapterLayout = { visible: new Set(chapters.map((c) => c.id)), dropped };
-    const again = classifyNotions(notions, toVerdicts(parsed.notionVerdicts, (ref) => reused.get(ref) ?? ref), layout);
+    const again = classifyNotions(notions, toVerdicts(parsed.notionVerdicts), layout);
     const standings = mergeRelaunch(first, again);
     const decision = thresholdDecision(standings, 'relaunch');
 
@@ -1617,8 +1629,11 @@ async function applyStage1(
   }
 
   const discardedChapters = await hideChapters(workshopId, pending.dropped);
+  const withoutPages = new Set(pending.withoutPages ?? []);
   for (const id of discardedChapters) {
-    const reason = pending.chapterOrder.find((c) => c.ref === id)?.reason?.trim();
+    const reason = withoutPages.has(id)
+      ? 'aucune page du cours ne lui est attribuée'
+      : pending.chapterOrder.find((c) => c.ref === id)?.reason?.trim();
     adjusted.push({
       kind: 'chapter',
       ref: id,
@@ -1626,7 +1641,7 @@ async function applyStage1(
     });
   }
 
-  const created = new Map([...(await insertChapters(workshopId, actorId, importId, pending.fresh)), ...pending.reused]);
+  const created = await insertChapters(workshopId, actorId, importId, pending.fresh);
   const idOf = (ref: string) => created.get(ref) ?? ref;
 
   const reordering = await applyChapterOrder(workshopId, pending.chapterOrder, created);
@@ -1690,8 +1705,6 @@ async function applyStage1(
   await writeScope(importId, { stage1, stage1Pending: null });
 
   return {
-    // Seuls les chapitres RÉELLEMENT créés sont comptés : un doublon redirigé
-    // vers un chapitre existant n'est pas une création.
     chapters: pending.fresh.map((c) => ({ id: created.get(c.ref) ?? c.ref, name: c.name })),
     discarded: pending.discarded,
     adjusted,
@@ -1813,7 +1826,7 @@ async function loadNotionsToArrange(workshopId: string) {
   // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
   const { data, error } = await supabase
     .from('workshop_bricks')
-    .select('id, title, chapter_id, import_id, source_document, source_page')
+    .select('id, title, chapter_id, import_id, source_document, source_page, created_at')
     .eq('workshop_id', workshopId)
     .order('created_at')
     .order('id');
@@ -1836,6 +1849,7 @@ async function loadNotionsToArrange(workshopId: string) {
       title: n.title as string,
       chapterId: (n.chapter_id as string | null) ?? null,
       importId: (n.import_id as string | null) ?? null,
+      createdAt: n.created_at as string,
       // Document disparu ou remplacé → provenance retirée, pas devinée.
       sourceDocument: name ?? null,
       page: name ? (n.source_page as number | null) : null,
@@ -1924,24 +1938,23 @@ export async function finishIngestion(
   try {
     const supabase = getSupabaseServerClient();
 
-    // 0. Les redites, en premier : toutes les questions sont écrites, plus
-    // aucune ne peut viser la notion qu'on efface. Ses questions rejoignent
-    // d'abord la notion qui reste — elles portent sur le même fait.
-    const arranged = await loadNotionsToArrange(workshopId);
-    const checked = revalidateRedites(redites, {
-      fresh: new Set(arranged.filter((n) => n.importId === importId).map((n) => n.id)),
-      existing: new Set(arranged.map((n) => n.id)),
-    });
-    if (checked.ignored > 0) {
-      adjusted.push({ kind: 'notion', reason: `${checked.ignored} redite(s) irrecevable(s) — ignorée(s)` });
-    }
-    for (const { remove, keep } of checked.removals) await reattachQuestions(remove, keep);
-    if (checked.removals.length > 0) {
-      await removeOrphans(workshopId, { chapterIds: [], notionIds: checked.removals.map((r) => r.remove) });
-    }
-
     const scope = await readScope(importId);
     const stage1 = scope.stage1 as Stage1State | undefined;
+
+    // 0. Les redites, en premier : toutes les questions sont écrites, plus
+    // aucune ne peut viser la notion qu'on efface. Ses questions et la
+    // progression des élèves rejoignent d'abord la notion qui reste — elles
+    // portent sur le même fait.
+    if (stage1) {
+      const { data: visibleRows } = await supabase
+        .from('workshop_chapters')
+        .select('id')
+        .eq('workshop_id', workshopId)
+        .eq('hidden', false);
+      const visible = new Set((visibleRows ?? []).map((c) => c.id as string));
+      const order = stage1.chapters.map((c) => c.id).filter((id) => visible.has(id));
+      adjusted.push(...(await applyRedites(workshopId, importId, redites, order)).adjusted);
+    }
 
     let stranded: string[] = [];
     if (stage1) {
@@ -2046,8 +2059,6 @@ export type ChapterNotionsResult = ChapterPassResult & {
    *  l'écran, qui les renvoie à la finalisation : aucune écriture concurrente
    *  entre chapitres qui tournent en parallèle. */
   claimed: string[];
-  /** Le chapitre n'avait pas de bornes exploitables et a lu des documents entiers. */
-  wholeDocumentFallback: boolean;
 };
 
 /** Étape 2 — les NOTIONS d'un chapitre, sur ses seules pages (§7.2, §7.3).
@@ -2094,6 +2105,18 @@ export async function ingestChapterNotions(
     },
     (docs) => provider.prepare(docs),
   );
+
+  // Sans page, rien à lire : l'appel écrirait des notions sur un cours qu'il
+  // n'a pas sous les yeux. Un chapitre sans page sort du programme dès l'étape
+  // chapitres ; ce cas ne reste possible que pour un lot ouvert avant cette règle.
+  if (input.documents.length === 0) {
+    return {
+      written: 0,
+      discarded: [],
+      adjusted: [{ kind: 'chapter', ref: chapterId, reason: `« ${chapter.name} » : aucune page du cours — aucune notion extraite` }],
+      claimed: [],
+    };
+  }
 
   try {
     const meta: StepMeta = { importId, workshopId, step: 'notions', batch: index, provider };
@@ -2152,14 +2175,6 @@ export async function ingestChapterNotions(
       new Map(),
     );
 
-    if (input.wholeDocumentFallback) {
-      plan.adjusted.push({
-        kind: 'chapter',
-        ref: chapterId,
-        reason: `« ${chapter.name} » : aucune borne de pages exploitable — le chapitre a lu les documents entiers`,
-      });
-    }
-
     await stepDone(meta, call, {
       ecrites: created.size,
       proposees: plan.notions.length,
@@ -2177,7 +2192,6 @@ export async function ingestChapterNotions(
       discarded: plan.discarded,
       adjusted: plan.adjusted,
       claimed: [...claimed],
-      wholeDocumentFallback: input.wholeDocumentFallback,
     };
   } finally {
     await releaseDocuments(provider, input.uploaded);
@@ -2187,11 +2201,11 @@ export async function ingestChapterNotions(
 export type RedundancyResult = {
   /** Paires soumises au modèle — 0 : aucun appel n'est parti. */
   pairs: number;
-  /** Notions neuves jugées redites — effacées au ménage de fin, pas ici. */
+  /** Notions neuves que les redites vont effacer — au ménage de fin, pas ici. */
   removed: number;
-  /** Ce que le ménage de fin devra effacer, et la notion qui reste pour chacune.
-   *  Rendu à l'écran, qui le renvoie à `finishIngestion`. */
-  removals: { remove: string; keep: string }[];
+  /** Les paires jugées redites. Le ménage de fin en recalcule les gestes sur
+   *  l'état de l'atelier (`resolveRedites`). */
+  duplicates: { a: string; b: string }[];
   adjusted: PlanIssue[];
 };
 
@@ -2213,21 +2227,17 @@ export async function ingestRedites(
   options: { provider?: PlanProvider } = {},
 ): Promise<RedundancyResult> {
   const [stage1, rows] = await Promise.all([stage1Of(importId), loadNotionsToArrange(workshopId)]);
-  const inProgram = new Set(stage1.chapters.map((c) => c.id));
-  const placed = rows
-    .filter((n) => n.chapterId && inProgram.has(n.chapterId))
-    .map((n) => ({ id: n.id, title: n.title, chapterId: n.chapterId, importId: n.importId }));
-  const fresh = placed.filter((n) => n.importId === importId);
-  const freshIds = new Set(fresh.map((n) => n.id));
+  const programOrder = stage1.chapters.map((c) => c.id);
+  const notions = rediteNotionsOf(rows, programOrder, importId);
 
-  const pairs = rediteCandidates(fresh, placed);
+  const pairs = rediteCandidates(notions);
   const answers = await judgeRedites(pairs, async (submitted) => {
     // Créé seulement s'il y a des paires : sans elles, aucun appel, aucune clé.
     const used = options.provider ?? createClaudeProvider({ userHint: await userHintOf(importId) });
     const meta: StepMeta = { importId, workshopId, step: 'redites', provider: used };
     const call = await modelCall(meta, () => used.documentToPlan([], EMPTY, {
       pass: 'redites',
-      pairs: submitted.map((p) => ({ candidate: p.candidate.title, other: p.other.title })),
+      pairs: submitted.map((p) => ({ candidate: p.a.title, other: p.b.title })),
     }));
     await addImportUsage(importId, call.result.usage);
     const raw = (call.result.plan as { verdicts?: unknown } | null)?.verdicts;
@@ -2243,20 +2253,84 @@ export async function ingestRedites(
     return verdicts;
   });
 
-  const removals = rediteRemovals(pairs, answers, freshIds);
-  if (removals.length === 0) return { pairs: pairs.length, removed: 0, removals: [], adjusted: [] };
+  const duplicates = judgedDuplicates(pairs, answers);
+  // Le compte annoncé à l'écran : le geste lui-même se recalcule au ménage de
+  // fin, sur l'état de l'atelier à ce moment-là.
+  const { actions } = resolveRedites(duplicates, new Map(notions.map((n) => [n.id, n])), programOrder);
+  const removed = actions.filter((a) => a.kind === 'merge' && notions.find((n) => n.id === a.remove)?.fresh).length;
+  return { pairs: pairs.length, removed, duplicates, adjusted: [] };
+}
 
-  const titles = new Map(placed.map((n) => [n.id, n.title]));
-  return {
-    pairs: pairs.length,
-    removed: removals.length,
-    removals,
-    adjusted: removals.map(({ remove, keep }) => ({
-      kind: 'notion' as const,
-      ref: remove,
-      reason: `« ${titles.get(remove) ?? remove} » redisait « ${titles.get(keep) ?? keep} » d'un autre chapitre — effacée, ses questions rattachées à l'autre`,
-    })),
-  };
+/** Les notions au programme de ce lot, telles que les redites les jugent. */
+function rediteNotionsOf(
+  rows: Awaited<ReturnType<typeof loadNotionsToArrange>>,
+  programOrder: readonly string[],
+  importId: string,
+): RediteNotion[] {
+  const inProgram = new Set(programOrder);
+  return rows
+    .filter((n) => n.chapterId && inProgram.has(n.chapterId))
+    .map((n) => ({
+      id: n.id,
+      title: n.title,
+      chapterId: n.chapterId,
+      fresh: n.importId === importId,
+      createdAt: n.createdAt,
+    }));
+}
+
+/** Applique les redites jugées (§7.6), une fois toutes les questions écrites.
+ *  Les paires sont RECALCULÉES sur l'état de l'atelier (`resolveRedites`) : ce
+ *  qui arrive de l'étape redites n'est qu'une liste de paires, jamais un ordre
+ *  d'effacement. Pour chaque fusion, dans l'ordre : les questions, puis la
+ *  progression des élèves, puis la place, et l'effacement en dernier — une
+ *  panne en route laisse deux notions, jamais une notion perdue. */
+async function applyRedites(
+  workshopId: string,
+  importId: string,
+  duplicates: unknown,
+  programOrder: readonly string[],
+): Promise<{ adjusted: PlanIssue[]; removed: number }> {
+  const list = (Array.isArray(duplicates) ? duplicates : []).flatMap((entry) => {
+    const r = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
+    // `remove`/`keep` : la forme d'avant, d'un lot ouvert avant cette règle.
+    const a = r.a ?? r.remove;
+    const b = r.b ?? r.keep;
+    return typeof a === 'string' && typeof b === 'string' ? [{ a, b }] : [];
+  });
+  if (list.length === 0) return { adjusted: [], removed: 0 };
+
+  const notions = rediteNotionsOf(await loadNotionsToArrange(workshopId), programOrder, importId);
+  const byId = new Map(notions.map((n) => [n.id, n]));
+  const { actions, ignored } = resolveRedites(list, byId, programOrder);
+  const adjusted: PlanIssue[] = [];
+  if (ignored > 0) adjusted.push({ kind: 'notion', reason: `${ignored} redite(s) irrecevable(s) — ignorée(s)` });
+
+  const titleOf = (id: string) => byId.get(id)?.title ?? id;
+  const current = new Map(notions.map((n) => [n.id, n.chapterId]));
+  const removed: string[] = [];
+  for (const action of actions) {
+    if (action.kind === 'unplace') {
+      await applyAssignments(workshopId, [{ notionRef: action.notion }], new Map(), current);
+      adjusted.push({
+        kind: 'notion',
+        ref: action.notion,
+        reason: `« ${titleOf(action.notion)} » redisait « ${titleOf(action.keep)} », plus récente — sortie du programme, sans chapitre`,
+      });
+      continue;
+    }
+    await reattachQuestions(action.remove, action.keep);
+    await transferMastery(action.remove, action.keep);
+    if (action.moveTo) await applyAssignments(workshopId, [{ notionRef: action.keep, chapterRef: action.moveTo }], new Map(), current);
+    removed.push(action.remove);
+    adjusted.push({
+      kind: 'notion',
+      ref: action.remove,
+      reason: `« ${titleOf(action.remove)} » redisait « ${titleOf(action.keep)} » — effacée, ses questions et la progression des élèves passées à l'autre`,
+    });
+  }
+  if (removed.length > 0) await removeOrphans(workshopId, { chapterIds: [], notionIds: removed });
+  return { adjusted, removed: removed.length };
 }
 
 /** Un appel de la passe parcours : ses notions, ce qu'on lui demande sur
@@ -2627,7 +2701,11 @@ export async function ingestExamQuestions(
   // au modèle, et n'ont pas à l'être. Ce qu'on écarte est dit dans le
   // compte-rendu — une question retirée en silence passerait pour une question
   // que le modèle n'a pas su écrire.
-  const { kept, removed } = dropRepeatedQuestions(groups, await loadParcoursContents(workshopId));
+  const training = await loadParcoursByNotionLevel(
+    [...new Set(groups.flatMap((g) => g.questions.flatMap((q) => q.notions.map((n) => n.ref))))],
+  );
+  const { kept, removed } = dropRepeatedQuestions(groups, (question) =>
+    question.notions.flatMap((n) => training.get(`${n.ref}|${n.bloomLevel}`) ?? []));
   for (const repeat of removed) {
     plan.discarded.push({
       kind: 'question',

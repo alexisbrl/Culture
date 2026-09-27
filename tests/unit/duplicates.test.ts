@@ -4,12 +4,13 @@ import {
   NEAR_DUPLICATE,
   dropNearDuplicates,
   dropRepeatedQuestions,
-  findExistingMatch,
   flagSimilar,
   judgeRedites,
+  judgedDuplicates,
+  questionFingerprint,
   rediteCandidates,
-  rediteRemovals,
-  revalidateRedites,
+  resolveRedites,
+  type RediteNotion,
   SIMILAR_ENOUGH_TO_ASK,
   proximity,
   significantWords,
@@ -147,46 +148,6 @@ describe('dropNearDuplicates', () => {
 
   it('un lot vide ne rend rien et ne lève pas', () => {
     expect(dropNearDuplicates([], [LIVRE_ANCIENNE], titleOf)).toEqual({ kept: [], dropped: [] });
-  });
-});
-
-describe('findExistingMatch — le doublon de CHAPITRE se redirige, il ne s’écarte pas', () => {
-  const chapitres = [
-    { id: 'c1', name: "L'Europe, foyer de peuplement et d'émigration" },
-    { id: 'c2', name: "La citoyenneté et l'Empire à Rome du I° au III° siècle après JC" },
-    { id: 'c3', name: "Les hommes de la Renaissance et l'humanisme" },
-  ];
-  const nameOf = (c: { name: string }) => c.name;
-
-  it('reconnaît un chapitre existant proposé sous une forme raccourcie', () => {
-    const found = findExistingMatch("L'Europe, foyer de peuplement", chapitres, nameOf);
-    expect(found?.match.id).toBe('c1');
-  });
-
-  it('ne confond pas deux chapitres réellement distincts du même cours', () => {
-    expect(findExistingMatch("L'élargissement du monde du XV° au XVI° siècle", chapitres, nameOf)).toBeNull();
-    expect(findExistingMatch('La Révolution française', chapitres, nameOf)).toBeNull();
-  });
-
-  it('rend l’élément entier, parce que l’appelant a besoin de son identifiant', () => {
-    // C'est toute la différence avec les notions : un chapitre en double n'est
-    // pas jeté, sa référence est redirigée vers celui qui existe — sinon les
-    // notions qu'on venait de lui affecter se retrouveraient orphelines.
-    const found = findExistingMatch("Les hommes de la Renaissance et l'humanisme", chapitres, nameOf);
-    expect(found?.match).toEqual(chapitres[2]);
-    expect(found?.proximity).toBe(1);
-  });
-
-  it('retient le plus proche quand deux existants s’en rapprochent', () => {
-    const found = findExistingMatch("L'Europe, foyer de peuplement et d'émigration", [
-      { id: 'a', name: "L'Europe" },
-      { id: 'b', name: "L'Europe, foyer de peuplement et d'émigration" },
-    ], nameOf, 0.2);
-    expect(found?.match.id).toBe('b');
-  });
-
-  it('ne trouve rien dans une liste vide', () => {
-    expect(findExistingMatch('Un chapitre', [], nameOf)).toBeNull();
   });
 });
 
@@ -329,108 +290,123 @@ describe('dropRepeatedQuestions', () => {
   });
 });
 
-describe('redites entre chapitres (§7.6)', () => {
-  const loire = { id: 'old1', title: 'La Loire est le plus long fleuve de France avec 1 012 km', chapterId: 'c1' };
-  const loireBis = { id: 'new1', title: 'Avec 1 012 km, la Loire est le plus long fleuve de France', chapterId: 'c2' };
-  const seine = { id: 'new2', title: 'La Seine se jette dans la Manche au Havre', chapterId: 'c2' };
-  const loireTer = { id: 'new3', title: 'La Loire est le plus long fleuve de France, avec 1 012 km', chapterId: 'c3' };
-
-  it('ne soumet que les paires neuve ↔ autre chapitre, chacune une fois', () => {
-    const pairs = rediteCandidates([loireBis, seine, loireTer], [loire, loireBis, seine, loireTer]);
-    const keys = pairs.map((p) => [p.candidate.id, p.other.id].sort().join('|'));
-    expect(new Set(keys).size).toBe(keys.length);
-    expect(keys).toContain('new1|old1');
-    expect(keys).toContain('new1|new3');
-    expect(pairs.every((p) => p.candidate.chapterId !== p.other.chapterId)).toBe(true);
-    expect(keys.some((k) => k.includes('new2'))).toBe(false);
+describe('questionFingerprint — la recopie, pas la parenté', () => {
+  it('ignore l’ordre des mots, la ponctuation, les accents et la casse', () => {
+    expect(questionFingerprint('Quelle est la capitale du Pérou ?')).toBe(questionFingerprint('du PEROU, la capitale est quelle.'));
   });
 
-  it('respecte le plafond, les plus proches d’abord', () => {
-    const pairs = rediteCandidates([loireBis, loireTer], [loire, loireBis, loireTer], 1);
-    expect(pairs).toHaveLength(1);
+  it('un mot de différence suffit à distinguer', () => {
+    expect(questionFingerprint('Combien fait 7 + 13 ?')).not.toBe(questionFingerprint('Combien fait 7 + 23 ?'));
   });
 
-  it('aucune paire ⇒ aucun appel', async () => {
-    const ask = vi.fn(async () => [{ pair: 0, duplicate: true }]);
-    expect(await judgeRedites([], ask)).toEqual([]);
-    expect(ask).not.toHaveBeenCalled();
+  it('un énoncé sans mot porteur n’a pas d’empreinte, et ne recopie rien', () => {
+    expect(questionFingerprint('?')).toBe('');
+    expect(dropRepeatedQuestions([{ questions: [{ content: '?' }] }], ['!']).kept).toHaveLength(1);
   });
 
-  it('des paires ⇒ un seul appel', async () => {
-    const ask = vi.fn(async () => [{ pair: 0, duplicate: true }]);
-    const pairs = rediteCandidates([loireBis], [loire, loireBis]);
-    await judgeRedites(pairs, ask);
-    expect(ask).toHaveBeenCalledTimes(1);
-  });
-
-  it('seule la neuve s’efface ; l’ancienne reste', () => {
-    const pairs = [{ candidate: loireBis, other: loire, proximity: 0.9 }];
-    expect(rediteRemovals(pairs, [{ pair: 0, duplicate: true }], new Set(['new1']))).toEqual([
-      { remove: 'new1', keep: 'old1' },
-    ]);
-  });
-
-  it('une notion préexistante n’est JAMAIS rendue à effacer, même désignée', () => {
-    // Paire mal formée où l'ancienne occupe la place de la candidate : le
-    // modèle a beau répondre « redite », rien ne sort.
-    const pairs = [{ candidate: loire, other: loireBis, proximity: 0.9 }];
-    expect(rediteRemovals(pairs, [{ pair: 0, duplicate: true }], new Set(['new1']))).toEqual([]);
-    // Et quelle que soit la réponse, aucune notion hors du lot n'est rendue.
-    const all = [
-      { candidate: loireBis, other: loire, proximity: 0.9 },
-      { candidate: loire, other: loireTer, proximity: 0.9 },
-    ];
-    const removals = rediteRemovals(all, [0, 1, 2, -1, 1.5].map((pair) => ({ pair, duplicate: true })), new Set(['new1', 'new3']));
-    expect(removals.map((r) => r.remove)).toEqual(['new1']);
-  });
-
-  it('« pas une redite », paire inconnue, réponse en double : rien', () => {
-    const pairs = [{ candidate: loireBis, other: loire, proximity: 0.9 }];
-    expect(rediteRemovals(pairs, [{ pair: 0, duplicate: false }, { pair: 7, duplicate: true }], new Set(['new1']))).toEqual([]);
-  });
-
-  it('une notion déjà effacée ne sert pas de notion gardée', () => {
-    const pairs = [
-      { candidate: loireBis, other: loireTer, proximity: 0.9 },
-      { candidate: loireTer, other: loireBis, proximity: 0.9 },
-    ];
-    expect(rediteRemovals(pairs, [{ pair: 0, duplicate: true }, { pair: 1, duplicate: true }], new Set(['new1', 'new3']))).toEqual([
-      { remove: 'new1', keep: 'new3' },
-    ]);
+  it('compare chaque question aux seuls énoncés qu’on lui désigne', () => {
+    const groups = [{ questions: [{ content: 'Quelle est la capitale du Pérou ?', notion: 'n1' }] }];
+    const pool: Record<string, string[]> = { n1: [], n2: ['Quelle est la capitale du Pérou ?'] };
+    expect(dropRepeatedQuestions(groups, (q) => pool[q.notion]).kept).toHaveLength(1);
+    expect(dropRepeatedQuestions(groups, () => pool.n2).kept).toHaveLength(0);
   });
 });
 
-// Les redites reviennent du navigateur à la finalisation, qui les efface : ce
-// sont des effacements pilotés par une donnée qui a fait l'aller-retour.
-describe('revalidateRedites', () => {
-  const allowed = { fresh: new Set(['new1', 'new2']), existing: new Set(['new1', 'new2', 'old1', 'old2']) };
+// Les doublons entre notions, jugés à la fin (§7.6). Testé parce que la règle
+// EFFACE des notions — y compris une ancienne, après transfert de ses questions
+// et de la progression des élèves — sur la foi d'une réponse du modèle.
+describe('redites (§7.6)', () => {
+  const n = (id: string, title: string, chapterId: string | null, fresh: boolean, createdAt = '2026-09-01'): RediteNotion =>
+    ({ id, title, chapterId, fresh, createdAt });
+  const LOIRE = 'La Loire est le plus long fleuve de France avec 1 012 km';
+  const LOIRE_BIS = 'Avec 1 012 km, la Loire est le plus long fleuve de France';
+  const SEINE = 'La Seine se jette dans la Manche au Havre';
+  const order = ['c1', 'c2', 'c3'];
 
-  it('garde un effacement valide', () => {
-    expect(revalidateRedites([{ remove: 'new1', keep: 'old1' }], allowed)).toEqual({
-      removals: [{ remove: 'new1', keep: 'old1' }],
-      ignored: 0,
+  describe('rediteCandidates', () => {
+    it('soumet chaque paire proche une fois, les plus proches d’abord', () => {
+      const pairs = rediteCandidates([n('old', LOIRE, 'c1', false), n('new1', LOIRE_BIS, 'c2', true), n('new2', SEINE, 'c2', true)]);
+      expect(pairs.map((p) => [p.a.id, p.b.id])).toEqual([['old', 'new1']]);
+    });
+
+    it('ne soumet pas une notion neuve face à une notion de son propre chapitre — déjà jugée à l’étape notions', () => {
+      expect(rediteCandidates([n('old', LOIRE, 'c2', false), n('new', LOIRE_BIS, 'c2', true)])).toEqual([]);
+    });
+
+    it('soumet deux anciennes, même dans un seul chapitre : personne ne les a jamais jugées', () => {
+      expect(rediteCandidates([n('a', LOIRE, 'c1', false), n('b', LOIRE_BIS, 'c1', false)])).toHaveLength(1);
+    });
+
+    it('respecte le plafond', () => {
+      const notions = [n('a', LOIRE, 'c1', false), n('b', LOIRE_BIS, 'c2', true), n('c', LOIRE, 'c3', true)];
+      expect(rediteCandidates(notions, 1)).toHaveLength(1);
     });
   });
 
-  it("n'efface jamais une notion antérieure au lot, quoi qu'on lui envoie", () => {
-    expect(revalidateRedites([{ remove: 'old1', keep: 'new1' }], allowed)).toEqual({ removals: [], ignored: 1 });
+  describe('judgeRedites / judgedDuplicates', () => {
+    const pairs = rediteCandidates([n('old', LOIRE, 'c1', false), n('new', LOIRE_BIS, 'c2', true)]);
+
+    it('aucune paire ⇒ aucun appel', async () => {
+      const ask = vi.fn(async () => [{ pair: 0, duplicate: true }]);
+      expect(await judgeRedites([], ask)).toEqual([]);
+      expect(ask).not.toHaveBeenCalled();
+    });
+
+    it('des paires ⇒ un seul appel', async () => {
+      const ask = vi.fn(async () => [{ pair: 0, duplicate: true }]);
+      await judgeRedites(pairs, ask);
+      expect(ask).toHaveBeenCalledTimes(1);
+    });
+
+    it('ne retient que les « redite », une fois, sur une paire connue', () => {
+      const answers = [0, 0, 7, -1, 1.5].map((pair) => ({ pair, duplicate: true }));
+      expect(judgedDuplicates(pairs, [...answers, { pair: 0, duplicate: false }])).toEqual([{ a: 'old', b: 'new' }]);
+      expect(judgedDuplicates(pairs, [{ pair: 0, duplicate: false }])).toEqual([]);
+    });
   });
 
-  it('refuse une notion gardée absente de l’atelier, et une notion gardée qui est elle-même', () => {
-    const out = revalidateRedites([{ remove: 'new1', keep: 'ailleurs' }, { remove: 'new2', keep: 'new2' }], allowed);
-    expect(out).toEqual({ removals: [], ignored: 2 });
-  });
+  describe('resolveRedites', () => {
+    const resolve = (duplicates: { a: string; b: string }[], notions: RediteNotion[]) =>
+      resolveRedites(duplicates, new Map(notions.map((x) => [x.id, x])), order);
 
-  it("n'utilise jamais comme notion gardée une notion effacée, dans un sens comme dans l'autre", () => {
-    expect(revalidateRedites([{ remove: 'new1', keep: 'old1' }, { remove: 'new2', keep: 'new1' }], allowed).removals)
-      .toEqual([{ remove: 'new1', keep: 'old1' }]);
-    expect(revalidateRedites([{ remove: 'new2', keep: 'new1' }, { remove: 'new1', keep: 'old1' }], allowed).removals)
-      .toEqual([{ remove: 'new2', keep: 'new1' }]);
-  });
+    it('deux neuves : celle du chapitre qui vient le premier reste', () => {
+      const out = resolve([{ a: 'n3', b: 'n1' }], [n('n3', LOIRE, 'c3', true), n('n1', LOIRE_BIS, 'c1', true)]);
+      expect(out.actions).toEqual([{ kind: 'merge', keep: 'n1', remove: 'n3', moveTo: null }]);
+    });
 
-  it('ignore une entrée mal formée sans faire échouer le reste', () => {
-    expect(revalidateRedites([null, 'x', { remove: 3, keep: 'old1' }, { remove: 'new1', keep: 'old2' }], allowed))
-      .toEqual({ removals: [{ remove: 'new1', keep: 'old2' }], ignored: 3 });
-    expect(revalidateRedites('pas une liste', allowed)).toEqual({ removals: [], ignored: 0 });
+    it('une neuve et une ancienne : la neuve reste, et prend la place la plus haute', () => {
+      const out = resolve([{ a: 'old', b: 'new' }], [n('old', LOIRE, 'c1', false), n('new', LOIRE_BIS, 'c3', true)]);
+      expect(out.actions).toEqual([{ kind: 'merge', keep: 'new', remove: 'old', moveTo: 'c1' }]);
+    });
+
+    it('une neuve déjà plus haut que l’ancienne : elle ne bouge pas', () => {
+      const out = resolve([{ a: 'old', b: 'new' }], [n('old', LOIRE, 'c3', false), n('new', LOIRE_BIS, 'c1', true)]);
+      expect(out.actions).toEqual([{ kind: 'merge', keep: 'new', remove: 'old', moveTo: null }]);
+    });
+
+    it('deux anciennes : la plus récente reste, l’autre sort sans rien perdre', () => {
+      const out = resolve(
+        [{ a: 'older', b: 'newer' }],
+        [n('older', LOIRE, 'c1', false, '2026-01-01'), n('newer', LOIRE_BIS, 'c1', false, '2026-06-01')],
+      );
+      expect(out.actions).toEqual([{ kind: 'unplace', keep: 'newer', notion: 'older' }]);
+    });
+
+    it('ignore une paire inconnue, hors programme, ou trop éloignée pour avoir été soumise', () => {
+      const out = resolve(
+        [{ a: 'old', b: 'zzz' }, { a: 'old', b: 'hidden' }, { a: 'old', b: 'seine' }, { a: 'old', b: 'old' }],
+        [n('old', LOIRE, 'c1', false), n('hidden', LOIRE_BIS, 'ailleurs', true), n('seine', SEINE, 'c2', true)],
+      );
+      expect(out).toEqual({ actions: [], ignored: 4 });
+    });
+
+    it('une notion ne sert qu’à une paire : la plus proche la fige', () => {
+      const out = resolve(
+        [{ a: 'old', b: 'bis' }, { a: 'old', b: 'ter' }],
+        [n('old', LOIRE, 'c1', false), n('bis', LOIRE, 'c2', true), n('ter', LOIRE_BIS, 'c3', true)],
+      );
+      expect(out.actions).toEqual([{ kind: 'merge', keep: 'bis', remove: 'old', moveTo: 'c1' }]);
+      expect(out.ignored).toBe(1);
+    });
   });
 });

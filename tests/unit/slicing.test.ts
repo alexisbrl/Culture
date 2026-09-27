@@ -97,30 +97,21 @@ describe('sliceChapters', () => {
     ['à zéro', [span(0, 0)]],
     ['inversées', [span(8, 3)]],
     ['hors document', [span(40, 45)]],
-  ])('bornes %s : le document entier, signalé', (_, spans) => {
+  ])('bornes %s : le chapitre ne reçoit rien — jamais le document entier', (_, spans) => {
+    // Lui donner le cours entier lui faisait réécrire tout le cours sous son
+    // titre (génération Evalia du 27/09/2026) : un chapitre sans page sort du
+    // programme avant d'arriver ici.
     const r = sliceChapters(
       [{ key: 'a', spans: [span(1, 10)] }, { key: 'b', spans }],
       [DOC],
     );
-    const b = r.chapters.find((c) => c.key === 'b')!;
-    expect(b.wholeDocumentFallback).toBe(true);
-    expect(pagesOf(r, 'b')).toBeNull();
-    expect(r.chapters.find((c) => c.key === 'a')!.wholeDocumentFallback).toBe(false);
+    expect(r.chapters.find((c) => c.key === 'b')!.slices).toEqual([]);
+    expect(pagesOf(r, 'a')).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
 
   it('borne qui dépasse la fin : ramenée à la dernière page', () => {
     const r = sliceChapters([{ key: 'a', spans: [span(8, 99)] }], [DOC]);
     expect(pagesOf(r, 'a')).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    expect(r.chapters[0].wholeDocumentFallback).toBe(false);
-  });
-
-  it('bornes inexploitables sur un document désigné : ce document seul', () => {
-    const r = sliceChapters(
-      [{ key: 'a', spans: [span(1, 5)] }, { key: 'b', spans: [span(0, 0, 'd2')] }],
-      [DOC, { id: 'd2', pageCount: 4 }],
-    );
-    const b = r.chapters.find((c) => c.key === 'b')!;
-    expect(b.slices).toEqual([{ documentId: 'd2', pages: null }]);
   });
 
   it('document que rien ne couvre : en entier dans chaque chapitre', () => {
@@ -138,7 +129,6 @@ describe('sliceChapters', () => {
       [{ id: 'txt', pageCount: null }],
     );
     expect(pagesOf(r, 'a', 'txt')).toBeNull();
-    expect(r.chapters[0].wholeDocumentFallback).toBe(false);
   });
 
   it('ignore un document inconnu', () => {

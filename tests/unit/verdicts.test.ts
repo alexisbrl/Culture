@@ -5,8 +5,8 @@ import {
   RELAUNCH_THRESHOLD,
   classifyNotions,
   finalFates,
-  guardDrops,
   mergeRelaunch,
+  retiredChapters,
   recheckList,
   revalidateClaims,
   strandedNotions,
@@ -194,22 +194,22 @@ describe('recheckList', () => {
   });
 });
 
-describe('guardDrops — jamais tous', () => {
-  it('écarter tous les chapitres visibles : rien n’est appliqué', () => {
-    expect(guardDrops(['a', 'b'], ['a', 'b'])).toEqual({ dropped: [], blocked: true });
-    expect(guardDrops(['a', 'b'], ['b', 'a', 'a'])).toEqual({ dropped: [], blocked: true });
+describe('retiredChapters — un chapitre sans page n’est pas au programme', () => {
+  it('sort au rang 0, ou faute de page', () => {
+    expect(retiredChapters(['a', 'b', 'c'], ['a'], new Set(['a', 'b']))).toEqual(['a', 'c']);
   });
 
-  it('en écarter une partie : appliqué', () => {
-    expect(guardDrops(['a', 'b', 'c'], ['a', 'c'])).toEqual({ dropped: ['a', 'c'], blocked: false });
+  it('un chapitre que la réponse tait n’a pas de page : il sort', () => {
+    expect(retiredChapters(['a', 'b'], [], new Set(['a']))).toEqual(['b']);
   });
 
-  it('une référence inconnue ne compte pas', () => {
-    expect(guardDrops(['a', 'b'], ['a', 'zzz'])).toEqual({ dropped: ['a'], blocked: false });
+  it('tous d’un coup : appliqué, aucun garde-fou ne retient la sortie', () => {
+    // Le cas Evalia du 27/09/2026 : un cours qui en remplace un autre.
+    expect(retiredChapters(['a', 'b'], ['a', 'b'], new Set())).toEqual(['a', 'b']);
   });
 
-  it('atelier sans chapitre : rien à garder', () => {
-    expect(guardDrops([], [])).toEqual({ dropped: [], blocked: false });
+  it('une référence inconnue ne sort rien', () => {
+    expect(retiredChapters(['a'], ['zzz'], new Set(['a']))).toEqual([]);
   });
 });
 
