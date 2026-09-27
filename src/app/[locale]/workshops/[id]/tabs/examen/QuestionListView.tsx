@@ -6,7 +6,6 @@ import { Link2, Pencil, Sparkles, Trash2 } from 'lucide-react';
 import { palette, withAlpha, ink } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AiGenerationDialog, { useWorkshopFiles } from '@/components/ai/AiGenerationDialog';
-import ImportBanner from '@/components/ai/ImportBanner';
 import { AiGenerationQueue } from '@/components/ai/AiGenerationButton';
 import { setListCreation, useListDraft, type ListCreation, type ListDoor } from '@/components/ai/listDraftStore';
 import { type Question, type ResponseType, type BloomLevel } from '../QuestionEditor';
@@ -750,16 +749,6 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
           quoi créer. Les filtres actifs ne sont pas repris ici non plus : ils se
           lisent et se règlent dans leur panneau, d'où le compteur porté par le
           bouton « filtres ». */}
-      {/* Le bandeau n'annonce que ce que CETTE liste a reçu : la banque d'examen
-          ne parle pas des questions du parcours, et réciproquement. */}
-      {workshopId && (
-        <ImportBanner
-          workshopId={workshopId}
-          scope={aiContext === 'exam' ? 'exam' : 'programme'}
-          waitFor={loading}
-        />
-      )}
-
 
       {/* Barre d'outils commune aux deux listes (`ListToolbar`) : la banque n'y
           met que ce qui lui est propre — sa recherche, ses critères de tri, son

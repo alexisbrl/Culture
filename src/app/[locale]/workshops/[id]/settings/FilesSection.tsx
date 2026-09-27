@@ -6,7 +6,6 @@ import { Check, Download, Loader2, Pencil, Sparkles, Trash2, Upload, X } from 'l
 import { palette, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AiGenerationButton, { SettingsGenerationBox } from '@/components/ai/AiGenerationButton';
-import ImportBanner from '@/components/ai/ImportBanner';
 import { useGenerationRefresh } from '@/components/ai/generationStore';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import {
@@ -171,10 +170,7 @@ export default function FilesSection({ workshopId, initialFiles }: { workshopId:
         <div style={{ marginBottom: 36 }}>
           {/* Seconde porte sur la génération : on y arrive soit par les documents
               (ici), soit par le programme qu'ils alimentent (Chapitre & Notion).
-              Même dialogue derrière — §8 du plan d'ingestion. Le bandeau
-              d'annulation suit, pour qu'on puisse revenir en arrière sans changer
-              d'écran. */}
-          <ImportBanner workshopId={workshopId} scope="programme" />
+              Même dialogue derrière — §8 du plan d'ingestion. */}
           {/* L'encadré de génération, au-dessus du titre : le même que dans
               Chapitre & Notion, qui garde sa consigne d'un onglet à l'autre. */}
           <SettingsGenerationBox workshopId={workshopId} origin="settings-files" />

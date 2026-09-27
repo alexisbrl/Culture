@@ -653,7 +653,7 @@ ressemblance reste réservé aux notions.
 ### 7.8 L'écriture : directe, étiquetée, annulable
 
 **Pas de prévisualisation.** Le plan est écrit immédiatement ; l'utilisateur constate dans
-l'app et annule si besoin.
+l'app et défait ce qui ne lui convient pas.
 
 Chaque élément créé porte l'**étiquette de sa génération**. Annuler = tout retirer d'un
 coup. Deux conditions : **moins de 24 h**, et **aucun élément modifié**.
@@ -665,12 +665,14 @@ coup. Deux conditions : **moins de 24 h**, et **aucun élément modifié**.
 > strictement identique. La comparaison reste donc exacte ; surtout pas de tolérance de
 > quelques secondes, qui finirait par mentir dans un sens ou dans l'autre.
 
-**Un bandeau, pas une entrée de menu.** « 3 chapitres, 42 notions et 87 questions ajoutés
-par l'IA il y a 12 minutes · Annuler », en tête de **chacun** des écrans concernés. Un
-import touche trois écrans à la fois : l'ancrer sur un seul le rendrait introuvable depuis
-les autres. Le bandeau disparaît de lui-même et ne laisse traîner aucune commande
-destructrice. Il n'annonce que des générations **terminées** : celle qui tourne se lit sur
-le bouton de génération (§7.11).
+**Pas de bandeau d'annulation : un libellé par lot.** À la clôture d'une génération
+lancée depuis l'examen — aboutie ou non —, ses questions reçoivent un libellé neuf,
+« Lot IA n°N » (le plus grand numéro existant + 1, sans compteur en base ;
+`src/lib/ingest/lotLabel.ts`). On relit le lot par le filtre des libellés et on le défait
+par la suppression du libellé avec ses questions (`src/lib/workshops/labelDeletion.ts`),
+sans délai ni condition. Côté programme (chapitres, notions, questions du parcours), aucune
+commande à l'écran n'annule plus un lot : l'étiquette reste en base, et l'arrêt d'une
+génération en cours s'appuie toujours sur elle.
 
 **Pas de transaction atomique, et c'est assumé.** Un échec en cours laisse un atelier
 partiellement rempli — l'étiquette permet de nettoyer d'un coup, **et elle sert bien
@@ -744,7 +746,7 @@ manque et sera repris au lancement suivant) ; un **délai de garde** par chapitr
 exercices lancés coup sur coup ne rechargent qu'une fois, et une recharge qui vient
 d'échouer ne repart pas en boucle) ; une **trace** — chaque recharge ouvre un lot d'import
 comme n'importe quelle génération, donc son coût est compté et son contenu reste
-annulable.
+étiqueté à son lot.
 
 **Les seuils sont absolus, jamais en pourcentage.** Un seuil proportionnel ferait
 recharger les gros ateliers plus tôt que les petits : ce qui compte pour un élève, c'est

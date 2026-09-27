@@ -927,7 +927,8 @@ export function LabelQuickMenu({ pools, selected, onToggle, onCreate, onEditLabe
 
 /** Libellés rangés par ordre alphabétique — l'ordre de tous les affichages. */
 export function sortPoolsByName<P extends { name: string }>(pools: readonly P[]): P[] {
-  return [...pools].sort((x, y) => x.name.localeCompare(y.name, 'fr', { sensitivity: 'base' }));
+  // `numeric` : « Lot IA n°10 » après « n°9 », pas entre « n°1 » et « n°2 ».
+  return [...pools].sort((x, y) => x.name.localeCompare(y.name, 'fr', { sensitivity: 'base', numeric: true }));
 }
 
 /** Une issue de la fenêtre de suppression d'un libellé : pastille ronde,

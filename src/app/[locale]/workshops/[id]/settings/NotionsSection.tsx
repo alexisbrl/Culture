@@ -6,7 +6,6 @@ import { ChevronDown, EllipsisVertical, EyeOff, GripVertical, Loader2, Pencil, P
 import { palette, shadow, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AiGenerationButton, { SettingsGenerationBox } from '@/components/ai/AiGenerationButton';
-import ImportBanner from '@/components/ai/ImportBanner';
 import { useGenerationRefresh } from '@/components/ai/generationStore';
 import {
   createWorkshopNotion,
@@ -586,11 +585,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
       )}
 
       {/* Génération par IA — l'une des deux portes sur la même fonction, l'autre
-          étant Ressources (§8 du plan d'ingestion). Le bandeau d'annulation est
-          posé ici parce que c'est ici qu'on constate le résultat sur les
-          chapitres et les notions ; il ne s'affiche que tant que le lot est
-          réellement annulable, et disparaît de lui-même. */}
-      <ImportBanner workshopId={workshopId} scope="programme" />
+          étant Ressources (§8 du plan d'ingestion). */}
 
       {/* L'encadré de génération, au-dessus des titres : le même que dans
           Ressources, qui garde sa consigne d'un onglet à l'autre. Il prend la
