@@ -5,7 +5,7 @@
 // présentationnels réutilisés par HistoryContent / BankContent / GeneratorContent / ExamenTab.
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { AlignLeft, ArrowDown, ArrowUp, Check, CheckSquare, File, Filter, Info, List, Palette, Paperclip, Pencil, Plus, Route, Search, Table, X, type LucideIcon } from 'lucide-react';
+import { AlignLeft, ArrowDown, ArrowUp, Check, CheckSquare, File, Filter, Info, List, Palette, Paperclip, Pencil, Plus, Route, Search, Table, Trash2, X, type LucideIcon } from 'lucide-react';
 import { palette, ink, withAlpha, categoryTones, shadow } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -1072,18 +1072,46 @@ export function LabelEditor({ label, usageCount, onSave, onDelete, onClose }: {
   const [confirming, setConfirming] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  function save() {
-    onSave({ ...label, name: name.trim() || label.name, color: color || label.color });
+  // Enregistrement automatique (27/09/2026) : plus de bouton « enregistrer »
+  // ni « annuler ». Une couleur s'enregistre au clic ; le nom, une demi-seconde
+  // après la dernière frappe, et de toute façon à la fermeture — Entrée,
+  // Échap ou clic dehors ferment le panneau. Un nom vidé n'est pas enregistré.
+  const pending = useRef<Pool | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onSaveRef = useRef(onSave);
+  useEffect(() => { onSaveRef.current = onSave; });
+  const flush = useCallback(() => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    const next = pending.current;
+    pending.current = null;
+    if (next) onSaveRef.current(next);
+  }, []);
+  useEffect(() => flush, [flush]);
+
+  function changeName(value: string) {
+    setName(value);
+    if (!value.trim()) return;
+    pending.current = { ...label, name: value.trim(), color };
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(flush, 500);
+  }
+  function changeColor(c: string) {
+    setColor(c);
+    pending.current = { ...label, name: name.trim() || label.name, color: c };
+    flush();
+  }
+  function close() {
+    flush();
     onClose();
   }
 
-  // N'importe quel clic hors du panneau l'abandonne (modifications perdues) :
-  // un panneau qui reste ouvert pendant qu'on travaille ailleurs finit par
-  // enregistrer sur un libellé qu'on ne regarde plus. Le voile ne couvre que
+  // N'importe quel clic hors du panneau le ferme, ce qui a été modifié étant
+  // déjà enregistré : un panneau qui reste ouvert pendant qu'on travaille
+  // ailleurs finit par viser un libellé qu'on ne regarde plus. Le voile ne couvre que
   // l'ancêtre positionné, d'où l'écoute au niveau du document. La confirmation
   // de suppression, elle, est une modale : `useDismissOnOutsideClick` l'ignore
   // d'office, il n'y a pas de cas particulier à tenir ici.
-  useDismissOnOutsideClick(true, cardRef, onClose);
+  useDismissOnOutsideClick(true, cardRef, close);
 
   return (
     <>
@@ -1094,19 +1122,21 @@ export function LabelEditor({ label, usageCount, onSave, onDelete, onClose }: {
           z-60), l'ordre relatif est inchangé — ses frères n'ont pas de z-index. */}
       <div style={{ position: 'absolute', inset: 0, zIndex: SHEET_PANEL_Z - 1, background: withAlpha(palette.cream, 0.7), borderRadius: 12 }} />
       <div ref={cardRef} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: SHEET_PANEL_Z, width: 190, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg, padding: 10 }}>
-        <input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') onClose(); }} style={{ width: '100%', fontSize: 11.5, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box' as const, background: palette.surfaceInput, color: palette.ink }} />
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+        <input autoFocus value={name} onChange={e => changeName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') close(); }} style={{ width: '100%', fontSize: 11.5, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box' as const, background: palette.surfaceInput, color: palette.ink }} />
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           {/* Les témoins montrent l'aplat réellement obtenu, pas la couleur
               brute : on choisit ce qu'on verra sur la pastille. */}
           {LABEL_COLORS.map(c => (
-            <button key={c} type="button" aria-label={c} onClick={() => setColor(c)} style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c), border: color === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }} />
+            <button key={c} type="button" aria-label={c} onClick={() => changeColor(c)} style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c), border: color === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }} />
           ))}
+          {/* Suppression réduite à une corbeille, poussée au bout de la
+              dernière rangée de couleurs. */}
+          <Tooltip content={t('bank.deleteLabel')}>
+            <button type="button" aria-label={t('bank.deleteLabel')} onClick={() => setConfirming(true)} style={{ marginLeft: 'auto', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, borderRadius: 6, border: 'none', background: 'none', color: palette.danger, cursor: 'pointer' }}>
+              <Trash2 size={14} strokeWidth={1.75} />
+            </button>
+          </Tooltip>
         </div>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-          <button type="button" onClick={save} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: 'none', background: palette.ink, color: palette.onInk, cursor: 'pointer', fontFamily: 'inherit' }}>{t('bank.saveLabel')}</button>
-          <button type="button" onClick={onClose} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>{t('cancelLower')}</button>
-        </div>
-        <button type="button" onClick={() => setConfirming(true)} style={{ width: '100%', fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${withAlpha(palette.danger, 0.30)}`, background: withAlpha(palette.danger, 0.08), color: palette.danger, cursor: 'pointer', fontFamily: 'inherit' }}>{t('bank.deleteLabel')}</button>
       </div>
       {confirming && (
         <ConfirmDialog
@@ -1116,7 +1146,7 @@ export function LabelEditor({ label, usageCount, onSave, onDelete, onClose }: {
           description={`${usageCount > 0 ? t('bank.deleteLabelCount', { count: usageCount }) : ''}${t('irreversible')}`}
           confirmLabel={t('delete')}
           onCancel={() => setConfirming(false)}
-          onConfirm={() => { setConfirming(false); onDelete(); onClose(); }}
+          onConfirm={() => { setConfirming(false); pending.current = null; onDelete(); onClose(); }}
         />
       )}
     </>

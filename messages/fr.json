@@ -419,7 +419,6 @@
       "editLabelTitle": "modifier le libellé",
       "quickLabels": "libellés de la question",
       "addLabelShort": "libellé",
-      "saveLabel": "enregistrer",
       "deleteLabel": "supprimer le libellé",
       "showParts": "question liée · voir les {count} parties",
       "hideParts": "masquer les parties",
