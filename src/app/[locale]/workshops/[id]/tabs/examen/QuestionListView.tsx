@@ -6,7 +6,6 @@ import { Link2, Pencil, Sparkles, Trash2 } from 'lucide-react';
 import { palette, withAlpha, ink } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AiGenerationDialog, { useWorkshopFiles } from '@/components/ai/AiGenerationDialog';
-import ImportBanner from '@/components/ai/ImportBanner';
 import { AiGenerationQueue } from '@/components/ai/AiGenerationButton';
 import { setListCreation, useListDraft, type ListCreation, type ListDoor } from '@/components/ai/listDraftStore';
 import { type Question, type ResponseType, type BloomLevel } from '../QuestionEditor';
@@ -16,9 +15,10 @@ import {
   type Pool, type Exam, type SortBy, type SortDir,
   DEFAULT_SORT_DIR, NEVER_EXAM_ID, CARD_LINE, CARD_ACTION_BTN, LIST_INSET_X,
   RESPONSE_TYPE_ICONS,
-  TypeIcon, IconBtn, ListToolbar, FilterButton, ListCard, ListCardSkeleton, LabelPill, LabelEditor, SegmentedToggle,
+  TypeIcon, IconBtn, ListToolbar, FilterButton, ListCard, ListCardSkeleton, LabelPill, LabelEditor, LabelQuickMenu, SegmentedToggle,
   useDismissOnOutsideClick, useRememberedCount,
 } from './examShared';
+import type { LabelImpact } from '@/lib/workshops/labelDeletion';
 import { Tooltip } from '@/components/ui/tooltip';
 
 // Le filtre « QCM » couvre aussi les questions à réponse unique : `qcs` est la
@@ -129,6 +129,12 @@ export type QuestionListLabels = {
   onCreate: (name: string) => string;
   onUpdate: (pool: Pool) => void;
   onDelete: (id: string) => void;
+  /** Pose ou retire un libellé depuis la carte (menu rapide). Absent = les
+   *  pastilles de la carte restent de simples témoins. */
+  onToggleQuestion?: (questionId: string, poolId: string) => void;
+  /** Supprime le libellé ET les questions qui le portent. */
+  onDeleteWithQuestions?: (id: string) => void;
+  impact?: (id: string) => LabelImpact;
 };
 
 export type QuestionListExams = {
@@ -555,8 +561,9 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   }
   // Suppression d'un libellé : la banque a en plus à oublier le filtre qui le
   // visait, sans quoi la liste resterait filtrée sur un libellé disparu.
-  function deleteLabel(id: string) {
-    labels?.onDelete(id);
+  function deleteLabel(id: string, withQuestions = false) {
+    if (withQuestions) labels?.onDeleteWithQuestions?.(id);
+    else labels?.onDelete(id);
     setFilterPools(prev => prev.filter(p => p !== id));
     clearMode(`pool:${id}`);
   }
@@ -637,6 +644,29 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
     }
   });
 
+  /** Pastilles d'une carte. Avec `onToggleQuestion`, elles ouvrent le menu
+   *  rapide des libellés — et un « + libellé » le fait quand la question n'en a
+   *  aucun. Pas sur la question ouverte dans le formulaire : ses libellés s'y
+   *  règlent, et deux endroits pour la même modification en cours finiraient
+   *  par se contredire. */
+  function renderCardLabels(q: Question, isEditing: boolean) {
+    const pills = pools.filter(p => q.pools.includes(p.id)).map(p => (
+      <LabelPill key={p.id} name={p.name} color={p.color} size="xs" />
+    ));
+    const onToggle = labels?.onToggleQuestion;
+    if (!labels || !onToggle || isEditing) return pills;
+    const toggle = (poolId: string) => onToggle(q.id, poolId);
+    return (
+      <LabelQuickMenu
+        pools={pools}
+        selected={q.pools}
+        onToggle={toggle}
+        onCreate={name => toggle(labels.onCreate(name))}
+        size="xs"
+      />
+    );
+  }
+
   function renderQuestionCard(q: Question) {
     const open = openId === q.id;
     const hasParts = q.parts.length > 0;
@@ -680,11 +710,7 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
             )}
           </>
         }
-        meta={!showLabels ? undefined : q.pools.map(pid => {
-          const p = pools.find(pp => pp.id === pid);
-          if (!p) return null;
-          return <LabelPill key={pid} name={p.name} color={p.color} size="xs" />;
-        })}
+        meta={!showLabels ? undefined : renderCardLabels(q, isEditing)}
         actions={
           <>
             <IconBtn size={CARD_ACTION_BTN} active={isEditing} title={isEditing ? tr('cancelEditQuestion') : tr('bank.editQuestion')} onClick={() => onEditQuestion(q)}>
@@ -723,16 +749,6 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
           quoi créer. Les filtres actifs ne sont pas repris ici non plus : ils se
           lisent et se règlent dans leur panneau, d'où le compteur porté par le
           bouton « filtres ». */}
-      {/* Le bandeau n'annonce que ce que CETTE liste a reçu : la banque d'examen
-          ne parle pas des questions du parcours, et réciproquement. */}
-      {workshopId && (
-        <ImportBanner
-          workshopId={workshopId}
-          scope={aiContext === 'exam' ? 'exam' : 'programme'}
-          waitFor={loading}
-        />
-      )}
-
 
       {/* Barre d'outils commune aux deux listes (`ListToolbar`) : la banque n'y
           met que ce qui lui est propre — sa recherche, ses critères de tri, son
@@ -914,9 +930,10 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
                 return (
                   <LabelEditor
                     label={label}
-                    usageCount={questions.filter(q => q.pools.includes(label.id)).length}
+                    impact={labels?.impact?.(label.id) ?? { questions: questions.filter(q => q.pools.includes(label.id)).length, inExams: 0, exams: 0 }}
                     onSave={pool => labels?.onUpdate(pool)}
                     onDelete={() => deleteLabel(label.id)}
+                    onDeleteWithQuestions={labels?.onDeleteWithQuestions ? () => deleteLabel(label.id, true) : undefined}
                     onClose={() => setEditingLabel(null)}
                   />
                 );

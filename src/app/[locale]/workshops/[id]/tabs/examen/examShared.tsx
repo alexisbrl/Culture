@@ -5,11 +5,12 @@
 // présentationnels réutilisés par HistoryContent / BankContent / GeneratorContent / ExamenTab.
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { AlignLeft, ArrowDown, ArrowUp, Check, CheckSquare, File, Filter, Info, List, Palette, Paperclip, Pencil, Plus, Route, Search, Table, X, type LucideIcon } from 'lucide-react';
-import { palette, ink, withAlpha, categoryTones, shadow } from '@/lib/theme';
+import { AlignLeft, ArrowDown, ArrowUp, Check, CheckSquare, File, Filter, Info, List, Palette, Paperclip, Pencil, Plus, Route, Search, Table, Trash2, X, type LucideIcon } from 'lucide-react';
+import { palette, ink, withAlpha, labelTones, shadow } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useIsClipped } from '@/components/ui/clipped-text';
+import type { LabelImpact } from '@/lib/workshops/labelDeletion';
 import { type Question, type QuestionPart, type ResponseType } from '../QuestionEditor';
 // Pièce jointe média (image/audio) : voir questionMedia.tsx pour l'explication
 // du cycle d'import évité. Réexporté ici pour ne pas casser les imports
@@ -202,7 +203,7 @@ const MENU_AUTO_MAX = 240;
  *  propre. */
 export const SHEET_PANEL_Z = 3;
 
-export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, title, triggerLabel, triggerStyle, wrapperStyle, panelWidth = 'trigger', align = 'left', onScroll = 'close', variant = 'list', footer, children }: {
+export function SelectMenu({ items, value, values, keepOpen = false, triggerAs = 'button', onSelect, onEditItem, editTitle, title, triggerLabel, triggerStyle, wrapperStyle, panelWidth = 'trigger', align = 'left', onScroll = 'close', variant = 'list', footer, children }: {
   /** `tone: 'danger'` — entrée destructrice (exclure, supprimer), rendue en
    *  rouge. Elle reste une entrée comme les autres : c'est la couleur qui
    *  prévient, pas une mécanique à part.
@@ -215,6 +216,15 @@ export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, titl
   /** Entrée à marquer comme courante. Absent = menu d'action (« ajouter… »), où
    *  aucune entrée n'est « la » valeur. */
   value?: string;
+  /** `variant: 'pills'` seulement — menu à cases : les entrées marquées, et
+   *  `keepOpen` pour que le menu reste ouvert d'un clic à l'autre (on coche et
+   *  décoche plusieurs libellés d'affilée). */
+  values?: readonly string[];
+  keepOpen?: boolean;
+  /** `div` : déclencheur qui porte lui-même des boutons (le crayon d'une
+   *  pastille) — un `<button>` ne peut pas en contenir un autre. Il reçoit
+   *  alors le rôle, le focus et le clavier d'un bouton. */
+  triggerAs?: 'button' | 'div';
   onSelect: (value: string) => void;
   /** `variant: 'pills'` seulement — crayon sur chaque pastille, qui modifie
    *  l'entrée au lieu de la choisir. Le menu se ferme avant de rappeler :
@@ -243,7 +253,7 @@ export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, titl
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
+  const btnRef = useRef<HTMLElement>(null);
   const panelEl = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number; width: number | undefined; maxHeight: number } | null>(null);
   useDismissOnOutsideClick(open, wrapRef, () => setOpen(false));
@@ -259,13 +269,22 @@ export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, titl
     const width = panelWidth === 'trigger' ? Math.max(r.width, 140)
       : panelWidth === 'auto' ? (panelEl.current?.offsetWidth ?? MENU_AUTO_MIN)
       : panelWidth;
-    const top = r.bottom + 6;
+    // Ouvert vers le bas, sauf si le panneau n'y tient pas et qu'il y a plus de
+    // place au-dessus du bouton (carte en bas de l'écran) : il s'ouvre alors
+    // vers le haut. La hauteur du panneau n'est connue qu'une fois peint — même
+    // convergence en une passe que pour la largeur automatique.
+    const panelH = panelEl.current?.scrollHeight ?? 0;
+    const below = window.innerHeight - r.bottom - 6 - 16;
+    const above = r.top - 6 - 16;
+    const upward = panelH > below && above > below;
+    const maxHeight = Math.max(96, upward ? above : below);
+    const top = upward ? r.top - 6 - Math.min(panelH, maxHeight) : r.bottom + 6;
     const wanted = align === 'right' ? r.right - width : r.left;
     const next = {
       left: Math.max(FILTER_PANEL_MARGIN, Math.min(wanted, window.innerWidth - width - FILTER_PANEL_MARGIN)),
       top,
       width: panelWidth === 'auto' ? undefined : width,
-      maxHeight: Math.max(96, window.innerHeight - top - 16),
+      maxHeight,
     };
     // Même précaution que `FilterButton` : l'effet tourne à chaque rendu, une
     // écriture systématique boucherait.
@@ -306,9 +325,25 @@ export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, titl
         {/* Sans `triggerLabel`, pas d'`aria-label` : le déclencheur porte déjà
             son texte visible (`children`), qui est son nom accessible — en
             ajouter un l'écraserait. */}
-        <button ref={btnRef} type="button" aria-label={triggerLabel} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(v => !v)} style={triggerStyle}>
-          {children}
-        </button>
+        {triggerAs === 'div' ? (
+          <div
+            ref={btnRef as React.RefObject<HTMLDivElement>}
+            role="button"
+            tabIndex={0}
+            aria-label={triggerLabel}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            onClick={() => setOpen(v => !v)}
+            onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setOpen(v => !v); } }}
+            style={triggerStyle}
+          >
+            {children}
+          </div>
+        ) : (
+          <button ref={btnRef as React.RefObject<HTMLButtonElement>} type="button" aria-label={triggerLabel} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(v => !v)} style={triggerStyle}>
+            {children}
+          </button>
+        )}
       </Tooltip>
       {open && (floating ? pos !== null : true) && (
         <div
@@ -333,8 +368,8 @@ export function SelectMenu({ items, value, onSelect, onEditItem, editTitle, titl
                   key={item.value}
                   name={item.label}
                   color={item.color!}
-                  active={item.value === value}
-                  onClick={() => { setOpen(false); onSelect(item.value); }}
+                  active={values ? values.includes(item.value) : item.value === value}
+                  onClick={() => { if (!keepOpen) setOpen(false); onSelect(item.value); }}
                   onEdit={onEditItem ? () => { setOpen(false); onEditItem(item.value); } : undefined}
                   editTitle={editTitle}
                 />
@@ -382,7 +417,7 @@ function MenuItem({ item, current, wrap = false, withIcons = false, onPick }: { 
   );
 }
 
-export function FilterButton({ title, count = 0, open = false, disabled = false, onToggle, containerRef, panelWidth = 290, children }: {
+export function FilterButton({ title, count = 0, open = false, disabled = false, onToggle, containerRef, panelWidth = 320, children }: {
   title: string;
   count?: number;
   open?: boolean;
@@ -397,13 +432,25 @@ export function FilterButton({ title, count = 0, open = false, disabled = false,
   const [panelPos, setPanelPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
 
   const place = useCallback(() => {
-    const r = btnRef.current?.getBoundingClientRect();
-    if (!r) return;
-    const top = r.bottom + 6;
+    const btn = btnRef.current;
+    const r = btn?.getBoundingClientRect();
+    if (!btn || !r) return;
+    // La liste peut être zoomée (`--exam-list-zoom`) et le panneau, posé en
+    // `fixed` dans ce zoom, voit ses coordonnées multipliées par lui : on les
+    // écrit donc divisées, sans quoi il glissait sur le bouton et décrochait de
+    // la barre.
+    const z = btn.offsetWidth > 0 ? r.width / btn.offsetWidth : 1;
+    const top = r.bottom / z + 6;
+    // Le panneau finit au bord droit de la barre d'outils (celui du bouton
+    // d'ajout) et s'étend vers la gauche, au-dessus de la liste : parti du
+    // bouton vers la droite, il mordait sur la feuille A4 d'à côté. Il est
+    // assez large (320) pour tenir les quatre niveaux sur une ligne.
+    const bar = btnRef.current?.closest('[data-list-toolbar]')?.getBoundingClientRect();
+    const wanted = (bar ? bar.right : r.left + panelWidth * z) / z - panelWidth;
     const next = {
-      left: Math.max(FILTER_PANEL_MARGIN, Math.min(r.left, window.innerWidth - panelWidth - FILTER_PANEL_MARGIN)),
+      left: Math.max(FILTER_PANEL_MARGIN, Math.min(wanted, window.innerWidth / z - panelWidth - FILTER_PANEL_MARGIN)),
       top,
-      maxHeight: Math.max(220, window.innerHeight - top - 16),
+      maxHeight: Math.max(220, window.innerHeight / z - top - 16),
     };
     // Comparaison explicite avant d'écrire : cet effet tourne à chaque rendu
     // (pas de tableau de dépendances), une écriture systématique bouclerait.
@@ -508,7 +555,7 @@ export function ListToolbar({ search, onSearchChange, searchPlaceholder, filter,
   action: ListToolbarAction;
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'stretch', gap: TOOLBAR_GAP, marginBottom: TOOLBAR_MB }}>
+    <div data-list-toolbar style={{ display: 'flex', alignItems: 'stretch', gap: TOOLBAR_GAP, marginBottom: TOOLBAR_MB }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0, background: palette.surfaceInput, border: `1px solid ${palette.line}`, borderRadius: 10, padding: '0 10px' }}>
         <Search size={15} strokeWidth={1.75} color={palette.inkFaint} style={{ flexShrink: 0 }} />
         <input value={search} onChange={e => onSearchChange(e.target.value)} placeholder={searchPlaceholder} style={{ flex: 1, minWidth: 0, fontSize: 13, color: palette.ink, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'inherit' }} />
@@ -575,13 +622,21 @@ export function isPageBreakId(id: string): boolean {
   return id.startsWith(PAGE_BREAK_PREFIX);
 }
 
-export const LABEL_COLORS = [categoryTones.blueGray, categoryTones.mauve, palette.greenSoft, palette.amberLight, palette.danger, palette.greenBrand, palette.amber, palette.inkFaint, categoryTones.steelBlue, categoryTones.rust];
+/** Couleur « neutre » d'un libellé : le beige des autres pastilles du panneau
+ *  de filtres (type de réponse, niveau, statut, chapitre). C'est la couleur
+ *  d'un libellé tout juste créé, et la première de la palette (27/09/2026). */
+export const LABEL_NEUTRAL = palette.surfaceSunken;
+
+/** Palette des libellés et des groupes de membres : le neutre, puis douze
+ *  teintes dans l'ordre du cercle chromatique (`labelTones`). Les libellés
+ *  déjà créés gardent la couleur enregistrée, même hors de cette liste. */
+export const LABEL_COLORS = [LABEL_NEUTRAL, ...Object.values(labelTones)];
 
 // Trois tailles pour un seul et même rendu de pastille : `xs` sur les cartes de
 // la banque (la ligne de métadonnées est serrée), `sm` dans le panneau de
 // filtres, `md` dans les éditeurs de question.
 const LABEL_PILL_SIZES = {
-  xs: { fontSize: 10.5, padding: '3px 9px', gap: 5, affordance: 13, icon: 8 },
+  xs: { fontSize: 10.5, padding: '1px 9px', gap: 5, affordance: 13, icon: 8 },
   sm: { fontSize: 11, padding: '4px 8px', gap: 5, affordance: 15, icon: 9 },
   md: { fontSize: 12, padding: '5px 9px', gap: 6, affordance: 17, icon: 10 },
 } as const;
@@ -591,7 +646,7 @@ const LABEL_PILL_SIZES = {
  *  `LABEL_COLORS` n'aurait rien réglé pour les libellés déjà enregistrés, qui
  *  portent leur hex en base. On garde donc la couleur telle quelle comme
  *  identité et on l'atténue à l'affichage, exactement comme `TypeIcon`. */
-export const labelTint = (color: string) => withAlpha(color, 0.22);
+export const labelTint = (color: string) => (color === LABEL_NEUTRAL ? LABEL_NEUTRAL : withAlpha(color, 0.22));
 
 /** Pastille de libellé — rendu unique de la banque, des filtres et des deux
  *  éditeurs de question. Le fond est l'aplat atténué du libellé (`labelTint`),
@@ -711,7 +766,7 @@ export function LabelPill({ name, color, size = 'sm', active = false, excluded =
         // filet clair au repos, qui prend la couleur de la sélection ensuite.
         // Le fond, lui, ne bouge jamais : c'est l'identité du libellé, elle ne
         // peut pas servir en même temps d'état.
-        border: `1px solid ${excluded ? palette.danger : active ? palette.ink : color ? 'transparent' : palette.line}`,
+        border: `1px solid ${excluded ? palette.danger : active ? palette.ink : color && color !== LABEL_NEUTRAL ? 'transparent' : palette.line}`,
         boxShadow: excluded ? `0 0 0 2px ${withAlpha(palette.danger, 0.25)}`
           : active ? `0 0 0 2px ${ink(0.25)}` : 'none',
         background: color ? labelTint(color) : palette.surfaceSunken,
@@ -801,6 +856,101 @@ export function LabelPicker({ pools, selected, onToggle, onCreate, onEdit, panel
     >
       {children}
     </SelectMenu>
+  );
+}
+
+/** Menu des libellés d'une question, le même sur la carte de la liste et dans
+ *  le formulaire : tous les libellés de l'atelier, ceux de la question marqués.
+ *  Un clic pose ou retire, et le menu reste ouvert pour enchaîner. Le
+ *  déclencheur, ce sont les pastilles de la question — un clic sur n'importe
+ *  laquelle ouvre le menu — ou un « + libellé » quand elle n'en a aucune. Pas
+ *  de croix de retrait : on décoche dans le menu.
+ *
+ *  La carte qui le porte est elle-même cliquable (clic : entrer dans l'examen,
+ *  double-clic : modifier) : le conteneur arrête donc les deux, y compris pour
+ *  les clics dans le panneau, qui est son descendant dans le DOM. */
+export function LabelQuickMenu({ pools, selected, onToggle, onCreate, onEditLabel, size }: {
+  /** Déjà triés par nom (voir `sortPoolsByName`). */
+  pools: readonly Pool[];
+  selected: readonly string[];
+  onToggle: (id: string) => void;
+  onCreate?: (name: string) => void;
+  /** Crayon sur les pastilles, posées comme dans le menu — dans le formulaire
+   *  seulement. */
+  onEditLabel?: (id: string) => void;
+  /** `xs` sur la carte (une ligne, rognée), `md` dans le formulaire (à la ligne). */
+  size: 'xs' | 'md';
+}) {
+  const t = useTranslations('examen');
+  const chosen = pools.filter(p => selected.includes(p.id));
+  const xs = size === 'xs';
+  return (
+    <span onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} style={{ display: 'flex', minWidth: 0 }}>
+      <SelectMenu
+        items={pools.map(p => ({ value: p.id, label: p.name, color: p.color }))}
+        values={selected}
+        keepOpen
+        onSelect={onToggle}
+        onEditItem={onEditLabel}
+        editTitle={t('bank.editLabelTitle')}
+        variant="pills"
+        panelWidth={260}
+        title={t('bank.quickLabels')}
+        triggerLabel={t('bank.quickLabels')}
+        triggerAs="div"
+        triggerStyle={{ display: 'flex', alignItems: 'center', gap: xs ? 6 : 8, minWidth: 0, cursor: 'pointer', outline: 'none', ...(xs ? { overflowX: 'clip', overflowY: 'visible' } : { flexWrap: 'wrap' }) }}
+        footer={onCreate ? close => <LabelCreateRow onCreate={name => { onCreate(name); close(); }} /> : undefined}
+      >
+        {/* « + libellé » : seul quand la question n'en a aucun ; dans le
+            formulaire, il reste en plus en tête de la rangée — la carte, elle,
+            n'a pas la place de le garder. */}
+        {(chosen.length === 0 || !xs) && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: xs ? 3 : 5, fontSize: xs ? 11 : 12, color: palette.inkFaint, border: `1px dashed ${palette.lineStrong}`, borderRadius: 999, padding: xs ? '1px 8px 1px 6px' : '5px 12px 5px 9px' }}>
+            <Plus size={xs ? 11 : 13} strokeWidth={2} />
+            {t('bank.addLabelShort')}
+          </span>
+        )}
+        {chosen.map(p => (
+          <LabelPill
+            key={p.id}
+            name={p.name}
+            color={p.color}
+            size={size}
+            onEdit={onEditLabel ? () => onEditLabel(p.id) : undefined}
+            editTitle={t('bank.editLabelTitle')}
+          />
+        ))}
+      </SelectMenu>
+    </span>
+  );
+}
+
+/** Libellés rangés par ordre alphabétique — l'ordre de tous les affichages. */
+export function sortPoolsByName<P extends { name: string }>(pools: readonly P[]): P[] {
+  // `numeric` : « Lot IA n°10 » après « n°9 », pas entre « n°1 » et « n°2 ».
+  return [...pools].sort((x, y) => x.name.localeCompare(y.name, 'fr', { sensitivity: 'base', numeric: true }));
+}
+
+/** Une issue de la fenêtre de suppression d'un libellé : pastille ronde,
+ *  intitulé, et une ligne qui dit ce qu'elle coûte. */
+function DeleteChoice({ checked, danger = false, onSelect, label, hint }: { checked: boolean; danger?: boolean; onSelect: () => void; label: string; hint?: string }) {
+  const accent = danger ? palette.danger : palette.greenBrand;
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={checked}
+      onClick={onSelect}
+      style={{ display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', textAlign: 'left' as const, padding: '10px 12px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${checked ? accent : palette.line}`, background: checked ? withAlpha(accent, 0.06) : 'transparent' }}
+    >
+      <span style={{ flexShrink: 0, marginTop: 2, width: 14, height: 14, borderRadius: '50%', border: `1.5px solid ${checked ? accent : palette.lineStrong}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {checked && <span style={{ width: 6, height: 6, borderRadius: '50%', background: accent }} />}
+      </span>
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: danger && checked ? palette.danger : palette.ink }}>{label}</span>
+        {hint && <span style={{ fontSize: 11.5, color: palette.inkMuted }}>{hint}</span>}
+      </span>
+    </button>
   );
 }
 
@@ -942,31 +1092,102 @@ export function useDismissOnOutsideClick(
   }, [active, ref]);
 }
 
-export function LabelEditor({ label, usageCount, onSave, onDelete, onClose }: {
+/** Panneau de modification d'un nom et d'une couleur — le même pour les
+ *  libellés d'examen et les groupes de membres (27/09/2026). Un champ, la
+ *  palette, une corbeille ; pas de bouton « enregistrer » ni « annuler » :
+ *  une couleur s'enregistre au clic, le nom une demi-seconde après la
+ *  dernière frappe, et de toute façon à la fermeture — Entrée, Échap ou clic
+ *  dehors. Un nom vidé n'est pas enregistré.
+ *
+ *  N'importe quel clic hors du panneau le ferme : un panneau resté ouvert
+ *  pendant qu'on travaille ailleurs finit par viser un objet qu'on ne regarde
+ *  plus. La confirmation de suppression est une modale, que
+ *  `useDismissOnOutsideClick` ignore d'office.
+ *
+ *  Le positionnement revient à l'appelant (`style`). */
+export function NameColorPanel({ name: initialName, color: initialColor, onSave, onRequestDelete, deleteTitle, onClose, style }: {
+  name: string;
+  color: string;
+  onSave: (next: { name: string; color: string }) => void;
+  onRequestDelete: () => void;
+  deleteTitle: string;
+  onClose: () => void;
+  style?: CSSProperties;
+}) {
+  const [name, setName] = useState(initialName);
+  const [color, setColor] = useState(initialColor);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const pending = useRef<{ name: string; color: string } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onSaveRef = useRef(onSave);
+  useEffect(() => { onSaveRef.current = onSave; });
+  const flush = useCallback(() => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    const next = pending.current;
+    pending.current = null;
+    if (next) onSaveRef.current(next);
+  }, []);
+  useEffect(() => flush, [flush]);
+
+  function changeName(value: string) {
+    setName(value);
+    if (!value.trim()) return;
+    pending.current = { name: value.trim(), color };
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(flush, 500);
+  }
+  function changeColor(c: string) {
+    setColor(c);
+    pending.current = { name: name.trim() || initialName, color: c };
+    flush();
+  }
+  function close() {
+    flush();
+    onClose();
+  }
+  // Ce qui est en attente part AVANT la question de la suppression : rien ne
+  // doit plus viser l'objet une fois qu'il a disparu.
+  function requestDelete() {
+    flush();
+    onRequestDelete();
+  }
+
+  useDismissOnOutsideClick(true, cardRef, close);
+
+  return (
+    <div ref={cardRef} style={{ width: 190, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg, padding: 10, ...style }}>
+      <input autoFocus value={name} onChange={e => changeName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') close(); }} style={{ width: '100%', fontSize: 11.5, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box' as const, background: palette.surfaceInput, color: palette.ink }} />
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* Les témoins montrent l'aplat réellement obtenu, pas la couleur
+            brute : on choisit ce qu'on verra sur la pastille. */}
+        {LABEL_COLORS.map(c => (
+          <button key={c} type="button" aria-label={c} onClick={() => changeColor(c)} style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c), border: color === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }} />
+        ))}
+        {/* Suppression réduite à une corbeille, au bout de la dernière rangée. */}
+        <Tooltip content={deleteTitle}>
+          <button type="button" aria-label={deleteTitle} onClick={requestDelete} style={{ marginLeft: 'auto', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, borderRadius: 6, border: 'none', background: 'none', color: palette.danger, cursor: 'pointer' }}>
+            <Trash2 size={14} strokeWidth={1.75} />
+          </button>
+        </Tooltip>
+      </div>
+    </div>
+  );
+}
+
+export function LabelEditor({ label, impact, onSave, onDelete, onDeleteWithQuestions, onClose }: {
   label: Pool;
-  usageCount: number;
+  impact: LabelImpact;
   onSave: (next: Pool) => void;
   onDelete: () => void;
+  /** Absent : la fenêtre ne propose que la suppression du libellé seul. */
+  onDeleteWithQuestions?: () => void;
   onClose: () => void;
 }) {
   const t = useTranslations('examen');
-  const [name, setName] = useState(label.name);
-  const [color, setColor] = useState(label.color);
   const [confirming, setConfirming] = useState(false);
-  const cardRef = useRef<HTMLDivElement>(null);
-
-  function save() {
-    onSave({ ...label, name: name.trim() || label.name, color: color || label.color });
-    onClose();
-  }
-
-  // N'importe quel clic hors du panneau l'abandonne (modifications perdues) :
-  // un panneau qui reste ouvert pendant qu'on travaille ailleurs finit par
-  // enregistrer sur un libellé qu'on ne regarde plus. Le voile ne couvre que
-  // l'ancêtre positionné, d'où l'écoute au niveau du document. La confirmation
-  // de suppression, elle, est une modale : `useDismissOnOutsideClick` l'ignore
-  // d'office, il n'y a pas de cas particulier à tenir ici.
-  useDismissOnOutsideClick(true, cardRef, onClose);
+  const [withQuestions, setWithQuestions] = useState(false);
+  const canPurge = !!onDeleteWithQuestions && impact.questions > 0;
 
   return (
     <>
@@ -976,33 +1197,51 @@ export function LabelEditor({ label, usageCount, onSave, onDelete, onClose }: {
           le panneau de filtres de la banque, qui a son propre plan (`fixed`,
           z-60), l'ordre relatif est inchangé — ses frères n'ont pas de z-index. */}
       <div style={{ position: 'absolute', inset: 0, zIndex: SHEET_PANEL_Z - 1, background: withAlpha(palette.cream, 0.7), borderRadius: 12 }} />
-      <div ref={cardRef} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: SHEET_PANEL_Z, width: 190, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg, padding: 10 }}>
-        <input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') onClose(); }} style={{ width: '100%', fontSize: 11.5, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box' as const, background: palette.surfaceInput, color: palette.ink }} />
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-          {/* Les témoins montrent l'aplat réellement obtenu, pas la couleur
-              brute : on choisit ce qu'on verra sur la pastille. */}
-          {LABEL_COLORS.map(c => (
-            <Tooltip key={c} content={c}>
-              <button type="button" aria-label={c} onClick={() => setColor(c)} style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c), border: color === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }} />
-            </Tooltip>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-          <button type="button" onClick={save} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: 'none', background: palette.ink, color: palette.onInk, cursor: 'pointer', fontFamily: 'inherit' }}>{t('bank.saveLabel')}</button>
-          <button type="button" onClick={onClose} style={{ flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>{t('cancelLower')}</button>
-        </div>
-        <button type="button" onClick={() => setConfirming(true)} style={{ width: '100%', fontSize: 11, padding: '5px 8px', borderRadius: 8, border: `1px solid ${withAlpha(palette.danger, 0.30)}`, background: withAlpha(palette.danger, 0.08), color: palette.danger, cursor: 'pointer', fontFamily: 'inherit' }}>{t('bank.deleteLabel')}</button>
-      </div>
+      <NameColorPanel
+        name={label.name}
+        color={label.color}
+        onSave={next => onSave({ ...label, ...next })}
+        onRequestDelete={() => setConfirming(true)}
+        deleteTitle={t('bank.deleteLabel')}
+        onClose={onClose}
+        style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: SHEET_PANEL_Z }}
+      />
       {confirming && (
         <ConfirmDialog
           portal
-          width={380}
+          width={400}
           title={t('bank.deleteLabelTitle', { name: label.name })}
-          description={`${usageCount > 0 ? t('bank.deleteLabelCount', { count: usageCount }) : ''}${t('irreversible')}`}
+          description={canPurge ? t('irreversible') : `${impact.questions > 0 ? t('bank.deleteLabelCount', { count: impact.questions }) : ''}${t('irreversible')}`}
           confirmLabel={t('delete')}
           onCancel={() => setConfirming(false)}
-          onConfirm={() => { setConfirming(false); onDelete(); onClose(); }}
-        />
+          onConfirm={() => {
+            setConfirming(false);
+            if (canPurge && withQuestions) onDeleteWithQuestions!(); else onDelete();
+            onClose();
+          }}
+        >
+          {/* Deux issues (27/09/2026) : le libellé seul — ses questions restent,
+              sans lui — ou le libellé avec toutes les questions qui le portent,
+              quels que soient leurs autres libellés. La moins destructrice est
+              cochée d'office. */}
+          {canPurge && (
+            <div role="radiogroup" style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20, textAlign: 'left' as const }}>
+              <DeleteChoice
+                checked={!withQuestions}
+                onSelect={() => setWithQuestions(false)}
+                label={t('bank.deleteLabelOnly')}
+                hint={t('bank.deleteLabelCount', { count: impact.questions }).trim()}
+              />
+              <DeleteChoice
+                checked={withQuestions}
+                danger
+                onSelect={() => setWithQuestions(true)}
+                label={t('bank.deleteLabelWithQuestions', { count: impact.questions })}
+                hint={impact.inExams > 0 ? t('bank.deleteLabelWithQuestionsExams', { inExams: impact.inExams, exams: impact.exams }) : undefined}
+              />
+            </div>
+          )}
+        </ConfirmDialog>
       )}
     </>
   );
@@ -1290,7 +1529,7 @@ export function renderAnswerSpace(q: Question) {
       );
     }
     // Liste : autant de lignes à remplir que de réponses attendues, numérotées
-    // si l'option l'est. Le contenu saisi côté éditeur est la référence de
+    // si l'option l'est, précédées d'une puce sinon. Le contenu saisi côté éditeur est la référence de
     // correction, il ne s'imprime pas sur la copie de l'élève.
     case 'liste': {
       // Même calcul que l'exercice et la correction : une liste numérotée se
@@ -1301,7 +1540,7 @@ export function renderAnswerSpace(q: Question) {
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' as const, gap: A4_ANSWER_LINE_GAP }}>
           {Array.from({ length: expected }, (_, i) => (
             <div key={i} style={{ height: A4_ANSWER_LINE_HEIGHT, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
-              {numbered && <span style={{ fontSize: 12, lineHeight: 1.2, color: palette.inkFaint, flexShrink: 0 }}>{i + 1}.</span>}
+              <span style={{ fontSize: 12, lineHeight: 1.2, color: palette.inkFaint, flexShrink: 0 }}>{numbered ? `${i + 1}.` : '•'}</span>
               <div style={{ flex: 1, borderBottom: `1px solid ${ink(0.18)}` }} />
             </div>
           ))}
@@ -1768,8 +2007,10 @@ export function ListCard({ onClick, onDoubleClick, tint, borderColor, leading, i
           <div style={{ position: 'absolute' as const, zIndex: 1, top: 0, left: 0, height: CARD_LINE, display: 'flex', alignItems: 'center', gap: 4 }}>{leading}</div>
         )}
         <ClampedTitle text={title} indent={indent} actionsTop={meta === undefined ? 0 : CARD_ACTIONS_SHAPE_TOP} />
+        {/* Rognée en largeur seulement : une pastille est un peu plus haute que
+            la ligne, et un `overflow: hidden` lui coupait le haut et le bas. */}
         {meta !== undefined && (
-          <div style={{ height: CARD_LINE, paddingRight: CARD_ACTIONS_W, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>{meta}</div>
+          <div style={{ height: CARD_LINE, paddingRight: CARD_ACTIONS_W, display: 'flex', alignItems: 'center', gap: 6, overflowX: 'clip', overflowY: 'visible' }}>{meta}</div>
         )}
         {actions && (
           <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute' as const, right: 0, bottom: 0, height: 2 * CARD_LINE, display: 'flex', alignItems: 'center', gap: CARD_ACTION_GAP }}>{actions}</div>
@@ -1938,7 +2179,7 @@ export function ShuffleNoticeIcon({ title }: { title: string }) {
         onMouseLeave={() => setHovered(false)}
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, flexShrink: 0, color: hovered ? palette.greenBrand : palette.inkFaint, transition: 'color 0.12s' }}
       >
-        <Info size={13} strokeWidth={1.85} />
+        <Info size={17} strokeWidth={1.85} />
       </span>
     </Tooltip>
   );

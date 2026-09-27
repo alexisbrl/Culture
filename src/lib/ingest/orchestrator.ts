@@ -20,6 +20,7 @@ import { chapterStartBudgets } from './demand';
 import { passFailed } from './failure';
 import { markOutcome } from './journal';
 import { CLOSED_ERROR, beatImport, closeImport } from './lock';
+import { labelExamLot } from './lotLabel';
 import { planExamCalls } from './passInput';
 import {
   MARK,
@@ -266,6 +267,14 @@ async function apply(p: Pipeline, intent: Intent, tasks: readonly StoredTask[]):
         .eq('key', MARK.end);
       await closeImport(p.importId);
       await markOutcome(p.importId, intent.outcome);
+      // Les questions d'examen du lot reçoivent leur libellé « Lot IA n°N »
+      // (27/09/2026), qu'il ait abouti ou non : c'est par lui qu'on les relit
+      // et qu'on les supprime. Un échec ici ne doit pas empêcher la clôture.
+      try {
+        await labelExamLot(p.workshopId, p.importId);
+      } catch (error) {
+        console.warn('[ingest] libellé du lot non posé :', error instanceof Error ? error.message : String(error));
+      }
       await run.releaseImportDocuments(p.importId);
       return;
     }

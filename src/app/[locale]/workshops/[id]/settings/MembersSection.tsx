@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Mail, UserPlus, Plus, Trash2, EllipsisVertical, ArrowUp, ArrowDown, UserMinus, Search, X } from 'lucide-react';
-import { palette, ink, shadow, withAlpha } from '@/lib/theme';
+import { palette, ink, withAlpha } from '@/lib/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -12,7 +12,7 @@ import {
   getJoinRequests, approveJoinRequest, rejectJoinRequest, type PendingInvite,
   createMemberGroup, updateMemberGroup, deleteMemberGroup, setMemberGroups as setMemberGroupsAction, type MemberGroup,
 } from '@/app/actions/workshops';
-import { LABEL_COLORS, LabelPill, labelTint, SelectMenu } from '../tabs/examen/examShared';
+import { LABEL_COLORS, LabelPill, NameColorPanel, SelectMenu } from '../tabs/examen/examShared';
 import { ROLE_RANK, avatarTone, type Member, type WorkshopRole } from './settingsShared';
 import { useLiveData } from '@/lib/useLiveData';
 
@@ -98,8 +98,6 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
-  const [editGroupName, setEditGroupName] = useState('');
-  const [editGroupColor, setEditGroupColor] = useState('');
   const [pendingDeleteGroup, setPendingDeleteGroup] = useState<string | null>(null);
   // Groupe actuellement sélectionné comme filtre/vue — null = tous les membres,
   // NO_GROUP_FILTER = les membres qui n'appartiennent à aucun groupe. Ce dernier
@@ -133,7 +131,8 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
     const name = newGroupName.trim();
     if (!name) return;
     const id = 'group' + Date.now();
-    const color = LABEL_COLORS[localGroups.length % LABEL_COLORS.length];
+    // Le neutre (1re couleur) est réservé aux libellés : les groupes tournent sur les teintes.
+    const color = LABEL_COLORS[1 + (localGroups.length % (LABEL_COLORS.length - 1))];
     const group: MemberGroup = { id, name, color };
     setLocalGroups((prev) => [...prev, group]);
     setNewGroupName('');
@@ -141,20 +140,10 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
     createMemberGroup(workshopId, group).catch((err) => console.error('création groupe échouée', err));
   }
 
-  function openEditGroup(group: MemberGroup) {
-    setEditingGroup(group.id);
-    setEditGroupName(group.name);
-    setEditGroupColor(group.color);
-  }
-
-  function saveEditGroup() {
-    if (!editingGroup) return;
-    const group = localGroups.find((g) => g.id === editingGroup);
-    if (!group) return;
-    const name = editGroupName.trim();
-    const updated: MemberGroup = { ...group, name: name || group.name, color: editGroupColor || group.color };
+  // Appelé au fil de la saisie par le panneau (`NameColorPanel`) : le panneau
+  // reste ouvert, c'est lui qui décide de sa fermeture.
+  function saveGroup(updated: MemberGroup) {
     setLocalGroups((prev) => prev.map((g) => (g.id === updated.id ? updated : g)));
-    setEditingGroup(null);
     updateMemberGroup(workshopId, updated).catch((err) => console.error('modification groupe échouée', err));
   }
 
@@ -466,51 +455,22 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                       size="md"
                       active={active}
                       onClick={() => setFilterGroupId(active ? null : g.id)}
-                      onEdit={() => (editingGroup === g.id ? setEditingGroup(null) : openEditGroup(g))}
+                      onEdit={() => (editingGroup === g.id ? setEditingGroup(null) : setEditingGroup(g.id))}
                       editTitle={t('groups.editTitle')}
                     />
+                    {/* Le même panneau que pour les libellés d'examen
+                        (`NameColorPanel`) : nom, couleurs, corbeille, et
+                        enregistrement au fil de la saisie. */}
                     {editingGroup === g.id && (
-                      <>
-                        <div onClick={() => setEditingGroup(null)} style={{ position: 'fixed', inset: 0, zIndex: 29 }} />
-                        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 30, width: 190, background: palette.surfaceRaised, border: `1px solid ${palette.line}`, borderRadius: 12, boxShadow: shadow.lg, padding: 10 }}>
-                          <input
-                            autoFocus
-                            value={editGroupName}
-                            onChange={(e) => setEditGroupName(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') saveEditGroup(); if (e.key === 'Escape') setEditingGroup(null); }}
-                            style={{ width: '100%', fontSize: 11.5, padding: '7px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box', background: palette.surfaceInput, color: palette.ink }}
-                          />
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                            {/* Le témoin montre l'aplat réellement obtenu sur la
-                                pastille (`labelTint`), pas la couleur brute —
-                                même règle que `LabelEditor` côté examen. */}
-                            {LABEL_COLORS.map((c) => (
-                              <Tooltip key={c} content={c}>
-                                <button
-                                  onClick={() => setEditGroupColor(c)}
-                                  aria-label={c}
-                                  style={{ width: 16, height: 16, borderRadius: '50%', background: labelTint(c), border: editGroupColor === c ? `2px solid ${palette.ink}` : `1px solid ${withAlpha(c, 0.55)}`, cursor: 'pointer', padding: 0 }}
-                                />
-                              </Tooltip>
-                            ))}
-                          </div>
-                          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                            <button onClick={saveEditGroup} style={{ flex: 1, fontSize: 11, padding: '6px 8px', borderRadius: 8, border: 'none', background: palette.ink, color: palette.onInk, cursor: 'pointer', fontFamily: 'inherit' }}>
-                              {t('groups.save')}
-                            </button>
-                            <button onClick={() => setEditingGroup(null)} style={{ flex: 1, fontSize: 11, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.lineStrong}`, background: 'transparent', color: palette.inkSoft, cursor: 'pointer', fontFamily: 'inherit' }}>
-                              {t('groups.cancel')}
-                            </button>
-                          </div>
-                          <button
-                            onClick={() => setPendingDeleteGroup(g.id)}
-                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', fontSize: 11, padding: '6px 8px', borderRadius: 8, border: `1px solid ${withAlpha(palette.danger, 0.30)}`, background: withAlpha(palette.danger, 0.08), color: palette.danger, cursor: 'pointer', fontFamily: 'inherit' }}
-                          >
-                            <Trash2 size={11} />
-                            {t('groups.delete')}
-                          </button>
-                        </div>
-                      </>
+                      <NameColorPanel
+                        name={g.name}
+                        color={g.color}
+                        onSave={(next) => saveGroup({ ...g, ...next })}
+                        onRequestDelete={() => setPendingDeleteGroup(g.id)}
+                        deleteTitle={t('groups.delete')}
+                        onClose={() => setEditingGroup(null)}
+                        style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 30 }}
+                      />
                     )}
                   </span>
                 );

@@ -455,18 +455,18 @@ export function QuestionFields({
         // un mot que personne ne lit.
         const numbered = opts.listNumbered ?? false;
         // Deux valeurs, et il ne faut pas les confondre : celle que l'auteur a
-        // ENREGISTRÉE, qu'une liste numérotée met en sommeil sans l'effacer, et
-        // celle qui S'APPLIQUE — c'est la seconde qui s'affiche, et c'est elle
+        // ENREGISTRÉE, et celle qui S'APPLIQUE une fois bornée par les réponses
+        // réellement saisies — c'est la seconde qui s'affiche, et c'est elle
         // que l'élève verra (`listAnswerCount`, partagée avec la copie A4,
-        // l'exercice et la correction).
+        // l'exercice et la correction). Numérotée, la liste attend les N
+        // premières réponses, dans l'ordre.
         const stored = opts.listExpected ?? items.length;
         const expected = listAnswerCount({ choices: items, typeOptions: opts }) ?? items.length;
         // Le nombre de réponses attendues suit l'ajout/retrait de lignes, borné
         // par [1, nombre de lignes] : on ne peut pas en attendre plus qu'il n'y
-        // a de références saisies. Tant que la liste est numérotée, le réglage
-        // dort — on se contente de le garder valide.
+        // a de références saisies.
         const commit = (arr: string[], expectedDelta: number) => {
-          const next = Math.min(Math.max(stored + (numbered ? 0 : expectedDelta), 1), arr.length);
+          const next = Math.min(Math.max(stored + expectedDelta, 1), arr.length);
           patch({ choices: arr, typeOptions: { ...(values.typeOptions ?? {}), listExpected: next } });
         };
         return (
@@ -504,24 +504,17 @@ export function QuestionFields({
                 <button type="button" onClick={() => commit([...items, ''], 1)} style={addLink}>{t('inline.addRow')}</button>
               )}
               {advancedOpen && (
-                // Liste numérotée = liste entière : le champ montre alors le
-                // nombre réel de réponses et se verrouille, plutôt que d'afficher
-                // un chiffre qui ne s'appliquerait pas. L'infobulle est sur le
-                // groupe, un champ désactivé n'émettant aucun événement de souris.
-                <Tooltip content={numbered ? t('inline.expectedAnswersLocked') : ''}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 11.5, color: numbered ? palette.inkFaint : palette.inkMuted }}>{t('inline.expectedAnswers')}</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={items.length}
-                      value={expected}
-                      disabled={numbered}
-                      onChange={e => patchOptions({ listExpected: Math.min(Math.max(Number(e.target.value) || 1, 1), items.length) })}
-                      style={{ ...numInput, width: 54, opacity: numbered ? 0.5 : 1, cursor: numbered ? 'not-allowed' : undefined }}
-                    />
-                  </div>
-                </Tooltip>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 11.5, color: palette.inkMuted }}>{t('inline.expectedAnswers')}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={items.length}
+                    value={expected}
+                    onChange={e => patchOptions({ listExpected: Math.min(Math.max(Number(e.target.value) || 1, 1), items.length) })}
+                    style={{ ...numInput, width: 54 }}
+                  />
+                </div>
               )}
               <PillToggle on={numbered} onClick={() => patchOptions({ listNumbered: !numbered })} label={t('inline.rank')} title={t('inline.rankHint')} />
               {answerOnImageToggle}

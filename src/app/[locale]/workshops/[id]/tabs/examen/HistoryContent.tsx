@@ -16,6 +16,10 @@ import {
 const HISTORY_SORTS: readonly SortBy[] = ['recent', 'name'];
 
 const CARD_HOT_TINT = withAlpha(palette.gold, 0.14); // teinte de l'examen tout juste créé
+// Examen ouvert sur la feuille : le même vert qu'une question posée sur la
+// copie dans la liste des questions. Il tient lieu de l'ancien bandeau
+// « Modification de … » au-dessus de la feuille.
+const CARD_EDITING_TINT = withAlpha(palette.green, 0.08);
 
 // ---- HISTORY — barre de recherche/filtre/tri toujours visible + cartes en
 // mode dense (variante retenue, lignes 810-869 de App-Culture.dc.html).
@@ -36,13 +40,15 @@ const CARD_HOT_TINT = withAlpha(palette.gold, 0.14); // teinte de l'examen tout 
 // le filtre qui allait avec — `Exam.status` reste en donnée, plus rien ne
 // l'affiche. Le bouton « filtrer » demeure, désactivé, tant qu'aucun critère de
 // filtre n'existe pour cette liste. ----
-function HistoryContent({ workshopId, exams, loading, justAddedId, onEdit, onOpenWithQuestions, onNew, onDelete }: {
+function HistoryContent({ workshopId, exams, loading, justAddedId, editingId, onEdit, onOpenWithQuestions, onNew, onDelete }: {
   workshopId: string;
   exams: Exam[];
   /** Les examens ne sont pas encore arrivés du serveur : la liste montre leur
    *  silhouette et l'action « nouvel examen » reste hors de portée. */
   loading: boolean;
   justAddedId: string | null;
+  /** Examen ouvert sur la feuille, surligné en vert. */
+  editingId: string | null;
   onEdit: (e: Exam) => void;
   /** Double-clic : ouvre l'examen ET montre la liste des questions, là où on
    *  le compose. */
@@ -101,13 +107,14 @@ function HistoryContent({ workshopId, exams, loading, justAddedId, onEdit, onOpe
         )}
         {!loading && filtered.map((e) => {
           const hot = e.id === justAddedId;
+          const isEditing = e.id === editingId;
           return (
             <ListCard
               key={e.id}
               onClick={() => onEdit(e)}
               onDoubleClick={() => onOpenWithQuestions(e)}
-              tint={hot ? CARD_HOT_TINT : undefined}
-              borderColor={hot ? palette.gold : undefined}
+              tint={isEditing ? CARD_EDITING_TINT : hot ? CARD_HOT_TINT : undefined}
+              borderColor={isEditing ? palette.greenSoft : hot ? palette.gold : undefined}
               title={e.title}
               meta={
                 <span style={{ minWidth: 0, fontSize: 11.5, color: palette.inkMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

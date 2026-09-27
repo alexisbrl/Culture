@@ -39,23 +39,6 @@ export type PlanIssue = {
   reason: string;
 };
 
-export type ImportBanner = {
-  importId: string;
-  state: 'cancellable' | 'empty' | 'expired' | 'modified';
-  /** La génération s'est arrêtée avant la fin (serveur perdu, tâche coupée
-   *  deux fois). Ce qu'elle a écrit est là, mais ce n'est pas un résultat
-   *  voulu : le bandeau le dit au lieu de l'annoncer comme un import réussi.
-   *  Voir `interruptedAmong` (@/lib/ingest/lock). */
-  interrupted: boolean;
-  chapters: number;
-  notions: number;
-  /** Les questions du lot, séparées selon l'écran qui les montre : le bandeau
-   *  du programme n'annonce pas les questions parties à l'examen, et
-   *  réciproquement (28/08/2026). */
-  parcoursQuestions: number;
-  examQuestions: number;
-};
-
 export type StartGenerationResult =
   /** La demande est dans la file (@/lib/ingest/queue) : elle part tout de
    *  suite si rien ne tourne, après la génération en cours sinon. */
@@ -156,50 +139,6 @@ export async function cancelGenerationRequest(workshopId: string, requestId: str
 export async function getLiveGeneration(workshopId: string): Promise<string | null> {
   if (!(await requireManager(workshopId))) return null;
   return orchestrator.liveGenerationOf(workshopId);
-}
-
-/** Les imports encore annulables, du plus récent au plus ancien. Liste vide
- *  quand il n'y a rien à proposer : aucun import récent, ou lots déjà annulés,
- *  expirés, ou modifiés depuis.
- *
- *  Plusieurs et non plus un seul depuis le 28/08/2026 : voir `recentImportIds`. */
-export async function getImportBanners(workshopId: string): Promise<ImportBanner[]> {
-  if (!(await requireManager(workshopId))) return [];
-
-  try {
-    const [recent, live] = await Promise.all([
-      imports.recentImportIds(workshopId),
-      orchestrator.liveGenerationOf(workshopId),
-    ]);
-    // La génération en cours n'a PAS de bandeau (25/09/2026) : c'est le bouton de
-    // génération qui la montre. Le bandeau n'annonce que ce qui est terminé.
-    const ids = recent.filter((id) => id !== live);
-    // Les deux lectures sont indépendantes → en parallèle (règle N+1). Le
-    // relevé des lots interrompus est une seule requête pour toute la liste,
-    // pas une par lot.
-    const [summaries, interrupted] = await Promise.all([
-      Promise.all(
-        ids.map(async (importId) => ({ importId, summary: await imports.getImportSummary(workshopId, importId) })),
-      ),
-      lock.interruptedAmong(ids),
-    ]);
-
-    return summaries
-      .filter(({ summary }) => summary.state === 'cancellable')
-      .map(({ importId, summary }) => ({
-        importId,
-        state: summary.state,
-        interrupted: interrupted.has(importId),
-        chapters: summary.chapters,
-        notions: summary.notions,
-        parcoursQuestions: summary.parcoursQuestions,
-        examQuestions: summary.examQuestions,
-      }));
-  } catch {
-    // Le bandeau est un confort : s'il échoue, il ne doit pas empêcher la page
-    // de s'afficher.
-    return [];
-  }
 }
 
 export async function cancelWorkshopImport(

@@ -1,25 +1,26 @@
 'use client';
 
-import { useState, useRef, useEffect, type ReactNode } from 'react';
+import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, ArrowLeft, ArrowRight, FileText, Search, X } from 'lucide-react';
-import { palette, ink, radius, withAlpha, categoryTones } from '@/lib/theme';
+import { palette, ink, radius, withAlpha } from '@/lib/theme';
 import { useIsPhone } from '@/lib/useIsPhone';
 import { type Question, emptyQuestion } from './QuestionEditor';
 import {
   getExamPageData, saveQuestion, createPool as createPoolAction, updatePool as updatePoolAction,
-  deletePool as deletePoolAction, deleteQuestion as deleteQuestionAction, saveGeneratedExam,
+  deletePool as deletePoolAction, deletePoolWithQuestions as deletePoolWithQuestionsAction, deleteQuestion as deleteQuestionAction, saveGeneratedExam,
   deleteGeneratedExam, saveExamDraft,
 } from '@/app/actions/examQuestions';
 import {
   type Exam, type Pool, type ExamConfig, type SheetFocus,
   defaultExamConfig, normalizeExamConfig, configQuestionIds, formatDuration, clearWeightingFor,
-  toggleQuestionInSections, isPageBreakId, pruneUnknownQuestions, LIST_INSET_X, partWeightKey,
+  toggleQuestionInSections, isPageBreakId, pruneUnknownQuestions, LIST_INSET_X, partWeightKey, sortPoolsByName, LABEL_NEUTRAL,
 } from './examen/examShared';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useGenerationRefresh } from '@/components/ai/generationStore';
 import { readListDraft, setListCreation } from '@/components/ai/listDraftStore';
+import { questionsCarryingLabel, type LabelImpact } from '@/lib/workshops/labelDeletion';
 import HistoryContent from './examen/HistoryContent';
 import BankContent from './examen/BankContent';
 import GeneratorContent from './examen/GeneratorContent';
@@ -91,6 +92,8 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
    *  éteints : le geste refusé est ainsi visible, au lieu d'être perdu. */
   const [loading, setLoading] = useState(true);
   const [pools, setPools] = useState<Pool[]>([]);
+  // Partout, les libellés s'affichent par ordre alphabétique.
+  const sortedPools = useMemo(() => sortPoolsByName(pools), [pools]);
   // `chapterId` sur la notion + la liste des chapitres : de quoi filtrer la
   // banque par chapitre, qu'une question ne porte pas elle-même (elle en hérite
   // par ses notions associées).
@@ -565,7 +568,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         number={frame === 'sheet' ? number : undefined}
         isNew={newQuestionId === editingQuestion.id}
         frame={frame}
-        pools={pools}
+        pools={sortedPools}
         notions={notions}
         onDraftChange={draft => {
           setEditingDraft(draft);
@@ -577,7 +580,8 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
         onCreatePool={handleCreatePool}
         onUpdatePool={handleUpdatePool}
         onDeletePool={handleDeletePool}
-        poolUsageCount={pid => questions.filter(qq => qq.pools.includes(pid)).length}
+        onDeletePoolWithQuestions={handleDeletePoolWithQuestions}
+        labelImpact={labelImpact}
         onSave={handleSaveQuestion}
         onCancel={handleCancelQuestion}
       />
@@ -657,7 +661,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
 
   function handleCreatePool(name: string): string {
     const id = 'pool' + Date.now();
-    const pool = { id, name, color: categoryTones.blueGray };
+    const pool = { id, name, color: LABEL_NEUTRAL };
     setPools(prev => [...prev, pool]);
     createPoolAction(workshopId, pool).catch(err => console.error('création libellé échouée', err));
     return id;
@@ -666,6 +670,66 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
   function handleUpdatePool(pool: Pool) {
     setPools(prev => prev.map(p => p.id === pool.id ? pool : p));
     updatePoolAction(workshopId, pool).catch(err => console.error('modification du libellé échouée', err));
+  }
+
+  // Menu rapide des cartes de la banque : pose ou retire un libellé sans ouvrir
+  // le formulaire. La question est enregistrée entière, comme depuis le
+  // formulaire — la liste ne l'offre pas sur la question ouverte, dont le
+  // brouillon écraserait ce changement.
+  function handleToggleQuestionPool(questionId: string, poolId: string) {
+    const q = questions.find(x => x.id === questionId);
+    if (!q) return;
+    const updated = { ...q, pools: q.pools.includes(poolId) ? q.pools.filter(p => p !== poolId) : [...q.pools, poolId] };
+    setQuestions(prev => prev.map(x => (x.id === questionId ? updated : x)));
+    saveQuestion(workshopId, updated).catch(err => console.error('enregistrement des libellés échoué', err));
+  }
+
+  /** Ce que coûterait la suppression d'un libellé avec ses questions : combien
+   *  de questions, et combien d'entre elles — dans combien d'examens
+   *  enregistrés — disparaîtraient d'un examen. */
+  function labelImpact(poolId: string): LabelImpact {
+    const ids = new Set(questionsCarryingLabel(questions, poolId));
+    const touched = exams.filter(e => e.config && configQuestionIds(e.config).some(qid => ids.has(qid)));
+    const inExams = new Set(touched.flatMap(e => configQuestionIds(e.config!).filter(qid => ids.has(qid))));
+    return { questions: ids.size, inExams: inExams.size, exams: touched.length };
+  }
+
+  // Suppression du libellé ET des questions qui le portent (27/09/2026). Même
+  // ménage que pour une question seule (`handleDeleteQuestion`), fait en une
+  // fois : les examens enregistrés perdent ces questions et sont réenregistrés
+  // une seule fois chacun, la copie en cours les perd aussi, et le formulaire se
+  // ferme si la question ouverte en fait partie.
+  function handleDeletePoolWithQuestions(poolId: string) {
+    const ids = new Set(questionsCarryingLabel(questions, poolId));
+    const strip = (config: ExamConfig): ExamConfig => {
+      let weighting = config.weighting;
+      ids.forEach(id => { weighting = clearWeightingFor(weighting, id); });
+      return { ...config, sections: config.sections.map(sec => ({ ...sec, questionIds: sec.questionIds.filter(qid => !ids.has(qid)) })), weighting };
+    };
+
+    const updatedExams = exams
+      .filter(e => e.config && configQuestionIds(e.config).some(qid => ids.has(qid)))
+      .map(e => {
+        const config = strip(e.config!);
+        const questionIds = configQuestionIds(config);
+        return { ...e, config, questionIds, q: questionIds.length };
+      });
+    const byId = new Map(updatedExams.map(e => [e.id, e]));
+    setExams(prev => prev.map(e => byId.get(e.id) ?? e));
+    setQuestions(prev => prev.filter(q => !ids.has(q.id)));
+    setPools(prev => prev.filter(p => p.id !== poolId));
+    setDraftIds(prev => prev.filter(qid => !ids.has(qid)));
+    setExamConfig(prev => (prev.sections.some(sec => sec.questionIds.some(qid => ids.has(qid))) ? strip(prev) : prev));
+    if (editingQuestion && ids.has(editingQuestion.id)) {
+      if (editingQuestion.id === newQuestionId) setListCreation(workshopId, 'exam', null);
+      setNewQuestionId(null);
+      setEditingQuestion(null);
+      setEditingDraft(null);
+    }
+
+    deletePoolWithQuestionsAction(workshopId, poolId, [...ids])
+      .then(() => Promise.all(updatedExams.map(e => saveGeneratedExam(workshopId, e))))
+      .catch(err => console.error('suppression du libellé et de ses questions échouée', err));
   }
 
   function handleDeletePool(id: string) {
@@ -828,7 +892,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 est conservée. */}
             <div className="scroll-panel" style={{ display: leftTab === 'history' ? 'block' : 'none', height: '100%', overflowY: sheetDragging ? 'hidden' : undefined }}>
               <div style={{ zoom: 'var(--exam-list-zoom, 1)' }}>
-                <HistoryContent workshopId={workshopId} exams={exams} loading={loading} justAddedId={justAdded} onEdit={e => requestEditExam(e)} onOpenWithQuestions={e => requestEditExam(e, true)} onNew={requestNewExam} onDelete={e => setPendingDeleteExam(e)} />
+                <HistoryContent workshopId={workshopId} exams={exams} loading={loading} justAddedId={justAdded} editingId={editing?.id ?? null} onEdit={e => requestEditExam(e)} onOpenWithQuestions={e => requestEditExam(e, true)} onNew={requestNewExam} onDelete={e => setPendingDeleteExam(e)} />
               </div>
             </div>
             <div className="scroll-panel" style={{ display: leftTab === 'bank' ? 'block' : 'none', height: '100%', position: 'relative', overflowY: sheetDragging ? 'hidden' : undefined }}>
@@ -837,7 +901,7 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 workshopId={workshopId}
                 questions={bankQuestions}
                 loading={loading}
-                pools={pools}
+                pools={sortedPools}
                 exams={exams}
                 notions={notions}
                 chapters={chapters}
@@ -857,6 +921,9 @@ export default function ExamenTab({ workshopId }: { workshopId: string }) {
                 onCreatePool={handleCreatePool}
                 onUpdatePool={handleUpdatePool}
                 onDeletePool={handleDeletePool}
+                onDeletePoolWithQuestions={handleDeletePoolWithQuestions}
+                labelImpact={labelImpact}
+                onToggleQuestionPool={handleToggleQuestionPool}
                 onDeleteQuestion={handleDeleteQuestion}
               />
               </div>
