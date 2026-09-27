@@ -416,7 +416,7 @@ function MenuItem({ item, current, wrap = false, withIcons = false, onPick }: { 
   );
 }
 
-export function FilterButton({ title, count = 0, open = false, disabled = false, onToggle, containerRef, panelWidth = 350, children }: {
+export function FilterButton({ title, count = 0, open = false, disabled = false, onToggle, containerRef, panelWidth = 320, children }: {
   title: string;
   count?: number;
   open?: boolean;
@@ -443,7 +443,7 @@ export function FilterButton({ title, count = 0, open = false, disabled = false,
     // Le panneau finit au bord droit de la barre d'outils (celui du bouton
     // d'ajout) et s'étend vers la gauche, au-dessus de la liste : parti du
     // bouton vers la droite, il mordait sur la feuille A4 d'à côté. Il est
-    // assez large (350) pour tenir les quatre niveaux sur une ligne.
+    // assez large (320) pour tenir les quatre niveaux sur une ligne.
     const bar = btnRef.current?.closest('[data-list-toolbar]')?.getBoundingClientRect();
     const wanted = (bar ? bar.right : r.left + panelWidth * z) / z - panelWidth;
     const next = {
