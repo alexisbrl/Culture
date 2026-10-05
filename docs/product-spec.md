@@ -66,7 +66,9 @@ Termes utilisés dans toute la codebase et dans ce document.
 - Premium : partageable avec 2 personnes supplémentaires (+7€/personne/mois)
 - Premium+ : partageable avec 3 personnes supplémentaires (+15€/personne/mois)
 
-> **L'abonnement se porte sur le COMPTE, jamais sur l'atelier** (décision du 09/09/2026). Un compte est Premium s'il a payé, un point c'est tout. Le modèle « atelier Premium » — un propriétaire activant irréversiblement le Premium pour tous ses membres, facturé par tête — est **abandonné**. Ce qui en subsiste dans le code et en base est à retirer : voir `docs/backlog.md`.
+> **L'abonnement se porte sur le COMPTE, jamais sur l'atelier** (décision du 09/09/2026). Un compte est Premium s'il a payé, un point c'est tout. Le modèle « atelier Premium » — un propriétaire activant irréversiblement le Premium pour tous ses membres, facturé par tête — est **abandonné**.
+
+**Page tarifs** : un sélecteur en haut à gauche bascule entre la **version actuelle** (les trois offres de compte ci-dessus, mensuel ou annuel) et la **nouvelle version**, une vitrine de l'offre « atelier Premium » — tarif dégressif par membre, simulé au curseur, avantages et grille des paliers. Cette vitrine est purement indicative : rien ne s'y active ni ne s'y facture.
 
 ### Tableau des fonctionnalités par niveau
 
@@ -128,7 +130,7 @@ Termes utilisés dans toute la codebase et dans ce document.
 **« Mes ateliers » — page secondaire** (`/dashboard`, anciennement page d'accueil ; fusionnée avec la recherche d'atelier). `/search` redirige vers `/dashboard`. Atteignable depuis le sélecteur d'atelier ; sert aussi de repli pour un utilisateur qui n'a encore aucun atelier.
 - Affiche les ateliers publics + les ateliers loisir proposés par Culture
 - **Ateliers loisir Culture :** créés et maintenus par Culture sur des sujets grand public. Disponibles selon l'abonnement : 5 (gratuit) / 10 (Premium) / 15 (Premium+).
-- Chaque atelier affiche une **page de présentation** (« Preview », en modale) : image de couverture, nom, description, propriétaire, nombre de membres, bouton « rejoindre » (envoie une demande d'adhésion — voir « Rejoindre un atelier » ci-dessous) ou « entrer » si déjà membre.
+- Chaque atelier affiche une **page de présentation** (« Preview », en modale) : image de couverture, nom, propriétaire, nombre de membres, bouton « rejoindre » (envoie une demande d'adhésion — voir « Rejoindre un atelier » ci-dessous) ou « entrer » si déjà membre.
 - Le QR code de partage d'un atelier pointe vers `/dashboard?preview=<id>`, qui ouvre automatiquement la Preview.
 
 **Profil utilisateur** *(mise en page arrêtée le 06/08/2026)*
@@ -159,7 +161,7 @@ Termes utilisés dans toute la codebase et dans ce document.
 ### Cycle de vie d'un atelier
 
 **Création**
-1. L'utilisateur crée un atelier (nom, description, image de couverture)
+1. L'utilisateur crée un atelier (nom, image de couverture)
 2. Il dépose des fichiers sources — PDF et texte aujourd’hui ; les autres formats (Word, PowerPoint, audio, vidéo) demandent une conversion préalable, voir `docs/backlog.md`
 3. L'IA décompose les fichiers en notions
 4. L'IA organise automatiquement les notions en sections et génère le programme éducatif
@@ -177,7 +179,7 @@ Termes utilisés dans toute la codebase et dans ce document.
 |---|---|
 | Demandes d'adhésion | Un gestionnaire/propriétaire accepte ou refuse chaque demande. |
 | Afficher / cacher le programme éducatif | Pour les candidats |
-| Inviter un utilisateur | Devient membre candidat directement (sans demande). **Réservé aux comptes Premium.** |
+| Inviter un utilisateur | Par son tag. Devient membre candidat directement (sans demande). **Réservé aux comptes Premium.** Le champ ne garde que les caractères possibles dans un tag, en majuscules : le « # », les espaces et les caractères exclus de l'alphabet (0, O, 1, I) sont bloqués à la frappe, sans être remplacés — un « #86qtxd » collé devient « 86QTXD ». |
 | Exclure un membre | Uniquement de rang inférieur au gestionnaire qui exclut (candidat < gestionnaire < propriétaire) |
 | Changer le rang d'un membre | Promouvoir : rang ≤ au sien / Rétrograder : rang < au sien |
 | QR code | Redirige vers l'atelier (Preview `?preview=`). Rejoindre passe toujours par une demande validée. |

@@ -73,7 +73,6 @@ export default async function SettingsPage({ params, searchParams }: Props) {
       locale={locale}
       workshopId={workshop.id}
       workshopName={workshop.name}
-      description={workshop.description}
       coverGradient={workshop.cover_gradient}
       coverImageUrl={workshop.cover_image_url}
       coverImageActive={workshop.cover_image_active}
@@ -81,15 +80,12 @@ export default async function SettingsPage({ params, searchParams }: Props) {
       createdAt={workshop.created_at}
       uniqueTag={workshop.unique_tag}
       currentUserRole={workshop.currentUserRole}
-      isPremium={workshop.is_premium}
       showProgramme={workshop.show_programme}
       initialSection={initialSection}
-      memberCount={members.length}
       membersSlot={
         <Suspense fallback={<SectionSkeleton rows={5} />}>
           <MembersSlot
             workshopId={id}
-            isPremium={workshop.is_premium}
             currentUserRole={workshop.currentUserRole}
             members={members}
           />
@@ -117,12 +113,10 @@ export default async function SettingsPage({ params, searchParams }: Props) {
 
 async function MembersSlot({
   workshopId,
-  isPremium,
   currentUserRole,
   members,
 }: {
   workshopId: string;
-  isPremium: boolean;
   currentUserRole: Member['role'];
   members: Member[];
 }) {
@@ -130,7 +124,6 @@ async function MembersSlot({
   return (
     <MembersSection
       workshopId={workshopId}
-      isPremium={isPremium}
       currentUserRole={currentUserRole}
       members={members}
       groups={groups}

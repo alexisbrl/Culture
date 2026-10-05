@@ -31,6 +31,15 @@ production casse, souvent en silence (beaucoup de `select` ne lisent que
 
 ## À appliquer
 
+- **05/10/2026 — fin de l'atelier Premium et de la description d'atelier**
+  (`docs/migrations/2026-10-05-fin-atelier-premium.sql`) : supprime la sécurité
+  qui interdisait à un atelier de redescendre, puis les colonnes
+  `workshops.is_premium`, `workshops.premium_activated_at` et
+  `workshops.description`. **Prérequis : la branche qui retire l'atelier Premium
+  et la description du code mergée et déployée** — avant, le code en ligne lit
+  encore ces colonnes. Régénérer `src/lib/database.types.ts`
+  ensuite.
+
 - **24/09/2026 — la veille des générations**
   (`docs/migrations/2026-09-24-veille-des-generations.sql`) : une tâche planifiée
   de la base qui appelle chaque minute `https://get-culture.com/api/ingest/watchdog`.

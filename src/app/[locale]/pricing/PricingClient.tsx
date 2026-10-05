@@ -5,6 +5,7 @@ import { palette, ink, withAlpha } from '@/lib/theme';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { SubscriptionTier } from '@/lib/subscription';
+import WorkshopPremiumOffer from './WorkshopPremiumOffer';
 
 const AMBER       = palette.amber;
 const AMBER_LIGHT = '#e8b86c';
@@ -121,6 +122,8 @@ function TierCTA({ tier, current, annual, dark }: {
 export default function PricingClient({ currentTier }: { currentTier: SubscriptionTier }) {
   const t = useTranslations('accountPricing');
   const [annual, setAnnual] = useState(false);
+  // Version affichée : les offres actuelles, ou la vitrine « atelier Premium ».
+  const [view, setView] = useState<'current' | 'new'>('current');
 
   const cardBase: React.CSSProperties = {
     background: withAlpha(palette.paper, 0.85),
@@ -133,7 +136,30 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
     <>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Caveat:wght@400;600&display=swap');`}</style>
 
-      <div style={{ background: BG, minHeight: 'calc(100vh - 65px)', fontFamily: "'Inter Tight', sans-serif", padding: '60px 20px 80px' }}>
+      <div style={{ background: BG, minHeight: 'calc(100vh - 65px)', fontFamily: "'Inter Tight', sans-serif", padding: '20px 20px 80px' }}>
+
+        {/* Bascule de version — en haut à gauche */}
+        <div style={{ maxWidth: 1100, margin: '0 auto 28px' }}>
+          <div style={{ display: 'inline-flex', background: ink(0.06), borderRadius: 100, padding: 4, gap: 2 }}>
+            {(['current', 'new'] as const).map((opt) => (
+              <button key={opt} onClick={() => setView(opt)} style={{
+                border: 'none', borderRadius: 100, padding: '6px 16px', fontSize: 13,
+                fontFamily: "'Inter Tight', sans-serif", fontWeight: 500, cursor: 'pointer',
+                background: view === opt ? palette.paper : 'transparent',
+                color: view === opt ? DARK : TEXT_MUTED,
+                boxShadow: view === opt ? '0 1px 4px rgba(0,0,0,0.10)' : 'none',
+                transition: 'all 0.15s',
+              }}>
+                {t(`view.${opt}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {view === 'new' ? (
+          <WorkshopPremiumOffer />
+        ) : (
+        <>
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
@@ -257,28 +283,8 @@ export default function PricingClient({ currentTier }: { currentTier: Subscripti
           </div>
         </div>
 
-        {/* Atelier Premium */}
-        <div style={{
-          maxWidth: 1100, margin: '0 auto',
-          background: `linear-gradient(135deg, ${withAlpha(palette.amberGlow, 0.18)}, ${withAlpha(palette.amber, 0.10)})`,
-          border: `1.5px solid ${withAlpha(palette.amber, 0.35)}`, borderRadius: 20, padding: '28px 32px',
-          display: 'grid', gridTemplateColumns: '1fr auto', gap: 24, alignItems: 'center',
-        }}>
-          <div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', background: AMBER_LIGHT, color: palette.paper, padding: '3px 10px', borderRadius: 100 }}>{t('workshopPremium.badge')}</span>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', background: '#e05c3a', color: palette.paper, padding: '3px 10px', borderRadius: 100 }}>{t('workshopPremium.irreversible')}</span>
-            </div>
-            <h3 style={{ fontSize: 18, fontWeight: 500, color: DARK, margin: '0 0 8px' }}>{t('workshopPremium.title')}</h3>
-            <p style={{ fontSize: 13, color: TEXT_MUTED, margin: '0 0 4px' }}>
-              {t('workshopPremium.description')}
-            </p>
-            <div style={{ fontFamily: "'Caveat', cursive", fontSize: 17, color: AMBER }}>{t('workshopPremium.tagline')}</div>
-          </div>
-          <button onClick={() => alert(t('alerts.soon'))} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: AMBER_LIGHT, color: palette.paper, fontSize: 14, fontWeight: 600, fontFamily: "'Inter Tight', sans-serif", cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            {t('workshopPremium.cta')}
-          </button>
-        </div>
+        </>
+        )}
 
       </div>
     </>

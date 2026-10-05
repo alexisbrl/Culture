@@ -19,7 +19,6 @@ type Props = {
   createdAt: string;
   currentUserId: string;
   currentUserRole: 'owner' | 'manager' | 'member';
-  isPremium: boolean;
   members: { id: string; userId: string; role: 'owner' | 'manager' | 'member'; joinedAt: string; displayName: string; uniqueTag: string }[];
   chapters: Chapter[];
   progress: ParcoursProgress;

@@ -205,7 +205,7 @@ const OUTLINE_MAX_HEADINGS = 60;
  *  demande de l'utilisateur. */
 export function writingQuestion(input: {
   hint: string;
-  workshop?: { name: string; description?: string | null } | null;
+  workshop?: { name: string } | null;
   chapters: { name: string }[];
   fileNames: string[];
   /** Le corps actuel du document de l'IA, s'il existe. Seuls ses titres partent. */
@@ -213,10 +213,7 @@ export function writingQuestion(input: {
 }): { state: string; question: string } {
   const lines: string[] = [];
   const name = input.workshop?.name?.trim();
-  if (name) {
-    const description = (input.workshop?.description ?? '').trim();
-    lines.push(`L'atelier : « ${name} »${description ? ` — ${description}` : ''}`);
-  }
+  if (name) lines.push(`L'atelier : « ${name} »`);
   lines.push(input.chapters.length > 0
     ? `Son programme :\n${input.chapters.map((c) => `- ${c.name}`).join('\n')}`
     : 'Son programme : vide, aucun chapitre.');

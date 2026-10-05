@@ -32,14 +32,12 @@ type Props = {
 type PreviewData = {
   id: string;
   name: string;
-  description: string | null;
   coverStyle: React.CSSProperties;
   emoji: string;
   ownerName: string;
   memberCount: number;
   isMember: boolean;
   hasRequested?: boolean;
-  isPremium?: boolean;
   role?: 'owner' | 'manager' | 'member';
   isInvitation?: boolean;
   isMock?: boolean;
@@ -76,13 +74,11 @@ function workshopToPreview(w: WorkshopCardData): PreviewData {
   return {
     id: w.id,
     name: w.name,
-    description: w.description,
     coverStyle: coverStyleFor(w.id, w.cover_gradient, w.cover_image_url, w.cover_image_active),
     emoji: emojiFor(w.id, w.emoji),
     ownerName: w.owner_name,
     memberCount: w.member_count,
     isMember: true,
-    isPremium: w.is_premium,
     role: w.role ?? 'member',
   };
 }
@@ -91,13 +87,11 @@ function invitationToPreview(w: WorkshopCardData): PreviewData {
   return {
     id: w.id,
     name: w.name,
-    description: w.description,
     coverStyle: coverStyleFor(w.id, w.cover_gradient, w.cover_image_url, w.cover_image_active),
     emoji: emojiFor(w.id, w.emoji),
     ownerName: w.owner_name,
     memberCount: w.member_count,
     isMember: false,
-    isPremium: w.is_premium,
     isInvitation: true,
   };
 }
@@ -106,13 +100,11 @@ function requestToPreview(w: WorkshopCardData): PreviewData {
   return {
     id: w.id,
     name: w.name,
-    description: w.description,
     coverStyle: coverStyleFor(w.id, w.cover_gradient, w.cover_image_url, w.cover_image_active),
     emoji: emojiFor(w.id, w.emoji),
     ownerName: w.owner_name,
     memberCount: w.member_count,
     isMember: false,
-    isPremium: w.is_premium,
     hasRequested: true,
   };
 }
@@ -121,7 +113,6 @@ function moduleToPreview(m: typeof CULTURE_MODULES[number]): PreviewData {
   return {
     id: `culture-${m.id}`,
     name: m.name,
-    description: m.desc,
     coverStyle: { backgroundColor: 'transparent', backgroundImage: TONE_CSS[m.tone], backgroundSize: 'auto', backgroundPosition: '0 0' },
     emoji: m.emoji,
     ownerName: 'Culture',
@@ -146,7 +137,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; description: string | null; cover_gradient: string | null; cover_image_url: string | null; cover_image_active: boolean; emoji: string | null; unique_tag: string | null; member_count: number }>>([]);
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; cover_gradient: string | null; cover_image_url: string | null; cover_image_active: boolean; emoji: string | null; unique_tag: string | null; member_count: number }>>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [joinErrorId, setJoinErrorId] = useState<string | null>(null);
@@ -219,14 +210,12 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
       setPreview({
         id: data.id,
         name: data.name,
-        description: data.description,
         coverStyle: coverStyleFor(data.id, data.coverGradient, data.coverImageUrl, data.coverImageActive),
         emoji: emojiFor(data.id, data.emoji),
         ownerName: data.ownerName,
         memberCount: data.memberCount,
         isMember: data.isMember,
         hasRequested: data.hasRequested,
-        isPremium: data.isPremium,
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -397,15 +386,13 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                             setPreview({
                               id: data.id,
                               name: data.name,
-                              description: data.description,
-                              coverStyle: coverStyleFor(data.id, data.coverGradient, data.coverImageUrl, data.coverImageActive),
+                                                    coverStyle: coverStyleFor(data.id, data.coverGradient, data.coverImageUrl, data.coverImageActive),
                               emoji: emojiFor(data.id, data.emoji),
                               ownerName: data.ownerName,
                               memberCount: data.memberCount,
                               isMember: data.isMember,
                               hasRequested: data.hasRequested,
-                              isPremium: data.isPremium,
-                            });
+                                                  });
                           });
                         }}
                         className="cursor-pointer rounded-2xl overflow-hidden bg-white/90 border border-ink/[0.08] shadow-[var(--shadow-sm)] flex flex-col"
@@ -577,7 +564,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                   <button onClick={closePreview} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/85 flex items-center justify-center text-ink-muted hover:bg-white">
                     <X className="w-4 h-4" />
                   </button>
-                  {(preview.role || preview.isPremium || preview.isInvitation) && (
+                  {(preview.role || preview.isInvitation) && (
                     <div className="absolute top-3 left-3 flex items-center gap-1.5">
                       {preview.isInvitation && (
                         <span
@@ -592,14 +579,6 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                           {t(`role.${preview.role}`)}
                         </span>
                       )}
-                      {preview.isPremium && (
-                        <span
-                          className="text-[11px] px-2.5 py-1 rounded-full font-medium"
-                          style={{ background: withAlpha(palette.amberGlow, 0.85), color: palette.amberLight }}
-                        >
-                          Premium
-                        </span>
-                      )}
                     </div>
                   )}
                 </div>
@@ -611,9 +590,6 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
                     <span className="w-[2px] h-[2px] rounded-full bg-ink-soft" />
                     <span>{t('createdBy')} {preview.ownerName}</span>
                   </div>
-                  {preview.description && (
-                    <p className="text-[13.5px] text-[var(--ink-body)] leading-relaxed mb-5">{preview.description}</p>
-                  )}
 
                   {preview.isInvitation ? (
                     <div className="flex items-center gap-3">
@@ -696,14 +672,6 @@ function WorkshopCard({ workshop, locale, onExpand }: { workshop: WorkshopCardDa
       <div className="relative h-[90px]" style={coverStyle}>
         <div className="absolute left-3.5 bottom-3 w-[38px] h-[38px] rounded-xl bg-white/90 flex items-center justify-center shadow-md text-lg">{emojiFor(workshop.id, workshop.emoji)}</div>
         <div className="absolute top-2.5 left-2.5 flex flex-wrap items-center gap-1">
-          {workshop.is_premium && (
-            <span
-              className="inline-flex items-center gap-1 text-[10.5px] px-2 py-0.5 rounded-full font-semibold shadow-sm"
-              style={{ background: withAlpha(palette.amberGlow, 0.92), color: palette.amberLight }}
-            >
-              <Crown className="w-2.5 h-2.5" /> Premium
-            </span>
-          )}
         </div>
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onExpand(); }}

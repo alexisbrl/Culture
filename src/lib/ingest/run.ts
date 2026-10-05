@@ -417,7 +417,6 @@ async function snapshotBefore(workshopId: string): Promise<Record<string, unknow
       notions: notions.count ?? 0,
       groupesDeQuestions: questions.count ?? 0,
       atelier: identity?.name ?? null,
-      description: identity?.description ?? null,
     };
   } catch (error) {
     console.warn('[journal] état de départ non relevé :', error instanceof Error ? error.message : error);
@@ -427,9 +426,9 @@ async function snapshotBefore(workshopId: string): Promise<Record<string, unknow
 
 async function loadWorkshopIdentity(workshopId: string): Promise<WorkshopIdentity | null> {
   const supabase = getSupabaseServerClient();
-  const { data } = await supabase.from('workshops').select('name, description').eq('id', workshopId).maybeSingle();
+  const { data } = await supabase.from('workshops').select('name').eq('id', workshopId).maybeSingle();
   if (!data) return null;
-  return { name: (data.name as string) ?? '', description: (data.description as string | null) ?? null };
+  return { name: (data.name as string) ?? '' };
 }
 
 /** Le programme tel qu'un candidat le voit : les chapitres VISIBLES, dans

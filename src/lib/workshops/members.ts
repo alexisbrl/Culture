@@ -11,6 +11,7 @@
 // Clerk), sans dupliquer les règles ci-dessous.
 
 import { getSupabaseServerClient } from '@/lib/supabase';
+import { normalizeTag } from '@/lib/tagFormat';
 import { ROLE_RANK, type WorkshopRole } from '@/lib/authz';
 import type { WorkshopCardData } from '@/app/actions/workshops';
 
@@ -212,22 +213,10 @@ export async function inviteByTag(
 ): Promise<{ success: boolean; displayName?: string; userId?: string; autoJoined?: boolean; error?: string }> {
   const supabase = getSupabaseServerClient();
 
-  // L'invitation est réservée aux ateliers Premium — vérification côté serveur
-  // (ne jamais se fier au gating UI, cf. CLAUDE.md « Atelier Premium »).
-  const { data: workshop } = await supabase
-    .from('workshops')
-    .select('is_premium')
-    .eq('id', workshopId)
-    .single();
-
-  if (!workshop?.is_premium) {
-    return { success: false, error: "L'invitation est réservée aux ateliers Premium" };
-  }
-
   const { data: targetUser } = await supabase
     .from('user_profiles')
     .select('user_id, display_name')
-    .eq('unique_tag', uniqueTag.toUpperCase())
+    .eq('unique_tag', normalizeTag(uniqueTag))
     .single();
 
   if (!targetUser) {
@@ -301,7 +290,7 @@ async function buildWorkshopCards(
 ): Promise<WorkshopCardData[]> {
   const { data: workshops } = await supabase
     .from('workshops')
-    .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium')
+    .select('id, name, created_at, created_by, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag')
     .in('id', workshopIds)
     .is('deleted_at', null);
 
@@ -334,14 +323,12 @@ async function buildWorkshopCards(
         name: w.name,
         created_at: w.created_at,
         member_count: countMap[w.id] ?? 1,
-        description: w.description,
         cover_gradient: w.cover_gradient,
         cover_image_url: w.cover_image_url,
         cover_image_active: w.cover_image_active,
         emoji: w.emoji,
         unique_tag: w.unique_tag,
         owner_name: ownerNameMap[w.created_by] ?? 'Utilisateur',
-        is_premium: w.is_premium,
       };
     });
 }

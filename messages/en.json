@@ -20,7 +20,6 @@
     "switcherTitle": "switch workshop",
     "switcherLoading": "loading…",
     "switcherEmpty": "no workshop yet",
-    "premiumWorkshop": "premium workshop",
     "newWorkshop": "new workshop",
     "allWorkshops": "all my workshops"
   },
@@ -625,8 +624,7 @@
       "general": "General",
       "members": "Members & roles",
       "files": "Resources",
-      "notions": "Chapter & Notion",
-      "premium": "Premium workshop"
+      "notions": "Chapter & Notion"
     },
     "role": {
       "owner": "owner",
@@ -652,8 +650,6 @@
     "general": {
       "title": "General",
       "nameLabel": "Workshop name",
-      "descLabel": "Description",
-      "descPlaceholder": "describe your workshop in a few words…",
       "coverLabel": "Cover image",
       "uploadAria": "upload your image",
       "removeCoverAria": "remove cover image",
@@ -679,7 +675,8 @@
       "emptyName": "the workshop name cannot be empty",
       "saving": "saving…",
       "saved": "saved",
-      "save": "save"
+      "save": "save",
+      "cancel": "cancel"
     },
     "deleteModal": {
       "trashTitle": "Move to trash?",
@@ -703,11 +700,11 @@
     "members": {
       "title": "Members & roles",
       "inviteLabel": "Invite a user",
+      "tagPlaceholder": "#tag…",
       "inviting": "sending…",
       "invite": "invite",
       "inviteSent": "Invitation sent to {name}.",
       "memberAdded": "{name} had already requested to join this workshop: added directly.",
-      "premiumOnly": "available for Premium workshops",
       "pendingInvites": "Pending invitations ({count})",
       "waiting": "pending",
       "canceling": "canceling…",
@@ -765,48 +762,6 @@
       "deleteFileTitle": "Delete this file?",
       "deleteFileDesc": "\"{name}\" will be permanently deleted. This action is irreversible."
     },
-    "premium": {
-      "title": "Premium workshop",
-      "eyebrowActive": "subscription",
-      "eyebrowInactive": "switch to premium",
-      "activeBadge": "Premium active",
-      "activeTitle": "This workshop enjoys every Premium benefit.",
-      "activeBilling": "Billing: about {total} € / month · {count, plural, one {# member} other {# members}}",
-      "heroTitle": "Make this workshop Premium",
-      "perMonthFor": "/ month for {count, plural, one {# member} other {# members}}",
-      "perMemberNote": "about {avg} € per member · degressive rate",
-      "activate": "Make the workshop Premium",
-      "irreversibleNote": "permanent and irreversible — the workshop becomes private for life for all its members",
-      "advantagesTitle": "What Premium unlocks",
-      "advantages": {
-        "noAds": "No ads",
-        "unlimitedEnergy": "Unlimited usage",
-        "aiExchange": "AI exchange",
-        "examGenerator": "Access to the exam generator",
-        "inviteMembers": "Add members straight from the workshop",
-        "fileStorage": "Upload up to 5 GB of files",
-        "dailyJoker": "1 random joker per day + via quests",
-        "exclusivePlants": "Exclusive plants"
-      },
-      "tiersTitle": "Price detail",
-      "tiersNote": "the more members the workshop has, the less each seat costs.",
-      "tiers": {
-        "t1": "1st member",
-        "t2to4": "2 to 4 members",
-        "t5to9": "5 to 9 members",
-        "t10to19": "10 to 19 members",
-        "t20to49": "20 to 49 members",
-        "t50to99": "50 to 99 members",
-        "t100plus": "100 members and up"
-      },
-      "yourTier": "your tier",
-      "perMemberUnit": "/ member",
-      "testPwHint": "test mode — will be removed with payment integration",
-      "pwPlaceholder": "activation code…",
-      "confirmTitle": "Make the workshop Premium",
-      "confirmDesc": "This action is permanent and irreversible: the workshop will become private forever and all its members (current and future) will get lifetime Premium access.",
-      "confirmBtn": "Confirm activation"
-    },
     "notions": {
       "title": "Notions",
       "edit": "edit",
@@ -852,7 +807,6 @@
       "manager": "manager",
       "member": "member"
     },
-    "premiumBadge": "premium",
     "memberCount": "{count} member{plural}",
     "leaveBtn": "leave workshop",
     "leaveConfirm": {
@@ -1051,17 +1005,42 @@
       "jokerChoice": "1 chosen joker/day",
       "shareSub3": "share plan +3"
     },
-    "workshopPremium": {
-      "badge": "premium workshop",
-      "irreversible": "irreversible",
-      "title": "unlock your workshop for all your members, for life.",
-      "description": "A one-time activation that grants Premium access to all current and future members of your workshop — no personal subscription required.",
-      "tagline": "“schools, training centers, teams — this is for you.”",
-      "cta": "activate for a workshop →"
-    },
     "alerts": {
-      "paymentSoon": "Payment coming soon.",
-      "soon": "Coming soon."
+      "paymentSoon": "Payment coming soon."
+    },
+    "view": {
+      "current": "current version",
+      "new": "new version"
+    },
+    "workshopOffer": {
+      "eyebrow": "premium workshop",
+      "heroTitle": "Premium for a whole workshop",
+      "perMonthFor": "/ month for {count, plural, one {# member} other {# members}}",
+      "perMemberNote": "about {avg} € per member · degressive rate",
+      "simulatorLabel": "number of workshop members",
+      "advantagesTitle": "What Premium unlocks",
+      "advantages": {
+        "noAds": "No ads",
+        "unlimitedEnergy": "Unlimited usage",
+        "aiExchange": "AI exchange",
+        "examGenerator": "Access to the exam generator",
+        "inviteMembers": "Add members straight from the workshop",
+        "fileStorage": "Upload up to 5 GB of files",
+        "dailyJoker": "1 random joker per day + via quests",
+        "exclusivePlants": "Exclusive plants"
+      },
+      "tiersTitle": "Price detail",
+      "tiersNote": "the more members the workshop has, the less each seat costs.",
+      "tiers": {
+        "t1": "1st member",
+        "t2to4": "2 to 4 members",
+        "t5to9": "5 to 9 members",
+        "t10to19": "10 to 19 members",
+        "t20to49": "20 to 49 members",
+        "t50to99": "50 to 99 members",
+        "t100plus": "100 members and up"
+      },
+      "perMemberUnit": "/ member"
     }
   },
   "analyse": {
@@ -1118,9 +1097,7 @@
       "kicker": "② identity",
       "changeCover": "change cover",
       "nameLabel": "name",
-      "namePlaceholder": "e.g. Cell biology — L2",
-      "descriptionLabel": "short description",
-      "descriptionPlaceholder": "one line to set the scene…"
+      "namePlaceholder": "e.g. Cell biology — L2"
     },
     "createCta": "create the workshop",
     "extractHint": "the AI then extracts the notions · you can adjust everything"

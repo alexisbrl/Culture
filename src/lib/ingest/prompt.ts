@@ -703,12 +703,11 @@ ${transmit}`;
  *  Sa version précédente ne parlait que du « public visé », ce qui est la moitié
  *  de ce qu'un intitulé apprend : il dit aussi le registre — scolaire,
  *  professionnel, ludique —, le niveau d'exigence et le vocabulaire attendus. */
-export type WorkshopIdentity = { name: string; description?: string | null };
+export type WorkshopIdentity = { name: string };
 
 export function workshopBlock(workshop?: WorkshopIdentity | null): string {
   if (!workshop?.name?.trim()) return '';
-  const description = (workshop.description ?? '').trim();
-  return `L'atelier s'intitule « ${workshop.name.trim()} »${description ? `, décrit ainsi par son auteur : « ${description} »` : ''}. Sers-t'en pour DÉDUIRE LE CONTEXTE de l'atelier : à qui il s'adresse, le niveau d'exigence, le registre — scolaire, professionnel, ludique —, le vocabulaire et le type d'exemples qui lui conviennent. Écris pour ce contexte-là.
+  return `L'atelier s'intitule « ${workshop.name.trim()} ». Sers-t'en pour DÉDUIRE LE CONTEXTE de l'atelier : à qui il s'adresse, le niveau d'exigence, le registre — scolaire, professionnel, ludique —, le vocabulaire et le type d'exemples qui lui conviennent. Écris pour ce contexte-là.
 
 C'est une source de DÉDUCTION, pas une source de vérité : un intitulé peut être vague, approximatif, ou resté d'une version précédente du cours. Il te dit dans QUEL CADRE tu écris — jamais ce que le cours contient. Ce que le cours contient, ce sont les notions ci-dessous, et elles seules.
 

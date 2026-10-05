@@ -49,7 +49,6 @@ export default async function WorkshopPage({ params }: Props) {
       createdAt={workshop.created_at}
       currentUserId={userId}
       currentUserRole={workshop.currentUserRole}
-      isPremium={workshop.is_premium}
       members={members}
       chapters={chapters}
       progress={progress}
