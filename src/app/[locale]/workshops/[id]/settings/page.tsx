@@ -7,6 +7,7 @@ import { getWorkshop, getMemberGroups } from '@/app/actions/workshops';
 import { getWorkshopFiles } from '@/app/actions/workshopFiles';
 import { getWorkshopNotions } from '@/app/actions/workshopNotions';
 import { getWorkshopChapters } from '@/app/actions/workshopChapters';
+import { getGenerationUndo } from '@/app/actions/aiIngest';
 import SettingsClient from './SettingsClient';
 import MembersSection from './MembersSection';
 import FilesSection from './FilesSection';
@@ -137,11 +138,12 @@ async function FilesSlot({ workshopId }: { workshopId: string }) {
 }
 
 async function NotionsSlot({ workshopId }: { workshopId: string }) {
-  const [notions, chapters] = await Promise.all([
+  const [notions, chapters, generationUndo] = await Promise.all([
     getWorkshopNotions(workshopId),
     getWorkshopChapters(workshopId),
+    getGenerationUndo(workshopId),
   ]);
-  return <NotionsSection workshopId={workshopId} notions={notions} chapters={chapters} />;
+  return <NotionsSection workshopId={workshopId} notions={notions} chapters={chapters} generationUndo={generationUndo} />;
 }
 
 /** Silhouette d'une section pas encore arrivée : mêmes dimensions qu'une carte

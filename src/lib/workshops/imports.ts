@@ -274,6 +274,18 @@ export async function cancelImport(workshopId: string, importId: string): Promis
   const state = importCancelState(rows);
   if (state !== 'cancellable') return { cancelled: false, reason: state };
 
+  return { cancelled: true, ...(await deleteImportRows(workshopId, importId)) };
+}
+
+/** Supprime tout ce que porte l'étiquette de ce lot, sans rien vérifier
+ *  d'autre : c'est à l'appelant de dire si le lot peut partir (`cancelImport`
+ *  pour l'arrêt d'une génération, `undoGeneration` pour l'annulation de la
+ *  dernière génération, @/lib/workshops/generationUndo). */
+export async function deleteImportRows(
+  workshopId: string,
+  importId: string,
+): Promise<{ chapters: number; notions: number; questionGroups: number }> {
+  assertImportId(importId);
   const supabase = getSupabaseServerClient();
   const deleted = { chapters: 0, notions: 0, questionGroups: 0 };
 
@@ -292,7 +304,7 @@ export async function cancelImport(workshopId: string, importId: string): Promis
     deleted[key] = (data ?? []).length;
   }
 
-  return { cancelled: true, ...deleted };
+  return deleted;
 }
 
 /** Le lot appartient-il à cet atelier ? Un identifiant de lot arrive du

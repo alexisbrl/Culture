@@ -655,8 +655,9 @@ ressemblance reste réservé aux notions.
 **Pas de prévisualisation.** Le plan est écrit immédiatement ; l'utilisateur constate dans
 l'app et défait ce qui ne lui convient pas.
 
-Chaque élément créé porte l'**étiquette de sa génération**. Annuler = tout retirer d'un
-coup. Deux conditions : **moins de 24 h**, et **aucun élément modifié**.
+Chaque élément créé porte l'**étiquette de sa génération**. Arrêter une génération en
+cours = tout retirer d'un coup, à deux conditions : **moins de 24 h**, et **aucun élément
+modifié** (`src/lib/workshops/imports.ts`).
 
 > ⚠️ **L'écriture d'ingestion doit OMETTRE la date de modification, pas l'aligner.** Un
 > enregistrement qui l'écrit explicitement — y compris à la création — fait naître tout
@@ -670,9 +671,31 @@ lancée depuis l'examen — aboutie ou non —, ses questions reçoivent un libe
 « Lot IA n°N » (le plus grand numéro existant + 1, sans compteur en base ;
 `src/lib/ingest/lotLabel.ts`). On relit le lot par le filtre des libellés et on le défait
 par la suppression du libellé avec ses questions (`src/lib/workshops/labelDeletion.ts`),
-sans délai ni condition. Côté programme (chapitres, notions, questions du parcours), aucune
-commande à l'écran n'annule plus un lot : l'étiquette reste en base, et l'arrêt d'une
-génération en cours s'appuie toujours sur elle.
+sans délai ni condition. L'arrêt d'une génération en cours s'appuie aussi sur l'étiquette.
+
+**Côté programme : la dernière génération s'annule d'un bloc**
+(`src/lib/workshops/generationUndo.ts`, produit : `docs/product-spec.md`, Paramètres). Seule
+la dernière génération lancée depuis les paramètres, pendant 48 h, et tant que rien n'a bougé
+dans les chapitres et les notions depuis sa clôture.
+- **« Rien n'a bougé » se lit en base, pas ligne à ligne.** Un déclencheur sur les chapitres
+  et les notions tient `workshops.program_changed_at` à jour à chaque écriture, suppressions
+  comprises — une date de modification par ligne ne voit pas une suppression. La clôture du
+  lot recopie cette valeur dans son `scope` (`programStamp`) ; l'annulation n'est offerte que
+  si elle n'a pas changé. Les deux valeurs viennent de la base et se comparent en chaînes, à
+  la microseconde : aucune horloge de serveur n'intervient.
+- **On note les changements, pas l'état.** Ce que la génération a créé se reconnaît à son
+  étiquette ; le reste est noté au fil de l'eau dans le `scope` : ancien chapitre des notions
+  existantes (`stage1.before`) et celles réellement déplacées (`movedNotions`), chapitres
+  écartés (`stage1.dropped`, `undoEmptied`), ordre des chapitres avant elle (`undoOrder`,
+  noté une seule fois, pour qu'une étape rejouée ne l'écrase pas).
+- **Annuler** remet les notions déplacées, rétablit les chapitres écartés, supprime ce que
+  porte l'étiquette, puis remet l'ordre. Le calcul (`planGenerationUndo`) est pur et testé :
+  il ne vise jamais une ligne que la génération n'a pas touchée.
+- **« modifié » sur un chapitre** : écarté par la génération, ou hors de la plus longue suite
+  de chapitres restés dans leur ordre relatif — un chapitre décalé par une insertion n'est
+  pas marqué.
+- Une génération sans tampon (antérieure au mécanisme, ou dont la clôture n'a pas pu
+  l'écrire) ne s'annule pas.
 
 **Pas de transaction atomique, et c'est assumé.** Un échec en cours laisse un atelier
 partiellement rempli — l'étiquette permet de nettoyer d'un coup, **et elle sert bien
@@ -1162,6 +1185,14 @@ elle-même, et lit l'état courant (pas celui du rendu qui l'a créée) : entre-
 génération a pu ajouter des chapitres.
 
 Annuler rend visible ce qu'il change : la section, le bon chapitre, un défilement jusqu'à la ligne et un clignotement — sinon, une annulation qui change de section ne dit pas où regarder.
+
+L'annulation de la dernière génération (§7.8) n'est **pas** une entrée de la pile : elle peut
+précéder l'arrivée sur la page et ne vient d'aucun geste. La section Chapitre & Notion la
+tient et la signale à la page par un second contexte ; la page affiche son bouton au-dessus
+de l'autre et confirme avant qu'une entrée de la section Chapitre & Notion ne soit dépilée.
+Dans la section, chaque geste qui écrit le programme passe par une même garde, qui confirme
+tant qu'elle existe — pour le glisser-déposer, la garde s'applique au lâcher, une fois la
+cible lue.
 
 **Une suppression efface tout de suite, mais d'abord met de côté** — côté serveur, jamais dans
 le navigateur — un **lot** — une notion, un chapitre, un chapitre écarté avec ses notions,

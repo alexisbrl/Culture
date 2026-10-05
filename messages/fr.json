@@ -675,6 +675,20 @@
       "tooltip": "Annuler la dernière action (Ctrl+Z)",
       "failed": "Impossible d'annuler cette action."
     },
+    "generationUndo": {
+      "badgeNew": "nouveau",
+      "badgeChanged": "modifié",
+      "button": "annuler la génération",
+      "tooltip": "Défait la dernière génération par IA : ce qu’elle a créé est supprimé, ce qu’elle a déplacé ou écarté reprend sa place.",
+      "confirmTitle": "Annuler la dernière génération ?",
+      "confirmDesc": "{created, plural, =0 {} one {# chapitre ou notion créé sera supprimé, avec ses questions.} other {# chapitres et notions créés seront supprimés, avec leurs questions.}} {changed, plural, =0 {} one {# élément déplacé ou écarté reprendra sa place.} other {# éléments déplacés ou écartés reprendront leur place.}} C’est définitif.",
+      "confirmAction": "annuler la génération",
+      "keep": "garder",
+      "modifyTitle": "Modifier le programme ?",
+      "modifyDesc": "La dernière génération ne pourra plus être annulée, et les pastilles « nouveau » et « modifié » disparaîtront.",
+      "modifyConfirm": "modifier",
+      "failed": "La génération ne peut plus être annulée : le programme a changé depuis."
+    },
     "deleteModal": {
       "trashTitle": "Mettre en corbeille ?",
       "trashDesc": "\"{name}\" sera mis en corbeille. Vous aurez 7 jours pour annuler.",

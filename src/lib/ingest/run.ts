@@ -1601,6 +1601,21 @@ async function applyStage1(
   const adjusted = [...pending.adjusted];
   const names = new Map(pending.visibleExisting.map((c) => [c.id, c.name]));
 
+  // L'ordre des chapitres AVANT que cette génération y touche : c'est lui que
+  // l'annulation remet (@/lib/workshops/generationUndo). Noté une seule fois —
+  // une étape rejouée par la veille ne doit pas l'écraser avec l'ordre qu'elle
+  // a elle-même produit.
+  if (!Array.isArray((await readScope(importId)).undoOrder)) {
+    const { data: orderRows, error: orderError } = await getSupabaseServerClient()
+      .from('workshop_chapters')
+      .select('id')
+      .eq('workshop_id', workshopId)
+      .order('position')
+      .order('id');
+    if (orderError) throw new Error(orderError.message);
+    await writeScope(importId, { undoOrder: (orderRows ?? []).map((r) => r.id as string) });
+  }
+
   const discardedChapters = await hideChapters(workshopId, pending.dropped);
   for (const id of discardedChapters) {
     const reason = pending.chapterOrder.find((c) => c.ref === id)?.reason?.trim();
@@ -1989,6 +2004,13 @@ export async function finishIngestion(
     // Le chapitre suit ses notions : celui qui ne garde que ce que personne n'a
     // su placer est écarté avec elles dedans.
     const hidden = await hideEmptyChapters(workshopId, stranded);
+    // Écartés par cette génération : l'annulation les rétablit.
+    if (hidden.length > 0) {
+      const previous = (await readScope(importId)).undoEmptied;
+      await writeScope(importId, {
+        undoEmptied: [...new Set([...(Array.isArray(previous) ? (previous as string[]) : []), ...hidden])],
+      });
+    }
 
     const [notions, chapterRows] = await Promise.all([
       loadNotionsToArrange(workshopId),

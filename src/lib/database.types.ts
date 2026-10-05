@@ -940,6 +940,7 @@ export type Database = {
           emoji: string | null
           id: string
           name: string
+          program_changed_at: string | null
           show_programme: boolean
           unique_tag: string | null
           updated_at: string | null
@@ -955,6 +956,7 @@ export type Database = {
           emoji?: string | null
           id?: string
           name: string
+          program_changed_at?: string | null
           show_programme?: boolean
           unique_tag?: string | null
           updated_at?: string | null
@@ -970,6 +972,7 @@ export type Database = {
           emoji?: string | null
           id?: string
           name?: string
+          program_changed_at?: string | null
           show_programme?: boolean
           unique_tag?: string | null
           updated_at?: string | null

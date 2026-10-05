@@ -16,6 +16,7 @@
 // ce module font le contrôle d'accès en amont (CLAUDE.md §5).
 
 import { getSupabaseServerClient } from '@/lib/supabase';
+import { stampProgram } from '@/lib/workshops/generationUndo';
 import { chapterStartBudgets } from './demand';
 import { passFailed } from './failure';
 import { markOutcome } from './journal';
@@ -267,6 +268,15 @@ async function apply(p: Pipeline, intent: Intent, tasks: readonly StoredTask[]):
         .eq('key', MARK.end);
       await closeImport(p.importId);
       await markOutcome(p.importId, intent.outcome);
+      // Le tampon de clôture : ce qui bougera dans le programme après lui
+      // retire la possibilité d'annuler cette génération
+      // (@/lib/workshops/generationUndo). Un échec la rend seulement
+      // inannulable.
+      try {
+        await stampProgram(p.workshopId, p.importId);
+      } catch (error) {
+        console.warn('[ingest] tampon de clôture non posé :', error instanceof Error ? error.message : String(error));
+      }
       // Les questions d'examen du lot reçoivent leur libellé « Lot IA n°N »
       // (27/09/2026), qu'il ait abouti ou non : c'est par lui qu'on les relit
       // et qu'on les supprime. Un échec ici ne doit pas empêcher la clôture.

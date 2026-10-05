@@ -37,6 +37,14 @@ AUCUN
 
 ## Appliqué / sans objet
 
+- **05/10/2026 — la dernière modification du programme**
+  (`docs/migrations/2026-10-05-programme-touche.sql`) : colonne
+  `workshops.program_changed_at` et déclencheur sur `workshop_chapters` et
+  `workshop_bricks`, pour l'annulation de la dernière génération. **Appliquée
+  tout de suite, rien à attendre** : purement additive, le code en ligne ignore
+  la colonne. Vérifiée en base (une écriture de notion la met à jour, dans une
+  transaction annulée). `src/lib/database.types.ts` mis à jour.
+
 - **05/10/2026 — la copie des suppressions des paramètres**
   (`docs/migrations/2026-10-05-copie-des-suppressions.sql`) : table
   `settings_trash`, qui garde de quoi annuler une suppression de notion ou de

@@ -12,6 +12,7 @@ import * as queue from '@/lib/ingest/queue';
 import * as run from '@/lib/ingest/run';
 import { revalidateWorkshop } from '@/lib/revalidate';
 import * as imports from '@/lib/workshops/imports';
+import * as generationUndo from '@/lib/workshops/generationUndo';
 
 // Logique métier : voir @/lib/ingest/orchestrator et @/lib/workshops/imports.
 // Ces wrappers ne portent que l'authz Clerk et la revalidation Next.js. Types
@@ -182,5 +183,45 @@ export async function cancelWorkshopImport(
     return { ok: true, chapters: result.chapters, notions: result.notions, questionGroups: result.questionGroups };
   } catch (error) {
     return { ok: false, error: message(error) };
+  }
+}
+
+// ─── Annuler la dernière génération du programme ─────────────────────────────
+// Logique : @/lib/workshops/generationUndo.
+
+export type GenerationUndoView = {
+  importId: string;
+  expiresAt: string;
+  marks: {
+    newChapters: string[];
+    newNotions: string[];
+    movedNotions: string[];
+    changedChapters: string[];
+  };
+};
+
+/** La dernière génération du programme, si elle s'annule encore — de quoi
+ *  marquer « nouveau » / « modifié » et afficher le bouton d'annulation. */
+export async function getGenerationUndo(workshopId: string): Promise<GenerationUndoView | null> {
+  if (!(await requireManager(workshopId))) return null;
+  try {
+    return await generationUndo.getGenerationUndo(workshopId);
+  } catch (error) {
+    console.warn('[generationUndo] lecture impossible :', message(error));
+    return null;
+  }
+}
+
+/** Annule la dernière génération du programme. `ok: false` : elle ne s'annule
+ *  plus (programme modifié depuis, délai passé, génération plus récente). */
+export async function undoLastGeneration(workshopId: string, importId: string): Promise<{ ok: boolean }> {
+  if (!(await requireManager(workshopId))) return { ok: false };
+  try {
+    const result = await generationUndo.undoGeneration(workshopId, importId);
+    if (result.ok) revalidateWorkshop();
+    return { ok: result.ok };
+  } catch (error) {
+    console.error('[generationUndo] annulation interrompue :', message(error));
+    return { ok: false };
   }
 }
