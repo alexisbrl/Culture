@@ -37,6 +37,12 @@ AUCUN
 
 ## Appliqué / sans objet
 
+- **05/10/2026 — la copie des suppressions des paramètres**
+  (`docs/migrations/2026-10-05-copie-des-suppressions.sql`) : table
+  `settings_trash`, qui garde de quoi annuler une suppression de notion ou de
+  chapitre. **Appliquée tout de suite, rien à attendre** : purement additive, le
+  code en ligne l'ignore. `src/lib/database.types.ts` mis à jour.
+
 - **24/09/2026 — la veille des générations**
   (`docs/migrations/2026-09-24-veille-des-generations.sql`) : en place depuis le
   25/09/2026 (tâche `veille-des-generations`, premier passage 08:15 UTC), sans que

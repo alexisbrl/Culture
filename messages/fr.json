@@ -670,13 +670,10 @@
       "leaveLabel": "Quitter l'atelier",
       "leaveHint": "vous perdrez l'accès à l'atelier et à votre progression"
     },
-    "saveBar": {
-      "unsaved": "modifications non enregistrées",
-      "emptyName": "le nom de l'atelier ne peut pas être vide",
-      "saving": "enregistrement…",
-      "saved": "enregistré",
-      "save": "enregistrer",
-      "cancel": "annuler"
+    "undo": {
+      "button": "annuler",
+      "tooltip": "Annuler la dernière action (Ctrl+Z)",
+      "failed": "Impossible d'annuler cette action."
     },
     "deleteModal": {
       "trashTitle": "Mettre en corbeille ?",
@@ -689,13 +686,6 @@
       "resend": "Renvoyer",
       "verifying": "Vérification…",
       "confirm": "Confirmer"
-    },
-    "leave": {
-      "title": "Modifications non enregistrées",
-      "desc": "Si vous quittez maintenant, les modifications apportées seront perdues.",
-      "emptyName": "le nom de l'atelier ne peut pas être vide",
-      "saveAndLeave": "Enregistrer et quitter",
-      "leaveWithout": "Quitter sans enregistrer"
     },
     "members": {
       "title": "Membres & rôles",
@@ -778,8 +768,7 @@
       "noChapter": "Sans chapitre",
       "needChapterHint": "crée un chapitre pour y planter tes premières notions.",
       "count": "{count, plural, =0 {aucune notion} one {# notion} other {# notions}}",
-      "deleteTitle": "Supprimer cette notion ?",
-      "deleteDesc": "« {title} » sera définitivement supprimée, ainsi que les données de maîtrise associées."
+      "deleteUnassigned": "supprimer {count, plural, one {cette notion} other {ces # notions}}"
     },
     "chapters": {
       "title": "Chapitres",
@@ -790,8 +779,6 @@
       "dragHint": "glisser pour réordonner",
       "empty": "Aucun chapitre pour l'instant.",
       "count": "{count, plural, =0 {aucun chapitre} one {# chapitre} other {# chapitres}}",
-      "deleteTitle": "Supprimer ce chapitre ?",
-      "deleteDesc": "« {name} » sera supprimé et son pot disparaîtra du programme. Ses notions ne sont pas supprimées : elles repassent dans « sans chapitre ».",
       "hiddenTitle": "Écartés par l’IA",
       "hiddenHint": "Ce chapitre n’est plus couvert par les documents de l’atelier. Il ne compte plus dans le programme, mais rien n’est perdu.",
       "restore": "Restaurer",

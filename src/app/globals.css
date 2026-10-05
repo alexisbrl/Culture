@@ -681,3 +681,21 @@
 @media (prefers-reduced-motion: reduce) {
   .ai-box-grow { animation: none; }
 }
+
+/* Clignotement de ce qu'une annulation vient de changer, dans les paramètres
+   d'atelier (05/10/2026) — voir `reveal` dans NotionsSection et les lignes de
+   Général. Un fondu d'entrée court (250 ms), une seconde allumé, un fondu de
+   sortie (400 ms) : 1 650 ms en tout, `UNDO_FLASH_MS` (settingsShared.tsx) —
+   les pourcentages ci-dessous en dépendent. Deux noms pour la même animation :
+   en alterner relance le clignotement quand on annule deux fois de suite sur
+   la même ligne. */
+@keyframes undo-flash-a {
+  0%        { background-color: transparent; animation-timing-function: ease-out; }
+  15%, 76%  { background-color: color-mix(in srgb, var(--green) 26%, transparent); animation-timing-function: ease-in; }
+  100%      { background-color: transparent; }
+}
+@keyframes undo-flash-b {
+  0%        { background-color: transparent; animation-timing-function: ease-out; }
+  15%, 76%  { background-color: color-mix(in srgb, var(--green) 26%, transparent); animation-timing-function: ease-in; }
+  100%      { background-color: transparent; }
+}

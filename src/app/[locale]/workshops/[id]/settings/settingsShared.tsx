@@ -52,6 +52,12 @@ export function formatFileSize(bytes: number, units: { b: string; kb: string; mb
 // (src/lib/theme.ts) : les teintes sont des tokens, pas une rampe HSL générée.
 export { avatarTone } from '@/lib/theme';
 
+/** Durée du clignotement de ce qu'une annulation vient de changer : fondu
+ *  d'entrée 250 ms, une seconde allumé, fondu de sortie 400 ms — le découpage
+ *  vit dans les images clés `undo-flash-*` (globals.css), qui en dépendent.
+ *  Partagée par Général et Chapitre & Notion. */
+export const UNDO_FLASH_MS = 1650;
+
 // ─── Sub-components ───────────────────────────────────────────────────────
 
 export function Row({
@@ -59,15 +65,23 @@ export function Row({
   hint,
   children,
   noBorder,
+  flash,
 }: {
   label: string;
   hint?: string;
   children: React.ReactNode;
   noBorder?: boolean;
+  /** Numéro de clignotement : la ligne clignote quand une annulation vient de
+   *  la changer (voir le bouton d'annulation de SettingsClient). */
+  flash?: number | null;
 }) {
   return (
     <div
       style={{
+        // `position` et `isolation` : le surlignage ci-dessous se place par
+        // rapport à la ligne, et passe SOUS son contenu.
+        position: 'relative',
+        isolation: 'isolate',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -77,6 +91,21 @@ export function Row({
         flexWrap: 'wrap',
       }}
     >
+      {/* Surlignage du clignotement : une zone à part, posée en absolu — la
+          ligne elle-même ne change pas d'un pixel. Elle déborde dans la marge
+          de la carte (18px) jusqu'à 6px de son bord, et laisse 4px au-dessus
+          et en dessous : un bloc arrondi entre les filets, sur toute la
+          largeur, plutôt qu'une bande coupée au ras du texte. */}
+      {flash ? (
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute', top: 4, bottom: 4, left: -12, right: -12, zIndex: -1,
+            borderRadius: 10, pointerEvents: 'none',
+            animation: `${flash % 2 ? 'undo-flash-a' : 'undo-flash-b'} ${UNDO_FLASH_MS}ms linear`,
+          }}
+        />
+      ) : null}
       <div>
         <div style={{ fontSize: 13.5, fontWeight: 600, color: palette.ink }}>{label}</div>
         {hint && <div style={{ fontSize: 11.5, color: palette.inkFaint, marginTop: 2 }}>{hint}</div>}
