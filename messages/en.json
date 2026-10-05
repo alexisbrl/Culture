@@ -670,13 +670,10 @@
       "leaveLabel": "Leave the workshop",
       "leaveHint": "you will lose access to the workshop and your progress"
     },
-    "saveBar": {
-      "unsaved": "unsaved changes",
-      "emptyName": "the workshop name cannot be empty",
-      "saving": "saving…",
-      "saved": "saved",
-      "save": "save",
-      "cancel": "cancel"
+    "undo": {
+      "button": "undo",
+      "tooltip": "Undo the last action (Ctrl+Z)",
+      "failed": "This action could not be undone."
     },
     "deleteModal": {
       "trashTitle": "Move to trash?",
@@ -689,13 +686,6 @@
       "resend": "Resend",
       "verifying": "Verifying…",
       "confirm": "Confirm"
-    },
-    "leave": {
-      "title": "Unsaved changes",
-      "desc": "If you leave now, your changes will be lost.",
-      "emptyName": "the workshop name cannot be empty",
-      "saveAndLeave": "Save and leave",
-      "leaveWithout": "Leave without saving"
     },
     "members": {
       "title": "Members & roles",
@@ -778,8 +768,7 @@
       "noChapter": "No chapter",
       "needChapterHint": "create a chapter to plant your first notions in.",
       "count": "{count, plural, =0 {no notions} one {# notion} other {# notions}}",
-      "deleteTitle": "Delete this notion?",
-      "deleteDesc": "“{title}” will be permanently deleted, along with its mastery data."
+      "deleteUnassigned": "delete {count, plural, one {this notion} other {these # notions}}"
     },
     "chapters": {
       "title": "Chapters",
@@ -790,8 +779,6 @@
       "dragHint": "drag to reorder",
       "empty": "No chapters yet.",
       "count": "{count, plural, =0 {no chapters} one {# chapter} other {# chapters}}",
-      "deleteTitle": "Delete this chapter?",
-      "deleteDesc": "“{name}” will be deleted and its pot will disappear from the programme. Its notions are not deleted: they move back to “no chapter”.",
       "hiddenTitle": "Set aside by AI",
       "hiddenHint": "This chapter is no longer covered by the workshop documents. It no longer counts towards the programme, but nothing is lost.",
       "restore": "Restore",

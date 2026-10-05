@@ -608,6 +608,38 @@ export type Database = {
           },
         ]
       }
+      settings_trash: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          payload: Json
+          workshop_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          payload: Json
+          workshop_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          payload?: Json
+          workshop_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "settings_trash_workshop_id_fkey"
+            columns: ["workshop_id"]
+            isOneToOne: false
+            referencedRelation: "workshops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_profiles: {
         Row: {
           display_name: string

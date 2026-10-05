@@ -74,10 +74,28 @@ export async function restoreChapter(
   workshopId: string,
   chapterId: string,
 ): Promise<{ success: boolean; error?: string }> {
+  return setChapterHidden(workshopId, chapterId, false);
+}
+
+/** Remet de côté un chapitre qu'on vient de restaurer — seulement pour
+ *  ANNULER ce « restaurer » depuis le bouton d'annulation des paramètres.
+ *  Ce n'est pas un bouton « cacher » : l'interface n'en offre toujours pas. */
+export async function unrestoreChapter(
+  workshopId: string,
+  chapterId: string,
+): Promise<{ success: boolean; error?: string }> {
+  return setChapterHidden(workshopId, chapterId, true);
+}
+
+async function setChapterHidden(
+  workshopId: string,
+  chapterId: string,
+  hidden: boolean,
+): Promise<{ success: boolean; error?: string }> {
   const supabase = getSupabaseServerClient();
   const { error } = await supabase
     .from('workshop_chapters')
-    .update({ hidden: false, updated_at: new Date().toISOString() })
+    .update({ hidden, updated_at: new Date().toISOString() })
     .eq('workshop_id', workshopId)
     .eq('id', chapterId);
 

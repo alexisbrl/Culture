@@ -1151,13 +1151,29 @@ c'est la raison même de le fermer, puisqu'il finit par passer par-dessus la bar
 navigation. Les modales sont hors du jeu : elles se posent au-dessus et gèrent leur propre
 sortie.
 
-### 11.5 Modifications non enregistrées
+### 11.5 Enregistrement immédiat et annulation
 
-Pour les pages de formulaire sans bouton d'enregistrement permanent : un état unique
-regroupant tous les champs, comparé à un instantané pour savoir si quelque chose a changé. Si
-oui, une barre flottante apparaît, et tout clic sur un lien interne ouvre une confirmation
-plutôt que de naviguer. La fermeture d'onglet est couverte à part. Ajouter un champ, c'est
-l'ajouter à cet état — la barre suit toute seule.
+Les paramètres d'atelier n'ont rien « en attente » : chaque geste s'écrit au moment où il est
+fait, et **celui qui l'écrit inscrit de quoi le défaire** dans un historique tenu par la page.
+Un bouton (et Ctrl+Z hors des champs de saisie) dépile la dernière entrée et revient à sa
+section. L'historique est une pile, jamais affichée, vidée en quittant la page ; les sections
+qui arrivent en flux s'y inscrivent par un contexte. Une annulation ne s'inscrit pas
+elle-même, et lit l'état courant (pas celui du rendu qui l'a créée) : entre-temps, une
+génération a pu ajouter des chapitres.
+
+Annuler rend visible ce qu'il change : la section, le bon chapitre, un défilement jusqu'à la ligne et un clignotement — sinon, une annulation qui change de section ne dit pas où regarder.
+
+**Une suppression efface tout de suite, mais d'abord met de côté** — côté serveur, jamais dans
+le navigateur — un **lot** — une notion, un chapitre, un chapitre écarté avec ses notions,
+ou d'un coup toutes les notions sans chapitre — et ce que la base efface avec lui en cascade (progression des
+membres, liens aux questions). Les suppressions visent les identifiants mis de côté, jamais
+un filtre plus large : une ligne arrivée entre-temps n'est pas dans la copie. Restaurer réécrit cette copie à l'identique, mêmes
+identifiants, puis la retire ; le navigateur ne détient qu'un identifiant de copie, cherché
+dans l'atelier. Ce choix plutôt qu'un masquage : un élément masqué aurait demandé un filtre
+dans chaque lecture de l'app (parcours, examen, génération), quand la copie n'en demande
+aucun. Quitter la page (lien, fermeture ou rechargement) efface ses copies, par `sendBeacon`
+vers une route d'API — seul envoi mené à terme quand la page disparaît ; ce qui échapperait
+est purgé à la suppression suivante, au-delà d'un jour.
 
 ### 11.6 Préparer une page au survol
 

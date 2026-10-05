@@ -6,15 +6,16 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { AlertTriangle, Check, ChevronDown, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, Trash2, Undo2, X } from 'lucide-react';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, leaveWorkshop } from '@/app/actions/workshops';
 import { COVER_GRADIENTS, COVER_GRADIENT_KEYS, COVER_EMOJIS, coverGradientFor, emojiFor } from '@/lib/workshopCover';
 import ShareQRModal from '@/components/ShareQRModal';
 import { Tooltip } from '@/components/ui/tooltip';
-import { NAV_ITEMS, Row, Switch, SmallBtn, SectionCard, type WorkshopRole } from './settingsShared';
+import { NAV_ITEMS, Row, Switch, SmallBtn, SectionCard, UNDO_FLASH_MS, type WorkshopRole } from './settingsShared';
 import { isNavSection, type NavSection } from './sections';
+import { UndoHistoryContext, type UndoEntry } from './undoHistory';
 
 type Props = {
   locale: string;
@@ -104,16 +105,121 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
   }
 
   // Section 1 — General
-  const [workshopNameInput, setWorkshopNameInput] = useState(workshopName);
-  const [selectedCover, setSelectedCover] = useState(coverGradientFor(workshopId, coverGradient));
-  const [selectedEmoji, setSelectedEmoji] = useState(emojiFor(workshopId, emoji));
-  const [coverImage, setCoverImage] = useState(coverImageUrl);
-  const [useCustomCover, setUseCustomCover] = useState(coverImageActive);
-  const [savingDetails, setSavingDetails] = useState(false);
-  const [detailsSaved, setDetailsSaved] = useState(false);
+  //
+  // Chaque changement s'enregistre AU MOMENT où il est fait, et s'inscrit dans
+  // l'historique du bouton d'annulation (voir undoHistory.tsx). Il n'y a plus
+  // ni barre « modifications non enregistrées » ni confirmation de sortie
+  // (05/10/2026) : rien n'est jamais en attente.
+  type Details = {
+    name: string;
+    cover: string;
+    emoji: string;
+    coverImage: string | null;
+    useCustomCover: boolean;
+    showProgramme: boolean;
+  };
+  const initialDetails: Details = {
+    name: workshopName,
+    cover: coverGradientFor(workshopId, coverGradient),
+    emoji: emojiFor(workshopId, emoji),
+    coverImage: coverImageUrl,
+    useCustomCover: coverImageActive,
+    // Tous les ateliers sont privés : on rejoint un atelier uniquement sur
+    // invitation ou via une demande d'adhésion validée par un gestionnaire. Il
+    // n'y a donc plus de réglage public/privé (cf. audit §1.2).
+    showProgramme: showProgrammeProp,
+  };
+  // Ce qui est affiché ET enregistré : les deux ne divergent plus, sauf le nom
+  // pendant la frappe (voir `nameDraft`).
+  const [details, setDetails] = useState<Details>(initialDetails);
+  // Le dernier état enregistré, lu par les annulations — qui s'exécutent bien
+  // après le rendu qui les a créées.
+  const savedDetailsRef = useRef<Details>(initialDetails);
+  const [nameDraft, setNameDraft] = useState(workshopName);
+  const [detailsError, setDetailsError] = useState('');
   const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const coverFileInputRef = useRef<HTMLInputElement>(null);
+
+  const { coverImage, useCustomCover, showProgramme } = details;
+  const selectedCover = details.cover;
+  const selectedEmoji = details.emoji;
+
+  /** Applique et enregistre de nouveaux réglages. `record` inscrit le geste
+   *  dans l'historique ; une annulation, elle, ne s'y inscrit pas. */
+  async function applyDetails(next: Details, record = true): Promise<boolean> {
+    const previous = savedDetailsRef.current;
+    if (JSON.stringify(next) === JSON.stringify(previous)) return true;
+    setDetails(next);
+    setNameDraft(next.name);
+    setDetailsError('');
+    savedDetailsRef.current = next;
+    const result = await updateWorkshopDetails(workshopId, {
+      name: next.name,
+      coverGradient: next.cover,
+      coverImageUrl: next.coverImage,
+      coverImageActive: next.useCustomCover,
+      emoji: next.emoji,
+      showProgramme: next.showProgramme,
+    });
+    if (!result.success) {
+      // L'écran doit refléter la base : on revient à ce qui y est.
+      savedDetailsRef.current = previous;
+      setDetails(previous);
+      setNameDraft(previous.name);
+      setDetailsError(result.error ?? t('err.generic'));
+      return false;
+    }
+    if (record) {
+      recordUndo({
+        section: 'general',
+        undo: async () => {
+          const ok = await applyDetails(previous, false);
+          if (ok) flashGeneral(changedRows(next, previous));
+          return ok;
+        },
+      });
+    }
+    return true;
+  }
+
+  // Ligne de Général qu'une annulation vient de changer, pour la faire
+  // clignoter : on ne voit pas forcément ce qui a bougé, surtout si
+  // l'annulation vient de nous ramener sur cette section.
+  type GeneralRow = 'name' | 'cover' | 'emoji' | 'programme';
+  const [generalFlash, setGeneralFlash] = useState<{ rows: GeneralRow[]; n: number } | null>(null);
+  const generalFlashSeq = useRef(0);
+  function changedRows(a: Details, b: Details): GeneralRow[] {
+    const rows: GeneralRow[] = [];
+    if (a.name !== b.name) rows.push('name');
+    if (a.cover !== b.cover || a.coverImage !== b.coverImage || a.useCustomCover !== b.useCustomCover) rows.push('cover');
+    if (a.emoji !== b.emoji) rows.push('emoji');
+    if (a.showProgramme !== b.showProgramme) rows.push('programme');
+    return rows;
+  }
+  function flashGeneral(rows: GeneralRow[]) {
+    generalFlashSeq.current += 1;
+    const n = generalFlashSeq.current;
+    setGeneralFlash({ rows, n });
+    setTimeout(() => setGeneralFlash((f) => (f?.n === n ? null : f)), UNDO_FLASH_MS + 200);
+  }
+  const flashOf = (row: GeneralRow) => (generalFlash?.rows.includes(row) ? generalFlash.n : null);
+
+  function changeDetails(patch: Partial<Details>) {
+    void applyDetails({ ...savedDetailsRef.current, ...patch });
+  }
+
+  /** Le nom s'enregistre quand on a fini de le taper (on quitte le champ, ou
+   *  Entrée) : une seule action par renommage, pas une par lettre. Vide, il
+   *  reprend sa valeur enregistrée. */
+  function commitName() {
+    const name = nameDraft.trim();
+    if (!name) {
+      setNameDraft(savedDetailsRef.current.name);
+      return;
+    }
+    changeDetails({ name });
+  }
 
   async function handleCoverFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -125,130 +231,101 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
     const result = await uploadWorkshopCover(workshopId, formData);
     setUploadingCover(false);
     if (result.success && result.url) {
-      setCoverImage(result.url);
-      setUseCustomCover(true);
+      changeDetails({ coverImage: result.url, useCustomCover: true });
     } else {
       setUploadError(result.error ?? t('err.upload'));
     }
     e.target.value = '';
   }
 
+  // L'image retirée reste stockée : c'est ce qui permet de l'annuler.
   function handleRemoveCoverImage() {
-    const wasActive = useCustomCover;
-    setCoverImage(null);
-    setUseCustomCover(false);
-    if (wasActive) {
+    const patch: Partial<Details> = { coverImage: null, useCustomCover: false };
+    if (useCustomCover) {
       const others = COVER_GRADIENT_KEYS.filter((k) => k !== selectedCover);
       const pool = others.length > 0 ? others : COVER_GRADIENT_KEYS;
-      setSelectedCover(pool[Math.floor(Math.random() * pool.length)]);
+      patch.cover = pool[Math.floor(Math.random() * pool.length)];
     }
+    changeDetails(patch);
   }
 
-  // Section 2 — Accès & limites
-  // Tous les ateliers sont privés : on rejoint un atelier uniquement sur invitation
-  // ou via une demande d'adhésion validée par un gestionnaire. Il n'y a donc plus de
-  // réglage public/privé (cf. audit §1.2).
-  const [showProgramme, setShowProgramme] = useState(showProgrammeProp);
+  // ─── Historique et bouton d'annulation ───────────────────────────────────
+  //
+  // Une pile, jamais affichée : le bouton (et Ctrl+Z) défait la dernière
+  // action, puis la précédente… Elle vit dans un ref — les annulations
+  // inscrivent et retirent pendant des appels asynchrones — et `undoCount` ne
+  // sert qu'à afficher ou masquer le bouton.
+  const undoStack = useRef<UndoEntry[]>([]);
+  const [undoCount, setUndoCount] = useState(0);
+  const [undoing, setUndoing] = useState(false);
+  const [undoFailed, setUndoFailed] = useState(false);
+  const undoingRef = useRef(false);
 
-  // Valeurs courantes de tous les champs des sections « Général » et « Visibilité & accès ».
-  // Toute clé ajoutée ici (et au snapshot ci-dessous) participe automatiquement à isDirty
-  // et à la sauvegarde — aucune autre modification n'est nécessaire pour une future ligne.
-  const formValues = {
-    name: workshopNameInput,
-    cover: selectedCover,
-    emoji: selectedEmoji,
-    coverImage,
-    useCustomCover,
-    showProgramme,
-  };
+  const recordUndo = useCallback((entry: UndoEntry) => {
+    undoStack.current.push(entry);
+    setUndoCount(undoStack.current.length);
+    setUndoFailed(false);
+  }, [setUndoCount, setUndoFailed]);
 
-  // Baseline used to detect unsaved changes
-  const [savedSnapshot, setSavedSnapshot] = useState(formValues);
-
-  const isDirty = JSON.stringify(formValues) !== JSON.stringify(savedSnapshot);
-
-  const canSave = workshopNameInput.trim().length > 0;
-
-  async function handleSaveDetails() {
-    if (!canSave) return;
-    setSavingDetails(true);
-    setDetailsSaved(false);
-    const result = await updateWorkshopDetails(workshopId, {
-      name: workshopNameInput.trim(),
-      coverGradient: selectedCover,
-      coverImageUrl: coverImage,
-      coverImageActive: useCustomCover,
-      emoji: selectedEmoji,
-      showProgramme,
-    });
-    setSavingDetails(false);
-    if (result.success) {
-      const trimmedName = workshopNameInput.trim();
-      setWorkshopNameInput(trimmedName);
-      setSavedSnapshot({ ...formValues, name: trimmedName });
-      setDetailsSaved(true);
-      setTimeout(() => setDetailsSaved(false), 2000);
-    }
+  async function undoLast() {
+    // Une annulation à la fois : deux Ctrl+Z rapprochés défont deux actions,
+    // dans l'ordre, jamais la même deux fois.
+    if (undoingRef.current) return;
+    const entry = undoStack.current.pop();
+    setUndoCount(undoStack.current.length);
+    if (!entry) return;
+    undoingRef.current = true;
+    setUndoing(true);
+    setUndoFailed(false);
+    // On montre ce qu'on défait : annuler un renommage depuis l'onglet des
+    // notions sans y retourner ne laisserait rien voir.
+    openSection(entry.section);
+    const ok = await entry.undo();
+    undoingRef.current = false;
+    setUndoing(false);
+    if (!ok) setUndoFailed(true);
   }
 
-  // Annuler : chaque champ reprend sa valeur du dernier enregistrement, et la
-  // barre disparaît d'elle-même (isDirty retombe). Une image de couverture
-  // téléversée entre-temps reste stockée, simplement plus désignée.
-  function handleCancelDetails() {
-    setWorkshopNameInput(savedSnapshot.name);
-    setSelectedCover(savedSnapshot.cover);
-    setSelectedEmoji(savedSnapshot.emoji);
-    setCoverImage(savedSnapshot.coverImage);
-    setUseCustomCover(savedSnapshot.useCustomCover);
-    setShowProgramme(savedSnapshot.showProgramme);
-    setUploadError('');
-  }
-
-  // Confirmation de sortie (modifications non enregistrées)
-  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-  // URL vers laquelle naviguer une fois la confirmation résolue (lien cliqué intercepté).
-  // Si null, le bouton « retour à l'atelier » est utilisé par défaut.
-  const [pendingHref, setPendingHref] = useState<string | null>(null);
-  // `isDirty` recalculé à chaque render ; on garde sa dernière valeur dans un ref
-  // (mis à jour en effet, pas pendant le render) pour les handlers beforeunload/click
-  // enregistrés une seule fois au montage, sans closure obsolète.
-  const isDirtyRef = useRef(isDirty);
-  useEffect(() => { isDirtyRef.current = isDirty; });
-
-  // Avertir avant de fermer/recharger l'onglet si des modifications ne sont pas enregistrées.
+  // Quitter la page vide la liste — et efface les copies de suppression qu'elle
+  // seule pouvait restaurer. Deux sorties : un lien de l'app (la page est
+  // démontée) et la fermeture ou le rechargement de l'onglet (`pagehide`). Dans
+  // les deux cas par `sendBeacon`, seul envoi que le navigateur mène à terme
+  // quand la page disparaît. Ce qui échapperait (navigateur tué) est rattrapé
+  // par la purge des copies de plus d'un jour (@/lib/workshops/trash).
   useEffect(() => {
-    function handleBeforeUnload(e: BeforeUnloadEvent) {
-      if (isDirtyRef.current) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
+    function discardCopies() {
+      const trashIds = undoStack.current.flatMap((e) => (e.trashId ? [e.trashId] : []));
+      // La liste part avec les copies : une page restaurée depuis le cache du
+      // navigateur (retour arrière) ne doit pas proposer d'annuler ce qui ne
+      // peut plus l'être.
+      undoStack.current = [];
+      setUndoCount(0);
+      if (trashIds.length === 0) return;
+      const body = new Blob([JSON.stringify({ workshopId, trashIds })], { type: 'application/json' });
+      navigator.sendBeacon('/api/settings-trash', body);
     }
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
+    window.addEventListener('pagehide', discardCopies);
+    return () => {
+      window.removeEventListener('pagehide', discardCopies);
+      discardCopies();
+    };
+  }, [workshopId]);
 
-  // Intercepte tout clic sur un lien de navigation interne (sidebar, header…) tant que
-  // des modifications ne sont pas enregistrées, et affiche la modale de confirmation.
+  // Ctrl+Z (Cmd+Z sur Mac) — sauf dans un champ de saisie, où il garde son
+  // sens habituel : défaire la frappe.
+  const undoLastRef = useRef(undoLast);
+  useEffect(() => { undoLastRef.current = undoLast; });
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (!isDirtyRef.current) return;
-      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      const anchor = (e.target as HTMLElement)?.closest('a');
-      if (!anchor) return;
-      const href = anchor.getAttribute('href');
-      if (!href || href.startsWith('#') || anchor.target === '_blank') return;
+    function onKey(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.closest('input, textarea, select') || target.isContentEditable)) return;
       e.preventDefault();
-      e.stopPropagation();
-      setPendingHref(href);
-      setShowLeaveConfirm(true);
+      void undoLastRef.current();
     }
-    document.addEventListener('click', handleClick, true);
-    return () => document.removeEventListener('click', handleClick, true);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
-
-  function leaveTargetHref() {
-    return pendingHref ?? `/${locale}/workshops/${workshopId}`;
-  }
 
   // Section 6 — Delete modal
   type DeleteStep = 'idle' | 'confirm' | 'sending' | 'enter_code' | 'verifying';
@@ -488,7 +565,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
             </>
           ) : (
             <>
-          <Row label={t('general.nameLabel')}>
+          <Row label={t('general.nameLabel')} flash={flashOf('name')}>
             <div
               style={{
                 display: 'flex',
@@ -515,8 +592,10 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
               <span style={{ fontSize: 13, color: palette.lineStrong, flexShrink: 0 }}>·</span>
               <input
                 type="text"
-                value={workshopNameInput}
-                onChange={(e) => setWorkshopNameInput(e.target.value)}
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onBlur={commitName}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                 style={{
                   fontSize: 13,
                   fontFamily: 'inherit',
@@ -532,16 +611,13 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
             </div>
           </Row>
 
-          <Row label={t('general.coverLabel')}>
+          <Row label={t('general.coverLabel')} flash={flashOf('cover')}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
               <div style={{ display: 'flex', gap: 8 }}>
                 {COVER_GRADIENT_KEYS.map((key) => (
                   <button
                     key={key}
-                    onClick={() => {
-                      setSelectedCover(key);
-                      setUseCustomCover(false);
-                    }}
+                    onClick={() => changeDetails({ cover: key, useCustomCover: false })}
                     aria-label={key}
                     style={{
                       width: 32,
@@ -558,7 +634,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
                   <button
                     onClick={() => {
                       if (coverImage && !useCustomCover) {
-                        setUseCustomCover(true);
+                        changeDetails({ useCustomCover: true });
                       } else {
                         coverFileInputRef.current?.click();
                       }
@@ -623,12 +699,12 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
             </div>
           </Row>
 
-          <Row label={t('general.emojiLabel')}>
+          <Row label={t('general.emojiLabel')} flash={flashOf('emoji')}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {COVER_EMOJIS.map((e) => (
                 <button
                   key={e}
-                  onClick={() => setSelectedEmoji(e)}
+                  onClick={() => changeDetails({ emoji: e })}
                   aria-label={e}
                   style={{
                     width: 32,
@@ -666,8 +742,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
         {/* ── 2. Accès & limites ── */}
         <SectionCard title={t('access.title')}>
           {!isMember && (
-            <Row label={t('access.showProgramme')}>
-              <Switch value={showProgramme} onChange={setShowProgramme} />
+            <Row label={t('access.showProgramme')} flash={flashOf('programme')}>
+              <Switch value={showProgramme} onChange={(v) => changeDetails({ showProgramme: v })} />
             </Row>
           )}
 
@@ -718,14 +794,19 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
         </div>
 
         <div style={{ display: activeSection === 'notions' ? 'contents' : 'none' }}>
-          {notionsSlot}
+          <UndoHistoryContext.Provider value={recordUndo}>
+            {notionsSlot}
+          </UndoHistoryContext.Provider>
         </div>
 
       </div>
       </div>
 
-      {/* ── Barre d'enregistrement (visible si modifications non sauvegardées) ── */}
-      {(isDirty || detailsSaved) && (
+      {/* ── Bouton d'annulation (05/10/2026) ──
+          Remplace la barre « modifications non enregistrées » : tout
+          s'enregistre au moment du geste, et ce bouton défait le dernier.
+          Visible seulement s'il y a quelque chose à défaire. */}
+      {(undoCount > 0 || undoing || undoFailed || detailsError) && (
         <div
           style={{
             position: 'fixed',
@@ -739,28 +820,28 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
             borderRadius: 12,
             boxShadow: `0 10px 30px ${ink(0.16)}`,
             border: `1px solid ${ink(0.08)}`,
-            padding: '10px 14px',
+            padding: '8px 8px 8px 14px',
           }}
         >
-          {isDirty && !detailsSaved && (
-            <span style={{ fontSize: 12.5, color: !canSave ? palette.danger : palette.inkSoft }}>
-              {!canSave ? t('saveBar.emptyName') : t('saveBar.unsaved')}
+          {(undoFailed || detailsError) && (
+            <span style={{ fontSize: 12.5, color: palette.danger }}>
+              {detailsError || t('undo.failed')}
             </span>
           )}
-          {isDirty && !detailsSaved && (
-            <SmallBtn onClick={handleCancelDetails} disabled={savingDetails}>
-              {t('saveBar.cancel')}
-            </SmallBtn>
+          {(undoCount > 0 || undoing) && (
+            <Tooltip content={t('undo.tooltip')}>
+              {/* Enveloppe : le déclencheur reçoit les écouteurs de l'infobulle,
+                  que SmallBtn ne transmet pas à son bouton. */}
+              <span style={{ display: 'inline-flex' }}>
+                <SmallBtn onClick={() => void undoLast()} disabled={undoing}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {undoing ? <Loader2 size={13} className="animate-spin" /> : <Undo2 size={13} strokeWidth={2} />}
+                    {t('undo.button')}
+                  </span>
+                </SmallBtn>
+              </span>
+            </Tooltip>
           )}
-          <SmallBtn tone={detailsSaved ? 'ghost' : 'dark'} onClick={handleSaveDetails} disabled={!canSave}>
-            {savingDetails ? (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Loader2 size={12} className="animate-spin" />{t('saveBar.saving')}</span>
-            ) : detailsSaved ? (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Check size={12} />{t('saveBar.saved')}</span>
-            ) : (
-              t('saveBar.save')
-            )}
-          </SmallBtn>
         </div>
       )}
 
@@ -1006,61 +1087,6 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
         />
       )}
 
-      {/* ── Modale « modifications non enregistrées » ── */}
-      {showLeaveConfirm && (
-        <Modal width={400} onClose={() => { setShowLeaveConfirm(false); setPendingHref(null); }}>
-          <div style={{ width: 38, height: 38, borderRadius: '50%', background: withAlpha(palette.amberGlow, 0.18), color: palette.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-            <AlertTriangle size={18} strokeWidth={2} />
-          </div>
-          <div style={{ fontSize: 15, fontWeight: 500, color: palette.ink, marginBottom: 6 }}>{t('leave.title')}</div>
-          <div style={{ fontSize: 12.5, color: palette.inkSoft, marginBottom: canSave ? 20 : 10 }}>
-            {t('leave.desc')}
-          </div>
-          {!canSave && (
-            <div style={{ fontSize: 12, color: palette.danger, marginBottom: 16 }}>
-              {t('leave.emptyName')}
-            </div>
-          )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <button
-              disabled={!canSave}
-              onClick={async () => {
-                await handleSaveDetails();
-                setShowLeaveConfirm(false);
-                router.push(leaveTargetHref());
-                setPendingHref(null);
-              }}
-              style={{
-                padding: '11px 14px',
-                borderRadius: 10,
-                background: canSave ? palette.ink : ink(0.12),
-                color: canSave ? palette.paper : palette.inkFaint,
-                border: 'none',
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: canSave ? 'pointer' : 'not-allowed',
-                fontFamily: 'inherit',
-              }}
-            >
-              {t('leave.saveAndLeave')}
-            </button>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => { setShowLeaveConfirm(false); setPendingHref(null); }}
-                style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: `1px solid ${ink(0.14)}`, background: 'transparent', color: palette.inkMuted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                {t('cancel')}
-              </button>
-              <button
-                onClick={() => { setShowLeaveConfirm(false); router.push(leaveTargetHref()); setPendingHref(null); }}
-                style={{ flex: 1, padding: '11px 14px', borderRadius: 10, border: 'none', background: palette.danger, color: palette.paper, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                {t('leave.leaveWithout')}
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }

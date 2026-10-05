@@ -20,6 +20,7 @@ import {
 } from './examShared';
 import type { LabelImpact } from '@/lib/workshops/labelDeletion';
 import { Tooltip } from '@/components/ui/tooltip';
+import { useRevealWhenOpened } from '@/components/ui/useRevealWhenOpened';
 
 // Le filtre « QCM » couvre aussi les questions à réponse unique : `qcs` est la
 // variante de `qcm`, elle partage son libellé et son pictogramme et n'a jamais
@@ -336,133 +337,9 @@ function QuestionListView({ questions, notions, chapters, labels, exams: examsPr
   // formulaire va tout en haut —, et le clic semblait ne rien faire. Le geste
   // vient parfois d'un autre écran (double-clic sur la copie d'examen), ce qui
   // rend le recadrage indispensable : la liste n'a alors même pas bougé.
-  //
-  // ⚠️ **Pas de `scrollIntoView`, et ce n'est pas un caprice** : la colonne des
-  // questions est mise à l'échelle (`--exam-list-zoom`), et le défilement
-  // demandé par le navigateur n'y arrivait tout simplement pas — le panneau
-  // restait où il était, le formulaire s'ouvrait hors de l'écran, et le clic
-  // paraissait sans effet. On vise donc le panneau défilant nous-mêmes.
-  //
-  // Les deux repères ne sont pas dans la même unité : un rectangle est dans le
-  // repère de la FENÊTRE (donc mis à l'échelle), `scrollTop` en unités LOCALES.
-  // D'où la calibration sur le panneau lui-même (hauteur mesurée / hauteur
-  // locale) avant de convertir l'écart. Un `rAF` laisse la mise en page se poser
-  // — le formulaire vient de remplacer une carte, les hauteurs bougent.
-  //
-  // ⚠️ **La barre de navigation est COLLANTE : elle recouvre le haut de ce qui
-  // défile sous elle.** Amener le formulaire au ras du bord haut revenait donc à
-  // le glisser sous la barre, et l'énoncé — la première ligne, celle qu'on vient
-  // ouvrir — était coupé (constaté le 06/09/2026). On vise donc le premier
-  // pixel réellement VISIBLE : sous la barre quand elle est là, le haut du
-  // panneau sinon. La barre se mesure (`data-app-header`) plutôt que de recopier
-  // sa hauteur ici — en mobile elle est absente, et mesure alors zéro.
-  //
-  // ─── Du MINIMUM, comme la copie d'examen ──────────────────────────────────
-  //
-  // Même règle des deux côtés (06/09/2026) : on défile juste de ce qu'il faut
-  // pour voir le formulaire en entier. Déjà entièrement visible, rien ne bouge —
-  // ouvrir une question qu'on a sous les yeux ne doit pas faire sauter la liste.
-  // Plus haut que la zone d'affichage (une grappe, une liste de quinze réponses),
-  // on aligne son HAUT : l'énoncé reste visible, c'est la partie sans laquelle
-  // le reste ne se comprend pas.
-  //
-  // ⚠️ **Le défilement animé n'aboutit pas toujours, et il échoue en silence**
-  // (voir `.claude/rules/frontend-patterns.md`, même famille que le
-  // `scrollIntoView` inopérant sous un ancêtre `zoom`). On anime, puis on
-  // REPASSE poser la position si elle n'a pas pris.
-  useEffect(() => {
-    if (editingQuestionId === null) return;
-    let retry = 0;
-
-    // ⚠️ **Un geste de l'utilisateur annule la seconde passe.** Elle est là pour
-    // rattraper un défilement qui n'a pas pris, jamais pour reprendre la main :
-    // qui fait défiler la liste juste après avoir ouvert une question voyait
-    // sinon l'écran se recadrer une seconde fois sous ses doigts (signalé par
-    // Alexis le 06/09/2026). On écoute le GESTE — molette, doigt, touche — et
-    // non la position : un défilement qu'on a demandé soi-même bouge lui aussi
-    // la position, il ne se distinguerait pas.
-    let userMoved = false;
-    const noteUserScroll = () => { userMoved = true; };
-    window.addEventListener('wheel', noteUserScroll, { passive: true });
-    window.addEventListener('touchmove', noteUserScroll, { passive: true });
-    window.addEventListener('keydown', noteUserScroll);
-
-    /** Amène le formulaire entièrement à l'écran, en défilant du MINIMUM.
-     *
-     *  ⚠️ **Rejoué une seconde fois, et RECALCULÉ**, pas seulement rejoué : le
-     *  formulaire grandit après son montage (les champs du type de réponse
-     *  arrivent, une image se charge). Au premier passage il tient parfois tout
-     *  entier à l'écran — donc rien à faire —, et c'est en grandissant qu'il
-     *  déborde. Un second passage qui se contenterait de reposer la position
-     *  calculée au premier ne verrait pas ce débordement (constaté le
-     *  06/09/2026). */
-    function settle(last: boolean) {
-      const el = editorRef.current;
-      if (!el) return;
-      const header = document.querySelector('[data-app-header]');
-      const covered = header ? header.getBoundingClientRect().bottom : 0;
-      // Une marge de respiration : collé au bord, le formulaire donne
-      // l'impression d'être coupé.
-      const GAP = 12;
-
-      let panel: HTMLElement | null = el.parentElement;
-      while (panel) {
-        const oy = getComputedStyle(panel).overflowY;
-        if ((oy === 'auto' || oy === 'scroll') && panel.scrollHeight > panel.clientHeight) break;
-        panel = panel.parentElement;
-      }
-
-      // Le cadre réellement visible, dans le repère de la FENÊTRE : le panneau
-      // défilant quand il y en a un, la fenêtre elle-même sinon (c'est alors la
-      // page qui défile, cas du parcours).
-      const panelRect = panel ? panel.getBoundingClientRect() : null;
-      const frameTop = Math.max(panelRect ? panelRect.top : 0, covered) + GAP;
-      const frameBottom = (panelRect ? panelRect.bottom : window.innerHeight) - GAP;
-
-      const rect = el.getBoundingClientRect();
-      // Déplacement à faire, en pixels de FENÊTRE. Positif = descendre.
-      let shift = 0;
-      if (rect.height > frameBottom - frameTop || rect.top < frameTop) {
-        // Plus haut que la place disponible, ou il commence au-dessus : on
-        // aligne son HAUT — l'énoncé, la seule partie qu'il faille voir.
-        shift = rect.top - frameTop;
-      } else if (rect.bottom > frameBottom) {
-        // Il dépasse par le bas : on descend juste de ce qui manque.
-        shift = rect.bottom - frameBottom;
-      }
-      if (Math.abs(shift) < 1) return;
-
-      if (!panel) {
-        // La PAGE défile : ses coordonnées sont celles de la fenêtre, rien à
-        // convertir. `scrollIntoView` la poserait sous la barre collante.
-        const top = Math.max(0, window.scrollY + shift);
-        // Le défilement animé n'aboutit pas toujours, et il échoue en silence :
-        // le second passage POSE la position (voir frontend-patterns.md).
-        window.scrollTo(last ? { top } : { top, behavior: 'smooth' });
-        return;
-      }
-      // `scrollTop` est en unités LOCALES, un rectangle dans le repère de la
-      // fenêtre : on ramène l'écart à l'échelle du panneau avant de le poser.
-      const scale = panel.clientHeight > 0 && panelRect ? panelRect.height / panel.clientHeight : 1;
-      const top = Math.max(0, panel.scrollTop + shift / (scale || 1));
-      if (last) panel.scrollTop = top;
-      else panel.scrollTo({ top, behavior: 'smooth' });
-    }
-
-    // Un `rAF` laisse la mise en page se poser — le formulaire vient de
-    // remplacer une carte, les hauteurs bougent.
-    const raf = requestAnimationFrame(() => {
-      settle(false);
-      if (!userMoved) retry = window.setTimeout(() => { if (!userMoved) settle(true); }, 700);
-    });
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(retry);
-      window.removeEventListener('wheel', noteUserScroll);
-      window.removeEventListener('touchmove', noteUserScroll);
-      window.removeEventListener('keydown', noteUserScroll);
-    };
-  }, [editingQuestionId]);
+  // Le mécanisme (et ses pièges : zoom, barre collante, seconde passe) est
+  // partagé avec les paramètres d'atelier — voir `useRevealWhenOpened`.
+  useRevealWhenOpened(editorRef, editingQuestionId);
 
   useEffect(() => {
     if (!filterOpen) return;
