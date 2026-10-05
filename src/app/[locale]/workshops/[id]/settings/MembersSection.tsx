@@ -15,6 +15,7 @@ import {
 import { LABEL_COLORS, LabelPill, NameColorPanel, SelectMenu } from '../tabs/examen/examShared';
 import { ROLE_RANK, avatarTone, type Member, type WorkshopRole } from './settingsShared';
 import { useLiveData } from '@/lib/useLiveData';
+import { normalizeTag } from '@/lib/tagFormat';
 
 // Valeur de filtre réservée à la vue « sans groupe » — elle n'est jamais un
 // identifiant de groupe (préfixe `__`, comme NEVER_EXAM_ID côté examen).
@@ -61,7 +62,7 @@ function RowBtn({ children, tone = 'ghost', onClick, disabled }: { children: Rea
   );
 }
 
-export default function MembersSection({ workshopId, isPremium, currentUserRole, members, groups }: { workshopId: string; isPremium: boolean; currentUserRole: WorkshopRole; members: Member[]; groups: MemberGroup[] }) {
+export default function MembersSection({ workshopId, currentUserRole, members, groups }: { workshopId: string; currentUserRole: WorkshopRole; members: Member[]; groups: MemberGroup[] }) {
   const t = useTranslations('settings');
   const actorRank = ROLE_RANK[currentUserRole];
   const [tagInput, setTagInput] = useState('');
@@ -186,7 +187,7 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
   // à rafraîchir la page. La liste des membres, elle, n'est PAS sondée : on
   // l'édite (cases à cocher des groupes), et une liste qui se réordonne sous
   // les doigts fait perdre la ligne qu'on visait — voir `useLiveData`.
-  const liveInvites = useLiveData(() => getWorkshopInvitations(workshopId), setPendingInvites, { enabled: isPremium });
+  const liveInvites = useLiveData(() => getWorkshopInvitations(workshopId), setPendingInvites);
   const liveJoinRequests = useLiveData(() => getJoinRequests(workshopId), setJoinRequests);
 
   async function handleApproveJoinRequest(targetUserId: string) {
@@ -320,15 +321,14 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
           {/* Inviter un utilisateur */}
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '10px 20px', padding: '14px 18px', borderBottom: `1px solid ${palette.line}` }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: palette.ink }}>{t('members.inviteLabel')}</div>
-            {isPremium ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <input
                     type="text"
                     value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value.toUpperCase())}
+                    onChange={(e) => setTagInput(normalizeTag(e.target.value))}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleInvite(); }}
-                    placeholder="#tag…"
+                    placeholder={t('members.tagPlaceholder')}
                     style={{
                       fontSize: 13.5,
                       fontFamily: "'ui-monospace', 'monospace', inherit",
@@ -368,24 +368,10 @@ export default function MembersSection({ workshopId, isPremium, currentUserRole,
                   </span>
                 )}
               </div>
-            ) : (
-              <span
-                style={{
-                  fontSize: 12,
-                  color: palette.inkFaint,
-                  background: ink(0.05),
-                  border: `1px solid ${ink(0.08)}`,
-                  borderRadius: 9,
-                  padding: '7px 12px',
-                }}
-              >
-                {t('members.premiumOnly')}
-              </span>
-            )}
           </div>
 
-          {/* Invitations en attente (premium) */}
-          {isPremium && pendingInvites.length > 0 && (
+          {/* Invitations en attente */}
+          {pendingInvites.length > 0 && (
             <div style={{ padding: '12px 18px', borderBottom: `1px solid ${palette.line}` }}>
               <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: palette.inkFaint, marginBottom: 8 }}>
                 {t('members.pendingInvites', { count: pendingInvites.length })}

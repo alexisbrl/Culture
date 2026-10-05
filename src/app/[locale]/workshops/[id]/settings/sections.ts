@@ -7,9 +7,9 @@
 // 30/08/2026 : « NAV_ITEMS.some is not a function »). Les icônes, elles,
 // restent avec le reste de l'habillage dans `settingsShared`.
 
-export type NavSection = 'general' | 'members' | 'notions' | 'files' | 'premium';
+export type NavSection = 'general' | 'members' | 'notions' | 'files';
 
-export const NAV_SECTIONS = ['general', 'members', 'files', 'notions', 'premium'] as const satisfies readonly NavSection[];
+export const NAV_SECTIONS = ['general', 'members', 'files', 'notions'] as const satisfies readonly NavSection[];
 
 export function isNavSection(value: string | undefined): value is NavSection {
   return !!value && (NAV_SECTIONS as readonly string[]).includes(value);

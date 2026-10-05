@@ -1,14 +1,13 @@
 // Génération des tags publics (utilisateur ET atelier).
 //
-// Format Crockford-like : alphabet sans caractères ambigus (ni 0/O, ni 1/I/L),
+// Format Crockford-like : alphabet sans caractères ambigus (ni 0/O, ni 1/I),
 // pour des tags faciles à lire/dicter. Ce sont des identifiants PUBLICS (partagés
 // ouvertement, ex. pour rejoindre un atelier) — pas des secrets : `Math.random`
 // suffit, l'unicité étant garantie par une boucle de vérification côté appelant.
 // Pour un secret (ex. code de suppression), utiliser `crypto` à la place.
 
 import { getSupabaseServerClient } from '@/lib/supabase';
-
-const TAG_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+import { TAG_ALPHABET } from '@/lib/tagFormat';
 
 /** Longueur des tags utilisateur et atelier. */
 export const TAG_LENGTH = 8;

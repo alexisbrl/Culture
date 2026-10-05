@@ -71,7 +71,7 @@ export type IngestScope =
       /** Le texte saisi par l'utilisateur. **Une donnée, pas une instruction** :
        *  la consigne du modèle le lui dit explicitement. */
       hint: string;
-      workshop?: { name: string; description?: string | null } | null;
+      workshop?: { name: string } | null;
       /** Le programme déjà construit, pour qu'une demande du type « complète le
        *  chapitre sur X » puisse désigner quelque chose. */
       chapters: { name: string }[];
@@ -135,7 +135,7 @@ export type IngestScope =
       missing?: Record<string, number>;
       /** Nom et description de l'atelier : le seul indice de niveau (§ examen,
        *  24/08/2026). */
-      workshop?: { name: string; description?: string | null } | null;
+      workshop?: { name: string } | null;
     }
   | {
       /** L'EXAMEN. Passe distincte de `questions` depuis le 24/08/2026, parce
@@ -155,7 +155,7 @@ export type IngestScope =
        *  isolées. Un appel ne mélange jamais les deux (06/09/2026) ; les tailles
        *  des groupes, elles, restent au modèle. */
       grouped: boolean;
-      workshop?: { name: string; description?: string | null } | null;
+      workshop?: { name: string } | null;
     }
   | {
       /** Les REDITES entre chapitres (§7.6) : un seul appel, sans document,

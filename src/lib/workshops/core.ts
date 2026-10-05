@@ -32,7 +32,7 @@ export async function getUserWorkshops(userId: string): Promise<{
   const [{ data: workshops }, { data: counts }] = await Promise.all([
     supabase
       .from('workshops')
-      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium')
+      .select('id, name, created_at, created_by, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag')
       .in('id', workshopIds)
       .is('deleted_at', null),
     supabase
@@ -74,14 +74,12 @@ export async function getUserWorkshops(userId: string): Promise<{
       name: w.name,
       created_at: w.created_at,
       member_count: countMap[w.id] ?? 1,
-      description: w.description,
       cover_gradient: w.cover_gradient,
       cover_image_url: w.cover_image_url,
       cover_image_active: w.cover_image_active,
       emoji: w.emoji,
       unique_tag: w.unique_tag,
       owner_name: ownerNameMap[w.created_by] ?? 'Utilisateur',
-      is_premium: w.is_premium,
       role: roleMap[w.id],
     };
     if (roleMap[w.id] === 'owner') owned.push(item);
@@ -168,7 +166,7 @@ export async function getWorkshop(workshopId: string, userId: string) {
     getWorkshopRole(workshopId, userId),
     supabase
       .from('workshops')
-      .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium, show_programme')
+      .select('id, name, created_at, created_by, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, show_programme')
       .eq('id', workshopId)
       .single(),
     supabase
@@ -227,7 +225,6 @@ export async function getWorkshopPreview(
   id: string;
   name: string;
   createdAt: string;
-  description: string | null;
   coverGradient: string | null;
   coverImageUrl: string | null;
   coverImageActive: boolean;
@@ -236,13 +233,12 @@ export async function getWorkshopPreview(
   memberCount: number;
   isMember: boolean;
   hasRequested: boolean;
-  isPremium: boolean;
 } | null> {
   const supabase = getSupabaseServerClient();
 
   const { data: workshop } = await supabase
     .from('workshops')
-    .select('id, name, created_at, created_by, description, cover_gradient, cover_image_url, cover_image_active, emoji, is_premium')
+    .select('id, name, created_at, created_by, cover_gradient, cover_image_url, cover_image_active, emoji')
     .eq('id', workshopId)
     .is('deleted_at', null)
     .single();
@@ -284,7 +280,6 @@ export async function getWorkshopPreview(
     id: workshop.id,
     name: workshop.name,
     createdAt: workshop.created_at,
-    description: workshop.description,
     coverGradient: workshop.cover_gradient,
     coverImageUrl: workshop.cover_image_url,
     coverImageActive: workshop.cover_image_active,
@@ -293,7 +288,6 @@ export async function getWorkshopPreview(
     memberCount: members.length,
     isMember,
     hasRequested,
-    isPremium: workshop.is_premium,
   };
 }
 
@@ -301,7 +295,6 @@ export async function updateDetails(
   workshopId: string,
   details: {
     name?: string;
-    description?: string;
     coverGradient?: string;
     coverImageUrl?: string | null;
     coverImageActive?: boolean;
@@ -313,7 +306,6 @@ export async function updateDetails(
 
   const update: Record<string, string | boolean | number | null> = {};
   if (details.name !== undefined) update.name = details.name;
-  if (details.description !== undefined) update.description = details.description;
   if (details.coverGradient !== undefined) update.cover_gradient = details.coverGradient;
   if (details.coverImageUrl !== undefined) update.cover_image_url = details.coverImageUrl;
   if (details.coverImageActive !== undefined) update.cover_image_active = details.coverImageActive;
@@ -321,32 +313,6 @@ export async function updateDetails(
   if (details.showProgramme !== undefined) update.show_programme = details.showProgramme;
 
   await supabase.from('workshops').update(update).eq('id', workshopId);
-
-  return { success: true };
-}
-
-// Active le statut Premium d'un atelier. N'inclut PAS le mode de test (mot de
-// passe + allowlist admin) : c'est un garde d'autorisation temporaire, il reste
-// dans le wrapper `'use server'` avec `requireOwner`, pas ici.
-export async function activatePremium(workshopId: string): Promise<{ success: boolean; error?: string }> {
-  const supabase = getSupabaseServerClient();
-
-  const { data: workshop } = await supabase
-    .from('workshops')
-    .select('is_premium')
-    .eq('id', workshopId)
-    .single();
-
-  if (!workshop) return { success: false, error: 'Atelier introuvable' };
-
-  if (workshop.is_premium) {
-    return { success: true };
-  }
-
-  await supabase
-    .from('workshops')
-    .update({ is_premium: true, premium_activated_at: new Date().toISOString() })
-    .eq('id', workshopId);
 
   return { success: true };
 }
@@ -389,7 +355,7 @@ export async function search(
   userId: string,
   query: string
 ): Promise<
-  Array<{ id: string; name: string; created_at: string; description: string | null; cover_gradient: string | null; cover_image_url: string | null; cover_image_active: boolean; emoji: string | null; unique_tag: string | null; member_count: number; is_premium: boolean }>
+  Array<{ id: string; name: string; created_at: string; cover_gradient: string | null; cover_image_url: string | null; cover_image_active: boolean; emoji: string | null; unique_tag: string | null; member_count: number }>
 > {
   if (!query.trim()) return [];
 
@@ -407,7 +373,7 @@ export async function search(
 
   let q = supabase
     .from('workshops')
-    .select('id, name, created_at, description, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag, is_premium')
+    .select('id, name, created_at, cover_gradient, cover_image_url, cover_image_active, emoji, unique_tag')
     .or(`name.ilike.%${safeQuery}%,unique_tag.ilike.${safeQuery}`)
     .is('deleted_at', null)
     .limit(8);

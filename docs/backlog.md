@@ -10,7 +10,7 @@
 >
 > ⚠️ **Ce fichier a un miroir lu par Alexis** — la feuille de route publiée (artefact `1726e6fc-756c-4de4-99d5-f7ebdf5144a6`), en langage produit. Toute entrée ajoutée, résolue ou déplacée ici doit l'être là aussi, dans la même session : c'est la page qu'il regarde, et une page en retard vaut moins que pas de page.
 >
-> Dernière mise à jour : 25/09/2026
+> Dernière mise à jour : 05/10/2026
 
 ## T4 2026 — ce qui rend une ouverture possible
 
@@ -22,7 +22,7 @@
 
 - **Le Jardin est accessible en entier alors que son tour n'est pas venu.** La gamification est rangée au T4 2027. Décision d'Alexis du 09/09/2026 : **bloquer `/garden` derrière un badge V2**, comme l'onglet Cours (`CoursTab.tsx`, `<Badge tone="premium">V2</Badge>`) — le même pattern, pas un nouveau.
 
-- **L'atelier Premium existe encore dans le code.** Cible : `docs/product-spec.md` § Comptes & abonnements (l'abonnement se porte sur le compte). **À retirer, dans cet ordre** : (1) le code qui active et lit le Premium d'un atelier (`activateWorkshopPremium`, la section Premium des paramètres d'atelier, les lectures de `workshops.is_premium`) ; (2) **seulement une fois ce code déployé** (expand/contract, `CLAUDE.md` §1), le trigger `trg_prevent_workshop_premium_downgrade` puis la colonne ; (3) le mécanisme de test (`PREMIUM_TEST_ADMIN_EMAILS` + `PREMIUM_TEST_ACTIVATION_PASSWORD` en dur). ⚠️ Tant que le trigger est en place, aucun atelier ne peut redescendre, même pour une correction de données. **À traiter avec** [[Intégration Stripe & facturation]] (T1 2027) et l'item de vocabulaire d'abonnement ci-dessous.
+- **L'invitation par tag est ouverte à tous les gestionnaires.** Cible : `docs/product-spec.md` § Paramètres d'un atelier (réservée aux comptes Premium). Le verrou « atelier Premium » a été retiré le 05/10/2026 avec l'atelier Premium ; le verrou par compte se pose avec [[Intégration Stripe & facturation]] (T1 2027) — avant, aucun compte n'est Premium et plus personne ne pourrait inviter. Contrôle côté serveur (`inviteByTag`, `src/lib/workshops/members.ts`), pas seulement dans l'écran.
 
 - **Le développement local écrit dans la base de production.** `npm run dev` et get-culture.com partagent le projet Supabase `hhkmrejjksjpfetwefju`. Palliatif actuel : atelier jetable et tests unitaires des opérations destructrices (`CLAUDE.md` §7). **La vraie réponse est un second projet Supabase dédié au développement**, avec son jeu de variables d'environnement. À faire avant les premiers vrais utilisateurs.
 

@@ -15,13 +15,11 @@ import ShareQRModal from '@/components/ShareQRModal';
 import { Tooltip } from '@/components/ui/tooltip';
 import { NAV_ITEMS, Row, Switch, SmallBtn, SectionCard, type WorkshopRole } from './settingsShared';
 import { isNavSection, type NavSection } from './sections';
-import PremiumSection from './PremiumSection';
 
 type Props = {
   locale: string;
   workshopId: string;
   workshopName: string;
-  description: string | null;
   coverGradient: string | null;
   coverImageUrl: string | null;
   coverImageActive: boolean;
@@ -29,13 +27,11 @@ type Props = {
   createdAt: string;
   uniqueTag: string | null;
   currentUserRole: WorkshopRole;
-  isPremium: boolean;
   showProgramme: boolean;
   /** Onglet à ouvrir, lu dans l'URL côté serveur (voir page.tsx). */
   initialSection: NavSection;
   /** Vient de l'atelier lui-même, donc gratuit : c'est la seule chose dont la
    *  section Premium a besoin de la liste des membres. */
-  memberCount: number;
   // Les trois sections lourdes arrivent en flux : la page les rend dans leur
   // propre frontière de chargement et nous les passe déjà emballées (page.tsx).
   membersSlot: React.ReactNode;
@@ -43,14 +39,14 @@ type Props = {
   notionsSlot: React.ReactNode;
 };
 
-export default function SettingsClient({ locale, workshopId, workshopName, description, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, isPremium, showProgramme: showProgrammeProp, initialSection, memberCount, membersSlot, filesSlot, notionsSlot }: Props) {
+export default function SettingsClient({ locale, workshopId, workshopName, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, showProgramme: showProgrammeProp, initialSection, membersSlot, filesSlot, notionsSlot }: Props) {
   const router = useRouter();
   const t = useTranslations('settings');
 
   // Propriétaire vs gestionnaire : seul le propriétaire touche à l'argent (Premium)
   // et à la suppression de l'atelier ; le reste est accessible aux deux.
-  // Un membre simple voit une version réduite : section Général seule, nom et
-  // description en lecture seule, QR, et « quitter l'atelier » en zone de danger.
+  // Un membre simple voit une version réduite : section Général seule, nom en
+  // lecture seule, QR, et « quitter l'atelier » en zone de danger.
   const isOwner = currentUserRole === 'owner';
   const isMember = currentUserRole === 'member';
 
@@ -109,7 +105,6 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
 
   // Section 1 — General
   const [workshopNameInput, setWorkshopNameInput] = useState(workshopName);
-  const [descriptionInput, setDescriptionInput] = useState(description ?? '');
   const [selectedCover, setSelectedCover] = useState(coverGradientFor(workshopId, coverGradient));
   const [selectedEmoji, setSelectedEmoji] = useState(emojiFor(workshopId, emoji));
   const [coverImage, setCoverImage] = useState(coverImageUrl);
@@ -160,7 +155,6 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
   // et à la sauvegarde — aucune autre modification n'est nécessaire pour une future ligne.
   const formValues = {
     name: workshopNameInput,
-    description: descriptionInput,
     cover: selectedCover,
     emoji: selectedEmoji,
     coverImage,
@@ -181,7 +175,6 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
     setDetailsSaved(false);
     const result = await updateWorkshopDetails(workshopId, {
       name: workshopNameInput.trim(),
-      description: descriptionInput,
       coverGradient: selectedCover,
       coverImageUrl: coverImage,
       coverImageActive: useCustomCover,
@@ -196,6 +189,19 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
       setDetailsSaved(true);
       setTimeout(() => setDetailsSaved(false), 2000);
     }
+  }
+
+  // Annuler : chaque champ reprend sa valeur du dernier enregistrement, et la
+  // barre disparaît d'elle-même (isDirty retombe). Une image de couverture
+  // téléversée entre-temps reste stockée, simplement plus désignée.
+  function handleCancelDetails() {
+    setWorkshopNameInput(savedSnapshot.name);
+    setSelectedCover(savedSnapshot.cover);
+    setSelectedEmoji(savedSnapshot.emoji);
+    setCoverImage(savedSnapshot.coverImage);
+    setUseCustomCover(savedSnapshot.useCustomCover);
+    setShowProgramme(savedSnapshot.showProgramme);
+    setUploadError('');
   }
 
   // Confirmation de sortie (modifications non enregistrées)
@@ -281,9 +287,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
     }
   }
 
-  const visibleNavItems = NAV_ITEMS.filter((item) =>
-    isMember ? item.id === 'general' : item.id !== 'premium' || isOwner,
-  );
+  const visibleNavItems = isMember ? NAV_ITEMS.filter((item) => item.id === 'general') : NAV_ITEMS;
 
   // ── Quitter l'atelier (membre et gestionnaire — le propriétaire supprime) ──
   const [leaveWorkshopOpen, setLeaveWorkshopOpen] = useState(false);
@@ -380,7 +384,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           {t('sidebarLabel')}
         </div>
 
-        {/* Nav items — « Atelier Premium » réservé au propriétaire */}
+        {/* Nav items */}
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {visibleNavItems.map((item) => {
             const active = activeSection === item.id;
@@ -473,17 +477,12 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
         <SectionCard title={t('general.title')}>
           {isMember ? (
             <>
-              {/* Membre simple : nom et description en lecture seule. */}
-              <Row label={t('general.nameLabel')}>
+              {/* Membre simple : nom en lecture seule. */}
+              <Row label={t('general.nameLabel')} noBorder>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: palette.inkSoft }}>
                   <span style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.04em', color: palette.inkFaint }}>{uniqueTag}</span>
                   <span style={{ color: palette.lineStrong }}>·</span>
                   {workshopName}
-                </span>
-              </Row>
-              <Row label={t('general.descLabel')} noBorder>
-                <span style={{ fontSize: 13, color: palette.inkSoft, maxWidth: 300, textAlign: 'right' }}>
-                  {description || '—'}
                 </span>
               </Row>
             </>
@@ -531,27 +530,6 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
                 }}
               />
             </div>
-          </Row>
-
-          <Row label={t('general.descLabel')}>
-            <textarea
-              value={descriptionInput}
-              onChange={(e) => setDescriptionInput(e.target.value)}
-              placeholder={t('general.descPlaceholder')}
-              rows={3}
-              style={{
-                fontSize: 13,
-                fontFamily: 'inherit',
-                padding: '8px 12px',
-                border: `1px solid ${palette.line}`,
-                borderRadius: 12,
-                outline: 'none',
-                background: palette.surfaceInput,
-                color: palette.ink,
-                width: 260,
-                resize: 'vertical',
-              }}
-            />
           </Row>
 
           <Row label={t('general.coverLabel')}>
@@ -743,11 +721,6 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
           {notionsSlot}
         </div>
 
-        {isOwner && (
-          <div style={{ display: activeSection === 'premium' ? 'contents' : 'none' }}>
-            <PremiumSection workshopId={workshopId} isPremium={isPremium} memberCount={memberCount} />
-          </div>
-        )}
       </div>
       </div>
 
@@ -773,6 +746,11 @@ export default function SettingsClient({ locale, workshopId, workshopName, descr
             <span style={{ fontSize: 12.5, color: !canSave ? palette.danger : palette.inkSoft }}>
               {!canSave ? t('saveBar.emptyName') : t('saveBar.unsaved')}
             </span>
+          )}
+          {isDirty && !detailsSaved && (
+            <SmallBtn onClick={handleCancelDetails} disabled={savingDetails}>
+              {t('saveBar.cancel')}
+            </SmallBtn>
           )}
           <SmallBtn tone={detailsSaved ? 'ghost' : 'dark'} onClick={handleSaveDetails} disabled={!canSave}>
             {savingDetails ? (

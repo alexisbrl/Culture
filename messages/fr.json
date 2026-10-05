@@ -20,7 +20,6 @@
     "switcherTitle": "changer d'atelier",
     "switcherLoading": "chargement…",
     "switcherEmpty": "aucun atelier pour l'instant",
-    "premiumWorkshop": "atelier premium",
     "newWorkshop": "nouvel atelier",
     "allWorkshops": "tous mes ateliers"
   },
@@ -625,8 +624,7 @@
       "general": "Général",
       "members": "Membres & rôles",
       "files": "Ressources",
-      "notions": "Chapitre & Notion",
-      "premium": "Atelier Premium"
+      "notions": "Chapitre & Notion"
     },
     "role": {
       "owner": "propriétaire",
@@ -652,8 +650,6 @@
     "general": {
       "title": "Général",
       "nameLabel": "Nom de l'atelier",
-      "descLabel": "Description",
-      "descPlaceholder": "décrivez votre atelier en quelques mots…",
       "coverLabel": "Image de couverture",
       "uploadAria": "uploader votre image",
       "removeCoverAria": "supprimer l'image de couverture",
@@ -679,7 +675,8 @@
       "emptyName": "le nom de l'atelier ne peut pas être vide",
       "saving": "enregistrement…",
       "saved": "enregistré",
-      "save": "enregistrer"
+      "save": "enregistrer",
+      "cancel": "annuler"
     },
     "deleteModal": {
       "trashTitle": "Mettre en corbeille ?",
@@ -703,11 +700,11 @@
     "members": {
       "title": "Membres & rôles",
       "inviteLabel": "Inviter un utilisateur",
+      "tagPlaceholder": "#tag…",
       "inviting": "envoi…",
       "invite": "inviter",
       "inviteSent": "Invitation envoyée à {name}.",
       "memberAdded": "{name} avait déjà demandé à rejoindre l'atelier : ajouté(e) directement.",
-      "premiumOnly": "disponible pour les ateliers Premium",
       "pendingInvites": "Invitations en attente ({count})",
       "waiting": "en attente",
       "canceling": "annulation…",
@@ -765,48 +762,6 @@
       "deleteFileTitle": "Supprimer ce fichier ?",
       "deleteFileDesc": "\"{name}\" sera définitivement supprimé. Cette action est irréversible."
     },
-    "premium": {
-      "title": "Atelier Premium",
-      "eyebrowActive": "abonnement",
-      "eyebrowInactive": "passage en premium",
-      "activeBadge": "Premium actif",
-      "activeTitle": "Cet atelier profite de tous les avantages Premium.",
-      "activeBilling": "Facturation : environ {total} € / mois · {count, plural, one {# membre} other {# membres}}",
-      "heroTitle": "Passe cet atelier en Premium",
-      "perMonthFor": "/ mois pour {count, plural, one {# membre} other {# membres}}",
-      "perMemberNote": "soit environ {avg} € par membre · tarif dégressif",
-      "activate": "Passer l'atelier en Premium",
-      "irreversibleNote": "passage définitif et irréversible — l'atelier devient privé à vie pour tous ses membres",
-      "advantagesTitle": "Ce que débloque le Premium",
-      "advantages": {
-        "noAds": "Sans publicité",
-        "unlimitedEnergy": "Utilisation illimitée",
-        "aiExchange": "Échange avec l'IA",
-        "examGenerator": "Accès au générateur d'examen",
-        "inviteMembers": "Ajout de membres depuis l'atelier",
-        "fileStorage": "Téléchargement jusqu'à 5 Go de fichiers",
-        "dailyJoker": "1 joker aléatoire par jour + via quêtes",
-        "exclusivePlants": "Plantes exclusives"
-      },
-      "tiersTitle": "Détail des prix",
-      "tiersNote": "plus l'atelier compte de membres, moins chaque place coûte.",
-      "tiers": {
-        "t1": "1er membre",
-        "t2to4": "2 à 4 membres",
-        "t5to9": "5 à 9 membres",
-        "t10to19": "10 à 19 membres",
-        "t20to49": "20 à 49 membres",
-        "t50to99": "50 à 99 membres",
-        "t100plus": "100 membres et +"
-      },
-      "yourTier": "votre palier",
-      "perMemberUnit": "/ membre",
-      "testPwHint": "mode de test — sera retiré avec l'intégration du paiement",
-      "pwPlaceholder": "code d'activation…",
-      "confirmTitle": "Passer l'atelier Premium",
-      "confirmDesc": "Cette action est définitive et irréversible : l'atelier deviendra privé pour toujours et tous ses membres (actuels et futurs) auront un accès Premium à vie.",
-      "confirmBtn": "Confirmer l'activation"
-    },
     "notions": {
       "title": "Notions",
       "edit": "éditer",
@@ -852,7 +807,6 @@
       "manager": "gestionnaire",
       "member": "membre"
     },
-    "premiumBadge": "premium",
     "memberCount": "{count} membre{plural}",
     "leaveBtn": "quitter l'atelier",
     "leaveConfirm": {
@@ -1051,17 +1005,42 @@
       "jokerChoice": "1 joker/jour au choix",
       "shareSub3": "partage abonnement +3"
     },
-    "workshopPremium": {
-      "badge": "atelier premium",
-      "irreversible": "irréversible",
-      "title": "débloque ton atelier pour tous tes membres, à vie.",
-      "description": "Une activation unique qui offre l'accès Premium à tous les membres actuels et futurs de ton atelier — sans abonnement personnel requis.",
-      "tagline": "« écoles, formations, équipes — c'est pour vous. »",
-      "cta": "activer pour un atelier →"
-    },
     "alerts": {
-      "paymentSoon": "Paiement disponible prochainement.",
-      "soon": "Disponible prochainement."
+      "paymentSoon": "Paiement disponible prochainement."
+    },
+    "view": {
+      "current": "version actuelle",
+      "new": "nouvelle version"
+    },
+    "workshopOffer": {
+      "eyebrow": "atelier premium",
+      "heroTitle": "Le Premium pour tout un atelier",
+      "perMonthFor": "/ mois pour {count, plural, one {# membre} other {# membres}}",
+      "perMemberNote": "soit environ {avg} € par membre · tarif dégressif",
+      "simulatorLabel": "nombre de membres de l'atelier",
+      "advantagesTitle": "Ce que débloque le Premium",
+      "advantages": {
+        "noAds": "Sans publicité",
+        "unlimitedEnergy": "Utilisation illimitée",
+        "aiExchange": "Échange avec l'IA",
+        "examGenerator": "Accès au générateur d'examen",
+        "inviteMembers": "Ajout de membres depuis l'atelier",
+        "fileStorage": "Téléchargement jusqu'à 5 Go de fichiers",
+        "dailyJoker": "1 joker aléatoire par jour + via quêtes",
+        "exclusivePlants": "Plantes exclusives"
+      },
+      "tiersTitle": "Détail des prix",
+      "tiersNote": "plus l'atelier compte de membres, moins chaque place coûte.",
+      "tiers": {
+        "t1": "1er membre",
+        "t2to4": "2 à 4 membres",
+        "t5to9": "5 à 9 membres",
+        "t10to19": "10 à 19 membres",
+        "t20to49": "20 à 49 membres",
+        "t50to99": "50 à 99 membres",
+        "t100plus": "100 membres et +"
+      },
+      "perMemberUnit": "/ membre"
     }
   },
   "analyse": {
@@ -1118,9 +1097,7 @@
       "kicker": "② identité",
       "changeCover": "changer la couverture",
       "nameLabel": "nom",
-      "namePlaceholder": "ex. Biologie cellulaire — L2",
-      "descriptionLabel": "description courte",
-      "descriptionPlaceholder": "une phrase pour situer la matière…"
+      "namePlaceholder": "ex. Biologie cellulaire — L2"
     },
     "createCta": "créer l'atelier",
     "extractHint": "l'IA extraira ensuite les notions · tu pourras tout ajuster"

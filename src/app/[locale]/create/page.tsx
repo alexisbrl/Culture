@@ -97,12 +97,7 @@ export default function CreatePage() {
               <div className="text-[10.5px] text-ink-soft mb-1">{t('identity.nameLabel')}</div>
               <input
                 placeholder={t('identity.namePlaceholder')}
-                className="w-full px-3 py-2.5 border border-ink/[0.14] rounded-lg text-[13px] bg-[var(--surface-input)] text-ink mb-3 outline-none focus:border-amber/50"
-              />
-              <div className="text-[10.5px] text-ink-soft mb-1">{t('identity.descriptionLabel')}</div>
-              <textarea
-                placeholder={t('identity.descriptionPlaceholder')}
-                className="w-full px-3 py-2.5 border border-ink/[0.14] rounded-lg text-[12.5px] bg-[var(--surface-input)] text-ink h-14 resize-none leading-snug outline-none focus:border-amber/50"
+                className="w-full px-3 py-2.5 border border-ink/[0.14] rounded-lg text-[13px] bg-[var(--surface-input)] text-ink outline-none focus:border-amber/50"
               />
             </div>
 

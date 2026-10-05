@@ -104,14 +104,12 @@ export type WorkshopCardData = {
   name: string;
   created_at: string;
   member_count: number;
-  description: string | null;
   cover_gradient: string | null;
   cover_image_url: string | null;
   cover_image_active: boolean;
   emoji: string | null;
   unique_tag: string | null;
   owner_name: string;
-  is_premium: boolean;
   role?: WorkshopRole;
 };
 
@@ -185,7 +183,6 @@ export async function getWorkshopPreview(workshopId: string): Promise<{
   id: string;
   name: string;
   createdAt: string;
-  description: string | null;
   coverGradient: string | null;
   coverImageUrl: string | null;
   coverImageActive: boolean;
@@ -194,7 +191,6 @@ export async function getWorkshopPreview(workshopId: string): Promise<{
   memberCount: number;
   isMember: boolean;
   hasRequested: boolean;
-  isPremium: boolean;
 } | null> {
   try {
     const { userId } = await auth();
@@ -212,7 +208,6 @@ export async function updateWorkshopDetails(
   workshopId: string,
   details: {
     name?: string;
-    description?: string;
     coverGradient?: string;
     coverImageUrl?: string | null;
     coverImageActive?: boolean;
@@ -233,66 +228,6 @@ export async function updateWorkshopDetails(
     return result;
   } catch (err) {
     console.error('updateWorkshopDetails error:', err);
-    return { success: false, error: 'Erreur serveur' };
-  }
-}
-
-// ─── Activer le statut Premium d'un atelier (propriétaire uniquement) ─────────
-//
-// [TEST TEMPORAIRE — 13/06/2026, MAJ 21/06/2026] En attendant l'intégration Stripe
-// (voir mémoire "Plan Stripe"), l'activation réelle ne devrait jamais avoir lieu sans
-// paiement vérifié. Cette action est un mode de test protégé par un mot de passe en dur
-// ET réservé aux comptes administrateurs (allowlist par email).
-//
-// L'allowlist est par EMAIL (et non par user_id Clerk) volontairement : l'instance
-// Clerk de production est distincte de celle de dev, donc un même compte y a un user_id
-// différent — l'email, lui, est stable entre les deux. Le mécanisme fonctionne ainsi
-// à l'identique en local et en ligne (pas de "marche en dev, pas en prod").
-//
-// À RETIRER une fois le paiement Stripe branché sur cette action (mot de passe,
-// allowlist email, et paramètre `password`).
-const PREMIUM_TEST_ACTIVATION_PASSWORD = 'CultureMDP';
-const PREMIUM_TEST_ADMIN_EMAILS = ['alex.bourillon@gmail.com'];
-
-export async function activateWorkshopPremium(
-  workshopId: string,
-  password: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const { userId } = await auth();
-    if (!userId) return { success: false, error: 'Non authentifié' };
-
-    // Réservé aux comptes administrateurs (par email, stable entre instances Clerk dev/prod).
-    const client = await clerkClient();
-    const user = await client.users.getUser(userId);
-    const email = (
-      user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId)?.emailAddress ??
-      user.emailAddresses[0]?.emailAddress ??
-      ''
-    ).toLowerCase();
-
-    if (!PREMIUM_TEST_ADMIN_EMAILS.includes(email)) {
-      return { success: false, error: 'Activation réservée aux comptes administrateurs' };
-    }
-
-    if (password !== PREMIUM_TEST_ACTIVATION_PASSWORD) {
-      return { success: false, error: 'Mot de passe incorrect' };
-    }
-
-    // Activation Premium : propriétaire uniquement.
-    if (!(await requireOwner(workshopId))) {
-      return { success: false, error: 'Droits insuffisants' };
-    }
-
-    const result = await coreLib.activatePremium(workshopId);
-    if (result.success) {
-      // Badge Premium visible sur la page atelier ET sur la carte du dashboard.
-      revalidateWorkshop();
-      revalidateDashboard();
-    }
-    return result;
-  } catch (err) {
-    console.error('activateWorkshopPremium error:', err);
     return { success: false, error: 'Erreur serveur' };
   }
 }
@@ -326,7 +261,7 @@ export async function uploadWorkshopCover(
 // ─── Search workshops to join ─────────────────────────────────────────────────
 
 export async function searchWorkshops(query: string): Promise<
-  Array<{ id: string; name: string; created_at: string; description: string | null; cover_gradient: string | null; cover_image_url: string | null; cover_image_active: boolean; emoji: string | null; unique_tag: string | null; member_count: number; is_premium: boolean }>
+  Array<{ id: string; name: string; created_at: string; cover_gradient: string | null; cover_image_url: string | null; cover_image_active: boolean; emoji: string | null; unique_tag: string | null; member_count: number }>
 > {
   try {
     const { userId } = await auth();
