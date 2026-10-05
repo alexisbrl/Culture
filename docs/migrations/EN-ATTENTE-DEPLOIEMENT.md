@@ -31,18 +31,17 @@ production casse, souvent en silence (beaucoup de `select` ne lisent que
 
 ## À appliquer
 
-- **24/09/2026 — la veille des générations**
-  (`docs/migrations/2026-09-24-veille-des-generations.sql`) : une tâche planifiée
-  de la base qui appelle chaque minute `https://get-culture.com/api/ingest/watchdog`.
-  **Prérequis : la branche `feat/generation-par-chapitres` (PR #58) mergée et
-  déployée** — la route n'existe pas avant. Ce n'est pas une suppression : l'appliquer
-  trop tôt ne casse rien, mais n'a aucun effet. Après application, vérifier dans
-  `cron.job_run_details` que les appels partent, et côté Vercel que la route répond
-  `200`.
+AUCUN
 
 ---
 
 ## Appliqué / sans objet
+
+- **24/09/2026 — la veille des générations**
+  (`docs/migrations/2026-09-24-veille-des-generations.sql`) : en place depuis le
+  25/09/2026 (tâche `veille-des-generations`, premier passage 08:15 UTC), sans que
+  ce fichier ait été mis à jour — constaté le 05/10/2026 : 14 622 passages, aucun
+  échec, la route répond `200`.
 
 - **05/10/2026 — fin de l'atelier Premium et de la description d'atelier**
   (`docs/migrations/2026-10-05-fin-atelier-premium.sql`) : appliquée le jour
