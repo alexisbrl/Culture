@@ -905,12 +905,9 @@ export type Database = {
           created_by: string
           deleted_at: string | null
           deleted_by: string | null
-          description: string | null
           emoji: string | null
           id: string
-          is_premium: boolean
           name: string
-          premium_activated_at: string | null
           show_programme: boolean
           unique_tag: string | null
           updated_at: string | null
@@ -923,12 +920,9 @@ export type Database = {
           created_by: string
           deleted_at?: string | null
           deleted_by?: string | null
-          description?: string | null
           emoji?: string | null
           id?: string
-          is_premium?: boolean
           name: string
-          premium_activated_at?: string | null
           show_programme?: boolean
           unique_tag?: string | null
           updated_at?: string | null
@@ -941,12 +935,9 @@ export type Database = {
           created_by?: string
           deleted_at?: string | null
           deleted_by?: string | null
-          description?: string | null
           emoji?: string | null
           id?: string
-          is_premium?: boolean
           name?: string
-          premium_activated_at?: string | null
           show_programme?: boolean
           unique_tag?: string | null
           updated_at?: string | null

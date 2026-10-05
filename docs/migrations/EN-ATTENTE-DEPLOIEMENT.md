@@ -31,15 +31,6 @@ production casse, souvent en silence (beaucoup de `select` ne lisent que
 
 ## À appliquer
 
-- **05/10/2026 — fin de l'atelier Premium et de la description d'atelier**
-  (`docs/migrations/2026-10-05-fin-atelier-premium.sql`) : supprime la sécurité
-  qui interdisait à un atelier de redescendre, puis les colonnes
-  `workshops.is_premium`, `workshops.premium_activated_at` et
-  `workshops.description`. **Prérequis : la branche qui retire l'atelier Premium
-  et la description du code mergée et déployée** — avant, le code en ligne lit
-  encore ces colonnes. Régénérer `src/lib/database.types.ts`
-  ensuite.
-
 - **24/09/2026 — la veille des générations**
   (`docs/migrations/2026-09-24-veille-des-generations.sql`) : une tâche planifiée
   de la base qui appelle chaque minute `https://get-culture.com/api/ingest/watchdog`.
@@ -52,6 +43,14 @@ production casse, souvent en silence (beaucoup de `select` ne lisent que
 ---
 
 ## Appliqué / sans objet
+
+- **05/10/2026 — fin de l'atelier Premium et de la description d'atelier**
+  (`docs/migrations/2026-10-05-fin-atelier-premium.sql`) : appliquée le jour
+  même, après le déploiement en production de la PR #62 (Vercel `success` sur
+  `3a4230d`, get-culture.com servant la nouvelle page tarifs). Sécurité
+  anti-rétrogradation, `is_premium`, `premium_activated_at` et `description`
+  supprimées ; vérifié en base (0 colonne, 0 déclencheur restants), pages
+  tableau de bord et paramètres contrôlées. `src/lib/database.types.ts` mis à jour.
 
 - **24/09/2026 — les tâches de génération**
   (`docs/migrations/2026-09-24-taches-de-generation.sql`) : table `ai_import_tasks`.
