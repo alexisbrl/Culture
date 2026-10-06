@@ -297,12 +297,12 @@ export function dropRepeatedQuestions<G extends { questions: readonly { content:
 //
 // L'étape notions d'un chapitre ne voit que son chapitre : si elle recrée une
 // notion qui vit dans un autre, rien ne le lui dit. Une fois tous les chapitres
-// passés, le site repère les paires suspectes, un seul appel les tranche, et
-// ces fonctions encadrent l'appel : ce qu'on lui soumet, et ce qu'on fait de sa
-// réponse.
+// passés, le site repère les paires suspectes, le décideur les tranche une
+// par une, et ces fonctions encadrent ses réponses : ce qu'on lui soumet, et ce
+// qu'on fait de ce qu'il dit.
 
-/** Au-delà, les paires les moins proches ne sont pas soumises : un appel qui
- *  ne répond que « redite ou pas » n'a pas à devenir un second import. */
+/** Au-delà, les paires les moins proches ne sont pas soumises : une question
+ *  par paire, et le tri des redites n'a pas à devenir un second import. */
 export const MAX_REDITE_PAIRS = 300;
 
 export interface RediteNotion {
@@ -343,88 +343,30 @@ export function rediteCandidates(
   return pairs.sort((x, y) => y.proximity - x.proximity).slice(0, limit);
 }
 
-/** Ce qu'on fait d'une paire jugée redite.
- *
- *  - `merge` : `remove` est effacée ; ses questions et la progression des
- *    élèves passent d'abord sur `keep`, qui rejoint `moveTo` si c'est un autre
- *    chapitre que le sien.
- *  - `unplace` : `notion` sort du programme, sans chapitre, intacte — rien ne
- *    lui est retiré, rien n'est transféré. */
-export type RediteAction =
-  | { kind: 'merge'; remove: string; keep: string; moveTo: string | null }
-  | { kind: 'unplace'; notion: string; keep: string };
-
-/**
- * Les gestes qu'appellent les paires jugées redites. Trois cas :
- *
- * - **deux neuves** : celle du chapitre qui vient le premier au programme reste,
- *   l'autre s'efface ;
- * - **une neuve, une ancienne** : la NEUVE reste — c'est la formulation du cours
- *   d'aujourd'hui —, elle récupère les questions et la progression de
- *   l'ancienne, qui s'efface, et elle prend la place qui vient la première au
- *   programme des deux ;
- * - **deux anciennes** : la plus récente reste où elle est, l'autre sort du
- *   programme, sans rien perdre.
- *
- * Tout est **recalculé ici** à partir de l'état de l'atelier, jamais pris de la
- * paire telle qu'elle arrive : une paire inconnue, une notion qui n'est plus au
- * programme ou deux titres qui ne se ressemblent pas assez pour avoir été
- * soumis sont ignorés. Une notion ne sert qu'à une paire : la première
- * appliquée (la plus proche) la fige.
- */
-export function resolveRedites(
-  duplicates: readonly { a: string; b: string }[],
-  notions: ReadonlyMap<string, RediteNotion>,
-  programOrder: readonly string[],
-): { actions: RediteAction[]; ignored: number } {
-  const rank = new Map(programOrder.map((id, i) => [id, i]));
-  const rankOf = (n: RediteNotion) => (n.chapterId !== null ? rank.get(n.chapterId) : undefined) ?? Number.MAX_SAFE_INTEGER;
-  const earlier = (x: RediteNotion, y: RediteNotion) => (rankOf(y) < rankOf(x) ? y : x);
-
-  const candidates = duplicates.flatMap((d) => {
-    const a = notions.get(d.a);
-    const b = notions.get(d.b);
-    if (!a || !b || a.id === b.id) return [];
-    if (!a.chapterId || !b.chapterId || !rank.has(a.chapterId) || !rank.has(b.chapterId)) return [];
-    const score = proximity(a.title, b.title);
-    return score >= SIMILAR_ENOUGH_TO_ASK ? [{ a, b, score }] : [];
-  });
-  let ignored = duplicates.length - candidates.length;
-
-  const locked = new Set<string>();
-  const actions: RediteAction[] = [];
-  for (const { a, b } of candidates.sort((x, y) => y.score - x.score)) {
-    if (locked.has(a.id) || locked.has(b.id)) {
-      ignored += 1;
-      continue;
-    }
-    locked.add(a.id);
-    locked.add(b.id);
-
-    if (a.fresh && b.fresh) {
-      const keep = earlier(a, b);
-      actions.push({ kind: 'merge', keep: keep.id, remove: keep === a ? b.id : a.id, moveTo: null });
-    } else if (a.fresh || b.fresh) {
-      const [fresh, old] = a.fresh ? [a, b] : [b, a];
-      const place = earlier(fresh, old).chapterId;
-      actions.push({ kind: 'merge', keep: fresh.id, remove: old.id, moveTo: place !== fresh.chapterId ? place : null });
-    } else {
-      const recent = a.createdAt > b.createdAt || (a.createdAt === b.createdAt && a.id > b.id) ? a : b;
-      actions.push({ kind: 'unplace', keep: recent.id, notion: recent === a ? b.id : a.id });
-    }
-  }
-  return { actions, ignored };
+/** La question fermée posée au décideur pour UNE paire suspecte (§7.6).
+ *  **Fonction pure.** Une paire, une question : le décideur — Jev à terme,
+ *  Haiku en attendant — répond oui ou non en une seconde, et toutes les paires
+ *  partent en parallèle. « Redondante » couvre les deux cas : la même chose
+ *  dite autrement, et une notion entièrement contenue dans l'autre. */
+export function rediteQuestion(a: { title: string }, b: { title: string }): { state: string; question: string } {
+  return {
+    state: `Deux notions d'un même cours. Chacune est un fait à apprendre.\n\nNotion A : « ${a.title.trim()} »\n\nNotion B : « ${b.title.trim()} »`,
+    question:
+      "L'une des deux est-elle redondante — elle n'apporte aucun fait vérifiable (date, nombre, nom, définition, relation) que l'autre ne contienne déjà, même formulé autrement ou dans un autre ordre ? Si chacune apporte un fait que l'autre n'a pas, la réponse est non.",
+  };
 }
 
 /** Ce qu'une redite écrit en base, une fois tranchée.
  *
  *  - `absorb` : une neuve redit une ancienne. L'ANCIENNE ligne reste — elle
  *    porte les questions, la progression des élèves et les liens d'examen — et
- *    prend le titre de la neuve et la place `chapterId` ; la neuve s'efface.
+ *    prend le titre `title` et la place `chapterId` ; la neuve s'efface.
  *    Garder la neuve aurait fait passer tout cela sur une ligne étiquetée par la
  *    génération, que son annulation (§7.8) efface.
- *  - `merge` : deux neuves ; `remove` s'efface au profit de `keep`.
- *  - `unplace` : deux anciennes ; `notion` sort du programme, intacte.
+ *  - `merge` : `remove`, une neuve, s'efface au profit de `keep`, qui rejoint
+ *    `moveTo` si c'est un autre chapitre que le sien.
+ *  - `unplace` : une ancienne sort du programme, sans chapitre, intacte — rien
+ *    ne lui est retiré, rien n'est transféré.
  *
  *  **Seule une notion neuve peut se trouver dans `absorb.fresh` ou
  *  `merge.remove`** : aucune redite n'efface une notion existante. */
@@ -433,51 +375,130 @@ export type RediteWrite =
   | { kind: 'merge'; remove: string; keep: string; moveTo: string | null }
   | { kind: 'unplace'; notion: string; keep: string };
 
-export function rediteWrites(
-  actions: readonly RediteAction[],
+/**
+ * Les gestes qu'appellent les paires jugées redites (06/10/2026). **Fonction pure.**
+ *
+ * **Par groupes de copies, pas par paires.** Une génération ratée peut laisser
+ * six fois le même fait : traiter une paire par notion n'en retirait qu'une
+ * copie par passage. Les paires confirmées se rejoignent en groupes, et chaque
+ * groupe se règle en une fois.
+ *
+ * - **La formulation gardée est la plus RICHE** — celle qui porte le plus de
+ *   mots porteurs : une notion qui en contient une autre, plus un fait, garde ce
+ *   fait. À égalité : la neuve (le cours d'aujourd'hui), puis le chapitre qui
+ *   vient le premier, puis la plus récente.
+ * - **Les chaînes ne s'enchaînent pas** : A redit B, B redit C ne dit rien de A
+ *   et C. Une notion ne sort que si la paire qu'elle forme AVEC LA GARDÉE a été
+ *   confirmée ; les autres restent, et un prochain passage jugera.
+ * - **La ligne qui reste est une ancienne s'il y en a une** parmi les copies
+ *   confirmées : c'est elle qui a un historique. Elle prend alors la formulation
+ *   gardée (`absorb`). Les neuves s'effacent, leurs questions rattachées à la
+ *   ligne qui reste ; les autres anciennes sortent du programme, intactes.
+ * - La ligne qui reste prend la place qui vient la première au programme parmi
+ *   les copies retirées et la gardée.
+ *
+ * Tout est **recalculé ici** à partir de l'état de l'atelier : une paire
+ * inconnue, une notion qui n'est plus au programme ou deux titres qui ne se
+ * ressemblent pas assez pour avoir été soumis sont ignorés.
+ */
+export function resolveRedites(
+  duplicates: readonly { a: string; b: string }[],
   notions: ReadonlyMap<string, RediteNotion>,
-): RediteWrite[] {
-  const writes: RediteWrite[] = [];
-  for (const action of actions) {
-    if (action.kind === 'unplace') {
-      writes.push(action);
+  programOrder: readonly string[],
+): { actions: RediteWrite[]; ignored: number } {
+  const rank = new Map(programOrder.map((id, i) => [id, i]));
+  const rankOf = (n: RediteNotion) => (n.chapterId !== null ? rank.get(n.chapterId) : undefined) ?? Number.MAX_SAFE_INTEGER;
+  const richness = new Map<string, number>();
+  const richOf = (n: RediteNotion) => {
+    let r = richness.get(n.id);
+    if (r === undefined) {
+      r = significantWords(n.title).size;
+      richness.set(n.id, r);
+    }
+    return r;
+  };
+
+  const linked = new Map<string, Set<string>>();
+  const link = (x: string, y: string) => {
+    if (!linked.has(x)) linked.set(x, new Set());
+    linked.get(x)!.add(y);
+  };
+  let ignored = 0;
+  for (const d of duplicates) {
+    const a = notions.get(d.a);
+    const b = notions.get(d.b);
+    const valid = a && b && a.id !== b.id
+      && a.chapterId && b.chapterId && rank.has(a.chapterId) && rank.has(b.chapterId)
+      && proximity(a.title, b.title) >= SIMILAR_ENOUGH_TO_ASK;
+    if (!valid) {
+      ignored += 1;
       continue;
     }
-    const remove = notions.get(action.remove);
-    const keep = notions.get(action.keep);
-    if (!remove || !keep) continue;
-    if (remove.fresh) {
-      writes.push(action);
-    } else if (keep.fresh) {
-      writes.push({ kind: 'absorb', old: remove.id, fresh: keep.id, title: keep.title, chapterId: action.moveTo ?? keep.chapterId });
+    link(a.id, b.id);
+    link(b.id, a.id);
+  }
+
+  // Le plus riche d'abord ; à égalité la neuve, le chapitre le plus haut, la plus récente.
+  const byPreference = (x: RediteNotion, y: RediteNotion) =>
+    richOf(y) - richOf(x)
+    || Number(y.fresh) - Number(x.fresh)
+    || rankOf(x) - rankOf(y)
+    || y.createdAt.localeCompare(x.createdAt)
+    || x.id.localeCompare(y.id);
+
+  const seen = new Set<string>();
+  const actions: RediteWrite[] = [];
+  for (const start of linked.keys()) {
+    if (seen.has(start)) continue;
+    const group: RediteNotion[] = [];
+    const queue = [start];
+    seen.add(start);
+    while (queue.length > 0) {
+      const id = queue.shift() as string;
+      group.push(notions.get(id) as RediteNotion);
+      for (const next of linked.get(id) ?? []) {
+        if (!seen.has(next)) {
+          seen.add(next);
+          queue.push(next);
+        }
+      }
     }
-    // Deux anciennes ne fusionnent jamais : `resolveRedites` les rend en `unplace`.
+
+    const keeper = [...group].sort(byPreference)[0];
+    const copies = group.filter((m) => m !== keeper && linked.get(keeper.id)?.has(m.id));
+    if (copies.length === 0) continue;
+
+    const place = [keeper, ...copies].reduce((best, m) => (rankOf(m) < rankOf(best) ? m : best)).chapterId;
+    const olds = copies.filter((m) => !m.fresh).sort(byPreference);
+    const line = keeper.fresh && olds.length > 0 ? olds[0] : keeper;
+
+    if (line !== keeper) {
+      actions.push({ kind: 'absorb', old: line.id, fresh: keeper.id, title: keeper.title, chapterId: place });
+    }
+    let moveTo = line === keeper && place !== line.chapterId ? place : null;
+    for (const m of copies) {
+      if (m === line) continue;
+      if (m.fresh) {
+        actions.push({ kind: 'merge', remove: m.id, keep: line.id, moveTo });
+        moveTo = null;
+      } else {
+        actions.push({ kind: 'unplace', notion: m.id, keep: line.id });
+      }
+    }
   }
-  return writes;
+  return { actions, ignored };
 }
 
-/** Les paires que le modèle a jugées redites, lues dans sa réponse. Une réponse
- *  sur une paire inconnue, en double ou mal formée est ignorée. */
-export function judgedDuplicates(
-  pairs: readonly ReditePair[],
-  answers: readonly { pair: number; duplicate: boolean }[],
-): { a: string; b: string }[] {
-  const answered = new Set<number>();
-  const out: { a: string; b: string }[] = [];
-  for (const answer of answers) {
-    if (!answer.duplicate || !Number.isInteger(answer.pair) || answered.has(answer.pair)) continue;
-    answered.add(answer.pair);
-    const pair = pairs[answer.pair];
-    if (pair) out.push({ a: pair.a.id, b: pair.b.id });
-  }
-  return out;
-}
-
-/** Soumet les paires au modèle — **et ne l'appelle pas s'il n'y en a aucune**. */
-export async function judgeRedites(
-  pairs: readonly ReditePair[],
-  ask: (pairs: readonly ReditePair[]) => Promise<{ pair: number; duplicate: boolean }[]>,
-): Promise<{ pair: number; duplicate: boolean }[]> {
-  if (pairs.length === 0) return [];
-  return ask(pairs);
+/** Le dernier filet avant l'écriture : un geste qui effacerait une notion
+ *  existante, ou en retirerait une neuve du programme sans l'effacer, ne passe
+ *  pas — quoi qu'ait calculé `resolveRedites`. **Fonction pure.** */
+export function rediteWrites(
+  actions: readonly RediteWrite[],
+  notions: ReadonlyMap<string, RediteNotion>,
+): RediteWrite[] {
+  return actions.filter((action) => {
+    if (action.kind === 'unplace') return notions.get(action.notion)?.fresh === false && notions.has(action.keep);
+    if (action.kind === 'merge') return notions.get(action.remove)?.fresh === true && notions.has(action.keep);
+    return notions.get(action.old)?.fresh === false && notions.get(action.fresh)?.fresh === true;
+  });
 }

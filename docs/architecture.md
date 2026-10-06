@@ -222,7 +222,7 @@ Le cours entier n'entre qu'une fois, dans le premier appel.
 |---|---|
 | **Chapitres** — 1 appel | le **texte seul** des documents, tous les chapitres, toutes les notions |
 | **Notions** — 1 appel par chapitre | les **pages de son chapitre** (texte et images), les notions qui lui sont attribuées |
-| **Redites** — 1 appel, seulement s'il y a des paires suspectes | les seules paires (nouvelle notion, notion d'un autre chapitre) repérées par le site (§7.6) |
+| **Redites** — 1 question fermée par paire suspecte, au décideur | les deux titres de la paire, repérée par le site (§7.6) |
 | **Questions** — 1 appel par tranche de huit questions de la demande d'un chapitre | **aucun document** : les notions de l'appel et ce qu'on lui demande sur chacune, les intitulés de **tout le chapitre** (150 au plus), et au plus 300 questions existantes des notions de l'appel |
 
 Trois gains du même geste : moins de bruit par appel (qualité), moins de jetons
@@ -312,17 +312,26 @@ donné : tout ce qui est envoyé entre dans le contexte et est facturé.
    que l'envoi en image sert à préserver.
 2. **En cas de doute, élargir.** Bornes qui se chevauchent : garder les deux pages en
    double, un chevauchement ne coûte que des jetons. Bornes qui laissent un trou :
-   rattacher les pages orphelines au chapitre précédent. **Perdre une page produit une
-   notion manquante que rien ne signale** — le pire mode de défaillance de tout le
-   système.
+   rattacher les pages orphelines au chapitre précédent **du même document**. **Perdre
+   une page produit une notion manquante que rien ne signale** — le pire mode de
+   défaillance de tout le système. Une page qui précède toute page citée de son document
+   n'a pas de chapitre précédent : personne ne la reçoit (une page de titre, l'en-tête du
+   document de l'IA).
 3. **Un chapitre sans page ne lit rien.** Il n'arrive pas jusqu'ici : sans page, il
    sort du programme dès l'étape chapitres (§7.6). **Jamais le document entier** : un
-   chapitre à qui l'on donne tout le cours le réécrit en entier sous son titre.
-4. **Un document texte a des pages, lui aussi** — texte brut comme document écrit par
-   l'IA. Un titre de premier ou deuxième niveau ouvre une page, sinon on coupe entre deux
-   paragraphes vers 3 000 caractères. Le découpage est rejoué à l'identique par les deux
-   étapes sur les mêmes octets, et l'extrait d'un chapitre repart en texte. Sans pages, un
-   tel document partait en entier dans chaque chapitre qui le citait.
+   chapitre à qui l'on donne tout le cours le réécrit en entier sous son titre. Pour la
+   même raison, **un document dont aucune page n'est citée n'est lu par personne**, et le
+   compte-rendu le dit.
+4. **Une seule numérotation pour tout le lot.** Les pages se suivent d'un document à
+   l'autre, et l'étape chapitres ne cite que des numéros, jamais un nom de document — deux
+   fichiers homonymes ne se confondent plus. Le serveur rend chaque intervalle à son
+   document, en le coupant s'il est à cheval sur deux.
+5. **Un document texte a des pages, lui aussi** — texte brut comme document écrit par
+   l'IA. S'il est titré, chaque titre de premier ou deuxième niveau ouvre une page, et
+   c'est la seule coupe : une partie du document de l'IA est donc exactement une page.
+   Sans aucun titre, on coupe entre deux paragraphes vers 3 000 caractères. Le découpage
+   est rejoué à l'identique par les deux étapes sur les mêmes octets, et l'extrait d'un
+   chapitre repart en texte. Un document illisible n'a aucune page, donc aucun lecteur.
 
 ### 7.4 L'étape 0 : lire la consigne, écrire ce qui manque
 
@@ -347,6 +356,14 @@ apparaît dans les ressources, marqué comme tel, téléchargeable et supprimabl
 **pas modifiable à la main** : pour le changer, on redonne une consigne. À chaque
 génération, l'IA peut le compléter, en retirer ce qui n'est plus d'actualité, ou n'y
 pas toucher — elle en rend alors la version complète, jamais un rapiéçage.
+
+**Il s'écrit partie par partie** : le format de réponse impose une liste de parties, un
+titre et un contenu, que le serveur recompose — un titre de section par partie, et aucun
+autre à ce niveau. Chaque partie devient une page (§7.3), donc un chapitre tombe pile sur
+ses parties. **Une partie qui complète ou corrige un chapitre du cours de l'utilisateur
+en porte exactement le titre** : l'étape chapitres réunit alors les deux sous ce chapitre.
+Il se nomme « Notes IA [atelier] - [date] », la date étant celle de sa dernière
+réécriture.
 
 > ⚠️ **Les documents de l'utilisateur ne sont jamais modifiés.** Une correction s'écrit
 > dans le document de l'IA, qui vient **s'ajouter** au cours, jamais à sa place. C'est
@@ -466,10 +483,13 @@ existant n'y reste que s'il correspond à une partie de ce cours ; sinon il sort
 un sujet voisin. C'est la conséquence directe du découpage, pas une décision délicate, et
 la consigne le dit ainsi.
 
-**La forme : le rang de chaque chapitre, 0 pour ceux qui sortent.** Le modèle rend
-l'architecture entière, chapitres neufs et anciens mêlés, avec un rang par chapitre.
-Demander le rang de **chacun** plutôt qu'une liste d'écartés oblige à statuer sur chaque
-chapitre existant, là où une liste se remplit au gré de ce que le modèle remarque.
+**La forme : une case obligatoire par chapitre existant.** Le format de réponse est
+construit pour chaque génération, avec une case par chapitre existant : rang et pages
+s'il correspond à une partie du cours, rang 0 et raison sinon. Le modèle ne peut plus en
+oublier un, et l'ordre du programme reçoit toujours un rang par chapitre. Les chapitres
+neufs portent eux aussi leur rang et leurs pages. Une seule forme par case plutôt qu'une
+alternative « gardé / écarté » : répétée pour chaque chapitre, une alternative alourdit
+le format au point de risquer le refus.
 
 **Un chapitre sans page n'est pas au programme.** Un chapitre que le cours traite encore
 y occupe forcément des pages : l'étape en donne à chaque chapitre, et celui qui n'en a
@@ -532,33 +552,38 @@ antérieures à l'import ne sont jamais touchées par ce ménage.
 les notions de son chapitre : si elle recrée une notion qui existe dans un autre, rien ne
 le lui dit. Quand tous les chapitres ont fini leur étape notions, le site repère les
 **paires suspectes** parmi les notions au programme — deux titres dont au moins 40 % des
-mots porteurs sont communs, les plus proches d'abord, 300 au plus — et **un seul appel**
-les tranche : il ne répond que « redite ou pas », et ne part pas s'il n'y a aucune paire.
-Une paire qui compte une notion neuve dans le même chapitre que l'autre n'est pas soumise :
-l'étape notions l'avait sous les yeux. Deux anciennes le sont, même dans un seul chapitre —
-personne ne les a jamais jugées. L'appel tourne **en même temps que les questions**, qui ne
-l'attendent pas — et c'est pourquoi **il juge sans rien toucher** : les gestes se font au
-ménage de fin, une fois toutes les questions écrites.
+mots porteurs sont communs, les plus proches d'abord, 300 au plus — et **le décideur**
+(§7.4 — Jev à terme, Haiku en attendant) **tranche chaque paire par une question
+fermée** : l'une des deux est-elle redondante, sans fait vérifiable que l'autre n'ait
+déjà ? Toutes les paires partent en parallèle, par paquets de vingt ; une réponse
+manquante vaut « non ». Rien ne part s'il n'y a aucune paire. Une paire qui compte une
+notion neuve dans le même chapitre que l'autre n'est pas soumise : l'étape notions l'avait
+sous les yeux. Deux anciennes le sont, même dans un seul chapitre — personne ne les a
+jamais jugées. Le tri tourne **en même temps que les questions**, qui ne l'attendent pas —
+et c'est pourquoi **il juge sans rien toucher** : les gestes se font au ménage de fin, une
+fois toutes les questions écrites.
 
-**Ce qu'on fait d'une redite, selon l'âge des deux notions :**
+**Ce qu'on fait des redites : par groupes de copies, pas par paires.** Une génération ratée
+peut laisser six fois le même fait ; une paire par notion n'en retirait qu'une copie par
+passage. Les paires confirmées se rejoignent en groupes, réglés chacun en une fois :
 
-- **deux neuves** : celle du chapitre qui vient le premier au programme reste, l'autre
-  s'efface ;
-- **une neuve et une ancienne** : **la formulation de la neuve l'emporte, sur la ligne de
-  l'ancienne** — c'est la formulation du cours d'aujourd'hui, et c'est l'ancienne qui porte
-  les questions, la progression des élèves et les liens d'examen. L'ancienne prend le titre
-  de la neuve et la place qui vient la première au programme des deux ; les questions déjà
-  écrites sur la neuve lui sont rattachées (un élève qui aurait travaillé les deux garde la
-  progression de l'ancienne), puis la neuve s'efface. Garder la ligne neuve ferait passer
-  tout cela sur une ligne étiquetée par la génération, que son annulation (§7.8) efface.
-  L'ancien titre est noté pour que l'annulation le rende ;
-- **deux anciennes** : la plus récente reste où elle est, l'autre sort du programme, sans
-  chapitre et sans rien perdre — ni fusion, ni transfert.
+- **la formulation gardée est la plus riche** — le plus de mots porteurs : une notion qui
+  en contient une autre plus un fait garde ce fait. À égalité : la neuve, puis le chapitre
+  qui vient le premier, puis la plus récente ;
+- **les chaînes ne s'enchaînent pas** : une copie ne part que si la paire qu'elle forme
+  avec la gardée a été confirmée — A redit B et B redit C ne disent rien de A et C ;
+- **la ligne qui reste est une ancienne s'il y en a une** parmi les copies : c'est elle
+  qui porte les questions, la progression des élèves et les liens d'examen. Elle prend la
+  formulation gardée et la place qui vient la première au programme ; garder une ligne
+  neuve ferait passer tout cela sur une ligne étiquetée par la génération, que son
+  annulation (§7.8) efface. Son ancien titre est noté pour que l'annulation le rende ;
+- **les copies neuves s'effacent**, leurs questions rattachées à la ligne qui reste (un
+  élève qui aurait travaillé les deux garde la progression de celle-ci) ; **les copies
+  anciennes sortent du programme**, sans chapitre et sans rien perdre.
 
-Une notion ne sert qu'à une paire par génération : la plus proche la fige. Les gestes sont
-**recalculés au ménage de fin sur l'état de l'atelier**, jamais repris tels quels : une
-paire dont une notion a quitté le programme, ou dont les titres ne se ressemblent pas
-assez pour avoir été soumis, est ignorée.
+Les gestes sont **recalculés au ménage de fin sur l'état de l'atelier**, jamais repris
+tels quels : une paire dont une notion a quitté le programme, ou dont les titres ne se
+ressemblent pas assez pour avoir été soumis, est ignorée.
 
 **Le chapitre suit ses notions** : un chapitre dont il ne reste que des notions que
 personne n'a su placer est écarté avec elles dedans. Le bouton « restaurer » reste ainsi
@@ -667,6 +692,11 @@ l'écrasante majorité n'en comptent qu'un —, et l'écran sait enchaîner. La 
 donc : une question est seule dans son groupe, **sauf** si deux ou trois ne se
 comprennent que dans l'ordre. Garde-fou explicite : un groupe dont les questions
 tiendraient seules n'est pas un groupe.
+
+**Un appel d'examen voit les questions d'examen qui portent sur ses notions** — au moins une
+notion de sa tranche en commun —, les plus récentes d'abord et dans un plafond : c'est ce
+qui l'empêche de reposer une question déjà dans la liste, et tout ce qu'on lui envoie se paie
+à chaque appel.
 
 **Un examen ne recopie pas l'entraînement.** Les deux listes ne se voient jamais — les
 verser l'une dans l'autre ferait revenir le poste de coût qu'on a supprimé. La

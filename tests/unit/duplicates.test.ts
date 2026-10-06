@@ -1,14 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
   NEAR_DUPLICATE,
   dropNearDuplicates,
   dropRepeatedQuestions,
   flagSimilar,
-  judgeRedites,
-  judgedDuplicates,
   questionFingerprint,
   rediteCandidates,
+  rediteQuestion,
   rediteWrites,
   resolveRedites,
   type RediteNotion,
@@ -317,8 +316,8 @@ describe('questionFingerprint — la recopie, pas la parenté', () => {
 });
 
 // Les doublons entre notions, jugés à la fin (§7.6). Testé parce que la règle
-// EFFACE des notions — y compris une ancienne, après transfert de ses questions
-// et de la progression des élèves — sur la foi d'une réponse du modèle.
+// EFFACE des notions neuves et retire des anciennes du programme, sur la foi
+// d'une réponse du modèle.
 describe('redites (§7.6)', () => {
   const n = (id: string, title: string, chapterId: string | null, fresh: boolean, createdAt = '2026-09-01'): RediteNotion =>
     ({ id, title, chapterId, fresh, createdAt });
@@ -347,90 +346,65 @@ describe('redites (§7.6)', () => {
     });
   });
 
-  describe('judgeRedites / judgedDuplicates', () => {
-    const pairs = rediteCandidates([n('old', LOIRE, 'c1', false), n('new', LOIRE_BIS, 'c2', true)]);
-
-    it('aucune paire ⇒ aucun appel', async () => {
-      const ask = vi.fn(async () => [{ pair: 0, duplicate: true }]);
-      expect(await judgeRedites([], ask)).toEqual([]);
-      expect(ask).not.toHaveBeenCalled();
-    });
-
-    it('des paires ⇒ un seul appel', async () => {
-      const ask = vi.fn(async () => [{ pair: 0, duplicate: true }]);
-      await judgeRedites(pairs, ask);
-      expect(ask).toHaveBeenCalledTimes(1);
-    });
-
-    it('ne retient que les « redite », une fois, sur une paire connue', () => {
-      const answers = [0, 0, 7, -1, 1.5].map((pair) => ({ pair, duplicate: true }));
-      expect(judgedDuplicates(pairs, [...answers, { pair: 0, duplicate: false }])).toEqual([{ a: 'old', b: 'new' }]);
-      expect(judgedDuplicates(pairs, [{ pair: 0, duplicate: false }])).toEqual([]);
-    });
+  it('rediteQuestion pose une question fermée sur les deux notions, et nomme les deux cas', () => {
+    const q = rediteQuestion({ title: LOIRE }, { title: LOIRE_BIS });
+    expect(q.state).toContain(LOIRE);
+    expect(q.state).toContain(LOIRE_BIS);
+    expect(q.question).toMatch(/redondante/);
+    expect(q.question).toMatch(/Si chacune apporte un fait que l'autre n'a pas, la réponse est non/);
   });
 
-  describe('rediteWrites — aucune redite n’efface une notion existante', () => {
-    const writes = (duplicates: { a: string; b: string }[], notions: RediteNotion[]) => {
-      const byId = new Map(notions.map((x) => [x.id, x]));
-      return rediteWrites(resolveRedites(duplicates, byId, order).actions, byId);
-    };
-
-    it('une neuve et une ancienne : l’ancienne ligne reste, prend le titre de la neuve et la place la plus haute', () => {
-      expect(writes([{ a: 'old', b: 'new' }], [n('old', LOIRE, 'c3', false), n('new', LOIRE_BIS, 'c1', true)]))
-        .toEqual([{ kind: 'absorb', old: 'old', fresh: 'new', title: LOIRE_BIS, chapterId: 'c1' }]);
-      expect(writes([{ a: 'old', b: 'new' }], [n('old', LOIRE, 'c1', false), n('new', LOIRE_BIS, 'c3', true)]))
-        .toEqual([{ kind: 'absorb', old: 'old', fresh: 'new', title: LOIRE_BIS, chapterId: 'c1' }]);
-    });
-
-    it('deux neuves : seule une neuve s’efface', () => {
-      expect(writes([{ a: 'n3', b: 'n1' }], [n('n3', LOIRE, 'c3', true), n('n1', LOIRE_BIS, 'c1', true)]))
-        .toEqual([{ kind: 'merge', keep: 'n1', remove: 'n3', moveTo: null }]);
-    });
-
-    it('quelle que soit la paire, rien d’ancien n’est jamais effacé', () => {
-      const notions = [
-        n('o1', LOIRE, 'c1', false, '2026-01-01'),
-        n('o2', LOIRE_BIS, 'c2', false, '2026-06-01'),
-        n('f1', LOIRE_BIS, 'c3', true),
-        n('f2', LOIRE, 'c2', true),
-      ];
-      const ids = notions.map((x) => x.id);
-      for (const a of ids) {
-        for (const b of ids) {
-          for (const w of writes([{ a, b }], notions)) {
-            const erased = w.kind === 'absorb' ? w.fresh : w.kind === 'merge' ? w.remove : null;
-            if (erased) expect(erased.startsWith('f')).toBe(true);
-          }
-        }
-      }
-    });
-  });
-
-  describe('resolveRedites', () => {
+  describe('resolveRedites — par groupes, la plus riche gardée', () => {
     const resolve = (duplicates: { a: string; b: string }[], notions: RediteNotion[]) =>
       resolveRedites(duplicates, new Map(notions.map((x) => [x.id, x])), order);
+    const RICHER = `${LOIRE}, et se jette dans l’Atlantique à Saint-Nazaire`;
 
-    it('deux neuves : celle du chapitre qui vient le premier reste', () => {
+    it('deux neuves aussi riches : celle du chapitre qui vient le premier reste', () => {
       const out = resolve([{ a: 'n3', b: 'n1' }], [n('n3', LOIRE, 'c3', true), n('n1', LOIRE_BIS, 'c1', true)]);
       expect(out.actions).toEqual([{ kind: 'merge', keep: 'n1', remove: 'n3', moveTo: null }]);
     });
 
-    it('une neuve et une ancienne : la neuve reste, et prend la place la plus haute', () => {
-      const out = resolve([{ a: 'old', b: 'new' }], [n('old', LOIRE, 'c1', false), n('new', LOIRE_BIS, 'c3', true)]);
-      expect(out.actions).toEqual([{ kind: 'merge', keep: 'new', remove: 'old', moveTo: 'c1' }]);
-    });
-
-    it('une neuve déjà plus haut que l’ancienne : elle ne bouge pas', () => {
+    it('une neuve et une ancienne aussi riches : l’ancienne ligne prend la formulation neuve et la place la plus haute', () => {
       const out = resolve([{ a: 'old', b: 'new' }], [n('old', LOIRE, 'c3', false), n('new', LOIRE_BIS, 'c1', true)]);
-      expect(out.actions).toEqual([{ kind: 'merge', keep: 'new', remove: 'old', moveTo: null }]);
+      expect(out.actions).toEqual([{ kind: 'absorb', old: 'old', fresh: 'new', title: LOIRE_BIS, chapterId: 'c1' }]);
     });
 
-    it('deux anciennes : la plus récente reste, l’autre sort sans rien perdre', () => {
-      const out = resolve(
+    it('une ancienne plus riche que la neuve : elle garde sa formulation, la neuve s’efface', () => {
+      const out = resolve([{ a: 'old', b: 'new' }], [n('old', RICHER, 'c3', false), n('new', LOIRE, 'c1', true)]);
+      expect(out.actions).toEqual([{ kind: 'merge', remove: 'new', keep: 'old', moveTo: 'c1' }]);
+    });
+
+    it('une neuve plus riche que l’ancienne : l’ancienne ligne prend le fait de plus', () => {
+      const out = resolve([{ a: 'old', b: 'new' }], [n('old', LOIRE, 'c1', false), n('new', RICHER, 'c2', true)]);
+      expect(out.actions).toEqual([{ kind: 'absorb', old: 'old', fresh: 'new', title: RICHER, chapterId: 'c1' }]);
+    });
+
+    it('deux anciennes : la plus riche reste, à égalité la plus récente ; l’autre sort sans rien perdre', () => {
+      expect(resolve(
         [{ a: 'older', b: 'newer' }],
         [n('older', LOIRE, 'c1', false, '2026-01-01'), n('newer', LOIRE_BIS, 'c1', false, '2026-06-01')],
-      );
-      expect(out.actions).toEqual([{ kind: 'unplace', keep: 'newer', notion: 'older' }]);
+      ).actions).toEqual([{ kind: 'unplace', keep: 'newer', notion: 'older' }]);
+      expect(resolve(
+        [{ a: 'older', b: 'newer' }],
+        [n('older', RICHER, 'c1', false, '2026-01-01'), n('newer', LOIRE, 'c1', false, '2026-06-01')],
+      ).actions).toEqual([{ kind: 'unplace', keep: 'older', notion: 'newer' }]);
+    });
+
+    it('un groupe de copies se règle en une fois : une ligne reste, toutes les copies confirmées partent', () => {
+      const notions = [n('o1', LOIRE, 'c2', false), n('f1', LOIRE_BIS, 'c1', true), n('f2', LOIRE, 'c3', true), n('f3', LOIRE_BIS, 'c3', true)];
+      const pairs = [{ a: 'o1', b: 'f1' }, { a: 'f1', b: 'f2' }, { a: 'f1', b: 'f3' }, { a: 'o1', b: 'f2' }];
+      const out = resolve(pairs, notions);
+      expect(out.actions).toContainEqual({ kind: 'absorb', old: 'o1', fresh: 'f1', title: LOIRE_BIS, chapterId: 'c1' });
+      expect(out.actions).toContainEqual({ kind: 'merge', remove: 'f2', keep: 'o1', moveTo: null });
+      expect(out.actions).toContainEqual({ kind: 'merge', remove: 'f3', keep: 'o1', moveTo: null });
+      expect(out.actions).toHaveLength(3);
+    });
+
+    it('les chaînes ne s’enchaînent pas : une copie non confirmée avec la gardée reste', () => {
+      // A redit B, B redit C — rien n'est dit de A et C.
+      const A = `${LOIRE} depuis le mont Gerbier-de-Jonc`;
+      const out = resolve([{ a: 'a', b: 'b' }, { a: 'b', b: 'c' }], [n('a', A, 'c1', true), n('b', LOIRE_BIS, 'c2', true), n('c', LOIRE, 'c3', true)]);
+      expect(out.actions).toEqual([{ kind: 'merge', remove: 'b', keep: 'a', moveTo: null }]);
     });
 
     it('ignore une paire inconnue, hors programme, ou trop éloignée pour avoir été soumise', () => {
@@ -440,14 +414,37 @@ describe('redites (§7.6)', () => {
       );
       expect(out).toEqual({ actions: [], ignored: 4 });
     });
+  });
 
-    it('une notion ne sert qu’à une paire : la plus proche la fige', () => {
-      const out = resolve(
-        [{ a: 'old', b: 'bis' }, { a: 'old', b: 'ter' }],
-        [n('old', LOIRE, 'c1', false), n('bis', LOIRE, 'c2', true), n('ter', LOIRE_BIS, 'c3', true)],
-      );
-      expect(out.actions).toEqual([{ kind: 'merge', keep: 'bis', remove: 'old', moveTo: 'c1' }]);
-      expect(out.ignored).toBe(1);
+  describe('rediteWrites — aucune redite n’efface une notion existante', () => {
+    const byId = (notions: RediteNotion[]) => new Map(notions.map((x) => [x.id, x]));
+
+    it('refuse tout geste qui effacerait une ancienne ou sortirait une neuve du programme', () => {
+      const notions = byId([n('old', LOIRE, 'c1', false), n('new', LOIRE_BIS, 'c2', true)]);
+      expect(rediteWrites([
+        { kind: 'merge', remove: 'old', keep: 'new', moveTo: null },
+        { kind: 'unplace', notion: 'new', keep: 'old' },
+        { kind: 'absorb', old: 'new', fresh: 'old', title: 'x', chapterId: null },
+        { kind: 'merge', remove: 'new', keep: 'old', moveTo: null },
+      ], notions)).toEqual([{ kind: 'merge', remove: 'new', keep: 'old', moveTo: null }]);
+    });
+
+    it('quelles que soient les paires confirmées, rien d’ancien n’est jamais effacé', () => {
+      const notions = [
+        n('o1', LOIRE, 'c1', false, '2026-01-01'),
+        n('o2', LOIRE_BIS, 'c2', false, '2026-06-01'),
+        n('f1', LOIRE_BIS, 'c3', true),
+        n('f2', LOIRE, 'c2', true),
+      ];
+      const ids = notions.map((x) => x.id);
+      const all = ids.flatMap((a) => ids.map((b) => ({ a, b })));
+      for (let k = 1; k <= all.length; k++) {
+        const writes = rediteWrites(resolveRedites(all.slice(0, k), byId(notions), order).actions, byId(notions));
+        for (const w of writes) {
+          const erased = w.kind === 'absorb' ? w.fresh : w.kind === 'merge' ? w.remove : null;
+          if (erased) expect(erased.startsWith('f')).toBe(true);
+        }
+      }
     });
   });
 });

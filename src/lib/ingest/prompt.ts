@@ -236,9 +236,7 @@ export type ExistingScope =
    *  qui est déjà DANS CETTE LISTE, quelle que soit la notion. Le chargeur
    *  borne déjà la liste ; filtrer une seconde fois ici ne ferait que perdre des
    *  énoncés en route. */
-  | { pass: 'exam' }
-  /** Les redites : les paires voyagent dans la consigne, rien d'autre. */
-  | { pass: 'redites' };
+  | { pass: 'exam' };
 
 const SYSTEM = `Tu construis le programme pédagogique d'un atelier à partir de ses documents sources.
 
@@ -389,9 +387,6 @@ function inScope(existing: ExistingContent, scope: ExistingScope): {
     }
     case 'exam':
       return { chapters: [], notions: [], questions: existing.questions.map((q) => q.content) };
-    case 'redites':
-      // Rien : les paires voyagent dans la consigne.
-      return { chapters: [], notions: [], questions: [] };
   }
 }
 
@@ -408,8 +403,6 @@ export function existingContentBlock(existing: ExistingContent, scope: ExistingS
         return "L'atelier est vide : rien n'existe encore.";
       case 'notions':
         return "L'atelier ne contient encore aucune notion.";
-      case 'redites':
-        return '';
       case 'questions':
         return "Aucune question ne porte encore sur ces notions : la liste est vide.";
       case 'exam':
@@ -656,7 +649,9 @@ Il a déjà été établi que cette demande appelle **ton document de cours** : 
 1. **Écrire ton document.** Tu disposes d'UN document, le tien, et d'un seul. Il rejoindra les ressources de l'atelier et sera lu par les étapes suivantes comme n'importe quel cours. Tu en rends la version COMPLÈTE, jamais seulement la partie ajoutée.
 2. **Réécrire la consigne** pour les étapes suivantes, en n'y laissant que ce qui les concerne.
 
-⚠️ **Tu ne modifies JAMAIS les documents de l'utilisateur.** Ils sont sa propriété et sa référence. Si sa demande porte sur l'un d'eux — corriger une erreur, compléter une partie trop mince, ajouter des exemples —, tu écris ce complément DANS TON document, en disant clairement à quoi il se rapporte (« Complément au chapitre X », « Correction : le cours indique A, or B »). Ton document vient s'ajouter au sien, jamais à sa place.
+**Ton document s'écrit PARTIE PAR PARTIE** : un titre, puis ce que la partie enseigne. Chaque partie deviendra un chapitre du programme, ou viendra compléter le chapitre dont elle porte le titre.
+
+⚠️ **Tu ne modifies JAMAIS les documents de l'utilisateur.** Ils sont sa propriété et sa référence. Si sa demande porte sur l'un d'eux — corriger une erreur, compléter une partie trop mince, ajouter des exemples —, tu écris ce complément DANS TON document, dans une partie qui porte **exactement le titre de la partie concernée** de son cours : c'est ce qui les réunira dans le même chapitre. Dans le texte, dis clairement ce que tu corriges (« Le cours indique A, or B »). Ton document vient s'ajouter au sien, jamais à sa place.
 
 CE QUE TU AS SOUS LES YEUX
 
@@ -683,7 +678,7 @@ CE QUE TU ÉCRIS
 
 ⚠️ **Sauf si la demande dit le contraire.** « Un chapitre par pays », « suis le plan de mon document », « une partie par siècle » : c'est l'utilisateur qui décide de la forme de son programme, et tu appliques sa consigne sans rien regrouper, même si certaines parties sont minuscules.
 
-**Écris pour être appris, pas pour faire nombre.** Des titres, des définitions nettes, des exemples ; ce que tu écris fera foi pour tout le reste de l'atelier, donc ce qui est faux ou vague le contaminera. ${input.maxLength} caractères au maximum — un cours de synthèse, pas un manuel.
+**Écris pour être appris, pas pour faire nombre.** Des sous-titres, des définitions nettes, des exemples ; ce que tu écris fera foi pour tout le reste de l'atelier, donc ce qui est faux ou vague le contaminera. ${input.maxLength} caractères au maximum — un cours de synthèse, pas un manuel.
 
 ${notRole}
 
@@ -773,7 +768,7 @@ ${retry.previous.length < PLAUSIBLE_CHAPTERS.min ? RETRY_TOO_FEW : RETRY_TOO_MAN
 `
     : '';
 
-  return `${again}${corpus}Tu reçois le TEXTE du cours, page par page — chaque page est précédée d'un marqueur « [page N] ». Certaines pages pauvres en texte te sont aussi montrées en image ; les autres images du cours ne te sont pas montrées.
+  return `${again}${corpus}Tu reçois le TEXTE du cours, page par page — chaque page est précédée d'un marqueur « [page N] ». **Les pages sont numérotées à la suite sur tout le cours, tous documents confondus** : un numéro désigne une seule page, et c'est par ces numéros seuls que tu situes un chapitre. Certaines pages pauvres en texte te sont aussi montrées en image ; les autres images du cours ne te sont pas montrées.
 
 Découpe ce cours en CHAPITRES : ses grandes parties, dans l'ordre où elles se lisent.
 
@@ -797,17 +792,19 @@ Donne à chacun une référence courte et unique (ch1, ch2…), et pour nom le t
 
 **Ce travail n'a rien de créatif : tu RELÈVES les parties du cours, tu ne les inventes pas.** Deux lectures du même cours doivent donner exactement les mêmes chapitres.
 
+**Un document intitulé « Notes IA … » est écrit par l'IA, partie par partie**, chaque partie sur sa propre page. Une partie qui porte le titre d'une partie du cours de l'utilisateur, ou d'un chapitre existant, la complète : c'est le même chapitre, avec les pages des deux documents. Les autres parties sont des chapitres à part entière, sous leur titre.
+
 **LES CHAPITRES EXISTANTS NE SONT PAS À PRÉSERVER.** Le programme de l'atelier est le découpage du cours que tu as sous les yeux, et rien d'autre. Un chapitre existant n'y reste que s'il correspond à une partie de ce cours — la même partie, sous le même titre ou presque : tu lui donnes alors son rang et ses pages au lieu de le recréer. **Tout chapitre existant qui ne correspond à aucune partie du cours sort**, même sur un sujet voisin, même si une notion du cours l'évoque en passant : rang 0, aucune page. Ce n'est pas une décision délicate, c'est la conséquence directe du découpage — et c'est le cas normal quand un cours en remplace un autre. Une sortie ne détruit rien : le chapitre est caché, et se restaure d'un clic.
 
-**Dans \`chapters\`, ne liste que les chapitres NOUVEAUX.** Ceux qui existent déjà sont listés plus haut avec leur référence : tu ne donnes que leur rang, dans \`chapterOrder\`. Un cours qu'on repasse à l'identique se répond donc avec un \`chapters\` VIDE, et c'est la bonne réponse.
+**Chaque chapitre existant a sa case dans \`existingChapters\`**, à son identifiant : tu les remplis TOUTES, sans exception — rang et pages s'il correspond à une partie du cours, rang 0 et raison sinon. **Dans \`chapters\`, ne liste que les chapitres NOUVEAUX**, avec leur rang et leurs pages. Un cours qu'on repasse à l'identique se répond donc avec un \`chapters\` VIDE, et c'est la bonne réponse.
 
-**L'ORDRE DU PROGRAMME, ET CE QUE LE COURS NE COUVRE PLUS.** Dans \`chapterOrder\`, donne son rang à chaque chapitre — ceux que tu viens de créer comme ceux qui existaient déjà —, à partir de 1 et dans l'ordre où le cours se lit. Seul l'ordre des rangs compte, pas leur valeur.
+**L'ORDRE DU PROGRAMME, ET CE QUE LE COURS NE COUVRE PLUS.** Chaque chapitre — ceux que tu viens de créer comme ceux qui existaient déjà — reçoit son rang, à partir de 1 et dans l'ordre où le cours se lit. Seul l'ordre des rangs compte, pas leur valeur.
 
 **Le rang 0 veut dire : le cours ne couvre plus ce chapitre.** Il sort du programme avec ce qu'il contient. Il est réservé aux chapitres qui existaient déjà — jamais un chapitre de ta propre réponse.
 
 Quand le cours traite toujours la même matière sous un autre découpage — une partie qui s'élargit ou se resserre —, la bonne réponse est de **créer le nouveau chapitre ET de mettre l'ancien à 0**, jamais de garder l'ancien sous un autre nom. Les notions encore d'actualité vont dans le nouveau ; celles que tu laisses dans l'ancien sortent du programme avec lui. C'est ce qui évite de porter deux fois la même partie sous deux noms.
 
-**SITUE CHAQUE CHAPITRE DANS LE COURS.** Pour chaque chapitre de rang 1 ou plus, donne dans \`spans\` le document et l'intervalle de pages qu'il occupe, d'après les marqueurs « [page N] » du texte, bornes incluses — plusieurs intervalles si le chapitre est éclaté, ou s'il s'étend sur plusieurs documents. L'étape suivante ne recevra QUE ces pages-là : une page que tu n'attribues à aucun chapitre ne sera lue par personne. Dans le doute, prends large ; deux chapitres peuvent partager une page de transition.
+**SITUE CHAQUE CHAPITRE DANS LE COURS.** Pour chaque chapitre de rang 1 ou plus, donne dans \`pages\` les intervalles de pages qu'il occupe, d'après les marqueurs « [page N] », bornes incluses — plusieurs intervalles si le chapitre est éclaté, ou s'il s'étend sur plusieurs documents. L'étape suivante ne recevra QUE ces pages-là : un document dont tu ne cites aucune page ne sera lu par personne. Dans le doute, prends large ; deux chapitres peuvent partager une page de transition.
 
 **UN VERDICT SUR CHAQUE NOTION EXISTANTE.** Les notions de l'atelier sont listées plus haut. Dans \`notionVerdicts\`, tu statues sur CHACUNE, sans exception — une notion que tu ne mentionnes pas est tenue pour oubliée. Deux réponses possibles :
 - **« chapter »**, avec la référence d'un chapitre au programme — existant ou de ta réponse : le cours la traite, dans ce chapitre.
@@ -1239,17 +1236,4 @@ Ce que chaque question doit porter en plus de son énoncé :
 Tu n'inventes aucun fait : tout ce qu'une question demande doit se déduire des notions ci-dessus.
 
 ⚠️ **UNE exception, et une seule : ce que la consigne de l'utilisateur te demande NOMMÉMENT d'écrire.** Si elle réclame une question sur un point précis que les notions ci-dessus ne portent pas, tu l'écris quand même — à partir de ce que tu sais établi, et sans jamais dire qu'elle sort du cours. **Et si aucune notion ne traite vraiment son sujet, laisse sa liste de notions VIDE** : c'est permis pour ce cas-là, et c'est ce qu'il faut faire. Ne lui accroche jamais une notion approchante pour remplir le champ — tu ferais dire à cette notion qu'elle est évaluée par une question qui ne la travaille pas, et c'est bien plus dommageable qu'une question sans notion. C'est lui l'auteur de cet examen : une demande qu'il a formulée explicitement ne se refuse pas au nom d'un cours qu'il a lui-même écrit, et il relira ce que tu produis. **Cette exception ne couvre QUE ce qu'il a nommé** — tout le reste de ce que tu écris reste strictement tiré des notions ci-dessus. En cas de doute sur ce qui est demandé, tu écris la question : rendre zéro question est la seule issue qui ne sert à personne.`;
-}
-
-/** Les REDITES entre chapitres (§7.6). Un seul appel, sans document : il ne
- *  répond que « redite ou pas », paire par paire. Qui s'efface ne se demande
- *  pas au modèle — c'est toujours la nouvelle, et le code le garantit. */
-export function reditesInstruction(pairs: readonly { candidate: string; other: string }[]): string {
-  return `Des notions ont été extraites chapitre par chapitre, sans que chaque chapitre voie les autres. Un calcul automatique a repéré les paires ci-dessous : deux notions de l'atelier qui se ressemblent. **Ce calcul ne juge rien** : il compare des mots. C'est à toi de dire, pour chaque paire, si c'est une REDITE.
-
-${pairs.map((p, i) => `${i}. « ${p.candidate} » ↔ « ${p.other} »`).join('\n')}
-
-Une paire est une redite si les deux notions énoncent le MÊME fait — mêmes chiffres, mêmes noms, mêmes dates, mêmes termes —, même tourné autrement ou dans un autre ordre. Ce n'est PAS une redite si l'une apporte un fait vérifiable de plus : quelque chose qu'on pourrait demander à un élève et dont la réponse est absente de l'autre.
-
-Réponds pour CHAQUE paire, par son numéro. Dans le doute, ce n'est pas une redite.`;
 }

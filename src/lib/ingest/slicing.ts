@@ -50,8 +50,8 @@ export interface ChapterSlice {
 
 export interface SlicingResult {
   chapters: ChapterSlice[];
-  /** Documents qu'aucune borne ne couvrait : ils partent en entier dans
-   *  chaque chapitre plutôt que de disparaître. Pour le compte-rendu. */
+  /** Documents qu'aucune borne ne couvrait : aucun chapitre ne les reçoit.
+   *  Pour le compte-rendu. */
   uncoveredDocuments: string[];
 }
 
@@ -70,12 +70,16 @@ export function usableSpan(span: PageSpan, pageCount: number): { from: number; t
  *
  * - Chevauchement : les deux chapitres gardent la page.
  * - Page orpheline : rattachée au chapitre qui couvre la page couverte la plus
- *   proche AVANT elle ; au premier chapitre du document si elle précède tout.
+ *   proche AVANT elle, **dans le même document**. Une page qui précède toute
+ *   page couverte de son document n'a pas de chapitre précédent : personne ne
+ *   la reçoit (souvent une page de titre, ou l'en-tête du document de l'IA).
  * - Chapitre sans aucune borne exploitable : il ne reçoit rien. Il n'arrive
  *   pas jusqu'ici — un chapitre sans page sort du programme dès l'étape
  *   chapitres (§7.6). Lui donner le cours entier, comme on le faisait, lui
  *   faisait réécrire tout le cours sous son titre.
- * - Document que rien ne couvre : en entier dans chaque chapitre.
+ * - Document que rien ne couvre : personne ne le reçoit, et c'est rendu au
+ *   compte-rendu. L'envoyer en entier à chaque chapitre, comme on le faisait,
+ *   recréait la même duplication (06/10/2026).
  */
 export function sliceChapters(
   chapters: readonly ChapterBounds[],
@@ -112,7 +116,6 @@ export function sliceChapters(
       .filter((ci) => pages[ci].has(doc.id));
     if (covering.length === 0) {
       uncoveredDocuments.push(doc.id);
-      chapters.forEach((_, ci) => pages[ci].set(doc.id, null));
       continue;
     }
     if (doc.pageCount === null) continue;
@@ -127,14 +130,13 @@ export function sliceChapters(
         if (owner[p] === undefined) owner[p] = ci;
       }
     }
-    const firstCovered = owner.findIndex((o, p) => p >= 1 && o !== undefined);
-    let previous = owner[firstCovered] as number;
+    let previous: number | undefined;
     for (let p = 1; p <= doc.pageCount; p++) {
       if (owner[p] !== undefined) {
         previous = owner[p] as number;
         continue;
       }
-      (pages[previous].get(doc.id) as Set<number>).add(p);
+      if (previous !== undefined) (pages[previous].get(doc.id) as Set<number>).add(p);
     }
   }
 

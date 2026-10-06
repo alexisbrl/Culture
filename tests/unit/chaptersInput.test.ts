@@ -12,6 +12,9 @@ import {
   TEXT_PAGE_CHARS,
   textExtract,
   textPages,
+  corpusText,
+  localizeSpans,
+  lotLayout,
 } from '@/lib/ingest/chaptersInput';
 import { readPdfText } from '@/lib/ingest/pdf';
 import type { PreparedDocument, SourceDocument } from '@/lib/ingest/providers/types';
@@ -262,5 +265,41 @@ describe('composeChapterSlices — les seules pages du chapitre (§7.3)', () => 
   it('pageRanges', () => {
     expect(pageRanges([3, 4, 5, 9])).toBe('3 à 5, 9');
     expect(pageRanges([2])).toBe('2');
+  });
+});
+
+describe('la numérotation unique du lot', () => {
+  const docs = [
+    { fileId: 'a', fileName: 'a.pdf', pageCount: 3, pages: ['1', '2', '3'], text: null },
+    { fileId: 'x', fileName: 'x.docx', pageCount: null, pages: null, text: '' },
+    { fileId: 'b', fileName: 'b.md', pageCount: 2, pages: ['4', '5'], text: null },
+  ];
+
+  it('les pages se suivent d’un document à l’autre ; un document illisible n’a aucun numéro', () => {
+    expect(lotLayout(docs)).toEqual([
+      { fileId: 'a', offset: 0, pageCount: 3 },
+      { fileId: 'x', offset: 3, pageCount: 0 },
+      { fileId: 'b', offset: 3, pageCount: 2 },
+    ]);
+  });
+
+  it('un intervalle se rend à ses documents, coupé en deux s’il est à cheval', () => {
+    const layout = lotLayout(docs);
+    expect(localizeSpans([{ from: 2, to: 4 }], layout)).toEqual([
+      { document: 'a', from: 2, to: 3 },
+      { document: 'b', from: 1, to: 1 },
+    ]);
+    expect(localizeSpans([{ from: 5, to: 9 }], layout)).toEqual([{ document: 'b', from: 2, to: 2 }]);
+  });
+
+  it('ce qui tombe hors du lot, ou à l’envers, est ignoré', () => {
+    const layout = lotLayout(docs);
+    expect(localizeSpans([{ from: 8, to: 9 }, { from: 3, to: 1 }, { from: 0, to: 0 }], layout)).toEqual([]);
+  });
+
+  it('le texte du cours porte les numéros du lot', () => {
+    const text = corpusText(docs, new Map());
+    expect(text).toContain('[page 4]\n4');
+    expect(text).toContain('(document illisible : il ne sera lu par aucun chapitre)');
   });
 });

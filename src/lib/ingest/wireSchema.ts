@@ -351,6 +351,47 @@ export const wireChaptersOutput = z.object({
   notionVerdicts: z.array(wireNotionVerdictSchema),
 });
 
+/** Un intervalle de pages, dans la numérotation UNIQUE du lot (06/10/2026) :
+ *  un numéro désigne une seule page, tous documents confondus. */
+export const wirePageRangeSchema = z.object({
+  pageStart: z.number().int().describe('Première page, d’après les marqueurs « [page N] ».'),
+  pageEnd: z.number().int().describe('Dernière page (incluse).'),
+});
+
+const pagesField = z
+  .array(wirePageRangeSchema)
+  .describe('Les pages du chapitre : un intervalle, plusieurs s’il est éclaté. Liste vide pour un rang 0.');
+
+/** La réponse de l'étape chapitres, construite POUR CHAQUE génération
+ *  (06/10/2026) : **une case obligatoire par chapitre existant**, clé = son
+ *  identifiant. Le modèle ne peut plus en oublier un — il le garde (rang et
+ *  pages) ou l'écarte (rang 0 et raison), toujours explicitement. Les chapitres
+ *  neufs portent eux aussi leur rang et leurs pages.
+ *
+ *  Une seule forme par case plutôt qu'une alternative « gardé / écarté » : une
+ *  alternative répétée pour chaque chapitre alourdit le format au point de
+ *  risquer le refus. La règle « sans pages, il sort » reste derrière, côté
+ *  serveur. `normalizeChaptersAnswer` ramène cette réponse à la forme commune. */
+export function wireChaptersOutputFor(existingChapterIds: readonly string[]) {
+  const existing = Object.fromEntries(existingChapterIds.map((id) => [id, z.object({
+    rank: z.number().int().min(0).describe("Sa place dans le programme, à partir de 1. 0 : il ne correspond à aucune partie du cours, il sort du programme."),
+    reason: z.string().describe("Pour un rang 0 : en quelques mots, pourquoi. S'affiche à l'utilisateur. Chaîne vide sinon."),
+    pages: pagesField,
+  })]));
+  return z.object({
+    chapters: z
+      .array(wireChapterSchema.extend({
+        rank: z.number().int().min(1).describe('Sa place dans le programme, à partir de 1.'),
+        pages: pagesField,
+      }))
+      .describe('Les chapitres NOUVEAUX seulement.'),
+    existingChapters: z
+      .object(existing)
+      .describe('Une case pour CHAQUE chapitre existant, clé = son identifiant : à remplir toutes, sans exception.'),
+    notionVerdicts: z.array(wireNotionVerdictSchema),
+  });
+}
+
 /** La relance de l'étape chapitres : les chapitres sont déjà écrits, on ne
  *  redemande que les verdicts des notions oubliées. */
 export const wireChaptersRelaunchOutput = z.object({
@@ -379,16 +420,21 @@ export type WireGroupsOutput = z.infer<typeof wireGroupsOutput>;
  *  (@/lib/decision). Le laisser au modèle, c'est ce qui lui faisait rédiger un
  *  cours entier à l'aveugle pour annoncer sa décision (24/09/2026).
  *
- *  • `document.content` — le corps COMPLET, jamais un extrait à recoller : un
- *    remplacement se vérifie, un rapiéçage non.
+ *  • `document.parts` — le document COMPLET, partie par partie (titre +
+ *    contenu), jamais un extrait à recoller : un remplacement se vérifie, un
+ *    rapiéçage non. Une partie devient une page, donc un chapitre se découpe
+ *    pile sur ses parties (§7.3).
  *  • `dropped` — une partie de la consigne a été écartée. Invisible pour
  *    l'utilisateur (décision du 04/09/2026), enregistrée au journal : c'est ce
  *    qui dira si le champ sert à autre chose qu'à demander du cours. */
 export const wireResourceOutput = z.object({
   document: z.object({
-    content: z
-      .string()
-      .describe('Le corps COMPLET de ton document, en Markdown.'),
+    parts: z
+      .array(z.object({
+        title: z.string().describe('Le titre de la partie, sans numéro. Pour compléter ou corriger une partie du cours de l’utilisateur, reprends son titre à l’identique.'),
+        content: z.string().describe('Ce que la partie enseigne, en Markdown, sans répéter son titre. Sous-titres de troisième niveau (###) au plus.'),
+      }))
+      .describe('Ton document COMPLET, partie par partie, dans l’ordre de lecture.'),
     summary: z.string().describe('Ce que tu as fait, en une phrase. Ne sera lu par personne d’autre qu’un journal technique.'),
   }),
   instruction: z
@@ -438,14 +484,3 @@ export const wireResourceOutputExam = z.object({
 });
 
 export type WireResourceOutput = z.infer<typeof wireResourceOutput>;
-
-/** Les REDITES entre chapitres (§7.6) : pour chaque paire soumise, redite ou
- *  pas — rien d'autre. Qui s'efface est décidé par le code, jamais ici. */
-export const wireReditesOutput = z.object({
-  verdicts: z.array(
-    z.object({
-      pair: z.number().int().describe('Le numéro de la paire, tel qu’il est donné dans la liste.'),
-      duplicate: z.boolean().describe('true si les deux notions disent le même fait, false si l’une apporte un fait vérifiable de plus.'),
-    }),
-  ),
-});

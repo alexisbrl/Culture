@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parsePlan, planSchema, shortenChapterName } from '@/lib/ingest/planSchema';
+import { normalizeChaptersAnswer, parsePlan, planSchema, shortenChapterName } from '@/lib/ingest/planSchema';
 import { MAX_CHOICES, MAX_LIST_ANSWERS } from '@/lib/workshops/examTypes';
 
 // Le contrat d'entrée de l'ingestion. Deux propriétés à tenir, et elles tirent
@@ -685,5 +685,48 @@ describe('parsePlan — étape chapitres : bornes et verdicts (§7.2, §7.6)', (
         ],
       },
     ]);
+  });
+});
+
+describe('normalizeChaptersAnswer — une case par chapitre existant', () => {
+  const answer = {
+    chapters: [{ ref: 'ch1', name: 'Neuf', rank: 1, pages: [{ pageStart: 1, pageEnd: 3 }] }],
+    existingChapters: {
+      c1: { rank: 2, reason: '', pages: [{ pageStart: 4, pageEnd: 6 }] },
+      c2: { rank: 0, reason: 'plus au programme', pages: [] },
+    },
+    notionVerdicts: [{ notion: 'n1', verdict: 'out', chapter: '' }],
+  };
+
+  it('rend la forme commune : les neufs, puis le rang et les pages de chacun', () => {
+    expect(normalizeChaptersAnswer(answer)).toEqual({
+      chapters: [{ ref: 'ch1', name: 'Neuf' }],
+      chapterOrder: [
+        { ref: 'ch1', rank: 1, reason: '', spans: [{ document: '', pageStart: 1, pageEnd: 3 }] },
+        { ref: 'c1', rank: 2, reason: '', spans: [{ document: '', pageStart: 4, pageEnd: 6 }] },
+        { ref: 'c2', rank: 0, reason: 'plus au programme', spans: [] },
+      ],
+      notionVerdicts: answer.notionVerdicts,
+    });
+  });
+
+  it('passe par parsePlan sans rien perdre, et le rang 0 écarte', () => {
+    const plan = parsePlan(normalizeChaptersAnswer(answer), { chapterIds: ['c1', 'c2'], notionIds: ['n1'] });
+    expect(plan.chapters.map((c) => c.ref)).toEqual(['ch1']);
+    expect(plan.chapterOrder).toEqual([
+      { ref: 'ch1', rank: 1, reason: '' },
+      { ref: 'c1', rank: 2, reason: '' },
+      { ref: 'c2', rank: 0, reason: 'plus au programme' },
+    ]);
+    expect(plan.chapterBounds).toEqual([
+      { ref: 'ch1', spans: [{ document: '', from: 1, to: 3 }] },
+      { ref: 'c1', spans: [{ document: '', from: 4, to: 6 }] },
+    ]);
+  });
+
+  it('une réponse d’une autre forme passe telle quelle, pour que parsePlan en juge', () => {
+    expect(normalizeChaptersAnswer(null)).toBeNull();
+    const old = { chapters: [], chapterOrder: [], notionVerdicts: [] };
+    expect(normalizeChaptersAnswer(old)).toBe(old);
   });
 });

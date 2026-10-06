@@ -13,8 +13,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MAX_GENERATED_LENGTH,
+  bodyFromParts,
   composeDocument,
   extractBody,
+  generatedFileName,
   questionCountFromHint,
   readResourceOutput,
   writingQuestion,
@@ -124,11 +126,36 @@ describe('le document et son en-tête', () => {
   });
 
   it('porte une en-tête qui le dit écrit par l’IA', () => {
-    const document = composeDocument('Du contenu.');
-    expect(document).toContain('écrit par l’IA');
+    const document = composeDocument('Du contenu.', new Date('2026-10-06T10:00:00Z'), 'Workshop 13');
+    expect(document).toContain('# Notes IA — Workshop 13');
+    expect(document).toContain('rédigé par l’IA');
     // L'en-tête est posée par NOUS à chaque écriture : c'est ce qui garantit
     // qu'elle est là, même si le modèle ne l'a pas reproduite.
-    expect(document.indexOf('Du contenu.')).toBeGreaterThan(document.indexOf('écrit par l’IA'));
+    expect(document.indexOf('Du contenu.')).toBeGreaterThan(document.indexOf('rédigé par l’IA'));
+  });
+
+  it('se nomme « Notes IA [atelier] - [date] », sans caractère interdit dans un nom de fichier', () => {
+    expect(generatedFileName('Workshop 13', new Date('2026-10-06T10:00:00Z'))).toBe('Notes IA Workshop 13 - 06-10-2026.md');
+    expect(generatedFileName('Histoire / Géo', new Date('2026-10-06T10:00:00Z'))).toBe('Notes IA Histoire Géo - 06-10-2026.md');
+    expect(generatedFileName(null, new Date('2026-10-06T10:00:00Z'))).toBe('Notes IA - 06-10-2026.md');
+  });
+
+  it('se recompose partie par partie, un titre de section par partie et un seul', () => {
+    const body = bodyFromParts([
+      { title: ' Jacob  Bernoulli ', content: 'Texte.\n\n## Un titre égaré\n\n### Un sous-titre' },
+      { title: 'Vide', content: '   ' },
+      { title: 'Daniel', content: 'Autre texte.' },
+    ]);
+    expect(body).toBe('## Jacob Bernoulli\n\nTexte.\n\n### Un titre égaré\n\n### Un sous-titre\n\n## Daniel\n\nAutre texte.');
+  });
+
+  it('lit une réponse rendue par parties', () => {
+    const out = readResourceOutput({
+      document: { parts: [{ title: 'A', content: 'a' }, { title: 'B', content: 'b' }, { nope: 1 }], summary: '' },
+      instruction: '',
+      dropped: false,
+    });
+    expect(out.body).toBe('## A\n\na\n\n## B\n\nb');
   });
 
   it('un document sans marque est rendu tel quel plutôt que perdu', () => {

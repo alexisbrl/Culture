@@ -58,12 +58,12 @@ import { MAX_NOTIONS_PER_WORKSHOP, countNotions } from '@/lib/workshops/notions'
 import {
   dropNearDuplicates,
   dropRepeatedQuestions,
-  judgeRedites,
-  judgedDuplicates,
   rediteCandidates,
+  rediteQuestion,
   rediteWrites,
   resolveRedites,
   type RediteNotion,
+  type ReditePair,
 } from './duplicates';
 import {
   contextNotions,
@@ -76,7 +76,7 @@ import {
 } from './passInput';
 import { classifyFailure, logStep, markOutcome, withRetry, type Attempted, type StepName } from './journal';
 import {
-  GENERATED_FILE_NAME,
+  generatedFileName,
   GENERATED_MIME_TYPE,
   composeDocument,
   extractBody,
@@ -93,7 +93,7 @@ import {
   type QuestionDemand,
 } from './demand';
 import { BUSY_ERROR, CLOSED_ERROR, assertImportOpen, closeImport, liveImportOf } from './lock';
-import { parsePlan, type PlanIssue } from './planSchema';
+import { normalizeChaptersAnswer, parsePlan, type PlanIssue } from './planSchema';
 import {
   classifyNotions,
   forgottenIds,
@@ -111,7 +111,7 @@ import {
   type NotionVerdict,
   type ThresholdDecision,
 } from './verdicts';
-import { chaptersWithPages, composeChapterSlices, composeChaptersInput, resolveDocumentName, sourcePageOf } from './chaptersInput';
+import { chaptersWithPages, composeChapterSlices, composeChaptersInput, localizeSpans, resolveDocumentName, sourcePageOf } from './chaptersInput';
 import type { PageSpan } from './slicing';
 import { releaseDocuments } from './release';
 import {
@@ -1076,7 +1076,7 @@ async function resourceStep(
   // contrainte pourrait un jour en renvoyer un quand même. L'invariant « on
   // n'écrit que ce qui a été décidé » se tient ici, où l'écriture a lieu.
   if (write && outcome.body) {
-    const file = await writeGeneratedFile(workshopId, actorId, outcome.body, existing);
+    const file = await writeGeneratedFile(workshopId, actorId, outcome.body, existing, workshop?.name);
     if (file) {
       written = true;
       // Le document rejoint le lot : sans ce téléversement, il existerait dans
@@ -1173,17 +1173,20 @@ async function writeGeneratedFile(
   actorId: string,
   body: string,
   existing: { id: string; storagePath: string } | null,
+  workshopName?: string | null,
 ): Promise<{ fileId: string; key: string; fileName: string; mimeType: string; bytes: Uint8Array } | null> {
-  const content = composeDocument(body);
+  const writtenAt = new Date();
+  const fileName = generatedFileName(workshopName, writtenAt);
+  const content = composeDocument(body, writtenAt, workshopName);
   const bytes = new TextEncoder().encode(content);
-  const key = buildWorkshopFileKey(workshopId, GENERATED_FILE_NAME);
+  const key = buildWorkshopFileKey(workshopId, fileName);
 
   if (!(await writeObject(key, bytes, GENERATED_MIME_TYPE))) return null;
 
   const supabase = getSupabaseServerClient();
   const row = {
     workshop_id: workshopId,
-    name: GENERATED_FILE_NAME,
+    name: fileName,
     size: bytes.byteLength,
     mime_type: GENERATED_MIME_TYPE,
     category: 'texte',
@@ -1210,7 +1213,7 @@ async function writeGeneratedFile(
   return {
     fileId: data.id as string,
     key,
-    fileName: GENERATED_FILE_NAME,
+    fileName,
     mimeType: GENERATED_MIME_TYPE,
     bytes,
   };
@@ -1456,7 +1459,10 @@ export async function ingestChapters(
           retry,
         }));
         await addImportUsage(importId, attempt.result.usage);
-        const parsed = parsePlanLogged('chapitres', attempt.result.plan, refs, attempt.result.truncated);
+        const parsed = parsePlanLogged('chapitres', normalizeChaptersAnswer(attempt.result.plan), refs, attempt.result.truncated);
+        // Les pages sont citées dans la numérotation unique du lot : on les rend
+        // à leurs documents, une fois pour toutes (§7.3).
+        parsed.chapterBounds = parsed.chapterBounds.map((b) => ({ ref: b.ref, spans: localizeSpans(b.spans, input.layout) }));
         await stepDone(meta, attempt, {
           proposes: parsed.chapters.length,
           verdicts: parsed.notionVerdicts.length,
@@ -1477,6 +1483,11 @@ export async function ingestChapters(
     // chapitre existant sans page sort — caché, jamais effacé.
     const paged = pagedOf(plan);
     const fresh = createdChapters(plan);
+    // Un document qu'aucun chapitre ne cite n'est lu par personne (§7.3) : le dire.
+    const cited = new Set(plan.chapterBounds.flatMap((b) => b.spans.map((s) => s.document)));
+    for (const doc of input.layout.filter((d) => !cited.has(d.fileId))) {
+      plan.adjusted.push({ kind: 'chapter', reason: `« ${input.fileNames[doc.fileId]} » n’est rattaché à aucun chapitre : il n’a été lu par personne` });
+    }
     for (const c of plan.chapters.filter((c) => !paged.has(c.ref))) {
       plan.adjusted.push({ kind: 'chapter', ref: c.ref, reason: `« ${c.name} » non créé : aucune page du cours ne lui est attribuée` });
     }
@@ -2234,41 +2245,78 @@ export type RedundancyResult = {
 export async function ingestRedites(
   workshopId: string,
   importId: string,
-  options: { provider?: PlanProvider } = {},
+  options: { decider?: Decider } = {},
 ): Promise<RedundancyResult> {
   const [stage1, rows] = await Promise.all([stage1Of(importId), loadNotionsToArrange(workshopId)]);
   const programOrder = stage1.chapters.map((c) => c.id);
   const notions = rediteNotionsOf(rows, programOrder, importId);
 
   const pairs = rediteCandidates(notions);
-  const answers = await judgeRedites(pairs, async (submitted) => {
-    // Créé seulement s'il y a des paires : sans elles, aucun appel, aucune clé.
-    const used = options.provider ?? createClaudeProvider({ userHint: await userHintOf(importId) });
-    const meta: StepMeta = { importId, workshopId, step: 'redites', provider: used };
-    const call = await modelCall(meta, () => used.documentToPlan([], EMPTY, {
-      pass: 'redites',
-      pairs: submitted.map((p) => ({ candidate: p.a.title, other: p.b.title })),
-    }));
-    await addImportUsage(importId, call.result.usage);
-    const raw = (call.result.plan as { verdicts?: unknown } | null)?.verdicts;
-    const verdicts = (Array.isArray(raw) ? raw : []).flatMap((v) => {
-      const r = v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
-      return typeof r.pair === 'number' && typeof r.duplicate === 'boolean' ? [{ pair: r.pair, duplicate: r.duplicate }] : [];
-    });
-    await stepDone(meta, call, {
-      paires: submitted.length,
-      redites: verdicts.filter((v) => v.duplicate).length,
-      illisibles: (Array.isArray(raw) ? raw.length : 0) - verdicts.length,
-    });
-    return verdicts;
-  });
+  const duplicates = pairs.length === 0 ? [] : await judgeRedites(workshopId, importId, pairs, options.decider ?? getDecider());
 
-  const duplicates = judgedDuplicates(pairs, answers);
   // Le compte annoncé à l'écran : le geste lui-même se recalcule au ménage de
   // fin, sur l'état de l'atelier à ce moment-là.
-  const { actions } = resolveRedites(duplicates, new Map(notions.map((n) => [n.id, n])), programOrder);
-  const removed = actions.filter((a) => a.kind === 'merge' && notions.find((n) => n.id === a.remove)?.fresh).length;
+  const byId = new Map(notions.map((n) => [n.id, n]));
+  const actions = rediteWrites(resolveRedites(duplicates, byId, programOrder).actions, byId);
+  const removed = actions.filter((a) => a.kind !== 'unplace').length;
   return { pairs: pairs.length, removed, duplicates, adjusted: [] };
+}
+
+/** Combien de questions de redite partent en même temps. Assez pour trancher
+ *  300 paires en une vingtaine de secondes, sans saturer le débit du compte. */
+const REDITE_CONCURRENCY = 20;
+
+/** Tranche chaque paire par une question fermée au décideur (§7.6) — Jev à
+ *  terme, Haiku en attendant —, toutes en parallèle par paquets. Rend les paires
+ *  jugées redites. **Une réponse manquante ou illisible vaut « non »** : une
+ *  redite qui reste se retire au passage suivant, une notion retirée à tort se
+ *  perd. Une ligne au journal pour l'ensemble, pas une par paire. */
+async function judgeRedites(
+  workshopId: string,
+  importId: string,
+  pairs: readonly ReditePair[],
+  decider: Decider,
+): Promise<{ a: string; b: string }[]> {
+  const started = Date.now();
+  const usage = { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cachedTokens: 0 };
+  let model: string | undefined;
+  let unreadable = 0;
+  const duplicates: { a: string; b: string }[] = [];
+
+  let next = 0;
+  const worker = async () => {
+    while (next < pairs.length) {
+      const pair = pairs[next++];
+      try {
+        const { result } = await withRetry(() => decider.decide(rediteQuestion(pair.a, pair.b)));
+        model ??= result.model;
+        usage.inputTokens += result.usage.inputTokens;
+        usage.outputTokens += result.usage.outputTokens;
+        usage.cacheCreationTokens += result.usage.cacheCreationTokens;
+        usage.cachedTokens += result.usage.cachedTokens;
+        const probability = readProbability(result.probability);
+        if (probability === null) unreadable += 1;
+        else if (isYes(probability)) duplicates.push({ a: pair.a.id, b: pair.b.id });
+      } catch {
+        unreadable += 1;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(REDITE_CONCURRENCY, pairs.length) }, worker));
+
+  await addImportUsage(importId, usage);
+  await logStep({
+    importId,
+    workshopId,
+    step: 'redites',
+    provider: decider.name,
+    model,
+    status: 'ok',
+    durationMs: Date.now() - started,
+    usage,
+    produced: { paires: pairs.length, redites: duplicates.length, illisibles: unreadable },
+  });
+  return duplicates;
 }
 
 /** Les notions au programme de ce lot, telles que les redites les jugent. */
@@ -2348,7 +2396,9 @@ async function applyRedites(
       continue;
     }
     await reattachQuestions(action.remove, action.keep);
-    await transferMastery(action.remove, action.keep);
+    // La notion effacée est toujours une neuve : en cas de doublon, l'élève
+    // garde la progression de celle qui reste.
+    await transferMastery(action.remove, action.keep, { onClash: 'keepTarget' });
     if (action.moveTo) await applyAssignments(workshopId, [{ notionRef: action.keep, chapterRef: action.moveTo }], new Map(), current);
     removed.push(action.remove);
     adjusted.push({

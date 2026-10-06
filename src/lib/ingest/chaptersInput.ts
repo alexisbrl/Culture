@@ -45,19 +45,23 @@ export const TEXT_PAGE_CHARS = 3000;
  * le 06/10/2026 : un cours de l'IA sur les Bernoulli, quatre chapitres, 173
  * paires de redites à trancher et cinq minutes d'attente.
  *
- * Un titre de niveau 1 ou 2 ouvre toujours une page — un document de l'IA est
- * titré, et un chapitre tombe alors pile sur ses pages. Sinon on coupe entre deux
- * paragraphes, au-delà de `TEXT_PAGE_CHARS` ; un paragraphe plus long qu'une
- * page reste entier.
+ * **Un document titré se coupe sur ses titres, et seulement là** : un titre de
+ * niveau 1 ou 2 ouvre une page, quelle que soit la longueur de la précédente. Le
+ * document de l'IA s'écrit partie par partie (`bodyFromParts`) : une partie y est
+ * donc exactement une page, et un chapitre tombe pile sur ses parties. Un texte
+ * sans aucun titre se coupe entre deux paragraphes, au-delà de
+ * `TEXT_PAGE_CHARS` ; un paragraphe plus long qu'une page reste entier.
  */
 export function textPages(text: string): string[] {
   const paragraphs = text.replace(/\r\n/g, '\n').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  const isHeading = (p: string) => /^#{1,2}\s/.test(p);
+  const titled = paragraphs.some(isHeading);
   const pages: string[] = [];
   let current: string[] = [];
   let size = 0;
   for (const paragraph of paragraphs) {
-    const heading = /^#{1,2}\s/.test(paragraph);
-    if (current.length > 0 && (heading || size + paragraph.length > TEXT_PAGE_CHARS)) {
+    const cut = titled ? isHeading(paragraph) : size + paragraph.length > TEXT_PAGE_CHARS;
+    if (current.length > 0 && cut) {
       pages.push(current.join('\n\n'));
       current = [];
       size = 0;
@@ -98,15 +102,64 @@ export function imageDocumentName(fileName: string, pages: readonly number[]): s
   return `${fileName} — pages ${pages.join(', ')} en image`;
 }
 
-/** Le texte du cours tel que le lit l'étape chapitres : chaque document sous
- *  son nom, chaque page sous son marqueur « [page N] ». */
-export function corpusText(documents: readonly DocumentText[], images: ReadonlyMap<string, number[]>): string {
-  const parts: string[] = [];
+/** La place d'un document dans la numérotation du lot : ses pages y portent
+ *  les numéros `offset + 1` à `offset + pageCount`. */
+export interface LotDocument {
+  fileId: string;
+  offset: number;
+  pageCount: number;
+}
+
+/**
+ * **Une seule numérotation pour tout le lot** (06/10/2026) : les pages se suivent
+ * d'un document à l'autre, et un numéro désigne une seule page. L'étape
+ * chapitres ne cite plus que des numéros — jamais un nom de document, qu'on
+ * devait relier au bon fichier et que deux fichiers homonymes rendaient
+ * ambigu. Un document sans pages lisibles n'a aucun numéro : il ne peut pas
+ * être cité, donc personne ne le reçoit. **Fonction pure.**
+ */
+export function lotLayout(documents: readonly DocumentText[]): LotDocument[] {
+  const layout: LotDocument[] = [];
+  let offset = 0;
   for (const doc of documents) {
+    const pageCount = doc.pages?.length ?? 0;
+    layout.push({ fileId: doc.fileId, offset, pageCount });
+    offset += pageCount;
+  }
+  return layout;
+}
+
+/** Ramène les intervalles du lot, tels que l'étape chapitres les rend, aux pages
+ *  de chaque document. Un intervalle à cheval sur deux documents se coupe en
+ *  deux ; ce qui tombe hors du lot est ignoré. Le document est désigné par son
+ *  identifiant. **Fonction pure.** */
+export function localizeSpans(
+  spans: readonly { from: number; to: number }[],
+  layout: readonly LotDocument[],
+): { document: string; from: number; to: number }[] {
+  const out: { document: string; from: number; to: number }[] = [];
+  for (const span of spans) {
+    if (!Number.isInteger(span.from) || !Number.isInteger(span.to) || span.to < span.from) continue;
+    for (const doc of layout) {
+      const from = Math.max(span.from, doc.offset + 1);
+      const to = Math.min(span.to, doc.offset + doc.pageCount);
+      if (from <= to) out.push({ document: doc.fileId, from: from - doc.offset, to: to - doc.offset });
+    }
+  }
+  return out;
+}
+
+/** Le texte du cours tel que le lit l'étape chapitres : chaque document sous
+ *  son nom, chaque page sous son marqueur « [page N] », numéroté à la suite sur
+ *  tout le lot (`lotLayout`). */
+export function corpusText(documents: readonly DocumentText[], images: ReadonlyMap<string, number[]>): string {
+  const layout = lotLayout(documents);
+  const parts: string[] = [];
+  documents.forEach((doc, d) => {
     parts.push(`=== Document « ${doc.fileName} » ===`);
     if (doc.pages === null) {
-      parts.push(doc.text?.trim() || '(document vide)');
-      continue;
+      parts.push('(document illisible : il ne sera lu par aucun chapitre)');
+      return;
     }
     const inImage = images.get(doc.fileId) ?? [];
     doc.pages.forEach((text, i) => {
@@ -115,10 +168,10 @@ export function corpusText(documents: readonly DocumentText[], images: ReadonlyM
       const note = k >= 0
         ? ` (peu de texte : cette page est jointe en image dans « ${imageDocumentName(doc.fileName, inImage)} », page ${k + 1})`
         : '';
-      parts.push(`[page ${page}]${note}`);
+      parts.push(`[page ${layout[d].offset + page}]${note}`);
       if (text.trim()) parts.push(text.trim());
     });
-  }
+  });
   return parts.join('\n');
 }
 
@@ -130,8 +183,11 @@ export interface ChaptersInput {
   images: PreparedDocument[];
   /** Le nombre de pages de chaque document (`null` : document sans pages). */
   pageCounts: Record<string, number | null>;
-  /** Le nom de chaque document, pour relier une borne rendue à son document. */
+  /** Le nom de chaque document, pour le compte-rendu et la consigne. */
   fileNames: Record<string, string>;
+  /** La numérotation unique du lot, pour ramener les bornes rendues aux pages
+   *  de chaque document (`localizeSpans`). */
+  layout: LotDocument[];
 }
 
 /**
@@ -170,6 +226,7 @@ export async function composeChaptersInput(
     images: toSend.length > 0 ? await prepare(toSend) : [],
     pageCounts: Object.fromEntries(texts.map((t) => [t.fileId, t.pageCount])),
     fileNames: Object.fromEntries(texts.map((t) => [t.fileId, t.fileName])),
+    layout: lotLayout(texts),
   };
 }
 
@@ -177,6 +234,9 @@ export async function composeChaptersInput(
  *  et les espaces ne comptent pas ; un nom inconnu ne désigne rien — sauf s'il
  *  n'y a qu'un document, qui est alors forcément celui-là. */
 export function resolveDocumentName(name: string, fileNames: Readonly<Record<string, string>>): string | null {
+  // L'identifiant d'un document du lot le désigne sans ambiguïté : c'est ce
+  // que portent les bornes depuis la numérotation unique (`localizeSpans`).
+  if (Object.hasOwn(fileNames, name)) return name;
   const wanted = name.trim().toLowerCase();
   const entries = Object.entries(fileNames);
   const found = entries.find(([, fileName]) => fileName.trim().toLowerCase() === wanted);

@@ -25,7 +25,6 @@ import {
   chaptersInstruction,
   chaptersRelaunchInstruction,
   chapterNotionsInstruction,
-  reditesInstruction,
   userHintBlock,
   existingContentBlock,
   examInstruction,
@@ -37,10 +36,9 @@ import {
 } from '@/lib/ingest/prompt';
 import { documentsForPass } from '@/lib/ingest/passInput';
 import {
-  wireChaptersOutput,
+  wireChaptersOutputFor,
   wireChaptersRelaunchOutput,
   wireChapterNotionsOutput,
-  wireReditesOutput,
   wireExamGroupsOutput,
   wireGroupsOutput,
   wireResourceOutput,
@@ -200,9 +198,8 @@ export const PASS_MODELS: Record<IngestScope['pass'], ModelId> = {
   notions: MODELS.sonnet,
   questions: MODELS.haiku,
   exam: MODELS.haiku,
-  // Juger si deux phrases disent le même fait : un jugement, et une notion
-  // effacée à tort ne revient pas. Un seul appel par génération.
-  redites: MODELS.sonnet,
+  // Les redites ne passent plus par ici : une question fermée par paire, au
+  // décideur (@/lib/decision), depuis le 06/10/2026.
 };
 
 /** Le repli quand la fenêtre du modèle voulu ne suffit pas. Sonnet 5 et non
@@ -347,8 +344,6 @@ function instructionFor(scope: IngestScope): string {
         budget: scope.budget,
         grouped: scope.grouped,
       });
-    case 'redites':
-      return reditesInstruction(scope.pairs);
   }
 }
 
@@ -372,8 +367,6 @@ function existingScopeFor(scope: IngestScope): ExistingScope {
       // (`loadExamQuestions`) rend déjà exactement ce qu'il faut — la portée ne
       // doit donc rien retirer de plus.
       return { pass: 'exam' };
-    case 'redites':
-      return { pass: 'redites' };
   }
 }
 
@@ -386,7 +379,7 @@ function resourceSystemFor(scope: IngestScope): string {
   return scope.write ? 'resource' : 'resource-instruction';
 }
 
-function outputSchemaFor(scope: IngestScope) {
+function outputSchemaFor(scope: IngestScope, existing: ExistingContent) {
   switch (scope.pass) {
     case 'resource':
       // Trois formes pour la même étape : un champ `document` n'existe QUE
@@ -396,7 +389,9 @@ function outputSchemaFor(scope: IngestScope) {
       if (scope.context === 'exam') return wireResourceOutputExam;
       return scope.write ? wireResourceOutput : wireResourceOutputInstruction;
     case 'chapters':
-      return scope.relaunch ? wireChaptersRelaunchOutput : wireChaptersOutput;
+      // Construit pour cette génération : une case obligatoire par chapitre
+      // existant (`wireChaptersOutputFor`).
+      return scope.relaunch ? wireChaptersRelaunchOutput : wireChaptersOutputFor(existing.chapters.map((c) => c.id));
     case 'notions':
       return wireChapterNotionsOutput;
     case 'questions':
@@ -406,8 +401,6 @@ function outputSchemaFor(scope: IngestScope) {
     // (EXAM_RESPONSE_TYPES).
     case 'exam':
       return wireExamGroupsOutput;
-    case 'redites':
-      return wireReditesOutput;
   }
 }
 
@@ -604,7 +597,7 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
           output_config: {
             // `effort` est absent sur Haiku 4.5 : il y est refusé (voir `tuningFor`).
             ...(tuning.effort ? { effort: tuning.effort } : {}),
-            format: zodOutputFormat(outputSchemaFor(scope)),
+            format: zodOutputFormat(outputSchemaFor(scope, existing)),
           },
           messages: [{ role: 'user', content }],
         }).finalMessage();

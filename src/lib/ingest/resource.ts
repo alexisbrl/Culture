@@ -68,8 +68,32 @@ export function questionCountFromHint(hint: string): number | null {
   return Math.min(value, MAX_QUESTIONS_PER_IMPORT);
 }
 
-/** Le nom du document, tel qu'il apparaît dans les ressources de l'atelier. */
-export const GENERATED_FILE_NAME = 'Cours écrit par l’IA.md';
+/** Le nom du document, tel qu'il apparaît dans les ressources de l'atelier :
+ *  « Notes IA [atelier] - [date de la dernière écriture] ». Il change à chaque
+ *  réécriture, ce qui dit d'un coup d'œil de quand date la version téléchargée. */
+export function generatedFileName(workshopName: string | null | undefined, writtenAt: Date = new Date()): string {
+  const name = (workshopName ?? '').trim().replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').slice(0, 80).trim();
+  const date = writtenAt.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
+  return `Notes IA${name ? ` ${name}` : ''} - ${date}.md`;
+}
+
+/** Une partie du document de l'IA : un titre, et ce qu'elle enseigne. Une
+ *  partie devient une page du document (`textPages`), donc un chapitre se
+ *  découpe pile sur ses parties. */
+export type GeneratedPart = { title: string; content: string };
+
+/** Le corps du document, recomposé à partir de ses parties. **Fonction pure.**
+ *
+ *  Chaque partie s'ouvre sur un titre de section, et c'est le SEUL titre de ce
+ *  niveau : un titre de premier ou deuxième niveau écrit dans un contenu est
+ *  ramené au troisième, sinon il ouvrirait une page au milieu de la partie. */
+export function bodyFromParts(parts: readonly GeneratedPart[]): string {
+  return parts
+    .map((p) => ({ title: p.title.replace(/\s+/g, ' ').trim(), content: p.content.trim() }))
+    .filter((p) => p.title && p.content)
+    .map((p) => `## ${p.title}\n\n${p.content.replace(/^#{1,2}(?=\s)/gm, '###')}`)
+    .join('\n\n');
+}
 
 /** Le type du fichier écrit. Du texte : c'est lisible par le modèle sans
  *  conversion, téléchargeable par l'utilisateur, et ça pèse mille fois moins
@@ -169,8 +193,20 @@ export function readResourceOutput(raw: unknown): ResourceOutcome {
 
   // Un corps n'existe que si l'écriture a été décidée en amont : le schéma
   // n'offre pas de champ `document` sinon. Vide ou mal formé, il vaut « ne
-  // touche à rien », qui est toujours la conduite la moins dommageable.
-  const body = typeof document.content === 'string' ? document.content.trim() : null;
+  // touche à rien », qui est toujours la conduite la moins dommageable. Il
+  // arrive par parties (titre + contenu) ; `content`, d'un seul tenant, est la
+  // forme d'avant le 06/10/2026, encore lue.
+  const parts = Array.isArray(document.parts)
+    ? document.parts.flatMap((p) => {
+        const part = p && typeof p === 'object' ? (p as Record<string, unknown>) : {};
+        return typeof part.title === 'string' && typeof part.content === 'string'
+          ? [{ title: part.title, content: part.content }]
+          : [];
+      })
+    : null;
+  const body = parts
+    ? bodyFromParts(parts) || null
+    : typeof document.content === 'string' ? document.content.trim() : null;
 
   // Un entier hors bornes est ramené dans la plage plutôt que rejeté : demander
   // 5000 questions veut dire « beaucoup », pas « erreur » — même logique que
@@ -248,10 +284,11 @@ export function writingQuestion(input: {
 }
 
 /** Le document complet, en-tête compris, tel qu'il est stocké et téléchargé. */
-export function composeDocument(body: string, writtenAt: Date = new Date()): string {
+export function composeDocument(body: string, writtenAt: Date = new Date(), workshopName?: string | null): string {
   const date = writtenAt.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const name = (workshopName ?? '').trim();
   return [
-    '# Cours écrit par l’IA',
+    `# Notes IA${name ? ` — ${name}` : ''}`,
     '',
     `> Ce document a été rédigé par l’IA de Culture à partir des consignes données à la génération, et mis à jour le ${date}.`,
     '> Il ne se modifie pas à la main : pour le corriger ou le compléter, redonnez une consigne à la génération.',
