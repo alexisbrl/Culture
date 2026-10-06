@@ -318,6 +318,11 @@ donné : tout ce qui est envoyé entre dans le contexte et est facturé.
 3. **Un chapitre sans page ne lit rien.** Il n'arrive pas jusqu'ici : sans page, il
    sort du programme dès l'étape chapitres (§7.6). **Jamais le document entier** : un
    chapitre à qui l'on donne tout le cours le réécrit en entier sous son titre.
+4. **Un document texte a des pages, lui aussi** — texte brut comme document écrit par
+   l'IA. Un titre de premier ou deuxième niveau ouvre une page, sinon on coupe entre deux
+   paragraphes vers 3 000 caractères. Le découpage est rejoué à l'identique par les deux
+   étapes sur les mêmes octets, et l'extrait d'un chapitre repart en texte. Sans pages, un
+   tel document partait en entier dans chaque chapitre qui le citait.
 
 ### 7.4 L'étape 0 : lire la consigne, écrire ce qui manque
 
@@ -454,6 +459,13 @@ L'argument n'est pas l'élégance, c'est **où vit l'information** : chaque appe
 l'étape notions ne voit que les pages de son chapitre — il ne peut pas juger que deux
 chapitres se recouvrent.
 
+**Le découpage se RELÈVE, il ne s'invente pas.** Les chapitres sont les parties du cours,
+titrées dans l'immense majorité des cas : deux lectures du même cours donnent les mêmes
+chapitres. Le programme est **le découpage du cours actuel, et rien d'autre** — un chapitre
+existant n'y reste que s'il correspond à une partie de ce cours ; sinon il sort, même sur
+un sujet voisin. C'est la conséquence directe du découpage, pas une décision délicate, et
+la consigne le dit ainsi.
+
 **La forme : le rang de chaque chapitre, 0 pour ceux qui sortent.** Le modèle rend
 l'architecture entière, chapitres neufs et anciens mêlés, avec un rang par chapitre.
 Demander le rang de **chacun** plutôt qu'une liste d'écartés oblige à statuer sur chaque
@@ -487,29 +499,27 @@ chapitre **et** écarte l'ancien. Les notions encore d'actualité rejoignent le 
 les autres restent dans l'ancien et sortent du programme avec lui. Un renommage aurait
 gardé les notions périmées sous le nouveau titre.
 
-**Un verdict sur chaque notion existante, en trois réponses possibles** — et le silence
-n'en est pas une :
+**Un verdict sur chaque notion existante, en deux réponses** — et le silence n'en est
+pas une :
 
-- **un chapitre visible**, neuf ou existant : elle y va ;
-- **hors programme** : le cours ne la couvre plus ;
-- **à vérifier** : elle est introuvable dans le texte. L'étape ne lit que le texte, et une
-  notion peut venir d'un schéma ou d'un tableau. **Ne pas retrouver une notion dans le texte
-  n'est jamais un motif de la déclarer hors programme.**
+- **un chapitre visible**, neuf ou existant : le cours la traite, dans ce chapitre ;
+- **non** : elle ne se rattache à aucun chapitre du cours actuel.
 
-Une notion que la réponse ne mentionne pas est **oubliée**. Dans une partie qui se
-resserre, laisser une notion dans l'ancien chapitre écarté vaut « hors programme ».
+Pas de « chapitre » par précaution : l'étape ne lit que le texte, une notion peut venir
+d'un schéma, et c'est prévu — tout « non » est revérifié (ci-dessous). Une notion que la
+réponse ne mentionne pas est **oubliée**. Dans une partie qui se resserre, laisser une
+notion dans l'ancien chapitre écarté vaut « non ».
 
 **Tout ce qui n'est pas rangé dans un chapitre visible est vérifié une seconde fois** —
-oubliée, à vérifier ou hors programme, y compris chaque notion d'un chapitre écarté en
-entier. L'étape chapitres ne voit pas les images ; l'étape notions, si. Aucune notion ne
-quitte le programme sur le seul avis d'une étape qui n'a pas vu toute sa matière.
+oubliée ou « non », y compris chaque notion d'un chapitre écarté en entier. L'étape
+chapitres ne voit pas les images ; l'étape notions, si. Aucune notion ne quitte le
+programme sur le seul avis d'une étape qui n'a pas vu toute sa matière.
 
-**Ce qui arrive si personne ne la réclame à l'étape notions** : une notion oubliée ou à
-vérifier **ne bouge pas** ; une notion hors programme reste dans son chapitre s'il est
-écarté, et passe **sans chapitre** s'il reste visible — elle sort du programme sans être
-détruite, et un gestionnaire peut la replacer. **Une notion existante n'est effacée que
-par une redite**, et seulement après avoir transmis ses questions et la progression des
-élèves à celle qui la remplace (ci-dessous).
+**Ce qui arrive si personne ne la réclame à l'étape notions** : une notion oubliée **ne
+bouge pas** ; une notion « non » reste dans son chapitre s'il est écarté, et passe **sans
+chapitre** s'il reste visible — elle sort du programme sans être détruite, et un
+gestionnaire peut la replacer. **Une notion existante n'est jamais effacée par une
+génération**, redites comprises (ci-dessous).
 
 **Mais une notion NEUVE non rangée n'est pas créée.** À la fin, toute notion née de cet
 import et restée sans chapitre est effacée. Le motif de la règle inverse — ne pas
@@ -534,12 +544,14 @@ ménage de fin, une fois toutes les questions écrites.
 
 - **deux neuves** : celle du chapitre qui vient le premier au programme reste, l'autre
   s'efface ;
-- **une neuve et une ancienne** : **la neuve reste** — c'est la formulation du cours
-  d'aujourd'hui. Elle reçoit les questions de l'ancienne, avec leur niveau, puis la
-  progression des élèves (un élève qui aurait déjà travaillé la neuve garde celle de
-  l'ancienne, qui seule a un historique), prend la place qui vient la première au
-  programme des deux, et l'ancienne s'efface. Dans cet ordre : une panne en route laisse
-  deux notions, jamais une notion perdue ;
+- **une neuve et une ancienne** : **la formulation de la neuve l'emporte, sur la ligne de
+  l'ancienne** — c'est la formulation du cours d'aujourd'hui, et c'est l'ancienne qui porte
+  les questions, la progression des élèves et les liens d'examen. L'ancienne prend le titre
+  de la neuve et la place qui vient la première au programme des deux ; les questions déjà
+  écrites sur la neuve lui sont rattachées (un élève qui aurait travaillé les deux garde la
+  progression de l'ancienne), puis la neuve s'efface. Garder la ligne neuve ferait passer
+  tout cela sur une ligne étiquetée par la génération, que son annulation (§7.8) efface.
+  L'ancien titre est noté pour que l'annulation le rende ;
 - **deux anciennes** : la plus récente reste où elle est, l'autre sort du programme, sans
   chapitre et sans rien perdre — ni fusion, ni transfert.
 
@@ -714,8 +726,9 @@ dans les chapitres et les notions depuis sa clôture.
   étiquette ; le reste est noté au fil de l'eau dans le `scope` : ancien chapitre des notions
   existantes (`stage1.before`) et celles réellement déplacées (`movedNotions`), chapitres
   écartés (`stage1.dropped`, `undoEmptied`), ordre des chapitres avant elle (`undoOrder`,
-  noté une seule fois, pour qu'une étape rejouée ne l'écrase pas).
-- **Annuler** remet les notions déplacées, rétablit les chapitres écartés, supprime ce que
+  noté une seule fois, pour qu'une étape rejouée ne l'écrase pas), titre d'avant des
+  notions existantes reformulées par une redite (`retitledNotions`).
+- **Annuler** remet les notions déplacées et leur titre d'avant, rétablit les chapitres écartés, supprime ce que
   porte l'étiquette, puis remet l'ordre. Le calcul (`planGenerationUndo`) est pur et testé :
   il ne vise jamais une ligne que la génération n'a pas touchée.
 - **« modifié » sur un chapitre** : écarté par la génération, ou hors de la plus longue suite
@@ -1442,3 +1455,11 @@ questions, données des cours comprises. **Écartés** : les lots à moitié pri
 recharge (DeepSeek n'en propose pas ; ses heures creuses, à moitié prix, s'appliquent
 d'elles-mêmes). **Jev** (TypeSafe AI) : retenu le 25/09/2026 pour les
 questions fermées — la décision d'écrire de l'étape 0 d'abord (§7.4).
+
+### K. Garder ou retirer (06/10/2026)
+
+Prudence (« dans le doute, garder ») et tri ont alterné six fois depuis août : chaque
+prudence répondait à une perte vue une fois, chaque tri à une accumulation de contenu
+périmé. **Tranché pour le tri** : un retrait se défait (chapitre caché, « restaurer »,
+annulation de génération 48 h), une accumulation ne se voit jamais. Le garde-fou reste
+« jamais effacer une notion existante », pas « ne rien retirer ».

@@ -114,7 +114,7 @@ export type IngestScope =
       /** Les extraits joints, avec les pages du cours qu'ils contiennent. */
       extracts: { name: string; pages: number[] | null }[];
       /** La seconde vérification (§7.6), étiquetée. */
-      recheck: { id: string; title: string; label: 'forgotten' | 'check' | 'out' }[];
+      recheck: { id: string; title: string; label: 'forgotten' | 'out' }[];
     }
   | {
       pass: 'questions';

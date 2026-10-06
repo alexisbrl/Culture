@@ -17,6 +17,8 @@
 //   • `movedNotions` — celles qu'elle a réellement déplacées ;
 //   • `stage1.dropped` et `undoEmptied` — les chapitres qu'elle a écartés ;
 //   • `undoOrder` — l'ordre des chapitres avant elle ;
+//   • `retitledNotions` — les notions existantes qui ont pris la formulation
+//     d'une redite neuve, avec leur titre d'avant ;
 //   • `programStamp` — la dernière modification du programme à sa clôture.
 // Ce qu'elle a CRÉÉ n'a pas besoin d'être noté : chaque ligne porte son
 // étiquette (`import_id`).
@@ -49,6 +51,8 @@ export type GenerationTrace = {
   movedNotions: string[];
   hiddenChapters: string[];
   order: string[] | null;
+  /** Titre d'avant des notions existantes reformulées par une redite. */
+  retitled: Record<string, string>;
   /** `undefined` : aucun tampon posé (génération d'avant le mécanisme, ou pas
    *  encore close). */
   stamp: { at: string | null } | undefined;
@@ -67,11 +71,17 @@ export function traceOf(scope: unknown): GenerationTrace {
     before[id] = typeof chapterId === 'string' ? chapterId : null;
   }
   const rawStamp = s.programStamp as { at?: unknown } | undefined;
+  const rawRetitled = (s.retitledNotions && typeof s.retitledNotions === 'object' ? s.retitledNotions : {}) as Record<string, unknown>;
+  const retitled: Record<string, string> = {};
+  for (const [id, title] of Object.entries(rawRetitled)) {
+    if (typeof title === 'string') retitled[id] = title;
+  }
   return {
     before,
     movedNotions: strings(s.movedNotions),
     hiddenChapters: [...new Set([...strings(stage1.dropped), ...strings(s.undoEmptied)])],
     order: Array.isArray(s.undoOrder) ? strings(s.undoOrder) : null,
+    retitled,
     stamp: rawStamp && typeof rawStamp === 'object'
       ? { at: typeof rawStamp.at === 'string' ? rawStamp.at : null }
       : undefined,
@@ -159,10 +169,16 @@ export function generationMarks(
   const untagged = chapters.filter((c) => c.importId !== importId);
   const untaggedIds = new Set(untagged.map((c) => c.id));
 
-  const movedNotions = trace.movedNotions.filter((id) => {
+  const moved = trace.movedNotions.filter((id) => {
     const n = notionById.get(id);
     return n && n.importId !== importId && n.chapterId !== (trace.before[id] ?? null);
   });
+  // Une notion reformulée par une redite a changé : « modifié », comme déplacée.
+  const reworded = Object.keys(trace.retitled).filter((id) => {
+    const n = notionById.get(id);
+    return n && n.importId !== importId;
+  });
+  const movedNotions = [...new Set([...moved, ...reworded])];
 
   const hiddenNow = new Set(chapters.filter((c) => c.hidden).map((c) => c.id));
   const hidden = trace.hiddenChapters.filter((id) => untaggedIds.has(id) && hiddenNow.has(id));
@@ -186,6 +202,8 @@ export type GenerationUndoPlan = {
   /** Les notions existantes à remettre dans leur chapitre d'avant (`null` :
    *  sans chapitre, ou chapitre disparu depuis). */
   moves: { notionId: string; chapterId: string | null }[];
+  /** Les notions existantes reformulées, avec le titre à leur rendre. */
+  retitles: { notionId: string; title: string }[];
   unhide: string[];
   /** L'ordre complet des chapitres qui restent, ou `null` s'il ne change pas. */
   order: string[] | null;
@@ -213,6 +231,13 @@ export function planGenerationUndo(
     if (n.chapterId !== target) moves.push({ notionId: id, chapterId: target });
   }
 
+  const retitles = Object.entries(trace.retitled)
+    .filter(([id]) => {
+      const n = notionById.get(id);
+      return n && n.importId !== importId;
+    })
+    .map(([notionId, title]) => ({ notionId, title }));
+
   const hiddenNow = new Set(chapters.filter((c) => c.hidden).map((c) => c.id));
   const unhide = trace.hiddenChapters.filter((id) => survivingIds.has(id) && hiddenNow.has(id));
 
@@ -225,7 +250,7 @@ export function planGenerationUndo(
     if (next.some((id, i) => id !== currentIds[i])) order = next;
   }
 
-  return { moves, unhide, order };
+  return { moves, retitles, unhide, order };
 }
 
 // ─── Base ────────────────────────────────────────────────────────────────────
@@ -379,6 +404,17 @@ export async function undoGeneration(workshopId: string, importId: string): Prom
         .in('id', part);
       if (error) throw new Error(error.message);
     }
+  }
+
+  // 1 bis. Les notions reformulées par une redite reprennent leur titre.
+  for (const r of plan.retitles) {
+    // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
+    const { error } = await supabase
+      .from('workshop_bricks')
+      .update({ title: r.title, updated_at: now })
+      .eq('workshop_id', workshopId)
+      .eq('id', r.notionId);
+    if (error) throw new Error(error.message);
   }
 
   // 2. Les chapitres écartés reviennent au programme.

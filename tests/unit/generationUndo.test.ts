@@ -25,6 +25,7 @@ const trace = (patch: Partial<GenerationTrace> = {}): GenerationTrace => ({
   movedNotions: [],
   hiddenChapters: [],
   order: null,
+  retitled: {},
   stamp: { at: STAMP },
   ...patch,
 });
@@ -69,8 +70,8 @@ describe('generationUndoState — quand l\'annulation s\'offre', () => {
 
 describe('traceOf — relire un scope jsonb libre', () => {
   it('tolère un scope vide ou absent', () => {
-    expect(traceOf(null)).toEqual({ before: {}, movedNotions: [], hiddenChapters: [], order: null, stamp: undefined });
-    expect(traceOf({})).toEqual({ before: {}, movedNotions: [], hiddenChapters: [], order: null, stamp: undefined });
+    expect(traceOf(null)).toEqual({ before: {}, movedNotions: [], hiddenChapters: [], order: null, retitled: {}, stamp: undefined });
+    expect(traceOf({})).toEqual({ before: {}, movedNotions: [], hiddenChapters: [], order: null, retitled: {}, stamp: undefined });
   });
 
   it('réunit les chapitres écartés par décision et ceux vidés en route', () => {
@@ -181,6 +182,16 @@ describe('planGenerationUndo — ce qui est réécrit, et rien d\'autre', () => 
   it('range en fin les chapitres inconnus de l\'ordre d\'avant', () => {
     const plan = planGenerationUndo(LOT, trace({ order: ['a', 'b'] }), [ch('b'), ch('x'), ch('a')], []);
     expect(plan.order).toEqual(['a', 'b', 'x']);
+  });
+
+  it('rend son titre à une notion existante reformulée par une redite', () => {
+    const plan = planGenerationUndo(LOT, trace({ retitled: { n1: 'ancien titre' } }), [ch('c1')], [no('n1', 'c1')]);
+    expect(plan.retitles).toEqual([{ notionId: 'n1', title: 'ancien titre' }]);
+  });
+
+  it('ne réécrit pas le titre d\'une notion du lot, ni d\'une notion disparue', () => {
+    const plan = planGenerationUndo(LOT, trace({ retitled: { n1: 'a', gone: 'b' } }), [ch('c1')], [no('n1', 'c1', LOT)]);
+    expect(plan.retitles).toEqual([]);
   });
 
   it('ne réordonne rien quand l\'ordre n\'a pas changé', () => {

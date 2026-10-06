@@ -32,7 +32,7 @@ function standings(counts: { forgotten: number; placed?: number; check?: number;
   let i = 0;
   for (let k = 0; k < counts.forgotten; k++) map.set(`n${i++}`, { kind: 'forgotten' });
   for (let k = 0; k < (counts.placed ?? 0); k++) map.set(`n${i++}`, { kind: 'placed', chapterRef: 'c1' });
-  for (let k = 0; k < (counts.check ?? 0); k++) map.set(`n${i++}`, { kind: 'check' });
+  for (let k = 0; k < (counts.check ?? 0); k++) map.set(`n${i++}`, { kind: 'out' });
   for (let k = 0; k < (counts.out ?? 0); k++) map.set(`n${i++}`, { kind: 'out' });
   return map;
 }
@@ -48,7 +48,7 @@ describe('classifyNotions', () => {
     { id: 'g', chapterId: 'c2' },
   ];
 
-  it('range chaque notion selon son verdict', () => {
+  it('range chaque notion selon son verdict — « à vérifier », d’un lot ancien, vaut « hors programme »', () => {
     const verdicts: NotionVerdict[] = [
       { notionId: 'a', verdict: 'chapter', chapterRef: 'new1' },
       { notionId: 'b', verdict: 'out' },
@@ -58,7 +58,7 @@ describe('classifyNotions', () => {
     const r = classifyNotions(notions, verdicts, layout);
     expect(r.get('a')).toEqual({ kind: 'placed', chapterRef: 'new1' });
     expect(r.get('b')).toEqual({ kind: 'out' });
-    expect(r.get('c')).toEqual({ kind: 'check' });
+    expect(r.get('c')).toEqual({ kind: 'out' });
     expect(r.get('d')).toEqual({ kind: 'placed', chapterRef: 'c2' });
   });
 
@@ -101,7 +101,7 @@ describe('classifyNotions', () => {
       ],
       layout,
     );
-    expect(r.get('a')).toEqual({ kind: 'check' });
+    expect(r.get('a')).toEqual({ kind: 'out' });
   });
 });
 
@@ -178,7 +178,7 @@ describe('recheckList', () => {
     );
     expect(recheckList(r)).toEqual([
       { notionId: 'b', label: 'out' },
-      { notionId: 'c', label: 'check' },
+      { notionId: 'c', label: 'out' },
       { notionId: 'd', label: 'forgotten' },
     ]);
   });
@@ -257,8 +257,8 @@ describe('finalFates', () => {
   });
 
   it('départage : sinon le premier dans l’ordre du programme, quel que soit l’ordre d’arrivée', () => {
-    const a = run([{ id: 'a', chapterId: 'old' }], [['a', { kind: 'check' }]], [['a', ['c3', 'c2']]]);
-    const b = run([{ id: 'a', chapterId: 'old' }], [['a', { kind: 'check' }]], [['a', ['c2', 'c3']]]);
+    const a = run([{ id: 'a', chapterId: 'old' }], [['a', { kind: 'out' }]], [['a', ['c3', 'c2']]]);
+    const b = run([{ id: 'a', chapterId: 'old' }], [['a', { kind: 'out' }]], [['a', ['c2', 'c3']]]);
     expect(a.fates[0].chapterId).toBe('c2');
     expect(b).toEqual(a);
     expect(a.arbitrations[0].rule).toBe('firstInProgram');
@@ -267,7 +267,7 @@ describe('finalFates', () => {
   it('réclamée seulement par des chapitres irrecevables : ne bouge pas, et c’est dit', () => {
     const { fates, arbitrations } = run(
       [{ id: 'a', chapterId: 'c1' }],
-      [['a', { kind: 'check' }]],
+      [['a', { kind: 'forgotten' }]],
       [['a', ['old', 'zzz']]],
     );
     expect(fates[0]).toMatchObject({ chapterId: 'c1', moved: false, reason: 'stays' });
@@ -277,7 +277,7 @@ describe('finalFates', () => {
   it('non réclamée, oubliée ou à vérifier : ne bouge pas', () => {
     const { fates } = run(
       [{ id: 'a', chapterId: 'c1' }, { id: 'b', chapterId: 'old' }],
-      [['a', { kind: 'forgotten' }], ['b', { kind: 'check' }]],
+      [['a', { kind: 'forgotten' }], ['b', { kind: 'forgotten' }]],
     );
     expect(fates.map((f) => [f.chapterId, f.moved])).toEqual([['c1', false], ['old', false]]);
   });
@@ -299,7 +299,6 @@ describe('finalFates', () => {
     const kinds: NotionStanding[] = [
       { kind: 'placed', chapterRef: 'c2' },
       { kind: 'out' },
-      { kind: 'check' },
       { kind: 'forgotten' },
     ];
     const currents = ['c1', 'old', null, 'zzz'];

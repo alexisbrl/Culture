@@ -1,7 +1,7 @@
 // Le sort des notions existantes — module PUR, sans réseau ni base.
 //
 // L'étape chapitres statue sur chaque notion existante (docs/architecture.md
-// §7.6) : un chapitre visible, « hors programme », ou « à vérifier ». Le
+// §7.6) : un chapitre visible, ou « non » — hors programme. Le
 // silence n'est pas une réponse : une notion qu'elle ne mentionne pas est
 // OUBLIÉE. Ce module range chaque notion dans l'un de ces cas, mesure la part
 // des oubliées pour décider de continuer, relancer ou annuler, et dresse la
@@ -21,7 +21,10 @@ export const CANCEL_THRESHOLD = 0.25;
  *  d'oubliées pour qu'un seuil puisse jouer. */
 export const MIN_FORGOTTEN_TO_ACT = 2;
 
-/** Ce que l'étape chapitres peut répondre pour une notion existante. */
+/** Ce que l'étape chapitres peut répondre pour une notion existante. `check`
+ *  (« à vérifier ») n'est plus proposé au modèle depuis le 06/10/2026 : il ne
+ *  se lit encore que dans un lot ouvert avant, et vaut `out` — les deux
+ *  repassent de toute façon par la seconde vérification. */
 export type NotionVerdict =
   | { notionId: string; verdict: 'chapter'; chapterRef: string }
   | { notionId: string; verdict: 'out' }
@@ -30,10 +33,9 @@ export type NotionVerdict =
 /** Le cas d'une notion existante après l'étape chapitres. */
 export type NotionStanding =
   | { kind: 'placed'; chapterRef: string }
-  /** Hors programme : jugée non couverte, ou laissée dans un chapitre écarté. */
+  /** Hors programme : rattachée à aucun chapitre du cours actuel, ou laissée
+   *  dans un chapitre écarté. */
   | { kind: 'out' }
-  /** Introuvable dans le texte — elle peut venir d'une image. */
-  | { kind: 'check' }
   /** La réponse n'en dit rien. Seul cas qui compte pour les seuils. */
   | { kind: 'forgotten' };
 
@@ -69,8 +71,7 @@ export function classifyNotions(
   const said = new Map<string, NotionStanding>();
   for (const v of verdicts) {
     if (!known.has(v.notionId) || said.has(v.notionId)) continue;
-    if (v.verdict === 'out') said.set(v.notionId, { kind: 'out' });
-    else if (v.verdict === 'check') said.set(v.notionId, { kind: 'check' });
+    if (v.verdict === 'out' || v.verdict === 'check') said.set(v.notionId, { kind: 'out' });
     else if (layout.visible.has(v.chapterRef)) said.set(v.notionId, { kind: 'placed', chapterRef: v.chapterRef });
     else if (layout.dropped.has(v.chapterRef)) said.set(v.notionId, { kind: 'out' });
   }
@@ -128,7 +129,7 @@ export function thresholdDecision(
 }
 
 /** L'étiquette d'une notion dans la seconde vérification. */
-export type RecheckLabel = 'forgotten' | 'check' | 'out';
+export type RecheckLabel = 'forgotten' | 'out';
 
 export interface RecheckNotion {
   notionId: string;
@@ -208,7 +209,7 @@ export interface FateInput {
  * - Réclamée par plusieurs : son chapitre actuel s'il en est, sinon le premier
  *   dans l'ordre du programme — indépendant de l'ordre d'arrivée des réponses.
  *   Chaque départage est rendu pour le compte-rendu.
- * - Non réclamée : oubliée ou à vérifier, elle ne bouge pas ; hors programme,
+ * - Non réclamée : oubliée, elle ne bouge pas ; hors programme,
  *   elle reste dans un chapitre écarté et passe sans chapitre si le sien est
  *   resté visible.
  */

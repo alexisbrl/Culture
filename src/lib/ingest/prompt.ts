@@ -795,6 +795,10 @@ Ordre de grandeur : un cours en compte typiquement ${PLAUSIBLE_CHAPTERS.min} à 
 
 Donne à chacun une référence courte et unique (ch1, ch2…), et pour nom le titre du cours, tel qu'il y figure (120 caractères maximum).
 
+**Ce travail n'a rien de créatif : tu RELÈVES les parties du cours, tu ne les inventes pas.** Deux lectures du même cours doivent donner exactement les mêmes chapitres.
+
+**LES CHAPITRES EXISTANTS NE SONT PAS À PRÉSERVER.** Le programme de l'atelier est le découpage du cours que tu as sous les yeux, et rien d'autre. Un chapitre existant n'y reste que s'il correspond à une partie de ce cours — la même partie, sous le même titre ou presque : tu lui donnes alors son rang et ses pages au lieu de le recréer. **Tout chapitre existant qui ne correspond à aucune partie du cours sort**, même sur un sujet voisin, même si une notion du cours l'évoque en passant : rang 0, aucune page. Ce n'est pas une décision délicate, c'est la conséquence directe du découpage — et c'est le cas normal quand un cours en remplace un autre. Une sortie ne détruit rien : le chapitre est caché, et se restaure d'un clic.
+
 **Dans \`chapters\`, ne liste que les chapitres NOUVEAUX.** Ceux qui existent déjà sont listés plus haut avec leur référence : tu ne donnes que leur rang, dans \`chapterOrder\`. Un cours qu'on repasse à l'identique se répond donc avec un \`chapters\` VIDE, et c'est la bonne réponse.
 
 **L'ORDRE DU PROGRAMME, ET CE QUE LE COURS NE COUVRE PLUS.** Dans \`chapterOrder\`, donne son rang à chaque chapitre — ceux que tu viens de créer comme ceux qui existaient déjà —, à partir de 1 et dans l'ordre où le cours se lit. Seul l'ordre des rangs compte, pas leur valeur.
@@ -804,12 +808,12 @@ Donne à chacun une référence courte et unique (ch1, ch2…), et pour nom le t
 Quand le cours traite toujours la même matière sous un autre découpage — une partie qui s'élargit ou se resserre —, la bonne réponse est de **créer le nouveau chapitre ET de mettre l'ancien à 0**, jamais de garder l'ancien sous un autre nom. Les notions encore d'actualité vont dans le nouveau ; celles que tu laisses dans l'ancien sortent du programme avec lui. C'est ce qui évite de porter deux fois la même partie sous deux noms.
 
 **SITUE CHAQUE CHAPITRE DANS LE COURS.** Pour chaque chapitre de rang 1 ou plus, donne dans \`spans\` le document et l'intervalle de pages qu'il occupe, d'après les marqueurs « [page N] » du texte, bornes incluses — plusieurs intervalles si le chapitre est éclaté, ou s'il s'étend sur plusieurs documents. L'étape suivante ne recevra QUE ces pages-là : une page que tu n'attribues à aucun chapitre ne sera lue par personne. Dans le doute, prends large ; deux chapitres peuvent partager une page de transition.
-**UN VERDICT SUR CHAQUE NOTION EXISTANTE.** Les notions de l'atelier sont listées plus haut. Dans \`notionVerdicts\`, tu statues sur CHACUNE, sans exception — une notion que tu ne mentionnes pas est tenue pour oubliée. Trois réponses possibles :
-- **« chapter »**, avec la référence d'un chapitre au programme — existant ou de ta réponse : la notion y va. C'est la réponse attendue pour toute notion que le cours traite encore.
-- **« out »** : le cours la contredit, ou ne traite plus du tout son sujet. Elle sort du programme.
-- **« check »** : tu ne la retrouves pas dans le texte.
 
-⚠️ **Ne pas retrouver une notion dans le texte n'est JAMAIS un motif de « out » : c'est « check ».** Tu ne lis que le TEXTE du cours ; ses schémas, ses tableaux en image et ses pages scannées ne te sont pas montrés, et une notion peut venir de là. Une autre étape, qui voit les images, tranchera. « out » est réservé à ce que le texte permet d'affirmer : le cours ne couvre plus ce sujet.`;
+**UN VERDICT SUR CHAQUE NOTION EXISTANTE.** Les notions de l'atelier sont listées plus haut. Dans \`notionVerdicts\`, tu statues sur CHACUNE, sans exception — une notion que tu ne mentionnes pas est tenue pour oubliée. Deux réponses possibles :
+- **« chapter »**, avec la référence d'un chapitre au programme — existant ou de ta réponse : le cours la traite, dans ce chapitre.
+- **« out »** : tu ne la rattaches à aucun chapitre du cours actuel.
+
+Ne réponds pas « chapter » par précaution. Tu ne lis que le TEXTE du cours, et une notion peut venir d'un schéma ou d'une page scannée : c'est prévu. Toute notion « out » est revérifiée par l'étape suivante, qui voit les images, et rangée si elle la retrouve. Celle que personne ne retrouve sort du programme, sans être effacée.`;
 }
 
 /** Relance de l'étape chapitres (§7.6) : trop de notions sont restées sans
@@ -830,20 +834,18 @@ ${chapters}
 LES NOTIONS À JUGER :
 ${notions}
 
-Dans \`notionVerdicts\`, trois réponses possibles :
+Dans \`notionVerdicts\`, deux réponses possibles :
 - **« chapter »**, avec la référence d'un chapitre ci-dessus : la notion y va.
-- **« out »** : le cours la contredit, ou ne traite plus du tout son sujet.
-- **« check »** : tu ne la retrouves pas dans le texte.
+- **« out »** : tu ne la rattaches à aucun de ces chapitres.
 
-⚠️ **Ne pas retrouver une notion dans le texte n'est JAMAIS un motif de « out » : c'est « check ».** Tu ne lis que le texte du cours, pas ses images ; une autre étape, qui les voit, tranchera.`;
+Ne réponds pas « chapter » par précaution : une notion que tu ne retrouves pas — elle vient peut-être d'une image — est revérifiée par une autre étape, qui voit les images et la range si elle la retrouve.`;
 }
 
 /** Les étiquettes de la seconde vérification (§7.6) : chaque notion dit
  *  pourquoi elle repasse. */
 export const RECHECK_LABELS = {
   forgotten: "n'a été rangée nulle part",
-  check: "est introuvable dans le texte du cours — elle vient peut-être d'une image",
-  out: 'a été jugée hors programme',
+  out: "n'a été rattachée à aucun chapitre — elle vient peut-être d'une image",
 } as const;
 
 /** Étape 2 — les notions d'UN chapitre, sur ses seules pages (§7.2).

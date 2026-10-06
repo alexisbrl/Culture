@@ -50,6 +50,7 @@ import {
   loadExistingRefs,
   reattachQuestions,
   removeOrphans,
+  retitleNotion,
   transferMastery,
 } from './ingest';
 import { reorderChapters } from '@/lib/workshops/chapters';
@@ -60,6 +61,7 @@ import {
   judgeRedites,
   judgedDuplicates,
   rediteCandidates,
+  rediteWrites,
   resolveRedites,
   type RediteNotion,
 } from './duplicates';
@@ -1878,9 +1880,13 @@ async function recordProgress(
   entries: {
     movedNotions: readonly string[];
     strandedNotions: readonly string[];
+    /** Notions existantes dont une redite a remplacé le titre, avec le titre
+     *  d'avant — le premier noté gagne, c'est celui que l'annulation rend. */
+    retitledNotions?: Readonly<Record<string, string>>;
   },
 ): Promise<void> {
-  if (entries.movedNotions.length === 0 && entries.strandedNotions.length === 0) return;
+  const retitled = entries.retitledNotions ?? {};
+  if (entries.movedNotions.length === 0 && entries.strandedNotions.length === 0 && Object.keys(retitled).length === 0) return;
   const supabase = getSupabaseServerClient();
   const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
   const scope = (data?.scope as Record<string, unknown> | null) ?? {};
@@ -1895,6 +1901,10 @@ async function recordProgress(
         ...scope,
         movedNotions: merge('movedNotions', entries.movedNotions),
         strandedNotions: merge('strandedNotions', entries.strandedNotions),
+        retitledNotions: {
+          ...retitled,
+          ...((scope.retitledNotions && typeof scope.retitledNotions === 'object' ? scope.retitledNotions : {}) as Record<string, string>),
+        },
       },
     })
     .eq('id', importId);
@@ -2309,13 +2319,31 @@ async function applyRedites(
   const titleOf = (id: string) => byId.get(id)?.title ?? id;
   const current = new Map(notions.map((n) => [n.id, n.chapterId]));
   const removed: string[] = [];
-  for (const action of actions) {
+  const moved: string[] = [];
+  const retitled: Record<string, string> = {};
+  for (const action of rediteWrites(actions, byId)) {
     if (action.kind === 'unplace') {
-      await applyAssignments(workshopId, [{ notionRef: action.notion }], new Map(), current);
+      moved.push(...(await applyAssignments(workshopId, [{ notionRef: action.notion }], new Map(), current)));
       adjusted.push({
         kind: 'notion',
         ref: action.notion,
         reason: `« ${titleOf(action.notion)} » redisait « ${titleOf(action.keep)} », plus récente — sortie du programme, sans chapitre`,
+      });
+      continue;
+    }
+    if (action.kind === 'absorb') {
+      // La formulation d'aujourd'hui, sur la ligne d'hier (voir `rediteWrites`).
+      // L'ancien titre est noté pour que l'annulation le rende.
+      await reattachQuestions(action.fresh, action.old);
+      await transferMastery(action.fresh, action.old, { onClash: 'keepTarget' });
+      await retitleNotion(workshopId, action.old, action.title);
+      retitled[action.old] = titleOf(action.old);
+      moved.push(...(await applyAssignments(workshopId, [{ notionRef: action.old, chapterRef: action.chapterId ?? undefined }], new Map(), current)));
+      removed.push(action.fresh);
+      adjusted.push({
+        kind: 'notion',
+        ref: action.old,
+        reason: `« ${titleOf(action.old)} » redisait « ${action.title} » — elle en prend la formulation et garde ses questions et la progression des élèves`,
       });
       continue;
     }
@@ -2326,9 +2354,10 @@ async function applyRedites(
     adjusted.push({
       kind: 'notion',
       ref: action.remove,
-      reason: `« ${titleOf(action.remove)} » redisait « ${titleOf(action.keep)} » — effacée, ses questions et la progression des élèves passées à l'autre`,
+      reason: `« ${titleOf(action.remove)} » redisait « ${titleOf(action.keep)} » — effacée, ses questions passées à l'autre`,
     });
   }
+  await recordProgress(importId, { movedNotions: moved, strandedNotions: [], retitledNotions: retitled });
   if (removed.length > 0) await removeOrphans(workshopId, { chapterIds: [], notionIds: removed });
   return { adjusted, removed: removed.length };
 }

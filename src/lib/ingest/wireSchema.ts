@@ -333,13 +333,13 @@ export const wireChapterRankSchema = z.object({
     .describe('Où le chapitre se trouve dans le cours : un intervalle de pages, plusieurs si le chapitre est éclaté. Liste vide pour un rang 0.'),
 });
 
-/** Le verdict sur UNE notion existante (§7.6). Trois réponses, et le silence
+/** Le verdict sur UNE notion existante (§7.6). Deux réponses, et le silence
  *  n'en est pas une : une notion absente de la liste est tenue pour oubliée. */
 export const wireNotionVerdictSchema = z.object({
   notion: z.string().describe("Identifiant de la notion existante, recopié tel quel."),
   verdict: z
-    .enum(['chapter', 'out', 'check'])
-    .describe("« chapter » : elle va dans le chapitre donné. « out » : le cours ne la couvre plus. « check » : tu ne la retrouves pas dans le texte — elle vient peut-être d'une image."),
+    .enum(['chapter', 'out'])
+    .describe("« chapter » : elle va dans le chapitre donné. « out » : tu ne la rattaches à aucun chapitre du cours actuel."),
   chapter: z
     .string()
     .describe("Pour « chapter » seulement : la référence d'un chapitre au programme, existant ou de cette réponse. Chaîne vide sinon."),

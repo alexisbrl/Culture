@@ -154,12 +154,10 @@ describe('instructions de passe', () => {
       extracts: [],
       recheck: [
         { id: 'n1', title: 'La Loire', label: 'forgotten' },
-        { id: 'n2', title: 'Le Rhône', label: 'check' },
         { id: 'n3', title: 'La Seine', label: 'out' },
       ],
     });
     expect(instruction).toContain(`- n1 — La Loire (celle-ci ${RECHECK_LABELS.forgotten})`);
-    expect(instruction).toContain(`- n2 — Le Rhône (celle-ci ${RECHECK_LABELS.check})`);
     expect(instruction).toContain(`- n3 — La Seine (celle-ci ${RECHECK_LABELS.out})`);
     expect(instruction).toMatch(/sinon, ignore-la/);
   });
@@ -262,11 +260,18 @@ describe('instructions de passe', () => {
     expect(instruction).not.toMatch(/question/i);
   });
 
-  it('introuvable dans le texte ⇒ « check », jamais « out » (§7.6)', () => {
-    const rule = /Ne pas retrouver une notion dans le texte n'est JAMAIS un motif de « out » : c'est « check »/;
-    expect(chaptersInstruction([])).toMatch(rule);
-    expect(chaptersRelaunchInstruction({ notions: [{ id: 'n1', title: 'T' }], chapters: [{ id: 'c1', name: 'C' }] }))
-      .toMatch(rule);
+  it('deux verdicts seulement, et jamais « chapter » par précaution (§7.6)', () => {
+    const relaunch = chaptersRelaunchInstruction({ notions: [{ id: 'n1', title: 'T' }], chapters: [{ id: 'c1', name: 'C' }] });
+    for (const instruction of [chaptersInstruction([]), relaunch]) {
+      expect(instruction).toMatch(/deux réponses possibles/i);
+      expect(instruction).toMatch(/Ne réponds pas « chapter » par précaution/);
+      expect(instruction).not.toMatch(/« check »/);
+    }
+  });
+
+  it('un chapitre existant qui ne correspond à aucune partie du cours sort (§7.6)', () => {
+    expect(chaptersInstruction([])).toMatch(/LES CHAPITRES EXISTANTS NE SONT PAS À PRÉSERVER/);
+    expect(chaptersInstruction([])).toMatch(/Tout chapitre existant qui ne correspond à aucune partie du cours sort/);
   });
 
   it('elle dit qu’elle ne lit que le texte', () => {

@@ -9,6 +9,9 @@ import {
   sourcePageOf,
   imageDocumentName,
   resolveDocumentName,
+  TEXT_PAGE_CHARS,
+  textExtract,
+  textPages,
 } from '@/lib/ingest/chaptersInput';
 import { readPdfText } from '@/lib/ingest/pdf';
 import type { PreparedDocument, SourceDocument } from '@/lib/ingest/providers/types';
@@ -86,15 +89,40 @@ describe('composeChaptersInput', () => {
     expect(input.text).toMatch(/\[page 1\]\n/);
   });
 
-  it('un document texte part en texte, sans pages ni image', async () => {
+  it('un document texte part en texte, avec ses pages et sans image', async () => {
     const provider = fakeProvider();
     const input = await composeChaptersInput(
-      [source('t1', 'notes.md', new TextEncoder().encode('# Notes\nLa photosynthese.'), 'text/markdown')],
+      [source('t1', 'notes.md', new TextEncoder().encode('# Notes\nLa photosynthese.\n\n## Partie 2\nLa respiration.'), 'text/markdown')],
       provider.prepare,
     );
     expect(provider.received).toEqual([]);
-    expect(input.pageCounts).toEqual({ t1: null });
+    expect(input.pageCounts).toEqual({ t1: 2 });
+    expect(input.text).toContain('[page 2]');
     expect(input.text).toContain('La photosynthese.');
+  });
+});
+
+describe('textPages — les pages d’un document texte', () => {
+  it('un titre de niveau 1 ou 2 ouvre une page, pas un titre plus fin', () => {
+    expect(textPages('# A\nun\n\n### a1\ndeux\n\n## B\ntrois')).toEqual(['# A\nun\n\n### a1\ndeux', '## B\ntrois']);
+  });
+
+  it('coupe entre deux paragraphes au-delà de la taille visée, jamais au milieu', () => {
+    const long = 'x'.repeat(TEXT_PAGE_CHARS - 10);
+    expect(textPages(`${long}\n\nsuite assez longue`)).toEqual([long, 'suite assez longue']);
+    expect(textPages('y'.repeat(TEXT_PAGE_CHARS * 2))).toHaveLength(1);
+  });
+
+  it('les mêmes octets donnent les mêmes pages, fins de ligne comprises', () => {
+    expect(textPages('# A\r\nun\r\n\r\n# B\r\ndeux')).toEqual(textPages('# A\nun\n\n# B\ndeux'));
+  });
+
+  it('un texte vide n’a aucune page', () => {
+    expect(textPages('  \n\n ')).toEqual([]);
+  });
+
+  it('un extrait renumérote ses pages et ignore une page hors du document', () => {
+    expect(textExtract(['p1', 'p2', 'p3'], [2, 3, 9])).toBe('[page 1]\np2\n\n[page 2]\np3');
   });
 
   it('plusieurs documents : chacun sous son nom, les pages en image de chacun à part', async () => {

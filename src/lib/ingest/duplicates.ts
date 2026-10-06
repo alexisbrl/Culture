@@ -416,6 +416,46 @@ export function resolveRedites(
   return { actions, ignored };
 }
 
+/** Ce qu'une redite écrit en base, une fois tranchée.
+ *
+ *  - `absorb` : une neuve redit une ancienne. L'ANCIENNE ligne reste — elle
+ *    porte les questions, la progression des élèves et les liens d'examen — et
+ *    prend le titre de la neuve et la place `chapterId` ; la neuve s'efface.
+ *    Garder la neuve aurait fait passer tout cela sur une ligne étiquetée par la
+ *    génération, que son annulation (§7.8) efface.
+ *  - `merge` : deux neuves ; `remove` s'efface au profit de `keep`.
+ *  - `unplace` : deux anciennes ; `notion` sort du programme, intacte.
+ *
+ *  **Seule une notion neuve peut se trouver dans `absorb.fresh` ou
+ *  `merge.remove`** : aucune redite n'efface une notion existante. */
+export type RediteWrite =
+  | { kind: 'absorb'; old: string; fresh: string; title: string; chapterId: string | null }
+  | { kind: 'merge'; remove: string; keep: string; moveTo: string | null }
+  | { kind: 'unplace'; notion: string; keep: string };
+
+export function rediteWrites(
+  actions: readonly RediteAction[],
+  notions: ReadonlyMap<string, RediteNotion>,
+): RediteWrite[] {
+  const writes: RediteWrite[] = [];
+  for (const action of actions) {
+    if (action.kind === 'unplace') {
+      writes.push(action);
+      continue;
+    }
+    const remove = notions.get(action.remove);
+    const keep = notions.get(action.keep);
+    if (!remove || !keep) continue;
+    if (remove.fresh) {
+      writes.push(action);
+    } else if (keep.fresh) {
+      writes.push({ kind: 'absorb', old: remove.id, fresh: keep.id, title: keep.title, chapterId: action.moveTo ?? keep.chapterId });
+    }
+    // Deux anciennes ne fusionnent jamais : `resolveRedites` les rend en `unplace`.
+  }
+  return writes;
+}
+
 /** Les paires que le modèle a jugées redites, lues dans sa réponse. Une réponse
  *  sur une paire inconnue, en double ou mal formée est ignorée. */
 export function judgedDuplicates(

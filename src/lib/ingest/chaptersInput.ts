@@ -22,14 +22,60 @@ export function isPlainText(mimeType: string): boolean {
   return mimeType.startsWith('text/');
 }
 
-/** Le texte d'un document, page par page. `pages = null` : document sans pages
- *  (texte brut, document de l'IA), dont `text` porte le contenu entier. */
+/** Le texte d'un document, page par page. `pages = null` : document qu'on ne
+ *  sait pas lire, dont `text` porte ce qu'on en a (rien, le plus souvent). */
 export interface DocumentText {
   fileId: string;
   fileName: string;
   pageCount: number | null;
   pages: string[] | null;
   text: string | null;
+}
+
+/** Taille visée d'une page de document texte, en caractères. */
+export const TEXT_PAGE_CHARS = 3000;
+
+/**
+ * Les pages d'un document TEXTE (texte brut, document écrit par l'IA). **Fonction
+ * pure** : l'étape chapitres et l'étape notions la rejouent sur les mêmes octets,
+ * et doivent tomber sur les mêmes pages.
+ *
+ * ⚠️ Sans pages, un document texte ne se découpait pas : chaque chapitre qui le
+ * citait le recevait EN ENTIER, et réécrivait le cours sous son titre. Constaté
+ * le 06/10/2026 : un cours de l'IA sur les Bernoulli, quatre chapitres, 173
+ * paires de redites à trancher et cinq minutes d'attente.
+ *
+ * Un titre de niveau 1 ou 2 ouvre toujours une page — un document de l'IA est
+ * titré, et un chapitre tombe alors pile sur ses pages. Sinon on coupe entre deux
+ * paragraphes, au-delà de `TEXT_PAGE_CHARS` ; un paragraphe plus long qu'une
+ * page reste entier.
+ */
+export function textPages(text: string): string[] {
+  const paragraphs = text.replace(/\r\n/g, '\n').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  const pages: string[] = [];
+  let current: string[] = [];
+  let size = 0;
+  for (const paragraph of paragraphs) {
+    const heading = /^#{1,2}\s/.test(paragraph);
+    if (current.length > 0 && (heading || size + paragraph.length > TEXT_PAGE_CHARS)) {
+      pages.push(current.join('\n\n'));
+      current = [];
+      size = 0;
+    }
+    current.push(paragraph);
+    size += paragraph.length;
+  }
+  if (current.length > 0) pages.push(current.join('\n\n'));
+  return pages;
+}
+
+/** Les pages choisies d'un document texte, chacune sous son marqueur relatif à
+ *  l'extrait — c'est ce numéro que l'étape notions rend, comme pour un PDF. */
+export function textExtract(pages: readonly string[], wanted: readonly number[]): string {
+  return wanted
+    .filter((p) => p >= 1 && p <= pages.length)
+    .map((p, i) => `[page ${i + 1}]\n${pages[p - 1]}`)
+    .join('\n\n');
 }
 
 /** Lit le texte d'un document du lot. Un format qu'on ne sait pas lire rend
@@ -39,8 +85,11 @@ export async function readDocumentText(doc: SourceDocument): Promise<DocumentTex
     const { pageCount, pages } = await readPdfText(doc.bytes);
     return { fileId: doc.fileId, fileName: doc.fileName, pageCount, pages, text: null };
   }
-  const text = isPlainText(doc.mimeType) ? new TextDecoder('utf-8').decode(doc.bytes) : '';
-  return { fileId: doc.fileId, fileName: doc.fileName, pageCount: null, pages: null, text };
+  if (isPlainText(doc.mimeType)) {
+    const pages = textPages(new TextDecoder('utf-8').decode(doc.bytes));
+    if (pages.length > 0) return { fileId: doc.fileId, fileName: doc.fileName, pageCount: pages.length, pages, text: null };
+  }
+  return { fileId: doc.fileId, fileName: doc.fileName, pageCount: null, pages: null, text: '' };
 }
 
 /** Le nom sous lequel les pages en image d'un document sont jointes. Il dit
@@ -100,7 +149,8 @@ export async function composeChaptersInput(
 
   for (const [i, doc] of documents.entries()) {
     const pages = texts[i].pages;
-    if (!pages) continue;
+    // Une page de texte n'a pas d'image : il n'y a rien à montrer en plus.
+    if (!pages || !isPdf(doc.mimeType)) continue;
     const poor = imagePages(pages);
     if (poor.length === 0) continue;
     const bytes = await extractPdfPages(doc.bytes, poor);
@@ -228,10 +278,17 @@ export async function composeChapterSlices(
       extracts.push({ documentId: doc.fileId, name: doc.fileName, pages: null });
       continue;
     }
-    const bytes = await extractPdfPages(await readBytes(doc), slice.pages as number[]);
-    if (!bytes) continue;
-    const name = `${doc.fileName} — pages ${pageRanges(slice.pages as number[])}`;
-    const source: SourceDocument = { fileId: doc.fileId, key: doc.key, fileName: name, mimeType: PDF_MIME, bytes };
+    const wanted = slice.pages as number[];
+    const raw = await readBytes(doc);
+    // Un document texte se découpe sur les mêmes pages que l'étape chapitres a
+    // lues (`textPages`), et repart en texte.
+    const bytes = isPlainText(doc.mimeType)
+      ? new TextEncoder().encode(textExtract(textPages(new TextDecoder('utf-8').decode(raw)), wanted))
+      : await extractPdfPages(raw, wanted);
+    if (!bytes || bytes.length === 0) continue;
+    const name = `${doc.fileName} — pages ${pageRanges(wanted)}`;
+    const mimeType = isPlainText(doc.mimeType) ? doc.mimeType : PDF_MIME;
+    const source: SourceDocument = { fileId: doc.fileId, key: doc.key, fileName: name, mimeType, bytes };
     toUpload.push(source);
     documents.push(source);
     extracts.push({ documentId: doc.fileId, name, pages: slice.pages as number[] });

@@ -298,18 +298,27 @@ export async function reattachQuestions(from: string, to: string): Promise<numbe
  *  Une seule écriture pour le transfert, filtrée sur la notion : aucune liste
  *  d'élèves ne voyage dans l'URL, quel que soit leur nombre. Rend le nombre
  *  d'élèves transférés. */
-export async function transferMastery(from: string, to: string): Promise<number> {
+export async function transferMastery(
+  from: string,
+  to: string,
+  /** Qui garde sa progression quand un élève en a sur les deux notions.
+   *  `keepSource` (défaut) : celle qu'on efface, l'ancienne. `keepTarget` :
+   *  celle qui reste — quand c'est elle l'ancienne, et la source une neuve. */
+  options: { onClash?: 'keepSource' | 'keepTarget' } = {},
+): Promise<number> {
   if (from === to) return 0;
   const supabase = getSupabaseServerClient();
+  // La ligne sacrifiée en cas de doublon (notion, élève) est celle du côté perdant.
+  const [winner, loser] = options.onClash === 'keepTarget' ? [to, from] : [from, to];
 
   // table encore nommée bricks en base (brick_mastery, brick_id)
-  const { data: fresh, error } = await supabase.from('brick_mastery').select('id, user_id').eq('brick_id', to);
+  const { data: fresh, error } = await supabase.from('brick_mastery').select('id, user_id').eq('brick_id', loser);
   if (error) throw new Error(error.message);
   if ((fresh ?? []).length > 0) {
     const { data: both, error: bothError } = await supabase
       .from('brick_mastery')
       .select('user_id')
-      .eq('brick_id', from)
+      .eq('brick_id', winner)
       .in('user_id', (fresh ?? []).map((r) => r.user_id as string));
     if (bothError) throw new Error(bothError.message);
     const clash = new Set((both ?? []).map((r) => r.user_id as string));
@@ -339,6 +348,19 @@ export async function transferMastery(from: string, to: string): Promise<number>
  *
  *  Le filtre sur `workshop_id` est une ceinture de plus : les identifiants
  *  viennent d'un calcul local, mais une suppression ne se protège jamais trop. */
+/** Donne à une notion existante la formulation d'une redite neuve (§7.6). Le
+ *  filtre sur l'atelier est une ceinture : l'identifiant vient d'un calcul
+ *  local, mais il a transité par une réponse de modèle. */
+export async function retitleNotion(workshopId: string, notionId: string, title: string): Promise<void> {
+  // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
+  const { error } = await getSupabaseServerClient()
+    .from('workshop_bricks')
+    .update({ title, updated_at: new Date().toISOString() })
+    .eq('workshop_id', workshopId)
+    .eq('id', notionId);
+  if (error) throw new Error(error.message);
+}
+
 export async function removeOrphans(
   workshopId: string,
   cleanup: { chapterIds: string[]; notionIds: string[] },

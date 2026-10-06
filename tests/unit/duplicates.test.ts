@@ -9,6 +9,7 @@ import {
   judgedDuplicates,
   questionFingerprint,
   rediteCandidates,
+  rediteWrites,
   resolveRedites,
   type RediteNotion,
   SIMILAR_ENOUGH_TO_ASK,
@@ -365,6 +366,43 @@ describe('redites (§7.6)', () => {
       const answers = [0, 0, 7, -1, 1.5].map((pair) => ({ pair, duplicate: true }));
       expect(judgedDuplicates(pairs, [...answers, { pair: 0, duplicate: false }])).toEqual([{ a: 'old', b: 'new' }]);
       expect(judgedDuplicates(pairs, [{ pair: 0, duplicate: false }])).toEqual([]);
+    });
+  });
+
+  describe('rediteWrites — aucune redite n’efface une notion existante', () => {
+    const writes = (duplicates: { a: string; b: string }[], notions: RediteNotion[]) => {
+      const byId = new Map(notions.map((x) => [x.id, x]));
+      return rediteWrites(resolveRedites(duplicates, byId, order).actions, byId);
+    };
+
+    it('une neuve et une ancienne : l’ancienne ligne reste, prend le titre de la neuve et la place la plus haute', () => {
+      expect(writes([{ a: 'old', b: 'new' }], [n('old', LOIRE, 'c3', false), n('new', LOIRE_BIS, 'c1', true)]))
+        .toEqual([{ kind: 'absorb', old: 'old', fresh: 'new', title: LOIRE_BIS, chapterId: 'c1' }]);
+      expect(writes([{ a: 'old', b: 'new' }], [n('old', LOIRE, 'c1', false), n('new', LOIRE_BIS, 'c3', true)]))
+        .toEqual([{ kind: 'absorb', old: 'old', fresh: 'new', title: LOIRE_BIS, chapterId: 'c1' }]);
+    });
+
+    it('deux neuves : seule une neuve s’efface', () => {
+      expect(writes([{ a: 'n3', b: 'n1' }], [n('n3', LOIRE, 'c3', true), n('n1', LOIRE_BIS, 'c1', true)]))
+        .toEqual([{ kind: 'merge', keep: 'n1', remove: 'n3', moveTo: null }]);
+    });
+
+    it('quelle que soit la paire, rien d’ancien n’est jamais effacé', () => {
+      const notions = [
+        n('o1', LOIRE, 'c1', false, '2026-01-01'),
+        n('o2', LOIRE_BIS, 'c2', false, '2026-06-01'),
+        n('f1', LOIRE_BIS, 'c3', true),
+        n('f2', LOIRE, 'c2', true),
+      ];
+      const ids = notions.map((x) => x.id);
+      for (const a of ids) {
+        for (const b of ids) {
+          for (const w of writes([{ a, b }], notions)) {
+            const erased = w.kind === 'absorb' ? w.fresh : w.kind === 'merge' ? w.remove : null;
+            if (erased) expect(erased.startsWith('f')).toBe(true);
+          }
+        }
+      }
     });
   });
 
