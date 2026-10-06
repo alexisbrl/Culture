@@ -36,6 +36,12 @@ describe('classifyFailure', () => {
     expect(classifyFailure(new Error('fetch failed'))).toBe('unavailable');
   });
 
+  it('range une connexion coupée en pleine réponse parmi les pannes passagères', () => {
+    expect(classifyFailure(new Error('terminated'))).toBe('unavailable');
+    expect(classifyFailure(new Error('socket hang up'))).toBe('unavailable');
+    expect(isTransient(classifyFailure(new Error('terminated')))).toBe(true);
+  });
+
   it('distingue le débit, la panne et la fenêtre', () => {
     expect(classifyFailure(providerError('rate limit', 429))).toBe('rate_limited');
     expect(classifyFailure(providerError('bad gateway', 502))).toBe('unavailable');

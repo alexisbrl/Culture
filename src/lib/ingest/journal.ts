@@ -116,7 +116,15 @@ export function classifyFailure(error: unknown): FailureCause {
   // du repli sur un modèle plus large. Ici on ne décide de rien, on nomme.
   if (text.includes('prompt is too long') || text.includes('exceed context limit')) return 'oversize';
   // Une panne réseau n'a pas de code : `fetch failed`, `ECONNRESET`, `timeout`.
-  if (text.includes('fetch failed') || text.includes('econnreset') || text.includes('timeout')) {
+  // `terminated` : la connexion coupée en pleine réponse, sans motif — deux lots
+  // de questions perdus sans relance sur l'atelier « Workshop 13 », 06/10/2026.
+  if (
+    text.includes('fetch failed') ||
+    text.includes('econnreset') ||
+    text.includes('timeout') ||
+    text === 'terminated' ||
+    text.includes('socket hang up')
+  ) {
     return 'unavailable';
   }
   return 'unknown';
