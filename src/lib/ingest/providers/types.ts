@@ -103,7 +103,13 @@ export type IngestScope =
       retry?: { previous: string[] };
       /** La relance du seuil d'oubli (§7.6) : on ne redemande que les verdicts
        *  de ces notions, chapitres figés. */
-      relaunch?: { notions: { id: string; title: string }[]; chapters: { id: string; name: string }[] };
+      relaunch?: {
+        notions: { id: string; title: string }[];
+        chapters: { id: string; name: string }[];
+        /** `fixed` : premier verdict sur un découpage posé par le site à partir
+         *  des parties du document de l'IA (§7.6), et non une relance. */
+        fixed?: boolean;
+      };
     }
   | {
       /** Étape 2 — les notions d'UN chapitre, sur ses seules pages (§7.2). Les

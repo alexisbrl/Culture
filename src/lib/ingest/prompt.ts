@@ -820,10 +820,16 @@ Ne réponds pas « chapter » par précaution. Tu ne lis que le TEXTE du cours, 
 export function chaptersRelaunchInstruction(input: {
   notions: { id: string; title: string }[];
   chapters: { id: string; name: string }[];
+  /** Premier verdict sur un découpage posé par le site (parties du document de
+   *  l'IA), et non une relance : seule la phrase d'ouverture change. */
+  fixed?: boolean;
 }): string {
   const chapters = input.chapters.map((c) => `- ${c.id} — ${c.name}`).join('\n');
   const notions = input.notions.map((n) => `- ${n.id} — ${n.title}`).join('\n');
-  return `Ta réponse précédente sur ce cours n'a statué sur aucune des notions ci-dessous. Statue maintenant sur CHACUNE d'elles, sans exception. Le découpage en chapitres est fait : tu ne crées, ne renommes et n'écartes aucun chapitre.
+  const opening = input.fixed
+    ? "Les chapitres de ce cours sont ses parties, déjà posées. Statue sur CHACUNE des notions existantes ci-dessous, sans exception. Tu ne crées, ne renommes et n'écartes aucun chapitre."
+    : "Ta réponse précédente sur ce cours n'a statué sur aucune des notions ci-dessous. Statue maintenant sur CHACUNE d'elles, sans exception. Le découpage en chapitres est fait : tu ne crées, ne renommes et n'écartes aucun chapitre.";
+  return `${opening}
 
 LES CHAPITRES AU PROGRAMME :
 ${chapters}

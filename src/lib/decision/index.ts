@@ -3,12 +3,13 @@
 // La cible est un modèle de décision, Jev (TypeSafe AI) : il ne rédige pas, il
 // rend la probabilité que la réponse soit « oui » — en une fraction de seconde,
 // pour une fraction du prix d'un modèle qui écrit (docs/architecture.md §7.4).
-// Branché le 08/10/2026 (@/lib/decision/jev), Claude Haiku en repli
-// (@/lib/decision/haiku). Le reste du code ne connaît que `Decider` : le
+// Branché le 08/10/2026 (@/lib/decision/jev), DeepSeek en relais
+// (@/lib/decision/deepseek). Le reste du code ne connaît que `Decider` : le
 // choix se fait dans `getDecider`, et nulle part ailleurs.
 
 import type { StepUsage } from '@/lib/ingest/journal';
 
+import { createDeepSeekDecider } from './deepseek';
 import { createHaikuDecider } from './haiku';
 import { createJevDecider } from './jev';
 
@@ -74,9 +75,12 @@ export function withFallback(primary: Decider, fallback: Decider): Decider {
   };
 }
 
-/** Le décideur en service : Jev depuis le 08/10/2026, Haiku en repli — et seul
- *  s'il n'y a pas de clé Jev (développement sans accès). */
+/** Le décideur en service : Jev depuis le 08/10/2026, DeepSeek en relais
+ *  (décision d'Alexis : essai du 08/10, 25/25 sur la décision d'écrire et
+ *  d'accord avec Jev sur 149 redites sur 150). Haiku ne sert plus que si une
+ *  clé manque — développement sans accès. */
 export function getDecider(): Decider {
-  if (!process.env.JEV_API_KEY) return createHaikuDecider();
-  return withFallback(createJevDecider(), createHaikuDecider());
+  const fallback = process.env.DEEPSEEK_API_KEY ? createDeepSeekDecider() : createHaikuDecider();
+  if (!process.env.JEV_API_KEY) return fallback;
+  return withFallback(createJevDecider(), fallback);
 }

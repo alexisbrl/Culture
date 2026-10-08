@@ -483,6 +483,14 @@ existant n'y reste que s'il correspond à une partie de ce cours ; sinon il sort
 un sujet voisin. C'est la conséquence directe du découpage, pas une décision délicate, et
 la consigne le dit ainsi.
 
+**Le document de l'IA seul se découpe sans IA** (`src/lib/ingest/partsProgram.ts`). Quand
+c'est le seul document de la génération, ses parties sont déjà ses chapitres (§7.4) : le
+site les pose lui-même, une partie par chapitre, dans l'ordre du document. Un chapitre
+existant au titre identique à une partie est gardé tel quel avec ses notions ; les autres
+sortent. Sans notion existante, on passe directement à l'étape notions ; avec, un seul
+appel rend les verdicts, chapitres figés — la consigne de la relance, ouverte autrement —,
+et la suite est celle de l'étape ordinaire (seuil d'oubli, relance).
+
 **La forme : une case obligatoire par chapitre existant.** Le format de réponse est
 construit pour chaque génération, avec une case par chapitre existant : rang et pages
 s'il correspond à une partie du cours, rang 0 et raison sinon. Le modèle ne peut plus en
@@ -512,7 +520,9 @@ l'ancien sort de lui-même.
 programme a reçu un rang : un classement partiel est une consigne ambiguë — les oubliés
 iraient où ? Comme l'ordre est cosmétique, ne rien changer est toujours moins grave que
 remuer un programme sur une réponse incomplète, et c'est dit au compte-rendu. Seule la
-**suite** des rangs est lue, jamais leur valeur.
+**suite** des rangs est lue, jamais leur valeur. Le format de réponse ne sait pas
+interdire deux rangs égaux : **une égalité se départage par la place des chapitres dans
+le cours** (premier document du lot, puis première page), et le compte-rendu le dit.
 
 **Une partie qui se resserre se règle sans renommage** : le modèle crée le nouveau
 chapitre **et** écarte l'ancien. Les notions encore d'actualité rejoignent le nouveau ;
@@ -553,7 +563,7 @@ les notions de son chapitre : si elle recrée une notion qui existe dans un autr
 le lui dit. Quand tous les chapitres ont fini leur étape notions, le site repère les
 **paires suspectes** parmi les notions au programme — deux titres dont au moins 40 % des
 mots porteurs sont communs, les plus proches d'abord, 300 au plus — et **le décideur**
-(§7.4 — Jev, Haiku quand il ne répond pas) **tranche chaque paire par une question
+(§7.4 — Jev, DeepSeek quand il ne répond pas) **tranche chaque paire par une question
 fermée** : l'une des deux est-elle redondante, sans fait vérifiable que l'autre n'ait
 déjà ? Le « oui » se lit au-dessus de 0,6 : une redite retenue efface une notion neuve. Toutes les paires partent en parallèle, cinq à la fois ; une réponse
 manquante vaut « non ». Rien ne part s'il n'y a aucune paire. Une paire qui compte une

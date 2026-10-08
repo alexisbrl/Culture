@@ -19,7 +19,7 @@
 // ─── Décider, puis écrire une seule fois ─────────────────────────────────────
 //
 // Écrire ou non est une question fermée, tranchée AVANT l'appel par le décideur
-// (@/lib/decision) — Jev depuis le 08/10/2026, Haiku en repli. Le
+// (@/lib/decision) — Jev depuis le 08/10/2026, DeepSeek en relais. Le
 // modèle qui écrit reçoit la décision toute faite : tout le corpus quand il
 // écrit, rien quand il ne fait que réécrire la consigne. Lui laisser le choix,
 // c'était un premier appel à l'aveugle qui rédigeait un cours entier pour

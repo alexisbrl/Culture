@@ -609,6 +609,10 @@ export async function insertGroups(
   importId: string,
   groups: PlanGroupInput[],
   notionIds: Map<string, string>,
+  /** Où dire combien de groupes n'ont pas été écrits faute de notion vivante :
+   *  le journal les compte (rare — aucune question sans notion sur 2 553 en
+   *  30 jours au 08/10/2026 —, mais à surveiller). */
+  report: { droppedGroups: number } = { droppedGroups: 0 },
   /** Reprises restantes si une notion disparaît PENDANT l'écriture. */
   retries = 1,
 ): Promise<number> {
@@ -640,6 +644,7 @@ export async function insertGroups(
     for (const row of data ?? []) live.add(row.id as string);
   }
   const { kept, dropped } = groupsWithLiveNotions(groups, (ref) => resolve(ref, notionIds), live);
+  report.droppedGroups += dropped;
   if (dropped > 0) console.info(`[ingest] ${dropped} groupe(s) de questions non écrit(s) : notion supprimée ou absente`);
   groups = kept;
   if (groups.length === 0) return 0;
@@ -701,7 +706,7 @@ export async function insertGroups(
       // doit rester sans sa notion — et on le réécrit, la vérification refaite.
       await supabase.from('exam_questions').delete().in('id', groupIds);
       if (linkError.code === '23503' && retries > 0) {
-        return insertGroups(workshopId, importId, groups, notionIds, retries - 1);
+        return insertGroups(workshopId, importId, groups, notionIds, report, retries - 1);
       }
       throw new Error(linkError.message);
     }

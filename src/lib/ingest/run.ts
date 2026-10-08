@@ -113,7 +113,8 @@ import {
   type NotionVerdict,
   type ThresholdDecision,
 } from './verdicts';
-import { chaptersWithPages, composeChapterSlices, composeChaptersInput, localizeSpans, resolveDocumentName, sourcePageOf } from './chaptersInput';
+import { chaptersWithPages, composeChapterSlices, composeChaptersInput, localizeSpans, readDocumentText, resolveDocumentName, sourcePageOf } from './chaptersInput';
+import { coursePositions, partsProgram, rankedByCourse, type PartsProgram } from './partsProgram';
 import type { PageSpan } from './slicing';
 import { releaseDocuments } from './release';
 import {
@@ -1446,6 +1447,12 @@ export async function ingestChapters(
   });
 
   const [prepared, program] = await Promise.all([preparedOf(importId), loadProgramForChapters(workshopId)]);
+
+  // Le document de l'IA, seul document du lot : ses parties SONT les chapitres,
+  // le site les pose sans appel (@/lib/ingest/partsProgram).
+  const fromParts = await partsProgramOf(prepared, program.chapters);
+  if (fromParts) return ingestChaptersFromParts(workshopId, actorId, importId, provider, program, fromParts);
+
   const input = await composeChaptersInput(await sourcesOf(prepared), (docs) => provider.prepare(docs));
 
   try {
@@ -1561,6 +1568,109 @@ export async function ingestChapters(
       };
     }
     return await applyStage1(workshopId, actorId, importId, pending, standings);
+  } finally {
+    await releaseDocuments(provider, input.images);
+  }
+}
+
+type PartsSource = { program: PartsProgram; documentId: string; fileName: string; pageCount: number };
+
+/** Le découpage tiré des parties du document de l'IA, si c'est le SEUL document
+ *  du lot et qu'il a des parties titrées ; sinon `null`, et l'étape chapitres
+ *  ordinaire s'en charge. */
+async function partsProgramOf(
+  prepared: readonly PreparedDocument[],
+  chapters: readonly { id: string; name: string }[],
+): Promise<PartsSource | null> {
+  if (prepared.length !== 1) return null;
+  const doc = prepared[0];
+  const { data, error } = await getSupabaseServerClient()
+    .from('workshop_files')
+    .select('generated')
+    .eq('id', doc.fileId)
+    .maybeSingle();
+  if (error || data?.generated !== true) return null;
+  const [source] = await sourcesOf(prepared);
+  const text = await readDocumentText(source);
+  if (!text.pages) return null;
+  const program = partsProgram(doc.fileId, text.pages, chapters);
+  return program ? { program, documentId: doc.fileId, fileName: doc.fileName, pageCount: text.pages.length } : null;
+}
+
+/** L'étape chapitres quand le site pose lui-même le découpage (§7.6). Sans
+ *  notion existante, rien n'est appelé ; avec, un seul appel rend les verdicts,
+ *  chapitres figés — la consigne de la relance, ouverte autrement. La suite est
+ *  celle de l'étape ordinaire : seuil d'oubli, relance éventuelle, écriture. */
+async function ingestChaptersFromParts(
+  workshopId: string,
+  actorId: string,
+  importId: string,
+  provider: PlanProvider,
+  program: { chapters: { id: string; name: string }[]; notions: { id: string; title: string; chapterId: string | null }[] },
+  source: PartsSource,
+): Promise<ChapterStructureResult> {
+  const parts = source.program;
+  const pending: Stage1Pending = {
+    fresh: parts.fresh,
+    chapterOrder: parts.chapterOrder,
+    chapterBounds: parts.chapterBounds,
+    dropped: parts.dropped,
+    withoutPages: [],
+    visibleExisting: program.chapters,
+    notions: program.notions,
+    standings: {},
+    pageCounts: { [source.documentId]: source.pageCount },
+    fileNames: { [source.documentId]: source.fileName },
+    discarded: [],
+    adjusted: [],
+  };
+  // Une ligne au journal, sans appel : on saura combien de générations y passent.
+  await logStep({
+    importId,
+    workshopId,
+    step: 'chapters',
+    provider: 'site',
+    status: 'ok',
+    produced: { automatique: true, parties: parts.chapterOrder.filter((c) => c.rank > 0).length, gardes: parts.kept, ecartes: parts.dropped.length, notions: program.notions.length },
+  });
+
+  if (program.notions.length === 0) return applyStage1(workshopId, actorId, importId, pending, new Map());
+
+  const dropped = new Set(parts.dropped);
+  const chapters = [
+    ...program.chapters.filter((c) => !dropped.has(c.id)),
+    ...parts.fresh.map((c) => ({ id: c.ref, name: c.name })),
+  ];
+  const input = await composeChaptersInput(await sourcesOf(await preparedOf(importId)), (docs) => provider.prepare(docs));
+  try {
+    const meta: StepMeta = { importId, workshopId, step: 'chapters', provider };
+    const attempt = await modelCall(meta, () => provider.documentToPlan(input.images, EMPTY, {
+      pass: 'chapters',
+      corpusText: input.text,
+      fileNames: Object.values(input.fileNames),
+      relaunch: { notions: program.notions.map((n) => ({ id: n.id, title: n.title })), chapters, fixed: true },
+    }));
+    await addImportUsage(importId, attempt.result.usage);
+    const parsed = parsePlanLogged('chapitres (parties)', attempt.result.plan, {
+      chapterIds: [...chapters.map((c) => c.id), ...parts.dropped],
+      notionIds: program.notions.map((n) => n.id),
+    }, attempt.result.truncated);
+    const layout: ChapterLayout = { visible: new Set(chapters.map((c) => c.id)), dropped };
+    const standings = classifyNotions(program.notions, toVerdicts(parsed.notionVerdicts), layout);
+    await stepDone(meta, attempt, {
+      automatique: true,
+      verdicts: parsed.notionVerdicts.length,
+      notions: program.notions.length,
+      ecartes: parsed.discarded.length,
+    });
+
+    const full: Stage1Pending = { ...pending, standings: Object.fromEntries(standings), discarded: parsed.discarded, adjusted: parsed.adjusted };
+    const decision = thresholdDecision(standings, 'first');
+    if (decision === 'relaunch') {
+      await writeScope(importId, { stage1Pending: full });
+      return { chapters: [], discarded: parsed.discarded, adjusted: parsed.adjusted, decision, forgottenShare: forgottenShare(standings) };
+    }
+    return await applyStage1(workshopId, actorId, importId, full, standings);
   } finally {
     await releaseDocuments(provider, input.images);
   }
@@ -1682,7 +1792,18 @@ async function applyStage1(
   const created = await insertChapters(workshopId, actorId, importId, pending.fresh);
   const idOf = (ref: string) => created.get(ref) ?? ref;
 
-  const reordering = await applyChapterOrder(workshopId, pending.chapterOrder, created);
+  const reordering = await applyChapterOrder(
+    workshopId,
+    pending.chapterOrder,
+    created,
+    coursePositions(pending.chapterBounds, Object.keys(pending.pageCounts)),
+  );
+  if (reordering.ties > 0) {
+    adjusted.push({
+      kind: 'chapter',
+      reason: `${reordering.ties} chapitre${reordering.ties > 1 ? 's' : ''} au même rang qu'un autre : départagé${reordering.ties > 1 ? 's' : ''} par leur place dans le cours`,
+    });
+  }
   if (reordering.missing > 0) {
     adjusted.push({
       kind: 'chapter',
@@ -1774,9 +1895,13 @@ async function applyChapterOrder(
   workshopId: string,
   order: readonly { ref: string; rank: number }[],
   created: ReadonlyMap<string, string>,
-): Promise<{ reordered: boolean; missing: number }> {
-  const ranked = order.filter((c) => c.rank > 0);
-  if (ranked.length === 0) return { reordered: false, missing: 0 };
+  /** La place de chaque chapitre dans le cours : elle départage deux rangs
+   *  égaux (décision d'Alexis du 08/10/2026). */
+  coursePosition: (ref: string) => number = () => 0,
+): Promise<{ reordered: boolean; missing: number; ties: number }> {
+  const ranked = rankedByCourse(order, coursePosition);
+  const ties = ranked.length - new Set(ranked.map((c) => c.rank)).size;
+  if (ranked.length === 0) return { reordered: false, missing: 0, ties: 0 };
 
   try {
     const supabase = getSupabaseServerClient();
@@ -1793,7 +1918,7 @@ async function applyChapterOrder(
     const wanted: string[] = [];
     const placed = new Set<string>();
 
-    for (const entry of [...ranked].sort((a, b) => a.rank - b.rank)) {
+    for (const entry of ranked) {
       // Une référence de cette réponse devient l'identifiant réellement créé ;
       // une référence existante est déjà un identifiant.
       const id = created.get(entry.ref) ?? entry.ref;
@@ -1803,13 +1928,13 @@ async function applyChapterOrder(
     }
 
     const missing = rows.filter((c) => !c.hidden && !placed.has(c.id)).length;
-    if (missing > 0 || wanted.length === 0) return { reordered: false, missing };
+    if (missing > 0 || wanted.length === 0) return { reordered: false, missing, ties };
 
     await reorderChapters(workshopId, [...wanted, ...rows.map((c) => c.id).filter((id) => !placed.has(id))]);
-    return { reordered: true, missing: 0 };
+    return { reordered: true, missing: 0, ties };
   } catch (error) {
     console.warn('[ingest] ordre des chapitres inchangé :', error instanceof Error ? error.message : error);
-    return { reordered: false, missing: 0 };
+    return { reordered: false, missing: 0, ties: 0 };
   }
 }
 
@@ -2295,7 +2420,7 @@ const REDITE_CONCURRENCY = 5;
 const REDITE_THRESHOLD = 0.6;
 
 /** Tranche chaque paire par une question fermée au décideur (§7.6) — Jev,
- *  Haiku en repli —, toutes en parallèle par paquets. Rend les paires
+ *  DeepSeek en relais —, toutes en parallèle par paquets. Rend les paires
  *  jugées redites. **Une réponse manquante ou illisible vaut « non »** : une
  *  redite qui reste se retire au passage suivant, une notion retirée à tort se
  *  perd. Une ligne au journal pour l'ensemble, pas une par paire. */
@@ -2672,7 +2797,8 @@ export async function ingestParcoursQuestions(
     capped.push({ ...group, questions });
   }
 
-  const written = await insertGroups(workshopId, importId, capped, new Map());
+  const report = { droppedGroups: 0 };
+  const written = await insertGroups(workshopId, importId, capped, new Map(), report);
 
   // ⚠️ **Demandé vs rendu vs écrit — la seule façon de savoir qui sous-produit.**
   // Un import qui rend moitié moins de questions que demandé peut l'être pour
@@ -2697,6 +2823,8 @@ export async function ingestParcoursQuestions(
   await stepDone(meta, call, {
     notionsDuLot: notions.length,
     demandees: Number.isFinite(asked) ? asked : null,
+    // Groupes non écrits : une de leurs notions a disparu pendant l'appel.
+    sansNotion: report.droppedGroups,
     plafond: budget,
     rendues: returned,
     ecrites: written,
@@ -2832,7 +2960,8 @@ export async function ingestExamQuestions(
     capped.push({ ...group, questions });
   }
 
-  const written = await insertGroups(workshopId, importId, capped, new Map());
+  const report = { droppedGroups: 0 };
+  const written = await insertGroups(workshopId, importId, capped, new Map(), report);
 
   await stepDone(meta, call, {
     chapitresDeLaTranche: chapters.length,
@@ -2846,6 +2975,8 @@ export async function ingestExamQuestions(
     // même chose qu'une réponse mal formée.
     redites: removed.length,
     ecartes: plan.discarded.length,
+    // Groupes non écrits : une de leurs notions a disparu pendant l'appel.
+    sansNotion: report.droppedGroups,
     corriges: plan.adjusted.length,
   });
 
