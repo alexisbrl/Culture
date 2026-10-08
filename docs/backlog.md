@@ -118,7 +118,13 @@
 
 - **Écran d'administration des générations IA.** Demande d'Alexis du 03/09/2026. Le journal de bord (`docs/architecture.md` §8) en est le prérequis. L'écran vient **quand les données peuvent remplir un graphique** : taux d'échec par cause et par semaine, coût moyen, durée moyenne, part des générations abandonnées. Réservé au compte propriétaire du produit.
 
-- **Le résumé mensuel et la purge du journal de bord ne sont pas écrits.** Cible : `docs/architecture.md` §8 (conservation). Volontairement différé : une purge se conçoit après avoir vu les données qu'elle emporte. Forme attendue : un job `pg_cron` mensuel écrivant dans une table de compteurs, **jamais** un nettoyage glissé dans un chemin de lecture.
+- **Le résumé mensuel et la purge du journal de bord ne sont pas écrits.** Cible : `docs/architecture.md` §8 (conservation). Volontairement différé : une purge se conçoit après avoir vu les données qu'elle emporte. Forme attendue : un job `pg_cron` mensuel écrivant dans une table de compteurs, **jamais** un nettoyage glissé dans un chemin de lecture. Le résumé porte aussi le coût (`ai_import_events.cost_usd`).
+
+- **Les notions sont trop fines.** Constat du 07/10/2026 sur l'atelier « Algèbre - Math Sup » : 675 notions pour 10 chapitres, exactes et fidèles, mais chaque propriété d'une liste devient une notion (les huit axiomes de l'addition des vecteurs), un exemple numérique aussi, et jusqu'à « le nom complet de la matrice ». C'est le premier poste de coût (l'écriture des notions faisait les deux tiers de la facture) et la cause des chapitres trop longs (ci-dessous). Décision d'Alexis du 08/10/2026 : à retravailler, sans toucher au découpage en chapitres. Cible à écrire dans `docs/architecture.md` §7.5 une fois la règle tranchée avec lui.
+
+- **Un chapitre dont l'écriture des notions dépasse la durée d'une tâche est perdu.** Le 07/10/2026, trois chapitres sur treize n'ont jamais répondu (coupés entre 5 et 8 minutes, `docs/architecture.md` §7.11) ; leur coût est désormais estimé au journal, mais le chapitre reste vide. **Décision d'Alexis du 08/10/2026 : pas de découpage en plusieurs appels** ; il a d'autres solutions, à cadrer avec lui. Voir aussi la piste [[arrêter nous-mêmes un appel avant la limite]] (T3 2027).
+
+- **Les compteurs de jetons d'une génération perdent des lots.** `ai_imports.input_tokens`/`output_tokens` s'additionnent appel par appel en lecture puis écriture (`addImportUsage`) : le 07/10/2026, un lot de questions entier y manquait par rapport au journal. Le journal fait foi (vue `ai_generation_costs`) ; à faire : retirer ces compteurs, ou les écrire par une addition côté base.
 
 
 ## T2 2027 — le confort, une fois que ça tourne
