@@ -344,8 +344,8 @@ export function rediteCandidates(
 }
 
 /** La question fermée posée au décideur pour UNE paire suspecte (§7.6).
- *  **Fonction pure.** Une paire, une question : le décideur — Jev à terme,
- *  Haiku en attendant — répond oui ou non en une seconde, et toutes les paires
+ *  **Fonction pure.** Une paire, une question : le décideur — Jev, Haiku en
+ *  repli — répond oui ou non en une seconde, et toutes les paires
  *  partent en parallèle. « Redondante » couvre les deux cas : la même chose
  *  dite autrement, et une notion entièrement contenue dans l'autre. */
 export function rediteQuestion(a: { title: string }, b: { title: string }): { state: string; question: string } {

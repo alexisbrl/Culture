@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { isYes, readProbability } from '@/lib/decision';
+import { isYes, readProbability, withFallback, type Decider } from '@/lib/decision';
 
 describe('readProbability', () => {
   it('garde un nombre entre 0 et 1', () => {
@@ -28,5 +28,27 @@ describe('isYes', () => {
 
   it('accepte un seuil propre à l’usage', () => {
     expect(isYes(0.6, 0.8)).toBe(false);
+  });
+});
+
+describe('withFallback', () => {
+  const decider = (name: string, answer: number | Error): Decider => ({
+    name,
+    decide: async () => {
+      if (answer instanceof Error) throw answer;
+      return { probability: answer, model: name, usage: { inputTokens: 1, outputTokens: 0, cachedTokens: 0, cacheCreationTokens: 0 } };
+    },
+  });
+  const q = { state: 's', question: 'q' };
+
+  it('garde la réponse du premier quand il répond', async () => {
+    expect((await withFallback(decider('jev', 0.9), decider('haiku', 0)).decide(q)).model).toBe('jev');
+  });
+
+  it('passe au second quand le premier est saturé', async () => {
+    const saturated = Object.assign(new Error('Jev 529'), { status: 529 });
+    const decision = await withFallback(decider('jev', saturated), decider('haiku', 1)).decide(q);
+    expect(decision.model).toBe('haiku');
+    expect(decision.probability).toBe(1);
   });
 });

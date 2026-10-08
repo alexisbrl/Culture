@@ -43,6 +43,10 @@ describe('callCostUsd', () => {
     expect(callCostUsd('claude', 'claude-haiku-4-5-20251001', usage(1_000_000, 0), OFF_PEAK)).toBeCloseTo(1, 6);
   });
 
+  it('chiffre Jev à l’entrée seule, même sous un autre nom de décideur', () => {
+    expect(callCostUsd('jev', 'jev-1.13.0', usage(1_000_000, 1_000_000), OFF_PEAK)).toBeCloseTo(0.042, 6);
+  });
+
   it('ne confond pas Opus 5.5 avec Opus 5', () => {
     expect(callCostUsd('claude', 'claude-opus-5-5', usage(1_000_000, 0), OFF_PEAK)).toBeCloseTo(4, 6);
     expect(callCostUsd('claude', 'claude-opus-5', usage(1_000_000, 0), OFF_PEAK)).toBeCloseTo(5, 6);

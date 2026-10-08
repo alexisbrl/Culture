@@ -2282,12 +2282,20 @@ export async function ingestRedites(
   return { pairs: pairs.length, removed, duplicates, adjusted: [] };
 }
 
-/** Combien de questions de redite partent en même temps. Assez pour trancher
- *  300 paires en une vingtaine de secondes, sans saturer le débit du compte. */
-const REDITE_CONCURRENCY = 20;
+/** Combien de questions de redite partent en même temps. Jev répond en un
+ *  quart de seconde : 300 paires en une vingtaine de secondes. Il a refusé pour
+ *  saturation à dix demandes simultanées (08/10/2026), d'où cinq. */
+const REDITE_CONCURRENCY = 5;
 
-/** Tranche chaque paire par une question fermée au décideur (§7.6) — Jev à
- *  terme, Haiku en attendant —, toutes en parallèle par paquets. Rend les paires
+/** Le « oui » d'une redite : au-dessus du milieu, parce qu'une redite retenue
+ *  efface une notion neuve, et qu'une redite manquée ne fait qu'en laisser
+ *  une de trop. Réglé le 08/10/2026 sur 150 paires réelles (atelier d'algèbre) :
+ *  à 0,6, les erreurs relues de Jev entre 0,5 et 0,6 étaient toutes des
+ *  « oui » à tort. */
+const REDITE_THRESHOLD = 0.6;
+
+/** Tranche chaque paire par une question fermée au décideur (§7.6) — Jev,
+ *  Haiku en repli —, toutes en parallèle par paquets. Rend les paires
  *  jugées redites. **Une réponse manquante ou illisible vaut « non »** : une
  *  redite qui reste se retire au passage suivant, une notion retirée à tort se
  *  perd. Une ligne au journal pour l'ensemble, pas une par paire. */
@@ -2316,7 +2324,7 @@ async function judgeRedites(
         usage.cachedTokens += result.usage.cachedTokens;
         const probability = readProbability(result.probability);
         if (probability === null) unreadable += 1;
-        else if (isYes(probability)) duplicates.push({ a: pair.a.id, b: pair.b.id });
+        else if (isYes(probability, REDITE_THRESHOLD)) duplicates.push({ a: pair.a.id, b: pair.b.id });
       } catch {
         unreadable += 1;
       }

@@ -19,7 +19,7 @@
 // ─── Décider, puis écrire une seule fois ─────────────────────────────────────
 //
 // Écrire ou non est une question fermée, tranchée AVANT l'appel par le décideur
-// (@/lib/decision) — Jev à terme, Haiku en attendant (Alexis, 25/09/2026). Le
+// (@/lib/decision) — Jev depuis le 08/10/2026, Haiku en repli. Le
 // modèle qui écrit reçoit la décision toute faite : tout le corpus quand il
 // écrit, rien quand il ne fait que réécrire la consigne. Lui laisser le choix,
 // c'était un premier appel à l'aveugle qui rédigeait un cours entier pour
@@ -246,7 +246,7 @@ export function writingQuestion(input: {
   fileNames: string[];
   /** Le corps actuel du document de l'IA, s'il existe. Seuls ses titres partent. */
   current?: string | null;
-}): { state: string; question: string } {
+}): { state: string; question: string; criteria: { true: string; false: string } } {
   const lines: string[] = [];
   const name = input.workshop?.name?.trim();
   if (name) lines.push(`L'atelier : « ${name} »`);
@@ -279,7 +279,17 @@ export function writingQuestion(input: {
     // en « non » — la demande était perdue. Sous cette forme, à température
     // nulle, 18 sur 19 sur trois passages ; la seule erreur (« insiste sur les
     // éruptions », un cours de l'IA existant) va dans le sens coûteux.
-    question: "Classe la demande. A : elle demande d'agir sur un COURS — en écrire un, le compléter, l'enrichir, le corriger, ou au contraire en retirer, raccourcir, simplifier, réécrire ou traduire une partie. B : elle ne porte que sur les questions à venir — leur difficulté, leur langue, leur type, les points sur lesquels insister, le contenu d'une question précise —, ou sur rien d'enseignable. La demande est-elle de type A ?",
+    // ⚠️ **La frontière passe dans les `criteria`, pas dans la question** (essai
+    // du 08/10/2026, 25 demandes types) : Jev lit au pied de la lettre, et sous
+    // la forme « classe A ou B » il faisait 24/25 — « ajoute des questions sur
+    // la tectonique » partait en « oui ». Sous cette forme, 25/25, avec un
+    // écart net : tous les « oui » au-dessus de 0,91, tous les « non » sous
+    // 0,11. Haiku, qui reçoit les critères à la suite, reste à 25/25.
+    question: "La demande de l'utilisateur demande-t-elle de modifier le COURS (le texte de cours de l'atelier), et pas seulement les questions ?",
+    criteria: {
+      true: "Elle demande d'écrire un cours, de le compléter, l'enrichir, le corriger, ou d'en retirer, raccourcir, simplifier, réécrire ou traduire une partie.",
+      false: "Elle ne porte que sur les questions à venir (difficulté, langue, type, nombre, sujets sur lesquels poser des questions, contenu d'une question), ou sur quelque chose qui n'est pas enseignable.",
+    },
   };
 }
 

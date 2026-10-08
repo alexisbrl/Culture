@@ -553,9 +553,9 @@ les notions de son chapitre : si elle recrée une notion qui existe dans un autr
 le lui dit. Quand tous les chapitres ont fini leur étape notions, le site repère les
 **paires suspectes** parmi les notions au programme — deux titres dont au moins 40 % des
 mots porteurs sont communs, les plus proches d'abord, 300 au plus — et **le décideur**
-(§7.4 — Jev à terme, Haiku en attendant) **tranche chaque paire par une question
+(§7.4 — Jev, Haiku quand il ne répond pas) **tranche chaque paire par une question
 fermée** : l'une des deux est-elle redondante, sans fait vérifiable que l'autre n'ait
-déjà ? Toutes les paires partent en parallèle, par paquets de vingt ; une réponse
+déjà ? Le « oui » se lit au-dessus de 0,6 : une redite retenue efface une notion neuve. Toutes les paires partent en parallèle, cinq à la fois ; une réponse
 manquante vaut « non ». Rien ne part s'il n'y a aucune paire. Une paire qui compte une
 notion neuve dans le même chapitre que l'autre n'est pas soumise : l'étape notions l'avait
 sous les yeux. Deux anciennes le sont, même dans un seul chapitre — personne ne les a
