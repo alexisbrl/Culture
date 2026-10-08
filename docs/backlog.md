@@ -10,7 +10,7 @@
 >
 > ⚠️ **Ce fichier a un miroir lu par Alexis** — la feuille de route publiée (artefact `1726e6fc-756c-4de4-99d5-f7ebdf5144a6`), en langage produit. Toute entrée ajoutée, résolue ou déplacée ici doit l'être là aussi, dans la même session : c'est la page qu'il regarde, et une page en retard vaut moins que pas de page.
 >
-> Dernière mise à jour : 05/10/2026
+> Dernière mise à jour : 08/10/2026
 
 ## T4 2026 — ce qui rend une ouverture possible
 
@@ -32,7 +32,7 @@
 
 - **Aucun canal de contact ne fonctionne, alors que les mentions légales en annoncent un.** **(1)** `contact@get-culture.com` n'existe pas, alors que `legal/page.tsx`, `contact/page.tsx` et la clé `contact.error` la donnent comme canal RGPD. **(2)** `src/app/api/contact/route.ts` écrit le message dans `console.log` et renvoie `{ success: true }` — l'appel Resend est commenté, avec un `to: 'votre@email.com'` jamais remplacé. Issues possibles, non exclusives : **(a)** créer une vraie boîte — Zoho Mail gratuit (5 utilisateurs, webmail ; **choisir le centre de données européen à l'inscription, c'est irréversible**), Hostinger, ou Google Workspace (~6 €/utilisateur/mois) ; **(b)** brancher le formulaire sur Resend vers une boîte existante — même chantier que `EMAIL_FROM`, une fois le domaine vérifié ; **(c)** faire renvoyer les mentions légales vers la page Contact plutôt que vers une adresse. **Piège** : ne pas remettre d'adresse dans les mentions avant qu'elle reçoive, et ne jamais répondre « envoyé » quand rien ne l'a été.
 
-- **Aucun plafond de dépense par compte.** `MAX_QUESTIONS_PER_IMPORT` est un fusible par lot (`docs/architecture.md` §7.13) : chaque lancement rouvre un compteur, et le coût enregistré dans `ai_imports` n'est lu par rien. Le vrai plafond est un quota par utilisateur adossé à l'abonnement, avant l'ouverture publique. Ne pas baisser le fusible pour en tenir lieu.
+- **Aucun plafond de dépense par compte.** `MAX_QUESTIONS_PER_IMPORT` est un fusible par lot (`docs/architecture.md` §7.13) : chaque lancement rouvre un compteur, et le coût de chaque génération est calculé et rattaché au compte qui l'a lancée (vue `ai_generation_costs`, `docs/architecture.md` §8), mais rien ne le lit encore. Le vrai plafond est un quota par utilisateur adossé à l'abonnement, avant l'ouverture publique. Ne pas baisser le fusible pour en tenir lieu.
 
 
 - **Le plafond de questions par atelier n'existe pas.** Cible : `docs/architecture.md` §7.13 (100 000, confirmé par Alexis le 08/09/2026). À poser sur **tous** les chemins d'écriture — création manuelle (`saveQuestions`, `src/lib/workshops/exam.ts`) et ingestion —, avec le message au gestionnaire, et à distinguer dans le signal de [[Un chapitre à sec]].
