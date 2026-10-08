@@ -55,6 +55,15 @@ describe('classifyFailure', () => {
     expect(classifyFailure(new Error(''))).toBe('unknown');
   });
 
+  it('reconnaît le crédit épuisé, chez les deux fournisseurs', () => {
+    // Anthropic le refuse en 400, comme une demande mal formée : seul le texte
+    // le distingue. DeepSeek a son propre code.
+    const anthropic = '400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API."}}';
+    expect(classifyFailure(providerError(anthropic, 400))).toBe('no_credit');
+    expect(classifyFailure(providerError('DeepSeek 402 : {"error":{"message":"Insufficient Balance"}}', 402))).toBe('no_credit');
+    expect(isTransient('no_credit')).toBe(false);
+  });
+
   it('une annulation n’est pas une panne', () => {
     expect(classifyFailure(new Error('INGEST_CLOSED'))).toBe('closed');
     expect(classifyFailure(new Error('INGEST_BUSY'))).toBe('closed');
@@ -71,7 +80,7 @@ describe('isTransient', () => {
   it('refuse tout ce qui échouera à l’identique', () => {
     // Un corpus trop volumineux le sera encore dans trois secondes, une réponse
     // illisible aussi, et une annulation doit rester une annulation.
-    for (const cause of ['oversize', 'truncated', 'unreadable', 'closed', 'unknown'] as const) {
+    for (const cause of ['oversize', 'truncated', 'unreadable', 'closed', 'no_credit', 'timeout', 'unknown'] as const) {
       expect(isTransient(cause)).toBe(false);
     }
   });

@@ -74,6 +74,8 @@ export type Database = {
           cache_creation_tokens: number
           cached_tokens: number
           cause: string | null
+          cost_estimated: boolean
+          cost_usd: number | null
           created_at: string
           duration_ms: number | null
           id: string
@@ -94,6 +96,8 @@ export type Database = {
           cache_creation_tokens?: number
           cached_tokens?: number
           cause?: string | null
+          cost_estimated?: boolean
+          cost_usd?: number | null
           created_at?: string
           duration_ms?: number | null
           id?: string
@@ -114,6 +118,8 @@ export type Database = {
           cache_creation_tokens?: number
           cached_tokens?: number
           cause?: string | null
+          cost_estimated?: boolean
+          cost_usd?: number | null
           created_at?: string
           duration_ms?: number | null
           id?: string
@@ -235,6 +241,7 @@ export type Database = {
       deletion_codes: {
         Row: {
           attempts: number
+          call_progress: Json | null
           code: string
           created_at: string | null
           expires_at: string
@@ -245,6 +252,7 @@ export type Database = {
         }
         Insert: {
           attempts?: number
+          call_progress?: Json | null
           code: string
           created_at?: string | null
           expires_at: string
@@ -255,6 +263,7 @@ export type Database = {
         }
         Update: {
           attempts?: number
+          call_progress?: Json | null
           code?: string
           created_at?: string | null
           expires_at?: string
@@ -981,9 +990,36 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      ai_generation_costs: {
+        Row: {
+          claude_usd: number | null
+          cost_usd: number | null
+          created_at: string | null
+          created_by: string | null
+          deepseek_usd: number | null
+          estimated_usd: number | null
+          import_id: string | null
+          origin: string | null
+          outcome: string | null
+          unpriced_calls: number | null
+          workshop_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_imports_workshop_id_fkey"
+            columns: ["workshop_id"]
+            isOneToOne: false
+            referencedRelation: "workshops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      merge_ai_import_scope: {
+        Args: { p_import_id: string; p_patch: Json }
+        Returns: undefined
+      }
       parcours_pick: {
         Args: {
           p_chapter: string
@@ -1013,6 +1049,10 @@ export type Database = {
           brick_id: string
           members: number
         }[]
+      }
+      stamp_ai_import_program: {
+        Args: { p_import_id: string }
+        Returns: undefined
       }
     }
     Enums: {

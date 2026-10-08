@@ -31,6 +31,7 @@ import {
   userHintBlock,
   type ExistingContent,
 } from '@/lib/ingest/prompt';
+import { reportCallInput } from '@/lib/ingest/callProgress';
 import { wireExamGroupsOutput, wireGroupsOutput } from '@/lib/ingest/wireSchema';
 
 import type { IngestScope, PlanProvider, PreparedDocument, ProviderResult } from './types';
@@ -44,12 +45,14 @@ const API_URL = 'https://api.deepseek.com/chat/completions';
  *  principale des générations qui rendaient la moitié des questions demandées
  *  (mesuré le 28/08/2026, quatre appels : 3 questions, 9, 8, et un appel perdu).
  *
- *  `deepseek-v4-flash` est le modèle courant du catalogue : même usage, même
+ *  `deepseek-flash` est le modèle courant du catalogue (08/10/2026 : l'ancien nom
+ *  `deepseek-v4-flash` est retiré et servi par DeepSeek-V4.1-Flash, au même
+ *  prix — on appelle donc le modèle par son nom actuel) : même usage, même
  *  prix d'entrée de gamme, et une sortie qui se compte en centaines de milliers
  *  de tokens. On reste sur la version rapide plutôt que `pro` (trois fois le
  *  prix) : écrire des questions sur des notions déjà extraites est une tâche de
  *  production, pas de raisonnement long. */
-export const DEEPSEEK_MODEL = 'deepseek-v4-flash';
+export const DEEPSEEK_MODEL = 'deepseek-flash';
 
 /** Le plafond de sortie : **celui du modèle**, 384 000 tokens (22/09/2026), même
  *  règle que chez Claude (`MAX_OUTPUT_TOKENS` dans `providers/claude.ts`).
@@ -158,33 +161,39 @@ export function createDeepSeekProvider(options: DeepSeekOptions = {}): PlanProvi
               budget: scope.budget,
             });
 
+      const body = JSON.stringify({
+        model,
+        max_tokens: MAX_TOKENS,
+        // Le mode JSON de DeepSeek exige que le prompt mentionne « json » —
+        // `shapeBlock` le fait, et c'est aussi lui qui porte la forme.
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: systemPrompt() },
+          {
+            role: 'user',
+            content: [
+              userHintBlock(options.userHint),
+              existingContentBlock(
+                existing,
+                scope.pass === 'exam'
+                  ? { pass: 'exam' }
+                  : { pass: 'questions', notionIds: scope.notions.map((n) => n.id) },
+              ),
+              instruction,
+              shapeBlock(scope.pass),
+            ].join('\n\n'),
+          },
+        ],
+      });
+      // DeepSeek ne compte ce qu'il a lu qu'en répondant : on note la taille de
+      // la demande, qui suffit à estimer l'entrée d'un appel coupé en route
+      // (@/lib/ingest/callProgress).
+      reportCallInput({ model, inputChars: body.length });
+
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model,
-          max_tokens: MAX_TOKENS,
-          // Le mode JSON de DeepSeek exige que le prompt mentionne « json » —
-          // `shapeBlock` le fait, et c'est aussi lui qui porte la forme.
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt() },
-            {
-              role: 'user',
-              content: [
-                userHintBlock(options.userHint),
-                existingContentBlock(
-                  existing,
-                  scope.pass === 'exam'
-                    ? { pass: 'exam' }
-                    : { pass: 'questions', notionIds: scope.notions.map((n) => n.id) },
-                ),
-                instruction,
-                shapeBlock(scope.pass),
-              ].join('\n\n'),
-            },
-          ],
-        }),
+        body,
       });
 
       if (!response.ok) {

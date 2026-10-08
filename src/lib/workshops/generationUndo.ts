@@ -316,19 +316,13 @@ async function loadProgram(workshopId: string): Promise<{
 /** Pose le tampon de clôture : la dernière modification du programme au moment
  *  où la génération se termine. Appelée par la clôture du lot (orchestrateur). */
 export async function stampProgram(workshopId: string, importId: string): Promise<void> {
-  const supabase = getSupabaseServerClient();
-  const [{ data: workshop, error }, { data: lot, error: lotError }] = await Promise.all([
-    supabase.from('workshops').select('program_changed_at').eq('id', workshopId).single(),
-    supabase.from('ai_imports').select('scope').eq('id', importId).single(),
-  ]);
+  // Lu et écrit dans la même instruction, par la base (08/10/2026) : ni une
+  // autre écriture du `scope` ni plusieurs clôtures simultanées ne peuvent plus
+  // l'effacer. `workshopId` reste dans la signature : la base le retrouve
+  // elle-même depuis le lot.
+  void workshopId;
+  const { error } = await getSupabaseServerClient().rpc('stamp_ai_import_program', { p_import_id: importId });
   if (error) throw new Error(error.message);
-  if (lotError || !lot) throw new Error(lotError?.message ?? 'import introuvable');
-  const scope = (lot.scope as Record<string, unknown> | null) ?? {};
-  const { error: writeError } = await supabase
-    .from('ai_imports')
-    .update({ scope: { ...scope, programStamp: { at: (workshop?.program_changed_at as string | null) ?? null } } })
-    .eq('id', importId);
-  if (writeError) throw new Error(writeError.message);
 }
 
 export type GenerationUndoView = {

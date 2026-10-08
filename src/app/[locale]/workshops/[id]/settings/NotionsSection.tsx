@@ -5,7 +5,8 @@ import { useTranslations } from 'next-intl';
 import { ChevronDown, EllipsisVertical, EyeOff, GripVertical, Loader2, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { palette, shadow, withAlpha } from '@/lib/theme';
 import AiGenerationButton, { SettingsGenerationBox } from '@/components/ai/AiGenerationButton';
-import { notifyWorkshopChanged, useGenerationRefresh } from '@/components/ai/generationStore';
+import { displayPhase, notifyWorkshopChanged, useGenerationRefresh, useGenerations } from '@/components/ai/generationStore';
+import { PROGRAM_LOCKED } from '@/lib/workshops/programLockError';
 import { getGenerationUndo, undoLastGeneration, type GenerationUndoView } from '@/app/actions/aiIngest';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import {
@@ -269,9 +270,27 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
     return null;
   }
 
-  /** Un geste qui modifie le programme : s'il reste une génération à annuler,
-   *  on demande d'abord, puisqu'il retire cette possibilité. */
+  // ─── Verrouillé pendant qu'une génération construit le programme ────────
+  //
+  // Le serveur refuse de toute façon (@/lib/workshops/programLock) ; l'écran le
+  // sait d'avance par le suivi partagé des générations, et le dit au lieu de
+  // laisser faire un geste voué à l'échec. Les générations de questions ne
+  // verrouillent rien.
+  const generations = useGenerations(workshopId);
+  const programBusy = generations.items.some((g) => g.door === 'settings' && displayPhase(generations, g) === 'running');
+  const programBusyRef = useRef(programBusy);
+  useEffect(() => { programBusyRef.current = programBusy; });
+
+  /** Le message d'un refus du serveur : le verrou se reconnaît à son code. */
+  function failText(error: string | undefined, fallback: string): string {
+    return error === PROGRAM_LOCKED ? t('notions.locked') : error ?? fallback;
+  }
+
+  /** Un geste qui modifie le programme : refusé pendant qu'une génération le
+   *  construit ; s'il reste une génération à annuler, on demande d'abord,
+   *  puisqu'il retire cette possibilité. */
   function guarded(action: () => void) {
+    if (programBusyRef.current) { setError(t('notions.locked')); return; }
     if (genUndoRef.current) setPendingEdit(() => action);
     else action();
   }
@@ -437,7 +456,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         },
       });
     } else {
-      setError(result.error ?? t('err.save'));
+      setError(failText(result.error, t('err.save')));
     }
   }
 
@@ -465,7 +484,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         });
       }
     } else {
-      setError(result.error ?? t('err.save'));
+      setError(failText(result.error, t('err.save')));
     }
   }
 
@@ -491,7 +510,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         },
       });
     } else {
-      setError(result.error ?? t('err.delete'));
+      setError(failText(result.error, t('err.delete')));
     }
   }
 
@@ -499,7 +518,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
   async function handleDeleteUnassigned() {
     setError('');
     const result = await deleteUnassignedWorkshopNotions(workshopId);
-    if (!result.success || !result.trashId) return setError(result.error ?? t('err.delete'));
+    if (!result.success || !result.trashId) return setError(failText(result.error, t('err.delete')));
     const trashId = result.trashId;
     await reload();
     // « sans chapitre » est vide : afficher le premier chapitre plutôt qu'un groupe vide.
@@ -556,7 +575,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         },
       });
     } else {
-      setError(result.error ?? t('err.save'));
+      setError(failText(result.error, t('err.save')));
     }
   }
 
@@ -584,7 +603,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         });
       }
     } else {
-      setError(result.error ?? t('err.save'));
+      setError(failText(result.error, t('err.save')));
     }
   }
 
@@ -607,7 +626,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         },
       });
     } else {
-      setError(result.error ?? t('err.delete'));
+      setError(failText(result.error, t('err.delete')));
     }
   }
 
@@ -615,7 +634,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
   async function handleDeleteHidden(target: Chapter) {
     setError('');
     const result = await deleteHiddenWorkshopChapter(workshopId, target.id);
-    if (!result.success || !result.trashId) return setError(result.error ?? t('err.delete'));
+    if (!result.success || !result.trashId) return setError(failText(result.error, t('err.delete')));
     const trashId = result.trashId;
     await reload();
     setSelectedChapterId((selected) =>
@@ -752,7 +771,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
       setNotions((prev) => prev.map((n) => (n.id === notionId ? { ...n, chapterId: from } : n)));
       bumpChapterCount(chapterId, -1);
       bumpChapterCount(from, +1);
-      setError(result.error ?? t('err.save'));
+      setError(failText(result.error, t('err.save')));
       return;
     }
     recordUndo({
@@ -839,7 +858,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
     const result = await reorderWorkshopChapters(workshopId, next.map((c) => c.id));
     if (!result.success) {
       setChapters(previous); // l'ordre affiché doit refléter la base
-      setError(result.error ?? t('err.save'));
+      setError(failText(result.error, t('err.save')));
       return false;
     }
     return true;
@@ -858,7 +877,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
     setChapterSaving(true);
     const result = await restoreWorkshopChapter(workshopId, chapterId);
     setChapterSaving(false);
-    if (!result.success) return setError(result.error ?? t('chapters.restoreFailed'));
+    if (!result.success) return setError(failText(result.error, t('chapters.restoreFailed')));
     setChapters((prev) => prev.map((c) => (c.id === chapterId ? { ...c, hidden: false } : c)));
     setSelectedChapterId(chapterId);
     recordUndo({
@@ -1005,8 +1024,14 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
           met pas ici, « Chapitres » et « Notions » en tête de colonne disant
           déjà de quoi il s'agit — et le titre répétait le libellé de l'entrée
           de navigation active, juste à gauche. */}
-      {error && (
+      {error && error !== t('notions.locked') && (
         <div style={{ fontSize: 12.5, color: palette.danger, padding: '2px 0 12px' }}>{error}</div>
+      )}
+      {/* Le verrou se dit d'avance, pas seulement au geste refusé — et le
+          refus du serveur, s'il arrive avant que l'écran le sache, prend la
+          même place. */}
+      {(programBusy || error === t('notions.locked')) && (
+        <div style={{ fontSize: 12.5, color: palette.inkSoft, padding: '2px 0 12px' }}>{t('notions.locked')}</div>
       )}
 
       {/* Génération par IA — l'une des deux portes sur la même fonction, l'autre

@@ -29,6 +29,7 @@ import { type QuestionTypeOptions } from '@/lib/workshops/examTypes';
 import { cancelImport } from '@/lib/workshops/imports';
 import { getSupabaseServerClient } from '@/lib/supabase';
 
+import { groupsWithLiveNotions } from './liveNotions';
 import { assertImportOpen } from './lock';
 import { parsePlan, type ExistingRefs, type PlanIssue } from './planSchema';
 
@@ -608,6 +609,8 @@ export async function insertGroups(
   importId: string,
   groups: PlanGroupInput[],
   notionIds: Map<string, string>,
+  /** Reprises restantes si une notion disparaît PENDANT l'écriture. */
+  retries = 1,
 ): Promise<number> {
   if (groups.length === 0) return 0;
 
@@ -617,6 +620,29 @@ export async function insertGroups(
   await assertImportOpen(importId);
 
   const supabase = getSupabaseServerClient();
+
+  // ─── Seulement sur des notions qui existent encore (08/10/2026) ───────────
+  // Une génération de questions ne verrouille pas le programme : une notion a
+  // pu être supprimée pendant l'appel. Ses questions ne s'écrivent pas
+  // (@/lib/ingest/liveNotions), et le reste du lot s'écrit normalement.
+  const wanted = [
+    ...new Set(groups.flatMap((g) => g.questions.flatMap((q) => q.notions.map((n) => resolve(n.ref, notionIds)))).filter((id): id is string => !!id)),
+  ];
+  const live = new Set<string>();
+  for (let i = 0; i < wanted.length; i += 200) {
+    // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
+    const { data, error } = await supabase
+      .from('workshop_bricks')
+      .select('id')
+      .eq('workshop_id', workshopId)
+      .in('id', wanted.slice(i, i + 200));
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) live.add(row.id as string);
+  }
+  const { kept, dropped } = groupsWithLiveNotions(groups, (ref) => resolve(ref, notionIds), live);
+  if (dropped > 0) console.info(`[ingest] ${dropped} groupe(s) de questions non écrit(s) : notion supprimée ou absente`);
+  groups = kept;
+  if (groups.length === 0) return 0;
 
   // La question principale reprend l'identifiant de son groupe (`sort_order` 0) —
   // invariant du stockage, voir .claude/rules/server-architecture.md.
@@ -669,7 +695,16 @@ export async function insertGroups(
 
   if (linkRows.length > 0) {
     const { error: linkError } = await supabase.from('exam_question_item_bricks').insert(linkRows);
-    if (linkError) throw new Error(linkError.message);
+    if (linkError) {
+      // Une notion supprimée entre la vérification et l'écriture (23503 : la
+      // clé étrangère refuse le lien). On retire ce lot de questions — rien ne
+      // doit rester sans sa notion — et on le réécrit, la vérification refaite.
+      await supabase.from('exam_questions').delete().in('id', groupIds);
+      if (linkError.code === '23503' && retries > 0) {
+        return insertGroups(workshopId, importId, groups, notionIds, retries - 1);
+      }
+      throw new Error(linkError.message);
+    }
   }
 
   return itemRows.length;

@@ -120,8 +120,6 @@
 
 - **Le résumé mensuel et la purge du journal de bord ne sont pas écrits.** Cible : `docs/architecture.md` §8 (conservation). Volontairement différé : une purge se conçoit après avoir vu les données qu'elle emporte. Forme attendue : un job `pg_cron` mensuel écrivant dans une table de compteurs, **jamais** un nettoyage glissé dans un chemin de lecture.
 
-- **`ai_imports.scope` est écrit en lecture-modification-écriture depuis des lots parallèles.** `recordProgress` et `recordOversizeModel` relisent, modifient et réécrivent le `scope` : deux lots simultanés s'écrasent. Conséquences bénignes aujourd'hui (on efface moins, jamais plus). À reprendre par une écriture atomique (`jsonb_set` dans une fonction Postgres, ou une table dédiée) le jour où un affichage s'appuiera dessus.
-
 
 ## T2 2027 — le confort, une fois que ça tourne
 

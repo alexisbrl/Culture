@@ -37,6 +37,13 @@ AUCUN
 
 ## Appliqué / sans objet
 
+- **08/10/2026 — le coût des générations**
+  (`docs/migrations/2026-10-08-cout-des-generations.sql`) : coût par ligne du
+  journal, appel en vol sur chaque tâche, fusion du `scope` par la base, vue
+  `ai_generation_costs`. **Appliquée tout de suite, rien à attendre** : purement
+  additive. Les lignes déjà au journal ont été chiffrées au tarif du 08/10/2026.
+  `src/lib/database.types.ts` mis à jour.
+
 - **05/10/2026 — la dernière modification du programme**
   (`docs/migrations/2026-10-05-programme-touche.sql`) : colonne
   `workshops.program_changed_at` et déclencheur sur `workshop_chapters` et

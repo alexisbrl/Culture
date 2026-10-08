@@ -34,6 +34,7 @@
 // par l'écran à la finalisation, qui les revalide.
 
 import { buildWorkshopFileKey, deleteObject, readObject, writeObject } from '@/lib/storage';
+import type { Json } from '@/lib/database.types';
 import { getSupabaseServerClient } from '@/lib/supabase';
 
 import { planImportCleanup } from '@/lib/program/operations';
@@ -74,6 +75,7 @@ import {
   withChapterRetry,
   type ExistingQuestion,
 } from './passInput';
+import { beginCall, holdUnloggedCall, releaseUnloggedCall } from './callProgress';
 import { classifyFailure, logStep, markOutcome, withRetry, type Attempted, type StepName } from './journal';
 import {
   generatedFileName,
@@ -601,19 +603,16 @@ async function oversizeModelsOf(importId: string): Promise<ModelId[]> {
 
 /** Ajoute un modèle à cette liste, sans écraser le reste du `scope`.
  *
- *  Lecture-modification-écriture : deux appels concurrents pourraient se
- *  chevaucher, mais le client enchaîne les passes une par une, et le pire cas
- *  (une écriture perdue) ne coûte qu'un aller-retour de plus. */
+ *  La liste se relit avant d'être réécrite : deux appels concurrents peuvent
+ *  perdre un ajout, ce qui ne coûte qu'un aller-retour de plus. La clé seule est
+ *  réécrite (`writeScope`), jamais le reste du `scope`. */
 async function recordOversizeModel(importId: string, model: ModelId): Promise<void> {
   const supabase = getSupabaseServerClient();
   const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
   const scope = (data?.scope as Record<string, unknown> | null) ?? {};
   const current = Array.isArray(scope.oversizeModels) ? (scope.oversizeModels as string[]) : [];
   if (current.includes(model)) return;
-  await supabase
-    .from('ai_imports')
-    .update({ scope: { ...scope, oversizeModels: [...current, model] } })
-    .eq('id', importId);
+  await writeScope(importId, { oversizeModels: [...current, model] });
 }
 
 /** `parsePlan`, mais qui **dit ce qu'il jette**.
@@ -686,13 +685,43 @@ async function modelCall(
   const started = Date.now();
   let attempts = 0;
   try {
-    return await withRetry(
-      () => {
+    const attempted = await withRetry(
+      async () => {
         attempts += 1;
-        return call();
+        // Noté pendant qu'il tourne : coupé en route, il aura quand même un
+        // coût (@/lib/ingest/callProgress).
+        const inFlight = beginCall({
+          importId: meta.importId,
+          workshopId: meta.workshopId,
+          step: meta.step,
+          batch: meta.batch,
+          provider: meta.provider.name,
+        });
+        try {
+          return await call();
+        } finally {
+          await inFlight.end();
+        }
       },
       (cause) => console.info(`[ingest] passe ${meta.step} : ${cause}, seconde tentative`),
     );
+    // Payé dès maintenant : si l'écriture de ce qu'il a produit échoue, la
+    // tâche le journalise quand même (`flushUnloggedCall`).
+    holdUnloggedCall(
+      {
+        importId: meta.importId,
+        workshopId: meta.workshopId,
+        step: meta.step,
+        batch: meta.batch,
+        provider: meta.provider.name,
+        model: attempted.result.model,
+        attempt: attempted.attempts,
+        durationMs: attempted.durationMs,
+        usage: attempted.result.usage,
+      },
+      attempted,
+    );
+    return attempted;
   } catch (error) {
     await logStep({
       importId: meta.importId,
@@ -721,6 +750,7 @@ async function stepDone(
   call: Attempted<ProviderResult>,
   produced: Record<string, unknown>,
 ): Promise<void> {
+  releaseUnloggedCall(call);
   await logStep({
     importId: meta.importId,
     workshopId: meta.workshopId,
@@ -1265,20 +1295,15 @@ async function attachDocument(
  *  tard : ce que l'utilisateur a demandé, et ce que les passes ont réellement lu. */
 async function recordInstruction(importId: string, instruction: string): Promise<void> {
   try {
-    const supabase = getSupabaseServerClient();
-    const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
-    const scope = (data?.scope as Record<string, unknown> | null) ?? {};
-    await supabase.from('ai_imports').update({ scope: { ...scope, instruction } }).eq('id', importId);
+    await writeScope(importId, { instruction });
   } catch (error) {
     console.warn('[ingest] consigne réécrite non enregistrée :', error instanceof Error ? error.message : error);
   }
 }
 
 /** Remplace le nombre de questions d'examen visé, quand l'étape 0 en a tiré un
- *  de la demande. Même écriture lecture-modification-écriture que
- *  `recordInstruction`, et rangée avant elle dans le fil d'exécution — mais
- *  écrite séparément : les deux clés vivent dans le même `scope`, et écraser
- *  l'une ne doit pas effacer l'autre.
+ *  de la demande. Écrite à part de `recordInstruction` : chacune fusionne sa
+ *  seule clé dans le `scope` (`writeScope`).
  *
  *  Personne ne la relit côté serveur : c'est le lancement qui compose le plan
  *  des appels et porte donc le nombre visé (06/09/2026). Elle reste écrite parce
@@ -1286,10 +1311,7 @@ async function recordInstruction(importId: string, instruction: string): Promise
  *  coup, et un chiffre absent du `scope` ne se retrouve nulle part. */
 async function recordExamTarget(importId: string, examQuestions: number): Promise<void> {
   try {
-    const supabase = getSupabaseServerClient();
-    const { data } = await supabase.from('ai_imports').select('scope').eq('id', importId).single();
-    const scope = (data?.scope as Record<string, unknown> | null) ?? {};
-    await supabase.from('ai_imports').update({ scope: { ...scope, examQuestions } }).eq('id', importId);
+    await writeScope(importId, { examQuestions });
   } catch (error) {
     console.warn('[ingest] nombre de questions d’examen non enregistré :', error instanceof Error ? error.message : error);
   }
@@ -1349,10 +1371,13 @@ async function readScope(importId: string): Promise<Record<string, unknown>> {
   return (data.scope as Record<string, unknown> | null) ?? {};
 }
 
+/** Fusionne des clés dans le `scope`, par la base et d'un seul geste : deux
+ *  écritures simultanées ne s'écrasent plus l'une l'autre (08/10/2026). */
 async function writeScope(importId: string, patch: Record<string, unknown>): Promise<void> {
-  const supabase = getSupabaseServerClient();
-  const scope = await readScope(importId);
-  const { error } = await supabase.from('ai_imports').update({ scope: { ...scope, ...patch } }).eq('id', importId);
+  const { error } = await getSupabaseServerClient().rpc('merge_ai_import_scope', {
+    p_import_id: importId,
+    p_patch: patch as Json,
+  });
   if (error) throw new Error(error.message);
 }
 
@@ -1881,11 +1906,10 @@ async function loadNotionsToArrange(workshopId: string) {
  *      GARDENT leur chapitre (elles existaient avant l'import). Elles ne
  *      suffisent plus à faire vivre un chapitre, voir `hideEmptyChapters`.
  *
- *  ⚠️ **Lecture-modification-écriture, et les lots tournent en parallèle** :
- *  deux lots qui aboutissent en même temps peuvent s'écraser l'un l'autre. La
- *  conséquence est bénigne — un marquage manquant, un chapitre vidé qui reste
- *  visible — et se corrige en relançant. À reprendre par une écriture atomique
- *  côté base le jour où ça compte (voir docs/backlog.md). */
+ *  ⚠️ Les trois clés se fusionnent par la base (`writeScope`), mais leur
+ *  CONTENU se cumule encore par lecture puis écriture : deux lots qui aboutissent
+ *  au même instant peuvent perdre un marquage. Bénin — un marquage manquant —
+ *  et le reste du `scope` n'y est plus exposé. */
 async function recordProgress(
   importId: string,
   entries: {
@@ -1905,20 +1929,16 @@ async function recordProgress(
     const previous = Array.isArray(scope[key]) ? (scope[key] as string[]) : [];
     return [...new Set([...previous, ...added])];
   };
-  await supabase
-    .from('ai_imports')
-    .update({
-      scope: {
-        ...scope,
-        movedNotions: merge('movedNotions', entries.movedNotions),
-        strandedNotions: merge('strandedNotions', entries.strandedNotions),
-        retitledNotions: {
-          ...retitled,
-          ...((scope.retitledNotions && typeof scope.retitledNotions === 'object' ? scope.retitledNotions : {}) as Record<string, string>),
-        },
-      },
-    })
-    .eq('id', importId);
+  // Seules ces trois clés sont réécrites : le reste du `scope` (le tampon
+  // d'annulation, l'ordre d'avant…) n'est plus exposé à l'écrasement.
+  await writeScope(importId, {
+    movedNotions: merge('movedNotions', entries.movedNotions),
+    strandedNotions: merge('strandedNotions', entries.strandedNotions),
+    retitledNotions: {
+      ...retitled,
+      ...((scope.retitledNotions && typeof scope.retitledNotions === 'object' ? scope.retitledNotions : {}) as Record<string, string>),
+    },
+  });
 }
 
 

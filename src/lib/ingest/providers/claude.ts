@@ -34,6 +34,7 @@ import {
   type ExistingContent,
   type ExistingScope,
 } from '@/lib/ingest/prompt';
+import { reportCallInput } from '@/lib/ingest/callProgress';
 import { documentsForPass } from '@/lib/ingest/passInput';
 import {
   wireChaptersOutputFor,
@@ -585,7 +586,7 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
 
       const call = (id: ModelId) => {
         const tuning = tuningFor(id);
-        return client.beta.messages.stream({
+        const stream = client.beta.messages.stream({
           model: id,
           max_tokens: maxTokensFor(id),
           betas: [FILES_BETA],
@@ -600,7 +601,21 @@ export function createClaudeProvider(options: ClaudeProviderOptions | string = {
             format: zodOutputFormat(outputSchemaFor(scope, existing)),
           },
           messages: [{ role: 'user', content }],
-        }).finalMessage();
+        });
+        // Ce qu'il a lu est connu dès le premier évènement : noté tout de suite,
+        // l'appel coupé en route aura quand même son coût d'entrée exact
+        // (@/lib/ingest/callProgress).
+        stream.on('streamEvent', (event) => {
+          if (event.type !== 'message_start') return;
+          const usage = event.message.usage;
+          reportCallInput({
+            model: event.message.model,
+            inputTokens: usage.input_tokens ?? 0,
+            cachedTokens: usage.cache_read_input_tokens ?? 0,
+            cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
+          });
+        });
+        return stream.finalMessage();
       };
 
       let message: Anthropic.Beta.BetaMessage;

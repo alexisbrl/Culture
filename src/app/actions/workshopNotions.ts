@@ -5,6 +5,7 @@ import * as notionsLib from '@/lib/workshops/notions';
 import * as trashLib from '@/lib/workshops/trash';
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { revalidateWorkshop } from '@/lib/revalidate';
+import { PROGRAM_LOCKED, programLocked } from '@/lib/workshops/programLock';
 
 // Logique métier : voir @/lib/workshops/notions. Les wrappers `'use server'` ici
 // ne portent que l'authz Clerk et la revalidation Next.js. Type redéclaré
@@ -41,6 +42,7 @@ export async function createWorkshopNotion(
   try {
     const ctx = await requireManager(workshopId);
     if (!ctx) return { success: false, error: 'Droits insuffisants' };
+    if (await programLocked(workshopId)) return { success: false, error: PROGRAM_LOCKED };
 
     const result = await notionsLib.createNotion(workshopId, ctx.userId, title, chapterId);
     if (result.success) revalidateWorkshop();
@@ -59,6 +61,7 @@ export async function updateWorkshopNotion(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+    if (await programLocked(workshopId)) return { success: false, error: PROGRAM_LOCKED };
 
     const result = await notionsLib.updateNotion(workshopId, notionId, title, chapterId);
     if (result.success) revalidateWorkshop();
@@ -77,6 +80,7 @@ export async function moveWorkshopNotion(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+    if (await programLocked(workshopId)) return { success: false, error: PROGRAM_LOCKED };
 
     const result = await notionsLib.setNotionChapter(workshopId, notionId, chapterId);
     if (result.success) revalidateWorkshop();
@@ -95,6 +99,7 @@ export async function deleteWorkshopNotion(
 ): Promise<{ success: boolean; trashId?: string; error?: string }> {
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+    if (await programLocked(workshopId)) return { success: false, error: PROGRAM_LOCKED };
 
     const result = await trashLib.trashNotion(getSupabaseServerClient(), workshopId, notionId);
     if (result.success) revalidateWorkshop();
@@ -111,6 +116,7 @@ export async function deleteUnassignedWorkshopNotions(
 ): Promise<{ success: boolean; trashId?: string; error?: string }> {
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+    if (await programLocked(workshopId)) return { success: false, error: PROGRAM_LOCKED };
 
     const result = await trashLib.trashUnassignedNotions(getSupabaseServerClient(), workshopId);
     if (result.success) revalidateWorkshop();
@@ -128,6 +134,7 @@ export async function restoreWorkshopTrash(
 ): Promise<{ success: boolean; restored?: Restored; error?: string }> {
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+    if (await programLocked(workshopId)) return { success: false, error: PROGRAM_LOCKED };
 
     const result = await trashLib.restoreFromTrash(getSupabaseServerClient(), workshopId, trashId);
     if (result.success) revalidateWorkshop();
@@ -146,6 +153,7 @@ export async function removeNewWorkshopNotion(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+    if (await programLocked(workshopId)) return { success: false, error: PROGRAM_LOCKED };
 
     const result = await notionsLib.deleteNotion(workshopId, notionId);
     if (result.success) revalidateWorkshop();

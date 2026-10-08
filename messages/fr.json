@@ -782,7 +782,8 @@
       "noChapter": "Sans chapitre",
       "needChapterHint": "crée un chapitre pour y planter tes premières notions.",
       "count": "{count, plural, =0 {aucune notion} one {# notion} other {# notions}}",
-      "deleteUnassigned": "supprimer {count, plural, one {cette notion} other {ces # notions}}"
+      "deleteUnassigned": "supprimer {count, plural, one {cette notion} other {ces # notions}}",
+      "locked": "Une génération par IA construit le programme : les chapitres et les notions se modifient de nouveau dès qu'elle est terminée."
     },
     "chapters": {
       "title": "Chapitres",

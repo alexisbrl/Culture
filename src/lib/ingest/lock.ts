@@ -113,6 +113,33 @@ export async function liveImportOf(workshopId: string): Promise<string | null> {
   return (data ?? [])[0]?.id ?? null;
 }
 
+/** Une génération qui construit le programme tourne-t-elle sur cet atelier ?
+ *  Même signe de vie que `liveImportOf`, restreint aux points d'entrée donnés.
+ *
+ *  ⚠️ Sur erreur de lecture, on répond `false` : bloquer l'édition sur un état
+ *  qu'on n'a pas su lire laisserait l'utilisateur sans recours. */
+export async function liveImportFrom(workshopId: string, origins: readonly string[]): Promise<boolean> {
+  try {
+    const since = new Date(Date.now() - LIVE_TIMEOUT_MS).toISOString();
+    const { data, error } = await getSupabaseServerClient()
+      .from('ai_imports')
+      .select('id')
+      .eq('workshop_id', workshopId)
+      .in('origin', [...origins])
+      .is('closed_at', null)
+      .gte('beat_at', since)
+      .limit(1);
+    if (error) {
+      console.error('liveImportFrom error:', error);
+      return false;
+    }
+    return (data ?? []).length > 0;
+  } catch (err) {
+    console.error('liveImportFrom error:', err);
+    return false;
+  }
+}
+
 /** Parmi les lots donnés, ceux qui se sont ARRÊTÉS EN ROUTE — 30/08/2026.
  *
  *  Une génération est pilotée par l'onglet (voir l'en-tête de

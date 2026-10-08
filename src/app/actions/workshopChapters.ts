@@ -5,6 +5,7 @@ import * as chaptersLib from '@/lib/workshops/chapters';
 import * as trashLib from '@/lib/workshops/trash';
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { revalidateWorkshop } from '@/lib/revalidate';
+import { PROGRAM_LOCKED, programLocked } from '@/lib/workshops/programLock';
 
 // Logique métier : voir @/lib/workshops/chapters. Type redéclaré localement (un
 // fichier `'use server'` ne peut pas réexporter un type importé — piège
@@ -34,6 +35,7 @@ export async function restoreWorkshopChapter(
   chapterId: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+  if (await programLocked(workshopId)) return { success: false, error: PROGRAM_LOCKED };
 
   const result = await chaptersLib.restoreChapter(workshopId, chapterId);
   if (result.success) revalidateWorkshop();
@@ -46,6 +48,7 @@ export async function unrestoreWorkshopChapter(
   chapterId: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+  if (await programLocked(workshopId)) return { success: false, error: PROGRAM_LOCKED };
 
   const result = await chaptersLib.unrestoreChapter(workshopId, chapterId);
   if (result.success) revalidateWorkshop();
@@ -59,6 +62,7 @@ export async function createWorkshopChapter(
   try {
     const ctx = await requireManager(workshopId);
     if (!ctx) return { success: false, error: 'Droits insuffisants' };
+    if (await programLocked(workshopId)) return { success: false, error: PROGRAM_LOCKED };
 
     const result = await chaptersLib.createChapter(workshopId, ctx.userId, name);
     if (result.success) revalidateWorkshop();
@@ -76,6 +80,7 @@ export async function renameWorkshopChapter(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+    if (await programLocked(workshopId)) return { success: false, error: PROGRAM_LOCKED };
 
     const result = await chaptersLib.renameChapter(workshopId, chapterId, name);
     if (result.success) revalidateWorkshop();
@@ -94,6 +99,7 @@ export async function deleteWorkshopChapter(
 ): Promise<{ success: boolean; trashId?: string; error?: string }> {
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+    if (await programLocked(workshopId)) return { success: false, error: PROGRAM_LOCKED };
 
     const result = await trashLib.trashChapter(getSupabaseServerClient(), workshopId, chapterId);
     if (result.success) revalidateWorkshop();
@@ -111,6 +117,7 @@ export async function deleteHiddenWorkshopChapter(
 ): Promise<{ success: boolean; trashId?: string; error?: string }> {
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+    if (await programLocked(workshopId)) return { success: false, error: PROGRAM_LOCKED };
 
     const result = await trashLib.trashHiddenChapter(getSupabaseServerClient(), workshopId, chapterId);
     if (result.success) revalidateWorkshop();
@@ -129,6 +136,7 @@ export async function removeNewWorkshopChapter(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+    if (await programLocked(workshopId)) return { success: false, error: PROGRAM_LOCKED };
 
     const result = await chaptersLib.deleteChapter(workshopId, chapterId);
     if (result.success) revalidateWorkshop();
@@ -145,6 +153,7 @@ export async function reorderWorkshopChapters(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
+    if (await programLocked(workshopId)) return { success: false, error: PROGRAM_LOCKED };
 
     const result = await chaptersLib.reorderChapters(workshopId, orderedIds);
     if (result.success) revalidateWorkshop();

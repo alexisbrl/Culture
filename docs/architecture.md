@@ -943,6 +943,20 @@ L'état est **partagé par tout l'onglet**, et les listes qui montrent ce qu'une
 les quelques secondes (les lectures passant en file), puis à la fin. Une génération lancée
 ailleurs est retrouvée en arrivant sur l'atelier, puis par un sondage lent (§9).
 
+**Le programme est verrouillé pendant qu'une génération le construit**
+(`src/lib/workshops/programLock.ts`). Tant qu'une génération lancée depuis les Paramètres a
+un signe de vie, toute action qui modifie un chapitre ou une notion est refusée par le
+serveur, avec un code que l'écran traduit ; l'écran le sait d'avance par le suivi partagé
+des générations et éteint ses gestes en le disant. Sans ce verrou, un chapitre supprimé
+avant l'arrivée de ses notions les faisait refuser (payées pour rien), et l'annulation ne
+distinguait plus ce qu'avait fait la génération de ce qu'avait fait l'utilisateur. Les
+générations de **questions** ne verrouillent rien : l'écriture ne garde que les questions
+dont toutes les notions existent encore au moment d'écrire, groupe par groupe, et reprend
+une fois si une notion disparaît entre la vérification et l'écriture
+(`src/lib/ingest/liveNotions.ts`). Le `scope` d'une génération s'écrit par fusion côté base
+(`merge_ai_import_scope`, `stamp_ai_import_program`), jamais en relisant puis réécrivant le
+tout : deux écritures simultanées ne s'effacent plus.
+
 **La recharge automatique reste à part** : elle ne passe pas par la file et n'y compte pas,
 elle tourne en parallèle de tout. Elle n'ajoute que des questions dans un chapitre, sans
 toucher aux chapitres ni aux notions ; le pire croisement avec une mise à jour de l'atelier
@@ -1100,6 +1114,22 @@ volumineux le sera encore dans trois secondes, une réponse illisible aussi, et 
 annulation doit rester une annulation. Le plafond est volontairement bas — on trace
 d'abord, on affinera sur des chiffres, le journal enregistrant le nombre d'essais
 réellement faits.
+
+**Chaque ligne porte son coût**, en dollars hors taxe, calculé à l'écriture : jetons ×
+prix du jour (`src/lib/ingest/pricing.ts`). Les deux fournisseurs facturent exactement
+cela, donc le coût d'un appel qui a répondu est le coût réel. Deux pièges : Anthropic
+compte le cache **en plus** de l'entrée, DeepSeek **dedans** ; DeepSeek double ses prix aux
+heures pleines. Un modèle hors grille donne un coût vide, jamais zéro. La vue
+`ai_generation_costs` additionne par génération, avec le compte qui l'a lancée et la part de
+chaque fournisseur.
+
+**Un appel coupé a quand même un coût.** Tant qu'il tourne, l'appel note sur sa tâche qui
+répond, ce qu'il a lu dès que le fournisseur le dit, et un signe de vie toutes les quinze
+secondes (`src/lib/ingest/callProgress.ts`). Une tâche coupée par la limite de durée meurt
+sans rien écrire ; la veille qui la reprend trouve la note et écrit la ligne : cause
+`timeout`, entrée connue, sortie **estimée** au débit mesuré du modèle sur le temps qu'il a
+vécu — la ligne est marquée estimée. De même, un appel qui a répondu mais dont l'écriture
+échoue ensuite est journalisé par la tâche avec ses jetons : payé, il apparaît.
 
 **Ce que coûte un échec** n'est pas le refus lui-même — une demande refusée pour saturation
 n'est pas traitée, donc pas facturée — mais **tout ce qui a été payé avant l'arrêt et qu'il

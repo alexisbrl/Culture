@@ -19,7 +19,8 @@ import { getSupabaseServerClient } from '@/lib/supabase';
 import { stampProgram } from '@/lib/workshops/generationUndo';
 import { chapterStartBudgets } from './demand';
 import { passFailed } from './failure';
-import { markOutcome } from './journal';
+import { flushUnloggedCall, logLostCall, withTaskContext } from './callProgress';
+import { classifyFailure, markOutcome } from './journal';
 import { CLOSED_ERROR, beatImport, closeImport } from './lock';
 import { labelExamLot } from './lotLabel';
 import { planExamCalls } from './passInput';
@@ -414,13 +415,18 @@ export async function runTask(taskId: string): Promise<Dispatch> {
     const live = p.cfg.kind !== 'refill';
     if (live) await beatImport(p.importId);
 
-    try {
-      const result = await execute(p, task);
-      await settleTask(task, 'done', { result });
-    } catch (error) {
-      const detail = passFailed(task.key, error, { workshopId: p.workshopId, importId: p.importId, task: task.key });
-      await settleTask(task, detail === CLOSED_ERROR ? 'skipped' : 'failed', { error: detail });
-    }
+    // Le contexte de la tâche suit ses appels au modèle : ce qui est payé se
+    // journalise même si la tâche échoue ou se fait couper (@/lib/ingest/callProgress).
+    await withTaskContext(task.id, async () => {
+      try {
+        const result = await execute(p, task);
+        await settleTask(task, 'done', { result });
+      } catch (error) {
+        const detail = passFailed(task.key, error, { workshopId: p.workshopId, importId: p.importId, task: task.key });
+        await flushUnloggedCall(classifyFailure(error), error instanceof Error ? error.message : String(error));
+        await settleTask(task, detail === CLOSED_ERROR ? 'skipped' : 'failed', { error: detail });
+      }
+    });
 
     if (live) await beatImport(p.importId);
     return await advance(p.importId);
@@ -448,7 +454,7 @@ export async function watch(options: { importId?: string; baseUrl?: string }): P
   const supabase = getSupabaseServerClient();
   let query = supabase
     .from('ai_import_tasks')
-    .select('id, import_id, status, attempts, started_at, created_at')
+    .select('id, import_id, status, attempts, started_at, created_at, call_progress')
     .in('status', ['pending', 'running']);
   if (options.importId) query = query.eq('import_id', options.importId);
   const { data, error } = await query;
@@ -465,14 +471,18 @@ export async function watch(options: { importId?: string; baseUrl?: string }): P
       const started = t.started_at ? Date.parse(t.started_at as string) : now;
       if (now - started < STALE_TASK_MS) continue;
       const retry = (t.attempts as number) < MAX_TASK_ATTEMPTS;
-      await supabase
+      const { data: taken } = await supabase
         .from('ai_import_tasks')
         .update(retry
           ? { status: 'pending' }
           : { status: 'failed', error: PIPELINE_ERRORS.timeout, finished_at: new Date().toISOString() })
         .eq('id', t.id)
         .eq('status', 'running')
-        .eq('attempts', t.attempts);
+        .eq('attempts', t.attempts)
+        .select('id');
+      // L'appel que la tâche avait en vol a été facturé sans rien rendre : sa
+      // ligne de coût, estimée. Seule la veille qui a repris la tâche l'écrit.
+      if ((taken ?? []).length > 0 && t.call_progress) await logLostCall(t.id as string, t.call_progress);
       touched.add(importId);
     } else if (now - Date.parse(t.created_at as string) > ORPHAN_TASK_MS) {
       touched.add(importId);
