@@ -319,7 +319,7 @@ function DashboardContent({ locale, firstName, uniqueTag, ownedWorkshops, joined
   // vert qui traînait ici faisait de « mes ateliers » la seule page à ne pas
   // être sur `--surface-page`.
   return (
-    <div className="relative min-h-[calc(100vh-60px)] bg-[var(--surface-page)] font-sans px-6 lg:px-10 py-8" style={{ color: palette.ink }}>
+    <div className="relative min-h-[calc(100vh-var(--app-chrome-h))] bg-[var(--surface-page)] font-sans px-6 lg:px-10 py-8" style={{ color: palette.ink }}>
       <div className="max-w-6xl mx-auto rounded-[20px] bg-cream/92 backdrop-blur-xl border border-ink/[0.07] shadow-[var(--shadow-lg)] flex flex-col">
         {/* header */}
         <div className="flex items-center justify-between px-7 pt-6">

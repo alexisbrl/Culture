@@ -12,12 +12,10 @@ import SettingsClient from './SettingsClient';
 import MembersSection from './MembersSection';
 import FilesSection from './FilesSection';
 import NotionsSection from './NotionsSection';
-import { isNavSection } from './sections';
 import type { Member } from './settingsShared';
 
 type Props = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ section?: string }>;
 };
 
 // ─── Ce qui bloque l'affichage, et ce qui ne le bloque plus ──────────────────
@@ -36,9 +34,8 @@ type Props = {
 // SettingsClient et .claude/rules/server-architecture.md) : on ne diffère que
 // leur ARRIVÉE, jamais leur montage. Une fois là, elles y restent.
 
-export default async function SettingsPage({ params, searchParams }: Props) {
+export default async function SettingsPage({ params }: Props) {
   const { id } = await params;
-  const { section } = await searchParams;
   // `auth()` et non `currentUser()` : la seconde appelle l'API de Clerk sur le
   // réseau pour rapporter tout le profil, alors qu'on ne pose ici qu'une
   // question — « est-il connecté ? » — à laquelle le jeton de session répond
@@ -64,11 +61,6 @@ export default async function SettingsPage({ params, searchParams }: Props) {
     groupIds: m.groups ?? [],
   }));
 
-  // L'onglet ouvert est lu ici, côté serveur, pour que la page arrive déjà sur
-  // le bon : le lire côté navigateur faisait apparaître « Général » un instant
-  // avant de basculer, à chaque rafraîchissement.
-  const initialSection = isNavSection(section) ? section : 'general';
-
   return (
     <SettingsClient
       locale={locale}
@@ -82,7 +74,6 @@ export default async function SettingsPage({ params, searchParams }: Props) {
       uniqueTag={workshop.unique_tag}
       currentUserRole={workshop.currentUserRole}
       showProgramme={workshop.show_programme}
-      initialSection={initialSection}
       membersSlot={
         <Suspense fallback={<SectionSkeleton rows={5} />}>
           <MembersSlot

@@ -1238,20 +1238,26 @@ dispersée dans les composants.
 
 ### 11.2 La mise en page
 
-Le layout empile un en-tête puis le contenu. **Ne jamais utiliser la hauteur de fenêtre
-brute** sur le conteneur racine d'une page : on ajouterait systématiquement la hauteur de
-l'en-tête en trop.
+Sur ordinateur, l'espace connecté pose le **menu latéral** à gauche et le contenu à
+droite ; rien ne surmonte le contenu. Sur téléphone, la réserve historique de 60px au-dessus
+du contenu demeure. Cette hauteur vit dans `--app-chrome-h` (0 sur ordinateur) : une page
+qui veut remplir l'écran écrit `calc(100vh - var(--app-chrome-h))`, **jamais un nombre**.
 
-L'en-tête de l'espace connecté est **collant** et reste dans le flux, donc aucune page n'a
-de compensation à faire — **mais tout autre bloc collant doit décaler sa position** sous
-peine de se glisser dessous.
+Le menu latéral fait **68px replié, 248px épinglé** ; ouvert au survol, il passe
+par-dessus la page sans la pousser. Toute mise en page qui dépend de la largeur disponible
+se lit donc sur le **contenu**, pas sur la fenêtre : la zone principale est un conteneur
+nommé `app-main`, et les paliers de la feuille d'examen sont des requêtes de conteneur.
+Une vue qui vit dans l'URL d'une page (section des paramètres, liste des questions du
+parcours) s'écrit par l'API d'historique, que le menu emploie aussi : la page la lit par
+`useSearchParams`, sans aller-retour serveur.
 
 **Contexte de navigation persistant sans requête bloquante.** Hors page d'atelier, l'URL ne
-porte aucun atelier, et l'en-tête a besoin du dernier visité. Le lire en base ajouterait une
+porte aucun atelier, et le menu latéral a besoin du dernier visité. Le lire en base ajouterait une
 requête bloquante au rendu de *toutes* les pages ; le lire dans le navigateur n'agit
 qu'après hydratation, donc le bloc apparaît en sursaut. Le pattern retenu est un **cookie
 écrit par le navigateur et lu par le serveur** : présent dans le HTML initial, coût nul,
-rafraîchi en arrière-plan. L'identité y est vérifiée à la lecture — poste partagé.
+rafraîchi en arrière-plan. L'identité y est vérifiée à la lecture — poste partagé. Même
+cookie, sans identité, pour le menu épinglé ou replié (`navPinned`).
 
 **Borner un texte qui déborde se fait en largeur, jamais en caractères.** Un plafond de
 caractères coupe des noms qui avaient la place de tenir et laisse passer les caractères

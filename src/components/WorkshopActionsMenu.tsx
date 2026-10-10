@@ -30,7 +30,7 @@ type Props = {
 export default function WorkshopActionsMenu({ workshopId, size = 34 }: Props) {
   const tNav = useTranslations('nav');
   const locale = useLocale();
-  // Même convention que les onglets de la barre (tabClass, DashboardHeader) :
+  // Même convention que les onglets de la barre (barre du bas, nav/AppNav) :
   // survol → encre, page active → vert.
   const pathname = usePathname();
   const active = pathname.includes(`/workshops/${workshopId}/settings`);

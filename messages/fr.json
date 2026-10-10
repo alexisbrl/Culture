@@ -21,13 +21,15 @@
     "switcherLoading": "chargement…",
     "switcherEmpty": "aucun atelier pour l'instant",
     "newWorkshop": "nouvel atelier",
-    "allWorkshops": "tous mes ateliers"
-  },
-  "notifications": {
-    "title": "notifications",
-    "join": "rejoindre",
-    "ignore": "ignorer",
-    "cancel": "annuler"
+    "allWorkshops": "tous mes ateliers",
+    "tabSuivi": "suivi",
+    "soon": "bientôt",
+    "subQuestions": "liste des questions",
+    "pinOpen": "garder le menu ouvert",
+    "pinClose": "replier le menu",
+    "goPremium": "passer à Premium",
+    "close": "fermer",
+    "tabParametres": "paramètres"
   },
   "stats": {
     "time": "gain de temps / formateur"
@@ -166,10 +168,6 @@
     "defaultName": "jardinier",
     "defaultNameFull": "Jardinier",
     "edit": "éditer",
-    "tracking": {
-      "title": "suivi",
-      "desc": "progression, maîtrise et statistiques détaillées"
-    },
     "passkeys": {
       "sectionTitle": "sécurité",
       "title": "clés d'accès",
@@ -1044,9 +1042,6 @@
       },
       "perMemberUnit": "/ membre"
     }
-  },
-  "analyse": {
-    "title": "analyse."
   },
   "session": {
     "leaveSession": "quitter la session",

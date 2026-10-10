@@ -35,7 +35,7 @@ export default function WorkshopNewClient({ locale }: { locale: string }) {
   }
 
   return (
-    <div className="min-h-[calc(100vh-60px)] bg-[var(--surface-page)] flex flex-col">
+    <div className="min-h-[calc(100vh-var(--app-chrome-h))] bg-[var(--surface-page)] flex flex-col">
       {/* Header */}
       <div className="bg-[var(--ink)] text-[var(--on-ink)] py-16">
         <div className="max-w-2xl mx-auto px-4">

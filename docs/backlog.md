@@ -22,6 +22,8 @@
 
 - **Le Jardin est accessible en entier alors que son tour n'est pas venu.** La gamification est rangée au T4 2027. Décision d'Alexis du 09/09/2026 : **bloquer `/garden` derrière un badge V2**, comme l'onglet Cours (`CoursTab.tsx`, `<Badge tone="premium">V2</Badge>`) — le même pattern, pas un nouveau.
 
+- **La navigation téléphone n'a pas suivi le menu latéral.** Cible ordinateur réalisée le 10/10/2026 (`docs/product-spec.md` § Coquille de navigation) ; le téléphone garde sa barre du bas et son bandeau d'atelier, et les pages y réservent encore 60px en tête (`--app-chrome-h`, `docs/architecture.md` §11.2). **Décision ouverte** : la variante téléphone de la maquette (`docs/design`) à retenir — à trancher avant de la décrire dans la spec. Au passage, l'entrée « suivi » n'existe pas sur téléphone.
+
 - **L'invitation par tag est ouverte à tous les gestionnaires.** Cible : `docs/product-spec.md` § Paramètres d'un atelier (réservée aux comptes Premium). Le verrou « atelier Premium » a été retiré le 05/10/2026 avec l'atelier Premium ; le verrou par compte se pose avec [[Intégration Stripe & facturation]] (T1 2027) — avant, aucun compte n'est Premium et plus personne ne pourrait inviter. Contrôle côté serveur (`inviteByTag`, `src/lib/workshops/members.ts`), pas seulement dans l'écran.
 
 - **Le développement local écrit dans la base de production.** `npm run dev` et get-culture.com partagent le projet Supabase `hhkmrejjksjpfetwefju`. Palliatif actuel : atelier jetable et tests unitaires des opérations destructrices (`CLAUDE.md` §7). **La vraie réponse est un second projet Supabase dédié au développement**, avec son jeu de variables d'environnement. À faire avant les premiers vrais utilisateurs.
@@ -137,11 +139,11 @@
 
 ## T4 2027 — le jeu, et le reste
 
-- **Gamification non implémentée.** Cible : `docs/product-spec.md` § Gamification. Aucune table pour les notifications, les gouttes, la série, l'XP, le temps passé ni les succès. **Données factices affichées sciemment**, à brancher : cloche et compteur de gouttes (`PLACEHOLDER_DROPLETS`) dans `DashboardHeader.tsx` ; carrousel de statistiques (`PLACEHOLDER_STATS`, `ProfileClient.tsx`) et ligne « notifications · activées ». La tuile « notions maîtrisées » est branchable dès aujourd'hui (compter les notions à `score >= 30`).
+- **Gamification non implémentée.** Cible : `docs/product-spec.md` § Gamification. Aucune table pour les notifications, les gouttes, la série, l'XP, le temps passé ni les succès. **Données factices affichées sciemment**, à brancher (la cloche et le compteur de gouttes ont quitté la navigation le 10/10/2026, à y remettre avec leurs données) : carrousel de statistiques (`PLACEHOLDER_STATS`, `ProfileClient.tsx`) et ligne « notifications · activées ». La tuile « notions maîtrisées » est branchable dès aujourd'hui (compter les notions à `score >= 30`).
 
 - **L'XP n'existe nulle part côté serveur.** Cible : `docs/product-spec.md` § Programme éducatif. Le jardin pousse sur un `localStorage` (`culture.garden.v2`). **Décision ouverte** : où l'XP s'accumule (par membre, ou par membre × atelier). L'écrire à la correction, au même endroit que le crédit de maîtrise (`gradeExercise`).
 
-- **Exposer la maîtrise dans un écran d'analyse.** Cible : `docs/product-spec.md` § Analyse. L'écriture de la maîtrise est faite (`rewardCorrectAnswer`, `src/lib/workshops/mastery.ts`), rien ne la montre. **Décisions ouvertes** : la répétition espacée (une réussite suffit-elle à tenir un niveau ?) et la régression après un échec.
+- **Exposer la maîtrise dans un écran d'analyse.** Cible : `docs/product-spec.md` § Analyse. L'écriture de la maîtrise est faite (`rewardCorrectAnswer`, `src/lib/workshops/mastery.ts`), rien ne la montre — l'entrée « suivi » du menu latéral est grisée (« bientôt ») et pointe nulle part ; la rendre active avec l'écran. **Décisions ouvertes** : la répétition espacée (une réussite suffit-elle à tenir un niveau ?) et la régression après un échec.
 
 - **Donner à l'IA l'accès au web, pour l'étape 0.** Piste du 06/09/2026, non retenue. Intéressant quand l'utilisateur demande un cours que ses documents ne couvrent pas. Probablement une mauvaise idée pour les questions, qui doivent rester adossées au cours (position d'Alexis, à trancher). Réserves : DeepSeek ne sait pas le faire, et deux générations sur le même cours ne donneraient plus le même résultat. Si ça se fait, en option activée par le professeur, jamais par défaut. Coût : ~1 centime par recherche, plus le texte rapporté.
 

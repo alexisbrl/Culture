@@ -21,7 +21,7 @@ function getResend() {
 }
 
 // Locale préférée d'un utilisateur pour ses emails, lue depuis Clerk
-// (`publicMetadata.locale`, synchronisée depuis l'URL par DashboardHeader).
+// (`publicMetadata.locale`, synchronisée depuis l'URL par la navigation (nav/AppNav)).
 // Repli sur 'fr' (defaultLocale) tant qu'aucune préférence n'est enregistrée.
 function emailLocaleOf(publicMetadata: unknown): EmailLocale {
   const locale = (publicMetadata as { locale?: unknown } | null | undefined)?.locale;

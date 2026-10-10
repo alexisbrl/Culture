@@ -110,7 +110,7 @@ export async function updateAvatarParts(
 
 // Persiste la langue préférée de l'utilisateur (publicMetadata.locale) — source
 // de vérité pour la langue de ses emails transactionnels. Synchronisée depuis
-// l'URL par DashboardHeader (auto-sync au chargement et au changement de langue).
+// l'URL par la navigation (nav/AppNav) (auto-sync au chargement et au changement de langue).
 export async function setUserLocale(locale: 'fr' | 'en'): Promise<{ success: boolean }> {
   try {
     if (locale !== 'fr' && locale !== 'en') return { success: false };

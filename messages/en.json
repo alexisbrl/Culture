@@ -21,13 +21,15 @@
     "switcherLoading": "loading…",
     "switcherEmpty": "no workshop yet",
     "newWorkshop": "new workshop",
-    "allWorkshops": "all my workshops"
-  },
-  "notifications": {
-    "title": "notifications",
-    "join": "join",
-    "ignore": "ignore",
-    "cancel": "undo"
+    "allWorkshops": "all my workshops",
+    "tabSuivi": "progress",
+    "soon": "soon",
+    "subQuestions": "question list",
+    "pinOpen": "keep the menu open",
+    "pinClose": "collapse the menu",
+    "goPremium": "go Premium",
+    "close": "close",
+    "tabParametres": "settings"
   },
   "stats": {
     "time": "saved per trainer"
@@ -166,10 +168,6 @@
     "defaultName": "gardener",
     "defaultNameFull": "Gardener",
     "edit": "edit",
-    "tracking": {
-      "title": "tracking",
-      "desc": "progress, mastery and detailed statistics"
-    },
     "passkeys": {
       "sectionTitle": "security",
       "title": "passkeys",
@@ -1044,9 +1042,6 @@
       },
       "perMemberUnit": "/ member"
     }
-  },
-  "analyse": {
-    "title": "analysis."
   },
   "session": {
     "leaveSession": "leave session",

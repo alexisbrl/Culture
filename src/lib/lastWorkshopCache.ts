@@ -1,5 +1,5 @@
 // Mémoire du dernier atelier visité, pour le contexte de la barre de navigation
-// (nom dans le sélecteur + groupe d'onglets, voir DashboardHeader).
+// (nom dans le sélecteur + groupe d'onglets, voir nav/AppNav).
 //
 // Pourquoi un cookie et pas une requête serveur : le header vit dans le layout,
 // donc interroger la base pour cette information ajouterait une requête

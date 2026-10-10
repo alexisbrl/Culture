@@ -4,9 +4,9 @@ import { palette, ink, withAlpha, shadow } from '@/lib/theme';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { ChevronDown, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, Sparkles, Trash2, Undo2, X } from 'lucide-react';
+import { ChevronDown, Loader2, Mail, QrCode, RotateCcw, Sparkles, Trash2, Undo2, X } from 'lucide-react';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, leaveWorkshop } from '@/app/actions/workshops';
@@ -14,7 +14,7 @@ import { COVER_GRADIENTS, COVER_GRADIENT_KEYS, COVER_EMOJIS, coverGradientFor, e
 import ShareQRModal from '@/components/ShareQRModal';
 import { Tooltip } from '@/components/ui/tooltip';
 import { NAV_ITEMS, Row, Switch, SmallBtn, SectionCard, UNDO_FLASH_MS, type WorkshopRole } from './settingsShared';
-import { isNavSection, type NavSection } from './sections';
+import { isNavSection, settingsSectionUrl, type NavSection } from './sections';
 import { GenerationUndoContext, UndoHistoryContext, type GenerationUndoHandle, type UndoEntry } from './undoHistory';
 
 type Props = {
@@ -29,8 +29,6 @@ type Props = {
   uniqueTag: string | null;
   currentUserRole: WorkshopRole;
   showProgramme: boolean;
-  /** Onglet à ouvrir, lu dans l'URL côté serveur (voir page.tsx). */
-  initialSection: NavSection;
   /** Vient de l'atelier lui-même, donc gratuit : c'est la seule chose dont la
    *  section Premium a besoin de la liste des membres. */
   // Les trois sections lourdes arrivent en flux : la page les rend dans leur
@@ -40,7 +38,7 @@ type Props = {
   notionsSlot: React.ReactNode;
 };
 
-export default function SettingsClient({ locale, workshopId, workshopName, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, showProgramme: showProgrammeProp, initialSection, membersSlot, filesSlot, notionsSlot }: Props) {
+export default function SettingsClient({ locale, workshopId, workshopName, coverGradient, coverImageUrl, coverImageActive, emoji, createdAt, uniqueTag, currentUserRole, showProgramme: showProgrammeProp, membersSlot, filesSlot, notionsSlot }: Props) {
   const router = useRouter();
   const t = useTranslations('settings');
 
@@ -51,57 +49,29 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
   const isOwner = currentUserRole === 'owner';
   const isMember = currentUserRole === 'member';
 
-  const [activeSection, setActiveSection] = useState<NavSection>(initialSection);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // ─── La section ouverte vit dans l'URL, et le retour arrière la suit ─────
   //
   // Elle est écrite dans `?section=notions` SANS passer par le routeur : les
-  // sections sont montées en permanence (voir .claude/rules/server-architecture.md),
-  // et une vraie navigation remettrait un temps de chargement là où il n'y en
-  // a pas. L'API d'historique du navigateur ne déclenche, elle, aucune requête.
+  // sections sont montées en permanence (docs/architecture.md §10), et une
+  // vraie navigation remettrait un temps de chargement là où il n'y en a pas.
+  // L'API d'historique du navigateur ne déclenche aucune requête, et Next la
+  // relaie à `useSearchParams` : l'URL est donc la SEULE source de vérité, lue
+  // telle quelle au rendu serveur comme au retour arrière.
   //
-  // Ça règle trois gênes (30/08/2026) : F5 ne renvoie plus sur « Général », la
-  // fin d'une génération par IA — qui recharge la page pour rafraîchir les
-  // listes — retombe sur la section d'où elle a été lancée, et le bouton
-  // « retour » du navigateur repasse d'onglet en onglet avant de sortir.
-  //
-  // Chaque changement d'onglet AJOUTE donc une entrée d'historique
-  // (`pushState`), là où la première version se contentait de réécrire la
-  // dernière (`replaceState`) pour que « retour » sorte des paramètres d'un
-  // coup. Sortir reste à un clic : le lien « ← nom de l'atelier » en tête de
-  // page est là pour ça, quel que soit l'onglet ouvert.
-  //
-  // L'onglet d'ARRIVÉE, lui, est lu côté serveur (`initialSection`, page.tsx) :
-  // le lire ici, dans un effet, affichait « Général » le temps d'un battement
-  // avant de basculer sur le bon onglet à chaque rafraîchissement. La lecture
-  // ci-dessous ne sert donc plus qu'au trajet arrière/avant du navigateur.
-  const sectionFromUrl = useCallback((): NavSection => {
-    const wanted = new URLSearchParams(window.location.search).get('section') ?? undefined;
-    return isNavSection(wanted) ? wanted : 'general';
-  }, []);
+  // C'est ce qui laisse le menu latéral (sous-menu « paramètres ») ouvrir une
+  // section sans rien savoir de cette page : il écrit l'URL de la même façon
+  // (`settingsSectionUrl`), et la page suit.
+  const searchParams = useSearchParams();
+  const wantedSection = searchParams.get('section') ?? undefined;
+  // Un membre simple n'a que « Général » : une URL qui en nomme une autre
+  // n'ouvre pas une section qu'il ne voit pas.
+  const activeSection: NavSection = !isMember && isNavSection(wantedSection) ? wantedSection : 'general';
 
-  // Retour / suivant du navigateur : l'URL a déjà changé quand l'événement
-  // arrive, il suffit de la relire. Aucune requête n'accompagne ce trajet —
-  // les cinq sections sont toujours à l'écran, on ne fait que changer celle
-  // qui est visible.
-  useEffect(() => {
-    const onPop = () => setActiveSection(sectionFromUrl());
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, [sectionFromUrl]);
-
-  /** Ouvre une section : l'état ET l'entrée d'historique, jamais l'un sans
-   *  l'autre. Écrit ici plutôt que dans un effet sur `activeSection` — sans
-   *  quoi un retour arrière, qui pose lui aussi l'état, empilerait une entrée
-   *  de plus et rendrait le bouton « retour » inopérant. */
   function openSection(id: NavSection) {
     if (id === activeSection) return;
-    setActiveSection(id);
-    const url = new URL(window.location.href);
-    if (id === 'general') url.searchParams.delete('section');
-    else url.searchParams.set('section', id);
-    window.history.pushState(null, '', url);
+    window.history.pushState(null, '', settingsSectionUrl(window.location.href, id));
   }
 
   // Section 1 — General
@@ -421,116 +391,22 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
       style={{
         fontFamily: 'var(--font-sans)',
         color: palette.ink,
-        minHeight: 'calc(100vh - 60px)',
+        minHeight: 'calc(100vh - var(--app-chrome-h))',
         background: palette.cream,
         cursor: 'default',
       }}
     >
-      {/* Coquille centrée (T44) — la maquette rend cet écran dans le conteneur
-          centré de l'app (`shellWidth`), la page elle-même occupant toute la
-          largeur disponible à l'intérieur. Sans ce conteneur, navigation et
-          cartes restaient collées au bord gauche du viewport. */}
-      <div className="settings-shell mx-auto flex w-full md:gap-7 md:px-6 md:py-8" style={{ maxWidth: 1100 }}>
-      {/* ── Sidebar (ordinateur) ── */}
-      <div
-        className="scroll-panel hidden md:flex"
-        style={{
-          // `scroll-panel` pose `overflow-y: auto`, ce qui force le navigateur à
-          // rogner AUSSI l'axe horizontal (`overflow-x: visible` n'existe pas en
-          // face d'un axe qui défile). Le halo de focus des entrées, posé en
-          // `box-shadow` de 3px tout autour, était donc coupé à gauche et à
-          // droite. On lui ouvre 16px de marge intérieure, rendus au voisinage
-          // par une marge négative de même valeur : la colonne occupe exactement
-          // la même place qu'avant (232 = 264 − 2 × 16) et son contenu tombe au
-          // même endroit, halo compris — y compris celui du retour à l'atelier,
-          // qui déborde de 10px sur la gauche.
-          width: 264,
-          paddingInline: 16,
-          marginInline: -16,
-          flexShrink: 0,
-          // Pas de `sticky` : la coquille (.settings-shell) est bornée au
-          // viewport et ne défile pas — la navigation reste en place d'elle-même.
-          // `scroll-panel` (barre masquée) couvre le cas d'un viewport trop bas
-          // pour afficher toutes les entrées : la colonne défile alors seule.
-          flexDirection: 'column',
-          gap: 0,
-          minHeight: 0,
-        }}
-      >
-        {/* Back link */}
-        <Link
-          href={`/${locale}/workshops/${workshopId}`}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            fontSize: 14,
-            fontWeight: 500,
-            color: palette.inkMuted,
-            textDecoration: 'none',
-            marginBottom: 20,
-            padding: '8px 10px',
-            margin: '-8px -10px 12px',
-            borderRadius: 9,
-          }}
-        >
-          <ChevronLeft size={18} />
-          {workshopName}
-        </Link>
-
-        {/* Label */}
-        <div
-          style={{
-            fontSize: 10.5,
-            fontWeight: 700,
-            letterSpacing: '0.12em',
-            color: palette.inkFaint,
-            textTransform: 'uppercase',
-            marginBottom: 8,
-            paddingLeft: 10,
-          }}
-        >
-          {t('sidebarLabel')}
-        </div>
-
-        {/* Nav items */}
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {visibleNavItems.map((item) => {
-            const active = activeSection === item.id;
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                onClick={() => openSection(item.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '9px 12px',
-                  borderRadius: 12,
-                  border: 'none',
-                  background: active ? palette.surfaceSunken : 'transparent',
-                  color: active ? palette.ink : palette.inkMuted,
-                  fontWeight: 600,
-                  fontSize: 13.5,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  textAlign: 'left',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <Icon size={16} strokeWidth={1.75} style={{ flexShrink: 0, color: active ? palette.green : palette.inkFaint }} />
-                {t(`nav.${item.id}`)}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
-
+      {/* Coquille bornée à la fenêtre (ordinateur) : seule la colonne de contenu
+          défile. Plus de navigation de sections ici — elle vit dans le sous-menu
+          « paramètres » du menu latéral, qui écrit l'URL lue plus haut. La
+          colonne occupe toute la largeur (la molette agit partout) et centre son
+          contenu par ses marges intérieures : 760 px, 1080 pour « Chapitre &
+          Notion » dont les listes ont besoin de place (maquette). */}
+      <div className="settings-shell flex w-full md:py-8">
       {/* ── Main content — seule colonne à défiler (sans barre visible) ── */}
       <div
-        className="scroll-panel px-5 pt-0 pb-10 md:px-0 md:pt-0 md:pb-4"
-        style={{ flex: 1, minWidth: 0, boxSizing: 'border-box' }}
+        className="scroll-panel settings-content px-5 pt-0 pb-10 md:pt-0 md:pb-4"
+        style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', ['--settings-w' as string]: activeSection === 'notions' ? '1080px' : '760px' }}
       >
         {/* Sélecteur de section (téléphone) — même système que le changement d'atelier */}
         <div
