@@ -459,6 +459,8 @@ lu » de « ne sait pas » ; un examen, lui, cherche à départager.*
 ne dit rien de la longueur attendue ; « trente secondes à une minute » dicte la taille
 de l'énoncé, le nombre de propositions et l'ampleur de la réponse.
 
+**Les notions s'écrivent dans la langue du cours**, reconnue par le site au découpage (mots courants de chaque langue, `src/lib/ingest/language.ts`) — la langue du cours, pas celle de l'atelier. Ce que le cours donne lui-même dans une autre langue garde la sienne. À l'arrivée, un chapitre dont les notions ne sont pas dans cette langue est signalé au compte-rendu, sans relance : un second appel sur un chapitre long dépasserait la durée d'une tâche.
+
 **Chaque notion sera lue seule**, sans le cours et sans les autres : aucune ne commence
 ni ne continue par un renvoi vers l'extérieur. On nomme ce dont on parle à chaque fois,
 quitte à répéter.
@@ -565,7 +567,7 @@ le lui dit. Quand tous les chapitres ont fini leur étape notions, le site repè
 mots porteurs sont communs, les plus proches d'abord, 300 au plus — et **le décideur**
 (§7.4 — Jev, DeepSeek quand il ne répond pas) **tranche chaque paire par une question
 fermée** : l'une des deux est-elle redondante, sans fait vérifiable que l'autre n'ait
-déjà ? Le « oui » se lit au-dessus de 0,6 : une redite retenue efface une notion neuve. Toutes les paires partent en parallèle, cinq à la fois ; une réponse
+déjà ? Le « oui » se lit au-dessus de 0,6 : une redite retenue efface une notion neuve. Toutes les paires partent en parallèle, au rythme que le décideur supporte : le nombre de demandes en vol monte quand tout passe et se divise par deux sur une saturation, sans jamais dépasser 80 départs par seconde, la limite annoncée par TypeSafe pour le compte entier — à relire quand Jev sortira de son lancement (`src/lib/decision/pool.ts`) ; une réponse
 manquante vaut « non ». Rien ne part s'il n'y a aucune paire. Une paire qui compte une
 notion neuve dans le même chapitre que l'autre n'est pas soumise : l'étape notions l'avait
 sous les yeux. Deux anciennes le sont, même dans un seul chapitre — personne ne les a

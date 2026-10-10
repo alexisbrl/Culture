@@ -329,7 +329,7 @@ function instructionFor(scope: IngestScope): string {
         ? chaptersRelaunchInstruction(scope.relaunch)
         : chaptersInstruction(scope.fileNames, scope.retry);
     case 'notions':
-      return chapterNotionsInstruction({ chapter: scope.chapter, extracts: scope.extracts, recheck: scope.recheck });
+      return chapterNotionsInstruction({ chapter: scope.chapter, extracts: scope.extracts, recheck: scope.recheck, language: scope.language });
     case 'questions':
       return questionsInstruction({
         chapter: scope.chapter,

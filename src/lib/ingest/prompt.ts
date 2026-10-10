@@ -863,7 +863,16 @@ export function chapterNotionsInstruction(input: {
    *  (`null` : le document entier). */
   extracts: { name: string; pages: number[] | null }[];
   recheck: { id: string; title: string; label: keyof typeof RECHECK_LABELS }[];
+  /** La langue du cours, en toutes lettres (« français »). */
+  language?: string;
 }): string {
+  // La langue est celle du COURS entier, pas celle de ces seules pages : un
+  // chapitre d'un cours français est sorti tout entier en anglais le
+  // 07/10/2026. Ce que le cours cite lui-même dans une autre langue — un cours
+  // de langue, une citation — garde sa langue.
+  const language = input.language
+    ? `\n\nÉcris chaque notion en ${input.language}, la langue du cours, même si ces pages-ci sont rédigées dans une autre langue. Ce que le cours donne lui-même dans une autre langue — une citation, un mot ou une phrase d'une langue étudiée — garde sa langue d'origine, entre guillemets.`
+    : '';
   const extracts = input.extracts
     .map((e) => (e.pages ? `- « ${e.name} » : ses pages ${e.pages.map((p, i) => `${i + 1} = page ${p} du cours`).join(', ')}` : `- « ${e.name} » : le document entier`))
     .join('\n');
@@ -881,7 +890,7 @@ ${extracts}
 
 Traite-les en entier, texte ET images : un tableau, un schéma ou une légende portent des notions comme le texte. Parmi ces pages, ne traite que ce qui relève de « ${input.chapter.name} ». Pour chaque notion, \`page\` est le numéro de page DANS L'EXTRAIT où tu l'as lue.
 
-Les notions déjà rangées dans ce chapitre sont listées plus haut : tu ne les réécris pas.
+Les notions déjà rangées dans ce chapitre sont listées plus haut : tu ne les réécris pas.${language}
 
 ${NOTION_RULES}${recheck}`;
 }

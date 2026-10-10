@@ -116,6 +116,7 @@ import {
 import { chaptersWithPages, composeChapterSlices, composeChaptersInput, localizeSpans, readDocumentText, resolveDocumentName, sourcePageOf } from './chaptersInput';
 import { coursePositions, partsProgram, rankedByCourse, type PartsProgram } from './partsProgram';
 import { callCostUsd } from './pricing';
+import { LANGUAGE_NAMES, confidentLanguage, detectLanguage, type CourseLanguage } from './language';
 import type { PageSpan } from './slicing';
 import { releaseDocuments } from './release';
 import {
@@ -1335,6 +1336,9 @@ async function recordExamTarget(importId: string, examQuestions: number): Promis
 export type Stage1State = {
   /** Les chapitres au programme, dans l'ordre, avec leurs bornes résolues. */
   chapters: { id: string; name: string; spans: PageSpan[] }[];
+  /** La langue du cours, reconnue par le site (@/lib/ingest/language) : celle
+   *  des notions. `null` : pas assez de texte pour conclure. */
+  courseLanguage?: CourseLanguage | null;
   /** Les chapitres que cette génération a écartés. */
   dropped: string[];
   /** Le cas de chaque notion existante à l'issue de l'étape. */
@@ -1349,6 +1353,7 @@ export type Stage1State = {
 
 /** La réponse de l'étape, gardée sans rien écrire le temps de la relance. */
 type Stage1Pending = {
+  courseLanguage?: CourseLanguage | null;
   fresh: { ref: string; name: string }[];
   chapterOrder: { ref: string; rank: number; reason: string }[];
   chapterBounds: { ref: string; spans: { document: string; from: number; to: number }[] }[];
@@ -1548,6 +1553,7 @@ export async function ingestChapters(
       visibleExisting: program.chapters,
       notions: program.notions,
       standings: Object.fromEntries(standings),
+      courseLanguage: confidentLanguage(input.text),
       pageCounts: input.pageCounts,
       fileNames: input.fileNames,
       discarded: plan.discarded,
@@ -1571,7 +1577,7 @@ export async function ingestChapters(
   }
 }
 
-type PartsSource = { program: PartsProgram; documentId: string; fileName: string; pageCount: number };
+type PartsSource = { program: PartsProgram; documentId: string; fileName: string; pageCount: number; courseLanguage: CourseLanguage | null };
 
 /** Le découpage tiré des parties du document de l'IA, si c'est le SEUL document
  *  du lot et qu'il a des parties titrées ; sinon `null`, et l'étape chapitres
@@ -1592,7 +1598,9 @@ async function partsProgramOf(
   const text = await readDocumentText(source);
   if (!text.pages) return null;
   const program = partsProgram(doc.fileId, text.pages, chapters);
-  return program ? { program, documentId: doc.fileId, fileName: doc.fileName, pageCount: text.pages.length } : null;
+  return program
+    ? { program, documentId: doc.fileId, fileName: doc.fileName, pageCount: text.pages.length, courseLanguage: confidentLanguage(text.pages.join(' ')) }
+    : null;
 }
 
 /** L'étape chapitres quand le site pose lui-même le découpage (§7.6). Sans
@@ -1617,6 +1625,7 @@ async function ingestChaptersFromParts(
     visibleExisting: program.chapters,
     notions: program.notions,
     standings: {},
+    courseLanguage: source.courseLanguage,
     pageCounts: { [source.documentId]: source.pageCount },
     fileNames: { [source.documentId]: source.fileName },
     discarded: [],
@@ -1856,6 +1865,7 @@ async function applyStage1(
     before: Object.fromEntries(before),
     pageCounts: pending.pageCounts,
     forgottenShare: forgottenShare(resolved),
+    courseLanguage: pending.courseLanguage ?? null,
   };
   await writeScope(importId, { stage1, stage1Pending: null });
 
@@ -2290,10 +2300,27 @@ export async function ingestChapterNotions(
         chapter: { id: chapter.id, name: chapter.name },
         extracts: input.extracts.map((e) => ({ name: e.name, pages: e.pages })),
         recheck,
+        language: stage1.courseLanguage ? LANGUAGE_NAMES[stage1.courseLanguage] : undefined,
       },
     ));
 
     const plan = parsePlanLogged('notions', call.result.plan, {}, call.result.truncated);
+
+    // La langue des notions rendues, vérifiée par le site : un écart avec la
+    // langue du cours se dit au compte-rendu et se compte au journal. Pas de
+    // relance : un second appel sur un chapitre long dépasserait la durée d'une
+    // tâche, et le chapitre serait perdu au lieu d'être mal écrit.
+    const notionsLanguage = detectLanguage(plan.notions.map((n) => n.title).join(' '));
+    const languageMismatch = stage1.courseLanguage && notionsLanguage.language && notionsLanguage.share >= 0.6 && notionsLanguage.language !== stage1.courseLanguage
+      ? notionsLanguage.language
+      : null;
+    if (languageMismatch) {
+      plan.adjusted.push({
+        kind: 'chapter',
+        ref: chapterId,
+        reason: `« ${chapter.name} » : notions écrites en ${LANGUAGE_NAMES[languageMismatch]} alors que le cours est en ${LANGUAGE_NAMES[stage1.courseLanguage!]}`,
+      });
+    }
     const rawClaims = (call.result.plan as { claimed?: unknown } | null)?.claimed;
     const claimed = new Set(
       (Array.isArray(rawClaims) ? rawClaims : []).filter((id): id is string => typeof id === 'string' && rechecked.has(id)),
@@ -2344,6 +2371,8 @@ export async function ingestChapterNotions(
       extraits: input.extracts.length,
       pages: input.extracts.reduce((sum, e) => sum + (e.pages?.length ?? 0), 0),
       documentsEntiers: input.extracts.filter((e) => e.pages === null).length,
+      langue: notionsLanguage.language,
+      langueDuCours: stage1.courseLanguage ?? null,
       ecartes: plan.discarded.length,
       corriges: plan.adjusted.length,
     });

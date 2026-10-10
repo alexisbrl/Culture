@@ -121,6 +121,10 @@ export type IngestScope =
       extracts: { name: string; pages: number[] | null }[];
       /** La seconde vérification (§7.6), étiquetée. */
       recheck: { id: string; title: string; label: 'forgotten' | 'out' }[];
+      /** La langue du cours, en toutes lettres (« français ») : celle des
+       *  notions (@/lib/ingest/language). Absente quand le site n'a pas su la
+       *  reconnaître. */
+      language?: string;
     }
   | {
       pass: 'questions';
