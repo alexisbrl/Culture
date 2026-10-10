@@ -13,7 +13,7 @@
 import { NAV_W_CLOSED, NAV_W_OPEN } from './navWidths';
 
 /** Air minimal à laisser entre le menu ouvert et le premier contenu. */
-const BREATHING = 48;
+const BREATHING = 100;
 
 /** Largeur que le menu ouvert prend en plus de sa largeur repliée, air compris. */
 const NEEDED = NAV_W_OPEN - NAV_W_CLOSED + BREATHING;

@@ -32,7 +32,7 @@
     "tabParametres": "settings",
     "noWorkshop": "no workshop",
     "drawerEmptyTitle": "no workshop yet",
-    "drawerEmptyText": "A workshop brings together a course, its learning path and its exams. Create your first one here:"
+    "drawerEmptyText": "Create or join a workshop using the button below:"
   },
   "stats": {
     "time": "saved per trainer"

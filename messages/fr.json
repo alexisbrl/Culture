@@ -32,7 +32,7 @@
     "tabParametres": "paramètres",
     "noWorkshop": "aucun atelier",
     "drawerEmptyTitle": "aucun atelier pour l'instant",
-    "drawerEmptyText": "Un atelier rassemble un cours, son parcours et ses examens. Crée le premier ici :"
+    "drawerEmptyText": "Créez ou rejoignez un atelier en cliquant sur le bouton ci-dessous :"
   },
   "stats": {
     "time": "gain de temps / formateur"
