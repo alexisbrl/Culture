@@ -1,8 +1,7 @@
 # Source de vérité visuelle — refonte UI Culture
 
-> Bundle de handoff exporté depuis Claude Design le 05/08/2026, déposé ici comme
-> maquette de référence du chantier
-> `docs/chantiers/2026-08-05-refonte-ui-design-system.md`. Versionné pour qu'un
+> Bundle de handoff exporté depuis Claude Design, version du **10/10/2026** (menu
+> latéral, version téléphone), qui remplace celle du 05/08/2026. Versionné pour qu'un
 > agent qui clone le dépôt à froid, sans session claude.ai, dispose de la maquette
 > complète et **fonctionnelle**.
 >
@@ -24,7 +23,7 @@
 
 | Chemin | Rôle |
 |---|---|
-| `App-Culture.dc.html` | **La maquette.** Prototype interactif des 9 écrans de l'app connectée, complet (3 750 lignes). Renommé depuis `App Culture.dc.html` pour retirer l'espace ; rien ne pointe vers son nom. |
+| `App-Culture.dc.html` | **La maquette.** Prototype interactif des 9 écrans de l'app connectée, ordinateur et téléphone, complet (4 800 lignes). Renommé depuis `App Culture.dc.html` pour retirer l'espace ; rien ne pointe vers son nom. |
 | `support.js` | Runtime Claude Design. **Indispensable au rendu** : sans lui le prototype n'affiche rien. |
 | `_ds/culture-design-system-…/tokens/*.css` | Les tokens : `colors`, `typography`, `spacing`, `fonts`, `base`, `_compat`. |
 | `_ds/culture-design-system-…/_ds_bundle.js` | Composants React compilés du design system (Button, Card, Input, Pill, Badge, Tag, Avatar, Icon, IconButton, ProgressBar, Tabs, StatCard, Checkbox, Radio, SegmentedControl, ArrosoirMeter). |
@@ -42,7 +41,7 @@
 Le format `.dc.html` est du HTML avec quatre balises propres à Claude Design :
 
 - `{{expression}}` — valeur calculée. Le calcul est dans le `<script>` final
-  (`class Component extends DCLogic`), à partir de la ligne 1934.
+  (`class Component extends DCLogic`), à partir de la ligne 2519.
 - `<sc-if value="{{cond}}" hint-placeholder-val="{{true|false}}">` — bloc
   conditionnel. `hint-placeholder-val` indique la valeur retenue par défaut dans
   l'éditeur : c'est ce qui permet de repérer quelle variante est celle choisie
@@ -57,58 +56,57 @@ Repérage rapide des écrans, par `data-screen-label` :
 
 | Ligne | Écran |
 |---|---|
-| 179 | Dashboard |
-| 268 | Jardin *(hors périmètre du chantier)* |
-| 412 | Parcours |
-| 532 | Exercice |
-| 688 | Générateur d'examen |
-| 1319 | Générateur de cours *(état vide V2)* |
-| 1325 | Profil |
-| 1400 | Analyse *(état vide V2)* |
-| 1408 | Réglages atelier |
+| 313 | Dashboard |
+| 402 | Jardin |
+| 546 | Parcours |
+| 657 | Exercice |
+| 936 | Générateur d'examen |
+| 1567 | Générateur de cours *(état vide)* |
+| 1573 | Profil |
+| 1672 | Analyse *(état vide)* |
+| 1680 | Réglages atelier |
 
-La coquille (barre du haut, bandeau d'atelier, barre d'onglets du bas) est autour :
-lignes 57–176 et 1859–1931. Tous les styles sont **inline dans le markup** — c'est
+La coquille est autour des écrans : menu latéral (variante « latérale gauche »,
+`showKnowt`, ligne 2077) et barres du haut/du bas des autres variantes. Tous les styles sont **inline dans le markup** — c'est
 la source de vérité pour reproduire un écran au pixel près.
 
 ## Variantes figées
 
 Le prototype embarque plusieurs variantes d'un même écran, pilotées par les
-propriétés déclarées dans `data-props` (ligne 1933). **Celles retenues pour le
-chantier** (défauts enregistrés dans le fichier, confirmés par Alexis le 05/08/2026) :
+propriétés déclarées dans `data-props` (ligne 2518). **Celles retenues** (défauts
+enregistrés dans le fichier, confirmés par Alexis le 10/10/2026 pour la navigation) :
 
 | Réglage | Valeur retenue |
 |---|---|
-| Version de l'app | `V2 · sans accueil` |
-| Couleurs | `V1 · crème (actuelle)` |
+| Couleurs (`couleursApp`) | `V1 · crème` |
+| Navigation ordinateur (`navOrdi`) | `latérale gauche` |
+| Lien atelier ↔ menus (`selecteurAtelier`) | `sous-menu` |
 | Typographie | `V1 · Source Serif 4 + Hanken Grotesk` — **mais le chantier n'utilise que la sans**, voir la feuille de route |
-| Navigation ordinateur | `barre du haut` |
-| Style du groupe d'onglets d'atelier | `encadré` |
 | Emplacement des filtres | `toujours visible` |
 | Paramètres avancés (éditeur d'examen) | `V1 · vert doux` |
 | Aperçu impression | `false` |
 
 Pour le **générateur d'examen**, le fichier contient trois variantes de mise en page
 de la colonne gauche. Celle retenue est **`banqueOngletsLarge` — « onglets pleine
-largeur (dans l'encadré) »** (ligne 797) : deux onglets mi-largeur (« mes examens » /
+largeur (dans l'encadré) »** (ligne 1046) : deux onglets mi-largeur (« mes examens » /
 « questions ») en tête de la colonne, coins hauts arrondis, filet sous les onglets,
-onglet actif teinté vert. Les variantes `banqueAccordeon` (ligne 696) et
-`banqueOnglets` (ligne 751) sont d'anciens essais **abandonnés** — les ignorer,
+onglet actif teinté vert. Les variantes `banqueAccordeon` (ligne 945) et
+`banqueOnglets` (ligne 1000) sont d'anciens essais **abandonnés** — les ignorer,
 **même si `banqueAccordeon` porte encore `hint-placeholder-val="{{true}}"`**. La
 disposition générale reste « banque et feuille côte à côte » (`examOptB`, seule
 présente dans le markup).
 
-Pour le **parcours**, la variante retenue est **`vueChapitres`** (ligne 490) :
-`parcoursPref` est figé à `'chapitres (liste + progression)'` (ligne 2203).
-`vueSerre` (434) et `vueParcelle` (466) sont ignorées. Corollaire : `showBriquesLine`
-(ligne 2793) vaut `false`, donc la ligne « N notions acquises sur M » n'est pas rendue.
+Pour le **parcours**, la variante retenue est **`vueChapitres`** (ligne 616) :
+`parcoursPref` est figé à `'chapitres (liste + progression)'` (ligne 2806).
+`vueSerre` (560) et `vueParcelle` (592) sont ignorées. Corollaire : `showBriquesLine`
+vaut `false`, donc la ligne « N notions acquises sur M » n'est pas rendue.
 
 ## ⚠️ Ne pas se fier aux `hint-placeholder-val`
 
 Ce sont des indices d'éditeur, **pas la valeur d'exécution**. Deux fois au moins ils
 mentent : `banqueAccordeon` porte `{{true}}` alors que le getter vaut `false`, et
 `vueSerre` porte `{{true}}` alors que la vue rendue est `vueChapitres`. **La vérité
-est dans les getters du `<script>` final** (à partir de la ligne 1934) : y chercher
+est dans les getters du `<script>` final** (à partir de la ligne 2519) : y chercher
 le nom de la condition (`grep -n "vueSerre\|banqueAccordeon" App-Culture.dc.html`)
 avant de choisir une variante.
 
