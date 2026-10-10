@@ -19,7 +19,6 @@ const eslintConfig = defineConfig([
     ".claude/**",
     // Maquettes / prototypes de référence (non suivis par git, locaux uniquement) :
     // ce ne sont pas des sources de l'app, on ne les lint pas.
-    "_handoff/**",
     "culture-design-system/**",
     // Bundle de handoff Claude Design (versionné, cf. docs/design/README.md) :
     // prototype + runtime + composants compilés. Documentation, pas des sources.

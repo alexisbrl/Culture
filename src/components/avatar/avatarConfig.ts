@@ -1,4 +1,4 @@
-// Avatar composition system — port fidèle de _handoff/project/src/avatar.jsx
+// Avatar composition system — port fidèle du avatar.jsx du premier prototype Claude Design
 
 export type AvatarConfig = {
   face: string;
