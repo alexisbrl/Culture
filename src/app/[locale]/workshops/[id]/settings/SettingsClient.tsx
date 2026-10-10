@@ -14,6 +14,7 @@ import { COVER_EMOJIS, coverGradientFor, emojiFor } from '@/lib/workshopCover';
 import ShareQRModal from '@/components/ShareQRModal';
 import { Tooltip } from '@/components/ui/tooltip';
 import { NAV_ITEMS, Row, Switch, SmallBtn, SectionCard, UNDO_FLASH_MS, type WorkshopRole } from './settingsShared';
+import { announceWorkshopDetails } from '@/lib/workshopDetailsEvent';
 import { isNavSection, settingsSectionUrl, type NavSection } from './sections';
 import { GenerationUndoContext, UndoHistoryContext, type GenerationUndoHandle, type UndoEntry } from './undoHistory';
 
@@ -138,6 +139,8 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
       setDetailsError(result.error ?? t('err.generic'));
       return false;
     }
+    // Le menu latéral affiche nom et emoji : il suit sans attendre.
+    announceWorkshopDetails({ id: workshopId, name: next.name, emoji: next.emoji });
     if (record) {
       recordUndo({
         section: 'general',

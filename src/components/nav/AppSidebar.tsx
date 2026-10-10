@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   BookOpen,
@@ -25,6 +25,8 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip } from '@/components/ui/tooltip';
 import WarmLink from '@/components/WarmLink';
 import { saveNavPinned } from '@/lib/navPinned';
+import { setNavPinned } from '@/app/actions/profile';
+import { pinnedNavNeedsRoom } from './contentFit';
 import { NAV_SECTIONS, settingsSectionUrl, type NavSection } from '@/app/[locale]/workshops/[id]/settings/sections';
 import { NAV_W_CLOSED, NAV_W_OPEN } from './navWidths';
 import WorkshopDrawer from './WorkshopDrawer';
@@ -35,7 +37,8 @@ import { useFold, type FoldPhase } from './useFold';
 // Maquette « latérale gauche », sélecteur d'atelier en « sous-menu »
 // (docs/design, App Culture). Replié, il ne montre que les icônes ; il s'ouvre
 // au survol PAR-DESSUS la page (ombre portée), ou en permanence une fois
-// épinglé — il pousse alors le contenu. Ouvrir le tiroir « changer d'atelier »
+// épinglé. Épinglé, il ne pousse la page que s'il en couvrirait du contenu
+// (contentFit) : une page centrée garde sa largeur. Ouvrir le tiroir « changer d'atelier »
 // le garde ouvert le temps du choix.
 //
 // Les sous-menus (« parcours » → liste des questions, « paramètres » → ses
@@ -61,6 +64,9 @@ type Props = {
   pathname: string;
   searchParams: { get(name: string): string | null };
   initialPinned: boolean;
+  /** Préférence du compte : undefined tant que le compte n'est pas chargé,
+   *  null s'il n'en a encore aucune. */
+  accountPinned: boolean | null | undefined;
   /** Abonnement gratuit avéré — le bouton Premium ne s'affiche qu'alors. */
   showPremium: boolean;
 };
@@ -79,12 +85,27 @@ function shallowIfSamePage(e: MouseEvent<HTMLAnchorElement>, href: string) {
   if (target.search !== window.location.search) window.history.pushState(null, '', target);
 }
 
-export default function AppSidebar({ workshopId, workshopName, workshopEmoji, canManage, isMember, pathname, searchParams, initialPinned, showPremium }: Props) {
+export default function AppSidebar({ workshopId, workshopName, workshopEmoji, canManage, isMember, pathname, searchParams, initialPinned, accountPinned, showPremium }: Props) {
   const t = useTranslations('nav');
   const ts = useTranslations('settings');
   const locale = useLocale();
 
   const [pinned, setPinned] = useState(initialPinned);
+  // Le cookie (`initialPinned`) n'est que la copie locale de la préférence du
+  // compte : elle fait foi dès qu'elle arrive, une seule fois par chargement
+  // (après, c'est le geste de l'utilisateur qui l'écrit). Un compte qui n'en
+  // a pas encore reçoit celle du poste.
+  const [accountSynced, setAccountSynced] = useState(false);
+  if (!accountSynced && accountPinned !== undefined) {
+    setAccountSynced(true);
+    if (accountPinned !== null && accountPinned !== pinned) setPinned(accountPinned);
+  }
+  useEffect(() => {
+    if (accountSynced && accountPinned === null) void setNavPinned(pinned);
+    // Une seule fois, à l'arrivée du compte.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountSynced]);
+  useEffect(() => saveNavPinned(pinned), [pinned]);
   const [hover, setHover] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [titleHover, setTitleHover] = useState(false);
@@ -94,7 +115,10 @@ export default function AppSidebar({ workshopId, workshopName, workshopEmoji, ca
   const togglePinned = () => {
     const next = !pinned;
     setPinned(next);
-    saveNavPinned(next);
+    void setNavPinned(next);
+    // Le prochain épinglage repart de la largeur repliée : la mesure s'y fait
+    // directement, et l'ouverture s'anime si la page doit se resserrer.
+    setPushes(false);
     // Replier depuis le menu ouvert au survol : sans ça, il resterait ouvert
     // sous la souris et le clic paraîtrait sans effet.
     setHover(false);
@@ -121,13 +145,51 @@ export default function AppSidebar({ workshopId, workshopName, workshopEmoji, ca
   const parcoursFold = useFold(parcoursActive && canManage);
   const settingsFold = useFold(onSettings);
 
+  // ─── Pousser la page, ou se poser par-dessus ─────────────────────────────
+  const slotRef = useRef<HTMLDivElement>(null);
+  const [pushes, setPushes] = useState(false);
+  const evaluateFit = useCallback(() => {
+    const slot = slotRef.current;
+    const main = document.querySelector<HTMLElement>('[data-app-main]');
+    if (!slot || !main || slot.offsetParent === null) return;
+    setPushes(pinnedNavNeedsRoom(slot, main));
+  }, []);
+  const routeKey = pathname + '?' + (searchParams.get('tab') ?? '') + (searchParams.get('section') ?? '') + (searchParams.get('view') ?? '');
+  // Avant peinture à l'épinglage et à chaque page, puis encore un peu plus
+  // tard : une page arrive souvent en plusieurs fois (sections en flux).
+  useLayoutEffect(() => {
+    if (!pinned) return;
+    evaluateFit();
+    const ids = [300, 1200].map((ms) => setTimeout(evaluateFit, ms));
+    return () => ids.forEach(clearTimeout);
+  }, [pinned, routeKey, evaluateFit]);
+  // Fenêtre redimensionnée, ou contenu qui change de taille.
+  useEffect(() => {
+    if (!pinned) return;
+    const main = document.querySelector<HTMLElement>('[data-app-main]');
+    let frame = 0;
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(evaluateFit);
+    };
+    window.addEventListener('resize', schedule);
+    const ro = new ResizeObserver(schedule);
+    if (main?.firstElementChild) ro.observe(main.firstElementChild);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', schedule);
+      ro.disconnect();
+    };
+  }, [pinned, routeKey, evaluateFit]);
+
   const base = `/${locale}/workshops/${workshopId}`;
   const sections = isMember ? (['general'] as const) : NAV_SECTIONS;
 
   return (
     <div
+      ref={slotRef}
       className="sticky top-0 hidden h-screen flex-none md:block"
-      style={{ width: pinned ? NAV_W_OPEN : NAV_W_CLOSED, transition: `width 240ms ${EASE}`, zIndex: 50 }}
+      style={{ width: pinned && pushes ? NAV_W_OPEN : NAV_W_CLOSED, transition: `width 240ms ${EASE}`, zIndex: 50 }}
     >
       {drawerOpen && <WorkshopDrawer left={NAV_W_OPEN} currentWorkshopId={workshopId} onClose={closeDrawer} />}
 
@@ -170,7 +232,7 @@ export default function AppSidebar({ workshopId, workshopName, workshopEmoji, ca
 
         {/* ── L'atelier : sélecteur + ses pages ── */}
         {workshopId && (
-          <div className="flex flex-none flex-col gap-1">
+          <div className="flex flex-none flex-col gap-0.5">
             {open ? (
               <button
                 type="button"
@@ -179,10 +241,10 @@ export default function AppSidebar({ workshopId, workshopName, workshopEmoji, ca
                 onMouseLeave={() => setTitleHover(false)}
                 aria-label={t('changeWorkshop')}
                 aria-expanded={drawerOpen}
-                className="relative z-[1] mb-0.5 flex max-w-full flex-none items-start gap-2.5 rounded-xl border-none bg-transparent px-1 py-1 text-left outline-none hover:bg-[var(--surface-sunken)] focus-visible:shadow-[var(--shadow-focus)]"
+                className="relative z-[1] flex max-w-full flex-none items-start gap-2.5 rounded-xl border-none bg-transparent px-1 py-1 text-left outline-none hover:bg-[var(--surface-sunken)] focus-visible:shadow-[var(--shadow-focus)]"
               >
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
-                  <span aria-hidden className="flex size-[34px] flex-none items-center justify-center rounded-[10px] border border-[var(--line)] text-[17px] leading-none">
+                  <span aria-hidden className="flex size-[34px] flex-none items-center justify-center text-[20px] leading-none">
                     {workshopEmoji}
                   </span>
                   <span className="flex h-10 min-w-0 flex-1 items-center">
@@ -210,9 +272,9 @@ export default function AppSidebar({ workshopId, workshopName, workshopEmoji, ca
                 type="button"
                 onClick={() => setDrawerOpen(true)}
                 aria-label={t('changeWorkshop')}
-                className="mb-0.5 flex flex-none flex-col items-start gap-1.5 rounded-xl border-none bg-transparent px-1 py-1 outline-none hover:bg-[var(--surface-sunken)] focus-visible:shadow-[var(--shadow-focus)]"
+                className="flex flex-none flex-col items-start gap-1.5 rounded-xl border-none bg-transparent px-1 py-1 outline-none hover:bg-[var(--surface-sunken)] focus-visible:shadow-[var(--shadow-focus)]"
               >
-                <span aria-hidden className="my-[3px] flex size-[34px] flex-none items-center justify-center rounded-[10px] border border-[var(--line)] text-[17px] leading-none">
+                <span aria-hidden className="my-[3px] flex size-[34px] flex-none items-center justify-center text-[20px] leading-none">
                   {workshopEmoji}
                 </span>
               </button>
@@ -225,7 +287,7 @@ export default function AppSidebar({ workshopId, workshopName, workshopEmoji, ca
                 // tout écart vertical entre les deux états ferait sauter les
                 // entrées de quelques pixels à chaque survol.
                 gap: 2,
-                margin: open ? '2px 0 4px 4px' : '2px 0 4px 0',
+                margin: open ? '0 0 4px 4px' : '0 0 4px 0',
                 padding: open ? '0 0 0 8px' : 0,
                 borderLeft: open ? '1px solid var(--line)' : 'none',
                 transition: 'margin 200ms var(--ease-out), padding 200ms var(--ease-out)',

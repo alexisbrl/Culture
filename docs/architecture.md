@@ -1243,8 +1243,10 @@ droite ; rien ne surmonte le contenu. Sur téléphone, la réserve historique de
 du contenu demeure. Cette hauteur vit dans `--app-chrome-h` (0 sur ordinateur) : une page
 qui veut remplir l'écran écrit `calc(100vh - var(--app-chrome-h))`, **jamais un nombre**.
 
-Le menu latéral fait **68px replié, 248px épinglé** ; ouvert au survol, il passe
-par-dessus la page sans la pousser. Toute mise en page qui dépend de la largeur disponible
+Le menu latéral fait **68px replié, 248px ouvert**. Ouvert au survol, il passe par-dessus la
+page ; épinglé, il ne la pousse que s'il en couvrirait du contenu visible (`nav/contentFit`,
+mesuré dans la géométrie « par-dessus », donc verdict stable) — un fond pleine largeur ne
+compte pas. Toute mise en page qui dépend de la largeur disponible
 se lit donc sur le **contenu**, pas sur la fenêtre : la zone principale est un conteneur
 nommé `app-main`, et les paliers de la feuille d'examen sont des requêtes de conteneur.
 Une vue qui vit dans l'URL d'une page (section des paramètres, liste des questions du
@@ -1257,7 +1259,8 @@ requête bloquante au rendu de *toutes* les pages ; le lire dans le navigateur n
 qu'après hydratation, donc le bloc apparaît en sursaut. Le pattern retenu est un **cookie
 écrit par le navigateur et lu par le serveur** : présent dans le HTML initial, coût nul,
 rafraîchi en arrière-plan. L'identité y est vérifiée à la lecture — poste partagé. Même
-cookie, sans identité, pour le menu épinglé ou replié (`navPinned`).
+pattern pour le menu épinglé : la préférence vit dans le compte (`publicMetadata.navPinned`),
+le cookie `navPinned` n'en est que la copie locale, et le compte fait foi à son arrivée.
 
 **Borner un texte qui déborde se fait en largeur, jamais en caractères.** Un plafond de
 caractères coupe des noms qui avaient la place de tenir et laisse passer les caractères

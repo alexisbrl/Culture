@@ -5,8 +5,8 @@
 // largeur. Lu dans le navigateur, il naîtrait replié puis s'ouvrirait d'un coup
 // après hydratation, en poussant tout le contenu de la page.
 //
-// Pas d'identité ici : c'est une préférence d'affichage du poste, pas une donnée
-// du compte.
+// La préférence elle-même vit dans le compte (publicMetadata.navPinned, voir
+// setNavPinned) : ce cookie n'en est que la copie locale, pour le premier rendu.
 
 export const NAV_PINNED_COOKIE = 'culture.navPinned';
 

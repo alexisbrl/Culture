@@ -10,6 +10,7 @@ import { getWorkshop, getLastVisitedWorkshop } from '@/app/actions/workshops';
 import { clearLastWorkshop, saveLastWorkshop, type CachedWorkshop } from '@/lib/lastWorkshopCache';
 import WarmLink from '@/components/WarmLink';
 import { emojiFor } from '@/lib/workshopCover';
+import { onWorkshopDetails } from '@/lib/workshopDetailsEvent';
 import AppSidebar from './AppSidebar';
 
 // Navigation de l'espace connecté, montée par le layout sur toutes ses pages
@@ -83,6 +84,23 @@ export default function AppNav({ userId, initialWorkshop, initialPinned }: Props
     };
   }, [urlWorkshopId, userId]);
 
+  // Renommage ou nouvel emoji depuis les paramètres : la page l'annonce, le
+  // menu suit tout de suite (sans quoi il gardait l'ancien nom jusqu'au
+  // changement d'atelier), et le souvenir aussi.
+  useEffect(
+    () =>
+      onWorkshopDetails(({ id, name, emoji }) => {
+        setWorkshop((w) => (w && id === urlWorkshopId ? { ...w, name, emoji } : w));
+        setLastWorkshop((w) => {
+          if (!w || w.id !== id) return w;
+          const next = { ...w, name, emoji };
+          saveLastWorkshop(userId, next);
+          return next;
+        });
+      }),
+    [urlWorkshopId, userId],
+  );
+
   // Jardin, profil et tableau de bord n'appartiennent à aucun atelier, mais la
   // navigation doit être IDENTIQUE partout : on y rétablit le contexte avec le
   // dernier atelier visité, au lieu d'un menu amputé.
@@ -152,6 +170,7 @@ export default function AppNav({ userId, initialWorkshop, initialPinned }: Props
         pathname={pathname}
         searchParams={searchParams}
         initialPinned={initialPinned}
+        accountPinned={!user ? undefined : typeof user.publicMetadata?.navPinned === 'boolean' ? user.publicMetadata.navPinned : null}
         showPremium={showPremium}
       />
       <nav className="fixed inset-x-0 bottom-0 z-30 flex items-stretch gap-1 border-t border-[var(--line)] bg-[var(--surface-raised)] px-3 pt-2 pb-3.5 md:hidden">

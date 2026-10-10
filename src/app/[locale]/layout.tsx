@@ -12,7 +12,7 @@ import { routing } from '@/i18n/routing';
 import '../globals.css';
 import Navbar from '@/components/Navbar';
 import AppNav from '@/components/nav/AppNav';
-import { NAV_W_CLOSED, NAV_W_OPEN } from '@/components/nav/navWidths';
+import { NAV_W_CLOSED } from '@/components/nav/navWidths';
 import Footer from '@/components/Footer';
 import SessionWatcher from '@/components/SessionWatcher';
 import GoogleOneTapGate from '@/components/GoogleOneTapGate';
@@ -78,14 +78,14 @@ export default async function LocaleLayout({ children, params }: Props) {
               // (feuille d'examen, globals.css) — la fenêtre n'en dit plus rien
               // depuis que le menu en prend une partie.
               <div className="flex flex-1 flex-col md:flex-row">
-                <Suspense fallback={<div className="hidden flex-none md:block" style={{ width: navPinned ? NAV_W_OPEN : NAV_W_CLOSED }} />}>
+                <Suspense fallback={<div className="hidden flex-none md:block" style={{ width: NAV_W_CLOSED }} />}>
                   {/* Contexte d'atelier et état du menu passés dès le HTML :
                       `userId` vient de l'`auth()` déjà fait plus haut, le reste
                       de cookies déjà présents dans la requête — aucune requête
                       base en plus, et rien ne « pope » après coup. */}
                   <AppNav userId={userId} initialWorkshop={lastWorkshop} initialPinned={navPinned} />
                 </Suspense>
-                <main className="min-w-0 flex-1 pb-[78px] [container-name:app-main] [container-type:inline-size] md:pb-0">{children}</main>
+                <main data-app-main className="min-w-0 flex-1 pb-[78px] [container-name:app-main] [container-type:inline-size] md:pb-0">{children}</main>
               </div>
             ) : (
               <>
