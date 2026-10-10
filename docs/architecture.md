@@ -567,9 +567,10 @@ le lui dit. Quand tous les chapitres ont fini leur étape notions, le site repè
 mots porteurs sont communs, les plus proches d'abord, 300 au plus — et **le décideur**
 (§7.4 — Jev, DeepSeek quand il ne répond pas) **tranche chaque paire par une question
 fermée** : l'une des deux est-elle redondante, sans fait vérifiable que l'autre n'ait
-déjà ? Le « oui » se lit au-dessus de 0,6 : une redite retenue efface une notion neuve. Toutes les paires partent en parallèle, au rythme que le décideur supporte : le nombre de demandes en vol monte quand tout passe et se divise par deux sur une saturation, sans jamais dépasser 80 départs par seconde, la limite annoncée par TypeSafe pour le compte entier — à relire quand Jev sortira de son lancement (`src/lib/decision/pool.ts`) ; une réponse
+déjà ? Le « oui » se lit au-dessus de 0,6 : une redite retenue efface une notion neuve. Toutes les paires partent en parallèle, au rythme que le décideur supporte : le nombre de demandes en vol monte quand tout passe et se divise par deux sur une saturation, sans jamais dépasser 50 départs par seconde par génération, sous la limite de 80 annoncée par TypeSafe pour le compte entier (le pourquoi et le risque : l'encadré de `src/lib/decision/pool.ts`) ; une réponse
 manquante vaut « non ». Rien ne part s'il n'y a aucune paire. Une paire qui compte une
-notion neuve dans le même chapitre que l'autre n'est pas soumise : l'étape notions l'avait
+notion neuve dans le même chapitre que l'autre n'est pas soumise — sauf deux neuves d'un
+chapitre lu en deux moitiés (§7.11), qui ne se sont pas vues : l'étape notions l'avait
 sous les yeux. Deux anciennes le sont, même dans un seul chapitre — personne ne les a
 jamais jugées. Le tri tourne **en même temps que les questions**, qui ne l'attendent pas —
 et c'est pourquoi **il juge sans rien toucher** : les gestes se font au ménage de fin, une
@@ -984,9 +985,21 @@ unique par étape). Une fonction peut mourir entre deux tâches sans rien perdre
 ensemble, et les questions d'un chapitre dès que ses notions sont écrites. Le plafond ne
 borne qu'une boucle emballée.
 
-**La veille rattrape ce qui se perd.** Une tâche coupée par la limite de durée n'écrit rien :
-elle est **reprise une fois**, et abandonnée si elle est coupée de nouveau (l'écran dit alors
-combien de questions manquent). Une tâche qu'aucun relais n'a prise est relancée. Cette
+**La veille rattrape ce qui se perd.** Une tâche coupée par la limite de durée n'écrit rien,
+et rien ne le signale : c'est son **signe de vie** qui le dit. Toute tâche l'écrit en partant
+puis toutes les quinze secondes jusqu'à sa fin, appel au modèle ou non ; sans signe depuis
+trente secondes — deux manqués, pour qu'une écriture en retard ne fasse pas payer un appel
+deux fois —, elle est tenue pour coupée. Aucune durée fixe : un appel long mais vivant n'est
+jamais repris. Une tâche coupée est **reprise une fois**, et abandonnée si elle est coupée de
+nouveau (l'écran dit alors combien de questions manquent).
+
+**Un chapitre trop long repart en deux moitiés.** Les notions d'un chapitre reprises après
+une coupure partent en deux appels simultanés, chacun sur la moitié de ses pages, dans
+l'ordre du cours ; un document sans pages ne se coupe pas et rejoint la moitié la plus
+légère. Les deux réponses n'en font qu'une : même filtre des redites, même plafond, une seule
+écriture, et le tri final des redites compare aussi les notions des deux moitiés entre elles.
+Une moitié en échec fait échouer le chapitre, chaque appel a sa ligne au journal (marquée
+`moitie`). Deux moitiés coupées à leur tour diraient qu'il faut couper en plus de parts. Une tâche qu'aucun relais n'a prise est relancée. Cette
 veille passe à chaque lecture d'avancement par l'écran, et chaque minute par une tâche
 planifiée de la base, pour les générations que plus personne ne regarde. **Une génération
 n'est menée que par le serveur qui l'a ouverte** : le développement local partage la base
@@ -1135,7 +1148,8 @@ heures pleines. Un modèle hors grille donne un coût vide, jamais zéro. La vue
 `ai_generation_costs` additionne par génération, avec le compte qui l'a lancée et la part de
 chaque fournisseur.
 
-**Un appel coupé a quand même un coût.** Tant qu'il tourne, l'appel note sur sa tâche qui
+**Un appel coupé a quand même un coût.** Tant qu'il tourne, l'appel note sur sa tâche — une note par appel quand
+plusieurs tournent ensemble — qui
 répond, ce qu'il a lu dès que le fournisseur le dit, et un signe de vie toutes les quinze
 secondes (`src/lib/ingest/callProgress.ts`). Une tâche coupée par la limite de durée meurt
 sans rien écrire ; la veille qui la reprend trouve la note et écrit la ligne : cause

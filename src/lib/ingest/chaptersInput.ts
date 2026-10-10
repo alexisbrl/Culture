@@ -10,7 +10,7 @@
 
 import { extractPdfPages, readPdfText } from './pdf';
 import type { PreparedDocument, SourceDocument } from './providers/types';
-import { imagePages, sliceChapters, usableSpan, type ChapterBounds } from './slicing';
+import { halveSlices, imagePages, sliceChapters, usableSpan, type ChapterBounds, type DocumentSlice } from './slicing';
 
 export const PDF_MIME = 'application/pdf';
 
@@ -307,6 +307,9 @@ export function pageRanges(pages: readonly number[]): string {
  * précède —, puis seules les pages de celui-ci sont extraites et remises au
  * fournisseur. Un document pris en entier réutilise la remise faite pour tout
  * le lot, sans rien téléverser.
+ *
+ * `half` : seulement cette moitié des pages (`chapterHalves`) — la reprise
+ * d'un chapitre trop long pour un appel.
  */
 export async function composeChapterSlices(
   chapterId: string,
@@ -315,13 +318,11 @@ export async function composeChapterSlices(
   prepared: readonly PreparedDocument[],
   readBytes: (doc: PreparedDocument) => Promise<Uint8Array>,
   prepare: (documents: SourceDocument[]) => Promise<PreparedDocument[]>,
+  half?: number,
 ): Promise<ChapterSlicesInput> {
-  const sliced = sliceChapters(
-    chapters,
-    prepared.map((d) => ({ id: d.fileId, pageCount: pageCounts[d.fileId] ?? null })),
-  );
-  const mine = sliced.chapters.find((c) => c.key === chapterId);
-  if (!mine) return { documents: [], uploaded: [], extracts: [] };
+  const all = slicesOf(chapterId, chapters, pageCounts, prepared);
+  if (!all) return { documents: [], uploaded: [], extracts: [] };
+  const mine = { slices: half === undefined ? all : (halveSlices(all, pageCounts)[half] ?? []) };
 
   const byId = new Map(prepared.map((d) => [d.fileId, d]));
   const documents: (PreparedDocument | SourceDocument)[] = [];
@@ -361,6 +362,31 @@ export async function composeChapterSlices(
     uploaded,
     extracts,
   };
+}
+
+function slicesOf(
+  chapterId: string,
+  chapters: readonly ChapterBounds[],
+  pageCounts: Readonly<Record<string, number | null>>,
+  prepared: readonly PreparedDocument[],
+): DocumentSlice[] | null {
+  const sliced = sliceChapters(
+    chapters,
+    prepared.map((d) => ({ id: d.fileId, pageCount: pageCounts[d.fileId] ?? null })),
+  );
+  return sliced.chapters.find((c) => c.key === chapterId)?.slices ?? null;
+}
+
+/** En combien de moitiés les pages d'un chapitre se coupent : 2, ou 1 quand il
+ *  n'y a rien à couper (`halveSlices`). */
+export function chapterHalves(
+  chapterId: string,
+  chapters: readonly ChapterBounds[],
+  pageCounts: Readonly<Record<string, number | null>>,
+  prepared: readonly PreparedDocument[],
+): number {
+  const all = slicesOf(chapterId, chapters, pageCounts, prepared);
+  return all ? halveSlices(all, pageCounts).length : 1;
 }
 
 /** Une page lue dans un extrait, rendue à sa page du cours. Ne se résout que

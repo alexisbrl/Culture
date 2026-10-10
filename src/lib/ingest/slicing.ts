@@ -167,3 +167,52 @@ export function imagePages(pageTexts: readonly string[]): number[] {
   });
   return out;
 }
+
+// ─── Un chapitre trop long : ses pages en deux moitiés ───────────────────────
+
+/**
+ * Coupe les pages d'un chapitre en deux moitiés égales, dans l'ordre du cours
+ * — pour la reprise d'un chapitre dont l'appel a dépassé la durée d'une tâche
+ * (Alexis, 10/10/2026). Un document pris en entier dont on connaît le nombre
+ * de pages se coupe comme les autres ; un document sans pages (texte, document
+ * de l'IA) ne se coupe pas, et rejoint la moitié la plus légère.
+ *
+ * Rend deux listes, ou une seule quand il n'y a rien à couper (une page, un
+ * seul document sans pages) : l'appel repart alors entier.
+ *
+ * Si deux moitiés ne suffisent plus un jour (des moitiés elles-mêmes coupées,
+ * au journal), c'est ici qu'on passerait à trois ou quatre parts.
+ */
+export function halveSlices(
+  slices: readonly DocumentSlice[],
+  pageCounts: Readonly<Record<string, number | null>>,
+): DocumentSlice[][] {
+  const pages: { documentId: string; page: number }[] = [];
+  const whole: DocumentSlice[] = [];
+  for (const slice of slices) {
+    const count = pageCounts[slice.documentId] ?? null;
+    const list = slice.pages ?? (count !== null ? Array.from({ length: count }, (_, i) => i + 1) : null);
+    if (list === null) whole.push({ documentId: slice.documentId, pages: null });
+    else for (const page of list) pages.push({ documentId: slice.documentId, page });
+  }
+  if (pages.length + whole.length < 2) return [slices.map((s) => ({ ...s }))];
+
+  const cut = Math.ceil(pages.length / 2);
+  const halves = [pages.slice(0, cut), pages.slice(cut)].map((part) => {
+    const out: DocumentSlice[] = [];
+    for (const { documentId, page } of part) {
+      const last = out[out.length - 1];
+      if (last && last.documentId === documentId) (last.pages as number[]).push(page);
+      else out.push({ documentId, pages: [page] });
+    }
+    return out;
+  });
+  // Les documents sans pages, un à un, vers la moitié qui a le moins à lire.
+  const weight = halves.map((h) => h.reduce((sum, s) => sum + (s.pages?.length ?? 0), 0));
+  for (const doc of whole) {
+    const lighter = weight[0] <= weight[1] ? 0 : 1;
+    halves[lighter].push(doc);
+    weight[lighter] += Math.max(1, ...weight);
+  }
+  return halves.filter((h) => h.length > 0);
+}

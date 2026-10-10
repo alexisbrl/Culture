@@ -325,17 +325,25 @@ export interface ReditePair {
  *  assez proche est soumise, SAUF une paire qui compte une notion neuve dans le
  *  même chapitre que l'autre : l'étape notions de ce chapitre l'a déjà jugée,
  *  elle avait la liste sous les yeux. Deux anciennes du même chapitre, elles,
- *  n'ont jamais été jugées par personne. */
+ *  n'ont jamais été jugées par personne.
+ *
+ *  `halved` : les chapitres lus en deux moitiés (reprise d'un chapitre trop
+ *  long). Deux notions NEUVES d'un tel chapitre ne se sont pas vues — chaque
+ *  moitié ignorait l'autre —, leur paire est donc soumise. */
 export function rediteCandidates(
   notions: readonly RediteNotion[],
   limit = MAX_REDITE_PAIRS,
+  halved: ReadonlySet<string> = new Set(),
 ): ReditePair[] {
   const words = notions.map((n) => significantWords(n.title));
   const pairs: ReditePair[] = [];
   for (let i = 0; i < notions.length; i++) {
     for (let j = i + 1; j < notions.length; j++) {
       const [a, b] = [notions[i], notions[j]];
-      if ((a.fresh || b.fresh) && a.chapterId === b.chapterId) continue;
+      if ((a.fresh || b.fresh) && a.chapterId === b.chapterId) {
+        const unseen = a.fresh && b.fresh && a.chapterId !== null && halved.has(a.chapterId);
+        if (!unseen) continue;
+      }
       const score = setProximity(words[i], words[j]);
       if (score >= SIMILAR_ENOUGH_TO_ASK) pairs.push({ a, b, proximity: score });
     }

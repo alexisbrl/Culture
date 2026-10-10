@@ -113,7 +113,7 @@ import {
   type NotionVerdict,
   type ThresholdDecision,
 } from './verdicts';
-import { chaptersWithPages, composeChapterSlices, composeChaptersInput, localizeSpans, readDocumentText, resolveDocumentName, sourcePageOf } from './chaptersInput';
+import { chapterHalves, chaptersWithPages, composeChapterSlices, composeChaptersInput, localizeSpans, readDocumentText, resolveDocumentName, sourcePageOf } from './chaptersInput';
 import { coursePositions, partsProgram, rankedByCourse, type PartsProgram } from './partsProgram';
 import { callCostUsd } from './pricing';
 import { LANGUAGE_NAMES, confidentLanguage, detectLanguage, type CourseLanguage } from './language';
@@ -701,7 +701,7 @@ async function modelCall(
           provider: meta.provider.name,
         });
         try {
-          return await call();
+          return await inFlight.run(call);
         } finally {
           await inFlight.end();
         }
@@ -2231,6 +2231,9 @@ export type ChapterNotionsResult = ChapterPassResult & {
    *  l'écran, qui les renvoie à la finalisation : aucune écriture concurrente
    *  entre chapitres qui tournent en parallèle. */
   claimed: string[];
+  /** Le chapitre a été lu en deux moitiés : ses notions neuves ne se sont pas
+   *  vues entre elles, les redites les comparent donc aussi entre elles. */
+  halves?: boolean;
 };
 
 /** Étape 2 — les NOTIONS d'un chapitre, sur ses seules pages (§7.2, §7.3).
@@ -2238,13 +2241,20 @@ export type ChapterNotionsResult = ChapterPassResult & {
  *  Reçoit les pages de son chapitre (texte et images), les notions qui y sont
  *  déjà rangées, et la seconde vérification (§7.6). Crée ses notions neuves
  *  directement dans le chapitre, et rend celles de la seconde vérification
- *  qu'il réclame. Les extraits remis au fournisseur sont rendus en fin d'appel. */
+ *  qu'il réclame. Les extraits remis au fournisseur sont rendus en fin d'appel.
+ *
+ *  `halves` : la reprise d'un chapitre dont l'appel a dépassé la durée d'une
+ *  tâche (Alexis, 10/10/2026). Ses pages partent en deux moitiés égales, deux
+ *  appels EN PARALLÈLE dans la même tâche ; les deux réponses sont ensuite
+ *  traitées comme une seule — même filtre des redites, même plafond, une seule
+ *  écriture. Une moitié en échec fait échouer le chapitre : rien n'est écrit,
+ *  et chaque appel, payé ou non, a sa ligne au journal. */
 export async function ingestChapterNotions(
   workshopId: string,
   actorId: string,
   importId: string,
   chapterId: string,
-  options: { provider?: PlanProvider } = {},
+  options: { provider?: PlanProvider; halves?: boolean } = {},
 ): Promise<ChapterNotionsResult> {
   const [stage1, prepared, userHint, all] = await Promise.all([
     stage1Of(importId), preparedOf(importId), userHintOf(importId), loadAllNotions(workshopId),
@@ -2265,9 +2275,14 @@ export async function ingestChapterNotions(
   const rechecked = new Set(recheck.map((n) => n.id));
   const attributed = all.notions.filter((n) => n.chapterId === chapterId && !rechecked.has(n.id));
 
-  const input = await composeChapterSlices(
+  const bounds = stage1.chapters.map((c) => ({ key: c.id, spans: c.spans }));
+  // ⚠️ Deux moitiés, pas plus. Si des moitiés se font couper à leur tour (au
+  // journal : une ligne `timeout` sur une reprise en moitiés), c'est le signe
+  // qu'il faut couper en davantage de parts — `halveSlices` (./slicing).
+  const parts = options.halves ? chapterHalves(chapterId, bounds, stage1.pageCounts, prepared) : 1;
+  const inputs = await Promise.all(Array.from({ length: parts }, (_, part) => composeChapterSlices(
     chapterId,
-    stage1.chapters.map((c) => ({ key: c.id, spans: c.spans })),
+    bounds,
     stage1.pageCounts,
     prepared,
     async (doc) => {
@@ -2276,12 +2291,15 @@ export async function ingestChapterNotions(
       return bytes;
     },
     (docs) => provider.prepare(docs),
-  );
+    parts > 1 ? part : undefined,
+  )));
+  const uploaded = inputs.flatMap((input) => input.uploaded);
 
   // Sans page, rien à lire : l'appel écrirait des notions sur un cours qu'il
   // n'a pas sous les yeux. Un chapitre sans page sort du programme dès l'étape
   // chapitres ; ce cas ne reste possible que pour un lot ouvert avant cette règle.
-  if (input.documents.length === 0) {
+  if (inputs.every((input) => input.documents.length === 0)) {
+    await releaseDocuments(provider, uploaded);
     return {
       written: 0,
       discarded: [],
@@ -2292,7 +2310,7 @@ export async function ingestChapterNotions(
 
   try {
     const meta: StepMeta = { importId, workshopId, step: 'notions', batch: index, provider };
-    const call = await modelCall(meta, () => provider.documentToPlan(
+    const settled = await Promise.allSettled(inputs.map((input) => modelCall(meta, () => provider.documentToPlan(
       input.documents,
       { ...EMPTY, notions: attributed },
       {
@@ -2302,50 +2320,89 @@ export async function ingestChapterNotions(
         recheck,
         language: stage1.courseLanguage ? LANGUAGE_NAMES[stage1.courseLanguage] : undefined,
       },
-    ));
+    ))));
 
-    const plan = parsePlanLogged('notions', call.result.plan, {}, call.result.truncated);
+    // Ce que chaque appel a lu — pour sa ligne au journal.
+    const readOf = (part: number) => ({
+      extraits: inputs[part].extracts.length,
+      pages: inputs[part].extracts.reduce((sum, e) => sum + (e.pages?.length ?? 0), 0),
+      documentsEntiers: inputs[part].extracts.filter((e) => e.pages === null).length,
+      ...(parts > 1 ? { moitie: `${part + 1}/${parts}` } : {}),
+    });
+
+    // Une moitié en échec : le chapitre s'arrête là. Sa ligne d'échec est déjà
+    // au journal (`modelCall`) ; l'autre, payée pour rien, y entre aussi.
+    const failure = settled.find((s): s is PromiseRejectedResult => s.status === 'rejected');
+    if (failure) {
+      for (const [part, s] of settled.entries()) {
+        if (s.status === 'fulfilled') await stepDone(meta, s.value, { ...readOf(part), ecrites: 0, abandonnee: "l'autre moitié a échoué" });
+      }
+      throw failure.reason;
+    }
+    const calls = settled.map((s) => (s as PromiseFulfilledResult<Attempted<ProviderResult>>).value);
+
+    // Les deux réponses n'en font qu'une. Les repères de chaque moitié sont
+    // préfixés (« m1- », « m2- ») : les deux appels numérotent leurs notions
+    // chacun de leur côté. La page de chaque notion se résout sur les extraits
+    // de SA moitié, avant la fusion.
+    const tag = (part: number, ref: string | undefined) => (parts > 1 && ref ? `m${part + 1}-${ref}` : ref);
+    const plans = calls.map((call, part) => {
+      const plan = parsePlanLogged('notions', call.result.plan, {}, call.result.truncated);
+      return {
+        notions: plan.notions.map((n) => {
+          const source = sourcePageOf(inputs[part].extracts, n.page);
+          return { ...n, ref: tag(part, n.ref) as string, sourceDocument: source?.documentId, page: source?.page };
+        }),
+        discarded: plan.discarded.map((i) => ({ ...i, ref: tag(part, i.ref) })),
+        adjusted: plan.adjusted.map((i) => ({ ...i, ref: tag(part, i.ref) })),
+      };
+    });
+    const proposed = plans.flatMap((p) => p.notions);
+    const discarded = plans.flatMap((p) => p.discarded);
+    const adjusted = plans.flatMap((p) => p.adjusted);
 
     // La langue des notions rendues, vérifiée par le site : un écart avec la
     // langue du cours se dit au compte-rendu et se compte au journal. Pas de
     // relance : un second appel sur un chapitre long dépasserait la durée d'une
     // tâche, et le chapitre serait perdu au lieu d'être mal écrit.
-    const notionsLanguage = detectLanguage(plan.notions.map((n) => n.title).join(' '));
+    const notionsLanguage = detectLanguage(proposed.map((n) => n.title).join(' '));
     const languageMismatch = stage1.courseLanguage && notionsLanguage.language && notionsLanguage.share >= 0.6 && notionsLanguage.language !== stage1.courseLanguage
       ? notionsLanguage.language
       : null;
     if (languageMismatch) {
-      plan.adjusted.push({
+      adjusted.push({
         kind: 'chapter',
         ref: chapterId,
         reason: `« ${chapter.name} » : notions écrites en ${LANGUAGE_NAMES[languageMismatch]} alors que le cours est en ${LANGUAGE_NAMES[stage1.courseLanguage!]}`,
       });
     }
-    const rawClaims = (call.result.plan as { claimed?: unknown } | null)?.claimed;
-    const claimed = new Set(
-      (Array.isArray(rawClaims) ? rawClaims : []).filter((id): id is string => typeof id === 'string' && rechecked.has(id)),
-    );
+    const claimed = new Set(calls.flatMap((call) => {
+      const rawClaims = (call.result.plan as { claimed?: unknown } | null)?.claimed;
+      return (Array.isArray(rawClaims) ? rawClaims : []).filter((id): id is string => typeof id === 'string' && rechecked.has(id));
+    }));
 
     // Le filtre mécanique : une notion neuve qui redit une notion de ce
     // chapitre n'est pas écrite. Si elle redit une notion de la seconde
-    // vérification, c'est que le chapitre la réclame sans l'avoir dit.
+    // vérification, c'est que le chapitre la réclame sans l'avoir dit. Il
+    // compare aussi les notions neuves entre elles — donc celles des deux
+    // moitiés.
     const recheckByTitle = new Map(recheck.map((n) => [n.title, n.id]));
     const { kept, dropped } = dropNearDuplicates(
-      plan.notions,
+      proposed,
       [...attributed.map((n) => n.title), ...recheck.map((n) => n.title)],
       (n) => n.title,
     );
     for (const d of dropped) {
       const reclaimed = recheckByTitle.get(d.matched);
       if (reclaimed) claimed.add(reclaimed);
-      plan.adjusted.push({ kind: 'notion', ref: d.candidate.ref, reason: `redit une notion existante (« ${d.matched} ») — non écrite` });
+      adjusted.push({ kind: 'notion', ref: d.candidate.ref, reason: `redit une notion existante (« ${d.matched} ») — non écrite` });
     }
 
     // Le plafond de l'atelier (§7.13) : ce qui dépasse est écarté, et dit.
     const room = MAX_NOTIONS_PER_WORKSHOP - (await countNotions(workshopId));
     const admitted = room > 0 ? kept.slice(0, room) : [];
     for (const refused of kept.slice(admitted.length)) {
-      plan.discarded.push({
+      discarded.push({
         kind: 'notion',
         ref: refused.ref,
         reason: `l'atelier a atteint sa limite de ${MAX_NOTIONS_PER_WORKSHOP} notions`,
@@ -2356,35 +2413,34 @@ export async function ingestChapterNotions(
       workshopId,
       actorId,
       importId,
-      admitted.map((n) => {
-        const source = sourcePageOf(input.extracts, n.page);
-        return { ...n, chapterRef: chapterId, sourceDocument: source?.documentId, page: source?.page };
-      }),
+      admitted.map((n) => ({ ...n, chapterRef: chapterId })),
       new Map(),
     );
 
-    await stepDone(meta, call, {
-      ecrites: created.size,
-      proposees: plan.notions.length,
-      reclamees: claimed.size,
-      secondeVerification: recheck.length,
-      extraits: input.extracts.length,
-      pages: input.extracts.reduce((sum, e) => sum + (e.pages?.length ?? 0), 0),
-      documentsEntiers: input.extracts.filter((e) => e.pages === null).length,
-      langue: notionsLanguage.language,
-      langueDuCours: stage1.courseLanguage ?? null,
-      ecartes: plan.discarded.length,
-      corriges: plan.adjusted.length,
-    });
+    for (const [part, call] of calls.entries()) {
+      const prefix = parts > 1 ? `m${part + 1}-` : '';
+      await stepDone(meta, call, {
+        ecrites: [...created.keys()].filter((ref) => ref.startsWith(prefix)).length,
+        proposees: plans[part].notions.length,
+        reclamees: claimed.size,
+        secondeVerification: recheck.length,
+        ...readOf(part),
+        langue: notionsLanguage.language,
+        langueDuCours: stage1.courseLanguage ?? null,
+        ecartes: plans[part].discarded.length,
+        corriges: plans[part].adjusted.length,
+      });
+    }
 
     return {
       written: created.size,
-      discarded: plan.discarded,
-      adjusted: plan.adjusted,
+      discarded,
+      adjusted,
       claimed: [...claimed],
+      ...(parts > 1 ? { halves: true } : {}),
     };
   } finally {
-    await releaseDocuments(provider, input.uploaded);
+    await releaseDocuments(provider, uploaded);
   }
 }
 
@@ -2414,13 +2470,13 @@ export type RedundancyResult = {
 export async function ingestRedites(
   workshopId: string,
   importId: string,
-  options: { decider?: Decider } = {},
+  options: { decider?: Decider; halved?: ReadonlySet<string> } = {},
 ): Promise<RedundancyResult> {
   const [stage1, rows] = await Promise.all([stage1Of(importId), loadNotionsToArrange(workshopId)]);
   const programOrder = stage1.chapters.map((c) => c.id);
   const notions = rediteNotionsOf(rows, programOrder, importId);
 
-  const pairs = rediteCandidates(notions);
+  const pairs = rediteCandidates(notions, undefined, options.halved);
   const duplicates = pairs.length === 0 ? [] : await judgeRedites(workshopId, importId, pairs, options.decider ?? getDecider());
 
   // Le compte annoncé à l'écran : le geste lui-même se recalcule au ménage de

@@ -41,6 +41,12 @@ production casse, souvent en silence (beaucoup de `select` ne lisent que
 
 ## Appliqué / sans objet
 
+- **10/10/2026 — le signe de vie des tâches de génération**
+  (`docs/migrations/2026-10-10-signe-de-vie-des-taches.sql`) : colonne
+  `ai_import_tasks.alive_at`. **Appliquée tout de suite, rien à attendre** :
+  purement additive, le code en ligne l'ignore. La table n'est pas dans
+  `src/lib/database.types.ts` : rien à régénérer.
+
 - **08/10/2026 — le coût des générations**
   (`docs/migrations/2026-10-08-cout-des-generations.sql`) : coût par ligne du
   journal, appel en vol sur chaque tâche, fusion du `scope` par la base, vue

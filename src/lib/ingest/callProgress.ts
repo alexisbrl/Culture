@@ -15,6 +15,8 @@
 // fournisseur le dit (Claude l'annonce au premier évènement de sa réponse ;
 // DeepSeek ne le dit qu'à la fin, on note alors la taille de la demande), et
 // enfin un signe de vie toutes les `BEAT_MS`. L'appel fini, la note est effacée.
+// Une tâche peut avoir PLUSIEURS appels en vol (les deux moitiés d'un chapitre
+// trop long, 10/10/2026) : la note est alors une liste, un appel par élément.
 //
 // Une note qui reste sur une tâche que la veille déclare coupée est donc un
 // appel perdu : la veille en tire une ligne de journal au coût ESTIMÉ —
@@ -61,20 +63,30 @@ export type CallProgress = {
  *  appel payé pour rien, et il doit apparaître quand même (`flushUnloggedCall`). */
 type Unlogged = { entry: Omit<StepLog, 'status' | 'cause' | 'message'>; token: object };
 
+/** Partagé par tous les appels d'une tâche — les listes sont les mêmes objets
+ *  dans chaque sous-contexte d'appel. `current` : l'appel du sous-contexte,
+ *  celui à qui le fournisseur rend compte (`reportCallInput`). */
 type TaskContext = {
   taskId: string;
+  calls: CallProgress[];
+  unlogged: Unlogged[];
   current: CallProgress | null;
-  unlogged: Unlogged | null;
 };
 
 const storage = new AsyncLocalStorage<TaskContext>();
 
 /** Exécute `fn` comme le corps de la tâche `taskId`. */
 export function withTaskContext<T>(taskId: string, fn: () => Promise<T>): Promise<T> {
-  return storage.run({ taskId, current: null, unlogged: null }, fn);
+  return storage.run({ taskId, calls: [], unlogged: [], current: null }, fn);
 }
 
-async function writeProgress(taskId: string, progress: CallProgress | null): Promise<void> {
+/** Ce que la colonne garde : rien, un appel, ou la liste quand il y en a
+ *  plusieurs — la forme à un appel reste celle d'avant. */
+function snapshot(calls: readonly CallProgress[]): CallProgress | CallProgress[] | null {
+  return calls.length === 0 ? null : calls.length === 1 ? calls[0] : [...calls];
+}
+
+async function writeProgress(taskId: string, progress: CallProgress | CallProgress[] | null): Promise<void> {
   try {
     const { error } = await getSupabaseServerClient()
       .from('ai_import_tasks')
@@ -86,36 +98,40 @@ async function writeProgress(taskId: string, progress: CallProgress | null): Pro
   }
 }
 
-/** Note le départ d'un appel, et bat jusqu'à ce que `end` soit appelé. */
+/** Note le départ d'un appel, et bat jusqu'à ce que `end` soit appelé.
+ *  L'appel lui-même s'exécute par `run` : c'est ce qui permet au fournisseur
+ *  de rendre compte au BON appel quand deux tournent en même temps. */
 export function beginCall(meta: {
   importId: string;
   workshopId: string;
   step: StepName;
   batch?: number;
   provider: string;
-}): { end: () => Promise<void> } {
+}): { run: <T>(fn: () => Promise<T>) => Promise<T>; end: () => Promise<void> } {
   const ctx = storage.getStore();
-  if (!ctx) return { end: async () => {} };
+  if (!ctx) return { run: (fn) => fn(), end: async () => {} };
 
   const now = new Date().toISOString();
   const progress: CallProgress = { ...meta, startedAt: now, lastAliveAt: now };
-  ctx.current = progress;
-  void writeProgress(ctx.taskId, progress);
+  ctx.calls.push(progress);
+  void writeProgress(ctx.taskId, snapshot(ctx.calls));
 
   const timer = setInterval(() => {
-    if (ctx.current !== progress) return;
+    if (!ctx.calls.includes(progress)) return;
     progress.lastAliveAt = new Date().toISOString();
-    void writeProgress(ctx.taskId, progress);
+    void writeProgress(ctx.taskId, snapshot(ctx.calls));
   }, BEAT_MS);
   // Le battement ne doit jamais retenir le processus à lui seul.
   timer.unref?.();
 
   return {
+    run: (fn) => storage.run({ ...ctx, current: progress }, fn),
     end: async () => {
       clearInterval(timer);
-      if (ctx.current !== progress) return;
-      ctx.current = null;
-      await writeProgress(ctx.taskId, null);
+      const at = ctx.calls.indexOf(progress);
+      if (at < 0) return;
+      ctx.calls.splice(at, 1);
+      await writeProgress(ctx.taskId, snapshot(ctx.calls));
     },
   };
 }
@@ -134,29 +150,28 @@ export function reportCallInput(input: {
   if (!ctx || !progress) return;
   Object.assign(progress, Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)));
   progress.lastAliveAt = new Date().toISOString();
-  void writeProgress(ctx.taskId, progress);
+  void writeProgress(ctx.taskId, snapshot(ctx.calls));
 }
 
 /** Garde un appel abouti en attente de sa ligne de journal. */
 export function holdUnloggedCall(entry: Unlogged['entry'], token: object): void {
-  const ctx = storage.getStore();
-  if (ctx) ctx.unlogged = { entry, token };
+  storage.getStore()?.unlogged.push({ entry, token });
 }
 
 /** Sa ligne vient d'être écrite : plus rien à rattraper. */
 export function releaseUnloggedCall(token: object): void {
-  const ctx = storage.getStore();
-  if (ctx?.unlogged?.token === token) ctx.unlogged = null;
+  const list = storage.getStore()?.unlogged;
+  const at = list ? list.findIndex((u) => u.token === token) : -1;
+  if (list && at >= 0) list.splice(at, 1);
 }
 
 /** La tâche échoue après un appel abouti dont la ligne n'a pas été écrite
  *  (écriture refusée, lot annulé…) : l'appel a été payé, il apparaît. */
 export async function flushUnloggedCall(cause: FailureCause, message: string): Promise<void> {
-  const ctx = storage.getStore();
-  const pending = ctx?.unlogged;
-  if (!ctx || !pending) return;
-  ctx.unlogged = null;
-  await logStep({ ...pending.entry, status: 'failed', cause, message });
+  const list = storage.getStore()?.unlogged;
+  if (!list) return;
+  const pending = list.splice(0, list.length);
+  for (const p of pending) await logStep({ ...p.entry, status: 'failed', cause, message });
 }
 
 // ─── La veille : l'appel perdu ───────────────────────────────────────────────
@@ -200,11 +215,20 @@ export function lostCallUsage(progress: CallProgress, tokensPerSecond: number): 
   };
 }
 
-/** Écrit la ligne d'un appel que la veille trouve encore noté sur une tâche
- *  coupée, puis efface la note. **Ne lève jamais.** */
+/** Écrit la ligne de chaque appel que la veille trouve encore noté sur une
+ *  tâche coupée — un ou plusieurs —, puis efface la note. **Ne lève jamais.** */
 export async function logLostCall(taskId: string, raw: unknown): Promise<void> {
-  const progress = raw as CallProgress | null;
-  if (!progress || !progress.importId || !progress.startedAt) return;
+  const list = (Array.isArray(raw) ? raw : [raw]) as (CallProgress | null)[];
+  const calls = list.filter((p): p is CallProgress => Boolean(p && p.importId && p.startedAt));
+  if (calls.length === 0) return;
+  try {
+    for (const progress of calls) await logOneLostCall(progress);
+  } finally {
+    await writeProgress(taskId, null);
+  }
+}
+
+async function logOneLostCall(progress: CallProgress): Promise<void> {
   try {
     const rate = await measuredOutputRate(progress.provider, progress.model);
     const { usage, livedMs } = lostCallUsage(progress, rate);
@@ -222,7 +246,7 @@ export async function logLostCall(taskId: string, raw: unknown): Promise<void> {
       usage,
       estimated: true,
     });
-  } finally {
-    await writeProgress(taskId, null);
+  } catch (error) {
+    console.warn('[ingest] appel perdu non journalisé :', error instanceof Error ? error.message : error);
   }
 }

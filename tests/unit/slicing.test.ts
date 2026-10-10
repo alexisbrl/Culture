@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MIN_PAGE_TEXT_CHARS,
+  halveSlices,
   imagePages,
   isTextPoor,
   sliceChapters,
@@ -156,5 +157,43 @@ describe('texte seul ou texte + image, page par page', () => {
     // Moyenne au-dessus du seuil, et pourtant la moitié du cours est scannée.
     const pages = [rich + rich + rich, rich + rich, '', '', rich];
     expect(imagePages(pages)).toEqual([3, 4]);
+  });
+});
+
+// La reprise d'un chapitre trop long : ses pages en deux moitiés. Aucune page
+// ne doit se perdre ni se lire deux fois.
+describe('halveSlices', () => {
+  it('coupe les pages en deux moitiés égales, dans l’ordre du cours, à travers les documents', () => {
+    const halves = halveSlices(
+      [{ documentId: 'a', pages: [3, 4, 5] }, { documentId: 'b', pages: [1, 2] }],
+      { a: 10, b: 2 },
+    );
+    expect(halves).toEqual([
+      [{ documentId: 'a', pages: [3, 4, 5] }],
+      [{ documentId: 'b', pages: [1, 2] }],
+    ]);
+  });
+
+  it('coupe aussi un document entier dont on connaît les pages', () => {
+    expect(halveSlices([{ documentId: 'a', pages: null }], { a: 4 })).toEqual([
+      [{ documentId: 'a', pages: [1, 2] }],
+      [{ documentId: 'a', pages: [3, 4] }],
+    ]);
+  });
+
+  it('envoie un document sans pages entier vers la moitié la plus légère', () => {
+    const halves = halveSlices(
+      [{ documentId: 'a', pages: [1, 2, 3] }, { documentId: 't', pages: null }],
+      { a: 3, t: null },
+    );
+    expect(halves).toEqual([
+      [{ documentId: 'a', pages: [1, 2] }],
+      [{ documentId: 'a', pages: [3] }, { documentId: 't', pages: null }],
+    ]);
+  });
+
+  it('ne coupe pas ce qui ne se coupe pas : une page, ou un seul document sans pages', () => {
+    expect(halveSlices([{ documentId: 'a', pages: [7] }], { a: 10 })).toHaveLength(1);
+    expect(halveSlices([{ documentId: 't', pages: null }], { t: null })).toHaveLength(1);
   });
 });

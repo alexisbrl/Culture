@@ -340,6 +340,13 @@ describe('redites (§7.6)', () => {
       expect(rediteCandidates([n('a', LOIRE, 'c1', false), n('b', LOIRE_BIS, 'c1', false)])).toHaveLength(1);
     });
 
+    it('soumet deux neuves du même chapitre quand il a été lu en deux moitiés — elles ne se sont pas vues', () => {
+      const notions = [n('m1', LOIRE, 'c2', true), n('m2', LOIRE_BIS, 'c2', true), n('old', LOIRE, 'c2', false)];
+      expect(rediteCandidates(notions)).toEqual([]);
+      const pairs = rediteCandidates(notions, undefined, new Set(['c2']));
+      expect(pairs.map((p) => [p.a.id, p.b.id])).toEqual([['m1', 'm2']]);
+    });
+
     it('respecte le plafond', () => {
       const notions = [n('a', LOIRE, 'c1', false), n('b', LOIRE_BIS, 'c2', true), n('c', LOIRE, 'c3', true)];
       expect(rediteCandidates(notions, 1)).toHaveLength(1);
