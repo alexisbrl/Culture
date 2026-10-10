@@ -5,7 +5,10 @@ import { useTranslations } from 'next-intl';
 import { ChevronDown, EllipsisVertical, EyeOff, GripVertical, Loader2, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { palette, shadow, withAlpha } from '@/lib/theme';
 import AiGenerationButton, { SettingsGenerationBox } from '@/components/ai/AiGenerationButton';
-import { useGenerationRefresh } from '@/components/ai/generationStore';
+import { displayPhase, notifyWorkshopChanged, useGenerationRefresh, useGenerations } from '@/components/ai/generationStore';
+import { PROGRAM_LOCKED } from '@/lib/workshops/programLockError';
+import { getGenerationUndo, undoLastGeneration, type GenerationUndoView } from '@/app/actions/aiIngest';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import {
   createWorkshopNotion,
   updateWorkshopNotion,
@@ -30,7 +33,7 @@ import {
   type Chapter,
 } from '@/app/actions/workshopChapters';
 import { SmallBtn, UNDO_FLASH_MS } from './settingsShared';
-import { useRecordUndo } from './undoHistory';
+import { useRecordUndo, useReportGenerationUndo } from './undoHistory';
 import { useRevealWhenOpened } from '@/components/ui/useRevealWhenOpened';
 import { Tooltip } from '@/components/ui/tooltip';
 import { ClippedText } from '@/components/ui/clipped-text';
@@ -47,7 +50,25 @@ type Props = {
   workshopId: string;
   notions: Notion[];
   chapters: Chapter[];
+  /** La dernière génération, si elle s'annule encore (@/lib/workshops/generationUndo). */
+  generationUndo: GenerationUndoView | null;
 };
+
+/** Pastille « nouveau » / « modifié » posée par la dernière génération. */
+function GenerationBadge({ kind, label }: { kind: 'new' | 'changed'; label: string }) {
+  return (
+    <span
+      style={{
+        flexShrink: 0, display: 'inline-flex', alignItems: 'center',
+        padding: '2px 7px', borderRadius: 999, fontSize: 10.5, fontWeight: 700, lineHeight: '14px',
+        background: kind === 'new' ? withAlpha(palette.green, 0.14) : palette.amberTint,
+        color: kind === 'new' ? palette.greenBrand : palette.amber,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
 
 // Pseudo-identifiant du groupe « sans chapitre » dans la colonne de sélection —
 // distinct de `null` (qui, lui, signifie « aucune sélection », cas atteint
@@ -209,7 +230,7 @@ function NotionForm({
   );
 }
 
-export default function NotionsSection({ workshopId, notions: initialNotions, chapters: initialChapters }: Props) {
+export default function NotionsSection({ workshopId, notions: initialNotions, chapters: initialChapters, generationUndo: initialGenerationUndo }: Props) {
   const t = useTranslations('settings');
   const [notions, setNotions] = useState<Notion[]>(initialNotions);
   const [chapters, setChapters] = useState<Chapter[]>(initialChapters);
@@ -220,16 +241,103 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
   const chaptersRef = useRef(chapters);
   useEffect(() => { notionsRef.current = notions; chaptersRef.current = chapters; });
 
+  // ─── La dernière génération : pastilles et annulation ────────────────────
+  //
+  // Tant qu'elle s'annule, ce qu'elle a créé porte « nouveau » et ce qu'elle a
+  // déplacé ou écarté « modifié ». Tout disparaît à la première modification
+  // du programme — d'où la confirmation qui la précède — ou passé 48 h
+  // (@/lib/workshops/generationUndo).
+  const [genUndo, setGenUndo] = useState<GenerationUndoView | null>(initialGenerationUndo);
+  const genUndoRef = useRef(genUndo);
+  useEffect(() => { genUndoRef.current = genUndo; });
+  const [pendingEdit, setPendingEdit] = useState<(() => void) | null>(null);
+  const reportGenerationUndo = useReportGenerationUndo();
+
+  // Passé le délai, elle s'éteint d'elle-même, page ouverte ou non.
+  useEffect(() => {
+    if (!genUndo) return;
+    const left = Math.max(0, new Date(genUndo.expiresAt).getTime() - Date.now());
+    const timer = setTimeout(() => setGenUndo(null), left);
+    return () => clearTimeout(timer);
+  }, [genUndo]);
+
+  const marks = genUndo?.marks;
+  const newIds = new Set([...(marks?.newChapters ?? []), ...(marks?.newNotions ?? [])]);
+  const changedIds = new Set([...(marks?.changedChapters ?? []), ...(marks?.movedNotions ?? [])]);
+  function badgeFor(id: string) {
+    if (newIds.has(id)) return <GenerationBadge kind="new" label={t('generationUndo.badgeNew')} />;
+    if (changedIds.has(id)) return <GenerationBadge kind="changed" label={t('generationUndo.badgeChanged')} />;
+    return null;
+  }
+
+  // ─── Verrouillé pendant qu'une génération construit le programme ────────
+  //
+  // Le serveur refuse de toute façon (@/lib/workshops/programLock) ; l'écran le
+  // sait d'avance par le suivi partagé des générations, et le dit au lieu de
+  // laisser faire un geste voué à l'échec. Les générations de questions ne
+  // verrouillent rien.
+  const generations = useGenerations(workshopId);
+  const programBusy = generations.items.some((g) => g.door === 'settings' && displayPhase(generations, g) === 'running');
+  const programBusyRef = useRef(programBusy);
+  useEffect(() => { programBusyRef.current = programBusy; });
+
+  /** Le message d'un refus du serveur : le verrou se reconnaît à son code. */
+  function failText(error: string | undefined, fallback: string): string {
+    return error === PROGRAM_LOCKED ? t('notions.locked') : error ?? fallback;
+  }
+
+  /** Un geste qui modifie le programme : refusé pendant qu'une génération le
+   *  construit ; s'il reste une génération à annuler, on demande d'abord,
+   *  puisqu'il retire cette possibilité. */
+  function guarded(action: () => void) {
+    if (programBusyRef.current) { setError(t('notions.locked')); return; }
+    if (genUndoRef.current) setPendingEdit(() => action);
+    else action();
+  }
+
+  // Signalée à la page, qui porte le bouton (undoHistory.tsx). Les fonctions
+  // lisent l'état du moment par les références.
+  useEffect(() => {
+    if (!genUndo) { reportGenerationUndo(null); return; }
+    const m = genUndo.marks;
+    reportGenerationUndo({
+      created: m.newChapters.length + m.newNotions.length,
+      changed: m.movedNotions.length + m.changedChapters.length,
+      dismiss: () => setGenUndo(null),
+      run: async () => {
+        const current = genUndoRef.current;
+        if (!current) return false;
+        const result = await undoLastGeneration(workshopId, current.importId);
+        setGenUndo(null);
+        if (!result.ok) return false;
+        const fresh = await reloadBoth();
+        // Le chapitre affiché a pu partir avec la génération.
+        setSelectedChapterId((selected) =>
+          selected && selected !== UNASSIGNED && !fresh.chapters.some((c) => c.id === selected)
+            ? fresh.chapters.find((c) => !c.hidden)?.id ?? null
+            : selected);
+        // Les autres écrans (questions du parcours) se relisent.
+        notifyWorkshopChanged(workshopId);
+        return true;
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [genUndo, reportGenerationUndo, workshopId]);
+  useEffect(() => () => reportGenerationUndo(null), [reportGenerationUndo]);
+
   // Ce qu'écrit une génération apparaît au fil de l'eau, sans rechargement.
-  // Les deux lectures se suivent (les actions passent une par une) : elles
-  // n'ont lieu qu'au rythme du suivi, pas à chaque frappe.
+  // Les lectures se suivent (les actions passent une par une) : elles n'ont
+  // lieu qu'au rythme du suivi, pas à chaque frappe. Une génération qui se
+  // termine apporte son annulation ; la pile du bouton « annuler » est gardée.
   useGenerationRefresh(workshopId, () => {
     void (async () => {
       try {
         const nextNotions = await getWorkshopNotions(workshopId);
         const nextChapters = await getWorkshopChapters(workshopId);
+        const nextUndo = await getGenerationUndo(workshopId);
         setNotions(nextNotions);
         setChapters(nextChapters);
+        setGenUndo(nextUndo);
       } catch {
         // Rafraîchissement d'agrément : un échec laisse la liste affichée.
       }
@@ -270,11 +378,15 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
   /** Relit les deux listes depuis la base — après une restauration, qui remet
    *  d'un coup des lignes dont la page n'a plus la trace exacte. */
   async function reload(): Promise<Notion[]> {
+    return (await reloadBoth()).notions;
+  }
+
+  async function reloadBoth(): Promise<{ notions: Notion[]; chapters: Chapter[] }> {
     const nextNotions = await getWorkshopNotions(workshopId);
     const nextChapters = await getWorkshopChapters(workshopId);
     setNotions(nextNotions);
     setChapters(nextChapters);
-    return nextNotions;
+    return { notions: nextNotions, chapters: nextChapters };
   }
 
   // ─── Montrer ce qu'une annulation vient de changer ───────────────────────
@@ -344,7 +456,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         },
       });
     } else {
-      setError(result.error ?? t('err.save'));
+      setError(failText(result.error, t('err.save')));
     }
   }
 
@@ -372,7 +484,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         });
       }
     } else {
-      setError(result.error ?? t('err.save'));
+      setError(failText(result.error, t('err.save')));
     }
   }
 
@@ -398,7 +510,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         },
       });
     } else {
-      setError(result.error ?? t('err.delete'));
+      setError(failText(result.error, t('err.delete')));
     }
   }
 
@@ -406,7 +518,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
   async function handleDeleteUnassigned() {
     setError('');
     const result = await deleteUnassignedWorkshopNotions(workshopId);
-    if (!result.success || !result.trashId) return setError(result.error ?? t('err.delete'));
+    if (!result.success || !result.trashId) return setError(failText(result.error, t('err.delete')));
     const trashId = result.trashId;
     await reload();
     // « sans chapitre » est vide : afficher le premier chapitre plutôt qu'un groupe vide.
@@ -463,7 +575,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         },
       });
     } else {
-      setError(result.error ?? t('err.save'));
+      setError(failText(result.error, t('err.save')));
     }
   }
 
@@ -491,7 +603,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         });
       }
     } else {
-      setError(result.error ?? t('err.save'));
+      setError(failText(result.error, t('err.save')));
     }
   }
 
@@ -514,7 +626,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         },
       });
     } else {
-      setError(result.error ?? t('err.delete'));
+      setError(failText(result.error, t('err.delete')));
     }
   }
 
@@ -522,7 +634,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
   async function handleDeleteHidden(target: Chapter) {
     setError('');
     const result = await deleteHiddenWorkshopChapter(workshopId, target.id);
-    if (!result.success || !result.trashId) return setError(result.error ?? t('err.delete'));
+    if (!result.success || !result.trashId) return setError(failText(result.error, t('err.delete')));
     const trashId = result.trashId;
     await reload();
     setSelectedChapterId((selected) =>
@@ -636,14 +748,18 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
     if (!id) setDropChapterId(null);
   }
 
-  async function handleDropNotion(chapterId: string | null) {
+  function handleDropNotion(chapterId: string | null) {
     const notionId = dragNotionRef.current;
     startNotionDrag(null);
     if (!notionId) return;
 
     const notion = notions.find((n) => n.id === notionId);
     if (!notion || notion.chapterId === chapterId) return;
+    guarded(() => void commitNotionMove(notion, chapterId));
+  }
 
+  async function commitNotionMove(notion: Notion, chapterId: string | null) {
+    const notionId = notion.id;
     const from = notion.chapterId;
     setNotions((prev) => prev.map((n) => (n.id === notionId ? { ...n, chapterId } : n)));
     bumpChapterCount(from, -1);
@@ -655,7 +771,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
       setNotions((prev) => prev.map((n) => (n.id === notionId ? { ...n, chapterId: from } : n)));
       bumpChapterCount(chapterId, -1);
       bumpChapterCount(from, +1);
-      setError(result.error ?? t('err.save'));
+      setError(failText(result.error, t('err.save')));
       return;
     }
     recordUndo({
@@ -692,13 +808,18 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
    *  ligne qui reçoit le `drop`. Le rang est celui de la liste d'origine :
    *  retirer le chapitre avant de l'insérer décale d'un cran tout ce qui le
    *  suivait, d'où la correction. L'ordre s'enregistre aussitôt. */
-  async function handleDropChapter() {
+  function handleDropChapter() {
     const from = dragIndexRef.current;
     const target = chapterDropAt;
     startChapterDrag(null);
     if (from === null || !target) return;
     const to = target.at > from ? target.at - 1 : target.at;
     if (to === from) return;
+    guarded(() => void commitChapterMove(from, to));
+  }
+
+  async function commitChapterMove(from: number, to: number) {
+    const chapters = chaptersRef.current;
 
     // Les rangs sont ceux des chapitres VISIBLES. Un chapitre écarté rangé entre
     // deux visibles ne s'affiche pas là, mais il comptait dans le calcul :
@@ -737,7 +858,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
     const result = await reorderWorkshopChapters(workshopId, next.map((c) => c.id));
     if (!result.success) {
       setChapters(previous); // l'ordre affiché doit refléter la base
-      setError(result.error ?? t('err.save'));
+      setError(failText(result.error, t('err.save')));
       return false;
     }
     return true;
@@ -756,7 +877,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
     setChapterSaving(true);
     const result = await restoreWorkshopChapter(workshopId, chapterId);
     setChapterSaving(false);
-    if (!result.success) return setError(result.error ?? t('chapters.restoreFailed'));
+    if (!result.success) return setError(failText(result.error, t('chapters.restoreFailed')));
     setChapters((prev) => prev.map((c) => (c.id === chapterId ? { ...c, hidden: false } : c)));
     setSelectedChapterId(chapterId);
     recordUndo({
@@ -840,7 +961,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
             initialChapterId={notion.chapterId}
             chapters={chapters}
             saving={saving}
-            onSave={(text, chapterId) => handleUpdate(notion.id, text, chapterId)}
+            onSave={(text, chapterId) => guarded(() => void handleUpdate(notion.id, text, chapterId))}
             onCancel={() => setEditingId(null)}
           />
         </div>
@@ -878,12 +999,13 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
           lines={2}
           style={{ flex: 1, minWidth: 0, fontSize: 14, lineHeight: '21px', fontWeight: 600, color: palette.ink }}
         />
+        {badgeFor(notion.id)}
         {rowMenu({
           label: t('notions.actions'),
           editLabel: t('notions.edit'),
           deleteLabel: t('notions.delete'),
           onEdit: () => startEditNotion(notion.id),
-          onDelete: () => void handleDelete(notion),
+          onDelete: () => guarded(() => void handleDelete(notion)),
         })}
       </div>
     );
@@ -902,8 +1024,14 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
           met pas ici, « Chapitres » et « Notions » en tête de colonne disant
           déjà de quoi il s'agit — et le titre répétait le libellé de l'entrée
           de navigation active, juste à gauche. */}
-      {error && (
+      {error && error !== t('notions.locked') && (
         <div style={{ fontSize: 12.5, color: palette.danger, padding: '2px 0 12px' }}>{error}</div>
+      )}
+      {/* Le verrou se dit d'avance, pas seulement au geste refusé — et le
+          refus du serveur, s'il arrive avant que l'écran le sache, prend la
+          même place. */}
+      {(programBusy || error === t('notions.locked')) && (
+        <div style={{ fontSize: 12.5, color: palette.inkSoft, padding: '2px 0 12px' }}>{t('notions.locked')}</div>
       )}
 
       {/* Génération par IA — l'une des deux portes sur la même fonction, l'autre
@@ -974,7 +1102,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
                   />
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     <SmallBtn tone="ghost" onClick={() => { setAddingChapter(false); setChapterName(''); }} disabled={chapterSaving}>{t('notions.cancel')}</SmallBtn>
-                    <SmallBtn tone="dark" onClick={handleCreateChapter} disabled={chapterSaving || !chapterName.trim()}>{t('notions.save')}</SmallBtn>
+                    <SmallBtn tone="dark" onClick={() => guarded(() => void handleCreateChapter())} disabled={chapterSaving || !chapterName.trim()}>{t('notions.save')}</SmallBtn>
                   </div>
                 </div>
               )}
@@ -1002,7 +1130,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
                       />
                       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                         <SmallBtn tone="ghost" onClick={() => setEditingChapterId(null)} disabled={chapterSaving}>{t('notions.cancel')}</SmallBtn>
-                        <SmallBtn tone="dark" onClick={() => handleRenameChapter(chapter.id)} disabled={chapterSaving || !editingChapterName.trim()}>{t('notions.save')}</SmallBtn>
+                        <SmallBtn tone="dark" onClick={() => guarded(() => void handleRenameChapter(chapter.id))} disabled={chapterSaving || !editingChapterName.trim()}>{t('notions.save')}</SmallBtn>
                       </div>
                     </div>
                   );
@@ -1065,8 +1193,9 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
                         text={chapter.name}
                         style={{ fontSize: 14, fontWeight: isActive ? 700 : 600, color: isActive ? palette.greenBrand : palette.ink }}
                       />
-                      <div style={{ fontSize: 12, color: palette.inkMuted }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: palette.inkMuted }}>
                         {t('notions.count', { count: chapter.notionCount })}
+                        {badgeFor(chapter.id)}
                       </div>
                     </div>
                     {rowMenu({
@@ -1074,7 +1203,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
                       editLabel: t('chapters.rename'),
                       deleteLabel: t('notions.delete'),
                       onEdit: () => startRenameChapter(chapter),
-                      onDelete: () => void handleDeleteChapter(chapter),
+                      onDelete: () => guarded(() => void handleDeleteChapter(chapter)),
                     })}
                   </div>
                 );
@@ -1161,8 +1290,9 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
                             style={{ fontSize: 14, fontWeight: 600, color: palette.inkMuted, textDecoration: 'line-through', textDecorationColor: palette.inkFaint }}
                           />
                         </Tooltip>
-                        <div style={{ fontSize: 12, color: palette.inkFaint }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: palette.inkFaint }}>
                           {t('notions.count', { count: chapter.notionCount })}
+                          {badgeFor(chapter.id)}
                         </div>
                       </div>
                       {/* Même menu ⋮ que les autres chapitres. Supprimer un écarté
@@ -1172,8 +1302,8 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
                         editLabel: t('chapters.restore'),
                         editIcon: <RotateCcw size={14} strokeWidth={2} />,
                         deleteLabel: t('notions.delete'),
-                        onEdit: () => void handleRestoreChapter(chapter.id),
-                        onDelete: () => void handleDeleteHidden(chapter),
+                        onEdit: () => guarded(() => void handleRestoreChapter(chapter.id)),
+                        onDelete: () => guarded(() => void handleDeleteHidden(chapter)),
                       })}
                     </div>
                   ))}
@@ -1200,7 +1330,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
 
               {selectedChapterId === UNASSIGNED && unassignedNotions.length > 0 && (
                 <button
-                  onClick={() => void handleDeleteUnassigned()}
+                  onClick={() => guarded(() => void handleDeleteUnassigned())}
                   className="hover:bg-[var(--surface-sunken)]"
                   style={{ width: '100%', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', border: 'none', borderBottom: `1px solid ${palette.line}`, background: 'transparent', color: palette.danger, fontSize: 13.5, fontWeight: 600 }}
                 >
@@ -1220,7 +1350,7 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
                     initialChapterId={selectedChapterId === UNASSIGNED ? null : selectedChapterId}
                     chapters={chapters}
                     saving={saving}
-                    onSave={handleCreate}
+                    onSave={(text, chapterId) => guarded(() => void handleCreate(text, chapterId))}
                     onCancel={() => setAdding(false)}
                   />
                 </div>
@@ -1242,6 +1372,24 @@ export default function NotionsSection({ workshopId, notions: initialNotions, ch
         </div>
       )}
 
+      {pendingEdit && (
+        <ConfirmDialog
+          width={440}
+          title={t('generationUndo.modifyTitle')}
+          description={t('generationUndo.modifyDesc')}
+          confirmLabel={t('generationUndo.modifyConfirm')}
+          cancelLabel={t('cancel')}
+          confirmTone="confirm"
+          iconTone="accent"
+          onCancel={() => setPendingEdit(null)}
+          onConfirm={() => {
+            const action = pendingEdit;
+            setPendingEdit(null);
+            setGenUndo(null);
+            action();
+          }}
+        />
+      )}
     </div>
   );
 }

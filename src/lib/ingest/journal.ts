@@ -33,6 +33,7 @@
 import { getSupabaseServerClient } from '@/lib/supabase';
 
 import { BUSY_ERROR, CLOSED_ERROR } from './lock';
+import { callCostUsd } from './pricing';
 
 /** Les étapes qui appellent un modèle. Le téléversement et le ménage de fin n'y
  *  figurent pas : ils ne coûtent pas de tokens et ne peuvent pas être relancés
@@ -52,6 +53,12 @@ export type StepName = 'decision' | 'resource' | 'chapters' | 'chapters-relaunch
  *  • `unreadable`   — la réponse est arrivée mais ne se lit pas.
  *  • `closed`       — le lot a été annulé pendant que l'appel était en vol. Ce
  *                     n'est pas une panne : c'est une annulation qui a marché.
+ *  • `no_credit`    — le solde du compte chez le fournisseur est épuisé. Toutes
+ *                     les demandes échoueront jusqu'à la recharge : rien à
+ *                     relancer (constaté le 07/10/2026, Anthropic).
+ *  • `timeout`      — l'appel a été coupé par la limite de durée du serveur,
+ *                     sans rien rendre. Écrite par la veille, qui le constate
+ *                     après coup ; sa ligne porte un coût ESTIMÉ.
  *  • `unknown`      — tout le reste. Une part qui grossit est le signal qu'il
  *                     manque une entrée à cette liste. */
 export type FailureCause =
@@ -62,6 +69,8 @@ export type FailureCause =
   | 'truncated'
   | 'unreadable'
   | 'closed'
+  | 'no_credit'
+  | 'timeout'
   | 'unknown';
 
 /** D'où vient la commande. Liste fermée elle aussi, et pour la même raison : on
@@ -106,17 +115,31 @@ export function classifyFailure(error: unknown): FailureCause {
   if (message === CLOSED_ERROR || message === BUSY_ERROR) return 'closed';
 
   const status = statusOf(error);
+  // Le solde épuisé AVANT les codes : Anthropic le refuse en 400, qui ne dit
+  // rien de plus. DeepSeek a un code à lui, 402.
+  const lower = message.toLowerCase();
+  if (status === 402 || lower.includes('credit balance is too low') || lower.includes('insufficient balance')) {
+    return 'no_credit';
+  }
   if (status === 529) return 'overloaded';
   if (status === 429) return 'rate_limited';
   if (status !== undefined && status >= 500) return 'unavailable';
 
-  const text = message.toLowerCase();
+  const text = lower;
   if (text.includes('overloaded')) return 'overloaded';
   // La fenêtre : mêmes formulations que `isContextWindowOverflow`, qui décide
   // du repli sur un modèle plus large. Ici on ne décide de rien, on nomme.
   if (text.includes('prompt is too long') || text.includes('exceed context limit')) return 'oversize';
   // Une panne réseau n'a pas de code : `fetch failed`, `ECONNRESET`, `timeout`.
-  if (text.includes('fetch failed') || text.includes('econnreset') || text.includes('timeout')) {
+  // `terminated` : la connexion coupée en pleine réponse, sans motif — deux lots
+  // de questions perdus sans relance sur l'atelier « Workshop 13 », 06/10/2026.
+  if (
+    text.includes('fetch failed') ||
+    text.includes('econnreset') ||
+    text.includes('timeout') ||
+    text === 'terminated' ||
+    text.includes('socket hang up')
+  ) {
     return 'unavailable';
   }
   return 'unknown';
@@ -191,6 +214,13 @@ export type StepLog = {
   message?: string;
   durationMs?: number;
   usage?: StepUsage;
+  /** Le coût de la ligne est une ESTIMATION : l'appel a été coupé avant de
+   *  rendre ses jetons (@/lib/ingest/callProgress). */
+  estimated?: boolean;
+  /** Le coût, quand l'appelant l'a déjà additionné appel par appel — une
+   *  ligne qui regroupe des réponses de plusieurs modèles (les redites, Jev et
+   *  son relais). Sinon, il se calcule ici depuis `usage` et `model`. */
+  costUsd?: number;
   /** Des COMPTES et des motifs — jamais un titre, un énoncé ou un extrait. */
   produced?: Record<string, unknown>;
 };
@@ -199,6 +229,10 @@ export type StepLog = {
  *  le droit de faire échouer ce qu'il observe. */
 export async function logStep(entry: StepLog): Promise<void> {
   try {
+    // Le coût, en dollars HT, figé avec la ligne (@/lib/ingest/pricing). Le
+    // début de l'appel fixe les heures pleines chez DeepSeek.
+    const startedAt = new Date(Date.now() - (entry.durationMs ?? 0));
+    const cost = entry.costUsd !== undefined ? entry.costUsd : entry.usage ? callCostUsd(entry.provider, entry.model, entry.usage, startedAt) : 0;
     const supabase = getSupabaseServerClient();
     const { error } = await supabase.from('ai_import_events').insert({
       import_id: entry.importId,
@@ -218,6 +252,8 @@ export async function logStep(entry: StepLog): Promise<void> {
       output_tokens: entry.usage?.outputTokens ?? 0,
       cache_creation_tokens: entry.usage?.cacheCreationTokens ?? 0,
       cached_tokens: entry.usage?.cachedTokens ?? 0,
+      cost_usd: cost,
+      cost_estimated: entry.estimated === true,
       produced: entry.produced ?? {},
     });
     if (error) console.warn('[journal] étape non enregistrée :', error.message);

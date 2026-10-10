@@ -33,3 +33,28 @@ export const UndoHistoryContext = createContext<(entry: UndoEntry) => void>(() =
 export function useRecordUndo() {
   return useContext(UndoHistoryContext);
 }
+
+// ─── L'annulation de la dernière génération ─────────────────────────────────
+//
+// Elle n'est pas une entrée de la pile : elle ne vient d'aucun geste de la page,
+// elle peut être là dès l'arrivée, et elle disparaît à la première modification
+// de Chapitre & Notion (@/lib/workshops/generationUndo). La section des notions,
+// qui la tient, la signale à la page, qui affiche son bouton au-dessus du bouton
+// « annuler » et demande confirmation avant qu'une annulation ordinaire ne
+// touche au programme.
+
+export type GenerationUndoHandle = {
+  /** Chapitres et notions créés, et éléments déplacés ou écartés. */
+  created: number;
+  changed: number;
+  /** Annule la génération ; `false` si elle ne s'annule plus. */
+  run: () => Promise<boolean>;
+  /** Renonce à l'annulation : on s'apprête à modifier le programme. */
+  dismiss: () => void;
+};
+
+export const GenerationUndoContext = createContext<(handle: GenerationUndoHandle | null) => void>(() => {});
+
+export function useReportGenerationUndo() {
+  return useContext(GenerationUndoContext);
+}

@@ -30,7 +30,8 @@ export function createHaikuDecider(apiKey: string | undefined = process.env.ANTH
   return {
     name: 'claude',
 
-    async decide({ state, question }: ClosedQuestion): Promise<Decision> {
+    async decide({ state, question: asked, criteria }: ClosedQuestion): Promise<Decision> {
+      const question = criteria ? `${asked}\n\nOui : ${criteria.true}\nNon : ${criteria.false}` : asked;
       const message = await client.messages.create({
         model: MODEL,
         max_tokens: MAX_TOKENS,

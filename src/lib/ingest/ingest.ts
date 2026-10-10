@@ -29,6 +29,7 @@ import { type QuestionTypeOptions } from '@/lib/workshops/examTypes';
 import { cancelImport } from '@/lib/workshops/imports';
 import { getSupabaseServerClient } from '@/lib/supabase';
 
+import { groupsWithLiveNotions } from './liveNotions';
 import { assertImportOpen } from './lock';
 import { parsePlan, type ExistingRefs, type PlanIssue } from './planSchema';
 
@@ -42,9 +43,6 @@ export type IngestMeta = {
   origin?: string | null;
   /** Clés de stockage des fichiers soumis au modèle. */
   fileIds?: string[];
-  inputTokens?: number;
-  outputTokens?: number;
-  cachedTokens?: number;
   /** Lot piloté par un onglet ouvert : il pose son premier signe de vie dès sa
    *  création, et c'est lui qui tient le verrou « une génération à la fois »
    *  (voir `./lock`). Faux pour une recharge automatique, qui tourne en fond
@@ -83,9 +81,6 @@ export async function createImport(
       scope: meta.scope ?? {},
       origin: meta.origin ?? null,
       file_ids: meta.fileIds ?? [],
-      input_tokens: meta.inputTokens ?? 0,
-      output_tokens: meta.outputTokens ?? 0,
-      cached_tokens: meta.cachedTokens ?? 0,
       // Le verrou naît avec le lot : entre l'ouverture et le premier battement
       // de l'onglet il s'écoule plusieurs dizaines de secondes (téléversement
       // des documents), largement de quoi lancer une seconde génération.
@@ -95,34 +90,6 @@ export async function createImport(
     .single();
   if (error || !data) throw new Error(error?.message ?? 'import non créé');
   return data.id as string;
-}
-
-/** Ajoute la consommation d'un appel au total du lot. Un import s'étalant sur
- *  25 appels, le coût ne se connaît qu'en cumulant — et c'est ce cumul qui
- *  servira de base aux quotas (§9). */
-export async function addImportUsage(
-  importId: string,
-  usage: { inputTokens: number; outputTokens: number; cacheCreationTokens: number; cachedTokens: number },
-): Promise<void> {
-  const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('ai_imports')
-    .select('input_tokens, output_tokens, cached_tokens')
-    .eq('id', importId)
-    .single();
-  if (error || !data) throw new Error(error?.message ?? 'import introuvable');
-
-  // Les tokens écrits dans le cache comptent comme de l'entrée : ils sont
-  // facturés plus cher qu'elle (1,25× en TTL 5 minutes, 2× en TTL 1 h), et les
-  // ignorer donnerait un coût largement sous-évalué.
-  await supabase
-    .from('ai_imports')
-    .update({
-      input_tokens: (data.input_tokens as number) + usage.inputTokens + usage.cacheCreationTokens,
-      output_tokens: (data.output_tokens as number) + usage.outputTokens,
-      cached_tokens: (data.cached_tokens as number) + usage.cachedTokens,
-    })
-    .eq('id', importId);
 }
 
 export async function ingestWorkshopPlan(
@@ -267,23 +234,74 @@ export async function reattachQuestions(from: string, to: string): Promise<numbe
   const supabase = getSupabaseServerClient();
 
   const [{ data: source, error }, { data: already }] = await Promise.all([
-    supabase.from('exam_question_item_bricks').select('item_id').eq('brick_id', from),
+    supabase.from('exam_question_item_bricks').select('item_id, bloom_level').eq('brick_id', from),
     supabase.from('exam_question_item_bricks').select('item_id').eq('brick_id', to),
   ]);
   if (error) throw new Error(error.message);
 
+  // Le niveau suit le lien : une question de niveau 3 sur l'ancienne notion
+  // l'est aussi sur la nouvelle, sans quoi le radar ne saurait plus la compter.
   const linked = new Set((already ?? []).map((r) => r.item_id as string));
-  const toLink = (source ?? [])
-    .map((r) => r.item_id as string)
-    .filter((itemId) => !linked.has(itemId));
+  const toLink = (source ?? []).filter((r) => !linked.has(r.item_id as string));
   if (toLink.length === 0) return 0;
 
   const { error: insertError } = await supabase
     .from('exam_question_item_bricks')
-    .insert(toLink.map((itemId) => ({ item_id: itemId, brick_id: to })));
+    .insert(toLink.map((r) => ({ item_id: r.item_id as string, brick_id: to, bloom_level: r.bloom_level as number | null })));
   if (insertError) throw new Error(insertError.message);
 
   return toLink.length;
+}
+
+/** Passe la progression des élèves d'une notion effacée à celle qui la
+ *  remplace (§7.6, redites) : l'élève garde ce qu'il avait acquis sur le fait,
+ *  sous sa nouvelle formulation.
+ *
+ *  Un élève qui a déjà une progression sur la notion gardée — une notion neuve,
+ *  donc au plus quelques minutes d'entraînement — garde celle de l'ancienne, qui
+ *  seule a un historique : la sienne est retirée avant le transfert, que la
+ *  contrainte d'unicité (notion, élève) refuserait sinon.
+ *
+ *  Une seule écriture pour le transfert, filtrée sur la notion : aucune liste
+ *  d'élèves ne voyage dans l'URL, quel que soit leur nombre. Rend le nombre
+ *  d'élèves transférés. */
+export async function transferMastery(
+  from: string,
+  to: string,
+  /** Qui garde sa progression quand un élève en a sur les deux notions.
+   *  `keepSource` (défaut) : celle qu'on efface, l'ancienne. `keepTarget` :
+   *  celle qui reste — quand c'est elle l'ancienne, et la source une neuve. */
+  options: { onClash?: 'keepSource' | 'keepTarget' } = {},
+): Promise<number> {
+  if (from === to) return 0;
+  const supabase = getSupabaseServerClient();
+  // La ligne sacrifiée en cas de doublon (notion, élève) est celle du côté perdant.
+  const [winner, loser] = options.onClash === 'keepTarget' ? [to, from] : [from, to];
+
+  // table encore nommée bricks en base (brick_mastery, brick_id)
+  const { data: fresh, error } = await supabase.from('brick_mastery').select('id, user_id').eq('brick_id', loser);
+  if (error) throw new Error(error.message);
+  if ((fresh ?? []).length > 0) {
+    const { data: both, error: bothError } = await supabase
+      .from('brick_mastery')
+      .select('user_id')
+      .eq('brick_id', winner)
+      .in('user_id', (fresh ?? []).map((r) => r.user_id as string));
+    if (bothError) throw new Error(bothError.message);
+    const clash = new Set((both ?? []).map((r) => r.user_id as string));
+    const drop = (fresh ?? []).filter((r) => clash.has(r.user_id as string)).map((r) => r.id as string);
+    if (drop.length > 0) {
+      const { error: dropError } = await supabase.from('brick_mastery').delete().in('id', drop);
+      if (dropError) throw new Error(dropError.message);
+    }
+  }
+
+  const { count, error: moveError } = await supabase
+    .from('brick_mastery')
+    .update({ brick_id: to }, { count: 'exact' })
+    .eq('brick_id', from);
+  if (moveError) throw new Error(moveError.message);
+  return count ?? 0;
 }
 
 /** Efface ce que cet import a créé et que personne n'a jamais rangé.
@@ -297,6 +315,19 @@ export async function reattachQuestions(from: string, to: string): Promise<numbe
  *
  *  Le filtre sur `workshop_id` est une ceinture de plus : les identifiants
  *  viennent d'un calcul local, mais une suppression ne se protège jamais trop. */
+/** Donne à une notion existante la formulation d'une redite neuve (§7.6). Le
+ *  filtre sur l'atelier est une ceinture : l'identifiant vient d'un calcul
+ *  local, mais il a transité par une réponse de modèle. */
+export async function retitleNotion(workshopId: string, notionId: string, title: string): Promise<void> {
+  // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
+  const { error } = await getSupabaseServerClient()
+    .from('workshop_bricks')
+    .update({ title, updated_at: new Date().toISOString() })
+    .eq('workshop_id', workshopId)
+    .eq('id', notionId);
+  if (error) throw new Error(error.message);
+}
+
 export async function removeOrphans(
   workshopId: string,
   cleanup: { chapterIds: string[]; notionIds: string[] },
@@ -544,6 +575,12 @@ export async function insertGroups(
   importId: string,
   groups: PlanGroupInput[],
   notionIds: Map<string, string>,
+  /** Où dire combien de groupes n'ont pas été écrits faute de notion vivante :
+   *  le journal les compte (rare — aucune question sans notion sur 2 553 en
+   *  30 jours au 08/10/2026 —, mais à surveiller). */
+  report: { droppedGroups: number } = { droppedGroups: 0 },
+  /** Reprises restantes si une notion disparaît PENDANT l'écriture. */
+  retries = 1,
 ): Promise<number> {
   if (groups.length === 0) return 0;
 
@@ -553,6 +590,30 @@ export async function insertGroups(
   await assertImportOpen(importId);
 
   const supabase = getSupabaseServerClient();
+
+  // ─── Seulement sur des notions qui existent encore (08/10/2026) ───────────
+  // Une génération de questions ne verrouille pas le programme : une notion a
+  // pu être supprimée pendant l'appel. Ses questions ne s'écrivent pas
+  // (@/lib/ingest/liveNotions), et le reste du lot s'écrit normalement.
+  const wanted = [
+    ...new Set(groups.flatMap((g) => g.questions.flatMap((q) => q.notions.map((n) => resolve(n.ref, notionIds)))).filter((id): id is string => !!id)),
+  ];
+  const live = new Set<string>();
+  for (let i = 0; i < wanted.length; i += 200) {
+    // table encore nommée bricks en base — renommage différé, voir docs/backlog.md
+    const { data, error } = await supabase
+      .from('workshop_bricks')
+      .select('id')
+      .eq('workshop_id', workshopId)
+      .in('id', wanted.slice(i, i + 200));
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) live.add(row.id as string);
+  }
+  const { kept, dropped } = groupsWithLiveNotions(groups, (ref) => resolve(ref, notionIds), live);
+  report.droppedGroups += dropped;
+  if (dropped > 0) console.info(`[ingest] ${dropped} groupe(s) de questions non écrit(s) : notion supprimée ou absente`);
+  groups = kept;
+  if (groups.length === 0) return 0;
 
   // La question principale reprend l'identifiant de son groupe (`sort_order` 0) —
   // invariant du stockage, voir .claude/rules/server-architecture.md.
@@ -605,7 +666,16 @@ export async function insertGroups(
 
   if (linkRows.length > 0) {
     const { error: linkError } = await supabase.from('exam_question_item_bricks').insert(linkRows);
-    if (linkError) throw new Error(linkError.message);
+    if (linkError) {
+      // Une notion supprimée entre la vérification et l'écriture (23503 : la
+      // clé étrangère refuse le lien). On retire ce lot de questions — rien ne
+      // doit rester sans sa notion — et on le réécrit, la vérification refaite.
+      await supabase.from('exam_questions').delete().in('id', groupIds);
+      if (linkError.code === '23503' && retries > 0) {
+        return insertGroups(workshopId, importId, groups, notionIds, report, retries - 1);
+      }
+      throw new Error(linkError.message);
+    }
   }
 
   return itemRows.length;

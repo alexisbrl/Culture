@@ -1,7 +1,7 @@
 // Le sort des notions existantes — module PUR, sans réseau ni base.
 //
 // L'étape chapitres statue sur chaque notion existante (docs/architecture.md
-// §7.6) : un chapitre visible, « hors programme », ou « à vérifier ». Le
+// §7.6) : un chapitre visible, ou « non » — hors programme. Le
 // silence n'est pas une réponse : une notion qu'elle ne mentionne pas est
 // OUBLIÉE. Ce module range chaque notion dans l'un de ces cas, mesure la part
 // des oubliées pour décider de continuer, relancer ou annuler, et dresse la
@@ -21,7 +21,10 @@ export const CANCEL_THRESHOLD = 0.25;
  *  d'oubliées pour qu'un seuil puisse jouer. */
 export const MIN_FORGOTTEN_TO_ACT = 2;
 
-/** Ce que l'étape chapitres peut répondre pour une notion existante. */
+/** Ce que l'étape chapitres peut répondre pour une notion existante. `check`
+ *  (« à vérifier ») n'est plus proposé au modèle depuis le 06/10/2026 : il ne
+ *  se lit encore que dans un lot ouvert avant, et vaut `out` — les deux
+ *  repassent de toute façon par la seconde vérification. */
 export type NotionVerdict =
   | { notionId: string; verdict: 'chapter'; chapterRef: string }
   | { notionId: string; verdict: 'out' }
@@ -30,10 +33,9 @@ export type NotionVerdict =
 /** Le cas d'une notion existante après l'étape chapitres. */
 export type NotionStanding =
   | { kind: 'placed'; chapterRef: string }
-  /** Hors programme : jugée non couverte, ou laissée dans un chapitre écarté. */
+  /** Hors programme : rattachée à aucun chapitre du cours actuel, ou laissée
+   *  dans un chapitre écarté. */
   | { kind: 'out' }
-  /** Introuvable dans le texte — elle peut venir d'une image. */
-  | { kind: 'check' }
   /** La réponse n'en dit rien. Seul cas qui compte pour les seuils. */
   | { kind: 'forgotten' };
 
@@ -69,8 +71,7 @@ export function classifyNotions(
   const said = new Map<string, NotionStanding>();
   for (const v of verdicts) {
     if (!known.has(v.notionId) || said.has(v.notionId)) continue;
-    if (v.verdict === 'out') said.set(v.notionId, { kind: 'out' });
-    else if (v.verdict === 'check') said.set(v.notionId, { kind: 'check' });
+    if (v.verdict === 'out' || v.verdict === 'check') said.set(v.notionId, { kind: 'out' });
     else if (layout.visible.has(v.chapterRef)) said.set(v.notionId, { kind: 'placed', chapterRef: v.chapterRef });
     else if (layout.dropped.has(v.chapterRef)) said.set(v.notionId, { kind: 'out' });
   }
@@ -128,7 +129,7 @@ export function thresholdDecision(
 }
 
 /** L'étiquette d'une notion dans la seconde vérification. */
-export type RecheckLabel = 'forgotten' | 'check' | 'out';
+export type RecheckLabel = 'forgotten' | 'out';
 
 export interface RecheckNotion {
   notionId: string;
@@ -146,23 +147,25 @@ export function recheckList(standings: ReadonlyMap<string, NotionStanding>): Rec
   return out;
 }
 
-// ─── Le garde-fou « jamais tous » ────────────────────────────────────────────
+// ─── Les chapitres qui sortent du programme ─────────────────────────────────
 
 /**
- * Les chapitres réellement écartés. Écarter CHAQUE chapitre encore au programme
- * en un seul import n'est presque jamais une décision — une consigne mal lue,
- * un document déposé par erreur (§7.6). On n'applique alors rien, et
- * `blocked` permet de le dire au compte-rendu. Le cas légitime se fait en deux
- * fois. Une référence qui n'est pas un chapitre visible existant est ignorée.
+ * Les chapitres existants qui sortent du programme : ceux que l'étape met au
+ * rang 0, et **ceux auxquels elle n'attribue aucune page** (§7.6). Un chapitre
+ * que le cours traite encore y occupe forcément des pages ; n'en avoir aucune,
+ * c'est ne plus être au programme — que l'étape l'ait dit, l'ait tu ou l'ait
+ * oublié. Aucun garde-fou ne retient la sortie, même de tous les chapitres
+ * d'un coup : elle cache sans rien effacer, et « restaurer » la défait.
+ *
+ * Une référence qui n'est pas un chapitre visible existant est ignorée.
  */
-export function guardDrops(
+export function retiredChapters(
   visibleExistingIds: readonly string[],
-  droppedRefs: readonly string[],
-): { dropped: string[]; blocked: boolean } {
-  const visible = new Set(visibleExistingIds);
-  const dropped = [...new Set(droppedRefs)].filter((ref) => visible.has(ref));
-  if (visible.size > 0 && dropped.length >= visible.size) return { dropped: [], blocked: true };
-  return { dropped, blocked: false };
+  rankedZero: readonly string[],
+  withPages: ReadonlySet<string>,
+): string[] {
+  const zero = new Set(rankedZero);
+  return visibleExistingIds.filter((id) => zero.has(id) || !withPages.has(id));
 }
 
 // ─── Le sort final, après l'étape notions ────────────────────────────────────
@@ -206,7 +209,7 @@ export interface FateInput {
  * - Réclamée par plusieurs : son chapitre actuel s'il en est, sinon le premier
  *   dans l'ordre du programme — indépendant de l'ordre d'arrivée des réponses.
  *   Chaque départage est rendu pour le compte-rendu.
- * - Non réclamée : oubliée ou à vérifier, elle ne bouge pas ; hors programme,
+ * - Non réclamée : oubliée, elle ne bouge pas ; hors programme,
  *   elle reste dans un chapitre écarté et passe sans chapitre si le sien est
  *   resté visible.
  */

@@ -46,22 +46,19 @@ export interface DocumentSlice {
 export interface ChapterSlice {
   key: string;
   slices: DocumentSlice[];
-  /** Vrai si le chapitre n'avait aucune borne exploitable et reçoit des
-   *  documents entiers — plus cher, jamais faux, et dit au compte-rendu. */
-  wholeDocumentFallback: boolean;
 }
 
 export interface SlicingResult {
   chapters: ChapterSlice[];
-  /** Documents qu'aucune borne ne couvrait : ils partent en entier dans
-   *  chaque chapitre plutôt que de disparaître. Pour le compte-rendu. */
+  /** Documents qu'aucune borne ne couvrait : aucun chapitre ne les reçoit.
+   *  Pour le compte-rendu. */
   uncoveredDocuments: string[];
 }
 
 /** Clampe un intervalle au document. `null` s'il est inexploitable : borne
  *  absente, 0, inversée, ou entièrement hors du document. Un intervalle qui
  *  dépasse seulement la fin est ramené à la dernière page — élargir, pas jeter. */
-function usableSpan(span: PageSpan, pageCount: number): { from: number; to: number } | null {
+export function usableSpan(span: PageSpan, pageCount: number): { from: number; to: number } | null {
   const { from, to } = span;
   if (!Number.isInteger(from) || !Number.isInteger(to)) return null;
   if (from < 1 || to < from || from > pageCount) return null;
@@ -73,10 +70,16 @@ function usableSpan(span: PageSpan, pageCount: number): { from: number; to: numb
  *
  * - Chevauchement : les deux chapitres gardent la page.
  * - Page orpheline : rattachée au chapitre qui couvre la page couverte la plus
- *   proche AVANT elle ; au premier chapitre du document si elle précède tout.
- * - Chapitre sans aucune borne exploitable : les documents qu'il désignait en
- *   entier, ou tous les documents s'il n'en désignait aucun de connu.
- * - Document que rien ne couvre : en entier dans chaque chapitre.
+ *   proche AVANT elle, **dans le même document**. Une page qui précède toute
+ *   page couverte de son document n'a pas de chapitre précédent : personne ne
+ *   la reçoit (souvent une page de titre, ou l'en-tête du document de l'IA).
+ * - Chapitre sans aucune borne exploitable : il ne reçoit rien. Il n'arrive
+ *   pas jusqu'ici — un chapitre sans page sort du programme dès l'étape
+ *   chapitres (§7.6). Lui donner le cours entier, comme on le faisait, lui
+ *   faisait réécrire tout le cours sous son titre.
+ * - Document que rien ne couvre : personne ne le reçoit, et c'est rendu au
+ *   compte-rendu. L'envoyer en entier à chaque chapitre, comme on le faisait,
+ *   recréait la même duplication (06/10/2026).
  */
 export function sliceChapters(
   chapters: readonly ChapterBounds[],
@@ -85,14 +88,11 @@ export function sliceChapters(
   const docById = new Map(documents.map((d) => [d.id, d]));
   // pages[chapitre][document] = ensemble des pages ; `null` = document entier.
   const pages = chapters.map(() => new Map<string, Set<number> | null>());
-  const fallback = chapters.map(() => false);
 
   chapters.forEach((chapter, ci) => {
-    const named = new Set<string>();
     for (const span of chapter.spans) {
       const doc = docById.get(span.documentId);
       if (!doc) continue;
-      named.add(doc.id);
       if (doc.pageCount === null) {
         pages[ci].set(doc.id, null);
         continue;
@@ -107,11 +107,6 @@ export function sliceChapters(
       }
       for (let p = usable.from; p <= usable.to; p++) set.add(p);
     }
-    if (pages[ci].size === 0) {
-      fallback[ci] = true;
-      const targets = named.size > 0 ? [...named] : documents.map((d) => d.id);
-      for (const id of targets) pages[ci].set(id, null);
-    }
   });
 
   const uncoveredDocuments: string[] = [];
@@ -121,7 +116,6 @@ export function sliceChapters(
       .filter((ci) => pages[ci].has(doc.id));
     if (covering.length === 0) {
       uncoveredDocuments.push(doc.id);
-      chapters.forEach((_, ci) => pages[ci].set(doc.id, null));
       continue;
     }
     if (doc.pageCount === null) continue;
@@ -136,21 +130,19 @@ export function sliceChapters(
         if (owner[p] === undefined) owner[p] = ci;
       }
     }
-    const firstCovered = owner.findIndex((o, p) => p >= 1 && o !== undefined);
-    let previous = owner[firstCovered] as number;
+    let previous: number | undefined;
     for (let p = 1; p <= doc.pageCount; p++) {
       if (owner[p] !== undefined) {
         previous = owner[p] as number;
         continue;
       }
-      (pages[previous].get(doc.id) as Set<number>).add(p);
+      if (previous !== undefined) (pages[previous].get(doc.id) as Set<number>).add(p);
     }
   }
 
   return {
     chapters: chapters.map((chapter, ci) => ({
       key: chapter.key,
-      wholeDocumentFallback: fallback[ci],
       slices: documents
         .filter((d) => pages[ci].has(d.id))
         .map((d) => {
@@ -174,4 +166,53 @@ export function imagePages(pageTexts: readonly string[]): number[] {
     if (isTextPoor(text)) out.push(i + 1);
   });
   return out;
+}
+
+// ─── Un chapitre trop long : ses pages en deux moitiés ───────────────────────
+
+/**
+ * Coupe les pages d'un chapitre en deux moitiés égales, dans l'ordre du cours
+ * — pour la reprise d'un chapitre dont l'appel a dépassé la durée d'une tâche
+ * (Alexis, 10/10/2026). Un document pris en entier dont on connaît le nombre
+ * de pages se coupe comme les autres ; un document sans pages (texte, document
+ * de l'IA) ne se coupe pas, et rejoint la moitié la plus légère.
+ *
+ * Rend deux listes, ou une seule quand il n'y a rien à couper (une page, un
+ * seul document sans pages) : l'appel repart alors entier.
+ *
+ * Si deux moitiés ne suffisent plus un jour (des moitiés elles-mêmes coupées,
+ * au journal), c'est ici qu'on passerait à trois ou quatre parts.
+ */
+export function halveSlices(
+  slices: readonly DocumentSlice[],
+  pageCounts: Readonly<Record<string, number | null>>,
+): DocumentSlice[][] {
+  const pages: { documentId: string; page: number }[] = [];
+  const whole: DocumentSlice[] = [];
+  for (const slice of slices) {
+    const count = pageCounts[slice.documentId] ?? null;
+    const list = slice.pages ?? (count !== null ? Array.from({ length: count }, (_, i) => i + 1) : null);
+    if (list === null) whole.push({ documentId: slice.documentId, pages: null });
+    else for (const page of list) pages.push({ documentId: slice.documentId, page });
+  }
+  if (pages.length + whole.length < 2) return [slices.map((s) => ({ ...s }))];
+
+  const cut = Math.ceil(pages.length / 2);
+  const halves = [pages.slice(0, cut), pages.slice(cut)].map((part) => {
+    const out: DocumentSlice[] = [];
+    for (const { documentId, page } of part) {
+      const last = out[out.length - 1];
+      if (last && last.documentId === documentId) (last.pages as number[]).push(page);
+      else out.push({ documentId, pages: [page] });
+    }
+    return out;
+  });
+  // Les documents sans pages, un à un, vers la moitié qui a le moins à lire.
+  const weight = halves.map((h) => h.reduce((sum, s) => sum + (s.pages?.length ?? 0), 0));
+  for (const doc of whole) {
+    const lighter = weight[0] <= weight[1] ? 0 : 1;
+    halves[lighter].push(doc);
+    weight[lighter] += Math.max(1, ...weight);
+  }
+  return halves.filter((h) => h.length > 0);
 }

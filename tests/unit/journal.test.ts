@@ -36,6 +36,12 @@ describe('classifyFailure', () => {
     expect(classifyFailure(new Error('fetch failed'))).toBe('unavailable');
   });
 
+  it('range une connexion coupée en pleine réponse parmi les pannes passagères', () => {
+    expect(classifyFailure(new Error('terminated'))).toBe('unavailable');
+    expect(classifyFailure(new Error('socket hang up'))).toBe('unavailable');
+    expect(isTransient(classifyFailure(new Error('terminated')))).toBe(true);
+  });
+
   it('distingue le débit, la panne et la fenêtre', () => {
     expect(classifyFailure(providerError('rate limit', 429))).toBe('rate_limited');
     expect(classifyFailure(providerError('bad gateway', 502))).toBe('unavailable');
@@ -47,6 +53,15 @@ describe('classifyFailure', () => {
   it('ne range dans « inconnue » que ce qu’il ne sait vraiment pas nommer', () => {
     expect(classifyFailure(providerError('invalid api key', 401))).toBe('unknown');
     expect(classifyFailure(new Error(''))).toBe('unknown');
+  });
+
+  it('reconnaît le crédit épuisé, chez les deux fournisseurs', () => {
+    // Anthropic le refuse en 400, comme une demande mal formée : seul le texte
+    // le distingue. DeepSeek a son propre code.
+    const anthropic = '400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API."}}';
+    expect(classifyFailure(providerError(anthropic, 400))).toBe('no_credit');
+    expect(classifyFailure(providerError('DeepSeek 402 : {"error":{"message":"Insufficient Balance"}}', 402))).toBe('no_credit');
+    expect(isTransient('no_credit')).toBe(false);
   });
 
   it('une annulation n’est pas une panne', () => {
@@ -65,7 +80,7 @@ describe('isTransient', () => {
   it('refuse tout ce qui échouera à l’identique', () => {
     // Un corpus trop volumineux le sera encore dans trois secondes, une réponse
     // illisible aussi, et une annulation doit rester une annulation.
-    for (const cause of ['oversize', 'truncated', 'unreadable', 'closed', 'unknown'] as const) {
+    for (const cause of ['oversize', 'truncated', 'unreadable', 'closed', 'no_credit', 'timeout', 'unknown'] as const) {
       expect(isTransient(cause)).toBe(false);
     }
   });

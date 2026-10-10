@@ -31,11 +31,36 @@ production casse, souvent en silence (beaucoup de `select` ne lisent que
 
 ## À appliquer
 
-AUCUN
+- **10/10/2026 — retirer les compteurs de jetons des générations**
+  (`docs/migrations/2026-10-10-compteurs-de-jetons.sql`). **Contract** : à
+  appliquer seulement quand la branche `fix/generation-cout-et-verrou` est
+  mergée ET déployée — le code en ligne avant elle écrit ces colonnes. Puis
+  retirer les trois colonnes de `src/lib/database.types.ts`.
 
 ---
 
 ## Appliqué / sans objet
+
+- **10/10/2026 — le signe de vie des tâches de génération**
+  (`docs/migrations/2026-10-10-signe-de-vie-des-taches.sql`) : colonne
+  `ai_import_tasks.alive_at`. **Appliquée tout de suite, rien à attendre** :
+  purement additive, le code en ligne l'ignore. La table n'est pas dans
+  `src/lib/database.types.ts` : rien à régénérer.
+
+- **08/10/2026 — le coût des générations**
+  (`docs/migrations/2026-10-08-cout-des-generations.sql`) : coût par ligne du
+  journal, appel en vol sur chaque tâche, fusion du `scope` par la base, vue
+  `ai_generation_costs`. **Appliquée tout de suite, rien à attendre** : purement
+  additive. Les lignes déjà au journal ont été chiffrées au tarif du 08/10/2026.
+  `src/lib/database.types.ts` mis à jour.
+
+- **05/10/2026 — la dernière modification du programme**
+  (`docs/migrations/2026-10-05-programme-touche.sql`) : colonne
+  `workshops.program_changed_at` et déclencheur sur `workshop_chapters` et
+  `workshop_bricks`, pour l'annulation de la dernière génération. **Appliquée
+  tout de suite, rien à attendre** : purement additive, le code en ligne ignore
+  la colonne. Vérifiée en base (une écriture de notion la met à jour, dans une
+  transaction annulée). `src/lib/database.types.ts` mis à jour.
 
 - **05/10/2026 — la copie des suppressions des paramètres**
   (`docs/migrations/2026-10-05-copie-des-suppressions.sql`) : table

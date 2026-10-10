@@ -19,7 +19,7 @@
 // ─── Décider, puis écrire une seule fois ─────────────────────────────────────
 //
 // Écrire ou non est une question fermée, tranchée AVANT l'appel par le décideur
-// (@/lib/decision) — Jev à terme, Haiku en attendant (Alexis, 25/09/2026). Le
+// (@/lib/decision) — Jev depuis le 08/10/2026, DeepSeek en relais. Le
 // modèle qui écrit reçoit la décision toute faite : tout le corpus quand il
 // écrit, rien quand il ne fait que réécrire la consigne. Lui laisser le choix,
 // c'était un premier appel à l'aveugle qui rédigeait un cours entier pour
@@ -68,8 +68,32 @@ export function questionCountFromHint(hint: string): number | null {
   return Math.min(value, MAX_QUESTIONS_PER_IMPORT);
 }
 
-/** Le nom du document, tel qu'il apparaît dans les ressources de l'atelier. */
-export const GENERATED_FILE_NAME = 'Cours écrit par l’IA.md';
+/** Le nom du document, tel qu'il apparaît dans les ressources de l'atelier :
+ *  « Notes IA [atelier] - [date de la dernière écriture] ». Il change à chaque
+ *  réécriture, ce qui dit d'un coup d'œil de quand date la version téléchargée. */
+export function generatedFileName(workshopName: string | null | undefined, writtenAt: Date = new Date()): string {
+  const name = (workshopName ?? '').trim().replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').slice(0, 80).trim();
+  const date = writtenAt.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
+  return `Notes IA${name ? ` ${name}` : ''} - ${date}.md`;
+}
+
+/** Une partie du document de l'IA : un titre, et ce qu'elle enseigne. Une
+ *  partie devient une page du document (`textPages`), donc un chapitre se
+ *  découpe pile sur ses parties. */
+export type GeneratedPart = { title: string; content: string };
+
+/** Le corps du document, recomposé à partir de ses parties. **Fonction pure.**
+ *
+ *  Chaque partie s'ouvre sur un titre de section, et c'est le SEUL titre de ce
+ *  niveau : un titre de premier ou deuxième niveau écrit dans un contenu est
+ *  ramené au troisième, sinon il ouvrirait une page au milieu de la partie. */
+export function bodyFromParts(parts: readonly GeneratedPart[]): string {
+  return parts
+    .map((p) => ({ title: p.title.replace(/\s+/g, ' ').trim(), content: p.content.trim() }))
+    .filter((p) => p.title && p.content)
+    .map((p) => `## ${p.title}\n\n${p.content.replace(/^#{1,2}(?=\s)/gm, '###')}`)
+    .join('\n\n');
+}
 
 /** Le type du fichier écrit. Du texte : c'est lisible par le modèle sans
  *  conversion, téléchargeable par l'utilisateur, et ça pèse mille fois moins
@@ -169,8 +193,20 @@ export function readResourceOutput(raw: unknown): ResourceOutcome {
 
   // Un corps n'existe que si l'écriture a été décidée en amont : le schéma
   // n'offre pas de champ `document` sinon. Vide ou mal formé, il vaut « ne
-  // touche à rien », qui est toujours la conduite la moins dommageable.
-  const body = typeof document.content === 'string' ? document.content.trim() : null;
+  // touche à rien », qui est toujours la conduite la moins dommageable. Il
+  // arrive par parties (titre + contenu) ; `content`, d'un seul tenant, est la
+  // forme d'avant le 06/10/2026, encore lue.
+  const parts = Array.isArray(document.parts)
+    ? document.parts.flatMap((p) => {
+        const part = p && typeof p === 'object' ? (p as Record<string, unknown>) : {};
+        return typeof part.title === 'string' && typeof part.content === 'string'
+          ? [{ title: part.title, content: part.content }]
+          : [];
+      })
+    : null;
+  const body = parts
+    ? bodyFromParts(parts) || null
+    : typeof document.content === 'string' ? document.content.trim() : null;
 
   // Un entier hors bornes est ramené dans la plage plutôt que rejeté : demander
   // 5000 questions veut dire « beaucoup », pas « erreur » — même logique que
@@ -210,7 +246,7 @@ export function writingQuestion(input: {
   fileNames: string[];
   /** Le corps actuel du document de l'IA, s'il existe. Seuls ses titres partent. */
   current?: string | null;
-}): { state: string; question: string } {
+}): { state: string; question: string; criteria: { true: string; false: string } } {
   const lines: string[] = [];
   const name = input.workshop?.name?.trim();
   if (name) lines.push(`L'atelier : « ${name} »`);
@@ -243,15 +279,26 @@ export function writingQuestion(input: {
     // en « non » — la demande était perdue. Sous cette forme, à température
     // nulle, 18 sur 19 sur trois passages ; la seule erreur (« insiste sur les
     // éruptions », un cours de l'IA existant) va dans le sens coûteux.
-    question: "Classe la demande. A : elle demande d'agir sur un COURS — en écrire un, le compléter, l'enrichir, le corriger, ou au contraire en retirer, raccourcir, simplifier, réécrire ou traduire une partie. B : elle ne porte que sur les questions à venir — leur difficulté, leur langue, leur type, les points sur lesquels insister, le contenu d'une question précise —, ou sur rien d'enseignable. La demande est-elle de type A ?",
+    // ⚠️ **La frontière passe dans les `criteria`, pas dans la question** (essai
+    // du 08/10/2026, 25 demandes types) : Jev lit au pied de la lettre, et sous
+    // la forme « classe A ou B » il faisait 24/25 — « ajoute des questions sur
+    // la tectonique » partait en « oui ». Sous cette forme, 25/25, avec un
+    // écart net : tous les « oui » au-dessus de 0,91, tous les « non » sous
+    // 0,11. Haiku, qui reçoit les critères à la suite, reste à 25/25.
+    question: "La demande de l'utilisateur demande-t-elle de modifier le COURS (le texte de cours de l'atelier), et pas seulement les questions ?",
+    criteria: {
+      true: "Elle demande d'écrire un cours, de le compléter, l'enrichir, le corriger, ou d'en retirer, raccourcir, simplifier, réécrire ou traduire une partie.",
+      false: "Elle ne porte que sur les questions à venir (difficulté, langue, type, nombre, sujets sur lesquels poser des questions, contenu d'une question), ou sur quelque chose qui n'est pas enseignable.",
+    },
   };
 }
 
 /** Le document complet, en-tête compris, tel qu'il est stocké et téléchargé. */
-export function composeDocument(body: string, writtenAt: Date = new Date()): string {
+export function composeDocument(body: string, writtenAt: Date = new Date(), workshopName?: string | null): string {
   const date = writtenAt.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const name = (workshopName ?? '').trim();
   return [
-    '# Cours écrit par l’IA',
+    `# Notes IA${name ? ` — ${name}` : ''}`,
     '',
     `> Ce document a été rédigé par l’IA de Culture à partir des consignes données à la génération, et mis à jour le ${date}.`,
     '> Il ne se modifie pas à la main : pour le corriger ou le compléter, redonnez une consigne à la génération.',

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MIN_PAGE_TEXT_CHARS,
+  halveSlices,
   imagePages,
   isTextPoor,
   sliceChapters,
@@ -53,21 +54,23 @@ describe('sliceChapters', () => {
     expect(pagesOf(r, 'b')).toEqual([7, 8, 9, 10]);
   });
 
-  it('pages avant le premier chapitre : rattachées au premier', () => {
+  it('pages avant toute page citée du document : à personne', () => {
+    // Pas de chapitre précédent dans ce document : une page de titre, ou
+    // l'en-tête du document de l'IA, n'a rien à apprendre.
     const r = sliceChapters(
       [{ key: 'a', spans: [span(3, 6)] }, { key: 'b', spans: [span(7, 10)] }],
       [DOC],
     );
-    expect(pagesOf(r, 'a')).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(pagesOf(r, 'a')).toEqual([3, 4, 5, 6]);
   });
 
-  it('le premier « dans l’ordre du document », pas du programme', () => {
+  it('l’ordre qui compte est celui du document, pas du programme', () => {
     // Le programme range b avant a, mais c'est a qui ouvre le document.
     const r = sliceChapters(
-      [{ key: 'b', spans: [span(7, 10)] }, { key: 'a', spans: [span(3, 6)] }],
+      [{ key: 'b', spans: [span(7, 10)] }, { key: 'a', spans: [span(2, 4)] }],
       [DOC],
     );
-    expect(pagesOf(r, 'a')).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(pagesOf(r, 'a')).toEqual([2, 3, 4, 5, 6]);
     expect(pagesOf(r, 'b')).toEqual([7, 8, 9, 10]);
   });
 
@@ -83,13 +86,13 @@ describe('sliceChapters', () => {
     expect(pagesOf(r, 'b')).toEqual([3, 4, 5, 8, 9, 10]);
   });
 
-  it('aucune page n’est perdue, quelles que soient les bornes', () => {
+  it('aucune page n’est perdue à partir de la première page citée', () => {
     const r = sliceChapters(
       [{ key: 'a', spans: [span(2, 2)] }, { key: 'b', spans: [span(9, 9)] }],
       [DOC],
     );
     const all = new Set([...(pagesOf(r, 'a') ?? []), ...(pagesOf(r, 'b') ?? [])]);
-    expect([...all].sort((x, y) => x - y)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect([...all].sort((x, y) => x - y)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
 
   it.each<[string, ChapterBounds['spans']]>([
@@ -97,39 +100,30 @@ describe('sliceChapters', () => {
     ['à zéro', [span(0, 0)]],
     ['inversées', [span(8, 3)]],
     ['hors document', [span(40, 45)]],
-  ])('bornes %s : le document entier, signalé', (_, spans) => {
+  ])('bornes %s : le chapitre ne reçoit rien — jamais le document entier', (_, spans) => {
+    // Lui donner le cours entier lui faisait réécrire tout le cours sous son
+    // titre (génération Evalia du 27/09/2026) : un chapitre sans page sort du
+    // programme avant d'arriver ici.
     const r = sliceChapters(
       [{ key: 'a', spans: [span(1, 10)] }, { key: 'b', spans }],
       [DOC],
     );
-    const b = r.chapters.find((c) => c.key === 'b')!;
-    expect(b.wholeDocumentFallback).toBe(true);
-    expect(pagesOf(r, 'b')).toBeNull();
-    expect(r.chapters.find((c) => c.key === 'a')!.wholeDocumentFallback).toBe(false);
+    expect(r.chapters.find((c) => c.key === 'b')!.slices).toEqual([]);
+    expect(pagesOf(r, 'a')).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
 
   it('borne qui dépasse la fin : ramenée à la dernière page', () => {
     const r = sliceChapters([{ key: 'a', spans: [span(8, 99)] }], [DOC]);
-    expect(pagesOf(r, 'a')).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    expect(r.chapters[0].wholeDocumentFallback).toBe(false);
+    expect(pagesOf(r, 'a')).toEqual([8, 9, 10]);
   });
 
-  it('bornes inexploitables sur un document désigné : ce document seul', () => {
-    const r = sliceChapters(
-      [{ key: 'a', spans: [span(1, 5)] }, { key: 'b', spans: [span(0, 0, 'd2')] }],
-      [DOC, { id: 'd2', pageCount: 4 }],
-    );
-    const b = r.chapters.find((c) => c.key === 'b')!;
-    expect(b.slices).toEqual([{ documentId: 'd2', pages: null }]);
-  });
-
-  it('document que rien ne couvre : en entier dans chaque chapitre', () => {
+  it('document que rien ne couvre : personne ne le reçoit', () => {
     const r = sliceChapters(
       [{ key: 'a', spans: [span(1, 10)] }],
       [DOC, { id: 'd2', pageCount: 4 }],
     );
     expect(r.uncoveredDocuments).toEqual(['d2']);
-    expect(pagesOf(r, 'a', 'd2')).toBeNull();
+    expect(pagesOf(r, 'a', 'd2')).toBeUndefined();
   });
 
   it('document sans pages : sa tranche est le document entier', () => {
@@ -138,7 +132,6 @@ describe('sliceChapters', () => {
       [{ id: 'txt', pageCount: null }],
     );
     expect(pagesOf(r, 'a', 'txt')).toBeNull();
-    expect(r.chapters[0].wholeDocumentFallback).toBe(false);
   });
 
   it('ignore un document inconnu', () => {
@@ -164,5 +157,43 @@ describe('texte seul ou texte + image, page par page', () => {
     // Moyenne au-dessus du seuil, et pourtant la moitié du cours est scannée.
     const pages = [rich + rich + rich, rich + rich, '', '', rich];
     expect(imagePages(pages)).toEqual([3, 4]);
+  });
+});
+
+// La reprise d'un chapitre trop long : ses pages en deux moitiés. Aucune page
+// ne doit se perdre ni se lire deux fois.
+describe('halveSlices', () => {
+  it('coupe les pages en deux moitiés égales, dans l’ordre du cours, à travers les documents', () => {
+    const halves = halveSlices(
+      [{ documentId: 'a', pages: [3, 4, 5] }, { documentId: 'b', pages: [1, 2] }],
+      { a: 10, b: 2 },
+    );
+    expect(halves).toEqual([
+      [{ documentId: 'a', pages: [3, 4, 5] }],
+      [{ documentId: 'b', pages: [1, 2] }],
+    ]);
+  });
+
+  it('coupe aussi un document entier dont on connaît les pages', () => {
+    expect(halveSlices([{ documentId: 'a', pages: null }], { a: 4 })).toEqual([
+      [{ documentId: 'a', pages: [1, 2] }],
+      [{ documentId: 'a', pages: [3, 4] }],
+    ]);
+  });
+
+  it('envoie un document sans pages entier vers la moitié la plus légère', () => {
+    const halves = halveSlices(
+      [{ documentId: 'a', pages: [1, 2, 3] }, { documentId: 't', pages: null }],
+      { a: 3, t: null },
+    );
+    expect(halves).toEqual([
+      [{ documentId: 'a', pages: [1, 2] }],
+      [{ documentId: 'a', pages: [3] }, { documentId: 't', pages: null }],
+    ]);
+  });
+
+  it('ne coupe pas ce qui ne se coupe pas : une page, ou un seul document sans pages', () => {
+    expect(halveSlices([{ documentId: 'a', pages: [7] }], { a: 10 })).toHaveLength(1);
+    expect(halveSlices([{ documentId: 't', pages: null }], { t: null })).toHaveLength(1);
   });
 });

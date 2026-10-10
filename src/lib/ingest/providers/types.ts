@@ -103,7 +103,13 @@ export type IngestScope =
       retry?: { previous: string[] };
       /** La relance du seuil d'oubli (§7.6) : on ne redemande que les verdicts
        *  de ces notions, chapitres figés. */
-      relaunch?: { notions: { id: string; title: string }[]; chapters: { id: string; name: string }[] };
+      relaunch?: {
+        notions: { id: string; title: string }[];
+        chapters: { id: string; name: string }[];
+        /** `fixed` : premier verdict sur un découpage posé par le site à partir
+         *  des parties du document de l'IA (§7.6), et non une relance. */
+        fixed?: boolean;
+      };
     }
   | {
       /** Étape 2 — les notions d'UN chapitre, sur ses seules pages (§7.2). Les
@@ -114,7 +120,11 @@ export type IngestScope =
       /** Les extraits joints, avec les pages du cours qu'ils contiennent. */
       extracts: { name: string; pages: number[] | null }[];
       /** La seconde vérification (§7.6), étiquetée. */
-      recheck: { id: string; title: string; label: 'forgotten' | 'check' | 'out' }[];
+      recheck: { id: string; title: string; label: 'forgotten' | 'out' }[];
+      /** La langue du cours, en toutes lettres (« français ») : celle des
+       *  notions (@/lib/ingest/language). Absente quand le site n'a pas su la
+       *  reconnaître. */
+      language?: string;
     }
   | {
       pass: 'questions';
@@ -157,12 +167,7 @@ export type IngestScope =
       grouped: boolean;
       workshop?: { name: string } | null;
     }
-  | {
-      /** Les REDITES entre chapitres (§7.6) : un seul appel, sans document,
-       *  qui ne répond que « redite ou pas » sur chaque paire. */
-      pass: 'redites';
-      pairs: { candidate: string; other: string }[];
-    };
+;
 
 /** Ce que rend un fournisseur : la sortie brute — **non validée**, c'est le rôle
  *  de `parsePlan` — et ce que l'appel a coûté. */

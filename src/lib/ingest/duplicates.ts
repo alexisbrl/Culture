@@ -76,12 +76,17 @@ export function significantWords(text: string): Set<string> {
  *  et 1. Fonction pure et exportée pour être mesurable seule : c'est elle qui
  *  justifie le seuil. */
 export function proximity(a: string, b: string): number {
-  const wa = significantWords(a);
-  const wb = significantWords(b);
-  if (wa.size === 0 || wb.size === 0) return 0;
+  return setProximity(significantWords(a), significantWords(b));
+}
 
+/** La même mesure sur des mots déjà extraits. Les boucles qui comparent une
+ *  liste à une autre extraient chaque texte UNE fois, puis comparent : extraire
+ *  à chaque comparaison refaisait le même travail des milliers de fois. */
+function setProximity(wa: ReadonlySet<string>, wb: ReadonlySet<string>): number {
+  if (wa.size === 0 || wb.size === 0) return 0;
+  const [small, large] = wa.size <= wb.size ? [wa, wb] : [wb, wa];
   let shared = 0;
-  for (const w of wa) if (wb.has(w)) shared += 1;
+  for (const w of small) if (large.has(w)) shared += 1;
   return shared / (wa.size + wb.size - shared);
 }
 
@@ -103,41 +108,6 @@ export function proximity(a: string, b: string): number {
  *  mangerait les deux notions « Pic de la Mirandole », qui portent bien deux
  *  faits distincts — et c'est l'erreur la plus coûteuse des deux. */
 export const NEAR_DUPLICATE = 0.6;
-
-/** Le seuil pour un NOM DE CHAPITRE, plus haut que pour une notion.
- *
- *  Un titre est court : deux titres partagent peu de mots, donc la moindre
- *  ressemblance pèse lourd dans l'indice. « L'Europe, foyer de peuplement » et
- *  « L'Europe, foyer de peuplement et d'émigration » atteignent 0,75, tandis que
- *  deux chapitres réellement distincts d'un même cours tombent sous 0,2 — l'écart
- *  est encore plus net que pour les notions, ce qui autorise un seuil sévère.
- *
- *  Sévère est ici le bon réglage **parce que l'erreur n'est pas symétrique** :
- *  fusionner deux chapitres distincts mélangerait leurs notions, ce qui se
- *  répare mal ; laisser passer un doublon de chapitre se corrige d'un
- *  glisser-déposer. */
-export const NEAR_DUPLICATE_TITLE = 0.7;
-
-/** L'élément existant que ce titre redit, s'il y en a un.
- *
- *  Rend l'ÉLÉMENT et non le titre, parce que l'appelant a besoin de son
- *  identifiant : un chapitre proposé en double n'est pas écarté, il est
- *  **redirigé** vers celui qui existe (voir `ingestChapters`). Écarter suffirait
- *  pour une notion — rien n'en dépend encore — mais orphelinerait toutes les
- *  notions qu'on venait de lui affecter. */
-export function findExistingMatch<T>(
-  title: string,
-  existing: readonly T[],
-  titleOf: (item: T) => string,
-  threshold = NEAR_DUPLICATE_TITLE,
-): { match: T; proximity: number } | null {
-  let best: { match: T; proximity: number } | null = null;
-  for (const item of existing) {
-    const score = proximity(title, titleOf(item));
-    if (score >= threshold && (!best || score > best.proximity)) best = { match: item, proximity: score };
-  }
-  return best;
-}
 
 /** Le seuil à partir duquel on POSE LA QUESTION au modèle, au lieu de trancher.
  *
@@ -171,12 +141,13 @@ export function flagSimilar<A, B>(
   threshold = SIMILAR_ENOUGH_TO_ASK,
 ): { candidate: A; other: B; proximity: number }[] {
   const flagged: { candidate: A; other: B; proximity: number }[] = [];
+  const otherWords = others.map((other) => significantWords(titleOfOther(other)));
   for (const candidate of candidates) {
-    const title = titleOfCandidate(candidate);
-    for (const other of others) {
-      const score = proximity(title, titleOfOther(other));
+    const words = significantWords(titleOfCandidate(candidate));
+    others.forEach((other, i) => {
+      const score = setProximity(words, otherWords[i]);
       if (score >= threshold) flagged.push({ candidate, other, proximity: score });
-    }
+    });
   }
   return flagged.sort((a, b) => b.proximity - a.proximity);
 }
@@ -204,23 +175,24 @@ export function dropNearDuplicates<T>(
 ): DuplicateVerdict<T> {
   const kept: T[] = [];
   const dropped: DuplicateVerdict<T>['dropped'] = [];
-  const seen = [...existing];
+  const seen = existing.map((text) => ({ text, words: significantWords(text) }));
 
   for (const candidate of candidates) {
     const title = titleOf(candidate);
+    const words = significantWords(title);
 
     let best: { matched: string; proximity: number } | null = null;
     for (const other of seen) {
-      const score = proximity(title, other);
+      const score = setProximity(words, other.words);
       if (score >= threshold && (!best || score > best.proximity)) {
-        best = { matched: other, proximity: score };
+        best = { matched: other.text, proximity: score };
       }
     }
 
     if (best) dropped.push({ candidate, matched: best.matched, proximity: best.proximity });
     else {
       kept.push(candidate);
-      seen.push(title);
+      seen.push({ text: title, words });
     }
   }
 
@@ -240,74 +212,79 @@ export function dropNearDuplicates<T>(
 // ~75 000 tokens qu'on a passé un chantier à retirer (§16.3). Le calcul, lui,
 // est local et gratuit.
 
-export type RepeatedQuestion = { content: string; other: string; proximity: number };
+export type RepeatedQuestion = { content: string; other: string };
 
-/** Le seuil de la recopie ENTRE LES DEUX LISTES — et il n'a rien à voir avec
- *  celui des titres (25/08/2026).
+/** L'empreinte d'un énoncé : son texte exact, à la casse, aux accents, aux
+ *  espaces et à la ponctuation près. Deux énoncés de même empreinte sont une
+ *  RECOPIE — et seule la recopie est cherchée ici.
  *
- *  ⚠️ **Deux questions très ressemblantes sont deux questions.** « Combien fait
- *  7 + 13 » et « combien fait 7 + 23 » partagent presque tous leurs mots et
- *  n'ont rien de commun pédagogiquement ; une question de parcours reformulée
- *  autrement dans un examen est légitime — on veut justement voir si la notion
- *  est comprise et pas seulement mémorisée. Le seul cas à écarter est le MOT À
- *  MOT, et c'est pour ça que la valeur est **1 exactement**.
+ *  ⚠️ **Deux questions très ressemblantes sont deux questions.** « Combien font
+ *  8 − 5 » et « combien font 5 − 8 » partagent tous leurs mots et n'ont rien de
+ *  commun pédagogiquement : l'ordre des mots, les chiffres et les symboles
+ *  mathématiques comptent donc, et un mot de différence suffit à distinguer.
  *
- *  1 ne veut PAS dire « caractère pour caractère » : la mesure ignore déjà la
- *  ponctuation, les accents, la casse, les mots-outils et l'ordre des mots. Elle
- *  attrape donc bien la même question reponctuée ou remise dans un autre ordre.
- *  Ce qu'elle laisse passer, c'est un mot de différence — et un mot de
- *  différence, dans une question, change souvent tout (un nombre, une date, un
- *  nom).
- *
- *  Le palier intermédiaire (0,95) a été essayé puis abandonné le même jour : il
- *  ne se distingue de 1 que sur les énoncés de plus de vingt mots signifiants,
- *  où il tolère un mot d'écart. Autant dire qu'il ajoutait de l'imprécision là
- *  où on ne cherche que la copie. */
-export const VERBATIM_REPEAT = 1;
+ *  Elle se compare en une seule recherche, quel que soit le nombre d'énoncés
+ *  déjà écrits — c'est ce qui permet de tout comparer. Un énoncé vide n'a pas
+ *  d'empreinte, et ne recopie rien. */
+export function questionFingerprint(content: string): string {
+  return content
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[−–—]/g, '-')
+    .replace(/[^\p{L}\p{N}+\-×*/÷=<>≤≥%^]+/gu, ' ')
+    .trim();
+}
 
-/** Retire d'un lot de groupes les questions qui redisent un énoncé déjà écrit
+/** Retire d'un lot de groupes les questions qui recopient un énoncé déjà écrit
  *  ailleurs.
+ *
+ *  `seen` : les énoncés à éviter, ou, pour chaque question, ceux qui la
+ *  concernent — l'appelant restreint alors la comparaison aux seuls énoncés qui
+ *  partagent une notion au même niveau.
  *
  *  ⚠️ **Un groupe amputé de sa PREMIÈRE question ne survit pas.** C'est elle qui
  *  pose le décor dont les suivantes dépendent (il n'y a pas d'énoncé commun,
  *  décision du 24/08/2026) : retirer la première et garder les autres
  *  produirait des questions qui renvoient à une situation absente. Le groupe
  *  part donc en entier — sauf s'il ne comptait qu'elle, où il n'y a rien de
- *  plus à perdre.
- *
- *  Le seuil est celui des titres, et sévère volontairement : ce qu'on cherche
- *  ici, c'est la RECOPIE, pas la parenté. Deux questions qui travaillent le même
- *  fait sous deux angles doivent passer. */
+ *  plus à perdre. */
 export function dropRepeatedQuestions<G extends { questions: readonly { content: string }[] }>(
   groups: readonly G[],
-  seen: readonly string[],
-  threshold = VERBATIM_REPEAT,
+  seen: readonly string[] | ((question: G['questions'][number]) => readonly string[]),
 ): { kept: G[]; removed: RepeatedQuestion[] } {
-  if (seen.length === 0) return { kept: [...groups], removed: [] };
+  const index = (texts: readonly string[]) => {
+    const byPrint = new Map<string, string>();
+    for (const text of texts) {
+      const print = questionFingerprint(text);
+      if (print && !byPrint.has(print)) byPrint.set(print, text);
+    }
+    return byPrint;
+  };
+  const shared = typeof seen === 'function' ? null : index(seen);
+  if (shared && shared.size === 0) return { kept: [...groups], removed: [] };
+
+  const copyOf = (question: G['questions'][number]): string | null => {
+    const print = questionFingerprint(question.content);
+    if (!print) return null;
+    const pool = shared ?? index((seen as (q: G['questions'][number]) => readonly string[])(question));
+    return pool.get(print) ?? null;
+  };
 
   const kept: G[] = [];
   const removed: RepeatedQuestion[] = [];
 
   for (const group of groups) {
-    const verdicts = group.questions.map((q) => findExistingMatch(q.content, seen, (c) => c, threshold));
-    const firstIsRepeat = verdicts[0] !== null && verdicts[0] !== undefined;
-
-    if (firstIsRepeat && group.questions.length > 1) {
-      for (let i = 0; i < group.questions.length; i += 1) {
-        const found = verdicts[i];
-        removed.push({
-          content: group.questions[i].content,
-          other: found ? found.match : (verdicts[0]?.match ?? ''),
-          proximity: found?.proximity ?? verdicts[0]?.proximity ?? 1,
-        });
-      }
+    const copies = group.questions.map(copyOf);
+    if (copies[0] && group.questions.length > 1) {
+      group.questions.forEach((q, i) => removed.push({ content: q.content, other: copies[i] ?? (copies[0] as string) }));
       continue;
     }
 
     const questions = group.questions.filter((q, i) => {
-      const found = verdicts[i];
-      if (!found) return true;
-      removed.push({ content: q.content, other: found.match, proximity: found.proximity });
+      const copy = copies[i];
+      if (!copy) return true;
+      removed.push({ content: q.content, other: copy });
       return false;
     });
     if (questions.length > 0) kept.push({ ...group, questions });
@@ -316,121 +293,220 @@ export function dropRepeatedQuestions<G extends { questions: readonly { content:
   return { kept, removed };
 }
 
-// ─── Les redites entre chapitres (docs/architecture.md §7.6) ────────────────
+// ─── Les doublons de notions, jugés à la fin (docs/architecture.md §7.6) ────
 //
 // L'étape notions d'un chapitre ne voit que son chapitre : si elle recrée une
 // notion qui vit dans un autre, rien ne le lui dit. Une fois tous les chapitres
-// passés, le site repère les paires suspectes, un seul appel les tranche, et
-// ces deux fonctions encadrent l'appel : ce qu'on lui soumet, et ce qu'on fait
-// de sa réponse.
+// passés, le site repère les paires suspectes, le décideur les tranche une
+// par une, et ces fonctions encadrent ses réponses : ce qu'on lui soumet, et ce
+// qu'on fait de ce qu'il dit.
 
-/** Au-delà, les paires les moins proches ne sont pas soumises : un appel qui
- *  ne répond que « redite ou pas » n'a pas à devenir un second import. */
+/** Au-delà, les paires les moins proches ne sont pas soumises : une question
+ *  par paire, et le tri des redites n'a pas à devenir un second import. */
 export const MAX_REDITE_PAIRS = 300;
 
 export interface RediteNotion {
   id: string;
   title: string;
   chapterId: string | null;
+  /** Créée par la génération en cours. */
+  fresh: boolean;
+  /** Date de création (ISO) : entre deux anciennes, la plus récente reste. */
+  createdAt: string;
 }
 
 export interface ReditePair {
-  /** La notion NEUVE de ce lot — la seule qui puisse s'effacer. */
-  candidate: RediteNotion;
-  /** Une notion d'un AUTRE chapitre, neuve ou non. */
-  other: RediteNotion;
+  a: RediteNotion;
+  b: RediteNotion;
   proximity: number;
 }
 
-/** Les paires suspectes : une notion neuve, et une notion trop proche rangée
- *  dans un autre chapitre. Une paire de deux notions neuves n'est soumise
- *  qu'une fois. Les plus proches d'abord, plafonnées. */
+/** Les paires suspectes, les plus proches d'abord, plafonnées. Toute paire
+ *  assez proche est soumise, SAUF une paire qui compte une notion neuve dans le
+ *  même chapitre que l'autre : l'étape notions de ce chapitre l'a déjà jugée,
+ *  elle avait la liste sous les yeux. Deux anciennes du même chapitre, elles,
+ *  n'ont jamais été jugées par personne.
+ *
+ *  `halved` : les chapitres lus en deux moitiés (reprise d'un chapitre trop
+ *  long). Deux notions NEUVES d'un tel chapitre ne se sont pas vues — chaque
+ *  moitié ignorait l'autre —, leur paire est donc soumise. */
 export function rediteCandidates(
-  fresh: readonly RediteNotion[],
-  all: readonly RediteNotion[],
+  notions: readonly RediteNotion[],
   limit = MAX_REDITE_PAIRS,
+  halved: ReadonlySet<string> = new Set(),
 ): ReditePair[] {
-  const seen = new Set<string>();
+  const words = notions.map((n) => significantWords(n.title));
   const pairs: ReditePair[] = [];
-  for (const candidate of fresh) {
-    const others = all.filter((o) => o.id !== candidate.id && o.chapterId !== candidate.chapterId);
-    for (const flagged of flagSimilar([candidate], others, (n) => n.title, (n) => n.title)) {
-      const key = [candidate.id, flagged.other.id].sort().join('|');
-      if (seen.has(key)) continue;
-      seen.add(key);
-      pairs.push({ candidate, other: flagged.other, proximity: flagged.proximity });
+  for (let i = 0; i < notions.length; i++) {
+    for (let j = i + 1; j < notions.length; j++) {
+      const [a, b] = [notions[i], notions[j]];
+      if ((a.fresh || b.fresh) && a.chapterId === b.chapterId) {
+        const unseen = a.fresh && b.fresh && a.chapterId !== null && halved.has(a.chapterId);
+        if (!unseen) continue;
+      }
+      const score = setProximity(words[i], words[j]);
+      if (score >= SIMILAR_ENOUGH_TO_ASK) pairs.push({ a, b, proximity: score });
     }
   }
-  return pairs.sort((a, b) => b.proximity - a.proximity).slice(0, limit);
+  return pairs.sort((x, y) => y.proximity - x.proximity).slice(0, limit);
 }
 
-/**
- * Ce que la réponse du modèle efface. **Garanti par le code, pas seulement
- * demandé** : seule la notion neuve d'une paire peut sortir par ce chemin, et
- * une notion préexistante n'est jamais rendue comme « à effacer », quoi que dise
- * le modèle. Une réponse sur une paire inconnue est ignorée ; une notion déjà
- * effacée ne peut plus servir de notion gardée.
- */
-export function rediteRemovals(
-  pairs: readonly ReditePair[],
-  answers: readonly { pair: number; duplicate: boolean }[],
-  freshIds: ReadonlySet<string>,
-): { remove: string; keep: string }[] {
-  const removed = new Set<string>();
-  const out: { remove: string; keep: string }[] = [];
-  const answered = new Set<number>();
-  for (const answer of answers) {
-    if (!answer.duplicate || !Number.isInteger(answer.pair) || answered.has(answer.pair)) continue;
-    answered.add(answer.pair);
-    const pair = pairs[answer.pair];
-    if (!pair) continue;
-    const { candidate, other } = pair;
-    if (!freshIds.has(candidate.id)) continue;
-    if (removed.has(candidate.id) || removed.has(other.id)) continue;
-    removed.add(candidate.id);
-    out.push({ remove: candidate.id, keep: other.id });
-  }
-  return out;
+/** La question fermée posée au décideur pour UNE paire suspecte (§7.6).
+ *  **Fonction pure.** Une paire, une question : le décideur — Jev, Haiku en
+ *  repli — répond oui ou non en une seconde, et toutes les paires
+ *  partent en parallèle. « Redondante » couvre les deux cas : la même chose
+ *  dite autrement, et une notion entièrement contenue dans l'autre. */
+export function rediteQuestion(a: { title: string }, b: { title: string }): { state: string; question: string } {
+  return {
+    state: `Deux notions d'un même cours. Chacune est un fait à apprendre.\n\nNotion A : « ${a.title.trim()} »\n\nNotion B : « ${b.title.trim()} »`,
+    question:
+      "L'une des deux est-elle redondante — elle n'apporte aucun fait vérifiable (date, nombre, nom, définition, relation) que l'autre ne contienne déjà, même formulé autrement ou dans un autre ordre ? Si chacune apporte un fait que l'autre n'a pas, la réponse est non.",
+  };
 }
 
+/** Ce qu'une redite écrit en base, une fois tranchée.
+ *
+ *  - `absorb` : une neuve redit une ancienne. L'ANCIENNE ligne reste — elle
+ *    porte les questions, la progression des élèves et les liens d'examen — et
+ *    prend le titre `title` et la place `chapterId` ; la neuve s'efface.
+ *    Garder la neuve aurait fait passer tout cela sur une ligne étiquetée par la
+ *    génération, que son annulation (§7.8) efface.
+ *  - `merge` : `remove`, une neuve, s'efface au profit de `keep`, qui rejoint
+ *    `moveTo` si c'est un autre chapitre que le sien.
+ *  - `unplace` : une ancienne sort du programme, sans chapitre, intacte — rien
+ *    ne lui est retiré, rien n'est transféré.
+ *
+ *  **Seule une notion neuve peut se trouver dans `absorb.fresh` ou
+ *  `merge.remove`** : aucune redite n'efface une notion existante. */
+export type RediteWrite =
+  | { kind: 'absorb'; old: string; fresh: string; title: string; chapterId: string | null }
+  | { kind: 'merge'; remove: string; keep: string; moveTo: string | null }
+  | { kind: 'unplace'; notion: string; keep: string };
+
 /**
- * Les effacements de redites rendus par le navigateur au ménage de fin,
- * **revalidés un à un** : ils ont fait l'aller-retour, donc ils ne valent pas
- * mieux qu'une donnée saisie. Même garantie que `rediteRemovals`, reposée côté
- * serveur : seule une notion NEUVE de ce lot peut sortir par ce chemin, la
- * notion gardée doit exister dans l'atelier, et une notion effacée ne peut plus
- * servir de notion gardée.
+ * Les gestes qu'appellent les paires jugées redites (06/10/2026). **Fonction pure.**
+ *
+ * **Par groupes de copies, pas par paires.** Une génération ratée peut laisser
+ * six fois le même fait : traiter une paire par notion n'en retirait qu'une
+ * copie par passage. Les paires confirmées se rejoignent en groupes, et chaque
+ * groupe se règle en une fois.
+ *
+ * - **La formulation gardée est la plus RICHE** — celle qui porte le plus de
+ *   mots porteurs : une notion qui en contient une autre, plus un fait, garde ce
+ *   fait. À égalité : la neuve (le cours d'aujourd'hui), puis le chapitre qui
+ *   vient le premier, puis la plus récente.
+ * - **Les chaînes ne s'enchaînent pas** : A redit B, B redit C ne dit rien de A
+ *   et C. Une notion ne sort que si la paire qu'elle forme AVEC LA GARDÉE a été
+ *   confirmée ; les autres restent, et un prochain passage jugera.
+ * - **La ligne qui reste est une ancienne s'il y en a une** parmi les copies
+ *   confirmées : c'est elle qui a un historique. Elle prend alors la formulation
+ *   gardée (`absorb`). Les neuves s'effacent, leurs questions rattachées à la
+ *   ligne qui reste ; les autres anciennes sortent du programme, intactes.
+ * - La ligne qui reste prend la place qui vient la première au programme parmi
+ *   les copies retirées et la gardée.
+ *
+ * Tout est **recalculé ici** à partir de l'état de l'atelier : une paire
+ * inconnue, une notion qui n'est plus au programme ou deux titres qui ne se
+ * ressemblent pas assez pour avoir été soumis sont ignorés.
  */
-export function revalidateRedites(
-  removals: unknown,
-  allowed: { fresh: ReadonlySet<string>; existing: ReadonlySet<string> },
-): { removals: { remove: string; keep: string }[]; ignored: number } {
-  const list = Array.isArray(removals) ? removals : [];
-  const removed = new Set<string>();
-  const kept = new Set<string>();
-  const out: { remove: string; keep: string }[] = [];
+export function resolveRedites(
+  duplicates: readonly { a: string; b: string }[],
+  notions: ReadonlyMap<string, RediteNotion>,
+  programOrder: readonly string[],
+): { actions: RediteWrite[]; ignored: number } {
+  const rank = new Map(programOrder.map((id, i) => [id, i]));
+  const rankOf = (n: RediteNotion) => (n.chapterId !== null ? rank.get(n.chapterId) : undefined) ?? Number.MAX_SAFE_INTEGER;
+  const richness = new Map<string, number>();
+  const richOf = (n: RediteNotion) => {
+    let r = richness.get(n.id);
+    if (r === undefined) {
+      r = significantWords(n.title).size;
+      richness.set(n.id, r);
+    }
+    return r;
+  };
+
+  const linked = new Map<string, Set<string>>();
+  const link = (x: string, y: string) => {
+    if (!linked.has(x)) linked.set(x, new Set());
+    linked.get(x)!.add(y);
+  };
   let ignored = 0;
-  for (const entry of list) {
-    const r = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
-    const { remove, keep } = r;
-    if (typeof remove !== 'string' || typeof keep !== 'string' || remove === keep
-      || !allowed.fresh.has(remove) || !allowed.existing.has(keep)
-      || removed.has(remove) || removed.has(keep) || kept.has(remove)) {
+  for (const d of duplicates) {
+    const a = notions.get(d.a);
+    const b = notions.get(d.b);
+    const valid = a && b && a.id !== b.id
+      && a.chapterId && b.chapterId && rank.has(a.chapterId) && rank.has(b.chapterId)
+      && proximity(a.title, b.title) >= SIMILAR_ENOUGH_TO_ASK;
+    if (!valid) {
       ignored += 1;
       continue;
     }
-    removed.add(remove);
-    kept.add(keep);
-    out.push({ remove, keep });
+    link(a.id, b.id);
+    link(b.id, a.id);
   }
-  return { removals: out, ignored };
+
+  // Le plus riche d'abord ; à égalité la neuve, le chapitre le plus haut, la plus récente.
+  const byPreference = (x: RediteNotion, y: RediteNotion) =>
+    richOf(y) - richOf(x)
+    || Number(y.fresh) - Number(x.fresh)
+    || rankOf(x) - rankOf(y)
+    || y.createdAt.localeCompare(x.createdAt)
+    || x.id.localeCompare(y.id);
+
+  const seen = new Set<string>();
+  const actions: RediteWrite[] = [];
+  for (const start of linked.keys()) {
+    if (seen.has(start)) continue;
+    const group: RediteNotion[] = [];
+    const queue = [start];
+    seen.add(start);
+    while (queue.length > 0) {
+      const id = queue.shift() as string;
+      group.push(notions.get(id) as RediteNotion);
+      for (const next of linked.get(id) ?? []) {
+        if (!seen.has(next)) {
+          seen.add(next);
+          queue.push(next);
+        }
+      }
+    }
+
+    const keeper = [...group].sort(byPreference)[0];
+    const copies = group.filter((m) => m !== keeper && linked.get(keeper.id)?.has(m.id));
+    if (copies.length === 0) continue;
+
+    const place = [keeper, ...copies].reduce((best, m) => (rankOf(m) < rankOf(best) ? m : best)).chapterId;
+    const olds = copies.filter((m) => !m.fresh).sort(byPreference);
+    const line = keeper.fresh && olds.length > 0 ? olds[0] : keeper;
+
+    if (line !== keeper) {
+      actions.push({ kind: 'absorb', old: line.id, fresh: keeper.id, title: keeper.title, chapterId: place });
+    }
+    let moveTo = line === keeper && place !== line.chapterId ? place : null;
+    for (const m of copies) {
+      if (m === line) continue;
+      if (m.fresh) {
+        actions.push({ kind: 'merge', remove: m.id, keep: line.id, moveTo });
+        moveTo = null;
+      } else {
+        actions.push({ kind: 'unplace', notion: m.id, keep: line.id });
+      }
+    }
+  }
+  return { actions, ignored };
 }
 
-/** Soumet les paires au modèle — **et ne l'appelle pas s'il n'y en a aucune**. */
-export async function judgeRedites(
-  pairs: readonly ReditePair[],
-  ask: (pairs: readonly ReditePair[]) => Promise<{ pair: number; duplicate: boolean }[]>,
-): Promise<{ pair: number; duplicate: boolean }[]> {
-  if (pairs.length === 0) return [];
-  return ask(pairs);
+/** Le dernier filet avant l'écriture : un geste qui effacerait une notion
+ *  existante, ou en retirerait une neuve du programme sans l'effacer, ne passe
+ *  pas — quoi qu'ait calculé `resolveRedites`. **Fonction pure.** */
+export function rediteWrites(
+  actions: readonly RediteWrite[],
+  notions: ReadonlyMap<string, RediteNotion>,
+): RediteWrite[] {
+  return actions.filter((action) => {
+    if (action.kind === 'unplace') return notions.get(action.notion)?.fresh === false && notions.has(action.keep);
+    if (action.kind === 'merge') return notions.get(action.remove)?.fresh === true && notions.has(action.keep);
+    return notions.get(action.old)?.fresh === false && notions.get(action.fresh)?.fresh === true;
+  });
 }

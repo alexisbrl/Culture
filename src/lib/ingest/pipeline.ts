@@ -98,7 +98,7 @@ export type ChaptersResult = {
 };
 export type NotionsResult = { written: number; discarded: PlanIssue[]; adjusted: PlanIssue[]; claimed: string[] };
 export type QuestionsResult = { written: number; discarded: PlanIssue[]; adjusted: PlanIssue[] };
-export type RedundancyResult = { removed: number; removals: { remove: string; keep: string }[]; adjusted: PlanIssue[] };
+export type RedundancyResult = { removed: number; duplicates?: { a: string; b: string }[]; adjusted: PlanIssue[] };
 export type FinishResult = { adjusted: PlanIssue[] };
 export type EndResult = { outcome: 'finished' | 'failed'; error?: string };
 

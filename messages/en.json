@@ -675,6 +675,20 @@
       "tooltip": "Undo the last action (Ctrl+Z)",
       "failed": "This action could not be undone."
     },
+    "generationUndo": {
+      "badgeNew": "new",
+      "badgeChanged": "changed",
+      "button": "undo generation",
+      "tooltip": "Undoes the last AI generation: what it created is deleted, what it moved or set aside goes back where it was.",
+      "confirmTitle": "Undo the last generation?",
+      "confirmDesc": "{created, plural, =0 {} one {# created chapter or notion will be deleted, with its questions.} other {# created chapters and notions will be deleted, with their questions.}} {changed, plural, =0 {} one {# moved or set-aside item will go back where it was.} other {# moved or set-aside items will go back where they were.}} This cannot be reversed.",
+      "confirmAction": "undo generation",
+      "keep": "keep",
+      "modifyTitle": "Change the curriculum?",
+      "modifyDesc": "The last generation will no longer be undoable, and the “new” and “changed” badges will disappear.",
+      "modifyConfirm": "change",
+      "failed": "The generation can no longer be undone: the curriculum has changed since."
+    },
     "deleteModal": {
       "trashTitle": "Move to trash?",
       "trashDesc": "\"{name}\" will be moved to trash. You'll have 7 days to undo.",
@@ -768,7 +782,8 @@
       "noChapter": "No chapter",
       "needChapterHint": "create a chapter to plant your first notions in.",
       "count": "{count, plural, =0 {no notions} one {# notion} other {# notions}}",
-      "deleteUnassigned": "delete {count, plural, one {this notion} other {these # notions}}"
+      "deleteUnassigned": "delete {count, plural, one {this notion} other {these # notions}}",
+      "locked": "An AI generation is building the program: chapters and notions can be edited again as soon as it finishes."
     },
     "chapters": {
       "title": "Chapters",

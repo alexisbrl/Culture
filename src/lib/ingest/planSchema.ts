@@ -587,6 +587,37 @@ function refOf(raw: unknown): string | undefined {
   return typeof r.ref === 'string' ? r.ref : undefined;
 }
 
+/**
+ * Ramène la réponse de l'étape chapitres — une case par chapitre existant, des
+ * chapitres neufs avec leur rang (`wireChaptersOutputFor`) — à la forme commune
+ * que lit `parsePlan` : la liste des neufs, puis `chapterOrder` avec le rang et
+ * les pages de chacun. **Fonction pure, et sans confiance** : ce qui est mal
+ * formé passe tel quel, `parsePlan` l'écartera en le disant.
+ *
+ * Les pages sont dans la numérotation unique du lot : aucun document n'est
+ * nommé ici, `localizeSpans` les rendra à leurs documents.
+ */
+export function normalizeChaptersAnswer(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const root = raw as Record<string, unknown>;
+  if (!root.existingChapters || typeof root.existingChapters !== 'object') return raw;
+
+  const spansOf = (pages: unknown) =>
+    asArray(pages).map((p) => ({ document: '', ...(p && typeof p === 'object' ? (p as Record<string, unknown>) : {}) }));
+  const chapterOrder: unknown[] = [];
+  const chapters: unknown[] = [];
+  for (const item of asArray(root.chapters)) {
+    const c = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+    chapters.push({ ref: c.ref, name: c.name });
+    chapterOrder.push({ ref: c.ref, rank: c.rank, reason: '', spans: spansOf(c.pages) });
+  }
+  for (const [ref, item] of Object.entries(root.existingChapters as Record<string, unknown>)) {
+    const c = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+    chapterOrder.push({ ref, rank: c.rank, reason: c.reason ?? '', spans: spansOf(c.pages) });
+  }
+  return { chapters, chapterOrder, notionVerdicts: root.notionVerdicts };
+}
+
 /** Lit un plan venu de n'importe où, sans jamais lui faire confiance et sans
  *  jamais tout perdre pour un élément fautif.
  *

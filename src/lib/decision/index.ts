@@ -3,13 +3,15 @@
 // La cible est un modèle de décision, Jev (TypeSafe AI) : il ne rédige pas, il
 // rend la probabilité que la réponse soit « oui » — en une fraction de seconde,
 // pour une fraction du prix d'un modèle qui écrit (docs/architecture.md §7.4).
-// Son accès n'est pas encore ouvert : Claude Haiku tient sa place, avec un mot à
-// écrire (@/lib/decision/haiku). Le reste du code ne connaît que `Decider` —
-// la bascule se fera dans `getDecider`, et nulle part ailleurs.
+// Branché le 08/10/2026 (@/lib/decision/jev), DeepSeek en relais
+// (@/lib/decision/deepseek). Le reste du code ne connaît que `Decider` : le
+// choix se fait dans `getDecider`, et nulle part ailleurs.
 
 import type { StepUsage } from '@/lib/ingest/journal';
 
+import { createDeepSeekDecider } from './deepseek';
 import { createHaikuDecider } from './haiku';
+import { createJevDecider } from './jev';
 
 /** Une question fermée, posée sur une situation décrite en texte. */
 export type ClosedQuestion = {
@@ -18,6 +20,9 @@ export type ClosedQuestion = {
   /** La question, formulée pour qu'un « oui » et un « non » aient chacun un sens
    *  précis. */
   question: string;
+  /** Ce que veulent dire « oui » et « non », quand la frontière est fine. Jev
+   *  les lit à part ; Haiku les reçoit à la suite de la question. */
+  criteria?: { true: string; false: string };
 };
 
 export type Decision = {
@@ -27,6 +32,9 @@ export type Decision = {
   /** Ce qui a répondu, tel qu'il se nomme — pour le journal. */
   model: string;
   usage: StepUsage;
+  /** Le premier décideur était saturé (429, 529) et le relais a répondu : le
+   *  signal qui fait ralentir l'envoi (@/lib/decision/pool). */
+  congested?: boolean;
 };
 
 export type Decider = {
@@ -52,7 +60,32 @@ export function isYes(probability: number, threshold: number = YES_THRESHOLD): b
   return probability >= threshold;
 }
 
-/** Le décideur en service. Haiku en attendant Jev. */
+/** Deux décideurs en cascade : le second répond quand le premier ne le peut
+ *  pas (saturation, panne). Une décision manquée coûte plus cher qu'une
+ *  décision un peu moins fine — Jev a refusé pour saturation lors de l'essai
+ *  du 08/10/2026, à dix demandes simultanées. */
+export function withFallback(primary: Decider, fallback: Decider): Decider {
+  return {
+    name: primary.name,
+    async decide(question) {
+      try {
+        return await primary.decide(question);
+      } catch (error) {
+        console.warn(`[decision] ${primary.name} indisponible, repli sur ${fallback.name} :`, error instanceof Error ? error.message : error);
+        const status = (error as { status?: unknown } | null)?.status;
+        const decision = await fallback.decide(question);
+        return status === 429 || status === 529 ? { ...decision, congested: true } : decision;
+      }
+    },
+  };
+}
+
+/** Le décideur en service : Jev depuis le 08/10/2026, DeepSeek en relais
+ *  (décision d'Alexis : essai du 08/10, 25/25 sur la décision d'écrire et
+ *  d'accord avec Jev sur 149 redites sur 150). Haiku ne sert plus que si une
+ *  clé manque — développement sans accès. */
 export function getDecider(): Decider {
-  return createHaikuDecider();
+  const fallback = process.env.DEEPSEEK_API_KEY ? createDeepSeekDecider() : createHaikuDecider();
+  if (!process.env.JEV_API_KEY) return fallback;
+  return withFallback(createJevDecider(), fallback);
 }

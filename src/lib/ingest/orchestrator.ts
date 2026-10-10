@@ -16,9 +16,11 @@
 // ce module font le contrôle d'accès en amont (CLAUDE.md §5).
 
 import { getSupabaseServerClient } from '@/lib/supabase';
+import { stampProgram } from '@/lib/workshops/generationUndo';
 import { chapterStartBudgets } from './demand';
 import { passFailed } from './failure';
-import { markOutcome } from './journal';
+import { flushUnloggedCall, logLostCall, withTaskContext } from './callProgress';
+import { classifyFailure, markOutcome } from './journal';
 import { CLOSED_ERROR, beatImport, closeImport } from './lock';
 import { labelExamLot } from './lotLabel';
 import { planExamCalls } from './passInput';
@@ -47,12 +49,24 @@ import * as run from './run';
  *  tâches attendent qu'une place se libère — chaque fin de tâche en relance. */
 export const MAX_TASKS_IN_FLIGHT = 50;
 
-/** Une tâche « en cours » depuis plus longtemps est tenue pour coupée : la
- *  limite de l'hébergeur est de 300 s, et une fonction coupée n'écrit rien. */
+/** Le rythme du signe de vie d'une tâche, tant qu'elle tourne — appel au
+ *  modèle ou non. */
+const TASK_BEAT_MS = 15_000;
+
+/** Une tâche dont le dernier signe de vie est plus vieux est tenue pour
+ *  coupée, et reprise aussitôt (10/10/2026). Deux signes manqués, pas un : une
+ *  écriture en base peut arriver en retard, et reprendre une tâche encore
+ *  vivante paierait l'appel deux fois. On ne se fie plus à une durée fixe : un
+ *  appel long mais vivant n'est jamais repris. */
+export const DEAD_TASK_MS = 30_000;
+
+/** Pour une tâche sans signe de vie — prise par un code d'avant le signe
+ *  (déploiement en cours de génération) : l'ancienne règle, une durée fixe. */
 export const STALE_TASK_MS = 8 * 60 * 1000;
 
 /** Une tâche coupée est reprise UNE fois ; coupée de nouveau, elle est
- *  abandonnée (décision d'Alexis du 24/09/2026). */
+ *  abandonnée (décision d'Alexis du 24/09/2026). Les notions d'un chapitre
+ *  reprises le sont en deux moitiés (`run.ingestChapterNotions`). */
 export const MAX_TASK_ATTEMPTS = 2;
 
 /** Une tâche en attente depuis plus longtemps n'a été prise par aucun relais. */
@@ -267,6 +281,15 @@ async function apply(p: Pipeline, intent: Intent, tasks: readonly StoredTask[]):
         .eq('key', MARK.end);
       await closeImport(p.importId);
       await markOutcome(p.importId, intent.outcome);
+      // Le tampon de clôture : ce qui bougera dans le programme après lui
+      // retire la possibilité d'annuler cette génération
+      // (@/lib/workshops/generationUndo). Un échec la rend seulement
+      // inannulable.
+      try {
+        await stampProgram(p.workshopId, p.importId);
+      } catch (error) {
+        console.warn('[ingest] tampon de clôture non posé :', error instanceof Error ? error.message : String(error));
+      }
       // Les questions d'examen du lot reçoivent leur libellé « Lot IA n°N »
       // (27/09/2026), qu'il ait abouti ou non : c'est par lui qu'on les relit
       // et qu'on les supprime. Un échec ici ne doit pas empêcher la clôture.
@@ -322,15 +345,26 @@ async function execute(p: Pipeline, task: StoredTask): Promise<unknown> {
     case 'chapters-relaunch':
       return run.ingestChaptersRelaunch(workshopId, userId, importId);
     case 'notions':
-      return run.ingestChapterNotions(workshopId, userId, importId, payload.chapterId as string);
+      // Reprise après une coupure : le chapitre est trop long pour un appel —
+      // ses pages partent en deux moitiés, en parallèle (Alexis, 10/10/2026).
+      return run.ingestChapterNotions(workshopId, userId, importId, payload.chapterId as string, {
+        halves: task.attempts >= 2,
+      });
     case 'questions':
       return run.ingestParcoursQuestions(workshopId, userId, importId, payload.chapter as ChapterRef, payload.batchIndex ?? 0, {
         budgetShare: payload.budgetShare,
         startBudget: payload.startBudget,
         demand: payload.demand,
       });
-    case 'redites':
-      return run.ingestRedites(workshopId, importId);
+    case 'redites': {
+      // Les chapitres lus en deux moitiés : leurs notions neuves se comparent
+      // aussi entre elles (`rediteCandidates`).
+      const tasks = await listTasks(importId);
+      const halved = new Set(tasks
+        .filter((t) => t.kind === 'notions' && t.status === 'done' && (t.result as { halves?: boolean } | null)?.halves)
+        .map((t) => t.payload.chapterId as string));
+      return run.ingestRedites(workshopId, importId, { halved });
+    }
     case 'finish': {
       // Les réclamations de chaque chapitre et les redites jugées : relues ici,
       // dans les résultats des tâches, et revalidées par la finalisation.
@@ -340,8 +374,9 @@ async function execute(p: Pipeline, task: StoredTask): Promise<unknown> {
         .map((t) => ({ chapterId: t.payload.chapterId as string, notionIds: (t.result as NotionsResult).claimed ?? [] }))
         .filter((c) => c.notionIds.length > 0);
       const redites = tasks.find((t) => t.key === 'redites' && t.status === 'done');
-      const removals = (redites?.result as RedundancyResult | undefined)?.removals ?? [];
-      const result = await run.finishIngestion(workshopId, importId, claims, removals);
+      // `removals` : la forme d'avant, pour un lot ouvert avant la règle actuelle.
+      const judged = redites?.result as (RedundancyResult & { removals?: unknown[] }) | undefined;
+      const result = await run.finishIngestion(workshopId, importId, claims, judged?.duplicates ?? judged?.removals ?? []);
       return { adjusted: result.adjusted };
     }
     case 'exam':
@@ -362,9 +397,10 @@ async function claim(taskId: string): Promise<(StoredTask & { importId: string }
     .eq('status', 'pending')
     .maybeSingle();
   if (error || !row) return null;
+  const now = new Date().toISOString();
   const { data, error: updateError } = await supabase
     .from('ai_import_tasks')
-    .update({ status: 'running', attempts: (row.attempts as number) + 1, started_at: new Date().toISOString() })
+    .update({ status: 'running', attempts: (row.attempts as number) + 1, started_at: now, alive_at: now })
     .eq('id', taskId)
     .eq('status', 'pending')
     .eq('attempts', row.attempts)
@@ -392,6 +428,36 @@ export async function runTask(taskId: string): Promise<Dispatch> {
   const task = await claim(taskId);
   if (!task) return NOTHING;
 
+  // Le signe de vie de la tâche, du début à la fin : c'est lui que la veille
+  // regarde pour savoir si la fonction tourne encore (`DEAD_TASK_MS`). Coupée
+  // par l'hébergeur, la fonction cesse de battre — rien d'autre ne le dit.
+  const beat = setInterval(() => { void beatTask(task); }, TASK_BEAT_MS);
+  beat.unref?.();
+  try {
+    return await runClaimed(task);
+  } finally {
+    clearInterval(beat);
+  }
+}
+
+/** Un signe de vie. **Ne lève jamais** : un battement manqué ne doit pas faire
+ *  échouer la tâche — au pire, la veille la reprend. Seulement si c'est
+ *  toujours CET essai qui la tient. */
+async function beatTask(task: StoredTask): Promise<void> {
+  try {
+    const { error } = await getSupabaseServerClient()
+      .from('ai_import_tasks')
+      .update({ alive_at: new Date().toISOString() })
+      .eq('id', task.id)
+      .eq('status', 'running')
+      .eq('attempts', task.attempts);
+    if (error) console.warn('[ingest] signe de vie non écrit :', task.key, error.message);
+  } catch (error) {
+    console.warn('[ingest] signe de vie non écrit :', task.key, error instanceof Error ? error.message : error);
+  }
+}
+
+async function runClaimed(task: StoredTask & { importId: string }): Promise<Dispatch> {
   try {
     const p = await readPipeline(task.importId);
     if (!p || p.closed) {
@@ -403,13 +469,18 @@ export async function runTask(taskId: string): Promise<Dispatch> {
     const live = p.cfg.kind !== 'refill';
     if (live) await beatImport(p.importId);
 
-    try {
-      const result = await execute(p, task);
-      await settleTask(task, 'done', { result });
-    } catch (error) {
-      const detail = passFailed(task.key, error, { workshopId: p.workshopId, importId: p.importId, task: task.key });
-      await settleTask(task, detail === CLOSED_ERROR ? 'skipped' : 'failed', { error: detail });
-    }
+    // Le contexte de la tâche suit ses appels au modèle : ce qui est payé se
+    // journalise même si la tâche échoue ou se fait couper (@/lib/ingest/callProgress).
+    await withTaskContext(task.id, async () => {
+      try {
+        const result = await execute(p, task);
+        await settleTask(task, 'done', { result });
+      } catch (error) {
+        const detail = passFailed(task.key, error, { workshopId: p.workshopId, importId: p.importId, task: task.key });
+        await flushUnloggedCall(classifyFailure(error), error instanceof Error ? error.message : String(error));
+        await settleTask(task, detail === CLOSED_ERROR ? 'skipped' : 'failed', { error: detail });
+      }
+    });
 
     if (live) await beatImport(p.importId);
     return await advance(p.importId);
@@ -423,10 +494,18 @@ export async function runTask(taskId: string): Promise<Dispatch> {
 
 // ─── La veille ───────────────────────────────────────────────────────────────
 
+/** Une tâche « en cours » est-elle coupée ? Son signe de vie le dit ; sans
+ *  signe (code d'avant la règle), l'ancienne durée fixe depuis son départ. */
+export function isTaskDead(aliveAt: string | null, startedAt: string | null, now: number): boolean {
+  if (aliveAt) return now - Date.parse(aliveAt) >= DEAD_TASK_MS;
+  const started = startedAt ? Date.parse(startedAt) : now;
+  return now - started >= STALE_TASK_MS;
+}
+
 /** Reprend ce qui s'est perdu en route, et rend la suite à lancer.
  *
- *  - une tâche coupée (« en cours » depuis plus de `STALE_TASK_MS`) repart une
- *    fois ; coupée de nouveau, elle est abandonnée ;
+ *  - une tâche coupée (« en cours », sans signe de vie depuis `DEAD_TASK_MS`)
+ *    repart une fois ; coupée de nouveau, elle est abandonnée ;
  *  - une tâche en attente qu'aucun relais n'a prise est relancée.
  *
  *  `importId` : la veille d'UN lot, faite à chaque lecture d'avancement par
@@ -437,7 +516,7 @@ export async function watch(options: { importId?: string; baseUrl?: string }): P
   const supabase = getSupabaseServerClient();
   let query = supabase
     .from('ai_import_tasks')
-    .select('id, import_id, status, attempts, started_at, created_at')
+    .select('id, import_id, status, attempts, started_at, alive_at, created_at, call_progress')
     .in('status', ['pending', 'running']);
   if (options.importId) query = query.eq('import_id', options.importId);
   const { data, error } = await query;
@@ -451,17 +530,20 @@ export async function watch(options: { importId?: string; baseUrl?: string }): P
   for (const t of data ?? []) {
     const importId = t.import_id as string;
     if (t.status === 'running') {
-      const started = t.started_at ? Date.parse(t.started_at as string) : now;
-      if (now - started < STALE_TASK_MS) continue;
+      if (!isTaskDead(t.alive_at as string | null, t.started_at as string | null, now)) continue;
       const retry = (t.attempts as number) < MAX_TASK_ATTEMPTS;
-      await supabase
+      const { data: taken } = await supabase
         .from('ai_import_tasks')
         .update(retry
           ? { status: 'pending' }
           : { status: 'failed', error: PIPELINE_ERRORS.timeout, finished_at: new Date().toISOString() })
         .eq('id', t.id)
         .eq('status', 'running')
-        .eq('attempts', t.attempts);
+        .eq('attempts', t.attempts)
+        .select('id');
+      // L'appel que la tâche avait en vol a été facturé sans rien rendre : sa
+      // ligne de coût, estimée. Seule la veille qui a repris la tâche l'écrit.
+      if ((taken ?? []).length > 0 && t.call_progress) await logLostCall(t.id as string, t.call_progress);
       touched.add(importId);
     } else if (now - Date.parse(t.created_at as string) > ORPHAN_TASK_MS) {
       touched.add(importId);

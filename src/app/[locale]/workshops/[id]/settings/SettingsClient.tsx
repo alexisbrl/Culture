@@ -6,7 +6,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { ChevronDown, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, Trash2, Undo2, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, Loader2, Mail, QrCode, RotateCcw, Sparkles, Trash2, Undo2, X } from 'lucide-react';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, leaveWorkshop } from '@/app/actions/workshops';
@@ -15,7 +15,7 @@ import ShareQRModal from '@/components/ShareQRModal';
 import { Tooltip } from '@/components/ui/tooltip';
 import { NAV_ITEMS, Row, Switch, SmallBtn, SectionCard, UNDO_FLASH_MS, type WorkshopRole } from './settingsShared';
 import { isNavSection, type NavSection } from './sections';
-import { UndoHistoryContext, type UndoEntry } from './undoHistory';
+import { GenerationUndoContext, UndoHistoryContext, type GenerationUndoHandle, type UndoEntry } from './undoHistory';
 
 type Props = {
   locale: string;
@@ -267,10 +267,42 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
     setUndoFailed(false);
   }, [setUndoCount, setUndoFailed]);
 
-  async function undoLast() {
+  // L'annulation de la dernière génération, signalée par la section des notions
+  // (voir undoHistory.tsx). Deux confirmations s'y rattachent : l'annuler, et
+  // défaire un geste ordinaire qui toucherait au programme — ce qui la retire.
+  const [generationUndo, setGenerationUndo] = useState<GenerationUndoHandle | null>(null);
+  const generationUndoRef = useRef<GenerationUndoHandle | null>(null);
+  useEffect(() => { generationUndoRef.current = generationUndo; });
+  const [confirmGenerationUndo, setConfirmGenerationUndo] = useState(false);
+  const [confirmProgramUndo, setConfirmProgramUndo] = useState(false);
+  const [generationUndoing, setGenerationUndoing] = useState(false);
+  const [generationUndoFailed, setGenerationUndoFailed] = useState(false);
+
+  async function runGenerationUndo() {
+    const handle = generationUndoRef.current;
+    setConfirmGenerationUndo(false);
+    if (!handle) return;
+    setGenerationUndoing(true);
+    setGenerationUndoFailed(false);
+    const ok = await handle.run();
+    setGenerationUndoing(false);
+    if (!ok) setGenerationUndoFailed(true);
+  }
+
+  async function undoLast(confirmed = false) {
     // Une annulation à la fois : deux Ctrl+Z rapprochés défont deux actions,
     // dans l'ordre, jamais la même deux fois.
     if (undoingRef.current) return;
+    const top = undoStack.current[undoStack.current.length - 1];
+    if (!top) return;
+    if (top.section === 'notions' && generationUndoRef.current) {
+      if (!confirmed) {
+        openSection('notions');
+        setConfirmProgramUndo(true);
+        return;
+      }
+      generationUndoRef.current.dismiss();
+    }
     const entry = undoStack.current.pop();
     setUndoCount(undoStack.current.length);
     if (!entry) return;
@@ -795,7 +827,9 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
 
         <div style={{ display: activeSection === 'notions' ? 'contents' : 'none' }}>
           <UndoHistoryContext.Provider value={recordUndo}>
-            {notionsSlot}
+            <GenerationUndoContext.Provider value={setGenerationUndo}>
+              {notionsSlot}
+            </GenerationUndoContext.Provider>
           </UndoHistoryContext.Provider>
         </div>
 
@@ -806,13 +840,54 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
           Remplace la barre « modifications non enregistrées » : tout
           s'enregistre au moment du geste, et ce bouton défait le dernier.
           Visible seulement s'il y a quelque chose à défaire. */}
+      {/* Au-dessus de lui, celui de la dernière génération : visible tant
+          qu'elle s'annule (voir undoHistory.tsx), quelle que soit la section. */}
+      <div style={{ position: 'fixed', bottom: 24, right: 32, zIndex: 40, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
+      {(generationUndo || generationUndoing || generationUndoFailed) && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            background: palette.paper,
+            borderRadius: 12,
+            boxShadow: `0 10px 30px ${ink(0.16)}`,
+            border: `1px solid ${ink(0.08)}`,
+            padding: '8px 8px 8px 14px',
+          }}
+        >
+          {generationUndoFailed && (
+            <span style={{ fontSize: 12.5, color: palette.danger }}>{t('generationUndo.failed')}</span>
+          )}
+          {(generationUndo || generationUndoing) && (
+            <Tooltip content={t('generationUndo.tooltip')}>
+              <span style={{ display: 'inline-flex' }}>
+                <SmallBtn
+                  onClick={() => { openSection('notions'); setConfirmGenerationUndo(true); }}
+                  disabled={generationUndoing}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {generationUndoing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} strokeWidth={2} />}
+                    {t('generationUndo.button')}
+                  </span>
+                </SmallBtn>
+              </span>
+            </Tooltip>
+          )}
+          {generationUndoFailed && !generationUndo && (
+            <button
+              onClick={() => setGenerationUndoFailed(false)}
+              aria-label={t('cancel')}
+              style={{ display: 'flex', border: 'none', background: 'transparent', color: palette.inkMuted, cursor: 'pointer', padding: 4 }}
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
       {(undoCount > 0 || undoing || undoFailed || detailsError) && (
         <div
           style={{
-            position: 'fixed',
-            bottom: 24,
-            right: 32,
-            zIndex: 40,
             display: 'flex',
             alignItems: 'center',
             gap: 12,
@@ -843,6 +918,34 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
             </Tooltip>
           )}
         </div>
+      )}
+      </div>
+
+      {confirmGenerationUndo && generationUndo && (
+        <ConfirmDialog
+          width={440}
+          title={t('generationUndo.confirmTitle')}
+          description={t('generationUndo.confirmDesc', { created: generationUndo.created, changed: generationUndo.changed })}
+          confirmLabel={t('generationUndo.confirmAction')}
+          cancelLabel={t('generationUndo.keep')}
+          icon={<Undo2 size={17} />}
+          onCancel={() => setConfirmGenerationUndo(false)}
+          onConfirm={() => void runGenerationUndo()}
+        />
+      )}
+
+      {confirmProgramUndo && (
+        <ConfirmDialog
+          width={440}
+          title={t('generationUndo.modifyTitle')}
+          description={t('generationUndo.modifyDesc')}
+          confirmLabel={t('generationUndo.modifyConfirm')}
+          cancelLabel={t('cancel')}
+          confirmTone="confirm"
+          iconTone="accent"
+          onCancel={() => setConfirmProgramUndo(false)}
+          onConfirm={() => { setConfirmProgramUndo(false); void undoLast(true); }}
+        />
       )}
 
       {/* ── Delete modal ── */}
