@@ -147,49 +147,40 @@ export type Database = {
       ai_imports: {
         Row: {
           beat_at: string | null
-          cached_tokens: number
           closed_at: string | null
           created_at: string
           created_by: string
           file_ids: Json
           finished_at: string | null
           id: string
-          input_tokens: number
           origin: string | null
           outcome: string | null
-          output_tokens: number
           scope: Json
           workshop_id: string
         }
         Insert: {
           beat_at?: string | null
-          cached_tokens?: number
           closed_at?: string | null
           created_at?: string
           created_by: string
           file_ids?: Json
           finished_at?: string | null
           id?: string
-          input_tokens?: number
           origin?: string | null
           outcome?: string | null
-          output_tokens?: number
           scope?: Json
           workshop_id: string
         }
         Update: {
           beat_at?: string | null
-          cached_tokens?: number
           closed_at?: string | null
           created_at?: string
           created_by?: string
           file_ids?: Json
           finished_at?: string | null
           id?: string
-          input_tokens?: number
           origin?: string | null
           outcome?: string | null
-          output_tokens?: number
           scope?: Json
           workshop_id?: string
         }

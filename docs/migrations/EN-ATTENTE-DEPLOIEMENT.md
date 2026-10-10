@@ -31,15 +31,16 @@ production casse, souvent en silence (beaucoup de `select` ne lisent que
 
 ## À appliquer
 
-- **10/10/2026 — retirer les compteurs de jetons des générations**
-  (`docs/migrations/2026-10-10-compteurs-de-jetons.sql`). **Contract** : à
-  appliquer seulement quand la branche `fix/generation-cout-et-verrou` est
-  mergée ET déployée — le code en ligne avant elle écrit ces colonnes. Puis
-  retirer les trois colonnes de `src/lib/database.types.ts`.
+AUCUN
 
 ---
 
 ## Appliqué / sans objet
+
+- **10/10/2026 — retirer les compteurs de jetons des générations**
+  (`docs/migrations/2026-10-10-compteurs-de-jetons.sql`) : appliquée le
+  10/10/2026 après le déploiement en production de la PR #65 (Vercel `READY`
+  sur `bd324f7`). Les trois colonnes retirées de `src/lib/database.types.ts`.
 
 - **10/10/2026 — le signe de vie des tâches de génération**
   (`docs/migrations/2026-10-10-signe-de-vie-des-taches.sql`) : colonne
