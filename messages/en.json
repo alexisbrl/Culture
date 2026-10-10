@@ -21,13 +21,18 @@
     "switcherLoading": "loading…",
     "switcherEmpty": "no workshop yet",
     "newWorkshop": "new workshop",
-    "allWorkshops": "all my workshops"
-  },
-  "notifications": {
-    "title": "notifications",
-    "join": "join",
-    "ignore": "ignore",
-    "cancel": "undo"
+    "allWorkshops": "all my workshops",
+    "tabSuivi": "progress",
+    "soon": "soon",
+    "subQuestions": "question list",
+    "pinOpen": "keep the menu open",
+    "pinClose": "collapse the menu",
+    "goPremium": "go Premium",
+    "close": "close",
+    "tabParametres": "settings",
+    "noWorkshop": "no workshop",
+    "drawerEmptyTitle": "no workshop yet",
+    "drawerEmptyText": "Create or join a workshop using the button below:"
   },
   "stats": {
     "time": "saved per trainer"
@@ -166,10 +171,6 @@
     "defaultName": "gardener",
     "defaultNameFull": "Gardener",
     "edit": "edit",
-    "tracking": {
-      "title": "tracking",
-      "desc": "progress, mastery and detailed statistics"
-    },
     "passkeys": {
       "sectionTitle": "security",
       "title": "passkeys",
@@ -645,14 +646,12 @@
       "save": "Save error",
       "delete": "Delete error",
       "emptyName": "The name cannot be empty",
-      "rename": "Rename error"
+      "rename": "Rename error",
+      "changedMeanwhile": "These settings were changed in the meantime by another manager: nothing was undone. Reload the page to see the latest version."
     },
     "general": {
       "title": "General",
       "nameLabel": "Workshop name",
-      "coverLabel": "Cover image",
-      "uploadAria": "upload your image",
-      "removeCoverAria": "remove cover image",
       "emojiLabel": "Emoji",
       "createdLabel": "Creation date"
     },
@@ -1044,9 +1043,6 @@
       },
       "perMemberUnit": "/ member"
     }
-  },
-  "analyse": {
-    "title": "analysis."
   },
   "session": {
     "leaveSession": "leave session",

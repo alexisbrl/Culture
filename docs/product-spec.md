@@ -114,12 +114,17 @@ Termes utilisés dans toute la codebase et dans ce document.
 - Fichiers exemples disponibles pour créer son premier atelier
 - **Règle de déverrouillage des fonctionnalités :** les fonctionnalités sont masquées par défaut et révélées au moment où elles deviennent pertinentes, pas après un délai fixe.
 
-**Pas de page d'accueil — entrée directe dans l'atelier** *(révisé le 05/08/2026, chantier de refonte UI)*. La connexion mène directement au dernier atelier travaillé (le plus récent parmi les ateliers possédés puis rejoints), onglet Parcours — jamais à une page d'accueil intermédiaire. Un utilisateur sans atelier atterrit sur `/dashboard` (voir ci-dessous). La navigation entre les ateliers passe par un **sélecteur d'atelier** (chevron à côté du nom de l'atelier courant, dans la barre du haut) plutôt que par une page dédiée.
+**Pas de page d'accueil — entrée directe dans l'atelier** *(révisé le 05/08/2026, chantier de refonte UI)*. La connexion mène directement au dernier atelier travaillé (le plus récent parmi les ateliers possédés puis rejoints), onglet Parcours — jamais à une page d'accueil intermédiaire. Un utilisateur sans atelier atterrit sur `/dashboard` (voir ci-dessous). La navigation entre les ateliers passe par un **sélecteur d'atelier** (nom de l'atelier courant, en tête du menu latéral) plutôt que par une page dédiée.
 
 **Coquille de navigation**
-- **Ordinateur** : barre du haut fixe — logo, sélecteur d'atelier, groupe d'onglets d'atelier (Parcours / Examens *(gestionnaires)* / Cours), lien Jardin, lien Profil, cloche de notifications, engrenage (paramètres de l'atelier + menu partage/quitter).
-- **Téléphone** : bandeau d'atelier (nom + sélecteur) sous une barre d'onglets fixée en bas d'écran (mêmes destinations qu'en barre du haut).
-- Implémentation : `src/components/DashboardHeader.tsx` (coquille + sélecteur), `src/app/[locale]/workshops/[id]/WorkshopClient.tsx` (onglets + bandeau mobile).
+- **Ordinateur** : **menu latéral gauche** *(10/10/2026, maquette `docs/design` — variante « latérale gauche », sélecteur en « sous-menu »)*. Replié, il ne montre que des icônes ; il s'ouvre au survol par-dessus la page, et une épingle le garde ouvert. Épinglé, il **ne pousse la page que s'il en cacherait du contenu** : une page centrée avec de la marge (parcours, paramètres, profil, tarifs) garde sa largeur et le menu se pose à côté ; une page qui occupe toute la largeur (examens, jardin) se resserre. Décidé automatiquement, page par page et selon la largeur de la fenêtre. Il est **épinglé ouvert à la première visite** ; ensuite, le dernier choix est une **préférence du compte**, retrouvée sur tous les appareils. De haut en bas :
+  - logo → « mes ateliers », et l'épingle ;
+  - **l'atelier courant**, précédé de son emoji (comme chaque atelier du tiroir) : son nom ouvre le tiroir « changer d'atelier » (liste des ateliers + bouton « nouvel atelier » bien visible ; sans aucun atelier, une courte explication au centre et une flèche vers ce bouton — le sélecteur affiche alors « aucun atelier ») ; dessous, reliées à lui par un trait, ses pages — **parcours** (sous-menu « liste des questions », gestionnaires), **examens** *(gestionnaires)*, **cours**, **paramètres** (sous-menu : Général, Membres & rôles, Ressources, Chapitre & Notion — Général seul pour un membre). Un sous-menu n'apparaît que sur sa page : il se déplie en y arrivant, se replie en la quittant ;
+  - les pages indépendantes des ateliers : **suivi**, **jardin** ; en pied, **profil** et « passer à Premium » (comptes gratuits seulement, vers `/pricing`).
+  - Une page qui n'existe pas encore (cours, suivi) est grisée, inerte, marquée « bientôt ».
+  - Pas de barre du haut, ni cloche ni compteur de gouttes : ils reviendront avec les notifications et l'énergie.
+- **Téléphone** : bandeau d'atelier (nom + sélecteur) sous une barre d'onglets fixée en bas d'écran.
+- Implémentation : `src/components/nav/` (`AppNav` : contexte + barre du bas ; `AppSidebar` : menu latéral ; `WorkshopDrawer`), `src/app/[locale]/workshops/[id]/WorkshopClient.tsx` (onglets + bandeau mobile).
 
 **Jardin** (`/garden`) — reste accessible depuis la coquille de navigation, mais n'est plus la page d'accueil.
 - Le jardin est **indépendant des ateliers** : atelier = cours où l'on gagne de l'XP ; jardin = lieu où l'on cultive des plantes qui grandissent grâce à l'XP gagné. Les arbres ne sont PAS liés à un atelier.
@@ -138,9 +143,8 @@ Termes utilisés dans toute la codebase et dans ce document.
 - **Bannière rayée** en tête : avatar centré (sans contour), nom en bas à gauche suivi du tag en plus petit (Crockford-like, 8 caractères), bouton « éditer » en haut à droite. « éditer » est le **seul** accès au composeur d'avatar — il n'y a plus de ligne « modifier l'avatar » dans les paramètres. Pas de date d'inscription.
 - **Carrousel de 5 statistiques** (série, XP, temps passé, succès, notions maîtrisées) : rangée à défilement horizontal, barre de défilement masquée — les dernières tuiles se découvrent en faisant glisser.
 - **Encart d'abonnement** : pour un compte gratuit, un encart doré d'upsell (« passe à Smart / débloque tout ton jardin », bouton vers `/pricing`, mention « ton forfait actuel · basique ») ; pour un compte déjà payant, une carte sobre rappelant le forfait réel. ⚠️ Le vocabulaire « Smart »/« basique » vient de la maquette et **ne correspond pas** aux offres Gratuit / Premium / Premium+ de `/pricing` — arbitrage à faire, voir `docs/backlog.md`.
-- **Carte « suivi »** → `/profile/analyse` (vue de suivi personnelle, voir plus bas).
-- **Paramètres** : notifications, langue, aide & contact, se déconnecter. La ligne « langue » ouvre un menu court (français / english) qui navigue vers la même page dans l'autre locale ; la préférence est ensuite persistée sur le compte par `DashboardHeader` (`publicMetadata.locale`, source de vérité pour la langue des emails).
-- **Barre du haut** : la page profil garde le sélecteur d'atelier et le groupe d'onglets, alimentés par le **dernier atelier visité** (`getLastVisitedWorkshop`) puisque son URL n'en porte aucun. Le Jardin et le tableau de bord gardent une barre nue.
+- **Paramètres** : notifications, langue, aide & contact, se déconnecter. La ligne « langue » ouvre un menu court (français / english) qui navigue vers la même page dans l'autre locale ; la préférence est ensuite persistée sur le compte par la navigation (`nav/AppNav`) (`publicMetadata.locale`, source de vérité pour la langue des emails).
+- **Menu latéral** : sur le profil (comme sur le jardin et « mes ateliers »), le groupe d'atelier est celui du **dernier atelier visité** (`getLastVisitedWorkshop`), puisque l'URL n'en porte aucun.
 - Accès à la page Examen officiel (module 2)
 
 **Page sociale**
@@ -466,7 +470,7 @@ Questions affichées une par une sur un écran partagé. Options : afficher la r
 
 ### Analyse
 
-**Périmètre révisé le 05/08/2026** (chantier de refonte UI) : l'Analyse n'est plus un onglet par atelier réservé aux gestionnaires, mais une **vue de suivi personnelle rattachée au profil** (`/profile/analyse`), indépendante de tout atelier ou rôle — accessible à tout utilisateur via la carte « suivi » de `/profile`. Actuellement un état vide « V2 » (titre + badge, aucune donnée) ; le contenu ci-dessous reste la cible fonctionnelle à spécifier plus précisément le moment venu (portée multi-ateliers à définir) :
+**Périmètre révisé le 05/08/2026** (chantier de refonte UI) : l'Analyse n'est plus un onglet par atelier réservé aux gestionnaires, mais une **vue de suivi personnelle**, indépendante de tout atelier ou rôle — accessible à tout utilisateur par l'entrée « suivi » du menu latéral. Contenu cible, à spécifier plus précisément le moment venu (portée multi-ateliers à définir) :
 
 - Ensemble des notes obtenues par chaque membre avec leurs coefficients
 - Moyenne des notes par membre

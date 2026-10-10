@@ -44,7 +44,6 @@ next-env.d.ts
 /.clerk/
 
 # design handoff (outil de travail local, pas du code)
-/_handoff/
 /culture-design-system/
 
 # Maquette Claude Design — docs/design/ est versionné (le prototype doit être

@@ -1,5 +1,5 @@
 // Mémoire du dernier atelier visité, pour le contexte de la barre de navigation
-// (nom dans le sélecteur + groupe d'onglets, voir DashboardHeader).
+// (nom dans le sélecteur + groupe d'onglets, voir nav/AppNav).
 //
 // Pourquoi un cookie et pas une requête serveur : le header vit dans le layout,
 // donc interroger la base pour cette information ajouterait une requête
@@ -18,6 +18,8 @@ export type CachedWorkshop = {
   id: string;
   name: string;
   role: 'owner' | 'manager' | 'member';
+  /** Emoji choisi (menu latéral). Absent des cookies écrits avant le 10/10/2026. */
+  emoji?: string | null;
 };
 
 type Stored = CachedWorkshop & { userId: string };
@@ -32,7 +34,7 @@ export function parseLastWorkshop(raw: string | undefined, userId: string): Cach
   try {
     const stored = JSON.parse(decodeURIComponent(raw)) as Stored;
     if (stored.userId !== userId || !stored.id || !stored.name || !stored.role) return null;
-    return { id: stored.id, name: stored.name, role: stored.role };
+    return { id: stored.id, name: stored.name, role: stored.role, emoji: stored.emoji ?? null };
   } catch {
     return null;
   }

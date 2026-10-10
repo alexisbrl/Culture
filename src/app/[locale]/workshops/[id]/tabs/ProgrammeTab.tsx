@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useGenerationRefresh } from '@/components/ai/generationStore';
 import { useTranslations, useLocale } from 'next-intl';
 import { ListChecks, Play, ArrowRight, RotateCcw, Sprout } from 'lucide-react';
@@ -45,7 +45,18 @@ export default function ProgrammeTab({ chapters, workshopId, workshopName, canMa
   const t = useTranslations('programme');
   const locale = useLocale();
   const router = useRouter();
-  const [showQuestions, setShowQuestions] = useState(false);
+  // La liste des questions est une vue du parcours, nommée dans l'URL
+  // (`?view=questions`) pour que le sous-menu « parcours » du menu latéral
+  // puisse l'ouvrir. Écrite par l'API d'historique, que Next relaie à
+  // `useSearchParams` : aucun aller-retour serveur, le retour arrière suit.
+  const searchParams = useSearchParams();
+  const showQuestions = canManage && searchParams.get('view') === 'questions';
+  function setShowQuestions(open: boolean) {
+    const url = new URL(window.location.href);
+    if (open) url.searchParams.set('view', 'questions');
+    else url.searchParams.delete('view');
+    window.history.pushState(null, '', url);
+  }
   // Les chapitres viennent du rendu serveur : une génération qui en écrit les
   // fait apparaître par un rafraîchissement, sans recharger la page. Seuls les
   // gestionnaires suivent l'avancement d'une génération.
@@ -116,14 +127,16 @@ export default function ProgrammeTab({ chapters, workshopId, workshopName, canMa
           </span>
         </div>
         {/* `aria-label` : le libellé du bouton disparaît sous `xl`, l'icône
-            reste seule — le nom accessible ne peut donc pas en dépendre. */}
+            reste seule — le nom accessible ne peut donc pas en dépendre.
+            Téléphone seulement : sur ordinateur, l'entrée est le sous-menu
+            « liste des questions » du menu latéral. */}
         {canManage && (
           <Tooltip content={t('questions.open')}>
           <button
             type="button"
             onClick={() => setShowQuestions(true)}
             aria-label={t('questions.open')}
-            className="mt-3.5 ml-auto flex items-center gap-2 rounded-full border border-[var(--line-strong)] bg-[var(--surface-raised)] px-[13px] py-2 text-[13px] font-semibold text-[var(--green-strong)] shadow-[var(--shadow-sm)] transition-colors hover:border-[var(--green-light)] hover:bg-[var(--green-tint)] md:absolute md:top-6 md:right-6 md:z-[5] md:mt-0 xl:px-[15px]"
+            className="mt-3.5 ml-auto flex items-center gap-2 rounded-full border border-[var(--line-strong)] bg-[var(--surface-raised)] px-[13px] py-2 text-[13px] font-semibold text-[var(--green-strong)] shadow-[var(--shadow-sm)] transition-colors hover:border-[var(--green-light)] hover:bg-[var(--green-tint)] md:hidden"
           >
             <ListChecks size={15} strokeWidth={1.75} />
             <span className="hidden xl:inline">{t('questions.open')}</span>

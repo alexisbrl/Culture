@@ -448,7 +448,7 @@ export default function GardenClient({ firstName }: Props) {
   const moving = movingTree || movingStruct;
 
   return (
-    <div className="relative w-full h-[calc(100vh-65px)] overflow-hidden select-none">
+    <div className="relative w-full h-[calc(100vh-65px)] md:h-screen overflow-hidden select-none">
       <SceneStyles />
       <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, #cfe6e8 0%, #bcdbdf 55%, #a9ced6 100%)' }} />
 

@@ -86,6 +86,11 @@
 }
 
 :root {
+  /* Hauteur de ce qui surmonte le contenu d'une page connectée. Sur ordinateur
+     la navigation est un menu latéral : rien au-dessus, 0. Sur téléphone on
+     garde la réserve historique de 60px (pages inchangées tant que la
+     navigation mobile n'est pas reprise). */
+  --app-chrome-h: 60px;
   --background: oklch(1 0 0);
   --foreground: oklch(0.12 0.02 285);
   --card: oklch(1 0 0);
@@ -422,13 +427,13 @@
     height: 0;
   }
   /* Coquille à deux colonnes de l'onglet examen : à partir de 768px sa hauteur
-     est bornée au viewport (61px de barre du haut + 22 de marge haute + 28 de
-     marge basse), donc la page ne défile plus et chaque colonne fait défiler
+     est bornée au viewport (22 de marge haute + 28 de marge basse — la
+     navigation est sur le côté, pas au-dessus), donc la page ne défile plus et chaque colonne fait défiler
      son propre contenu. En dessous, les colonnes s'empilent et la page défile
      normalement. */
   @media (min-width: 768px) {
     .split-shell {
-      height: calc(100vh - 111px);
+      height: calc(100vh - 50px);
       overflow: hidden;
     }
   }
@@ -468,61 +473,64 @@
      vide, et ce qui dépasse passe sous le bord de la coquille (`overflow:
      hidden`). C'est ce qui rendait les croix invisibles avant les paliers, sur
      tout écran de moins de ~1610px. */
+  /* Les paliers se lisent sur la largeur du CONTENU (le conteneur `app-main`,
+     posé sur la zone principale de l'espace connecté), pas sur celle de la
+     fenêtre : le menu latéral en prend 68 à 248px selon qu'il est épinglé. */
   .exam-shell {
     --exam-scale: 0.406; /* 429px de papier */
     --exam-list-w: 255px;
     --exam-list-zoom: 0.75;
   }
-  @media (min-width: 900px) {
+  @container app-main (min-width: 900px) {
     .exam-shell {
       --exam-scale: 0.467; /* 493px */
       --exam-list-w: 290px;
       --exam-list-zoom: 0.8;
     }
   }
-  @media (min-width: 1030px) {
+  @container app-main (min-width: 1030px) {
     .exam-shell {
       --exam-scale: 0.531; /* 561px */
       --exam-list-w: 340px;
       --exam-list-zoom: 0.87;
     }
   }
-  @media (min-width: 1160px) {
+  @container app-main (min-width: 1160px) {
     .exam-shell {
       --exam-scale: 0.588; /* 621px */
       --exam-list-w: 400px;
       --exam-list-zoom: 0.94;
     }
   }
-  @media (min-width: 1290px) {
+  @container app-main (min-width: 1290px) {
     .exam-shell {
       --exam-scale: 0.652; /* 689px */
       --exam-list-w: 450px;
       --exam-list-zoom: 1; /* référence : taille de texte et d'icônes de la maquette */
     }
   }
-  @media (min-width: 1410px) {
+  @container app-main (min-width: 1410px) {
     .exam-shell {
       --exam-scale: 0.696; /* 735px */
       --exam-list-w: 490px;
       --exam-list-zoom: 1;
     }
   }
-  @media (min-width: 1620px) {
+  @container app-main (min-width: 1620px) {
     .exam-shell {
       --exam-scale: 0.819; /* 865px */
       --exam-list-w: 550px;
       --exam-list-zoom: 1;
     }
   }
-  @media (min-width: 1900px) {
+  @container app-main (min-width: 1900px) {
     .exam-shell {
       --exam-scale: 0.947; /* 1000px */
       --exam-list-w: 766px;
       --exam-list-zoom: 1;
     }
   }
-  @media (min-width: 2200px) {
+  @container app-main (min-width: 2200px) {
     .exam-shell {
       --exam-scale: 1.05; /* 1109px */
       --exam-list-w: 810px;
@@ -546,14 +554,18 @@
       margin-right: calc(-120px * var(--exam-scale));
     }
   }
-  /* Coquille des Paramètres d'atelier : même principe que .split-shell mais
-     directement sous la barre du haut (61px). La navigation de gauche tient
-     sans défiler ; seule la colonne de droite défile (via .scroll-panel, sans
-     barre visible). En dessous de 768px, la page défile normalement. */
+  /* Coquille des Paramètres d'atelier : même principe que .split-shell, sur
+     toute la hauteur de la fenêtre. Seule la colonne de contenu défile (via
+     .scroll-panel, sans barre visible) ; elle occupe toute la largeur et centre
+     son contenu par ses marges intérieures, sur la largeur que la page lui
+     donne (--settings-w). En dessous de 768px, la page défile normalement. */
   @media (min-width: 768px) {
     .settings-shell {
-      height: calc(100vh - 61px);
+      height: 100vh;
       overflow: hidden;
+    }
+    .settings-content {
+      padding-inline: max(24px, calc((100% - var(--settings-w, 760px)) / 2));
     }
   }
 }
@@ -698,4 +710,48 @@
   0%        { background-color: transparent; animation-timing-function: ease-out; }
   15%, 76%  { background-color: color-mix(in srgb, var(--green) 26%, transparent); animation-timing-function: ease-in; }
   100%      { background-color: transparent; }
+}
+
+
+/* ── Menu latéral (ordinateur) ─────────────────────────────────────────────
+   Les animations de la maquette « latérale gauche » : un sous-menu se déplie
+   quand sa page devient active et se replie quand on la quitte, ses entrées
+   glissent en décalé ; le tiroir « changer d'atelier » glisse depuis le menu,
+   par-dessus un voile. */
+@media (min-width: 768px) {
+  :root {
+    --app-chrome-h: 0px;
+  }
+}
+@keyframes nav-unfold {
+  from { max-height: 0; opacity: 0.4; }
+  to { max-height: 260px; opacity: 1; }
+}
+@keyframes nav-fold {
+  from { max-height: 260px; opacity: 1; }
+  to { max-height: 0; opacity: 0; }
+}
+@keyframes nav-item-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes nav-item-out {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(-8px); }
+}
+@keyframes nav-drawer-in {
+  from { opacity: 0; transform: translateX(-18px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+/* Flèche du tiroir vide, qui montre « nouvel atelier » juste en dessous. */
+@keyframes nav-nudge {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+@keyframes nav-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-nav-anim] { animation: none !important; transition: none !important; }
 }

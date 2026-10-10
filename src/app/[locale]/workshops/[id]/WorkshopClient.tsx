@@ -33,16 +33,16 @@ export default function WorkshopClient({ workshopId, workshopName, currentUserRo
   const searchParams = useSearchParams();
   // Propriétaire ou gestionnaire : accès aux onglets de gestion + paramètres.
   const canManage = currentUserRole === 'owner' || currentUserRole === 'manager';
-  // La navigation entre onglets vit désormais dans la barre du haut globale
-  // (DashboardHeader, T12) — cet onglet ne fait plus que lire l'URL (?tab=).
+  // La navigation entre onglets vit dans le menu latéral global
+  // (nav/AppSidebar) — cet onglet ne fait plus que lire l'URL (?tab=).
   const activeTab = (searchParams.get('tab') as TabId | null) ?? 'programme';
 
   const [mobileSwitcherOpen, setMobileSwitcherOpen] = useState(false);
 
   return (
-    <div style={{ fontFamily: 'var(--font-sans)', color: palette.ink, minHeight: 'calc(100vh - 60px)', background: palette.cream, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ fontFamily: 'var(--font-sans)', color: palette.ink, minHeight: 'calc(100vh - var(--app-chrome-h))', background: palette.cream, display: 'flex', flexDirection: 'column' }}>
       {/* Bandeau d'atelier (téléphone) — masqué au-dessus de 768px, où la barre
-          du haut (DashboardHeader, T12) porte déjà le nom + le sélecteur. */}
+          latéral (nav/AppSidebar) porte déjà le nom + le sélecteur. */}
       <div className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--surface-raised)] px-5 py-3.5 md:hidden">
         <div className="relative flex min-w-0 items-center gap-2">
           <button

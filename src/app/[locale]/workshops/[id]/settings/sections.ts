@@ -14,3 +14,14 @@ export const NAV_SECTIONS = ['general', 'members', 'files', 'notions'] as const 
 export function isNavSection(value: string | undefined): value is NavSection {
   return !!value && (NAV_SECTIONS as readonly string[]).includes(value);
 }
+
+/** L'adresse d'une section, à partir de l'adresse courante. Partagée par la page
+ *  (changement de section au téléphone, annulation) et le menu latéral (sous-menu
+ *  « paramètres ») : les deux écrivent l'URL de la même façon, et la page la lit
+ *  (voir SettingsClient). « Général » n'a pas de paramètre — c'est l'arrivée. */
+export function settingsSectionUrl(current: string, section: NavSection): string {
+  const url = new URL(current);
+  if (section === 'general') url.searchParams.delete('section');
+  else url.searchParams.set('section', section);
+  return url.toString();
+}

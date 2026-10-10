@@ -12,7 +12,7 @@
 // d'affichage sans mémoriser de permutation.
 //
 // Coquille plein écran (position fixed, au-dessus de la barre du haut/du bas —
-// masquées par ailleurs sur /exercise/ dans DashboardHeader.tsx).
+// masquées par ailleurs sur /exercise/ dans nav/AppNav.tsx).
 //
 // ── Un exercice = 12 niveaux de Bloom (29/08/2026) ──────────────────────────
 //

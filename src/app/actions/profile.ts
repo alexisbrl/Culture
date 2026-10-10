@@ -110,7 +110,7 @@ export async function updateAvatarParts(
 
 // Persiste la langue préférée de l'utilisateur (publicMetadata.locale) — source
 // de vérité pour la langue de ses emails transactionnels. Synchronisée depuis
-// l'URL par DashboardHeader (auto-sync au chargement et au changement de langue).
+// l'URL par la navigation (nav/AppNav) (auto-sync au chargement et au changement de langue).
 export async function setUserLocale(locale: 'fr' | 'en'): Promise<{ success: boolean }> {
   try {
     if (locale !== 'fr' && locale !== 'en') return { success: false };
@@ -160,4 +160,33 @@ export async function getPrivateProfileData(): Promise<{
     profession:  meta?.profession  ?? '',
     company:     meta?.company     ?? '',
   };
+}
+
+// Persiste le menu latéral épinglé ou replié (publicMetadata.navPinned) : une
+// préférence du compte, retrouvée sur tout appareil. Le cookie `navPinned`
+// n'en est que la copie locale, lue par le layout pour rendre le menu à la
+// bonne largeur dès le HTML (voir src/lib/navPinned.ts).
+export async function setNavPinned(pinned: boolean): Promise<{ success: boolean }> {
+  try {
+    if (typeof pinned !== 'boolean') return { success: false };
+
+    const { userId } = await auth();
+    if (!userId) return { success: false };
+
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    if (user.publicMetadata?.navPinned === pinned) return { success: true };
+
+    await client.users.updateUserMetadata(userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        navPinned: pinned,
+      },
+    });
+
+    return { success: true };
+  } catch (err) {
+    console.error('setNavPinned error:', err);
+    return { success: false };
+  }
 }

@@ -21,13 +21,18 @@
     "switcherLoading": "chargement…",
     "switcherEmpty": "aucun atelier pour l'instant",
     "newWorkshop": "nouvel atelier",
-    "allWorkshops": "tous mes ateliers"
-  },
-  "notifications": {
-    "title": "notifications",
-    "join": "rejoindre",
-    "ignore": "ignorer",
-    "cancel": "annuler"
+    "allWorkshops": "tous mes ateliers",
+    "tabSuivi": "suivi",
+    "soon": "bientôt",
+    "subQuestions": "liste des questions",
+    "pinOpen": "garder le menu ouvert",
+    "pinClose": "replier le menu",
+    "goPremium": "passer à Premium",
+    "close": "fermer",
+    "tabParametres": "paramètres",
+    "noWorkshop": "aucun atelier",
+    "drawerEmptyTitle": "aucun atelier pour l'instant",
+    "drawerEmptyText": "Créez ou rejoignez un atelier en cliquant sur le bouton ci-dessous :"
   },
   "stats": {
     "time": "gain de temps / formateur"
@@ -166,10 +171,6 @@
     "defaultName": "jardinier",
     "defaultNameFull": "Jardinier",
     "edit": "éditer",
-    "tracking": {
-      "title": "suivi",
-      "desc": "progression, maîtrise et statistiques détaillées"
-    },
     "passkeys": {
       "sectionTitle": "sécurité",
       "title": "clés d'accès",
@@ -645,14 +646,12 @@
       "save": "Erreur lors de l'enregistrement",
       "delete": "Erreur lors de la suppression",
       "emptyName": "Le nom ne peut pas être vide",
-      "rename": "Erreur lors du renommage"
+      "rename": "Erreur lors du renommage",
+      "changedMeanwhile": "Ces réglages ont été modifiés entre-temps par un autre gestionnaire : rien n'a été annulé. Rechargez la page pour voir la version à jour."
     },
     "general": {
       "title": "Général",
       "nameLabel": "Nom de l'atelier",
-      "coverLabel": "Image de couverture",
-      "uploadAria": "uploader votre image",
-      "removeCoverAria": "supprimer l'image de couverture",
       "emojiLabel": "Emoji",
       "createdLabel": "Date de création"
     },
@@ -1044,9 +1043,6 @@
       },
       "perMemberUnit": "/ membre"
     }
-  },
-  "analyse": {
-    "title": "analyse."
   },
   "session": {
     "leaveSession": "quitter la session",

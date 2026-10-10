@@ -10,6 +10,7 @@
 import { getSupabaseServerClient } from '@/lib/supabase';
 import type { WorkshopRole } from '@/lib/authz';
 import { getWorkshopRole } from '@/lib/workshops/membership';
+import { writeWorkshopDetails, type WorkshopDetailsPatch } from './details';
 import type { WorkshopCardData } from '@/app/actions/workshops';
 
 export async function getUserWorkshops(userId: string): Promise<{
@@ -117,7 +118,7 @@ export async function getTrashWorkshops(
 /**
  * Dernier atelier visité par l'utilisateur, encore actif (hors corbeille).
  *
- * Sert à rétablir le contexte d'atelier dans la barre du haut sur les pages qui
+ * Sert à rétablir le contexte d'atelier dans le menu latéral sur les pages qui
  * n'en portent aucun dans leur URL — la page profil, dont la maquette garde le
  * sélecteur d'atelier et le groupe d'onglets. Lecture seule : contrairement à
  * `getWorkshop`, `last_visited_at` n'est PAS retouché, consulter son profil
@@ -125,7 +126,7 @@ export async function getTrashWorkshops(
  */
 export async function getLastVisitedWorkshop(
   userId: string
-): Promise<{ id: string; name: string; role: WorkshopRole } | null> {
+): Promise<{ id: string; name: string; role: WorkshopRole; emoji: string | null } | null> {
   const supabase = getSupabaseServerClient();
 
   const { data: memberships } = await supabase
@@ -138,7 +139,7 @@ export async function getLastVisitedWorkshop(
 
   const { data: workshops } = await supabase
     .from('workshops')
-    .select('id, name')
+    .select('id, name, emoji')
     .in(
       'id',
       memberships.map((m) => m.workshop_id)
@@ -147,10 +148,10 @@ export async function getLastVisitedWorkshop(
 
   // Les adhésions sont déjà triées du plus récent au plus ancien : on descend
   // jusqu'au premier atelier qui n'est pas à la corbeille.
-  const nameById = new Map((workshops ?? []).map((w) => [w.id as string, w.name as string]));
+  const byId = new Map((workshops ?? []).map((w) => [w.id as string, w]));
   for (const m of memberships) {
-    const name = nameById.get(m.workshop_id);
-    if (name) return { id: m.workshop_id, name, role: m.role as WorkshopRole };
+    const w = byId.get(m.workshop_id);
+    if (w) return { id: m.workshop_id, name: w.name as string, role: m.role as WorkshopRole, emoji: (w.emoji as string | null) ?? null };
   }
   return null;
 }
@@ -291,30 +292,14 @@ export async function getWorkshopPreview(
   };
 }
 
+/** Voir writeWorkshopDetails (details.ts) : n'écrit que ce qui change, et une
+ *  annulation (`expected`) ne s'applique que si rien n'a bougé depuis. */
 export async function updateDetails(
   workshopId: string,
-  details: {
-    name?: string;
-    coverGradient?: string;
-    coverImageUrl?: string | null;
-    coverImageActive?: boolean;
-    emoji?: string;
-    showProgramme?: boolean;
-  }
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = getSupabaseServerClient();
-
-  const update: Record<string, string | boolean | number | null> = {};
-  if (details.name !== undefined) update.name = details.name;
-  if (details.coverGradient !== undefined) update.cover_gradient = details.coverGradient;
-  if (details.coverImageUrl !== undefined) update.cover_image_url = details.coverImageUrl;
-  if (details.coverImageActive !== undefined) update.cover_image_active = details.coverImageActive;
-  if (details.emoji !== undefined) update.emoji = details.emoji;
-  if (details.showProgramme !== undefined) update.show_programme = details.showProgramme;
-
-  await supabase.from('workshops').update(update).eq('id', workshopId);
-
-  return { success: true };
+  details: WorkshopDetailsPatch,
+  expected?: WorkshopDetailsPatch
+): Promise<{ success: boolean; conflict?: boolean; error?: string }> {
+  return writeWorkshopDetails(getSupabaseServerClient(), workshopId, details, expected);
 }
 
 export async function uploadCover(

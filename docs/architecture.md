@@ -1238,20 +1238,29 @@ dispersée dans les composants.
 
 ### 11.2 La mise en page
 
-Le layout empile un en-tête puis le contenu. **Ne jamais utiliser la hauteur de fenêtre
-brute** sur le conteneur racine d'une page : on ajouterait systématiquement la hauteur de
-l'en-tête en trop.
+Sur ordinateur, l'espace connecté pose le **menu latéral** à gauche et le contenu à
+droite ; rien ne surmonte le contenu. Sur téléphone, la réserve historique de 60px au-dessus
+du contenu demeure. Cette hauteur vit dans `--app-chrome-h` (0 sur ordinateur) : une page
+qui veut remplir l'écran écrit `calc(100vh - var(--app-chrome-h))`, **jamais un nombre**.
 
-L'en-tête de l'espace connecté est **collant** et reste dans le flux, donc aucune page n'a
-de compensation à faire — **mais tout autre bloc collant doit décaler sa position** sous
-peine de se glisser dessous.
+Le menu latéral fait **68px replié, 248px ouvert**. Ouvert au survol, il passe par-dessus la
+page ; épinglé, il ne la pousse que s'il en couvrirait du contenu visible (`nav/contentFit`,
+mesuré dans la géométrie « par-dessus », donc verdict stable) — un fond pleine largeur ne
+compte pas. Toute mise en page qui dépend de la largeur disponible
+se lit donc sur le **contenu**, pas sur la fenêtre : la zone principale est un conteneur
+nommé `app-main`, et les paliers de la feuille d'examen sont des requêtes de conteneur.
+Une vue qui vit dans l'URL d'une page (section des paramètres, liste des questions du
+parcours) s'écrit par l'API d'historique, que le menu emploie aussi : la page la lit par
+`useSearchParams`, sans aller-retour serveur.
 
 **Contexte de navigation persistant sans requête bloquante.** Hors page d'atelier, l'URL ne
-porte aucun atelier, et l'en-tête a besoin du dernier visité. Le lire en base ajouterait une
+porte aucun atelier, et le menu latéral a besoin du dernier visité. Le lire en base ajouterait une
 requête bloquante au rendu de *toutes* les pages ; le lire dans le navigateur n'agit
 qu'après hydratation, donc le bloc apparaît en sursaut. Le pattern retenu est un **cookie
 écrit par le navigateur et lu par le serveur** : présent dans le HTML initial, coût nul,
-rafraîchi en arrière-plan. L'identité y est vérifiée à la lecture — poste partagé.
+rafraîchi en arrière-plan. L'identité y est vérifiée à la lecture — poste partagé. Même
+pattern pour le menu épinglé : la préférence vit dans le compte (`publicMetadata.navPinned`),
+le cookie `navPinned` n'en est que la copie locale, et le compte fait foi à son arrivée.
 
 **Borner un texte qui déborde se fait en largeur, jamais en caractères.** Un plafond de
 caractères coupe des noms qui avaient la place de tenir et laisse passer les caractères
@@ -1309,6 +1318,10 @@ section. L'historique est une pile, jamais affichée, vidée en quittant la page
 qui arrivent en flux s'y inscrivent par un contexte. Une annulation ne s'inscrit pas
 elle-même, et lit l'état courant (pas celui du rendu qui l'a créée) : entre-temps, une
 génération a pu ajouter des chapitres.
+
+**Deux gestionnaires sur la même page.** Chacun a sa copie des réglages : un geste n'écrit
+que les champs qu'il change, et une annulation ne s'applique que si la base contient encore
+ce qu'elle défait — sinon elle n'écrit rien et le dit (`src/lib/workshops/details.ts`).
 
 Annuler rend visible ce qu'il change : la section, le bon chapitre, un défilement jusqu'à la ligne et un clignotement — sinon, une annulation qui change de section ne dit pas où regarder.
 

@@ -15,7 +15,7 @@ export default function CreatePage() {
   const t = useTranslations('createWorkshop');
 
   return (
-    <div className="min-h-[calc(100vh-60px)] bg-cream font-sans">
+    <div className="min-h-[calc(100vh-var(--app-chrome-h))] bg-cream font-sans">
       <div className="max-w-5xl mx-auto px-6 py-8">
         {/* breadcrumb + header */}
         <div className="text-[11px] text-ink-soft mb-1">
@@ -84,7 +84,7 @@ export default function CreatePage() {
 
           {/* SIDE — identity */}
           {/* 60 px de barre de navigation (collante) + les 16 px d'air voulus. */}
-          <div className="flex flex-col gap-3.5 lg:sticky lg:top-[76px]">
+          <div className="flex flex-col gap-3.5 lg:sticky lg:top-4">
             <div className="bg-[var(--surface-raised)]/85 border border-ink/[0.08] rounded-[14px] px-[18px] py-4">
               <div className="text-[10px] font-semibold tracking-[0.16em] uppercase text-ink-soft mb-3">
                 {t('identity.kicker')}

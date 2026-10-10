@@ -2,11 +2,10 @@
 
 // Page profil, alignée sur la maquette du 06/08/2026 : bannière rayée (avatar
 // centré, nom + tag, bouton « éditer » vers le composeur), rangée de 4
-// statistiques, encart d'upsell, bloc « suivi » (page d'analyse dédiée au
-// profil, T39 — indépendante de tout atelier) et liste de paramètres.
+// statistiques, encart d'upsell et liste de paramètres. Le « suivi » est une
+// entrée (grisée, « bientôt ») du menu latéral, plus un bloc de cette page.
 //
-// ⚠️ Deux zones sont volontairement NON fonctionnelles, comme le compteur de
-// gouttes et la cloche du header : la rangée de statistiques (aucune série
+// ⚠️ Deux zones sont volontairement NON fonctionnelles : la rangée de statistiques (aucune série
 // d'arrosage, aucun XP, aucun temps passé ni succès n'existe côté serveur —
 // tout est V2, voir docs/product-spec.md) et la ligne « notifications ».
 
@@ -15,7 +14,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useUser, SignOutButton } from '@clerk/nextjs';
-import { BarChart3, Check, ChevronRight, Clock, Droplet, LogOut, Sprout, Star, Trophy, Zap } from 'lucide-react';
+import { Check, ChevronRight, Clock, Droplet, LogOut, Sprout, Star, Trophy, Zap } from 'lucide-react';
 import { palette, withAlpha, shadow } from '@/lib/theme';
 import { Button } from '@/components/ui/button';
 import LinkButton from '@/components/LinkButton';
@@ -35,7 +34,7 @@ type Props = {
 };
 
 // Valeurs de la maquette, figées : aucune de ces 4 statistiques n'a de source
-// côté serveur. Même principe que PLACEHOLDER_DROPLETS dans DashboardHeader —
+// côté serveur. Même principe que les autres données factices de la gamification —
 // à brancher sur la vraie donnée le jour où la gamification existe (V2).
 const PLACEHOLDER_STATS = {
   streak: '12',
@@ -65,7 +64,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
   }, [user]);
 
   // Changer de langue = naviguer vers la même page dans l'autre locale. La
-  // préférence est ensuite persistée sur le compte par DashboardHeader, qui
+  // préférence est ensuite persistée sur le compte par la navigation (nav/AppNav), qui
   // synchronise publicMetadata.locale sur la locale de l'URL (source de vérité
   // pour la langue des emails). `/profile` n'a pas de chemin localisé
   // (src/i18n/routing.ts) : le préfixe suffit.
@@ -144,7 +143,7 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
     // `page-no-scrollbar` : la page défile toujours (elle dépasse d'environ
     // 180px sur un écran courant), mais sans barre visible à droite — décision
     // du 18/08/2026. Voir `globals.css`.
-    <div className="page-no-scrollbar" style={{ background: palette.cream, minHeight: 'calc(100vh - 60px)', padding: '28px 24px 48px' }}>
+    <div className="page-no-scrollbar" style={{ background: palette.cream, minHeight: 'calc(100vh - var(--app-chrome-h))', padding: '28px 24px 48px' }}>
       <div style={{ maxWidth: 520, margin: '0 auto' }}>
         {/* Bannière — rayures diagonales, avatar centré sans contour, nom en haut
             à gauche avec le tag juste en dessous. « éditer » ouvre le composeur
@@ -350,21 +349,6 @@ export default function ProfileClient({ locale, uniqueId, firstName, lastName, t
             </Link>
           </div>
         )}
-
-        {/* Suivi — page d'analyse dédiée (état vide V2), indépendante de tout atelier */}
-        <Link
-          href={`/${locale}/profile/analyse`}
-          style={{ ...cardStyle, padding: '18px 20px', marginTop: 14, display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none' }}
-        >
-          <span style={{ width: 44, height: 44, borderRadius: 12, background: withAlpha(palette.green, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', color: palette.greenBrand, flexShrink: 0 }}>
-            <BarChart3 size={20} strokeWidth={1.75} />
-          </span>
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: palette.ink }}>{t('tracking.title')}</span>
-            <span style={{ display: 'block', fontSize: 12.5, color: palette.inkMuted, marginTop: 2 }}>{t('tracking.desc')}</span>
-          </span>
-          <ChevronRight size={18} strokeWidth={1.75} color={palette.inkMuted} />
-        </Link>
 
         {/* Sécurité — clés d'accès. MASQUÉ le 08/09/2026, à réafficher tel quel.
             Clerk ne permet les clés d'accès qu'en offre payante : sur l'offre

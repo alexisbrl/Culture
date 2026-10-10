@@ -6,6 +6,7 @@ import { getSupabaseServerClient } from '@/lib/supabase';
 import { requireMember, requireManager, requireOwner } from '@/lib/authz';
 import * as membersLib from '@/lib/workshops/members';
 import * as coreLib from '@/lib/workshops/core';
+import type { WorkshopDetailsPatch } from '@/lib/workshops/details';
 import * as lifecycleLib from '@/lib/workshops/lifecycle';
 import { revalidateWorkshop, revalidateDashboard } from '@/lib/revalidate';
 import { generateUniqueUserTag } from '@/lib/tag';
@@ -160,12 +161,13 @@ export async function getWorkshop(workshopId: string) {
   }
 }
 
-// ─── Dernier atelier visité (contexte de la barre du haut hors page d'atelier) ─
+// ─── Dernier atelier visité (contexte du menu latéral hors page d'atelier) ─
 
 export async function getLastVisitedWorkshop(): Promise<{
   id: string;
   name: string;
   role: 'owner' | 'manager' | 'member';
+  emoji: string | null;
 } | null> {
   try {
     const { userId } = await auth();
@@ -213,13 +215,15 @@ export async function updateWorkshopDetails(
     coverImageActive?: boolean;
     emoji?: string;
     showProgramme?: boolean;
-  }
-): Promise<{ success: boolean; error?: string }> {
+  },
+  /** Annulation : valeurs qu'elle défait, qui doivent être encore en base. */
+  expected?: WorkshopDetailsPatch
+): Promise<{ success: boolean; conflict?: boolean; error?: string }> {
   try {
     // Réglages généraux : propriétaire ou gestionnaire.
     if (!(await requireManager(workshopId))) return { success: false, error: 'Droits insuffisants' };
 
-    const result = await coreLib.updateDetails(workshopId, details);
+    const result = await coreLib.updateDetails(workshopId, details, expected);
     // Détails affichés à la fois sur la page atelier et sur la carte du dashboard.
     if (result.success) {
       revalidateWorkshop();
