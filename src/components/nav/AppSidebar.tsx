@@ -13,6 +13,7 @@ import {
   LayoutGrid,
   Leaf,
   List,
+  Plus,
   Route,
   SlidersHorizontal,
   Sprout,
@@ -148,12 +149,42 @@ export default function AppSidebar({ workshopId, workshopName, workshopEmoji, ca
   // ─── Pousser la page, ou se poser par-dessus ─────────────────────────────
   const slotRef = useRef<HTMLDivElement>(null);
   const [pushes, setPushes] = useState(false);
+  // Pendant que l'emplacement s'élargit ou se resserre, la page change de
+  // taille à chaque image : la mesurer alors (elle ramène l'emplacement à sa
+  // largeur repliée le temps d'un calcul) couperait court à l'animation — la
+  // page sautait d'un coup à l'épinglage. On attend la fin, puis on mesure.
+  const slotMovingRef = useRef(false);
+  const pinnedRef = useRef(pinned);
+  // Avant les mesures (déclaré plus haut qu'elles, donc exécuté avant).
+  useLayoutEffect(() => {
+    pinnedRef.current = pinned;
+  });
   const evaluateFit = useCallback(() => {
     const slot = slotRef.current;
     const main = document.querySelector<HTMLElement>('[data-app-main]');
-    if (!slot || !main || slot.offsetParent === null) return;
+    if (!slot || !main || slot.offsetParent === null || slotMovingRef.current || !pinnedRef.current) return;
     setPushes(pinnedNavNeedsRoom(slot, main));
   }, []);
+  useEffect(() => {
+    const slot = slotRef.current;
+    if (!slot) return;
+    const start = (e: TransitionEvent) => {
+      if (e.target === slot) slotMovingRef.current = true;
+    };
+    const end = (e: TransitionEvent) => {
+      if (e.target !== slot) return;
+      slotMovingRef.current = false;
+      evaluateFit();
+    };
+    slot.addEventListener('transitionrun', start);
+    slot.addEventListener('transitionend', end);
+    slot.addEventListener('transitioncancel', end);
+    return () => {
+      slot.removeEventListener('transitionrun', start);
+      slot.removeEventListener('transitionend', end);
+      slot.removeEventListener('transitioncancel', end);
+    };
+  }, [evaluateFit]);
   const routeKey = pathname + '?' + (searchParams.get('tab') ?? '') + (searchParams.get('section') ?? '') + (searchParams.get('view') ?? '');
   // Avant peinture à l'épinglage et à chaque page, puis encore un peu plus
   // tard : une page arrive souvent en plusieurs fois (sections en flux).
@@ -231,7 +262,8 @@ export default function AppSidebar({ workshopId, workshopName, workshopEmoji, ca
         </div>
 
         {/* ── L'atelier : sélecteur + ses pages ── */}
-        {workshopId && (
+        {/* Sans atelier, le sélecteur reste là : c'est par lui (tiroir) qu'on
+            crée le premier. */}
           <div className="flex flex-none flex-col gap-0.5">
             {open ? (
               <button
@@ -241,18 +273,26 @@ export default function AppSidebar({ workshopId, workshopName, workshopEmoji, ca
                 onMouseLeave={() => setTitleHover(false)}
                 aria-label={t('changeWorkshop')}
                 aria-expanded={drawerOpen}
-                className="relative z-[1] flex max-w-full flex-none items-start gap-2.5 rounded-xl border-none bg-transparent px-1 py-1 text-left outline-none hover:bg-[var(--surface-sunken)] focus-visible:shadow-[var(--shadow-focus)]"
+                // Largeur FINALE dès la première image : pendant l'ouverture du
+                // menu, un titre à la largeur courante passait sur deux lignes
+                // puis revenait sur une — le menu, lui, rogne ce qui dépasse.
+                style={{ width: NAV_W_OPEN - 24 }}
+                className="relative z-[1] flex flex-none items-start gap-2.5 rounded-xl border-none bg-transparent px-1 py-1 text-left outline-none hover:bg-[var(--surface-sunken)] focus-visible:shadow-[var(--shadow-focus)]"
               >
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
-                  <span aria-hidden className="flex size-[34px] flex-none items-center justify-center text-[20px] leading-none">
-                    {workshopEmoji}
-                  </span>
+                  {workshopEmoji ? (
+                    <span aria-hidden className="flex size-[34px] flex-none items-center justify-center text-[20px] leading-none">{workshopEmoji}</span>
+                  ) : (
+                    <span aria-hidden className={`flex size-[34px] flex-none items-center justify-center rounded-[10px] text-[var(--green)] ${workshopId ? '' : 'border-[1.5px] border-dashed border-[var(--line-strong)]'}`}>
+                      {!workshopId && <Plus size={16} strokeWidth={2} />}
+                    </span>
+                  )}
                   <span className="flex h-10 min-w-0 flex-1 items-center">
                     <span
-                      className="line-clamp-2 overflow-hidden text-[var(--ink)]"
+                      className={`line-clamp-2 overflow-hidden ${workshopId ? 'text-[var(--ink)]' : 'text-[var(--ink-muted)]'}`}
                       style={{ fontFamily: 'var(--font-serif)', fontSize: 17, fontWeight: 600, lineHeight: '20px', textWrap: 'pretty' }}
                     >
-                      {workshopName ?? ''}
+                      {workshopId ? (workshopName ?? '') : t('noWorkshop')}
                     </span>
                   </span>
                   <ChevronRight
@@ -274,12 +314,17 @@ export default function AppSidebar({ workshopId, workshopName, workshopEmoji, ca
                 aria-label={t('changeWorkshop')}
                 className="flex flex-none flex-col items-start gap-1.5 rounded-xl border-none bg-transparent px-1 py-1 outline-none hover:bg-[var(--surface-sunken)] focus-visible:shadow-[var(--shadow-focus)]"
               >
-                <span aria-hidden className="my-[3px] flex size-[34px] flex-none items-center justify-center text-[20px] leading-none">
-                  {workshopEmoji}
-                </span>
+                {workshopEmoji ? (
+                  <span aria-hidden className="my-[3px] flex size-[34px] flex-none items-center justify-center text-[20px] leading-none">{workshopEmoji}</span>
+                ) : (
+                  <span aria-hidden className={`my-[3px] flex size-[34px] flex-none items-center justify-center rounded-[10px] text-[var(--green)] ${workshopId ? '' : 'border-[1.5px] border-dashed border-[var(--line-strong)]'}`}>
+                    {!workshopId && <Plus size={16} strokeWidth={2} />}
+                  </span>
+                )}
               </button>
             )}
 
+            {workshopId && (
             <div
               className="relative flex flex-none flex-col overflow-hidden"
               style={{
@@ -351,8 +396,8 @@ export default function AppSidebar({ workshopId, workshopName, workshopEmoji, ca
                 </SubMenu>
               )}
             </div>
+            )}
           </div>
-        )}
 
         {/* ── Hors atelier ── */}
         <div className="mx-1.5 mb-[9px]" />

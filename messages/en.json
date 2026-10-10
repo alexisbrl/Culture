@@ -29,7 +29,10 @@
     "pinClose": "collapse the menu",
     "goPremium": "go Premium",
     "close": "close",
-    "tabParametres": "settings"
+    "tabParametres": "settings",
+    "noWorkshop": "no workshop",
+    "drawerEmptyTitle": "no workshop yet",
+    "drawerEmptyText": "A workshop brings together a course, its learning path and its exams. Create your first one here:"
   },
   "stats": {
     "time": "saved per trainer"

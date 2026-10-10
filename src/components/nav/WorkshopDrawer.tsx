@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { Plus, X } from 'lucide-react';
+import { ArrowDown, Plus, X } from 'lucide-react';
 import { emojiFor } from '@/lib/workshopCover';
 import { getUserWorkshops, type WorkshopCardData } from '@/app/actions/workshops';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -82,7 +82,19 @@ export default function WorkshopDrawer({ left, currentWorkshopId, onClose }: Pro
             <div className="px-4 py-6 text-center text-sm text-[var(--ink-muted)]">{t('switcherLoading')}</div>
           )}
           {workshops?.length === 0 && (
-            <div className="px-4 py-6 text-center text-sm text-[var(--ink-muted)]">{t('switcherEmpty')}</div>
+            // Aucun atelier : une phrase d'explication au milieu du panneau, et
+            // une flèche vers le seul geste possible, juste en dessous.
+            <div className="my-auto flex flex-col items-center gap-2 px-6 text-center">
+              <span className="text-[15px] font-semibold text-[var(--ink)]">{t('drawerEmptyTitle')}</span>
+              <span className="text-[13px] leading-5 text-[var(--ink-muted)]">{t('drawerEmptyText')}</span>
+              <ArrowDown
+                data-nav-anim
+                size={20}
+                strokeWidth={1.75}
+                className="mt-2 text-[var(--green)]"
+                style={{ animation: 'nav-nudge 1400ms ease-in-out infinite' }}
+              />
+            </div>
           )}
           {workshops?.map((w) => {
             const active = w.id === currentWorkshopId;
@@ -113,11 +125,9 @@ export default function WorkshopDrawer({ left, currentWorkshopId, onClose }: Pro
           <WarmLink
             href={`/${locale}/workshops/new`}
             onClick={onClose}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-semibold text-[var(--green-strong)] outline-none hover:bg-[var(--surface-sunken)] focus-visible:shadow-[var(--shadow-focus)]"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--green)] px-3 text-[14px] font-bold text-[var(--on-green)] shadow-[var(--shadow-sm)] outline-none transition-colors hover:bg-[var(--green-strong)] focus-visible:shadow-[var(--shadow-focus)]"
           >
-            <span className="flex size-[34px] flex-none items-center justify-center rounded-[10px] border-[1.5px] border-dashed border-[var(--line-strong)] text-[var(--tan)]">
-              <Plus size={15} strokeWidth={1.75} />
-            </span>
+            <Plus size={17} strokeWidth={2} />
             {t('newWorkshop')}
           </WarmLink>
         </div>
