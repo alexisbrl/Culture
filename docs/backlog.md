@@ -10,7 +10,7 @@
 >
 > ⚠️ **Ce fichier a un miroir lu par Alexis** — la feuille de route publiée (artefact `1726e6fc-756c-4de4-99d5-f7ebdf5144a6`), en langage produit. Toute entrée ajoutée, résolue ou déplacée ici doit l'être là aussi, dans la même session : c'est la page qu'il regarde, et une page en retard vaut moins que pas de page.
 >
-> Dernière mise à jour : 08/10/2026
+> Dernière mise à jour : 10/10/2026
 
 ## T4 2026 — ce qui rend une ouverture possible
 
