@@ -54,6 +54,8 @@ const SECTION_ICONS: Record<NavSection, LucideIcon> = {
 type Props = {
   workshopId: string | null;
   workshopName: string | null;
+  /** Emoji de l'atelier courant — null tant qu'on ne le connaît pas. */
+  workshopEmoji: string | null;
   canManage: boolean;
   isMember: boolean;
   pathname: string;
@@ -77,7 +79,7 @@ function shallowIfSamePage(e: MouseEvent<HTMLAnchorElement>, href: string) {
   if (target.search !== window.location.search) window.history.pushState(null, '', target);
 }
 
-export default function AppSidebar({ workshopId, workshopName, canManage, isMember, pathname, searchParams, initialPinned, showPremium }: Props) {
+export default function AppSidebar({ workshopId, workshopName, workshopEmoji, canManage, isMember, pathname, searchParams, initialPinned, showPremium }: Props) {
   const t = useTranslations('nav');
   const ts = useTranslations('settings');
   const locale = useLocale();
@@ -140,7 +142,9 @@ export default function AppSidebar({ workshopId, workshopName, canManage, isMemb
         }}
       >
         {/* ── Logo + épingle ── */}
-        <div className="flex min-h-[34px] items-center justify-between gap-2 px-1 pt-0.5 pb-3">
+        {/* Hauteur fixe : le nom « Culture » et l'épingle, qui n'existent qu'ouvert,
+            ne doivent pas grandir la rangée et pousser tout le menu. */}
+        <div className="flex h-11 flex-none items-center justify-between gap-2 px-1 pt-0.5 pb-3">
           <WarmLink href={`/${locale}/dashboard`} aria-label="Culture" className="flex min-w-0 items-center gap-2 rounded-lg outline-none focus-visible:shadow-[var(--shadow-focus)]">
             <Sprout size={22} strokeWidth={1.75} className="flex-none text-[var(--green)]" />
             {open && (
@@ -175,11 +179,11 @@ export default function AppSidebar({ workshopId, workshopName, canManage, isMemb
                 onMouseLeave={() => setTitleHover(false)}
                 aria-label={t('changeWorkshop')}
                 aria-expanded={drawerOpen}
-                className="relative z-[1] mb-0.5 flex max-w-full flex-none items-start gap-2.5 rounded-xl border-none bg-transparent pt-2 pr-2 pb-0 pl-1 text-left outline-none hover:bg-[var(--surface-sunken)] focus-visible:shadow-[var(--shadow-focus)]"
+                className="relative z-[1] mb-0.5 flex max-w-full flex-none items-start gap-2.5 rounded-xl border-none bg-transparent px-1 py-1 text-left outline-none hover:bg-[var(--surface-sunken)] focus-visible:shadow-[var(--shadow-focus)]"
               >
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
-                  <span className="flex size-[34px] flex-none items-center justify-center rounded-[10px] border border-[var(--line)] text-[var(--ink)]">
-                    <Leaf size={17} strokeWidth={1.75} />
+                  <span aria-hidden className="flex size-[34px] flex-none items-center justify-center rounded-[10px] border border-[var(--line)] text-[17px] leading-none">
+                    {workshopEmoji}
                   </span>
                   <span className="flex h-10 min-w-0 flex-1 items-center">
                     <span
@@ -206,10 +210,10 @@ export default function AppSidebar({ workshopId, workshopName, canManage, isMemb
                 type="button"
                 onClick={() => setDrawerOpen(true)}
                 aria-label={t('changeWorkshop')}
-                className="mb-0.5 flex flex-none flex-col items-start gap-1.5 rounded-xl border-none bg-transparent px-1 pt-2 pb-0 outline-none hover:bg-[var(--surface-sunken)] focus-visible:shadow-[var(--shadow-focus)]"
+                className="mb-0.5 flex flex-none flex-col items-start gap-1.5 rounded-xl border-none bg-transparent px-1 py-1 outline-none hover:bg-[var(--surface-sunken)] focus-visible:shadow-[var(--shadow-focus)]"
               >
-                <span className="my-[3px] flex size-[34px] flex-none items-center justify-center rounded-[10px] border border-[var(--line)] text-[var(--ink)]">
-                  <Leaf size={17} strokeWidth={1.75} />
+                <span aria-hidden className="my-[3px] flex size-[34px] flex-none items-center justify-center rounded-[10px] border border-[var(--line)] text-[17px] leading-none">
+                  {workshopEmoji}
                 </span>
               </button>
             )}
@@ -217,9 +221,12 @@ export default function AppSidebar({ workshopId, workshopName, canManage, isMemb
             <div
               className="relative flex flex-none flex-col overflow-hidden"
               style={{
-                gap: open ? 2 : 4,
-                margin: open ? '2px 0 4px 4px' : 0,
-                padding: open ? '0 0 0 8px' : '4px 0 0 0',
+                // Seuls la marge et le trait de GAUCHE changent à l'ouverture :
+                // tout écart vertical entre les deux états ferait sauter les
+                // entrées de quelques pixels à chaque survol.
+                gap: 2,
+                margin: open ? '2px 0 4px 4px' : '2px 0 4px 0',
+                padding: open ? '0 0 0 8px' : 0,
                 borderLeft: open ? '1px solid var(--line)' : 'none',
                 transition: 'margin 200ms var(--ease-out), padding 200ms var(--ease-out)',
               }}
@@ -296,7 +303,7 @@ export default function AppSidebar({ workshopId, workshopName, canManage, isMemb
             <WarmLink
               href={`/${locale}/pricing`}
               aria-label={t('goPremium')}
-              className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-[13.5px] font-bold text-[var(--ink)] outline-none focus-visible:shadow-[var(--shadow-focus)] [background:color-mix(in_oklab,var(--gold)_12%,var(--surface-raised))] hover:[background:color-mix(in_oklab,var(--gold)_20%,var(--surface-raised))]"
+              className="flex h-10 flex-none items-center justify-center gap-2 rounded-xl px-3 text-[13.5px] font-bold text-[var(--ink)] outline-none focus-visible:shadow-[var(--shadow-focus)] [background:color-mix(in_oklab,var(--gold)_12%,var(--surface-raised))] hover:[background:color-mix(in_oklab,var(--gold)_20%,var(--surface-raised))]"
               style={{ border: '1px solid color-mix(in oklab, var(--gold) 45%, transparent)' }}
             >
               <Star size={16} strokeWidth={1.75} className="flex-none text-[var(--gold)]" />
@@ -312,7 +319,9 @@ export default function AppSidebar({ workshopId, workshopName, canManage, isMemb
 // ─── Entrées ───────────────────────────────────────────────────────────────
 
 const itemBase =
-  'flex items-center justify-start gap-3 rounded-xl px-3 py-2.5 text-sm outline-none focus-visible:shadow-[var(--shadow-focus)]';
+  // Hauteur fixe : le libellé, qui n'existe qu'ouvert, ne doit pas grandir
+  // l'entrée d'un pixel (cumulé sur tout le menu, il se voyait).
+  'flex h-10 flex-none items-center justify-start gap-3 rounded-xl px-3 text-sm leading-5 outline-none focus-visible:shadow-[var(--shadow-focus)]';
 
 function NavItem({
   href,

@@ -9,8 +9,8 @@ import { useTranslations } from 'next-intl';
 import { ChevronDown, Loader2, Mail, QrCode, RotateCcw, Sparkles, Trash2, Undo2, X } from 'lucide-react';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, uploadWorkshopCover, leaveWorkshop } from '@/app/actions/workshops';
-import { COVER_GRADIENTS, COVER_GRADIENT_KEYS, COVER_EMOJIS, coverGradientFor, emojiFor } from '@/lib/workshopCover';
+import { requestDeletionCode, confirmDeletion, updateWorkshopDetails, leaveWorkshop } from '@/app/actions/workshops';
+import { COVER_EMOJIS, coverGradientFor, emojiFor } from '@/lib/workshopCover';
 import ShareQRModal from '@/components/ShareQRModal';
 import { Tooltip } from '@/components/ui/tooltip';
 import { NAV_ITEMS, Row, Switch, SmallBtn, SectionCard, UNDO_FLASH_MS, type WorkshopRole } from './settingsShared';
@@ -107,12 +107,10 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
   const savedDetailsRef = useRef<Details>(initialDetails);
   const [nameDraft, setNameDraft] = useState(workshopName);
   const [detailsError, setDetailsError] = useState('');
-  const [uploadingCover, setUploadingCover] = useState(false);
-  const [uploadError, setUploadError] = useState('');
-  const coverFileInputRef = useRef<HTMLInputElement>(null);
 
-  const { coverImage, useCustomCover, showProgramme } = details;
-  const selectedCover = details.cover;
+  // La couverture n'est plus réglable ici (10/10/2026) : elle reste dans les
+  // réglages enregistrés, telle quelle, pour les cartes d'atelier.
+  const { showProgramme } = details;
   const selectedEmoji = details.emoji;
 
   /** Applique et enregistre de nouveaux réglages. `record` inscrit le geste
@@ -189,34 +187,6 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
       return;
     }
     changeDetails({ name });
-  }
-
-  async function handleCoverFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadError('');
-    setUploadingCover(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    const result = await uploadWorkshopCover(workshopId, formData);
-    setUploadingCover(false);
-    if (result.success && result.url) {
-      changeDetails({ coverImage: result.url, useCustomCover: true });
-    } else {
-      setUploadError(result.error ?? t('err.upload'));
-    }
-    e.target.value = '';
-  }
-
-  // L'image retirée reste stockée : c'est ce qui permet de l'annuler.
-  function handleRemoveCoverImage() {
-    const patch: Partial<Details> = { coverImage: null, useCustomCover: false };
-    if (useCustomCover) {
-      const others = COVER_GRADIENT_KEYS.filter((k) => k !== selectedCover);
-      const pool = others.length > 0 ? others : COVER_GRADIENT_KEYS;
-      patch.cover = pool[Math.floor(Math.random() * pool.length)];
-    }
-    changeDetails(patch);
   }
 
   // ─── Historique et bouton d'annulation ───────────────────────────────────
@@ -516,94 +486,6 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
                   padding: 0,
                 }}
               />
-            </div>
-          </Row>
-
-          <Row label={t('general.coverLabel')} flash={flashOf('cover')}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {COVER_GRADIENT_KEYS.map((key) => (
-                  <button
-                    key={key}
-                    onClick={() => changeDetails({ cover: key, useCustomCover: false })}
-                    aria-label={key}
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 9,
-                      background: COVER_GRADIENTS[key],
-                      border: !useCustomCover && selectedCover === key ? `2px solid ${palette.ink}` : '2px solid transparent',
-                      cursor: 'pointer',
-                      padding: 0,
-                    }}
-                  />
-                ))}
-                <div style={{ position: 'relative', width: 32, height: 32 }}>
-                  <button
-                    onClick={() => {
-                      if (coverImage && !useCustomCover) {
-                        changeDetails({ useCustomCover: true });
-                      } else {
-                        coverFileInputRef.current?.click();
-                      }
-                    }}
-                    aria-label={t('general.uploadAria')}
-                    disabled={uploadingCover}
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 9,
-                      backgroundColor: coverImage ? 'transparent' : palette.surfaceSunken,
-                      backgroundImage: coverImage ? `url(${coverImage})` : 'none',
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center',
-                      border: useCustomCover && coverImage ? `2px solid ${palette.ink}` : `2px dashed ${palette.lineStrong}`,
-                      cursor: uploadingCover ? 'default' : 'pointer',
-                      padding: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 14,
-                      color: palette.inkFaint,
-                    }}
-                  >
-                    {uploadingCover ? <Loader2 size={14} className="animate-spin" /> : !coverImage && '+'}
-                  </button>
-                  {coverImage && !uploadingCover && (
-                    <button
-                      onClick={handleRemoveCoverImage}
-                      aria-label={t('general.removeCoverAria')}
-                      style={{
-                        position: 'absolute',
-                        top: -6,
-                        right: -6,
-                        width: 16,
-                        height: 16,
-                        borderRadius: '50%',
-                        background: palette.danger,
-                        border: `1px solid ${palette.surfaceRaised}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        padding: 0,
-                      }}
-                    >
-                      <X size={10} color={palette.onInk} />
-                    </button>
-                  )}
-                </div>
-                <input
-                  ref={coverFileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handleCoverFileChange}
-                  style={{ display: 'none' }}
-                />
-              </div>
-              {uploadError && (
-                <span style={{ fontSize: 11, color: palette.danger }}>{uploadError}</span>
-              )}
             </div>
           </Row>
 

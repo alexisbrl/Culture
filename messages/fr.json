@@ -648,9 +648,6 @@
     "general": {
       "title": "Général",
       "nameLabel": "Nom de l'atelier",
-      "coverLabel": "Image de couverture",
-      "uploadAria": "uploader votre image",
-      "removeCoverAria": "supprimer l'image de couverture",
       "emojiLabel": "Emoji",
       "createdLabel": "Date de création"
     },

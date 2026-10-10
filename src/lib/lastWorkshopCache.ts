@@ -18,6 +18,8 @@ export type CachedWorkshop = {
   id: string;
   name: string;
   role: 'owner' | 'manager' | 'member';
+  /** Emoji choisi (menu latéral). Absent des cookies écrits avant le 10/10/2026. */
+  emoji?: string | null;
 };
 
 type Stored = CachedWorkshop & { userId: string };
@@ -32,7 +34,7 @@ export function parseLastWorkshop(raw: string | undefined, userId: string): Cach
   try {
     const stored = JSON.parse(decodeURIComponent(raw)) as Stored;
     if (stored.userId !== userId || !stored.id || !stored.name || !stored.role) return null;
-    return { id: stored.id, name: stored.name, role: stored.role };
+    return { id: stored.id, name: stored.name, role: stored.role, emoji: stored.emoji ?? null };
   } catch {
     return null;
   }

@@ -12,8 +12,10 @@ export const NAV_PINNED_COOKIE = 'culture.navPinned';
 
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 
+/** Première visite (aucun cookie) : ouvert, pour que tout le monde découvre le
+ *  menu en entier. Ensuite, le dernier choix fait sur ce poste. */
 export function parseNavPinned(raw: string | undefined): boolean {
-  return raw === '1';
+  return raw !== '0';
 }
 
 /** Écriture côté client uniquement — le serveur ne fait que lire. */

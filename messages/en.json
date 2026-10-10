@@ -648,9 +648,6 @@
     "general": {
       "title": "General",
       "nameLabel": "Workshop name",
-      "coverLabel": "Cover image",
-      "uploadAria": "upload your image",
-      "removeCoverAria": "remove cover image",
       "emojiLabel": "Emoji",
       "createdLabel": "Creation date"
     },

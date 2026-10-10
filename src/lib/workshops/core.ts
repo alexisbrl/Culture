@@ -117,7 +117,7 @@ export async function getTrashWorkshops(
 /**
  * Dernier atelier visité par l'utilisateur, encore actif (hors corbeille).
  *
- * Sert à rétablir le contexte d'atelier dans la barre du haut sur les pages qui
+ * Sert à rétablir le contexte d'atelier dans le menu latéral sur les pages qui
  * n'en portent aucun dans leur URL — la page profil, dont la maquette garde le
  * sélecteur d'atelier et le groupe d'onglets. Lecture seule : contrairement à
  * `getWorkshop`, `last_visited_at` n'est PAS retouché, consulter son profil
@@ -125,7 +125,7 @@ export async function getTrashWorkshops(
  */
 export async function getLastVisitedWorkshop(
   userId: string
-): Promise<{ id: string; name: string; role: WorkshopRole } | null> {
+): Promise<{ id: string; name: string; role: WorkshopRole; emoji: string | null } | null> {
   const supabase = getSupabaseServerClient();
 
   const { data: memberships } = await supabase
@@ -138,7 +138,7 @@ export async function getLastVisitedWorkshop(
 
   const { data: workshops } = await supabase
     .from('workshops')
-    .select('id, name')
+    .select('id, name, emoji')
     .in(
       'id',
       memberships.map((m) => m.workshop_id)
@@ -147,10 +147,10 @@ export async function getLastVisitedWorkshop(
 
   // Les adhésions sont déjà triées du plus récent au plus ancien : on descend
   // jusqu'au premier atelier qui n'est pas à la corbeille.
-  const nameById = new Map((workshops ?? []).map((w) => [w.id as string, w.name as string]));
+  const byId = new Map((workshops ?? []).map((w) => [w.id as string, w]));
   for (const m of memberships) {
-    const name = nameById.get(m.workshop_id);
-    if (name) return { id: m.workshop_id, name, role: m.role as WorkshopRole };
+    const w = byId.get(m.workshop_id);
+    if (w) return { id: m.workshop_id, name: w.name as string, role: m.role as WorkshopRole, emoji: (w.emoji as string | null) ?? null };
   }
   return null;
 }

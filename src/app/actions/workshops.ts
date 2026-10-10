@@ -160,12 +160,13 @@ export async function getWorkshop(workshopId: string) {
   }
 }
 
-// ─── Dernier atelier visité (contexte de la barre du haut hors page d'atelier) ─
+// ─── Dernier atelier visité (contexte du menu latéral hors page d'atelier) ─
 
 export async function getLastVisitedWorkshop(): Promise<{
   id: string;
   name: string;
   role: 'owner' | 'manager' | 'member';
+  emoji: string | null;
 } | null> {
   try {
     const { userId } = await auth();

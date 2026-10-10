@@ -9,13 +9,14 @@ import { setUserLocale } from '@/app/actions/profile';
 import { getWorkshop, getLastVisitedWorkshop } from '@/app/actions/workshops';
 import { clearLastWorkshop, saveLastWorkshop, type CachedWorkshop } from '@/lib/lastWorkshopCache';
 import WarmLink from '@/components/WarmLink';
+import { emojiFor } from '@/lib/workshopCover';
 import AppSidebar from './AppSidebar';
 
 // Navigation de l'espace connecté, montée par le layout sur toutes ses pages
 // sauf l'exercice (plein écran) : le menu latéral sur ordinateur (AppSidebar),
 // la barre du bas sur téléphone. Les deux partagent ici le contexte d'atelier.
 
-type WorkshopInfo = { name: string; role: 'owner' | 'manager' | 'member' };
+type WorkshopInfo = { name: string; role: 'owner' | 'manager' | 'member'; emoji: string | null };
 
 type Props = {
   userId: string;
@@ -68,7 +69,7 @@ export default function AppNav({ userId, initialWorkshop, initialPinned }: Props
     let cancelled = false;
     getWorkshop(urlWorkshopId).then((w) => {
       if (cancelled) return;
-      const info = w ? { name: w.name, role: w.currentUserRole } : null;
+      const info = w ? { name: w.name, role: w.currentUserRole, emoji: w.emoji } : null;
       setWorkshop(info);
       // On mémorise au passage le contexte pour le profil : y arriver depuis une
       // page d'atelier n'a alors plus rien à attendre du serveur.
@@ -145,6 +146,7 @@ export default function AppNav({ userId, initialWorkshop, initialPinned }: Props
       <AppSidebar
         workshopId={workshopId}
         workshopName={activeWorkshop?.name ?? null}
+        workshopEmoji={workshopId && activeWorkshop ? emojiFor(workshopId, activeWorkshop.emoji) : null}
         canManage={canManage}
         isMember={activeWorkshop?.role === 'member'}
         pathname={pathname}

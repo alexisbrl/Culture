@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { Leaf, Plus, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
+import { emojiFor } from '@/lib/workshopCover';
 import { getUserWorkshops, type WorkshopCardData } from '@/app/actions/workshops';
 import { Tooltip } from '@/components/ui/tooltip';
 import WarmLink from '@/components/WarmLink';
@@ -94,8 +95,8 @@ export default function WorkshopDrawer({ left, currentWorkshopId, onClose }: Pro
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left outline-none hover:bg-[var(--green-tint)] focus-visible:shadow-[var(--shadow-focus)] ${active ? 'bg-[var(--green-tint)]' : ''}`}
                 style={{ animation: 'nav-item-in 240ms cubic-bezier(0.22,1,0.36,1) both' }}
               >
-                <span className="flex size-[34px] flex-none items-center justify-center rounded-[10px] border border-[var(--line)] text-[var(--ink)]">
-                  <Leaf size={15} strokeWidth={1.75} />
+                <span aria-hidden className="flex size-[34px] flex-none items-center justify-center rounded-[10px] border border-[var(--line)] text-[17px] leading-none">
+                  {emojiFor(w.id, w.emoji)}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13.5px] font-semibold text-[var(--ink)]">{w.name}</span>
