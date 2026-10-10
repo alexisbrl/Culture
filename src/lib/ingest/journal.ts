@@ -217,6 +217,10 @@ export type StepLog = {
   /** Le coût de la ligne est une ESTIMATION : l'appel a été coupé avant de
    *  rendre ses jetons (@/lib/ingest/callProgress). */
   estimated?: boolean;
+  /** Le coût, quand l'appelant l'a déjà additionné appel par appel — une
+   *  ligne qui regroupe des réponses de plusieurs modèles (les redites, Jev et
+   *  son relais). Sinon, il se calcule ici depuis `usage` et `model`. */
+  costUsd?: number;
   /** Des COMPTES et des motifs — jamais un titre, un énoncé ou un extrait. */
   produced?: Record<string, unknown>;
 };
@@ -228,7 +232,7 @@ export async function logStep(entry: StepLog): Promise<void> {
     // Le coût, en dollars HT, figé avec la ligne (@/lib/ingest/pricing). Le
     // début de l'appel fixe les heures pleines chez DeepSeek.
     const startedAt = new Date(Date.now() - (entry.durationMs ?? 0));
-    const cost = entry.usage ? callCostUsd(entry.provider, entry.model, entry.usage, startedAt) : 0;
+    const cost = entry.costUsd !== undefined ? entry.costUsd : entry.usage ? callCostUsd(entry.provider, entry.model, entry.usage, startedAt) : 0;
     const supabase = getSupabaseServerClient();
     const { error } = await supabase.from('ai_import_events').insert({
       import_id: entry.importId,

@@ -782,7 +782,7 @@ partiellement rempli — l'étiquette permet de nettoyer d'un coup, **et elle se
 au-delà de la panne** : annuler un import qui a techniquement réussi mais dont l'IA a mal
 compris le cours. Aucune transaction ne donne ça.
 
-Une table d'imports porte le périmètre, la consigne, les jetons consommés et le coût. Elle
+Une table d'imports porte le périmètre et la consigne ; ses jetons et son coût se lisent au journal (§8), seule source qui fasse foi. Elle
 sert à l'annulation, aux quotas, à la détection d'un fichier déjà traité, et au journal
 (§8).
 

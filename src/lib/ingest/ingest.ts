@@ -43,9 +43,6 @@ export type IngestMeta = {
   origin?: string | null;
   /** Clés de stockage des fichiers soumis au modèle. */
   fileIds?: string[];
-  inputTokens?: number;
-  outputTokens?: number;
-  cachedTokens?: number;
   /** Lot piloté par un onglet ouvert : il pose son premier signe de vie dès sa
    *  création, et c'est lui qui tient le verrou « une génération à la fois »
    *  (voir `./lock`). Faux pour une recharge automatique, qui tourne en fond
@@ -84,9 +81,6 @@ export async function createImport(
       scope: meta.scope ?? {},
       origin: meta.origin ?? null,
       file_ids: meta.fileIds ?? [],
-      input_tokens: meta.inputTokens ?? 0,
-      output_tokens: meta.outputTokens ?? 0,
-      cached_tokens: meta.cachedTokens ?? 0,
       // Le verrou naît avec le lot : entre l'ouverture et le premier battement
       // de l'onglet il s'écoule plusieurs dizaines de secondes (téléversement
       // des documents), largement de quoi lancer une seconde génération.
@@ -96,34 +90,6 @@ export async function createImport(
     .single();
   if (error || !data) throw new Error(error?.message ?? 'import non créé');
   return data.id as string;
-}
-
-/** Ajoute la consommation d'un appel au total du lot. Un import s'étalant sur
- *  25 appels, le coût ne se connaît qu'en cumulant — et c'est ce cumul qui
- *  servira de base aux quotas (§9). */
-export async function addImportUsage(
-  importId: string,
-  usage: { inputTokens: number; outputTokens: number; cacheCreationTokens: number; cachedTokens: number },
-): Promise<void> {
-  const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('ai_imports')
-    .select('input_tokens, output_tokens, cached_tokens')
-    .eq('id', importId)
-    .single();
-  if (error || !data) throw new Error(error?.message ?? 'import introuvable');
-
-  // Les tokens écrits dans le cache comptent comme de l'entrée : ils sont
-  // facturés plus cher qu'elle (1,25× en TTL 5 minutes, 2× en TTL 1 h), et les
-  // ignorer donnerait un coût largement sous-évalué.
-  await supabase
-    .from('ai_imports')
-    .update({
-      input_tokens: (data.input_tokens as number) + usage.inputTokens + usage.cacheCreationTokens,
-      output_tokens: (data.output_tokens as number) + usage.outputTokens,
-      cached_tokens: (data.cached_tokens as number) + usage.cachedTokens,
-    })
-    .eq('id', importId);
 }
 
 export async function ingestWorkshopPlan(

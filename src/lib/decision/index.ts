@@ -32,6 +32,9 @@ export type Decision = {
   /** Ce qui a répondu, tel qu'il se nomme — pour le journal. */
   model: string;
   usage: StepUsage;
+  /** Le premier décideur était saturé (429, 529) et le relais a répondu : le
+   *  signal qui fait ralentir l'envoi (@/lib/decision/pool). */
+  congested?: boolean;
 };
 
 export type Decider = {
@@ -69,7 +72,9 @@ export function withFallback(primary: Decider, fallback: Decider): Decider {
         return await primary.decide(question);
       } catch (error) {
         console.warn(`[decision] ${primary.name} indisponible, repli sur ${fallback.name} :`, error instanceof Error ? error.message : error);
-        return fallback.decide(question);
+        const status = (error as { status?: unknown } | null)?.status;
+        const decision = await fallback.decide(question);
+        return status === 429 || status === 529 ? { ...decision, congested: true } : decision;
       }
     },
   };

@@ -40,7 +40,6 @@ import { getSupabaseServerClient } from '@/lib/supabase';
 import { planImportCleanup } from '@/lib/program/operations';
 
 import {
-  addImportUsage,
   applyAssignments,
   createImport,
   hideEmptyChapters,
@@ -86,6 +85,7 @@ import {
   writingQuestion,
 } from './resource';
 import { getDecider, isYes, readProbability, type ClosedQuestion, type Decider } from '@/lib/decision';
+import { JEV_POOL, adaptiveMap } from '@/lib/decision/pool';
 import type { BloomLevel } from '@/lib/workshops/examTypes';
 import {
   CHAPTER_START_QUESTIONS,
@@ -115,6 +115,7 @@ import {
 } from './verdicts';
 import { chaptersWithPages, composeChapterSlices, composeChaptersInput, localizeSpans, readDocumentText, resolveDocumentName, sourcePageOf } from './chaptersInput';
 import { coursePositions, partsProgram, rankedByCourse, type PartsProgram } from './partsProgram';
+import { callCostUsd } from './pricing';
 import type { PageSpan } from './slicing';
 import { releaseDocuments } from './release';
 import {
@@ -1068,7 +1069,6 @@ async function resourceStep(
     write,
     context,
   }));
-  await addImportUsage(importId, call.result.usage);
   const outcome = readResourceOutput(call.result.plan);
   await stepDone(meta, call, {
     ecritureDecidee: write,
@@ -1157,7 +1157,6 @@ async function decideWriting(
       read.probability = readProbability(decision.probability);
       return { plan: null, model: decision.model, truncated: false, usage: decision.usage };
     });
-    await addImportUsage(ids.importId, call.result.usage);
     const write = read.probability === null ? true : isYes(read.probability);
     await stepDone(meta, call, { probabilite: read.probability, ecrire: write });
     return write;
@@ -1490,7 +1489,6 @@ export async function ingestChapters(
           fileNames: Object.values(input.fileNames),
           retry,
         }));
-        await addImportUsage(importId, attempt.result.usage);
         const parsed = parsePlanLogged('chapitres', normalizeChaptersAnswer(attempt.result.plan), refs, attempt.result.truncated);
         // Les pages sont citées dans la numérotation unique du lot : on les rend
         // à leurs documents, une fois pour toutes (§7.3).
@@ -1650,7 +1648,6 @@ async function ingestChaptersFromParts(
       fileNames: Object.values(input.fileNames),
       relaunch: { notions: program.notions.map((n) => ({ id: n.id, title: n.title })), chapters, fixed: true },
     }));
-    await addImportUsage(importId, attempt.result.usage);
     const parsed = parsePlanLogged('chapitres (parties)', attempt.result.plan, {
       chapterIds: [...chapters.map((c) => c.id), ...parts.dropped],
       notionIds: program.notions.map((n) => n.id),
@@ -1716,7 +1713,6 @@ export async function ingestChaptersRelaunch(
       fileNames: Object.values(input.fileNames),
       relaunch: { notions: notions.map((n) => ({ id: n.id, title: n.title })), chapters },
     }));
-    await addImportUsage(importId, attempt.result.usage);
     const parsed = parsePlanLogged('chapitres (relance)', attempt.result.plan, {
       chapterIds: [...chapters.map((c) => c.id), ...pending.dropped],
       notionIds: notions.map((n) => n.id),
@@ -2296,7 +2292,6 @@ export async function ingestChapterNotions(
         recheck,
       },
     ));
-    await addImportUsage(importId, call.result.usage);
 
     const plan = parsePlanLogged('notions', call.result.plan, {}, call.result.truncated);
     const rawClaims = (call.result.plan as { claimed?: unknown } | null)?.claimed;
@@ -2407,11 +2402,6 @@ export async function ingestRedites(
   return { pairs: pairs.length, removed, duplicates, adjusted: [] };
 }
 
-/** Combien de questions de redite partent en même temps. Jev répond en un
- *  quart de seconde : 300 paires en une vingtaine de secondes. Il a refusé pour
- *  saturation à dix demandes simultanées (08/10/2026), d'où cinq. */
-const REDITE_CONCURRENCY = 5;
-
 /** Le « oui » d'une redite : au-dessus du milieu, parce qu'une redite retenue
  *  efface une notion neuve, et qu'une redite manquée ne fait qu'en laisser
  *  une de trop. Réglé le 08/10/2026 sur 150 paires réelles (atelier d'algèbre) :
@@ -2420,10 +2410,12 @@ const REDITE_CONCURRENCY = 5;
 const REDITE_THRESHOLD = 0.6;
 
 /** Tranche chaque paire par une question fermée au décideur (§7.6) — Jev,
- *  DeepSeek en relais —, toutes en parallèle par paquets. Rend les paires
- *  jugées redites. **Une réponse manquante ou illisible vaut « non »** : une
- *  redite qui reste se retire au passage suivant, une notion retirée à tort se
- *  perd. Une ligne au journal pour l'ensemble, pas une par paire. */
+ *  DeepSeek en relais —, en parallèle, au rythme que le décideur supporte
+ *  (`adaptiveMap`). Rend les paires jugées redites. **Une réponse manquante ou
+ *  illisible vaut « non »** : une redite qui reste se retire au passage
+ *  suivant, une notion retirée à tort se perd. Une ligne au journal pour
+ *  l'ensemble, pas une par paire ; son coût additionne celui de chaque réponse,
+ *  Jev comme relais. */
 async function judgeRedites(
   workshopId: string,
   importId: string,
@@ -2434,30 +2426,28 @@ async function judgeRedites(
   const usage = { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cachedTokens: 0 };
   let model: string | undefined;
   let unreadable = 0;
+  let cost = 0;
   const duplicates: { a: string; b: string }[] = [];
 
-  let next = 0;
-  const worker = async () => {
-    while (next < pairs.length) {
-      const pair = pairs[next++];
-      try {
-        const { result } = await withRetry(() => decider.decide(rediteQuestion(pair.a, pair.b)));
-        model ??= result.model;
-        usage.inputTokens += result.usage.inputTokens;
-        usage.outputTokens += result.usage.outputTokens;
-        usage.cacheCreationTokens += result.usage.cacheCreationTokens;
-        usage.cachedTokens += result.usage.cachedTokens;
-        const probability = readProbability(result.probability);
-        if (probability === null) unreadable += 1;
-        else if (isYes(probability, REDITE_THRESHOLD)) duplicates.push({ a: pair.a.id, b: pair.b.id });
-      } catch {
-        unreadable += 1;
-      }
+  const { finalLimit, congestions } = await adaptiveMap(pairs, async (pair) => {
+    try {
+      const { result } = await withRetry(() => decider.decide(rediteQuestion(pair.a, pair.b)));
+      model ??= result.model;
+      usage.inputTokens += result.usage.inputTokens;
+      usage.outputTokens += result.usage.outputTokens;
+      usage.cacheCreationTokens += result.usage.cacheCreationTokens;
+      usage.cachedTokens += result.usage.cachedTokens;
+      cost += callCostUsd(decider.name, result.model, result.usage, new Date()) ?? 0;
+      const probability = readProbability(result.probability);
+      if (probability === null) unreadable += 1;
+      else if (isYes(probability, REDITE_THRESHOLD)) duplicates.push({ a: pair.a.id, b: pair.b.id });
+      return { value: null, congested: result.congested === true };
+    } catch {
+      unreadable += 1;
+      return { value: null, congested: false };
     }
-  };
-  await Promise.all(Array.from({ length: Math.min(REDITE_CONCURRENCY, pairs.length) }, worker));
+  }, JEV_POOL);
 
-  await addImportUsage(importId, usage);
   await logStep({
     importId,
     workshopId,
@@ -2467,7 +2457,8 @@ async function judgeRedites(
     status: 'ok',
     durationMs: Date.now() - started,
     usage,
-    produced: { paires: pairs.length, redites: duplicates.length, illisibles: unreadable },
+    costUsd: Number(cost.toFixed(6)),
+    produced: { paires: pairs.length, redites: duplicates.length, illisibles: unreadable, saturations: congestions, simultaneesEnFin: finalLimit },
   });
   return duplicates;
 }
@@ -2777,7 +2768,6 @@ export async function ingestParcoursQuestions(
     budget,
   }));
   const result = call.result;
-  await addImportUsage(importId, result.usage);
 
   const refs = await loadExistingRefs(workshopId);
   const plan = parsePlanLogged('questions', result.plan, refs, result.truncated);
@@ -2921,7 +2911,6 @@ export async function ingestExamQuestions(
     workshop,
   }));
   const result = call.result;
-  await addImportUsage(importId, result.usage);
 
   const refs = await loadExistingRefs(workshopId);
   const plan = parsePlanLogged('examen', result.plan, refs, result.truncated);

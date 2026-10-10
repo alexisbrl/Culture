@@ -57,7 +57,7 @@ function ratesFor(provider: string | null | undefined, model: string | null | un
   // Reconnu au modèle et non au fournisseur : quand Jev est saturé, Haiku
   // répond à sa place sous le même nom de décideur.
   if (model.startsWith('jev')) return { input: 0.042, output: 0, cacheRead: 0, cacheWrite: 0 };
-  if (provider === 'deepseek') {
+  if (provider === 'deepseek' || model.startsWith('deepseek')) {
     // `deepseek-flash`, et l'ancien nom `deepseek-v4-flash` servi au même prix.
     if (!model.includes('flash')) return null;
     const factor = isDeepSeekPeak(at) ? 2 : 1;
