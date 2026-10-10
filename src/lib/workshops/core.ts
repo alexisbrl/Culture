@@ -10,6 +10,7 @@
 import { getSupabaseServerClient } from '@/lib/supabase';
 import type { WorkshopRole } from '@/lib/authz';
 import { getWorkshopRole } from '@/lib/workshops/membership';
+import { writeWorkshopDetails, type WorkshopDetailsPatch } from './details';
 import type { WorkshopCardData } from '@/app/actions/workshops';
 
 export async function getUserWorkshops(userId: string): Promise<{
@@ -291,30 +292,14 @@ export async function getWorkshopPreview(
   };
 }
 
+/** Voir writeWorkshopDetails (details.ts) : n'écrit que ce qui change, et une
+ *  annulation (`expected`) ne s'applique que si rien n'a bougé depuis. */
 export async function updateDetails(
   workshopId: string,
-  details: {
-    name?: string;
-    coverGradient?: string;
-    coverImageUrl?: string | null;
-    coverImageActive?: boolean;
-    emoji?: string;
-    showProgramme?: boolean;
-  }
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = getSupabaseServerClient();
-
-  const update: Record<string, string | boolean | number | null> = {};
-  if (details.name !== undefined) update.name = details.name;
-  if (details.coverGradient !== undefined) update.cover_gradient = details.coverGradient;
-  if (details.coverImageUrl !== undefined) update.cover_image_url = details.coverImageUrl;
-  if (details.coverImageActive !== undefined) update.cover_image_active = details.coverImageActive;
-  if (details.emoji !== undefined) update.emoji = details.emoji;
-  if (details.showProgramme !== undefined) update.show_programme = details.showProgramme;
-
-  await supabase.from('workshops').update(update).eq('id', workshopId);
-
-  return { success: true };
+  details: WorkshopDetailsPatch,
+  expected?: WorkshopDetailsPatch
+): Promise<{ success: boolean; conflict?: boolean; error?: string }> {
+  return writeWorkshopDetails(getSupabaseServerClient(), workshopId, details, expected);
 }
 
 export async function uploadCover(

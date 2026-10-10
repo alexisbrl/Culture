@@ -1319,6 +1319,10 @@ qui arrivent en flux s'y inscrivent par un contexte. Une annulation ne s'inscrit
 elle-même, et lit l'état courant (pas celui du rendu qui l'a créée) : entre-temps, une
 génération a pu ajouter des chapitres.
 
+**Deux gestionnaires sur la même page.** Chacun a sa copie des réglages : un geste n'écrit
+que les champs qu'il change, et une annulation ne s'applique que si la base contient encore
+ce qu'elle défait — sinon elle n'écrit rien et le dit (`src/lib/workshops/details.ts`).
+
 Annuler rend visible ce qu'il change : la section, le bon chapitre, un défilement jusqu'à la ligne et un clignotement — sinon, une annulation qui change de section ne dit pas où regarder.
 
 L'annulation de la dernière génération (§7.8) n'est **pas** une entrée de la pile : elle peut

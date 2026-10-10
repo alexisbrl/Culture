@@ -646,7 +646,8 @@
       "save": "Erreur lors de l'enregistrement",
       "delete": "Erreur lors de la suppression",
       "emptyName": "Le nom ne peut pas être vide",
-      "rename": "Erreur lors du renommage"
+      "rename": "Erreur lors du renommage",
+      "changedMeanwhile": "Ces réglages ont été modifiés entre-temps par un autre gestionnaire : rien n'a été annulé. Rechargez la page pour voir la version à jour."
     },
     "general": {
       "title": "Général",

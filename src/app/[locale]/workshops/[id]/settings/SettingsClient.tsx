@@ -15,6 +15,7 @@ import ShareQRModal from '@/components/ShareQRModal';
 import { Tooltip } from '@/components/ui/tooltip';
 import { NAV_ITEMS, Row, Switch, SmallBtn, SectionCard, UNDO_FLASH_MS, type WorkshopRole } from './settingsShared';
 import { announceWorkshopDetails } from '@/lib/workshopDetailsEvent';
+import type { WorkshopDetailsPatch } from '@/lib/workshops/details';
 import { isNavSection, settingsSectionUrl, type NavSection } from './sections';
 import { GenerationUndoContext, UndoHistoryContext, type GenerationUndoHandle, type UndoEntry } from './undoHistory';
 
@@ -116,27 +117,39 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
 
   /** Applique et enregistre de nouveaux réglages. `record` inscrit le geste
    *  dans l'historique ; une annulation, elle, ne s'y inscrit pas. */
-  async function applyDetails(next: Details, record = true): Promise<boolean> {
+  /** Ce qui diffère entre deux états, au format de l'écriture : c'est tout ce
+   *  qu'on envoie — un champ qu'on n'a pas touché n'écrase pas celui qu'un
+   *  autre gestionnaire a pu changer entre-temps (src/lib/workshops/details.ts). */
+  function detailsPatch(from: Details, to: Details): WorkshopDetailsPatch {
+    const patch: WorkshopDetailsPatch = {};
+    if (from.name !== to.name) patch.name = to.name;
+    if (from.cover !== to.cover) patch.coverGradient = to.cover;
+    if (from.coverImage !== to.coverImage) patch.coverImageUrl = to.coverImage;
+    if (from.useCustomCover !== to.useCustomCover) patch.coverImageActive = to.useCustomCover;
+    if (from.emoji !== to.emoji) patch.emoji = to.emoji;
+    if (from.showProgramme !== to.showProgramme) patch.showProgramme = to.showProgramme;
+    return patch;
+  }
+
+  /** `undoing` : l'état que cette annulation défait. Elle ne s'applique que si
+   *  la base le contient encore — sinon quelqu'un d'autre a changé ces
+   *  réglages depuis, et on ne revient pas sur son travail. */
+  async function applyDetails(next: Details, record = true, undoing?: Details): Promise<boolean> {
     const previous = savedDetailsRef.current;
     if (JSON.stringify(next) === JSON.stringify(previous)) return true;
+    const patch = detailsPatch(previous, next);
+    const expected = undoing ? detailsPatch(next, undoing) : undefined;
     setDetails(next);
     setNameDraft(next.name);
     setDetailsError('');
     savedDetailsRef.current = next;
-    const result = await updateWorkshopDetails(workshopId, {
-      name: next.name,
-      coverGradient: next.cover,
-      coverImageUrl: next.coverImage,
-      coverImageActive: next.useCustomCover,
-      emoji: next.emoji,
-      showProgramme: next.showProgramme,
-    });
+    const result = await updateWorkshopDetails(workshopId, patch, expected);
     if (!result.success) {
       // L'écran doit refléter la base : on revient à ce qui y est.
       savedDetailsRef.current = previous;
       setDetails(previous);
       setNameDraft(previous.name);
-      setDetailsError(result.error ?? t('err.generic'));
+      setDetailsError(result.conflict ? t('err.changedMeanwhile') : (result.error ?? t('err.generic')));
       return false;
     }
     // Le menu latéral affiche nom et emoji : il suit sans attendre.
@@ -145,7 +158,7 @@ export default function SettingsClient({ locale, workshopId, workshopName, cover
       recordUndo({
         section: 'general',
         undo: async () => {
-          const ok = await applyDetails(previous, false);
+          const ok = await applyDetails(previous, false, next);
           if (ok) flashGeneral(changedRows(next, previous));
           return ok;
         },

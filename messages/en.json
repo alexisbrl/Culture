@@ -646,7 +646,8 @@
       "save": "Save error",
       "delete": "Delete error",
       "emptyName": "The name cannot be empty",
-      "rename": "Rename error"
+      "rename": "Rename error",
+      "changedMeanwhile": "These settings were changed in the meantime by another manager: nothing was undone. Reload the page to see the latest version."
     },
     "general": {
       "title": "General",
